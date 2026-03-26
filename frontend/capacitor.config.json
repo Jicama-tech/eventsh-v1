@@ -1,0 +1,14 @@
+{
+  "appId": "app.lovable.658fa1bb417a471eb11b5927e6c42350",
+  "appName": "eventsh",
+  "webDir": "dist",
+  "server": {
+    "url": "https://658fa1bb-417a-471e-b11b-5927e6c42350.lovableproject.com?forceHideBadge=true",
+    "cleartext": true
+  },
+  "plugins": {
+    "BarcodeScanner": {
+      "cameraPermission": "To scan QR codes for event attendance and product scanning"
+    }
+  }
+}

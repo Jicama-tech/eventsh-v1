@@ -1,0 +1,274 @@
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 210 100% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --event: 0 90% 70%;
+    --event-foreground: 0 0% 100%;
+
+    --secondary: 199 89% 48%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 0 90% 70%;
+    --accent-foreground: 0 0% 100%;
+
+    --eShop: 150 80% 45%;
+    --eShop-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 210 100% 50%;
+
+    --radius: 0.75rem;
+
+    /* Custom gradients */
+    --gradient-primary: linear-gradient(
+      135deg,
+      hsl(199 89% 48%) 0%,
+      hsl(210 100% 50%) 50%,
+      hsl(230 80% 55%) 100%
+    );
+    --gradient-hero: linear-gradient(
+      180deg,
+      hsl(199 89% 48%) 0%,
+      hsl(210 100% 60%) 100%
+    );
+    --gradient-card: linear-gradient(
+      135deg,
+      hsl(0 0% 100%) 0%,
+      hsl(210 40% 98%) 100%
+    );
+    --gradient-accent: linear-gradient(
+      135deg,
+      hsl(45 85% 60%) 0%,
+      hsl(50 90% 50%) 100%
+    );
+    --gradient-event: linear-gradient(
+      135deg,
+      hsl(0, 90%, 70%) 0%,
+      hsl(0, 63%, 62%) 100%
+    );
+    /* Shadows */
+    --shadow-card: 0 4px 20px -4px hsl(210 100% 50% / 0.15);
+    --shadow-hover: 0 8px 30px -4px hsl(210 100% 50% / 0.25);
+    --shadow-glow: 0 0 40px hsl(210 100% 50% / 0.3);
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 100% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 199 89% 48%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 280 85% 65%;
+    --accent-foreground: 0 0% 100%;
+
+    --eShop: 150 80% 45%;
+    --eShop-foreground: 0 0% 100%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 212 27% 84%;
+
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: "Poppins", sans-serif;
+  }
+}
+
+@layer utilities {
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  /* Quill HTML Rendering Fixes */
+  .quill-content ul {
+    list-style-type: disc !important;
+    margin-left: 1.25rem !important;
+    display: block !important;
+  }
+
+  .quill-content ol {
+    list-style-type: decimal !important;
+    margin-left: 1.25rem !important;
+    display: block !important;
+  }
+
+  .quill-content li {
+    display: list-item !important;
+    margin-bottom: 0.25rem;
+  }
+
+  /* Fix for nested lists */
+  .quill-content ul ul,
+  .quill-content ol ol,
+  .quill-content ul ol,
+  .quill-content ol ul {
+    margin-left: 1.5rem !important;
+  }
+
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  .gradient-event {
+    background: var(--gradient-event);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-hover {
+    box-shadow: var(--shadow-hover);
+  }
+
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .text-gradient {
+    background-image: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .text-event {
+    color: hsl(310 85% 50%) 100%;
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-fade-up {
+    animation: fadeUp 0.6s ease-out forwards;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.4s ease-out forwards;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* LandingPage.tsx styles */
+@keyframes glow {
+  0%, 100% { 
+    filter: drop-shadow(0 0 10px rgba(var(--primary), 0.3)); 
+  }
+  50% { 
+    filter: drop-shadow(0 0 25px rgba(var(--primary), 0.6)); 
+  }
+}
+
+@layer utilities {
+  .animate-glow {
+    animation: glow 3s ease-in-out infinite;
+  }
+  
+  .testimonial-swiper .swiper-pagination-bullet {
+    background: rgba(255, 255, 255, 0.2);
+    opacity: 1;
+  }
+  
+  .testimonial-swiper .swiper-pagination-bullet-active {
+    background: var(--primary);
+    width: 24px;
+    border-radius: 4px;
+  }
+}

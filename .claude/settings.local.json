@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -rn shopkeeper /c/Users/vansh/Desktop/VAnsh/eventsh/frontend/src --include=*.tsx)",
+      "Bash(curl -s http://localhost:8081)",
+      "WebFetch(domain:localhost)",
+      "Bash(grep -rn localhost C:/Users/vansh/Desktop/VAnsh/eventsh/backend/src --include=*.ts)",
+      "Bash(npx tsc:*)",
+      "Bash(npm install:*)"
+    ]
+  }
+}
