@@ -771,6 +771,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             registrationNumber: shopData.registrationNumber || "",
             residency: shopData.residency || "",
             refundPaymentDescription: shopData.refundPaymentDescription || "",
+            preferredTemplateId: "",
+            preferredTemplateName: "",
           });
           setEmailVerified(true); // Assume verified if exists
 
