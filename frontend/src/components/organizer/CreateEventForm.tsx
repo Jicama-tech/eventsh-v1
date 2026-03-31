@@ -120,10 +120,11 @@ interface TableTemplate {
   type: "Straight" | "Corner" | "Round" | "Square";
   width: number;
   height: number;
-  rowNumber: number; // NEW: Row number (1, 2, 3, etc.)
-  tablePrice: number; // NEW: Full rental price
-  bookingPrice: number; // NEW: Partial payment (≤ tablePrice)
-  depositPrice: number; // NEW: Security deposit (can be > tablePrice)
+  rowNumber: number;
+  tablePrice: number;
+  bookingPrice: number;
+  depositPrice: number;
+  color?: string;
   isBooked?: boolean;
   bookedBy?: string;
   customDimensions?: boolean;
@@ -769,6 +770,7 @@ const TableManagement = ({
     tablePrice: string;
     bookingPrice: string;
     depositPrice: string;
+    color: string;
   };
   setCurrentTable: React.Dispatch<
     React.SetStateAction<{
@@ -780,6 +782,7 @@ const TableManagement = ({
       tablePrice: string;
       bookingPrice: string;
       depositPrice: string;
+      color: string;
     }>
   >;
   // Update the currentAddOn prop type in TableManagement:
@@ -963,6 +966,7 @@ const TableManagement = ({
       tablePrice: tablePrice,
       bookingPrice: bookingPrice,
       depositPrice: depositPrice,
+      color: currentTable.color || "#6b7280",
       customDimensions: currentTable.type === "Straight",
       isBooked: false,
     };
@@ -979,6 +983,7 @@ const TableManagement = ({
       tablePrice: "",
       bookingPrice: "",
       depositPrice: "",
+      color: "#6b7280",
     });
 
     toast({
@@ -1201,6 +1206,29 @@ const TableManagement = ({
               </div>
             </div>
 
+            {/* Color Picker */}
+            <div>
+              <Label className="flex items-center gap-1 mb-2">Space Color</Label>
+              <div className="flex items-center gap-2 flex-wrap">
+                {["#6b7280", "#ef4444", "#f59e0b", "#10b981", "#3b82f6", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316", "#6366f1"].map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`w-8 h-8 rounded-full border-2 transition-all ${currentTable.color === c ? "border-gray-800 scale-110 shadow-md" : "border-gray-200 hover:scale-105"}`}
+                    style={{ backgroundColor: c }}
+                    onClick={() => setCurrentTable((prev) => ({ ...prev, color: c }))}
+                  />
+                ))}
+                <input
+                  type="color"
+                  value={currentTable.color}
+                  onChange={(e) => setCurrentTable((prev) => ({ ...prev, color: e.target.value }))}
+                  className="w-8 h-8 rounded-full cursor-pointer border-2 border-gray-200"
+                  title="Custom color"
+                />
+              </div>
+            </div>
+
             {/* Pricing Summary */}
             {currentTable.tablePrice &&
               currentTable.bookingPrice &&
@@ -1263,10 +1291,12 @@ const TableManagement = ({
                 {tableTemplates.map((table) => (
                   <div
                     key={table.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded border"
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded border-l-4"
+                    style={{ borderLeftColor: table.color || "#6b7280" }}
                   >
                     <div className="space-y-1">
                       <div className="font-medium flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: table.color || "#6b7280" }} />
                         {table.name}
                         {/* <Badge variant="buttonOutline">
                           Row {table.rowNumber}
@@ -1853,9 +1883,9 @@ const VenueDesigner = ({
         ? "#ef4444"
         : isSelected
           ? "#3b82f6"
-          : "#6b7280",
+          : (table.color || "#6b7280"),
       color: "white",
-      border: isSelected ? "3px solid #1d4ed8" : "2px solid #374151",
+      border: isSelected ? "3px solid #1d4ed8" : `2px solid ${table.color ? table.color + "88" : "#374151"}`,
       cursor: isDragging ? "grabbing" : "grab",
       display: "flex",
       alignItems: "center",
@@ -1921,11 +1951,12 @@ const VenueDesigner = ({
           {tableTemplates.map((template) => (
             <div
               key={template.id}
-              className="flex-shrink-0 w-36 p-3 border-2 border-blue-200 rounded-xl cursor-pointer hover:border-blue-500 hover:shadow-md transition-all bg-white"
+              className="flex-shrink-0 w-36 p-3 border-2 rounded-xl cursor-pointer hover:shadow-md transition-all bg-white"
+              style={{ borderColor: (template.color || "#6b7280") + "44" }}
               onClick={() => addTableToVenue(template)}
             >
               <div className="flex items-center gap-1 mb-1">
-                <div className="w-3 h-3 rounded-sm bg-blue-500" />
+                <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: template.color || "#6b7280" }} />
                 <span className="font-bold text-xs truncate">
                   {template.name}
                 </span>
@@ -1933,7 +1964,7 @@ const VenueDesigner = ({
               <p className="text-[10px] text-muted-foreground">
                 {template.width}×{template.height}
               </p>
-              <p className="text-[10px] font-semibold text-blue-600">
+              <p className="text-[10px] font-semibold" style={{ color: template.color || "#6b7280" }}>
                 {formatPrice(template.tablePrice)}
               </p>
             </div>
@@ -2491,6 +2522,7 @@ export function CreateEventForm({
     tablePrice: "",
     bookingPrice: "",
     depositPrice: "",
+    color: "#6b7280",
   });
 
   // Replace your currentAddOn state with this:

@@ -304,9 +304,10 @@ export class Event {
     rowNumber?: number; // NEW: Row number for pricing
     tablePrice: number; // NEW: Full table rental price
     bookingPrice: number; // NEW: Partial payment (must be <= tablePrice)
-    depositPrice: number; // NEW: Security deposit (can be > tablePrice)
-    isBooked: boolean; // NEW: Booking status
-    bookedBy?: string; // NEW: Reference to shopkeeper/stall booking
+    depositPrice: number;
+    color?: string;
+    isBooked: boolean;
+    bookedBy?: string;
     customDimensions?: boolean;
   }[];
 
@@ -324,12 +325,13 @@ export class Event {
     y: number;
     rotation: number;
     isPlaced: boolean;
-    rowNumber?: number; // NEW: Row number for pricing
-    tablePrice: number; // NEW: Full table rental price
-    bookingPrice: number; // NEW: Partial payment (must be <= tablePrice)
-    depositPrice: number; // NEW: Security deposit (can be > tablePrice)
-    isBooked: boolean; // NEW: Booking status
-    bookedBy?: string; // NEW: Reference to shopkeeper/stall booking
+    rowNumber?: number;
+    tablePrice: number;
+    bookingPrice: number;
+    depositPrice: number;
+    color?: string;
+    isBooked: boolean;
+    bookedBy?: string;
   }[];
 
   @Prop({ type: Array, default: [] })

@@ -4128,7 +4128,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                       : table.type === "Corner"
                                         ? "rounded-lg"
                                         : "rounded-sm"
-                                  } ${isBooked ? "border-gray-500 bg-gray-400/80 cursor-not-allowed" : "border-green-600 bg-green-200/80 shadow-sm"}`}
+                                  } ${isBooked ? "border-gray-500 bg-gray-400/80 cursor-not-allowed" : "shadow-sm"}`}
                                   style={{
                                     left: `${table.x}px`,
                                     top: `${table.y}px`,
@@ -4137,6 +4137,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     transform: `rotate(${table.rotation || 0}deg)`,
                                     transformOrigin: "center center",
                                     zIndex: 5,
+                                    ...(!isBooked && {
+                                      backgroundColor: (table.color || "#22c55e") + "33",
+                                      borderColor: table.color || "#22c55e",
+                                    }),
                                   }}
                                 >
                                   <div className="relative group hover:z-50">
