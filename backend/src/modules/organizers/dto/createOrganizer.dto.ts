@@ -55,7 +55,11 @@ export class CreateOrganizerDto {
   @IsNotEmpty()
   country: string;
 
-  // @IsBoolean()
-  // @IsNotEmpty()
-  // hasDocVerification: boolean;
+  @IsString()
+  @IsOptional()
+  bio?: string;
+
+  @IsString()
+  @IsOptional()
+  role?: string;
 }
