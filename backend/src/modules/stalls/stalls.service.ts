@@ -415,35 +415,28 @@ export class StallsService {
         { new: true },
       );
 
-      // If payment info was provided, trigger payment confirmation flow
-      // (generates QR code, PDF ticket, sends WhatsApp message)
-      if (selectDto.paymentStatus || selectDto.paidAmount) {
-        try {
-          const result = await this.confirmPayment(stallId, selectDto.notes);
-          return {
-            success: true,
-            message:
-              "Tables selected and payment confirmed. Ticket sent to vendor via WhatsApp.",
-            data: result.data,
-          };
-        } catch (paymentError) {
-          this.logger.error(
-            "Error in payment confirmation after table selection:",
-            paymentError,
+      // Notify vendor that tables were selected — organizer will confirm payment
+      try {
+        const vendor = await this.vendorModel.findById(stall.shopkeeperId);
+        const vendorWhatsApp = vendor?.whatsAppNumber || vendor?.whatsappNumber;
+        if (vendorWhatsApp) {
+          const tableNames = selectDto.selectedTables.map((t) => t.tableName).join(", ");
+          await this.otpService.sendWhatsAppMessage(
+            vendorWhatsApp,
+            `*Tables Selected — ${event.title}*\n\n` +
+              `Your table selection has been saved:\n` +
+              `Tables: ${tableNames}\n` +
+              `Grand Total: ${updatedStall.grandTotal}\n\n` +
+              `Please complete your payment. The organizer will confirm and your stall ticket with QR code will be sent to you.`,
           );
-          // Tables are saved, but payment confirmation failed — return partial success
-          return {
-            success: true,
-            message:
-              "Tables selected successfully, but ticket generation failed. Please confirm payment manually.",
-            data: updatedStall,
-          };
         }
+      } catch {
+        this.logger.warn("Failed to send table selection notification");
       }
 
       return {
         success: true,
-        message: "Tables and add-ons selected successfully",
+        message: "Tables and add-ons selected. Awaiting payment confirmation from organizer.",
         data: updatedStall,
       };
     } catch (error) {
@@ -849,15 +842,20 @@ export class StallsService {
             </div>
           </div>
 
+          ${qrBase64 ? `
           <div class="qr-section">
             <p class="qr-head">Your Stall QR Code</p>
             <p class="qr-label">Scan at Event Entrance</p>
             <img src="${qrBase64}" alt="Stall Entry QR Code">
           </div>
-
           <div class="warning">
             ⚠️ <strong>Important:</strong> Use Official EventSH App to scan QR code, to Check-In and Check-Out.
           </div>
+          ` : `
+          <div class="warning" style="background: #fef3c7; border-color: #f59e0b; color: #92400e;">
+            ⏳ <strong>Awaiting Full Payment</strong> — Your QR code will be released once the organizer confirms full payment.
+          </div>
+          `}
 
           ${
             stall.couponCodeAssigned
@@ -1367,14 +1365,64 @@ Thank you for choosing Eventsh! 🎊`;
         updateDto.paymentStatus === "Partial"
       ) {
         if (updateDto.paymentStatus === "Paid") {
+          // Full payment — generate QR, coupon, PDF ticket, send via WhatsApp
           await this.confirmPayment(stallId, updateDto.notes);
         }
         if (updateDto.paymentStatus === "Partial") {
-          await this.sendPaymentStatusNotification(
-            stall,
-            oldPaymentStatus,
-            updateDto.paymentStatus,
-          );
+          // Partial payment — send details PDF without QR/coupon + WhatsApp notification
+          try {
+            const populatedStall = await this.stallModel
+              .findById(stallId)
+              .populate("shopkeeperId")
+              .populate("eventId")
+              .populate("organizerId");
+
+            if (populatedStall) {
+              const orgDoc = await this.organizerModel.findById(
+                (populatedStall.organizerId as any)?._id || populatedStall.organizerId,
+              );
+              const ctry = orgDoc?.country || "IN";
+
+              // Generate details-only PDF (no QR, no coupon)
+              const pdfBuffer = await this.generateStallTicketPDF(
+                populatedStall,
+                null, // no QR
+                null, // no coupon
+                ctry,
+              );
+
+              const pdfDir = path.join(process.cwd(), "uploads", "stallTickets");
+              if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
+              const pdfFileName = `stall_booking_${stallId}.pdf`;
+              const pdfPath = path.join(pdfDir, pdfFileName);
+              await fs.promises.writeFile(pdfPath, pdfBuffer);
+
+              const vendor = populatedStall.shopkeeperId as any;
+              const vendorWhatsApp = vendor?.whatsAppNumber || vendor?.whatsappNumber;
+
+              if (vendorWhatsApp) {
+                const eventObj = populatedStall.eventId as any;
+                await this.otpService.sendWhatsAppMessage(
+                  vendorWhatsApp,
+                  `*Partial Payment Received — ${eventObj?.title || "Event"}*\n\n` +
+                    `We have received your partial payment.\n\n` +
+                    `Paid: ${populatedStall.paidAmount}\n` +
+                    `Remaining: ${populatedStall.remainingAmount}\n` +
+                    `Grand Total: ${populatedStall.grandTotal}\n\n` +
+                    `Please complete the remaining payment. Your stall QR ticket will be released once full payment is confirmed by the organizer.\n\n` +
+                    `Your booking details PDF is attached.`,
+                );
+
+                await this.otpService.sendMediaMessage(
+                  vendorWhatsApp,
+                  pdfPath,
+                  `Booking Details - ${eventObj?.title || "Event"}`,
+                );
+              }
+            }
+          } catch (partialErr) {
+            this.logger.warn("Failed to send partial payment notification", partialErr);
+          }
         }
         updateData.paymentDate = new Date();
       }
