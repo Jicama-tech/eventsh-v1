@@ -139,6 +139,38 @@ class Speaker {
   order: number;
 }
 
+class RoundTableTemplate {
+  @Prop({ required: true }) id: string;
+  @Prop({ required: true }) name: string;
+  @Prop({ required: true, min: 2, max: 20 }) numberOfChairs: number;
+  @Prop({ required: true, enum: ["table", "chair"] }) sellingMode: string;
+  @Prop({ default: 0 }) tablePrice: number;
+  @Prop({ default: 0 }) chairPrice: number;
+  @Prop({ default: "Standard" }) category: string;
+  @Prop({ default: "#8B5CF6" }) color: string;
+  @Prop({ default: 120 }) tableDiameter: number;
+}
+
+class PositionedRoundTable {
+  @Prop({ required: true }) positionId: string;
+  @Prop({ required: true }) templateId: string;
+  @Prop({ required: true }) name: string;
+  @Prop({ required: true }) numberOfChairs: number;
+  @Prop({ required: true, enum: ["table", "chair"] }) sellingMode: string;
+  @Prop({ default: 0 }) tablePrice: number;
+  @Prop({ default: 0 }) chairPrice: number;
+  @Prop({ default: "Standard" }) category: string;
+  @Prop({ default: "#8B5CF6" }) color: string;
+  @Prop({ default: 120 }) tableDiameter: number;
+  @Prop() x: number;
+  @Prop() y: number;
+  @Prop({ default: 0 }) rotation: number;
+  @Prop({ default: true }) isPlaced: boolean;
+  @Prop() venueConfigId: string;
+  @Prop({ type: [Number], default: [] }) bookedChairs: number[];
+  @Prop({ default: false }) isFullyBooked: boolean;
+}
+
 class termsAndConditionsforStalls {
   @Prop()
   termsAndConditionsforStalls: string;
@@ -346,6 +378,13 @@ export class Event {
 
   @Prop({ type: [Object], default: [] })
   termsAndConditionsforStalls?: termsAndConditionsforStalls[];
+
+  // Round Table Seating (charity dinners, galas, etc.)
+  @Prop({ type: Array, default: [] })
+  roundTableTemplates: RoundTableTemplate[];
+
+  @Prop({ type: Array, default: [] })
+  venueRoundTables: PositionedRoundTable[];
 
   @Prop()
   createdAt: Date;

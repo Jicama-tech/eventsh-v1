@@ -108,6 +108,56 @@ export class AuthController {
     }
   }
 
+  // ===== Google Buyer Auth (for ticket cart) =====
+  @Get("google-buyer")
+  @UseGuards(AuthGuard("google-buyer"))
+  async googleBuyerAuth() {
+    // Redirects to Google consent screen
+  }
+
+  @Get("google-buyer/redirect")
+  @UseGuards(AuthGuard("google-buyer"))
+  async googleBuyerRedirect(@Req() req: Request, @Res() res: Response) {
+    try {
+      const userFromGoogle = req.user as any;
+      if (!userFromGoogle) {
+        return res.redirect("http://localhost:8080/ticket-cart?error=auth_failed");
+      }
+
+      // Find or create user
+      let user = await this.usersService.findByEmail(userFromGoogle.email);
+      const isExisting = !!user;
+
+      if (!user) {
+        const createUserDto: CreateUserDto = {
+          name: userFromGoogle.name,
+          email: userFromGoogle.email,
+          password: "oauth-" + userFromGoogle.oauthId,
+          provider: userFromGoogle.oauthProvider,
+          providerId: userFromGoogle.oauthId,
+        };
+        user = await this.usersService.create(createUserDto);
+      }
+
+      // Encode user info as query params for the frontend to pick up
+      const params = new URLSearchParams({
+        google_auth: "success",
+        email: userFromGoogle.email || "",
+        firstName: userFromGoogle.firstName || "",
+        lastName: userFromGoogle.lastName || "",
+        name: userFromGoogle.name || "",
+        existing: isExisting ? "true" : "false",
+      });
+
+      // Redirect back to ticket cart with user info
+      const returnUrl = req.query?.state as string || "";
+      const baseUrl = returnUrl || "http://localhost:8080/ticket-cart";
+      return res.redirect(`${baseUrl}?${params.toString()}`);
+    } catch (error) {
+      return res.redirect("http://localhost:8080/ticket-cart?error=auth_failed");
+    }
+  }
+
   @Get("google-organizer")
   @UseGuards(AuthGuard("google-organizer"))
   async googleOrganizerAuth() {

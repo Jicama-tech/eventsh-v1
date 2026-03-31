@@ -18,6 +18,10 @@ export class UpdateOrganizerDto {
 
   @IsString()
   @IsOptional()
+  ownerName?: string;
+
+  @IsString()
+  @IsOptional()
   organizationName?: string; // Mapped from shopName
 
   @IsEmail()

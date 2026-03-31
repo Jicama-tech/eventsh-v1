@@ -96,7 +96,7 @@ interface EventData {
   };
 }
 
-type ScanMode = "event-ticket" | "stall-ticket" | "speaker-ticket" | null;
+type ScanMode = "event-ticket" | "stall-ticket" | "speaker-ticket" | "round-table" | null;
 type Step =
   | "otp-verification"
   | "mode-selection"
@@ -133,6 +133,10 @@ export default function QRTicketScanner() {
   const [pendingSpeakerQR, setPendingSpeakerQR] = useState<string | null>(null);
   const [speakerData, setSpeakerData] = useState<any>(null);
   const [speakerAction, setSpeakerAction] = useState<"CHECK_IN" | "CHECK_OUT" | null>(null);
+
+  const [pendingRoundTableQR, setPendingRoundTableQR] = useState<string | null>(null);
+  const [roundTableData, setRoundTableData] = useState<any>(null);
+  const [roundTableAction, setRoundTableAction] = useState<"CHECK_IN" | "CHECK_OUT" | null>(null);
 
   // Check-Out confirmation dialog states
   const [showCheckOutConfirmDialog, setShowCheckOutConfirmDialog] =
@@ -313,6 +317,8 @@ export default function QRTicketScanner() {
         await handleStallTicketScan(decodedText);
       } else if (scanMode === "speaker-ticket") {
         await handleSpeakerTicketScan(decodedText);
+      } else if (scanMode === "round-table") {
+        await handleRoundTableScan(decodedText);
       }
     } catch (error) {
       console.error("Error processing QR code:", error);
@@ -428,6 +434,8 @@ export default function QRTicketScanner() {
     setShowCheckOutConfirmDialog(false);
     if (scanMode === "speaker-ticket") {
       await processSpeakerAction("CHECK_OUT");
+    } else if (scanMode === "round-table") {
+      await processRoundTableAction("CHECK_OUT");
     } else {
       await processStallAction("CHECK_OUT");
     }
@@ -608,6 +616,102 @@ export default function QRTicketScanner() {
     }
   };
 
+  // Handle Round Table QR Scan
+  const handleRoundTableScan = async (decodedText: string) => {
+    const qrData = JSON.parse(decodedText);
+
+    if (!qrData.type || qrData.type !== "eventsh-roundtable-checkin") {
+      throw new Error("Invalid round table QR code. This QR is not from EventSH.");
+    }
+
+    if (!qrData.bookingId) {
+      throw new Error("Invalid QR code format. Missing booking ID.");
+    }
+
+    setPendingRoundTableQR(decodedText);
+    setIsProcessing(false);
+    setStep("checkin-checkout-selection");
+  };
+
+  const handleRoundTableActionConfirm = async (action: "CHECK_IN" | "CHECK_OUT") => {
+    if (!pendingRoundTableQR) return;
+
+    if (action === "CHECK_OUT") {
+      setRoundTableAction("CHECK_OUT");
+      setCheckOutConfirmInput("");
+      setCheckOutConfirmError("");
+      setShowCheckOutConfirmDialog(true);
+      return;
+    }
+
+    await processRoundTableAction("CHECK_IN");
+  };
+
+  const processRoundTableAction = async (action: "CHECK_IN" | "CHECK_OUT") => {
+    if (!pendingRoundTableQR) return;
+    setIsProcessing(true);
+    setRoundTableAction(action);
+
+    try {
+      const qrData = JSON.parse(pendingRoundTableQR);
+
+      // Validate state
+      const checkRes = await fetch(`${apiURL}/round-table-bookings/${qrData.bookingId}`);
+      const checkData = await checkRes.json();
+      const booking = checkData.data;
+
+      if (action === "CHECK_IN" && booking.hasCheckedIn) {
+        throw new Error("This visitor has already checked in.");
+      }
+      if (action === "CHECK_OUT" && !booking.hasCheckedIn) {
+        throw new Error("This visitor has not checked in yet.");
+      }
+      if (action === "CHECK_OUT" && booking.hasCheckedOut) {
+        throw new Error("This visitor has already checked out.");
+      }
+
+      const scanRes = await fetch(`${apiURL}/round-table-bookings/scan-qr`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ qrCodeData: pendingRoundTableQR }),
+      });
+
+      if (!scanRes.ok) {
+        const errorData = await scanRes.json();
+        throw new Error(errorData.message || "Failed to process round table QR");
+      }
+
+      const scanInfo = await scanRes.json();
+
+      setRoundTableData(scanInfo.data);
+      setScanResult("success");
+      setStep("success");
+
+      toast({
+        duration: 5000,
+        title: "Success!",
+        description: `${action === "CHECK_IN" ? "Checked In" : "Checked Out"} successfully for ${scanInfo.data.visitorName}`,
+      });
+    } catch (error: any) {
+      setErrorMessage(error.message || "Failed to process round table QR");
+      setScanResult("error");
+      toast({
+        duration: 5000,
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+
+      setTimeout(() => {
+        setScanResult(null);
+        setIsProcessing(false);
+        setStep("checkin-checkout-selection");
+      }, 3000);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const onScanFailure = (error: any) => {
     // Ignore scan failures (normal when no QR code is detected)
   };
@@ -619,6 +723,9 @@ export default function QRTicketScanner() {
     setSpeakerData(null);
     setPendingSpeakerQR(null);
     setSpeakerAction(null);
+    setRoundTableData(null);
+    setPendingRoundTableQR(null);
+    setRoundTableAction(null);
     setErrorMessage("");
     setIsProcessing(false);
     setPendingStallQR(null);
@@ -751,6 +858,13 @@ export default function QRTicketScanner() {
             <Camera className="mr-2 h-4 w-4" />
             Speaker Pass
           </Button>
+          <Button
+            onClick={() => handleModeSelection("round-table")}
+            className="w-full bg-amber-600 hover:bg-amber-700"
+          >
+            <Camera className="mr-2 h-4 w-4" />
+            Round Table Ticket
+          </Button>
         </div>
       </CardContent>
     </Card>
@@ -766,12 +880,16 @@ export default function QRTicketScanner() {
             ? "Scan Event Ticket"
             : scanMode === "speaker-ticket"
               ? "Scan Speaker Pass"
-              : "Scan Stall Ticket"}
+              : scanMode === "round-table"
+                ? "Scan Round Table Ticket"
+                : "Scan Stall Ticket"}
         </CardTitle>
         <p className="text-sm text-gray-600">
           {scanMode === "event-ticket"
             ? "Point your camera at the attendee's ticket QR code"
-            : "Point your camera at the shopkeeper's stall QR code"}
+            : scanMode === "round-table"
+              ? "Point your camera at the round table ticket QR code"
+              : "Point your camera at the shopkeeper's stall QR code"}
         </p>
       </CardHeader>
       <CardContent>
@@ -844,11 +962,11 @@ export default function QRTicketScanner() {
 
         <div className="space-y-3">
           <Button
-            onClick={() => scanMode === "speaker-ticket" ? handleSpeakerActionConfirm("CHECK_IN") : handleStallActionConfirm("CHECK_IN")}
+            onClick={() => scanMode === "speaker-ticket" ? handleSpeakerActionConfirm("CHECK_IN") : scanMode === "round-table" ? handleRoundTableActionConfirm("CHECK_IN") : handleStallActionConfirm("CHECK_IN")}
             disabled={isProcessing}
             className="w-full bg-green-600 hover:bg-green-700 h-14 text-base"
           >
-            {isProcessing && (stallAction === "CHECK_IN" || speakerAction === "CHECK_IN") ? (
+            {isProcessing && (stallAction === "CHECK_IN" || speakerAction === "CHECK_IN" || roundTableAction === "CHECK_IN") ? (
               <RefreshCw className="mr-2 h-5 w-5 animate-spin" />
             ) : (
               <CheckCircle className="mr-2 h-5 w-5" />
@@ -857,11 +975,11 @@ export default function QRTicketScanner() {
           </Button>
 
           <Button
-            onClick={() => scanMode === "speaker-ticket" ? handleSpeakerActionConfirm("CHECK_OUT") : handleStallActionConfirm("CHECK_OUT")}
+            onClick={() => scanMode === "speaker-ticket" ? handleSpeakerActionConfirm("CHECK_OUT") : scanMode === "round-table" ? handleRoundTableActionConfirm("CHECK_OUT") : handleStallActionConfirm("CHECK_OUT")}
             disabled={isProcessing}
             className="w-full bg-orange-500 hover:bg-orange-600 h-14 text-base"
           >
-            {isProcessing && (stallAction === "CHECK_OUT" || speakerAction === "CHECK_OUT") ? (
+            {isProcessing && (stallAction === "CHECK_OUT" || speakerAction === "CHECK_OUT" || roundTableAction === "CHECK_OUT") ? (
               <RefreshCw className="mr-2 h-5 w-5 animate-spin" />
             ) : (
               <XCircle className="mr-2 h-5 w-5" />
@@ -1086,6 +1204,38 @@ export default function QRTicketScanner() {
             </Card>
           )}
 
+        {step === "success" &&
+          scanMode === "round-table" &&
+          roundTableData && (
+            <Card className="w-full max-w-md mx-auto">
+              <CardHeader className="text-center">
+                <CheckCircle className="mx-auto h-16 w-16 text-green-500 mb-2" />
+                <CardTitle className="text-green-700">
+                  {roundTableData.action === "CHECK_IN" ? "Visitor Checked In!" : "Visitor Checked Out!"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-2">
+                  <p className="font-semibold text-amber-800">{roundTableData.visitorName}</p>
+                  <p className="text-sm text-amber-600">Table: {roundTableData.tableName} ({roundTableData.tableCategory})</p>
+                  <p className="text-sm text-amber-600">Seats: {roundTableData.seats}</p>
+                  {roundTableData.checkInTime && (
+                    <p className="text-xs text-gray-600">Check-in: {new Date(roundTableData.checkInTime).toLocaleTimeString()}</p>
+                  )}
+                  {roundTableData.checkOutTime && (
+                    <p className="text-xs text-gray-600">Check-out: {new Date(roundTableData.checkOutTime).toLocaleTimeString()}</p>
+                  )}
+                  {roundTableData.durationMinutes && (
+                    <p className="text-xs text-gray-600">Duration: {roundTableData.durationMinutes} minutes</p>
+                  )}
+                </div>
+                <Button onClick={resetScanner} className="w-full">
+                  Scan Another QR
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
         {/* ─── CHECK_OUT Confirmation Dialog ─────────────────────────────────── */}
         {showCheckOutConfirmDialog && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1097,7 +1247,7 @@ export default function QRTicketScanner() {
                 </div>
                 <p className="text-sm text-gray-600 mt-1">
                   Are you sure you want to <strong>Check Out</strong> this
-                  {scanMode === "speaker-ticket" ? " speaker" : " exhibitor"}? This action cannot be undone.
+                  {scanMode === "speaker-ticket" ? " speaker" : scanMode === "round-table" ? " visitor" : " exhibitor"}? This action cannot be undone.
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">

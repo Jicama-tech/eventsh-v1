@@ -36,6 +36,7 @@ import {
   Type,
   Image,
   Mic,
+  Circle,
 } from "lucide-react";
 import { jwtDecode } from "jwt-decode";
 import BlurOverlay from "../ui/blurOverlay";
@@ -43,6 +44,7 @@ import { useCurrency } from "@/hooks/useCurrencyhook";
 import ImageCropModal from "../ui/imageCropModal";
 import { lazy, Suspense } from "react";
 
+import "react-quill/dist/quill.snow.css";
 const ReactQuill = lazy(() => import("react-quill"));
 
 interface VisitorFeatureAccess {
@@ -73,7 +75,14 @@ const DEFAULT_VISITOR_FEATURES: VisitorFeatureAccess = {
   accessibility: false,
 };
 
-const DEFAULT_FEATURE_NAMES = ["food", "parking", "wifi", "photography", "security", "accessibility"];
+const DEFAULT_FEATURE_NAMES = [
+  "food",
+  "parking",
+  "wifi",
+  "photography",
+  "security",
+  "accessibility",
+];
 
 export const modules = {
   toolbar: [
@@ -138,6 +147,30 @@ interface AddOnItem {
   preview?: string; // Add this for the local UI preview
   rawFile?: File; // Add this for the actual file upload
   hasNewImage?: boolean; // Add this flag for the backend
+}
+
+interface RoundTableTemplate {
+  id: string;
+  name: string;
+  numberOfChairs: number;
+  sellingMode: "table" | "chair";
+  tablePrice: number;
+  chairPrice: number;
+  category: string;
+  color: string;
+  tableDiameter: number;
+}
+
+interface PositionedRoundTable extends RoundTableTemplate {
+  positionId: string;
+  templateId: string;
+  x: number;
+  y: number;
+  rotation: number;
+  isPlaced: boolean;
+  venueConfigId: string;
+  bookedChairs: number[];
+  isFullyBooked: boolean;
 }
 
 interface StallTermsCondition {
@@ -1087,8 +1120,8 @@ const TableManagement = ({
               {/* Table Price */}
               <div>
                 <Label className="flex items-center gap-1">
-                    Space Price ({getSymbol()}) *
-                  </Label>
+                  Space Price ({getSymbol()}) *
+                </Label>
 
                 <Input
                   type="number"
@@ -1105,8 +1138,8 @@ const TableManagement = ({
               {/* Booking Price */}
               <div>
                 <Label className="flex items-center gap-1">
-                    Booking Price ({getSymbol()}) *
-                  </Label>
+                  Booking Price ({getSymbol()}) *
+                </Label>
                 <Input
                   type="number"
                   min="0"
@@ -1138,8 +1171,8 @@ const TableManagement = ({
               {/* Deposit Price */}
               <div>
                 <Label className="flex items-center gap-1">
-                    Deposit Price ({getSymbol()}) *
-                  </Label>
+                  Deposit Price ({getSymbol()}) *
+                </Label>
                 <Input
                   type="number"
                   min="0"
@@ -1207,7 +1240,9 @@ const TableManagement = ({
                             parseFloat(currentTable.tablePrice),
                         )}
                       </p>
-                        <p className="text-xs text-purple-600">Remaining: {getSymbol()}0</p>
+                      <p className="text-xs text-purple-600">
+                        Remaining: {getSymbol()}0
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1467,6 +1502,9 @@ const VenueDesigner = ({
   speakerSlotTemplates,
   venueSpeakerZones,
   setVenueSpeakerZones,
+  roundTableTemplates,
+  venueRoundTables,
+  setVenueRoundTables,
 }: {
   tableTemplates: TableTemplate[];
   venueTables: Record<string, PositionedTable[]>;
@@ -1480,6 +1518,12 @@ const VenueDesigner = ({
   speakerSlotTemplates: any[];
   venueSpeakerZones: Record<string, any[]>;
   setVenueSpeakerZones: (zones: Record<string, any[]>) => void;
+  roundTableTemplates: RoundTableTemplate[];
+  venueRoundTables: Record<string, PositionedRoundTable[]>;
+  setVenueRoundTables: (tables: Record<string, PositionedRoundTable[]>) => void;
+  roundTableTemplates: RoundTableTemplate[];
+  venueRoundTables: Record<string, PositionedRoundTable[]>;
+  setVenueRoundTables: (tables: Record<string, PositionedRoundTable[]>) => void;
 }) => {
   const { toast } = useToast();
   const [isDragging, setIsDragging] = useState(false);
@@ -1495,6 +1539,7 @@ const VenueDesigner = ({
 
   const currentTables = venueTables[selectedVenueConfigId] || [];
   const currentSpeakerZones = venueSpeakerZones[selectedVenueConfigId] || [];
+  const currentRoundTables = venueRoundTables[selectedVenueConfigId] || [];
 
   // --- Actions ---
 
@@ -1569,13 +1614,18 @@ const VenueDesigner = ({
       ...venueSpeakerZones,
       [selectedVenueConfigId]: [...currentSpeakerZones, newZone],
     });
-    toast({ title: "Speaker Zone Added", description: `${template.name} added to ${venueConfig.name}` });
+    toast({
+      title: "Speaker Zone Added",
+      description: `${template.name} added to ${venueConfig.name}`,
+    });
   };
 
   const removeSpeakerZone = (positionId: string) => {
     setVenueSpeakerZones({
       ...venueSpeakerZones,
-      [selectedVenueConfigId]: currentSpeakerZones.filter((z) => z.positionId !== positionId),
+      [selectedVenueConfigId]: currentSpeakerZones.filter(
+        (z) => z.positionId !== positionId,
+      ),
     });
     setSelectedTable(null);
   };
@@ -1588,6 +1638,57 @@ const VenueDesigner = ({
       y: e.clientY - containerRect.top - zone.y * venueConfig.scale,
     });
     setSelectedTable(`sz-${zone.positionId}`);
+    setIsDragging(true);
+  };
+
+  // --- Round Table Actions ---
+  const addRoundTableToVenue = (template: RoundTableTemplate) => {
+    if (!venueConfig) return;
+    const diameter = template.tableDiameter || 120;
+    const newRT: PositionedRoundTable = {
+      ...template,
+      positionId: Math.random().toString(36).slice(2, 15),
+      templateId: template.id,
+      x: (venueConfig.width - diameter) / 2,
+      y: (venueConfig.height - diameter) / 2,
+      rotation: 0,
+      isPlaced: true,
+      venueConfigId: selectedVenueConfigId,
+      bookedChairs: [],
+      isFullyBooked: false,
+    };
+    setVenueRoundTables({
+      ...venueRoundTables,
+      [selectedVenueConfigId]: [...currentRoundTables, newRT],
+    });
+    setSelectedTable(`rt-${newRT.positionId}`);
+    toast({
+      title: "Round Table Added",
+      description: `${template.name} added to ${venueConfig.name}`,
+    });
+  };
+
+  const removeRoundTable = (positionId: string) => {
+    setVenueRoundTables({
+      ...venueRoundTables,
+      [selectedVenueConfigId]: currentRoundTables.filter(
+        (rt) => rt.positionId !== positionId,
+      ),
+    });
+    setSelectedTable(null);
+  };
+
+  const handleRoundTableMouseDown = (
+    e: React.MouseEvent,
+    rt: PositionedRoundTable,
+  ) => {
+    const containerRect = venueRef.current?.getBoundingClientRect();
+    if (!containerRect || !venueConfig) return;
+    setDragOffset({
+      x: e.clientX - containerRect.left - rt.x * venueConfig.scale,
+      y: e.clientY - containerRect.top - rt.y * venueConfig.scale,
+    });
+    setSelectedTable(`rt-${rt.positionId}`);
     setIsDragging(true);
   };
 
@@ -1611,19 +1712,74 @@ const VenueDesigner = ({
     const rect = venueRef.current?.getBoundingClientRect();
     if (!rect) return;
 
-    if (selectedTable.startsWith("sz-")) {
+    if (selectedTable.startsWith("rt-")) {
+      const rtId = selectedTable.replace("rt-", "");
+      const rt = currentRoundTables.find((r) => r.positionId === rtId);
+      if (!rt) return;
+      const diameter = rt.tableDiameter || 120;
+      const newX = Math.max(
+        0,
+        Math.min(
+          (e.clientX - rect.left - dragOffset.x) / venueConfig.scale,
+          venueConfig.width - diameter,
+        ),
+      );
+      const newY = Math.max(
+        0,
+        Math.min(
+          (e.clientY - rect.top - dragOffset.y) / venueConfig.scale,
+          venueConfig.height - diameter,
+        ),
+      );
+      const updatedRTs = currentRoundTables.map((r) =>
+        r.positionId === rtId ? { ...r, x: newX, y: newY } : r,
+      );
+      setVenueRoundTables({
+        ...venueRoundTables,
+        [selectedVenueConfigId]: updatedRTs,
+      });
+    } else if (selectedTable.startsWith("sz-")) {
       const zoneId = selectedTable.replace("sz-", "");
       const zone = currentSpeakerZones.find((z) => z.positionId === zoneId);
       if (!zone) return;
-      const newX = Math.max(0, Math.min((e.clientX - rect.left - dragOffset.x) / venueConfig.scale, venueConfig.width - zone.width));
-      const newY = Math.max(0, Math.min((e.clientY - rect.top - dragOffset.y) / venueConfig.scale, venueConfig.height - zone.height));
-      const updatedZones = currentSpeakerZones.map((z) => z.positionId === zoneId ? { ...z, x: newX, y: newY } : z);
-      setVenueSpeakerZones({ ...venueSpeakerZones, [selectedVenueConfigId]: updatedZones });
+      const newX = Math.max(
+        0,
+        Math.min(
+          (e.clientX - rect.left - dragOffset.x) / venueConfig.scale,
+          venueConfig.width - zone.width,
+        ),
+      );
+      const newY = Math.max(
+        0,
+        Math.min(
+          (e.clientY - rect.top - dragOffset.y) / venueConfig.scale,
+          venueConfig.height - zone.height,
+        ),
+      );
+      const updatedZones = currentSpeakerZones.map((z) =>
+        z.positionId === zoneId ? { ...z, x: newX, y: newY } : z,
+      );
+      setVenueSpeakerZones({
+        ...venueSpeakerZones,
+        [selectedVenueConfigId]: updatedZones,
+      });
     } else {
       const table = currentTables.find((t) => t.positionId === selectedTable);
       if (!table) return;
-      const newX = Math.max(0, Math.min((e.clientX - rect.left - dragOffset.x) / venueConfig.scale, venueConfig.width - table.width));
-      const newY = Math.max(0, Math.min((e.clientY - rect.top - dragOffset.y) / venueConfig.scale, venueConfig.height - table.height));
+      const newX = Math.max(
+        0,
+        Math.min(
+          (e.clientX - rect.left - dragOffset.x) / venueConfig.scale,
+          venueConfig.width - table.width,
+        ),
+      );
+      const newY = Math.max(
+        0,
+        Math.min(
+          (e.clientY - rect.top - dragOffset.y) / venueConfig.scale,
+          venueConfig.height - table.height,
+        ),
+      );
       handleUpdateTable(selectedTable, { x: newX, y: newY });
     }
   };
@@ -1670,11 +1826,11 @@ const VenueDesigner = ({
   };
 
   useEffect(() => {
-    if (currentTables.length > 0) {
+    if (currentTables.length > 0 || currentRoundTables.length > 0) {
       const timeoutId = setTimeout(captureVenueAsImage, 1000);
       return () => clearTimeout(timeoutId);
     }
-  }, [currentTables, venueConfig, selectedVenueConfigId]);
+  }, [currentTables, currentRoundTables, venueConfig, selectedVenueConfigId]);
 
   // --- Styles ---
 
@@ -1725,31 +1881,61 @@ const VenueDesigner = ({
       {/* Top Bar: Venue Selector + Export */}
       <div className="flex items-center justify-between">
         <div className="flex flex-wrap gap-2 items-center">
-          <span className="text-sm font-semibold text-muted-foreground mr-2">Venue:</span>
+          <span className="text-sm font-semibold text-muted-foreground mr-2">
+            Venue:
+          </span>
           {venueConfigurations.map((config) => (
-            <Button key={config.id} size="sm" variant={selectedVenueConfigId === config.id ? "default" : "outline"} onClick={() => setSelectedVenueConfigId(config.id)}>
+            <Button
+              key={config.id}
+              size="sm"
+              variant={
+                selectedVenueConfigId === config.id ? "default" : "outline"
+              }
+              onClick={() => setSelectedVenueConfigId(config.id)}
+            >
               {config.name}
             </Button>
           ))}
         </div>
-        <Button size="sm" variant="outline" onClick={downloadVenueLayout} disabled={currentTables.length === 0 && currentSpeakerZones.length === 0}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={downloadVenueLayout}
+          disabled={
+            currentTables.length === 0 &&
+            currentSpeakerZones.length === 0 &&
+            currentRoundTables.length === 0
+          }
+        >
           <Download size={14} className="mr-2" /> Export
         </Button>
       </div>
 
       {/* Templates Row - Full Width Horizontal */}
       <div className="border rounded-xl bg-slate-50 p-4">
-        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Click to add to venue</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
+          Click to add to venue
+        </p>
         <div className="flex gap-3 overflow-x-auto pb-2">
           {/* Space Templates */}
           {tableTemplates.map((template) => (
-            <div key={template.id} className="flex-shrink-0 w-36 p-3 border-2 border-blue-200 rounded-xl cursor-pointer hover:border-blue-500 hover:shadow-md transition-all bg-white" onClick={() => addTableToVenue(template)}>
+            <div
+              key={template.id}
+              className="flex-shrink-0 w-36 p-3 border-2 border-blue-200 rounded-xl cursor-pointer hover:border-blue-500 hover:shadow-md transition-all bg-white"
+              onClick={() => addTableToVenue(template)}
+            >
               <div className="flex items-center gap-1 mb-1">
                 <div className="w-3 h-3 rounded-sm bg-blue-500" />
-                <span className="font-bold text-xs truncate">{template.name}</span>
+                <span className="font-bold text-xs truncate">
+                  {template.name}
+                </span>
               </div>
-              <p className="text-[10px] text-muted-foreground">{template.width}×{template.height}</p>
-              <p className="text-[10px] font-semibold text-blue-600">{formatPrice(template.tablePrice)}</p>
+              <p className="text-[10px] text-muted-foreground">
+                {template.width}×{template.height}
+              </p>
+              <p className="text-[10px] font-semibold text-blue-600">
+                {formatPrice(template.tablePrice)}
+              </p>
             </div>
           ))}
 
@@ -1760,20 +1946,79 @@ const VenueDesigner = ({
 
           {/* Speaker Zone Templates */}
           {speakerSlotTemplates.map((template) => (
-            <div key={template.id} className="flex-shrink-0 w-40 p-3 border-2 border-purple-200 rounded-xl cursor-pointer hover:border-purple-500 hover:shadow-md transition-all bg-purple-50/50" onClick={() => addSpeakerZoneToVenue(template)}>
+            <div
+              key={template.id}
+              className="flex-shrink-0 w-40 p-3 border-2 border-purple-200 rounded-xl cursor-pointer hover:border-purple-500 hover:shadow-md transition-all bg-purple-50/50"
+              onClick={() => addSpeakerZoneToVenue(template)}
+            >
               <div className="flex items-center gap-1 mb-1">
                 <div className="w-3 h-3 rounded-full bg-purple-500" />
-                <span className="font-bold text-xs truncate text-purple-800">{template.name}</span>
-                {template.isMainStage && <Badge className="bg-purple-200 text-purple-700 text-[8px] px-1 py-0 ml-auto">STAGE</Badge>}
+                <span className="font-bold text-xs truncate text-purple-800">
+                  {template.name}
+                </span>
+                {template.isMainStage && (
+                  <Badge className="bg-purple-200 text-purple-700 text-[8px] px-1 py-0 ml-auto">
+                    STAGE
+                  </Badge>
+                )}
               </div>
-              <p className="text-[10px] text-purple-600">{template.startTime && template.endTime ? `${template.startTime} - ${template.endTime}` : "Time TBD"}</p>
-              <p className="text-[10px] text-muted-foreground">{template.isMainStage ? "Main Stage" : `${template.width}×${template.height}`}</p>
+              <p className="text-[10px] text-purple-600">
+                {template.startTime && template.endTime
+                  ? `${template.startTime} - ${template.endTime}`
+                  : "Time TBD"}
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                {template.isMainStage
+                  ? "Main Stage"
+                  : `${template.width}×${template.height}`}
+              </p>
             </div>
           ))}
 
-          {tableTemplates.length === 0 && speakerSlotTemplates.length === 0 && (
-            <p className="text-sm text-muted-foreground py-4 w-full text-center">No templates yet. Create Spaces in "Space / AddOns" tab or Speaker Slots in "Speakers" tab first.</p>
-          )}
+          {/* Divider */}
+          {(tableTemplates.length > 0 || speakerSlotTemplates.length > 0) &&
+            roundTableTemplates.length > 0 && (
+              <div className="flex-shrink-0 w-px bg-gray-300 mx-1" />
+            )}
+
+          {/* Round Table Templates */}
+          {roundTableTemplates.map((template) => (
+            <div
+              key={template.id}
+              className="flex-shrink-0 w-40 p-3 border-2 rounded-xl cursor-pointer hover:shadow-md transition-all bg-white"
+              style={{ borderColor: template.color + "66" }}
+              onClick={() => addRoundTableToVenue(template)}
+            >
+              <div className="flex items-center gap-1 mb-1">
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: template.color }}
+                />
+                <span className="font-bold text-xs truncate">
+                  {template.name}
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                {template.numberOfChairs} chairs
+              </p>
+              <p
+                className="text-[10px] font-semibold"
+                style={{ color: template.color }}
+              >
+                {template.sellingMode === "table" ? "Whole Table" : "Per Chair"}
+              </p>
+            </div>
+          ))}
+
+          {tableTemplates.length === 0 &&
+            speakerSlotTemplates.length === 0 &&
+            roundTableTemplates.length === 0 && (
+              <p className="text-sm text-muted-foreground py-4 w-full text-center">
+                No templates yet. Create Spaces in "Space / AddOns" tab, Speaker
+                Slots in "Speakers" tab, or Round Tables in "Round Tables" tab
+                first.
+              </p>
+            )}
         </div>
       </div>
 
@@ -1812,15 +2057,39 @@ const VenueDesigner = ({
 
               {/* Placed Tables */}
               {currentTables.map((table) => (
-                <div key={table.positionId} style={getTableStyle(table)} onMouseDown={(e) => handleMouseDown(e, table)} onClick={(e) => { e.stopPropagation(); setSelectedTable(table.positionId); }}>
+                <div
+                  key={table.positionId}
+                  style={getTableStyle(table)}
+                  onMouseDown={(e) => handleMouseDown(e, table)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedTable(table.positionId);
+                  }}
+                >
                   <div className="text-center p-1 overflow-hidden">
                     <div className="truncate">{table.name}</div>
-                    {table.isBooked && <div className="text-[8px] mt-0.5">BOOKED</div>}
+                    {table.isBooked && (
+                      <div className="text-[8px] mt-0.5">BOOKED</div>
+                    )}
                   </div>
                   {selectedTable === table.positionId && (
                     <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-1 bg-white border p-1 rounded-md shadow-xl z-50">
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => rotateTable(table.positionId)}><RotateCw size={12} /></Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500 hover:text-red-600" onClick={() => removeTableFromVenue(table.positionId)}><Trash2 size={12} /></Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={() => rotateTable(table.positionId)}
+                      >
+                        <RotateCw size={12} />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-red-500 hover:text-red-600"
+                        onClick={() => removeTableFromVenue(table.positionId)}
+                      >
+                        <Trash2 size={12} />
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -1833,33 +2102,213 @@ const VenueDesigner = ({
                   <div
                     key={`sz-${zone.positionId}`}
                     style={{
-                      position: "absolute", left: zone.x * venueConfig.scale, top: zone.y * venueConfig.scale,
-                      width: zone.width * venueConfig.scale, height: zone.height * venueConfig.scale,
-                      background: isSelected ? "linear-gradient(135deg, #7c3aed, #6d28d9)" : "linear-gradient(135deg, #a855f7, #8b5cf6)",
-                      border: isSelected ? "3px solid #5b21b6" : "2px solid #7c3aed",
-                      borderRadius: "10px", cursor: isDragging ? "grabbing" : "grab",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: Math.max(8, 10 * venueConfig.scale) + "px", fontWeight: "bold", color: "white",
-                      userSelect: "none" as const, zIndex: isSelected ? 10 : 2,
+                      position: "absolute",
+                      left: zone.x * venueConfig.scale,
+                      top: zone.y * venueConfig.scale,
+                      width: zone.width * venueConfig.scale,
+                      height: zone.height * venueConfig.scale,
+                      background: isSelected
+                        ? "linear-gradient(135deg, #7c3aed, #6d28d9)"
+                        : "linear-gradient(135deg, #a855f7, #8b5cf6)",
+                      border: isSelected
+                        ? "3px solid #5b21b6"
+                        : "2px solid #7c3aed",
+                      borderRadius: "10px",
+                      cursor: isDragging ? "grabbing" : "grab",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: Math.max(8, 10 * venueConfig.scale) + "px",
+                      fontWeight: "bold",
+                      color: "white",
+                      userSelect: "none" as const,
+                      zIndex: isSelected ? 10 : 2,
                       transition: isDragging ? "none" : "all 0.1s ease",
-                      boxShadow: isSelected ? "0 6px 20px rgba(124,58,237,0.4)" : "0 2px 8px rgba(124,58,237,0.15)",
+                      boxShadow: isSelected
+                        ? "0 6px 20px rgba(124,58,237,0.4)"
+                        : "0 2px 8px rgba(124,58,237,0.15)",
                     }}
                     onMouseDown={(e) => handleSpeakerZoneMouseDown(e, zone)}
-                    onClick={(e) => { e.stopPropagation(); setSelectedTable(`sz-${zone.positionId}`); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedTable(`sz-${zone.positionId}`);
+                    }}
                   >
                     <div className="text-center p-1 overflow-hidden">
                       <div className="truncate">{zone.name}</div>
-                      <div style={{ fontSize: Math.max(6, 8 * venueConfig.scale) + "px", opacity: 0.85 }}>
-                        {zone.startTime ? `${zone.startTime} - ${zone.endTime}` : "SPEAKER ZONE"}
+                      <div
+                        style={{
+                          fontSize: Math.max(6, 8 * venueConfig.scale) + "px",
+                          opacity: 0.85,
+                        }}
+                      >
+                        {zone.startTime
+                          ? `${zone.startTime} - ${zone.endTime}`
+                          : "SPEAKER ZONE"}
                       </div>
                     </div>
                     {isSelected && (
                       <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-1 bg-white border p-1 rounded-md shadow-xl z-50">
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => {
-                          const updated = currentSpeakerZones.map((z) => z.positionId === zone.positionId ? { ...z, rotation: ((z.rotation || 0) + 90) % 360 } : z);
-                          setVenueSpeakerZones({ ...venueSpeakerZones, [selectedVenueConfigId]: updated });
-                        }}><RotateCw size={12} /></Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500 hover:text-red-600" onClick={() => removeSpeakerZone(zone.positionId)}><Trash2 size={12} /></Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          onClick={() => {
+                            const updated = currentSpeakerZones.map((z) =>
+                              z.positionId === zone.positionId
+                                ? {
+                                    ...z,
+                                    rotation: ((z.rotation || 0) + 90) % 360,
+                                  }
+                                : z,
+                            );
+                            setVenueSpeakerZones({
+                              ...venueSpeakerZones,
+                              [selectedVenueConfigId]: updated,
+                            });
+                          }}
+                        >
+                          <RotateCw size={12} />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-red-500 hover:text-red-600"
+                          onClick={() => removeSpeakerZone(zone.positionId)}
+                        >
+                          <Trash2 size={12} />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Placed Round Tables */}
+              {currentRoundTables.map((rt) => {
+                const isSelected = selectedTable === `rt-${rt.positionId}`;
+                const diameter = (rt.tableDiameter || 120) * venueConfig.scale;
+                const chairSize = Math.max(8, 12 * venueConfig.scale);
+                const chairOffset = diameter / 2 + chairSize / 2 + 2;
+                const centerX = diameter / 2;
+                const centerY = diameter / 2;
+
+                return (
+                  <div
+                    key={`rt-${rt.positionId}`}
+                    style={{
+                      position: "absolute",
+                      left: rt.x * venueConfig.scale,
+                      top: rt.y * venueConfig.scale,
+                      width: diameter + chairSize + 4,
+                      height: diameter + chairSize + 4,
+                      cursor: isDragging ? "grabbing" : "grab",
+                      userSelect: "none" as const,
+                      zIndex: isSelected ? 10 : 2,
+                    }}
+                    onMouseDown={(e) => handleRoundTableMouseDown(e, rt)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedTable(`rt-${rt.positionId}`);
+                    }}
+                  >
+                    {/* The table circle */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: chairSize / 2 + 2,
+                        top: chairSize / 2 + 2,
+                        width: diameter,
+                        height: diameter,
+                        borderRadius: "50%",
+                        backgroundColor: rt.color + "33",
+                        border: isSelected
+                          ? `3px solid ${rt.color}`
+                          : `2px solid ${rt.color}88`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexDirection: "column",
+                        boxShadow: isSelected
+                          ? `0 4px 12px ${rt.color}44`
+                          : "none",
+                        transition: isDragging ? "none" : "all 0.1s ease",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: Math.max(7, 9 * venueConfig.scale) + "px",
+                          fontWeight: "bold",
+                          color: rt.color,
+                          textAlign: "center",
+                          lineHeight: 1.1,
+                        }}
+                      >
+                        {rt.name}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: Math.max(5, 7 * venueConfig.scale) + "px",
+                          color: rt.color + "BB",
+                          marginTop: 1,
+                        }}
+                      >
+                        {rt.category}
+                      </span>
+                    </div>
+
+                    {/* Chair circles */}
+                    {Array.from({ length: rt.numberOfChairs }).map((_, i) => {
+                      const angle =
+                        (2 * Math.PI * i) / rt.numberOfChairs - Math.PI / 2;
+                      const cx =
+                        centerX +
+                        chairOffset * Math.cos(angle) +
+                        chairSize / 2 +
+                        2;
+                      const cy =
+                        centerY +
+                        chairOffset * Math.sin(angle) +
+                        chairSize / 2 +
+                        2;
+                      const isBooked = (rt.bookedChairs || []).includes(i);
+
+                      return (
+                        <div
+                          key={i}
+                          style={{
+                            position: "absolute",
+                            left: cx - chairSize / 2,
+                            top: cy - chairSize / 2,
+                            width: chairSize,
+                            height: chairSize,
+                            borderRadius: "50%",
+                            backgroundColor: isBooked ? "#9ca3af" : rt.color,
+                            border: "1px solid white",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: Math.max(5, 6 * venueConfig.scale) + "px",
+                            color: "white",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {i + 1}
+                        </div>
+                      );
+                    })}
+
+                    {/* Controls */}
+                    {isSelected && (
+                      <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-1 bg-white border p-1 rounded-md shadow-xl z-50">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-red-500 hover:text-red-600"
+                          onClick={() => removeRoundTable(rt.positionId)}
+                        >
+                          <Trash2 size={12} />
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -1871,32 +2320,94 @@ const VenueDesigner = ({
       </Card>
 
       {/* Inventory Summary - Full Width */}
-      {(currentTables.length > 0 || currentSpeakerZones.length > 0) && (
+      {(currentTables.length > 0 ||
+        currentSpeakerZones.length > 0 ||
+        currentRoundTables.length > 0) && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Placed Items ({currentTables.length + currentSpeakerZones.length})</CardTitle>
+            <CardTitle className="text-base">
+              Placed Items (
+              {currentTables.length +
+                currentSpeakerZones.length +
+                currentRoundTables.length}
+              )
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
               {currentTables.map((table) => (
-                <div key={table.positionId} className={`p-3 border rounded-lg transition-all cursor-pointer ${selectedTable === table.positionId ? "ring-2 ring-blue-500 bg-blue-50" : "bg-slate-50 hover:bg-slate-100"}`} onClick={() => setSelectedTable(table.positionId)}>
+                <div
+                  key={table.positionId}
+                  className={`p-3 border rounded-lg transition-all cursor-pointer ${selectedTable === table.positionId ? "ring-2 ring-blue-500 bg-blue-50" : "bg-slate-50 hover:bg-slate-100"}`}
+                  onClick={() => setSelectedTable(table.positionId)}
+                >
                   <div className="flex items-center gap-2 mb-1">
                     <div className="w-2 h-2 rounded-sm bg-blue-500" />
-                    <Input className="h-6 text-xs bg-white border-0 p-0 font-semibold" value={table.name} placeholder="Name" onChange={(e) => handleUpdateTable(table.positionId, { name: e.target.value })} onClick={(e) => e.stopPropagation()} />
+                    <Input
+                      className="h-6 text-xs bg-white border-0 p-0 font-semibold"
+                      value={table.name}
+                      placeholder="Name"
+                      onChange={(e) =>
+                        handleUpdateTable(table.positionId, {
+                          name: e.target.value,
+                        })
+                      }
+                      onClick={(e) => e.stopPropagation()}
+                    />
                   </div>
                   <div className="flex justify-between text-[9px] text-slate-500 uppercase font-bold">
                     <span>{table.type}</span>
-                    <span className={table.isBooked ? "text-red-500" : "text-green-600"}>{table.isBooked ? "Booked" : "Open"}</span>
+                    <span
+                      className={
+                        table.isBooked ? "text-red-500" : "text-green-600"
+                      }
+                    >
+                      {table.isBooked ? "Booked" : "Open"}
+                    </span>
                   </div>
                 </div>
               ))}
               {currentSpeakerZones.map((zone) => (
-                <div key={`inv-${zone.positionId}`} className={`p-3 border-2 border-purple-200 rounded-lg transition-all cursor-pointer ${selectedTable === `sz-${zone.positionId}` ? "ring-2 ring-purple-500 bg-purple-50" : "bg-purple-50/30 hover:bg-purple-50"}`} onClick={() => setSelectedTable(`sz-${zone.positionId}`)}>
+                <div
+                  key={`inv-${zone.positionId}`}
+                  className={`p-3 border-2 border-purple-200 rounded-lg transition-all cursor-pointer ${selectedTable === `sz-${zone.positionId}` ? "ring-2 ring-purple-500 bg-purple-50" : "bg-purple-50/30 hover:bg-purple-50"}`}
+                  onClick={() => setSelectedTable(`sz-${zone.positionId}`)}
+                >
                   <div className="flex items-center gap-2 mb-1">
                     <div className="w-2 h-2 rounded-full bg-purple-500" />
-                    <span className="text-xs font-semibold text-purple-800 truncate">{zone.name}</span>
+                    <span className="text-xs font-semibold text-purple-800 truncate">
+                      {zone.name}
+                    </span>
                   </div>
-                  <p className="text-[9px] text-purple-600">{zone.startTime ? `${zone.startTime}-${zone.endTime}` : "Speaker Zone"}</p>
+                  <p className="text-[9px] text-purple-600">
+                    {zone.startTime
+                      ? `${zone.startTime}-${zone.endTime}`
+                      : "Speaker Zone"}
+                  </p>
+                </div>
+              ))}
+              {currentRoundTables.map((rt) => (
+                <div
+                  key={`inv-rt-${rt.positionId}`}
+                  className={`p-3 border-2 rounded-lg transition-all cursor-pointer ${selectedTable === `rt-${rt.positionId}` ? "ring-2 bg-opacity-20" : "bg-opacity-5 hover:bg-opacity-10"}`}
+                  style={{
+                    borderColor: rt.color + "66",
+                    backgroundColor: rt.color + "11",
+                  }}
+                  onClick={() => setSelectedTable(`rt-${rt.positionId}`)}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <div
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: rt.color }}
+                    />
+                    <span className="text-xs font-semibold truncate">
+                      {rt.name}
+                    </span>
+                  </div>
+                  <p className="text-[9px] text-muted-foreground">
+                    {rt.numberOfChairs} chairs &middot; {rt.category}
+                  </p>
                 </div>
               ))}
             </div>
@@ -2024,7 +2535,7 @@ export function CreateEventForm({
 
   useEffect(() => {
     fetchOrganizer();
-  });
+  }, []);
 
   // Enhanced Options
   const categoryOptions = [
@@ -2156,18 +2667,49 @@ export function CreateEventForm({
   });
 
   // Positioned speaker zones on venue canvas
-  const [venueSpeakerZones, setVenueSpeakerZones] = useState<Record<string, any[]>>(
-    initialData?.venueSpeakerZones ?
-      (Array.isArray(initialData.venueSpeakerZones)
+  const [venueSpeakerZones, setVenueSpeakerZones] = useState<
+    Record<string, any[]>
+  >(
+    initialData?.venueSpeakerZones
+      ? Array.isArray(initialData.venueSpeakerZones)
         ? initialData.venueSpeakerZones.reduce((acc: any, z: any) => {
             const key = z.venueConfigId || "default";
             if (!acc[key]) acc[key] = [];
             acc[key].push(z);
             return acc;
           }, {})
-        : initialData.venueSpeakerZones)
+        : initialData.venueSpeakerZones
       : {},
   );
+
+  // Round Table states
+  const [roundTableTemplates, setRoundTableTemplates] = useState<
+    RoundTableTemplate[]
+  >(initialData?.roundTableTemplates || []);
+  const [venueRoundTables, setVenueRoundTables] = useState<
+    Record<string, PositionedRoundTable[]>
+  >(
+    initialData?.venueRoundTables
+      ? Array.isArray(initialData.venueRoundTables)
+        ? initialData.venueRoundTables.reduce((acc: any, rt: any) => {
+            const key = rt.venueConfigId || "default";
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(rt);
+            return acc;
+          }, {})
+        : initialData.venueRoundTables
+      : {},
+  );
+  const [currentRoundTable, setCurrentRoundTable] = useState({
+    name: "",
+    numberOfChairs: "8",
+    sellingMode: "chair" as "table" | "chair",
+    tablePrice: "",
+    chairPrice: "",
+    category: "Standard",
+    color: "#8B5CF6",
+    tableDiameter: "120",
+  });
 
   // Load initial data for editing
   useEffect(() => {
@@ -2220,6 +2762,25 @@ export function CreateEventForm({
             isMandatory: t.isMandatory,
           })),
         );
+      }
+      if (initialData.roundTableTemplates) {
+        setRoundTableTemplates(initialData.roundTableTemplates);
+      }
+      if (initialData.venueRoundTables) {
+        if (Array.isArray(initialData.venueRoundTables)) {
+          const grouped = initialData.venueRoundTables.reduce(
+            (acc: any, rt: any) => {
+              const key = rt.venueConfigId || "default";
+              if (!acc[key]) acc[key] = [];
+              acc[key].push(rt);
+              return acc;
+            },
+            {},
+          );
+          setVenueRoundTables(grouped);
+        } else {
+          setVenueRoundTables(initialData.venueRoundTables);
+        }
       }
     }
   }, [editMode, initialData]);
@@ -2325,8 +2886,12 @@ export function CreateEventForm({
       id: Math.random().toString(36).slice(2, 10),
       name: currentSpeakerSlot.name.trim(),
       isMainStage: currentSpeakerSlot.isMainStage,
-      width: currentSpeakerSlot.isMainStage ? 300 : parseInt(currentSpeakerSlot.width) || 200,
-      height: currentSpeakerSlot.isMainStage ? 80 : parseInt(currentSpeakerSlot.height) || 100,
+      width: currentSpeakerSlot.isMainStage
+        ? 300
+        : parseInt(currentSpeakerSlot.width) || 200,
+      height: currentSpeakerSlot.isMainStage
+        ? 80
+        : parseInt(currentSpeakerSlot.height) || 100,
       slotPrice: parseFloat(currentSpeakerSlot.slotPrice) || 0,
       maxSpeakers: parseInt(currentSpeakerSlot.maxSpeakers) || 1,
       maxVisitors: parseInt(currentSpeakerSlot.maxVisitors) || 0,
@@ -2336,9 +2901,17 @@ export function CreateEventForm({
     };
     setSpeakerSlotTemplates((prev) => [...prev, newSlot]);
     setCurrentSpeakerSlot({
-      name: "", startTime: "", endTime: "", isMainStage: false,
-      width: "200", height: "100", slotPrice: "0", maxSpeakers: "1",
-      maxVisitors: "", description: "", openForApplications: true,
+      name: "",
+      startTime: "",
+      endTime: "",
+      isMainStage: false,
+      width: "200",
+      height: "100",
+      slotPrice: "0",
+      maxSpeakers: "1",
+      maxVisitors: "",
+      description: "",
+      openForApplications: true,
     });
   };
 
@@ -2355,13 +2928,21 @@ export function CreateEventForm({
       id: Math.random().toString(36).slice(2, 10),
       name: currentVisitor.name.trim(),
       price: parseFloat(currentVisitor.price) || 0,
-      maxCount: currentVisitor.maxCount ? parseInt(currentVisitor.maxCount) : undefined,
+      maxCount: currentVisitor.maxCount
+        ? parseInt(currentVisitor.maxCount)
+        : undefined,
       description: currentVisitor.description,
       featureAccess: { ...currentVisitor.featureAccess },
       isActive: true,
     };
     setVisitorTypes((prev) => [...prev, newVisitor]);
-    setCurrentVisitor({ name: "", price: "0", maxCount: "", description: "", featureAccess: { ...DEFAULT_VISITOR_FEATURES } });
+    setCurrentVisitor({
+      name: "",
+      price: "0",
+      maxCount: "",
+      description: "",
+      featureAccess: { ...DEFAULT_VISITOR_FEATURES },
+    });
   };
 
   const removeVisitorType = (id: string) => {
@@ -2487,7 +3068,8 @@ export function CreateEventForm({
               organization: sess.companyName || "",
               bio: sess.description || "",
               hasNewImage: !!sess.photoFile,
-              image: sess.photo || "", email: sess.email || "",
+              image: sess.photo || "",
+              email: sess.email || "",
               socialLinks: {
                 linkedin: sess.socialLinks?.linkedin || "",
                 twitter: sess.socialLinks?.twitter || "",
@@ -2496,7 +3078,14 @@ export function CreateEventForm({
                 youtube: sess.socialLinks?.youtube || "",
                 facebook: sess.socialLinks?.facebook || "",
               },
-              slots: [{ topic: sess.agenda || space.name, startTime: sess.startTime || "", endTime: sess.endTime || "", description: sess.description || "" }],
+              slots: [
+                {
+                  topic: sess.agenda || space.name,
+                  startTime: sess.startTime || "",
+                  endTime: sess.endTime || "",
+                  description: sess.description || "",
+                },
+              ],
               isKeynote: space.isMainStage || false,
               order: builtSpeakers.length,
             });
@@ -2508,9 +3097,18 @@ export function CreateEventForm({
       // Add speaker slot templates and zones
       data.append("speakerSlotTemplates", JSON.stringify(speakerSlotTemplates));
       const allSpeakerZones = Object.entries(venueSpeakerZones).flatMap(
-        ([configId, zones]) => zones.map((z: any) => ({ ...z, venueConfigId: configId }))
+        ([configId, zones]) =>
+          zones.map((z: any) => ({ ...z, venueConfigId: configId })),
       );
       data.append("venueSpeakerZones", JSON.stringify(allSpeakerZones));
+
+      // Add round table data
+      data.append("roundTableTemplates", JSON.stringify(roundTableTemplates));
+      const allRoundTables = Object.entries(venueRoundTables).flatMap(
+        ([configId, tables]) =>
+          tables.map((rt) => ({ ...rt, venueConfigId: configId })),
+      );
+      data.append("venueRoundTables", JSON.stringify(allRoundTables));
 
       // Add visitor types
       data.append("visitorTypes", JSON.stringify(visitorTypes));
@@ -2566,7 +3164,7 @@ export function CreateEventForm({
       {/* Sticky Tabs */}
       <div className="sticky top-[73px] z-40 bg-white border-b">
         <Tabs value={currentTab} onValueChange={setCurrentTab}>
-          <TabsList className="grid w-full grid-cols-7 h-12">
+          <TabsList className="grid w-full grid-cols-8 h-12">
             <TabsTrigger value="basic" className="text-sm">
               Basic Info
             </TabsTrigger>
@@ -2584,6 +3182,9 @@ export function CreateEventForm({
             </TabsTrigger>
             <TabsTrigger value="tables" className="text-sm">
               Space / AddOns
+            </TabsTrigger>
+            <TabsTrigger value="roundtables" className="text-sm">
+              Round Tables
             </TabsTrigger>
             <TabsTrigger value="layout" className="text-sm">
               Space Layout
@@ -2736,7 +3337,6 @@ export function CreateEventForm({
                     required
                   />
                 </div>
-
               </CardContent>
             </Card>
 
@@ -2830,17 +3430,21 @@ export function CreateEventForm({
                       Special Instructions / Event Itinerary
                     </Label>
                     <div className="bg-white dark:bg-slate-950 rounded-md">
-                      <Suspense fallback={<div className="h-[150px] border rounded-md animate-pulse bg-muted" />}>
-                      <ReactQuill
-                        theme="snow"
-                        value={formData.specialInstructions}
-                        modules={modules}
-                        onChange={(content) =>
-                          handleInputChange("specialInstructions", content)
+                      <Suspense
+                        fallback={
+                          <div className="h-[150px] border rounded-md animate-pulse bg-muted" />
                         }
-                        placeholder="e.g. 1. Goods once sold are not returnable."
-                        className="[&_.ql-editor]:min-h-[150px] [&_.ql-container]:rounded-b-md [&_.ql-toolbar]:rounded-t-md text-black dark:text-white"
-                      />
+                      >
+                        <ReactQuill
+                          theme="snow"
+                          value={formData.specialInstructions}
+                          modules={modules}
+                          onChange={(content) =>
+                            handleInputChange("specialInstructions", content)
+                          }
+                          placeholder="e.g. 1. Goods once sold are not returnable."
+                          className="[&_.ql-editor]:min-h-[150px] [&_.ql-container]:rounded-b-md [&_.ql-toolbar]:rounded-t-md text-black dark:text-white"
+                        />
                       </Suspense>
                     </div>
                   </div>
@@ -2849,17 +3453,21 @@ export function CreateEventForm({
                   <div>
                     <Label className="mb-2 block">Refund Policy</Label>
                     <div className="bg-white dark:bg-slate-950 rounded-md">
-                      <Suspense fallback={<div className="h-[150px] border rounded-md animate-pulse bg-muted" />}>
-                      <ReactQuill
-                        theme="snow"
-                        value={formData.refundPolicy}
-                        modules={modules}
-                        onChange={(content) =>
-                          handleInputChange("refundPolicy", content)
+                      <Suspense
+                        fallback={
+                          <div className="h-[150px] border rounded-md animate-pulse bg-muted" />
                         }
-                        placeholder="Define your refund policies"
-                        className="[&_.ql-editor]:min-h-[150px] [&_.ql-container]:rounded-b-md [&_.ql-toolbar]:rounded-t-md text-black dark:text-white"
-                      />
+                      >
+                        <ReactQuill
+                          theme="snow"
+                          value={formData.refundPolicy}
+                          modules={modules}
+                          onChange={(content) =>
+                            handleInputChange("refundPolicy", content)
+                          }
+                          placeholder="Define your refund policies"
+                          className="[&_.ql-editor]:min-h-[150px] [&_.ql-container]:rounded-b-md [&_.ql-toolbar]:rounded-t-md text-black dark:text-white"
+                        />
                       </Suspense>
                     </div>
                   </div>
@@ -2868,17 +3476,21 @@ export function CreateEventForm({
                   <div>
                     <Label className="mb-2 block">Terms and Conditions</Label>
                     <div className="bg-white dark:bg-slate-950 rounded-md">
-                      <Suspense fallback={<div className="h-[150px] border rounded-md animate-pulse bg-muted" />}>
-                      <ReactQuill
-                        theme="snow"
-                        value={formData.termsAndConditions}
-                        modules={modules}
-                        onChange={(content) =>
-                          handleInputChange("termsAndConditions", content)
+                      <Suspense
+                        fallback={
+                          <div className="h-[150px] border rounded-md animate-pulse bg-muted" />
                         }
-                        placeholder="Event terms and conditions"
-                        className="[&_.ql-editor]:min-h-[150px] [&_.ql-container]:rounded-b-md [&_.ql-toolbar]:rounded-t-md text-black dark:text-white"
-                      />
+                      >
+                        <ReactQuill
+                          theme="snow"
+                          value={formData.termsAndConditions}
+                          modules={modules}
+                          onChange={(content) =>
+                            handleInputChange("termsAndConditions", content)
+                          }
+                          placeholder="Event terms and conditions"
+                          className="[&_.ql-editor]:min-h-[150px] [&_.ql-container]:rounded-b-md [&_.ql-toolbar]:rounded-t-md text-black dark:text-white"
+                        />
                       </Suspense>
                     </div>
                   </div>
@@ -2999,48 +3611,127 @@ export function CreateEventForm({
               </CardHeader>
               <CardContent className="space-y-6">
                 <p className="text-sm text-gray-500">
-                  Define different visitor categories (e.g. Normal, Delegate, VIP). Leave <strong>Max Count</strong> empty for unlimited entries.
+                  Define different visitor categories (e.g. Normal, Delegate,
+                  VIP). Leave <strong>Max Count</strong> empty for unlimited
+                  entries.
                 </p>
                 <div className="border rounded-lg p-4 bg-slate-50 space-y-4">
-                  <Label className="text-sm font-semibold text-slate-700">Add New Visitor Type</Label>
+                  <Label className="text-sm font-semibold text-slate-700">
+                    Add New Visitor Type
+                  </Label>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <Label>Type Name *</Label>
-                      <Input value={currentVisitor.name} onChange={(e) => setCurrentVisitor((p) => ({ ...p, name: e.target.value }))} placeholder="e.g. VIP, Delegate, General" />
+                      <Input
+                        value={currentVisitor.name}
+                        onChange={(e) =>
+                          setCurrentVisitor((p) => ({
+                            ...p,
+                            name: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g. VIP, Delegate, General"
+                      />
                     </div>
                     <div>
                       <Label>Entry Price *</Label>
-                      <Input type="number" min="0" value={currentVisitor.price} onChange={(e) => setCurrentVisitor((p) => ({ ...p, price: e.target.value }))} placeholder="0 = Free" />
+                      <Input
+                        type="number"
+                        min="0"
+                        value={currentVisitor.price}
+                        onChange={(e) =>
+                          setCurrentVisitor((p) => ({
+                            ...p,
+                            price: e.target.value,
+                          }))
+                        }
+                        placeholder="0 = Free"
+                      />
                     </div>
                     <div>
-                      <Label>Max Count <span className="text-gray-400 text-xs">(blank = unlimited)</span></Label>
-                      <Input type="number" min="1" value={currentVisitor.maxCount} onChange={(e) => setCurrentVisitor((p) => ({ ...p, maxCount: e.target.value }))} placeholder="e.g. 100" />
+                      <Label>
+                        Max Count{" "}
+                        <span className="text-gray-400 text-xs">
+                          (blank = unlimited)
+                        </span>
+                      </Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={currentVisitor.maxCount}
+                        onChange={(e) =>
+                          setCurrentVisitor((p) => ({
+                            ...p,
+                            maxCount: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g. 100"
+                      />
                     </div>
                   </div>
                   <div>
                     <Label>Description</Label>
-                    <Input value={currentVisitor.description} onChange={(e) => setCurrentVisitor((p) => ({ ...p, description: e.target.value }))} placeholder="Brief description of this visitor type" />
+                    <Input
+                      value={currentVisitor.description}
+                      onChange={(e) =>
+                        setCurrentVisitor((p) => ({
+                          ...p,
+                          description: e.target.value,
+                        }))
+                      }
+                      placeholder="Brief description of this visitor type"
+                    />
                   </div>
                   <div>
-                    <Label className="text-sm font-medium mb-2 block">Feature Access</Label>
+                    <Label className="text-sm font-medium mb-2 block">
+                      Feature Access
+                    </Label>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      {Object.keys(currentVisitor.featureAccess).map((feature) => (
-                        <div key={feature} className="flex items-center space-x-2">
-                          <Checkbox checked={!!currentVisitor.featureAccess[feature as keyof VisitorFeatureAccess]} onCheckedChange={(checked) => setCurrentVisitor((p) => ({ ...p, featureAccess: { ...p.featureAccess, [feature]: !!checked } }))} />
-                          <Label className="capitalize text-sm">{feature}</Label>
-                          {!DEFAULT_FEATURE_NAMES.includes(feature) && (
-                            <Button type="button" variant="ghost" size="sm" className="h-5 w-5 p-0 text-red-400 hover:text-red-600" onClick={() => {
-                              setCurrentVisitor((p) => {
-                                const fa = { ...p.featureAccess };
-                                delete (fa as any)[feature];
-                                return { ...p, featureAccess: fa };
-                              });
-                            }}>
-                              <X size={10} />
-                            </Button>
-                          )}
-                        </div>
-                      ))}
+                      {Object.keys(currentVisitor.featureAccess).map(
+                        (feature) => (
+                          <div
+                            key={feature}
+                            className="flex items-center space-x-2"
+                          >
+                            <Checkbox
+                              checked={
+                                !!currentVisitor.featureAccess[
+                                  feature as keyof VisitorFeatureAccess
+                                ]
+                              }
+                              onCheckedChange={(checked) =>
+                                setCurrentVisitor((p) => ({
+                                  ...p,
+                                  featureAccess: {
+                                    ...p.featureAccess,
+                                    [feature]: !!checked,
+                                  },
+                                }))
+                              }
+                            />
+                            <Label className="capitalize text-sm">
+                              {feature}
+                            </Label>
+                            {!DEFAULT_FEATURE_NAMES.includes(feature) && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-5 w-5 p-0 text-red-400 hover:text-red-600"
+                                onClick={() => {
+                                  setCurrentVisitor((p) => {
+                                    const fa = { ...p.featureAccess };
+                                    delete (fa as any)[feature];
+                                    return { ...p, featureAccess: fa };
+                                  });
+                                }}
+                              >
+                                <X size={10} />
+                              </Button>
+                            )}
+                          </div>
+                        ),
+                      )}
                     </div>
                     <div className="flex gap-2 mt-3">
                       <Input
@@ -3049,56 +3740,134 @@ export function CreateEventForm({
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             e.preventDefault();
-                            const val = (e.target as HTMLInputElement).value.trim().toLowerCase();
-                            if (val && !currentVisitor.featureAccess.hasOwnProperty(val)) {
-                              setCurrentVisitor((p) => ({ ...p, featureAccess: { ...p.featureAccess, [val]: true } }));
+                            const val = (e.target as HTMLInputElement).value
+                              .trim()
+                              .toLowerCase();
+                            if (
+                              val &&
+                              !currentVisitor.featureAccess.hasOwnProperty(val)
+                            ) {
+                              setCurrentVisitor((p) => ({
+                                ...p,
+                                featureAccess: {
+                                  ...p.featureAccess,
+                                  [val]: true,
+                                },
+                              }));
                               (e.target as HTMLInputElement).value = "";
                             }
                           }
                         }}
                       />
-                      <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => {
-                        const input = document.getElementById("custom-feature-input") as HTMLInputElement;
-                        if (!input) return;
-                        const val = input.value.trim().toLowerCase();
-                        if (val && !currentVisitor.featureAccess.hasOwnProperty(val)) {
-                          setCurrentVisitor((p) => ({ ...p, featureAccess: { ...p.featureAccess, [val]: true } }));
-                          input.value = "";
-                        }
-                      }}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={() => {
+                          const input = document.getElementById(
+                            "custom-feature-input",
+                          ) as HTMLInputElement;
+                          if (!input) return;
+                          const val = input.value.trim().toLowerCase();
+                          if (
+                            val &&
+                            !currentVisitor.featureAccess.hasOwnProperty(val)
+                          ) {
+                            setCurrentVisitor((p) => ({
+                              ...p,
+                              featureAccess: {
+                                ...p.featureAccess,
+                                [val]: true,
+                              },
+                            }));
+                            input.value = "";
+                          }
+                        }}
+                      >
                         <Plus size={12} className="mr-1" /> Add
                       </Button>
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">Press Enter or click Add to create a custom feature</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Press Enter or click Add to create a custom feature
+                    </p>
                   </div>
-                  <Button type="button" onClick={addVisitorType} className="w-full md:w-auto">
+                  <Button
+                    type="button"
+                    onClick={addVisitorType}
+                    className="w-full md:w-auto"
+                  >
                     <Plus size={16} className="mr-2" /> Add Visitor Type
                   </Button>
                 </div>
                 {visitorTypes.length === 0 && (
-                  <div className="text-sm text-gray-400 border border-dashed rounded-lg p-6 text-center">No visitor types added yet. Add at least one above.</div>
+                  <div className="text-sm text-gray-400 border border-dashed rounded-lg p-6 text-center">
+                    No visitor types added yet. Add at least one above.
+                  </div>
                 )}
                 <div className="space-y-3">
                   {visitorTypes.map((visitor, index) => (
-                    <div key={visitor.id} className="border rounded-lg p-4 bg-white space-y-3">
+                    <div
+                      key={visitor.id}
+                      className="border rounded-lg p-4 bg-white space-y-3"
+                    >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="bg-primary/10 text-primary rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold">{index + 1}</div>
+                          <div className="bg-primary/10 text-primary rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold">
+                            {index + 1}
+                          </div>
                           <div>
                             <div className="font-semibold">{visitor.name}</div>
-                            <div className="text-sm text-gray-500">{visitor.price === 0 ? "Free" : formatPrice(visitor.price)} · {visitor.maxCount ? `Max ${visitor.maxCount}` : "Unlimited"}</div>
+                            <div className="text-sm text-gray-500">
+                              {visitor.price === 0
+                                ? "Free"
+                                : formatPrice(visitor.price)}{" "}
+                              ·{" "}
+                              {visitor.maxCount
+                                ? `Max ${visitor.maxCount}`
+                                : "Unlimited"}
+                            </div>
                           </div>
                         </div>
-                        <Button type="button" variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={() => removeVisitorType(visitor.id)}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-500 hover:text-red-600"
+                          onClick={() => removeVisitorType(visitor.id)}
+                        >
                           <Trash2 size={14} />
                         </Button>
                       </div>
-                      {visitor.description && <p className="text-sm text-gray-600 bg-gray-50 rounded px-3 py-2">{visitor.description}</p>}
+                      {visitor.description && (
+                        <p className="text-sm text-gray-600 bg-gray-50 rounded px-3 py-2">
+                          {visitor.description}
+                        </p>
+                      )}
                       <div className="flex flex-wrap gap-2">
-                        {(Object.entries(visitor.featureAccess) as [keyof VisitorFeatureAccess, boolean][]).filter(([, val]) => val).map(([feat]) => (
-                          <Badge key={feat} variant="secondary" className="capitalize text-xs">{feat}</Badge>
-                        ))}
-                        {Object.values(visitor.featureAccess).every((v) => !v) && <span className="text-xs text-gray-400">No special feature access</span>}
+                        {(
+                          Object.entries(visitor.featureAccess) as [
+                            keyof VisitorFeatureAccess,
+                            boolean,
+                          ][]
+                        )
+                          .filter(([, val]) => val)
+                          .map(([feat]) => (
+                            <Badge
+                              key={feat}
+                              variant="secondary"
+                              className="capitalize text-xs"
+                            >
+                              {feat}
+                            </Badge>
+                          ))}
+                        {Object.values(visitor.featureAccess).every(
+                          (v) => !v,
+                        ) && (
+                          <span className="text-xs text-gray-400">
+                            No special feature access
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -3116,30 +3885,63 @@ export function CreateEventForm({
                   Speaker Space
                 </CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Define the physical speaker zone — dimensions, stage type, and pricing. This zone will appear on your venue layout.
+                  Define the physical speaker zone — dimensions, stage type, and
+                  pricing. This zone will appear on your venue layout.
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="border rounded-xl p-5 bg-slate-50 space-y-4">
-                  <Label className="text-sm font-semibold text-slate-700">Add Speaker Space</Label>
+                  <Label className="text-sm font-semibold text-slate-700">
+                    Add Speaker Space
+                  </Label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label className="text-xs">Space Name *</Label>
-                      <Input value={currentSpeakerSlot.name} onChange={(e) => setCurrentSpeakerSlot((p) => ({ ...p, name: e.target.value }))} placeholder="e.g. Main Stage, Workshop Room, Panel Area" />
+                      <Input
+                        value={currentSpeakerSlot.name}
+                        onChange={(e) =>
+                          setCurrentSpeakerSlot((p) => ({
+                            ...p,
+                            name: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g. Main Stage, Workshop Room, Panel Area"
+                      />
                     </div>
                     <div>
                       <Label className="text-xs">Description</Label>
-                      <Input value={currentSpeakerSlot.description} onChange={(e) => setCurrentSpeakerSlot((p) => ({ ...p, description: e.target.value }))} placeholder="Brief description of this space" />
+                      <Input
+                        value={currentSpeakerSlot.description}
+                        onChange={(e) =>
+                          setCurrentSpeakerSlot((p) => ({
+                            ...p,
+                            description: e.target.value,
+                          }))
+                        }
+                        placeholder="Brief description of this space"
+                      />
                     </div>
                   </div>
 
                   {/* Main Stage Toggle */}
                   <div className="flex items-center justify-between bg-white rounded-lg p-3 border">
                     <div>
-                      <Label className="text-sm font-medium">Is Main Stage</Label>
-                      <p className="text-xs text-muted-foreground">Uses the venue's main stage — dimensions are auto-set</p>
+                      <Label className="text-sm font-medium">
+                        Is Main Stage
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Uses the venue's main stage — dimensions are auto-set
+                      </p>
                     </div>
-                    <Checkbox checked={currentSpeakerSlot.isMainStage} onCheckedChange={(checked) => setCurrentSpeakerSlot((p) => ({ ...p, isMainStage: !!checked }))} />
+                    <Checkbox
+                      checked={currentSpeakerSlot.isMainStage}
+                      onCheckedChange={(checked) =>
+                        setCurrentSpeakerSlot((p) => ({
+                          ...p,
+                          isMainStage: !!checked,
+                        }))
+                      }
+                    />
                   </div>
 
                   {/* Dimensions (only if NOT main stage) */}
@@ -3147,11 +3949,33 @@ export function CreateEventForm({
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label className="text-xs">Width (px)</Label>
-                        <Input type="number" min="50" value={currentSpeakerSlot.width} onChange={(e) => setCurrentSpeakerSlot((p) => ({ ...p, width: e.target.value }))} placeholder="200" />
+                        <Input
+                          type="number"
+                          min="50"
+                          value={currentSpeakerSlot.width}
+                          onChange={(e) =>
+                            setCurrentSpeakerSlot((p) => ({
+                              ...p,
+                              width: e.target.value,
+                            }))
+                          }
+                          placeholder="200"
+                        />
                       </div>
                       <div>
                         <Label className="text-xs">Height (px)</Label>
-                        <Input type="number" min="50" value={currentSpeakerSlot.height} onChange={(e) => setCurrentSpeakerSlot((p) => ({ ...p, height: e.target.value }))} placeholder="100" />
+                        <Input
+                          type="number"
+                          min="50"
+                          value={currentSpeakerSlot.height}
+                          onChange={(e) =>
+                            setCurrentSpeakerSlot((p) => ({
+                              ...p,
+                              height: e.target.value,
+                            }))
+                          }
+                          placeholder="100"
+                        />
                       </div>
                     </div>
                   )}
@@ -3159,27 +3983,77 @@ export function CreateEventForm({
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <Label className="text-xs">Slot Price (0 = Free)</Label>
-                      <Input type="number" min="0" value={currentSpeakerSlot.slotPrice} onChange={(e) => setCurrentSpeakerSlot((p) => ({ ...p, slotPrice: e.target.value }))} placeholder="0" />
+                      <Input
+                        type="number"
+                        min="0"
+                        value={currentSpeakerSlot.slotPrice}
+                        onChange={(e) =>
+                          setCurrentSpeakerSlot((p) => ({
+                            ...p,
+                            slotPrice: e.target.value,
+                          }))
+                        }
+                        placeholder="0"
+                      />
                     </div>
                     <div>
                       <Label className="text-xs">Max Speakers</Label>
-                      <Input type="number" min="1" value={currentSpeakerSlot.maxSpeakers} onChange={(e) => setCurrentSpeakerSlot((p) => ({ ...p, maxSpeakers: e.target.value }))} placeholder="1" />
+                      <Input
+                        type="number"
+                        min="1"
+                        value={currentSpeakerSlot.maxSpeakers}
+                        onChange={(e) =>
+                          setCurrentSpeakerSlot((p) => ({
+                            ...p,
+                            maxSpeakers: e.target.value,
+                          }))
+                        }
+                        placeholder="1"
+                      />
                     </div>
                     <div>
                       <Label className="text-xs">Max Visitors Allowed</Label>
-                      <Input type="number" min="0" value={currentSpeakerSlot.maxVisitors || ""} onChange={(e) => setCurrentSpeakerSlot((p) => ({ ...p, maxVisitors: e.target.value }))} placeholder="0 = Unlimited" />
+                      <Input
+                        type="number"
+                        min="0"
+                        value={currentSpeakerSlot.maxVisitors || ""}
+                        onChange={(e) =>
+                          setCurrentSpeakerSlot((p) => ({
+                            ...p,
+                            maxVisitors: e.target.value,
+                          }))
+                        }
+                        placeholder="0 = Unlimited"
+                      />
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between bg-white rounded-lg p-3 border">
                     <div>
-                      <Label className="text-sm font-medium">Open for External Applications</Label>
-                      <p className="text-xs text-muted-foreground">Allow outside speakers to apply for sessions in this space</p>
+                      <Label className="text-sm font-medium">
+                        Open for External Applications
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Allow outside speakers to apply for sessions in this
+                        space
+                      </p>
                     </div>
-                    <Checkbox checked={currentSpeakerSlot.openForApplications} onCheckedChange={(checked) => setCurrentSpeakerSlot((p) => ({ ...p, openForApplications: !!checked }))} />
+                    <Checkbox
+                      checked={currentSpeakerSlot.openForApplications}
+                      onCheckedChange={(checked) =>
+                        setCurrentSpeakerSlot((p) => ({
+                          ...p,
+                          openForApplications: !!checked,
+                        }))
+                      }
+                    />
                   </div>
 
-                  <Button type="button" onClick={addSpeakerSlot} className="w-full md:w-auto">
+                  <Button
+                    type="button"
+                    onClick={addSpeakerSlot}
+                    className="w-full md:w-auto"
+                  >
                     <Plus size={16} className="mr-2" /> Add Speaker Space
                   </Button>
                 </div>
@@ -3188,8 +4062,12 @@ export function CreateEventForm({
                 {speakerSlotTemplates.length === 0 && (
                   <div className="text-center py-10 border-2 border-dashed rounded-xl">
                     <Mic className="mx-auto h-10 w-10 text-muted-foreground/30" />
-                    <p className="mt-3 text-sm text-muted-foreground">No speaker spaces created yet</p>
-                    <p className="text-xs text-muted-foreground/60">Add a space above, then create session slots within it</p>
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      No speaker spaces created yet
+                    </p>
+                    <p className="text-xs text-muted-foreground/60">
+                      Add a space above, then create session slots within it
+                    </p>
                   </div>
                 )}
               </CardContent>
@@ -3201,87 +4079,165 @@ export function CreateEventForm({
                 <CardHeader className="bg-purple-50/50">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="bg-purple-100 text-purple-700 rounded-lg w-10 h-10 flex items-center justify-center text-sm font-bold">{spaceIdx + 1}</div>
+                      <div className="bg-purple-100 text-purple-700 rounded-lg w-10 h-10 flex items-center justify-center text-sm font-bold">
+                        {spaceIdx + 1}
+                      </div>
                       <div>
                         <CardTitle className="text-base flex items-center gap-2">
                           {space.name}
-                          {space.isMainStage && <Badge className="bg-purple-100 text-purple-700 text-[10px]">MAIN STAGE</Badge>}
-                          {space.openForApplications && <Badge variant="outline" className="text-[10px] text-green-600 border-green-300">Open</Badge>}
+                          {space.isMainStage && (
+                            <Badge className="bg-purple-100 text-purple-700 text-[10px]">
+                              MAIN STAGE
+                            </Badge>
+                          )}
+                          {space.openForApplications && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] text-green-600 border-green-300"
+                            >
+                              Open
+                            </Badge>
+                          )}
                         </CardTitle>
                         <p className="text-xs text-gray-500">
-                          {space.isMainStage ? "Main Stage" : `${space.width}×${space.height}px`}
-                          {" · "}{space.slotPrice > 0 ? formatPrice(space.slotPrice) : "Free"}
-                          {" · "}Max {space.maxSpeakers} speaker{space.maxSpeakers > 1 ? "s" : ""}
-                          {" · "}{space.maxVisitors > 0 ? `${space.maxVisitors} visitors` : "Unlimited visitors"}
+                          {space.isMainStage
+                            ? "Main Stage"
+                            : `${space.width}×${space.height}px`}
+                          {" · "}
+                          {space.slotPrice > 0
+                            ? formatPrice(space.slotPrice)
+                            : "Free"}
+                          {" · "}Max {space.maxSpeakers} speaker
+                          {space.maxSpeakers > 1 ? "s" : ""}
+                          {" · "}
+                          {space.maxVisitors > 0
+                            ? `${space.maxVisitors} visitors`
+                            : "Unlimited visitors"}
                         </p>
                       </div>
                     </div>
-                    <Button type="button" variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={() => removeSpeakerSlot(space.id)}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-500 hover:text-red-600"
+                      onClick={() => removeSpeakerSlot(space.id)}
+                    >
                       <Trash2 size={14} className="mr-1" /> Remove Space
                     </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-4 space-y-4">
-                  {space.description && <p className="text-sm text-gray-500 bg-gray-50 rounded-lg px-3 py-2">{space.description}</p>}
+                  {space.description && (
+                    <p className="text-sm text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                      {space.description}
+                    </p>
+                  )}
 
                   {/* Session Slots */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <Label className="text-sm font-semibold">Session Slots</Label>
-                      <Button type="button" variant="outline" size="sm" onClick={() => {
-                        const updated = [...speakerSlotTemplates];
-                        const sessions = updated[spaceIdx].sessions || [];
-                        sessions.push({
-                          id: Math.random().toString(36).slice(2, 10),
-                          speakerName: "", companyName: "", agenda: "", description: "",
-                          startTime: formData.time || "", endTime: formData.endTime || "",
-                          whatsAppNumber: "", email: "",
-                          socialLinks: { linkedin: "", instagram: "", youtube: "", facebook: "", twitter: "", website: "" },
-                        });
-                        updated[spaceIdx] = { ...updated[spaceIdx], sessions };
-                        setSpeakerSlotTemplates(updated);
-                      }}>
+                      <Label className="text-sm font-semibold">
+                        Session Slots
+                      </Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const updated = [...speakerSlotTemplates];
+                          const sessions = updated[spaceIdx].sessions || [];
+                          sessions.push({
+                            id: Math.random().toString(36).slice(2, 10),
+                            speakerName: "",
+                            companyName: "",
+                            agenda: "",
+                            description: "",
+                            startTime: formData.time || "",
+                            endTime: formData.endTime || "",
+                            whatsAppNumber: "",
+                            email: "",
+                            socialLinks: {
+                              linkedin: "",
+                              instagram: "",
+                              youtube: "",
+                              facebook: "",
+                              twitter: "",
+                              website: "",
+                            },
+                          });
+                          updated[spaceIdx] = {
+                            ...updated[spaceIdx],
+                            sessions,
+                          };
+                          setSpeakerSlotTemplates(updated);
+                        }}
+                      >
                         <Plus size={14} className="mr-1" /> Add Session
                       </Button>
                     </div>
 
                     {(!space.sessions || space.sessions.length === 0) && (
                       <div className="text-center py-6 border border-dashed rounded-lg text-sm text-muted-foreground">
-                        No sessions yet. Click "Add Session" to schedule speakers for this space.
+                        No sessions yet. Click "Add Session" to schedule
+                        speakers for this space.
                       </div>
                     )}
 
                     {space.sessions?.map((session: any, sessIdx: number) => {
                       const updateSession = (field: string, value: any) => {
                         const updated = [...speakerSlotTemplates];
-                        const sessions = [...(updated[spaceIdx].sessions || [])];
-                        sessions[sessIdx] = { ...sessions[sessIdx], [field]: value };
+                        const sessions = [
+                          ...(updated[spaceIdx].sessions || []),
+                        ];
+                        sessions[sessIdx] = {
+                          ...sessions[sessIdx],
+                          [field]: value,
+                        };
                         updated[spaceIdx] = { ...updated[spaceIdx], sessions };
                         setSpeakerSlotTemplates(updated);
                       };
                       const updateSocial = (field: string, value: string) => {
                         const updated = [...speakerSlotTemplates];
-                        const sessions = [...(updated[spaceIdx].sessions || [])];
+                        const sessions = [
+                          ...(updated[spaceIdx].sessions || []),
+                        ];
                         sessions[sessIdx] = {
                           ...sessions[sessIdx],
-                          socialLinks: { ...sessions[sessIdx].socialLinks, [field]: value },
+                          socialLinks: {
+                            ...sessions[sessIdx].socialLinks,
+                            [field]: value,
+                          },
                         };
                         updated[spaceIdx] = { ...updated[spaceIdx], sessions };
                         setSpeakerSlotTemplates(updated);
                       };
                       const removeSession = () => {
                         const updated = [...speakerSlotTemplates];
-                        const sessions = [...(updated[spaceIdx].sessions || [])];
+                        const sessions = [
+                          ...(updated[spaceIdx].sessions || []),
+                        ];
                         sessions.splice(sessIdx, 1);
                         updated[spaceIdx] = { ...updated[spaceIdx], sessions };
                         setSpeakerSlotTemplates(updated);
                       };
 
                       return (
-                        <div key={session.id} className="border rounded-xl p-4 bg-white space-y-4">
+                        <div
+                          key={session.id}
+                          className="border rounded-xl p-4 bg-white space-y-4"
+                        >
                           <div className="flex items-center justify-between">
-                            <Badge variant="secondary" className="text-xs">Session {sessIdx + 1}</Badge>
-                            <Button type="button" variant="ghost" size="sm" className="text-red-500 hover:text-red-600 h-7" onClick={removeSession}>
+                            <Badge variant="secondary" className="text-xs">
+                              Session {sessIdx + 1}
+                            </Badge>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-500 hover:text-red-600 h-7"
+                              onClick={removeSession}
+                            >
                               <Trash2 size={12} className="mr-1" /> Remove
                             </Button>
                           </div>
@@ -3292,11 +4248,22 @@ export function CreateEventForm({
                             <div className="flex flex-col items-center gap-1">
                               <div
                                 className="w-16 h-16 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-gray-50"
-                                onClick={() => document.getElementById(`session-img-${spaceIdx}-${sessIdx}`)?.click()}
+                                onClick={() =>
+                                  document
+                                    .getElementById(
+                                      `session-img-${spaceIdx}-${sessIdx}`,
+                                    )
+                                    ?.click()
+                                }
                               >
-                                {(session.photoPreview || session.photo) ? (
+                                {session.photoPreview || session.photo ? (
                                   <img
-                                    src={session.photoPreview || (session.photo?.startsWith("/") ? `${__API_URL__?.replace("/api", "") || ""}${session.photo}` : session.photo)}
+                                    src={
+                                      session.photoPreview ||
+                                      (session.photo?.startsWith("/")
+                                        ? `${__API_URL__?.replace("/api", "") || ""}${session.photo}`
+                                        : session.photo)
+                                    }
                                     alt={session.speakerName}
                                     className="w-full h-full object-cover"
                                   />
@@ -3313,20 +4280,41 @@ export function CreateEventForm({
                                   const file = e.target.files?.[0];
                                   if (file) {
                                     updateSession("photoFile", file);
-                                    updateSession("photoPreview", URL.createObjectURL(file));
+                                    updateSession(
+                                      "photoPreview",
+                                      URL.createObjectURL(file),
+                                    );
                                   }
                                 }}
                               />
-                              <span className="text-[9px] text-muted-foreground">Photo</span>
+                              <span className="text-[9px] text-muted-foreground">
+                                Photo
+                              </span>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               <div>
-                                <Label className="text-xs">Speaker Name *</Label>
-                                <Input value={session.speakerName} onChange={(e) => updateSession("speakerName", e.target.value)} placeholder="Full name of the speaker" />
+                                <Label className="text-xs">
+                                  Speaker Name *
+                                </Label>
+                                <Input
+                                  value={session.speakerName}
+                                  onChange={(e) =>
+                                    updateSession("speakerName", e.target.value)
+                                  }
+                                  placeholder="Full name of the speaker"
+                                />
                               </div>
                               <div>
-                                <Label className="text-xs">Company / Organization</Label>
-                                <Input value={session.companyName} onChange={(e) => updateSession("companyName", e.target.value)} placeholder="e.g. Google, MIT (optional)" />
+                                <Label className="text-xs">
+                                  Company / Organization
+                                </Label>
+                                <Input
+                                  value={session.companyName}
+                                  onChange={(e) =>
+                                    updateSession("companyName", e.target.value)
+                                  }
+                                  placeholder="e.g. Google, MIT (optional)"
+                                />
                               </div>
                             </div>
                           </div>
@@ -3334,50 +4322,111 @@ export function CreateEventForm({
                           {/* Agenda */}
                           <div>
                             <Label className="text-xs">Agenda / Topic *</Label>
-                            <Input value={session.agenda} onChange={(e) => updateSession("agenda", e.target.value)} placeholder="What will they speak about?" />
+                            <Input
+                              value={session.agenda}
+                              onChange={(e) =>
+                                updateSession("agenda", e.target.value)
+                              }
+                              placeholder="What will they speak about?"
+                            />
                           </div>
                           <div>
-                            <Label className="text-xs">Session Description</Label>
-                            <Textarea rows={2} value={session.description || ""} onChange={(e) => updateSession("description", e.target.value)} placeholder="Detailed session description..." />
+                            <Label className="text-xs">
+                              Session Description
+                            </Label>
+                            <Textarea
+                              rows={2}
+                              value={session.description || ""}
+                              onChange={(e) =>
+                                updateSession("description", e.target.value)
+                              }
+                              placeholder="Detailed session description..."
+                            />
                           </div>
 
                           {/* Timing (validated against event start/end) */}
                           <div className="grid grid-cols-2 gap-3">
                             <div>
                               <Label className="text-xs">Start Time *</Label>
-                              <Input type="time" value={session.startTime} min={formData.time || undefined} max={formData.endTime || undefined}
+                              <Input
+                                type="time"
+                                value={session.startTime}
+                                min={formData.time || undefined}
+                                max={formData.endTime || undefined}
                                 onChange={(e) => {
                                   const val = e.target.value;
                                   if (formData.time && val < formData.time) {
-                                    toast({ title: "Invalid Time", description: `Start time cannot be before event start (${formData.time})`, variant: "destructive" });
+                                    toast({
+                                      title: "Invalid Time",
+                                      description: `Start time cannot be before event start (${formData.time})`,
+                                      variant: "destructive",
+                                    });
                                     return;
                                   }
-                                  if (formData.endTime && val > formData.endTime) {
-                                    toast({ title: "Invalid Time", description: `Start time cannot be after event end (${formData.endTime})`, variant: "destructive" });
+                                  if (
+                                    formData.endTime &&
+                                    val > formData.endTime
+                                  ) {
+                                    toast({
+                                      title: "Invalid Time",
+                                      description: `Start time cannot be after event end (${formData.endTime})`,
+                                      variant: "destructive",
+                                    });
                                     return;
                                   }
                                   updateSession("startTime", val);
                                 }}
                               />
-                              {formData.time && <p className="text-[10px] text-muted-foreground mt-0.5">Event starts: {formData.time}</p>}
+                              {formData.time && (
+                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                  Event starts: {formData.time}
+                                </p>
+                              )}
                             </div>
                             <div>
                               <Label className="text-xs">End Time *</Label>
-                              <Input type="time" value={session.endTime} min={session.startTime || formData.time || undefined} max={formData.endTime || undefined}
+                              <Input
+                                type="time"
+                                value={session.endTime}
+                                min={
+                                  session.startTime ||
+                                  formData.time ||
+                                  undefined
+                                }
+                                max={formData.endTime || undefined}
                                 onChange={(e) => {
                                   const val = e.target.value;
-                                  if (session.startTime && val < session.startTime) {
-                                    toast({ title: "Invalid Time", description: "End time must be after start time", variant: "destructive" });
+                                  if (
+                                    session.startTime &&
+                                    val < session.startTime
+                                  ) {
+                                    toast({
+                                      title: "Invalid Time",
+                                      description:
+                                        "End time must be after start time",
+                                      variant: "destructive",
+                                    });
                                     return;
                                   }
-                                  if (formData.endTime && val > formData.endTime) {
-                                    toast({ title: "Invalid Time", description: `End time cannot exceed event end (${formData.endTime})`, variant: "destructive" });
+                                  if (
+                                    formData.endTime &&
+                                    val > formData.endTime
+                                  ) {
+                                    toast({
+                                      title: "Invalid Time",
+                                      description: `End time cannot exceed event end (${formData.endTime})`,
+                                      variant: "destructive",
+                                    });
                                     return;
                                   }
                                   updateSession("endTime", val);
                                 }}
                               />
-                              {formData.endTime && <p className="text-[10px] text-muted-foreground mt-0.5">Event ends: {formData.endTime}</p>}
+                              {formData.endTime && (
+                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                  Event ends: {formData.endTime}
+                                </p>
+                              )}
                             </div>
                           </div>
 
@@ -3385,24 +4434,78 @@ export function CreateEventForm({
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
                               <Label className="text-xs">WhatsApp Number</Label>
-                              <Input value={session.whatsAppNumber || ""} onChange={(e) => updateSession("whatsAppNumber", e.target.value)} placeholder="+91 98765 43210" />
+                              <Input
+                                value={session.whatsAppNumber || ""}
+                                onChange={(e) =>
+                                  updateSession(
+                                    "whatsAppNumber",
+                                    e.target.value,
+                                  )
+                                }
+                                placeholder="+91 98765 43210"
+                              />
                             </div>
                             <div>
                               <Label className="text-xs">Email</Label>
-                              <Input type="email" value={session.email || ""} onChange={(e) => updateSession("email", e.target.value)} placeholder="speaker@example.com" />
+                              <Input
+                                type="email"
+                                value={session.email || ""}
+                                onChange={(e) =>
+                                  updateSession("email", e.target.value)
+                                }
+                                placeholder="speaker@example.com"
+                              />
                             </div>
                           </div>
 
                           {/* Social Links */}
                           <div>
-                            <Label className="text-xs font-medium mb-2 block">Social Media Links</Label>
+                            <Label className="text-xs font-medium mb-2 block">
+                              Social Media Links
+                            </Label>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                              <Input placeholder="LinkedIn URL" value={session.socialLinks?.linkedin || ""} onChange={(e) => updateSocial("linkedin", e.target.value)} />
-                              <Input placeholder="Instagram URL" value={session.socialLinks?.instagram || ""} onChange={(e) => updateSocial("instagram", e.target.value)} />
-                              <Input placeholder="YouTube URL" value={session.socialLinks?.youtube || ""} onChange={(e) => updateSocial("youtube", e.target.value)} />
-                              <Input placeholder="Facebook URL" value={session.socialLinks?.facebook || ""} onChange={(e) => updateSocial("facebook", e.target.value)} />
-                              <Input placeholder="Twitter / X URL" value={session.socialLinks?.twitter || ""} onChange={(e) => updateSocial("twitter", e.target.value)} />
-                              <Input placeholder="Website URL" value={session.socialLinks?.website || ""} onChange={(e) => updateSocial("website", e.target.value)} />
+                              <Input
+                                placeholder="LinkedIn URL"
+                                value={session.socialLinks?.linkedin || ""}
+                                onChange={(e) =>
+                                  updateSocial("linkedin", e.target.value)
+                                }
+                              />
+                              <Input
+                                placeholder="Instagram URL"
+                                value={session.socialLinks?.instagram || ""}
+                                onChange={(e) =>
+                                  updateSocial("instagram", e.target.value)
+                                }
+                              />
+                              <Input
+                                placeholder="YouTube URL"
+                                value={session.socialLinks?.youtube || ""}
+                                onChange={(e) =>
+                                  updateSocial("youtube", e.target.value)
+                                }
+                              />
+                              <Input
+                                placeholder="Facebook URL"
+                                value={session.socialLinks?.facebook || ""}
+                                onChange={(e) =>
+                                  updateSocial("facebook", e.target.value)
+                                }
+                              />
+                              <Input
+                                placeholder="Twitter / X URL"
+                                value={session.socialLinks?.twitter || ""}
+                                onChange={(e) =>
+                                  updateSocial("twitter", e.target.value)
+                                }
+                              />
+                              <Input
+                                placeholder="Website URL"
+                                value={session.socialLinks?.website || ""}
+                                onChange={(e) =>
+                                  updateSocial("website", e.target.value)
+                                }
+                              />
                             </div>
                           </div>
                         </div>
@@ -3444,6 +4547,355 @@ export function CreateEventForm({
             </BlurOverlay>
           </TabsContent>
 
+          {/* ROUND TABLES TAB */}
+          <TabsContent value="roundtables">
+            <BlurOverlay visible={!blurActive}>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Circle size={20} />
+                    Round Table Templates
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Create round tables for seating (charity dinners, galas,
+                    etc.). Visitors can purchase seats directly.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Add Round Table Form */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 border rounded-lg bg-slate-50">
+                    <div>
+                      <Label>Table Name *</Label>
+                      <Input
+                        placeholder="e.g. Platinum Table"
+                        value={currentRoundTable.name}
+                        onChange={(e) =>
+                          setCurrentRoundTable({
+                            ...currentRoundTable,
+                            name: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label>Number of Chairs *</Label>
+                      <Input
+                        type="number"
+                        min={2}
+                        max={20}
+                        value={currentRoundTable.numberOfChairs}
+                        onChange={(e) =>
+                          setCurrentRoundTable({
+                            ...currentRoundTable,
+                            numberOfChairs: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label>Category</Label>
+                      <select
+                        className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={currentRoundTable.category}
+                        onChange={(e) =>
+                          setCurrentRoundTable({
+                            ...currentRoundTable,
+                            category: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="Platinum">Platinum</option>
+                        <option value="Gold">Gold</option>
+                        <option value="Silver">Silver</option>
+                        <option value="Standard">Standard</option>
+                        <option value="VIP">VIP</option>
+                      </select>
+                    </div>
+                    <div>
+                      <Label>Selling Mode *</Label>
+                      <div className="flex gap-2 mt-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={
+                            currentRoundTable.sellingMode === "chair"
+                              ? "default"
+                              : "outline"
+                          }
+                          onClick={() =>
+                            setCurrentRoundTable({
+                              ...currentRoundTable,
+                              sellingMode: "chair",
+                            })
+                          }
+                        >
+                          Per Chair
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={
+                            currentRoundTable.sellingMode === "table"
+                              ? "default"
+                              : "outline"
+                          }
+                          onClick={() =>
+                            setCurrentRoundTable({
+                              ...currentRoundTable,
+                              sellingMode: "table",
+                            })
+                          }
+                        >
+                          Whole Table
+                        </Button>
+                      </div>
+                    </div>
+                    {currentRoundTable.sellingMode === "chair" ? (
+                      <div>
+                        <Label>Price Per Chair ({getSymbol()}) *</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          placeholder="0"
+                          value={currentRoundTable.chairPrice}
+                          onChange={(e) =>
+                            setCurrentRoundTable({
+                              ...currentRoundTable,
+                              chairPrice: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <Label>Table Price ({getSymbol()}) *</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          placeholder="0"
+                          value={currentRoundTable.tablePrice}
+                          onChange={(e) =>
+                            setCurrentRoundTable({
+                              ...currentRoundTable,
+                              tablePrice: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <Label>Color</Label>
+                      <div className="flex gap-2 mt-1">
+                        {[
+                          "#8B5CF6",
+                          "#EF4444",
+                          "#F59E0B",
+                          "#10B981",
+                          "#3B82F6",
+                          "#EC4899",
+                        ].map((c) => (
+                          <button
+                            key={c}
+                            type="button"
+                            className={`w-8 h-8 rounded-full border-2 transition-all ${currentRoundTable.color === c ? "border-gray-800 scale-110" : "border-transparent"}`}
+                            style={{ backgroundColor: c }}
+                            onClick={() =>
+                              setCurrentRoundTable({
+                                ...currentRoundTable,
+                                color: c,
+                              })
+                            }
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          if (!currentRoundTable.name) {
+                            toast({
+                              title: "Table name is required",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
+                          const chairs =
+                            parseInt(currentRoundTable.numberOfChairs) || 8;
+                          if (chairs < 2 || chairs > 20) {
+                            toast({
+                              title: "Chairs must be between 2 and 20",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
+                          const price =
+                            currentRoundTable.sellingMode === "chair"
+                              ? parseFloat(currentRoundTable.chairPrice) || 0
+                              : parseFloat(currentRoundTable.tablePrice) || 0;
+                          if (price <= 0) {
+                            toast({
+                              title: "Price must be greater than 0",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
+                          const newTemplate: RoundTableTemplate = {
+                            id: Math.random().toString(36).slice(2, 15),
+                            name: currentRoundTable.name,
+                            numberOfChairs: chairs,
+                            sellingMode: currentRoundTable.sellingMode,
+                            tablePrice:
+                              parseFloat(currentRoundTable.tablePrice) || 0,
+                            chairPrice:
+                              parseFloat(currentRoundTable.chairPrice) || 0,
+                            category: currentRoundTable.category,
+                            color: currentRoundTable.color,
+                            tableDiameter:
+                              parseInt(currentRoundTable.tableDiameter) || 120,
+                          };
+                          setRoundTableTemplates([
+                            ...roundTableTemplates,
+                            newTemplate,
+                          ]);
+                          setCurrentRoundTable({
+                            name: "",
+                            numberOfChairs: "8",
+                            sellingMode: "chair",
+                            tablePrice: "",
+                            chairPrice: "",
+                            category: "Standard",
+                            color: "#8B5CF6",
+                            tableDiameter: "120",
+                          });
+                          toast({ title: "Round table template added" });
+                        }}
+                        className="w-full"
+                      >
+                        <Plus size={16} className="mr-2" /> Add Template
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Existing Templates */}
+                  {roundTableTemplates.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {roundTableTemplates.map((template) => (
+                        <div
+                          key={template.id}
+                          className="p-4 border-2 rounded-xl bg-white"
+                          style={{ borderColor: template.color + "66" }}
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              {/* Mini round table preview */}
+                              <div
+                                className="relative"
+                                style={{ width: 48, height: 48 }}
+                              >
+                                <div
+                                  className="absolute rounded-full"
+                                  style={{
+                                    width: 28,
+                                    height: 28,
+                                    left: 10,
+                                    top: 10,
+                                    backgroundColor: template.color + "33",
+                                    border: `2px solid ${template.color}`,
+                                  }}
+                                />
+                                {Array.from({
+                                  length: Math.min(template.numberOfChairs, 12),
+                                }).map((_, i) => {
+                                  const angle =
+                                    (2 * Math.PI * i) /
+                                      template.numberOfChairs -
+                                    Math.PI / 2;
+                                  const cx = 24 + 20 * Math.cos(angle);
+                                  const cy = 24 + 20 * Math.sin(angle);
+                                  return (
+                                    <div
+                                      key={i}
+                                      className="absolute rounded-full"
+                                      style={{
+                                        width: 6,
+                                        height: 6,
+                                        left: cx - 3,
+                                        top: cy - 3,
+                                        backgroundColor: template.color,
+                                      }}
+                                    />
+                                  );
+                                })}
+                              </div>
+                              <div>
+                                <h4 className="font-bold text-sm">
+                                  {template.name}
+                                </h4>
+                                <span
+                                  className="text-xs px-2 py-0.5 rounded-full text-white"
+                                  style={{ backgroundColor: template.color }}
+                                >
+                                  {template.category}
+                                </span>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-red-500"
+                              onClick={() =>
+                                setRoundTableTemplates(
+                                  roundTableTemplates.filter(
+                                    (t) => t.id !== template.id,
+                                  ),
+                                )
+                              }
+                            >
+                              <Trash2 size={14} />
+                            </Button>
+                          </div>
+                          <div className="text-xs text-muted-foreground space-y-1">
+                            <div className="flex justify-between">
+                              <span>Chairs:</span>
+                              <span className="font-semibold">
+                                {template.numberOfChairs}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Mode:</span>
+                              <span className="font-semibold">
+                                {template.sellingMode === "table"
+                                  ? "Whole Table"
+                                  : "Per Chair"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Price:</span>
+                              <span className="font-semibold">
+                                {template.sellingMode === "table"
+                                  ? formatPrice(template.tablePrice)
+                                  : `${formatPrice(template.chairPrice)} / chair`}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {roundTableTemplates.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Circle size={48} className="mx-auto mb-3 opacity-20" />
+                      <p>No round table templates yet. Create one above.</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </BlurOverlay>
+          </TabsContent>
+
           {/* LAYOUT DESIGN TAB */}
           <TabsContent value="layout">
             <BlurOverlay visible={!blurActive}>
@@ -3460,6 +4912,9 @@ export function CreateEventForm({
                 speakerSlotTemplates={speakerSlotTemplates}
                 venueSpeakerZones={venueSpeakerZones}
                 setVenueSpeakerZones={setVenueSpeakerZones}
+                roundTableTemplates={roundTableTemplates}
+                venueRoundTables={venueRoundTables}
+                setVenueRoundTables={setVenueRoundTables}
               />
             </BlurOverlay>
           </TabsContent>

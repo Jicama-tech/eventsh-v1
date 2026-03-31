@@ -85,6 +85,9 @@ export class EventsService {
                 },
               ],
 
+        roundTableTemplates: createEventDto.roundTableTemplates || [],
+        venueRoundTables: createEventDto.venueRoundTables || [],
+
         status: createEventDto.status || "draft",
         featured: createEventDto.featured || false,
       });
@@ -107,11 +110,10 @@ export class EventsService {
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit)
-          .lean()
           .exec(),
         this.eventModel.countDocuments().exec(),
       ]);
-      return { events: events as Event[], total };
+      return { events, total };
     } catch (error) {
       console.error("Error fetching events:", error);
       throw error;

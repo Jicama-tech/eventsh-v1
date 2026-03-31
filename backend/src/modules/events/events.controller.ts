@@ -109,6 +109,10 @@ export class EventsController {
         body.speakerSlotTemplates = JSON.parse(body.speakerSlotTemplates);
       if (typeof body.venueSpeakerZones === "string")
         body.venueSpeakerZones = JSON.parse(body.venueSpeakerZones);
+      if (typeof body.roundTableTemplates === "string")
+        body.roundTableTemplates = JSON.parse(body.roundTableTemplates);
+      if (typeof body.venueRoundTables === "string")
+        body.venueRoundTables = JSON.parse(body.venueRoundTables);
 
       // Handle banner image
       if (files.banner && files.banner[0]) {
@@ -296,6 +300,10 @@ export class EventsController {
         body.speakerSlotTemplates = JSON.parse(body.speakerSlotTemplates);
       if (typeof body.venueSpeakerZones === "string")
         body.venueSpeakerZones = JSON.parse(body.venueSpeakerZones);
+      if (typeof body.roundTableTemplates === "string")
+        body.roundTableTemplates = JSON.parse(body.roundTableTemplates);
+      if (typeof body.venueRoundTables === "string")
+        body.venueRoundTables = JSON.parse(body.venueRoundTables);
 
       // Handle new banner image
       if (files.banner && files.banner[0]) {

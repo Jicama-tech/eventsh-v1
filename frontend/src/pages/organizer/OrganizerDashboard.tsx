@@ -22,6 +22,7 @@ import {
   X,
   Mic2,
   HelpCircle,
+  Circle,
 } from "lucide-react";
 import { lazy, Suspense } from "react";
 import { EventfrontTemplate } from "./EventfrontTemplate";
@@ -48,6 +49,87 @@ const SpeakerRequests = lazy(() => import("@/components/organizer/SpeakerRequest
 const HelpFAQ = lazy(() => import("@/components/organizer/HelpFAQ").then(m => ({ default: m.HelpFAQ })));
 const EventAttendees = lazy(() => import("@/components/organizer/EventAttendees"));
 const OrganizerStorefrontCustomizer = lazy(() => import("@/components/organizer/organizerStorefrontCustomizer").then(m => ({ default: m.OrganizerStorefrontCustomizer })));
+const RoundTableBookings = lazy(() => import("@/components/organizer/RoundTableBookings"));
+
+function RoundTableBookingsTab({ apiURL }: { apiURL: string }) {
+  const [rtEvents, setRtEvents] = useState<any[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loadingEvents, setLoadingEvents] = useState(true);
+
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        const token = sessionStorage.getItem("token");
+        if (!token) return;
+        const decoded: any = jwtDecode(token);
+        const organizerId = decoded.sub;
+        const res = await fetch(`${apiURL}/events/organizer/${organizerId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setRtEvents(data.data || []);
+        }
+      } catch {
+        // ignore
+      } finally {
+        setLoadingEvents(false);
+      }
+    };
+    fetchEvents();
+  }, [apiURL]);
+
+  if (loadingEvents) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-2xl sm:text-3xl font-bold">Round Table Bookings</h2>
+      <p className="text-gray-500 text-sm">
+        View and manage round table seat bookings across your events.
+      </p>
+
+      {rtEvents.length > 0 ? (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {rtEvents.map((event: any) => (
+              <Button
+                key={event._id}
+                size="sm"
+                variant={selectedId === event._id ? "default" : "outline"}
+                onClick={() => setSelectedId(event._id)}
+                className="text-xs"
+              >
+                {event.title}
+              </Button>
+            ))}
+          </div>
+
+          {selectedId ? (
+            <Suspense fallback={<div className="flex items-center justify-center py-8"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" /></div>}>
+              <RoundTableBookings eventId={selectedId} />
+            </Suspense>
+          ) : (
+            <Card>
+              <CardContent className="py-8 text-center text-gray-500">
+                Select an event above to view its round table bookings.
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="py-8 text-center text-gray-500">
+            No events found. Create an event first.
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
 
 function TabLoader() {
   return (
@@ -78,6 +160,7 @@ export function OrganizerDashboard({
   // UI State
   const [organizerId, setOrganizerId] = useState("");
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [selectedRTEventId, setSelectedRTEventId] = useState<string | null>(null);
   const [showEventfront, setShowEventfront] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -443,6 +526,7 @@ export function OrganizerDashboard({
     // { id: "shopkeepers", label: "Shopkeepers", icon: UserCheck },
     // { id: "tickets", label: "Sales", icon: Ticket },
     { id: "users", label: "Exhibitors/Visitors", icon: Users },
+    { id: "roundTableBookings", label: "Round Tables", icon: Circle },
     { id: "events", label: "Events", icon: CalendarDays },
     { id: "storefront", label: "Eventfront", icon: Globe, isAction: true },
     { id: "settings", label: "Settings", icon: Settings },
@@ -719,6 +803,12 @@ export function OrganizerDashboard({
                       onUpdateTicket={handleUpdateTicket}
                     />
                   </div>
+                </Suspense>
+              </TabsContent>
+
+              <TabsContent value="roundTableBookings" className="mt-0">
+                <Suspense fallback={<TabLoader />}>
+                  <RoundTableBookingsTab apiURL={apiURL} />
                 </Suspense>
               </TabsContent>
 

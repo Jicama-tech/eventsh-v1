@@ -332,6 +332,40 @@ export class SpeakerDto {
   order?: number;
 }
 
+// Round table templates
+export class RoundTableTemplateDto {
+  @IsString() id: string;
+  @IsString() name: string;
+  @IsNumber() @Min(2) numberOfChairs: number;
+  @IsString() sellingMode: string; // "table" | "chair"
+  @IsNumber() @Min(0) @IsOptional() tablePrice?: number;
+  @IsNumber() @Min(0) @IsOptional() chairPrice?: number;
+  @IsString() @IsOptional() category?: string;
+  @IsString() @IsOptional() color?: string;
+  @IsNumber() @IsOptional() tableDiameter?: number;
+}
+
+// Positioned round tables on venue canvas
+export class PositionedRoundTableDto {
+  @IsString() positionId: string;
+  @IsString() templateId: string;
+  @IsString() name: string;
+  @IsNumber() @Min(2) numberOfChairs: number;
+  @IsString() sellingMode: string;
+  @IsNumber() @Min(0) @IsOptional() tablePrice?: number;
+  @IsNumber() @Min(0) @IsOptional() chairPrice?: number;
+  @IsString() @IsOptional() category?: string;
+  @IsString() @IsOptional() color?: string;
+  @IsNumber() @IsOptional() tableDiameter?: number;
+  @IsNumber() x: number;
+  @IsNumber() y: number;
+  @IsNumber() @IsOptional() rotation?: number;
+  @IsBoolean() @IsOptional() isPlaced?: boolean;
+  @IsString() venueConfigId: string;
+  @IsArray() @IsOptional() bookedChairs?: number[];
+  @IsBoolean() @IsOptional() isFullyBooked?: boolean;
+}
+
 export class CreateEventDto {
   @IsString()
   title: string;
@@ -484,6 +518,16 @@ export class CreateEventDto {
   @IsOptional()
   @Type(() => SpeakerDto)
   speakers?: SpeakerDto[];
+
+  @ValidateNested({ each: true })
+  @IsOptional()
+  @Type(() => RoundTableTemplateDto)
+  roundTableTemplates?: RoundTableTemplateDto[];
+
+  @ValidateNested({ each: true })
+  @IsOptional()
+  @Type(() => PositionedRoundTableDto)
+  venueRoundTables?: PositionedRoundTableDto[];
 
   @IsEnum(EventStatus)
   @IsOptional()

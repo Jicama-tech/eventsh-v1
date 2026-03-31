@@ -193,6 +193,10 @@ interface FetchedEvent {
     createdAt: string;
     organizationName: string;
   };
+  visitorTypes?: any[];
+  venueTables?: any;
+  speakerSlotTemplates?: any[];
+  venueRoundTables?: any[];
 }
 
 export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
@@ -388,7 +392,7 @@ export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
             location: event.address,
             price: event.visitorTypes?.length > 0
               ? Math.min(...event.visitorTypes.map((v: any) => v.price || 0))
-              : (parseFloat(event.ticketPrice) || 0),
+              : (event.ticketPrice ? parseFloat(event.ticketPrice) : null),
             rating: 4.5,
             attendees: 0,
             maxAttendees: event.visitorTypes?.length > 0
@@ -399,6 +403,10 @@ export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
             featured: false,
             sale: false,
             badge: "",
+            hasTickets: event.visitorTypes?.length > 0,
+            hasStalls: event.venueTables && (Array.isArray(event.venueTables) ? event.venueTables.length > 0 : Object.keys(event.venueTables).length > 0),
+            hasSpeakers: event.speakerSlotTemplates?.length > 0,
+            hasRoundTables: event.venueRoundTables?.length > 0,
           }));
 
           const sortedEvents = mappedEvents.sort(
@@ -1194,11 +1202,12 @@ export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
                             className="text-xl font-extrabold"
                             style={{ color: design.primaryColor }}
                           >
-                            {formatPrice(featuredEvent.price)}
+                            {featuredEvent.price != null ? (featuredEvent.price === 0 ? "Free" : formatPrice(featuredEvent.price)) : ""}
                           </span>
                           <span className="text-white/50 text-sm">
-                            {featuredEvent.maxAttendees.toLocaleString()}{" "}
-                            attending
+                            {featuredEvent.maxAttendees > 0
+                              ? `${featuredEvent.maxAttendees.toLocaleString()} attending`
+                              : "Open event"}
                           </span>
                         </div>
                       </div>
@@ -1449,7 +1458,7 @@ export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
                             className="text-2xl sm:text-3xl font-bold"
                             style={{ color: design.secondaryColor }}
                           >
-                            {formatPrice(featuredEvent.price)}
+                            {featuredEvent.price != null ? (featuredEvent.price === 0 ? "Free" : formatPrice(featuredEvent.price)) : ""}
                           </span>
                         </div>
                         <button
@@ -1504,7 +1513,7 @@ export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
                                 className="text-sm font-bold"
                                 style={{ color: design.secondaryColor }}
                               >
-                                {formatPrice(event.price)}
+                                {event.price != null ? (event.price === 0 ? "Free" : formatPrice(event.price)) : ""}
                               </span>
                             </div>
                           </div>
@@ -1648,7 +1657,7 @@ export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
                                         className="text-xl font-bold"
                                         style={{ color: design.secondaryColor }}
                                       >
-                                        {formatPrice(event.price)}
+                                        {event.price != null ? (event.price === 0 ? "Free" : formatPrice(event.price)) : ""}
                                       </span>
                                       <Button
                                         className="rounded-xl px-4 py-2 text-xs font-light border-0 transition-all hover:scale-105"
@@ -1832,7 +1841,7 @@ export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
                                 className="text-2xl font-bold"
                                 style={{ color: design.secondaryColor }}
                               >
-                                {formatPrice(bigEvent.price)}
+                                {bigEvent.price != null ? (bigEvent.price === 0 ? "Free" : formatPrice(bigEvent.price)) : ""}
                               </span>
                               <div className="flex gap-2">
                                 <Button
@@ -1848,7 +1857,7 @@ export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
                                   }}
                                 >
                                   <Ticket className="h-3.5 w-3.5 mr-1.5" />
-                                  Get Tickets
+                                  {bigEvent.hasTickets ? "Get Tickets" : bigEvent.hasRoundTables ? "Book Seats" : "View Event"}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -1907,7 +1916,7 @@ export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
                                       className="text-sm font-bold"
                                       style={{ color: design.secondaryColor }}
                                     >
-                                      {formatPrice(event.price)}
+                                      {event.price != null ? (event.price === 0 ? "Free" : formatPrice(event.price)) : ""}
                                     </span>
                                     <span className="text-white/60 text-xs">
                                       {event.date}
@@ -2048,7 +2057,7 @@ export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
                               className="text-lg font-bold"
                               style={{ color: design.secondaryColor }}
                             >
-                              {formatPrice(event.price)}
+                              {event.price != null ? (event.price === 0 ? "Free" : formatPrice(event.price)) : ""}
                             </span>
                             <Button
                               className="rounded-xl px-4 py-2 text-xs font-medium border-0 transition-all hover:scale-105"
@@ -2193,7 +2202,7 @@ export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
                             className="text-lg font-bold"
                             style={{ color: design.secondaryColor }}
                           >
-                            {formatPrice(event.price)}
+                            {event.price != null ? (event.price === 0 ? "Free" : formatPrice(event.price)) : ""}
                           </span>
                           <Button
                             className="rounded-xl px-4 py-2 text-xs font-medium border-0 transition-all hover:scale-105"

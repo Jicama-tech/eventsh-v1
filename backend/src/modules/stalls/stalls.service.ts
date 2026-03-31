@@ -22,9 +22,15 @@ import { CreateCouponDto } from "../coupon/dto/create-coupon.dto";
 
 function formatCurrency(amount: number, country?: string): string {
   if (country === "IN") {
-    return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(amount);
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+    }).format(amount);
   } else if (country === "SG") {
-    return new Intl.NumberFormat("en-SG", { style: "currency", currency: "SGD" }).format(amount);
+    return new Intl.NumberFormat("en-SG", {
+      style: "currency",
+      currency: "SGD",
+    }).format(amount);
   }
   return `$${amount.toFixed(2)}`;
 }
@@ -71,22 +77,47 @@ export class StallsService {
 
         // Update vendor with latest form details
         const updateFields: Record<string, any> = {};
-        if (createStallDto.brandName) updateFields.brandName = createStallDto.brandName;
-        if (createStallDto.nameOfApplicant) updateFields.nameOfApplicant = createStallDto.nameOfApplicant;
-        if (createStallDto.businessOwnerNationality) updateFields.businessOwnerNationality = createStallDto.businessOwnerNationality;
-        if (createStallDto.registrationNumber) updateFields.registrationNumber = createStallDto.registrationNumber;
-        if (createStallDto.residency) updateFields.residency = createStallDto.residency;
-        if (createStallDto.companyLogo) updateFields.companyLogo = createStallDto.companyLogo;
-        if (createStallDto.faceBookLink) updateFields.faceBookLink = createStallDto.faceBookLink;
-        if (createStallDto.instagramLink) updateFields.instagramLink = createStallDto.instagramLink;
-        if (createStallDto.productDescription) updateFields.productDescription = createStallDto.productDescription;
-        if (createStallDto.productImage) updateFields.productImage = createStallDto.productImage;
-        if (createStallDto.registrationImage) updateFields.registrationImage = createStallDto.registrationImage;
-        if (createStallDto.refundPaymentDescription) updateFields.refundPaymentDescription = createStallDto.refundPaymentDescription;
-        if (createStallDto.noOfOperators) updateFields.noOfOperators = createStallDto.noOfOperators;
+        if (createStallDto.brandName)
+          updateFields.brandName = createStallDto.brandName;
+        if (createStallDto.nameOfApplicant)
+          updateFields.nameOfApplicant = createStallDto.nameOfApplicant;
+        if (createStallDto.businessOwnerNationality)
+          updateFields.businessOwnerNationality =
+            createStallDto.businessOwnerNationality;
+        if (createStallDto.registrationNumber)
+          updateFields.registrationNumber = createStallDto.registrationNumber;
+        if (createStallDto.residency)
+          updateFields.residency = createStallDto.residency;
+        if (createStallDto.companyLogo)
+          updateFields.companyLogo = createStallDto.companyLogo;
+        if (createStallDto.faceBookLink)
+          updateFields.faceBookLink = createStallDto.faceBookLink;
+        if (createStallDto.instagramLink)
+          updateFields.instagramLink = createStallDto.instagramLink;
+        if (createStallDto.productDescription)
+          updateFields.productDescription = createStallDto.productDescription;
+        if (createStallDto.productImage)
+          updateFields.productImage = createStallDto.productImage;
+        if (createStallDto.registrationImage)
+          updateFields.registrationImage = createStallDto.registrationImage;
+        if (createStallDto.refundPaymentDescription)
+          updateFields.refundPaymentDescription =
+            createStallDto.refundPaymentDescription;
+        if (createStallDto.noOfOperators)
+          updateFields.noOfOperators = createStallDto.noOfOperators;
+        if (createStallDto.businessCategory)
+          updateFields.businessCategory = createStallDto.businessCategory;
+        if (createStallDto.businessType) {
+          updateFields.businessType = createStallDto.businessType;
+          if (!createStallDto.businessCategory)
+            updateFields.businessCategory = createStallDto.businessType;
+        }
 
         if (Object.keys(updateFields).length > 0) {
-          await this.vendorModel.findByIdAndUpdate(createStallDto.shopkeeperId, { $set: updateFields });
+          await this.vendorModel.findByIdAndUpdate(
+            createStallDto.shopkeeperId,
+            { $set: updateFields },
+          );
         }
 
         shopkeeperId = new Types.ObjectId(createStallDto.shopkeeperId);
@@ -130,6 +161,7 @@ export class StallsService {
             phoneNumber: createStallDto.shopkeeperPhoneNumber,
             businessName: createStallDto.businessName,
             businessType: createStallDto.businessType,
+            businessCategory: createStallDto.businessCategory || createStallDto.businessType,
             businessDescription: createStallDto.businessDescription,
             address: createStallDto.businessAddress,
             city: createStallDto.businessCity,
@@ -241,7 +273,6 @@ export class StallsService {
       if (!Types.ObjectId.isValid(stallId)) {
         throw new BadRequestException("Invalid stall ID format");
       }
-
 
       const stall = await this.stallModel.findById(stallId).populate("eventId");
       if (!stall) {
@@ -378,7 +409,6 @@ export class StallsService {
         });
       }
 
-
       await this.eventModel.findByIdAndUpdate(
         event._id,
         { venueTables: updatedVenueTables },
@@ -392,15 +422,20 @@ export class StallsService {
           const result = await this.confirmPayment(stallId, selectDto.notes);
           return {
             success: true,
-            message: "Tables selected and payment confirmed. Ticket sent to vendor via WhatsApp.",
+            message:
+              "Tables selected and payment confirmed. Ticket sent to vendor via WhatsApp.",
             data: result.data,
           };
         } catch (paymentError) {
-          this.logger.error("Error in payment confirmation after table selection:", paymentError);
+          this.logger.error(
+            "Error in payment confirmation after table selection:",
+            paymentError,
+          );
           // Tables are saved, but payment confirmation failed — return partial success
           return {
             success: true,
-            message: "Tables selected successfully, but ticket generation failed. Please confirm payment manually.",
+            message:
+              "Tables selected successfully, but ticket generation failed. Please confirm payment manually.",
             data: updatedStall,
           };
         }
@@ -459,7 +494,6 @@ export class StallsService {
         issuedAt: new Date().toISOString(),
       };
 
-
       // ===== GENERATE QR CODE BASE64 (Same as tickets.service.ts) =====
       const qrCodeBase64 = await QRCode.toDataURL(JSON.stringify(qrPayload), {
         width: 200,
@@ -495,11 +529,14 @@ export class StallsService {
 
       const eventId = (stall.eventId as any)?._id || stall.eventId;
       const eventDetail = await this.eventModel.findById(eventId);
+      if (!eventDetail) {
+        throw new NotFoundException("Event not found for this stall");
+      }
 
       const couponName = (
-        eventDetail.title +
-        (vendor.businessName || vendor.shopName || vendor.name) +
-        stall.noOfOperators
+        (eventDetail.title || "Event") +
+        (vendor.businessName || vendor.shopName || vendor.name || "Vendor") +
+        (stall.noOfOperators || "1")
       ).replace(/\s+/g, "");
 
       const orgId = (stall.organizerId as any)?._id || stall.organizerId;
@@ -508,8 +545,8 @@ export class StallsService {
         code: couponName,
         discountType: "PERCENTAGE",
         discountPercentage: 100,
-        minOrderAmount: eventDetail.ticketPrice,
-        maxUsage: Number(stall.noOfOperators),
+        minOrderAmount: eventDetail.ticketPrice || "0",
+        maxUsage: Number(stall.noOfOperators) || 1,
         expiryDate: eventDetail.startDate,
         isActive: true,
         eventId: String(eventId),
@@ -518,14 +555,18 @@ export class StallsService {
 
       const coupon = await this.couponService.create(couponPayload);
 
-
       stall.couponCodeAssigned = coupon.code;
 
       // Get organizer country for currency
       const organizerDoc = await this.organizerModel.findById(orgId);
       const country = organizerDoc?.country || "IN";
 
-      const pdfBuffer = await this.generateStallTicketPDF(stall, qrCodeBase64, coupon, country);
+      const pdfBuffer = await this.generateStallTicketPDF(
+        stall,
+        qrCodeBase64,
+        coupon,
+        country,
+      );
 
       const pdfDir = path.join(process.cwd(), "uploads", "stallTickets");
       if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
@@ -543,15 +584,39 @@ export class StallsService {
       // ===== SEND VIA WHATSAPP =====
       const vendorWhatsApp = vendor.whatsAppNumber || vendor.whatsappNumber;
       if (vendorWhatsApp) {
-        await this.sendStallTicketViaWhatsApp(
-          stall,
-          qrCodeBase64,
-          vendorWhatsApp,
-          coupon,
-          country,
-        );
+        try {
+          const eventObj = stall.eventId as any;
+          const eventDate = eventObj?.startDate
+            ? new Date(eventObj.startDate).toLocaleDateString()
+            : "TBA";
+
+          const message =
+            `🎉 *Your Stall Confirmation is Ready!*\n\n` +
+            `🎪 *Event:* ${eventObj?.title || "Event"}\n` +
+            `👤 *Business:* ${vendor.name || stall.brandName || "—"}\n` +
+            `📅 *Date:* ${eventDate}\n` +
+            `📍 *Venue:* ${eventObj?.location || "TBA"}\n\n` +
+            `📊 *Booking Summary:*\n` +
+            `• Tables: ${stall.selectedTables.length}\n` +
+            `• Add-ons: ${stall.selectedAddOns?.length || 0}\n` +
+            `• Total: ${formatCurrency(stall.grandTotal, country)}\n` +
+            (coupon ? `\n🎟️ *Coupon:* ${coupon.code} (${stall.noOfOperators} free entries)\n` : "") +
+            `\n⚠️ Your stall ticket PDF is attached. Present the QR code at the event entrance.`;
+
+          await this.otpService.sendWhatsAppMessage(vendorWhatsApp, message);
+
+          await this.otpService.sendMediaMessage(
+            vendorWhatsApp,
+            pdfPath,
+            `Stall Ticket - ${eventObj?.title || "Event"}`,
+          );
+        } catch (whatsAppError) {
+          this.logger.warn("Failed to send stall ticket via WhatsApp", whatsAppError);
+        }
       } else {
-        this.logger.warn(`No WhatsApp number found for vendor ${vendorId}, skipping message`);
+        this.logger.warn(
+          `No WhatsApp number found for vendor ${vendorId}, skipping message`,
+        );
       }
 
       this.logger.log(
@@ -825,7 +890,12 @@ export class StallsService {
     coupon?: any,
     country?: string,
   ): Promise<Buffer> {
-    const html = await this.generateStallTicketHTML(stall, qrBase64, coupon, country);
+    const html = await this.generateStallTicketHTML(
+      stall,
+      qrBase64,
+      coupon,
+      country,
+    );
 
     const browser = await puppeteer.launch({
       headless: true,
@@ -856,7 +926,6 @@ export class StallsService {
     country?: string,
   ): Promise<void> {
     try {
-
       const pdfBuffer = await this.generateStallTicketPDF(
         stall,
         qrBase64,
@@ -867,26 +936,26 @@ export class StallsService {
 
       if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
 
-      const event = await this.eventModel.findOne(stall.eventId);
-
-      const pdfFileName = `stall_ticket_${event.title}.pdf`;
+      const pdfFileName = `stall_ticket_${(stall as any)._id}.pdf`;
       const pdfPath = path.join(pdfDir, pdfFileName);
 
       await fs.promises.writeFile(pdfPath, pdfBuffer);
 
-      const eventDate = new Date(
-        stall.eventId["startDate"],
-      ).toLocaleDateString();
+      const eventObj = stall.eventId as any;
+      const vendorObj = stall.shopkeeperId as any;
+      const eventDate = eventObj?.startDate
+        ? new Date(eventObj.startDate).toLocaleDateString()
+        : "TBA";
 
       const message = `🎉 *Your Stall Confirmation is Ready!*
 
-🎪 *Stall:* Confirmed for ${stall.eventId["title"]}
+🎪 *Stall:* Confirmed for ${eventObj?.title || "Event"}
 
-👤 *Business:* ${stall.shopkeeperId["name"]}
+👤 *Business:* ${vendorObj?.name || stall.brandName || "—"}
 
 📅 *Date:* ${eventDate}
 
-📍 *Venue:* ${stall.eventId["location"] || "N/A"}
+📍 *Venue:* ${eventObj?.location || "TBA"}
 
 📊 *Booking Summary:*
 • Tables: ${stall.selectedTables.length}
@@ -909,7 +978,6 @@ Thank you for choosing Eventsh! 🎊`;
         pdfPath,
         `🎪 Your stall confirmation for ${stall.eventId["title"]}`,
       );
-
     } catch (error) {
       this.logger.error("Error sending stall ticket via WhatsApp:", error);
       throw error;
@@ -960,9 +1028,7 @@ Thank you for choosing Eventsh! 🎊`;
         throw new BadRequestException("Invalid QR code");
       }
 
-      const vendor = await this.vendorModel.findById(
-        stall.shopkeeperId,
-      );
+      const vendor = await this.vendorModel.findById(stall.shopkeeperId);
 
       const now = new Date();
 
@@ -972,9 +1038,7 @@ Thank you for choosing Eventsh! 🎊`;
         stall.hasCheckedIn = true;
         await stall.save();
 
-        const vendor = await this.vendorModel.findById(
-          stall.shopkeeperId,
-        );
+        const vendor = await this.vendorModel.findById(stall.shopkeeperId);
         const message =
           `✅ *Check-in Successful*\n\n` +
           `Welcome ${vendor.name}!\n` +
@@ -982,7 +1046,7 @@ Thank you for choosing Eventsh! 🎊`;
           `Your stall is now open. Enjoy the event! 🎉`;
 
         await this.otpService.sendWhatsAppMessage(
-          vendor.whatsappNumber,
+          (vendor.whatsAppNumber || vendor.whatsappNumber),
           message,
         );
 
@@ -1012,9 +1076,7 @@ Thank you for choosing Eventsh! 🎊`;
         stall.hasCheckedOut = true;
         await stall.save();
 
-        const vendor = await this.vendorModel.findById(
-          stall.shopkeeperId,
-        );
+        const vendor = await this.vendorModel.findById(stall.shopkeeperId);
         const duration = Math.floor(
           (now.getTime() - stall.checkInTime.getTime()) / (1000 * 60),
         );
@@ -1027,7 +1089,7 @@ Thank you for choosing Eventsh! 🎊`;
           `Thank you for participating! 🙏`;
 
         await this.otpService.sendWhatsAppMessage(
-          vendor.whatsappNumber,
+          (vendor.whatsAppNumber || vendor.whatsappNumber),
           message,
         );
 
@@ -1094,9 +1156,7 @@ Thank you for choosing Eventsh! 🎊`;
 
   private async sendStallCreatedNotification(stall: any) {
     try {
-      const vendor = await this.vendorModel.findById(
-        stall.shopkeeperId,
-      );
+      const vendor = await this.vendorModel.findById(stall.shopkeeperId);
 
       const event: any = stall.eventId;
 
@@ -1111,10 +1171,7 @@ Thank you for choosing Eventsh! 🎊`;
         `Your request is now pending organizer approval.\n\n` +
         `Thank you! 🙏`;
 
-      await this.otpService.sendWhatsAppMessage(
-        vendor.whatsappNumber,
-        message,
-      );
+      await this.otpService.sendWhatsAppMessage((vendor.whatsAppNumber || vendor.whatsappNumber), message);
     } catch (error) {
       this.logger.error("Error sending stall created notification:", error);
     }
@@ -1126,9 +1183,7 @@ Thank you for choosing Eventsh! 🎊`;
     newStatus: string,
   ) {
     try {
-      const vendor = await this.vendorModel.findById(
-        stall.shopkeeperId,
-      );
+      const vendor = await this.vendorModel.findById(stall.shopkeeperId);
       const event: any = stall.eventId;
 
       let message = "";
@@ -1154,7 +1209,7 @@ Thank you for choosing Eventsh! 🎊`;
 
       if (message) {
         await this.otpService.sendWhatsAppMessage(
-          vendor.whatsappNumber,
+          (vendor.whatsAppNumber || vendor.whatsappNumber),
           message,
         );
       }
@@ -1169,11 +1224,11 @@ Thank you for choosing Eventsh! 🎊`;
     newPaymentStatus: string,
   ) {
     try {
-      const vendor = await this.vendorModel.findById(
-        stall.shopkeeperId,
-      );
+      const vendor = await this.vendorModel.findById(stall.shopkeeperId);
       const event: any = stall.eventId;
-      const organizerDoc = await this.organizerModel.findById(stall.organizerId);
+      const organizerDoc = await this.organizerModel.findById(
+        stall.organizerId,
+      );
       const country = organizerDoc?.country || "IN";
 
       let message = "";
@@ -1207,7 +1262,7 @@ Thank you for choosing Eventsh! 🎊`;
 
       if (message) {
         await this.otpService.sendWhatsAppMessage(
-          vendor.whatsappNumber,
+          (vendor.whatsAppNumber || vendor.whatsappNumber),
           message,
         );
       }
@@ -1416,14 +1471,17 @@ Thank you for choosing Eventsh! 🎊`;
   // --- Vendor Lookup Methods ---
 
   async findVendorByWhatsApp(whatsAppNumber: string) {
-    const vendor = await this.vendorModel.findOne({
-      $or: [
-        { whatsAppNumber: whatsAppNumber },
-        { whatsAppNumber: whatsAppNumber.replace("+", "") },
-        { whatsappNumber: whatsAppNumber },
-        { whatsappNumber: whatsAppNumber.replace("+", "") },
-      ],
-    }).lean().exec();
+    const vendor = await this.vendorModel
+      .findOne({
+        $or: [
+          { whatsAppNumber: whatsAppNumber },
+          { whatsAppNumber: whatsAppNumber.replace("+", "") },
+          { whatsappNumber: whatsAppNumber },
+          { whatsappNumber: whatsAppNumber.replace("+", "") },
+        ],
+      })
+      .lean()
+      .exec();
 
     if (!vendor) {
       throw new NotFoundException("Vendor not found");
@@ -1681,9 +1739,7 @@ Thank you for choosing Eventsh! 🎊`;
 
   private async sendDepositReturnedNotification(stall: any) {
     try {
-      const vendor = await this.vendorModel.findById(
-        stall.shopkeeperId,
-      );
+      const vendor = await this.vendorModel.findById(stall.shopkeeperId);
       const event = await this.eventModel.findById(stall.eventId);
       const organizer = await this.organizerModel.findById(stall.organizerId);
       const country = organizer?.country || "IN";
@@ -1703,10 +1759,7 @@ Thank you for choosing Eventsh! 🎊`;
       stall.depositReturned = true;
       await stall.save();
 
-      await this.otpService.sendWhatsAppMessage(
-        vendor.whatsappNumber,
-        message,
-      );
+      await this.otpService.sendWhatsAppMessage((vendor.whatsAppNumber || vendor.whatsappNumber), message);
     } catch (error) {
       this.logger.error("Error sending deposit returned notification:", error);
     }
@@ -1810,7 +1863,9 @@ Thank you for choosing Eventsh! 🎊`;
         : null;
 
       // Get organizer country for currency
-      const organizerForCurrency = await this.organizerModel.findById(stall.organizerId);
+      const organizerForCurrency = await this.organizerModel.findById(
+        stall.organizerId,
+      );
       const dlCountry = organizerForCurrency?.country || "IN";
 
       // Generate the PDF Buffer

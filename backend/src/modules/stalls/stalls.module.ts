@@ -8,6 +8,7 @@ import { OtpModule } from "../otp/otp.module";
 import { CouponModule } from "../coupon/coupon.module";
 import { EventSchema } from "../events/schemas/event.schema";
 import { OrganizerSchema } from "../organizers/schemas/organizer.schema";
+import { StallPaymentSchedulerService } from "./stall-payment-scheduler.service";
 
 @Module({
   imports: [
@@ -21,7 +22,7 @@ import { OrganizerSchema } from "../organizers/schemas/organizer.schema";
     CouponModule,
   ],
   controllers: [StallsController],
-  providers: [StallsService],
+  providers: [StallsService, StallPaymentSchedulerService],
   exports: [StallsService],
 })
 export class StallsModule {}

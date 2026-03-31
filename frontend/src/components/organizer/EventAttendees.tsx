@@ -296,7 +296,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   const [attendanceTimeSort, setAttendanceTimeSort] = useState<
     "none" | "latest" | "oldest"
   >("latest");
-  const [stalls, setStalls] = useState(null);
+  const [stalls, setStalls] = useState<any[]>([]);
   const [stallRequest, setStallRequest] = useState<StallRequest | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -1151,17 +1151,17 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         method: "GET",
       });
 
-      if (!response.ok) {
-        throw new Error("no Stalls Found");
-      }
-
       if (response.ok) {
         const data = await response.json();
-        setStalls(data.data);
-        setLoading(false);
+        setStalls(data.data || []);
+      } else {
+        setStalls([]);
       }
     } catch (error) {
-      throw error;
+      console.error("Error fetching stalls:", error);
+      setStalls([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1952,7 +1952,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
             </DialogDescription>
           </DialogHeader>
 
-          {selectedEvent && stalls && (
+          {selectedEvent && (
             <div className="space-y-6">
               {/* 1. Event Info & High-Level Stats */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -2078,12 +2078,20 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                         <TableRow key={stall._id}>
                           <TableCell>
                             <div className="font-bold text-sm">
-                              {stall.shopkeeperId?.name}
+                              {stall.shopkeeperId?.name || stall.nameOfApplicant || "—"}
                             </div>
-                            <div className="text-xs text-muted-foreground flex items-center gap-1">
-                              <ShoppingCartIcon className="h-3 w-3" />{" "}
-                              {stall.shopkeeperId?.shopName}
-                            </div>
+                            {(stall.shopkeeperId?.shopName || stall.shopkeeperId?.businessName || stall.brandName) && (
+                              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                <ShoppingCartIcon className="h-3 w-3" />{" "}
+                                {stall.shopkeeperId?.shopName || stall.shopkeeperId?.businessName || stall.brandName}
+                              </div>
+                            )}
+                            {stall.shopkeeperId?.whatsappNumber && (
+                              <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                <Phone className="h-3 w-3" />{" "}
+                                {stall.shopkeeperId.whatsappNumber}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell>
                             {stall.selectedTables.length > 0 ? (
@@ -2166,19 +2174,31 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                 </>
                               )}
 
-                              {(stall.status === "Processing" ||
-                                stall.status === "Completed") &&
+                              {stall.status !== "Pending" &&
+                                stall.status !== "Cancelled" &&
+                                stall.status !== "Forfeited" &&
                                 stall.paymentStatus !== "Paid" && (
                                   <Button
                                     size="sm"
                                     variant="default"
+                                    className="bg-blue-600 hover:bg-blue-700"
                                     onClick={() => {
                                       setSelectedRequest(stall);
                                       setShowPaymentDialog(true);
                                     }}
+                                    title="Confirm Payment"
                                   >
-                                    <CreditCard className="h-3 w-3" />
+                                    <CreditCard className="h-3 w-3 mr-1" />
+                                    <span className="text-xs">Payment</span>
                                   </Button>
+                                )}
+
+                              {stall.paymentStatus === "Paid" &&
+                                stall.status === "Completed" &&
+                                !stall.hasCheckedIn && (
+                                  <Badge className="bg-green-100 text-green-700 text-[10px]">
+                                    QR Sent
+                                  </Badge>
                                 )}
                             </div>
                           </TableCell>
@@ -2226,6 +2246,50 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Payment Action Bar */}
+              {stallRequest.status !== "Pending" &&
+                stallRequest.status !== "Cancelled" &&
+                stallRequest.status !== "Forfeited" &&
+                stallRequest.paymentStatus !== "Paid" && (
+                <Card className="border-blue-200 bg-blue-50/50">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-sm text-blue-900">Payment Confirmation Required</p>
+                        <p className="text-xs text-blue-700 mt-0.5">
+                          Grand Total: <span className="font-bold">{formatPrice(stallRequest.grandTotal)}</span>
+                          {stallRequest.paidAmount > 0 && (
+                            <> &middot; Paid: <span className="font-bold">{formatPrice(stallRequest.paidAmount)}</span> &middot; Remaining: <span className="font-bold">{formatPrice(stallRequest.remainingAmount)}</span></>
+                          )}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="bg-blue-600 hover:bg-blue-700"
+                        onClick={() => {
+                          setSelectedRequest(stallRequest);
+                          setShowPaymentDialog(true);
+                        }}
+                      >
+                        <CreditCard className="h-3.5 w-3.5 mr-1.5" />
+                        Confirm Payment
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {stallRequest.paymentStatus === "Paid" && (
+                <Card className="border-green-200 bg-green-50/50">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <p className="font-semibold text-sm text-green-800">Payment Confirmed — QR ticket generated and sent to vendor</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Shopkeeper Info */}
               <Card>
@@ -2314,13 +2378,20 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   )}
                   {/* Location & Social */}
                   <div>
-                    <Label className="text-muted-foreground">Country</Label>
+                    <Label className="text-muted-foreground">Country / Nationality</Label>
                     <p className="font-medium">
-                      {stallRequest.shopkeeperId?.country === "IN"
-                        ? "🇮🇳 India"
-                        : stallRequest.shopkeeperId?.country === "SG"
-                          ? "🇸🇬 Singapore"
-                          : stallRequest.shopkeeperId?.country || "—"}
+                      {(() => {
+                        const code = stallRequest.shopkeeperId?.countryCode || stallRequest.shopkeeperId?.country || "";
+                        const nationality = stallRequest.businessOwnerNationality || stallRequest.shopkeeperId?.businessOwnerNationality || "";
+                        if (code === "+91" || code === "IN") return "🇮🇳 India";
+                        if (code === "+65" || code === "SG") return "🇸🇬 Singapore";
+                        if (code === "+1" || code === "US") return "🇺🇸 USA";
+                        if (code === "+44" || code === "GB") return "🇬🇧 UK";
+                        if (code === "+971" || code === "AE") return "🇦🇪 UAE";
+                        if (nationality) return nationality;
+                        if (code) return code;
+                        return "—";
+                      })()}
                     </p>
                   </div>
                   <div>
@@ -2347,32 +2418,43 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   </div>
                   {/* Tax & Registration */}
                   <div>
-                    {stallRequest.shopkeeperId?.country === "IN" ? (
-                      <>
-                        <Label className="text-muted-foreground">
-                          GST Number
-                        </Label>
-                        <p className="font-medium uppercase">
-                          {stallRequest.shopkeeperId?.GSTNumber ||
-                            "Not Provided"}
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <Label className="text-muted-foreground">
-                          UEN Number
-                        </Label>
-                        <p className="font-medium uppercase">
-                          {stallRequest.shopkeeperId?.UENNumber ||
-                            "Not Provided"}
-                        </p>
-                      </>
-                    )}
+                    {(() => {
+                      const code = stallRequest.shopkeeperId?.countryCode || stallRequest.shopkeeperId?.country || "";
+                      const isIN = code === "+91" || code === "IN";
+                      if (isIN) {
+                        return (<>
+                          <Label className="text-muted-foreground">GST Number</Label>
+                          <p className="font-medium uppercase">{stallRequest.shopkeeperId?.GSTNumber || "Not Provided"}</p>
+                        </>);
+                      }
+                      if (stallRequest.shopkeeperId?.UENNumber) {
+                        return (<>
+                          <Label className="text-muted-foreground">UEN Number</Label>
+                          <p className="font-medium uppercase">{stallRequest.shopkeeperId.UENNumber}</p>
+                        </>);
+                      }
+                      if (stallRequest.shopkeeperId?.GSTNumber) {
+                        return (<>
+                          <Label className="text-muted-foreground">GST Number</Label>
+                          <p className="font-medium uppercase">{stallRequest.shopkeeperId.GSTNumber}</p>
+                        </>);
+                      }
+                      if (stallRequest.registrationNumber) {
+                        return (<>
+                          <Label className="text-muted-foreground">Registration No.</Label>
+                          <p className="font-medium uppercase">{stallRequest.registrationNumber}</p>
+                        </>);
+                      }
+                      return (<>
+                        <Label className="text-muted-foreground">Registration</Label>
+                        <p className="font-medium text-muted-foreground italic text-sm">Not Provided</p>
+                      </>);
+                    })()}
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Category</Label>
                     <p className="font-medium">
-                      {stallRequest.shopkeeperId?.businessCategory}
+                      {stallRequest.shopkeeperId?.businessCategory || "—"}
                     </p>
                   </div>
 
@@ -2389,13 +2471,13 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       Owner Nationality
                     </Label>
                     <p className="font-medium">
-                      {stallRequest.businessOwnerNationality}
+                      {stallRequest.businessOwnerNationality || "—"}
                     </p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Residency</Label>
                     <p className="font-medium">
-                      {stallRequest.residency || "Not Provided"}
+                      {stallRequest.residency || "—"}
                     </p>
                   </div>
                   {/* Financial/System Details (New) */}
@@ -2461,7 +2543,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       Business Address
                     </Label>
                     <p className="text-sm leading-tight mt-1 italic">
-                      {stallRequest.shopkeeperId?.address}
+                      {stallRequest.shopkeeperId?.address || "Not provided"}
                     </p>
                   </div>
 
@@ -2515,7 +2597,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       Business Address
                     </Label>
                     <p className="text-sm leading-tight mt-1 italic">
-                      {stallRequest.shopkeeperId?.address}
+                      {stallRequest.shopkeeperId?.address || "Not provided"}
                     </p>
                   </div> */}
                 </CardContent>
@@ -2535,7 +2617,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       </Label>
                       <div className="flex items-center gap-2">
                         <p className="font-bold text-lg">
-                          {stallRequest.eventId.title}
+                          {stallRequest.eventId?.title || "—"}
                         </p>
                         {/* <Badge
                           variant={
@@ -2551,7 +2633,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     <div>
                       <Label className="text-muted-foreground">Category</Label>
                       <p className="font-medium">
-                        {stallRequest.eventId.category}
+                        {stallRequest.eventId?.category || "—"}
                       </p>
                     </div>
                   </div>
@@ -2563,11 +2645,11 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                         <Calendar className="w-3 h-3" /> Duration
                       </Label>
                       <p className="text-sm font-medium">
-                        {formatDate(stallRequest.eventId.startDate)} -{" "}
-                        {formatDate(stallRequest.eventId.endDate)}
+                        {formatDate(stallRequest.eventId?.startDate)} -{" "}
+                        {formatDate(stallRequest.eventId?.endDate)}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Starts at: {stallRequest.eventId.time}
+                        Starts at: {stallRequest.eventId?.time || "TBA"}
                       </p>
                     </div>
                     <div>
@@ -2575,10 +2657,10 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                         <MapPin className="w-3 h-3" /> Venue
                       </Label>
                       <p className="text-sm font-medium">
-                        {stallRequest.eventId.location}
+                        {stallRequest.eventId?.location || "TBA"}
                       </p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {stallRequest.eventId.address}
+                        {stallRequest.eventId?.address}
                       </p>
                     </div>
                   </div>
@@ -2589,7 +2671,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       Included Features
                     </Label>
                     <div className="flex flex-wrap gap-2">
-                      {stallRequest.eventId.features.parking && (
+                      {stallRequest.eventId?.features?.parking && (
                         <Badge
                           variant="outline"
                           className="flex gap-1 items-center bg-green-50"
@@ -2597,7 +2679,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                           <ParkingCircle className="w-3 h-3" /> Parking
                         </Badge>
                       )}
-                      {stallRequest.eventId.features.wifi && (
+                      {stallRequest.eventId?.features?.wifi && (
                         <Badge
                           variant="outline"
                           className="flex gap-1 items-center bg-yellow-50"
@@ -2605,7 +2687,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                           <Wifi className="w-3 h-3" /> WiFi
                         </Badge>
                       )}
-                      {stallRequest.eventId.features.photography && (
+                      {stallRequest.eventId?.features?.photography && (
                         <Badge
                           variant="outline"
                           className="flex gap-1 items-center bg-blue-50"
@@ -2613,7 +2695,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                           <Camera className="w-3 h-3" /> Photography
                         </Badge>
                       )}
-                      {stallRequest.eventId.features.security && (
+                      {stallRequest.eventId?.features?.security && (
                         <Badge
                           variant="outline"
                           className="flex gap-1 items-center bg-red-50"
@@ -2621,7 +2703,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                           <ShieldCheck className="w-3 h-3" /> Security
                         </Badge>
                       )}
-                      {stallRequest.eventId.features.food && (
+                      {stallRequest.eventId?.features?.food && (
                         <Badge
                           variant="outline"
                           className="flex gap-1 items-center bg-pink-50"
@@ -2639,13 +2721,13 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                         Dress Code
                       </Label>
                       <p className="text-sm font-medium">
-                        {stallRequest.eventId.dresscode || "Casual"}
+                        {stallRequest.eventId?.dresscode || "Casual"}
                       </p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Age Limit</Label>
                       <p className="text-sm font-medium">
-                        {stallRequest.eventId.ageRestriction || "No Limit"}
+                        {stallRequest.eventId?.ageRestriction || "No Limit"}
                       </p>
                     </div>
                   </div>
@@ -2661,7 +2743,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                           Ticket Price
                         </span>
                         <span className="font-bold">
-                          {formatPrice(stallRequest.eventId.ticketPrice)}
+                          {formatPrice(stallRequest.eventId?.ticketPrice)}
                         </span>
                       </div>
                       <div className="text-center p-2 border rounded-md flex-1">
@@ -2669,20 +2751,20 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                           Available Slots
                         </span>
                         <span className="font-bold">
-                          {stallRequest.eventId.totalTickets}
+                          {stallRequest.eventId?.totalTickets || "Unlimited"}
                         </span>
                       </div>
                     </div>
                   </div>
 
                   {/* Gallery Preview */}
-                  {stallRequest.eventId.gallery?.length > 0 && (
+                  {stallRequest.eventId?.gallery?.length > 0 && (
                     <div className="border-t pt-4">
                       <Label className="text-muted-foreground block mb-2">
                         Event Gallery
                       </Label>
                       <div className="flex gap-2 overflow-x-auto pb-2">
-                        {stallRequest.eventId.gallery.map((img, idx) => (
+                        {stallRequest.eventId?.gallery.map((img, idx) => (
                           <img
                             key={idx}
                             src={`${__API_URL__}${img}`}

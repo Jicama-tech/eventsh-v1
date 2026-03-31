@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import {
   Card,
@@ -143,6 +143,81 @@ export default function TicketCart() {
   const [completeWhatsAppNumber, setCompleteWhatsAppNumber] = useState("");
   const [country, setCountry] = useState("");
   const { formatPrice, getSymbol } = useCurrency(country);
+
+  // Google Auth state
+  const [googleAuthed, setGoogleAuthed] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Handle Google auth redirect callback
+  useEffect(() => {
+    const googleAuth = searchParams.get("google_auth");
+    if (googleAuth === "success") {
+      const gEmail = searchParams.get("email") || "";
+      const gFirstName = searchParams.get("firstName") || "";
+      const gLastName = searchParams.get("lastName") || "";
+      const gName = searchParams.get("name") || "";
+      const isExisting = searchParams.get("existing") === "true";
+
+      setEmail(gEmail);
+      setEmailVerified(true);
+      setGoogleAuthed(true);
+
+      if (isExisting) {
+        // Existing user — fetch full details from backend
+        fetchUserByEmail(gEmail).then((existingUser) => {
+          setCustomerDetails({
+            firstName: existingUser?.firstName || gFirstName || gName.split(" ")[0] || "",
+            lastName: existingUser?.lastName || gLastName || gName.split(" ").slice(1).join(" ") || "",
+          });
+          setIsNameDisabled(true);
+          toast({
+            duration: 3000,
+            title: "Welcome back!",
+            description: "Your details have been auto-filled",
+          });
+        });
+      } else {
+        // New user — prefill from Google
+        setCustomerDetails({
+          firstName: gFirstName || gName.split(" ")[0] || "",
+          lastName: gLastName || gName.split(" ").slice(1).join(" ") || "",
+        });
+        setIsNameDisabled(false);
+        toast({
+          duration: 3000,
+          title: "Signed in with Google",
+          description: "Please complete your details",
+        });
+      }
+
+      // Clean URL params
+      searchParams.delete("google_auth");
+      searchParams.delete("email");
+      searchParams.delete("firstName");
+      searchParams.delete("lastName");
+      searchParams.delete("name");
+      searchParams.delete("existing");
+      setSearchParams(searchParams, { replace: true });
+    } else if (searchParams.get("error") === "auth_failed") {
+      toast({
+        duration: 3000,
+        title: "Google Sign-in Failed",
+        description: "Please try again or enter details manually",
+        variant: "destructive",
+      });
+      searchParams.delete("error");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, []);
+
+  const handleGoogleSignIn = () => {
+    setGoogleLoading(true);
+    // Save current cart to localStorage before redirect (it's already there)
+    // Redirect to backend Google auth with return URL
+    const returnUrl = encodeURIComponent(window.location.pathname);
+    window.location.href = `${apiURL}/auth/google-buyer?state=${returnUrl}`;
+  };
 
   useEffect(() => {
     async function getShopkeeper() {
@@ -1090,6 +1165,54 @@ export default function TicketCart() {
                       <TabsTrigger value="self">Self Order</TabsTrigger>
                     </TabsList>
                     <TabsContent value="customer" className="space-y-4">
+                      {/* Google Sign-in */}
+                      {!googleAuthed && (
+                        <div className="mb-4">
+                          <button
+                            type="button"
+                            onClick={handleGoogleSignIn}
+                            disabled={googleLoading}
+                            className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50"
+                          >
+                            {googleLoading ? (
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                            ) : (
+                              <svg viewBox="0 0 24 24" className="h-5 w-5">
+                                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
+                                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                              </svg>
+                            )}
+                            <span className="text-sm font-medium text-gray-700">
+                              {googleLoading ? "Signing in..." : "Sign in with Google"}
+                            </span>
+                          </button>
+                          <div className="relative my-4">
+                            <div className="absolute inset-0 flex items-center">
+                              <Separator />
+                            </div>
+                            <div className="relative flex justify-center text-xs uppercase">
+                              <span className="bg-background px-2 text-muted-foreground">
+                                or continue manually
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {googleAuthed && (
+                        <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg mb-4">
+                          <svg viewBox="0 0 24 24" className="h-4 w-4 flex-shrink-0">
+                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
+                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                          </svg>
+                          <span className="text-sm text-green-700 font-medium">Signed in as {email}</span>
+                        </div>
+                      )}
+
                       {/* WhatsApp Number */}
                       <div className="mb-6">
                         <Label

@@ -9,7 +9,13 @@ import {
   HttpCode,
   HttpStatus,
   Res,
+  UseInterceptors,
+  UploadedFile,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { diskStorage } from "multer";
+import { v4 as uuidv4 } from "uuid";
+import * as path from "path";
 import { Response } from "express";
 import { SpeakerRequestsService } from "./speaker-requests.service";
 import {
@@ -31,6 +37,39 @@ export class SpeakerRequestsController {
       body.sessions = JSON.parse(body.sessions);
     if (typeof body.socialLinks === "string")
       body.socialLinks = JSON.parse(body.socialLinks);
+    return this.service.create(body);
+  }
+
+  // Phase 1b: Apply as speaker with image upload
+  @Post("apply-with-image")
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(
+    FileInterceptor("image", {
+      storage: diskStorage({
+        destination: "./uploads/speakers",
+        filename: (_req, file, cb) => {
+          const ext = path.extname(file.originalname);
+          cb(null, `${uuidv4()}${ext}`);
+        },
+      }),
+      fileFilter: (_req, file, cb) => {
+        if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
+          cb(new Error("Only image files are allowed!"), false);
+        } else {
+          cb(null, true);
+        }
+      },
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  async applyWithImage(@UploadedFile() file: Express.Multer.File, @Body() body: any) {
+    if (typeof body.sessions === "string")
+      body.sessions = JSON.parse(body.sessions);
+    if (typeof body.socialLinks === "string")
+      body.socialLinks = JSON.parse(body.socialLinks);
+    if (file) {
+      body.image = `/uploads/speakers/${file.filename}`;
+    }
     return this.service.create(body);
   }
 

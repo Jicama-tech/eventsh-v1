@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 import { ConfigModule } from "@nestjs/config";
+import { ScheduleModule } from "@nestjs/schedule";
 import { AuthModule } from "./modules/auth/auth.module";
 import { UsersModule } from "./modules/users/users.module";
 import { EventsModule } from "./modules/events/events.module";
@@ -19,10 +20,12 @@ import { OrganizerStoresModule } from "./modules/organizer-stores/organizer-stor
 import { CouponModule } from "./modules/coupon/coupon.module";
 import { OperatorsModule } from "./modules/operators/operators.module";
 import { SpeakerRequestsModule } from "./modules/speaker-requests/speaker-requests.module";
+import { RoundTableBookingsModule } from "./modules/round-table-bookings/round-table-bookings.module";
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     MailModule,
     MongooseModule.forRoot(
       process.env.MONGO_URI || "mongodb://127.0.0.1:27017/eventsh_dev",
@@ -50,6 +53,7 @@ import { SpeakerRequestsModule } from "./modules/speaker-requests/speaker-reques
     CouponModule,
     OperatorsModule,
     SpeakerRequestsModule,
+    RoundTableBookingsModule,
   ],
 })
 export class AppModule {}

@@ -887,7 +887,7 @@ const TablePaymentPage = () => {
                             Pay: {formatPrice(totals.fullPayment)}
                           </p>
                           <p className="text-xs text-green-600 font-semibold">
-                            Remaining: {formatPrice(0)}
+                            No balance — fully paid
                           </p>
                         </div>
                       </Label>

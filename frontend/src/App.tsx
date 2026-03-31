@@ -11,6 +11,7 @@ import {
 } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 import { CountryProvider } from "./hooks/useCountry";
 import { lazy, Suspense, useEffect } from "react";
 import { useLocation } from "react-router-dom";
@@ -26,6 +27,7 @@ const TablePaymentPage = lazy(() => import("./components/user/tablePaymentPage")
 const SpeakerPaymentPage = lazy(() => import("./components/user/speakerPaymentPage"));
 const TicketPaymentPage = lazy(() => import("./components/user/ticketPaymentPage"));
 const TicketCart = lazy(() => import("./components/user/ticketCart"));
+const RoundTablePaymentPage = lazy(() => import("./components/user/roundTablePaymentPage"));
 
 // Auth pages
 const AdminLogs = lazy(() => import("./components/auth/loginAdmin").then(m => ({ default: m.AdminLogs })));
@@ -88,6 +90,7 @@ function CleanStorefrontUrl() {
       "/ticket-cart",
       "/table-payment",
       "/speaker-payment",
+      "/round-table-payment",
       "/events",
       "/organizer-dashboard",
       "/organizer",
@@ -212,6 +215,7 @@ function AppContent() {
           <Route path="/ticket-payment" element={<TicketPaymentPage />} />
           <Route path="/table-payment" element={<TablePaymentPage />} />
           <Route path="/speaker-payment" element={<SpeakerPaymentPage />} />
+          <Route path="/round-table-payment" element={<RoundTablePaymentPage />} />
           <Route path="/event-login" element={<OrganizerLogin />} />
           <Route
             path="/:organizationName"
@@ -294,6 +298,7 @@ function AppContent() {
                   />
                   <Route path="/table-payment" element={<TablePaymentPage />} />
           <Route path="/speaker-payment" element={<SpeakerPaymentPage />} />
+          <Route path="/round-table-payment" element={<RoundTablePaymentPage />} />
                   <Route
                     path="/organizer-dashboard"
                     element={
@@ -338,6 +343,7 @@ function AppContent() {
                   />
                   <Route path="/table-payment" element={<TablePaymentPage />} />
           <Route path="/speaker-payment" element={<SpeakerPaymentPage />} />
+          <Route path="/round-table-payment" element={<RoundTablePaymentPage />} />
 
                   <Route
                     path="/login"
@@ -405,22 +411,26 @@ const queryClient = new QueryClient({
   },
 });
 
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
+
 const App = () => (
-  <HelmetProvider>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <AuthProvider>
-            <CountryProvider>
-              <AppContent />
-            </CountryProvider>
-          </AuthProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
-  </HelmetProvider>
+  <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+    <HelmetProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <AuthProvider>
+              <CountryProvider>
+                <AppContent />
+              </CountryProvider>
+            </AuthProvider>
+          </BrowserRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </HelmetProvider>
+  </GoogleOAuthProvider>
 );
 
 export default App;

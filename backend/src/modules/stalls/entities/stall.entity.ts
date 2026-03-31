@@ -51,6 +51,7 @@ export enum StallStatusEnum {
   Cancelled = "Cancelled",
   Completed = "Completed",
   Returned = "Returned",
+  Forfeited = "Forfeited",
   Unpaid = "Unpaid",
   Partial = "Partial",
   Paid = "Paid",

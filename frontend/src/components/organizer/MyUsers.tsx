@@ -446,13 +446,13 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
         if (!exhibitorMap.has(key)) {
           exhibitorMap.set(key, {
             _id: key,
-            shopName: stall.shopkeeperId?.shopName,
-            ownerName: stall.shopkeeperId?.name,
-            email: stall.shopkeeperId?.businessEmail || stall.shopkeeperId?.email,
-            phone: stall.shopkeeperId?.phone,
+            shopName: stall.shopkeeperId?.shopName || stall.shopkeeperId?.businessName || stall.brandName || "",
+            ownerName: stall.shopkeeperId?.name || stall.nameOfApplicant || "",
+            email: stall.shopkeeperId?.businessEmail || stall.shopkeeperId?.email || "",
+            phone: stall.shopkeeperId?.phone || "",
             whatsapp:
-              stall.shopkeeperId?.whatsappNumber || stall.shopkeeperId?.phone,
-            category: stall.shopkeeperId?.businessCategory,
+              stall.shopkeeperId?.whatsappNumber || stall.shopkeeperId?.whatsAppNumber || stall.shopkeeperId?.phone || "",
+            category: stall.shopkeeperId?.businessCategory || "Uncategorized",
             status: stall.shopkeeperId?.approved
               ? "Verified"
               : stall.shopkeeperId?.rejected
@@ -1047,8 +1047,8 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Business</TableHead>
-                      <TableHead>Owner</TableHead>
+                      <TableHead>Exhibitor</TableHead>
+                      <TableHead>Contact</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Performance</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
@@ -1070,24 +1070,29 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                           <TableCell>
                             <div className="flex flex-col">
                               <span className="font-medium">
-                                {exhibitor.shopName}
+                                {exhibitor.ownerName || "—"}
                               </span>
+                              {exhibitor.shopName && (
+                                <span className="text-xs text-muted-foreground">
+                                  {exhibitor.shopName}
+                                </span>
+                              )}
                               <Badge
                                 variant="outline"
                                 className="w-fit text-[10px] mt-1"
                               >
-                                {exhibitor.category}
+                                {exhibitor.category || "Uncategorized"}
                               </Badge>
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col">
                               <span className="text-sm font-medium">
-                                {exhibitor.ownerName}
+                                {exhibitor.email || "—"}
                               </span>
                               <span className="text-xs text-muted-foreground flex items-center gap-1">
                                 <Phone className="h-3 w-3" />
-                                {exhibitor.phone}
+                                {exhibitor.whatsapp || exhibitor.phone || "—"}
                               </span>
                             </div>
                           </TableCell>
@@ -1353,7 +1358,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                       Business Name
                     </Label>
                     <p className="font-medium">
-                      {stallRequest.shopkeeperId?.shopName}
+                      {stallRequest.shopkeeperId?.shopName || stallRequest.shopkeeperId?.businessName || "Not provided"}
                     </p>
                   </div>
 
@@ -1377,24 +1382,37 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   <div>
                     <Label className="text-muted-foreground">WhatsApp</Label>
                     <p className="font-medium">
-                      <a
-                        href={`https://wa.me/${stallRequest.shopkeeperId?.whatsappNumber.replace(/\+/g, "")}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-green-600 hover:underline"
-                      >
-                        {stallRequest.shopkeeperId?.whatsappNumber}
-                      </a>
+                      {stallRequest.shopkeeperId?.whatsappNumber ? (
+                        <a
+                          href={`https://wa.me/${stallRequest.shopkeeperId.whatsappNumber.replace(/\+/g, "")}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-green-600 hover:underline"
+                        >
+                          {stallRequest.shopkeeperId.whatsappNumber}
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground italic text-sm">Not provided</span>
+                      )}
                     </p>
                   </div>
 
                   {/* Location & Social */}
                   <div>
-                    <Label className="text-muted-foreground">Country</Label>
+                    <Label className="text-muted-foreground">Country / Nationality</Label>
                     <p className="font-medium">
-                      {stallRequest.shopkeeperId?.country === "IN"
-                        ? "🇮🇳 India"
-                        : "🇸🇬 Singapore"}
+                      {(() => {
+                        const code = stallRequest.shopkeeperId?.countryCode || stallRequest.shopkeeperId?.country || "";
+                        const nationality = stallRequest.businessOwnerNationality || stallRequest.shopkeeperId?.businessOwnerNationality || "";
+                        if (code === "+91" || code === "IN") return "🇮🇳 India";
+                        if (code === "+65" || code === "SG") return "🇸🇬 Singapore";
+                        if (code === "+1" || code === "US") return "🇺🇸 USA";
+                        if (code === "+44" || code === "GB") return "🇬🇧 UK";
+                        if (code === "+971" || code === "AE") return "🇦🇪 UAE";
+                        if (nationality) return nationality;
+                        if (code) return code;
+                        return "—";
+                      })()}
                     </p>
                   </div>
 
@@ -1423,27 +1441,20 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
 
                   {/* Tax & Registration */}
                   <div>
-                    {stallRequest.shopkeeperId?.country === "IN" ? (
-                      <>
-                        <Label className="text-muted-foreground">
-                          GST Number
-                        </Label>
-                        <p className="font-medium uppercase">
-                          {stallRequest.shopkeeperId?.GSTNumber ||
-                            "Not Provided"}
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <Label className="text-muted-foreground">
-                          UEN Number
-                        </Label>
-                        <p className="font-medium uppercase">
-                          {stallRequest.shopkeeperId?.UENNumber ||
-                            "Not Provided"}
-                        </p>
-                      </>
-                    )}
+                    {(() => {
+                      const code = stallRequest.shopkeeperId?.countryCode || stallRequest.shopkeeperId?.country || "";
+                      const isIN = code === "+91" || code === "IN";
+                      if (isIN && stallRequest.shopkeeperId?.GSTNumber) {
+                        return (<><Label className="text-muted-foreground">GST Number</Label><p className="font-medium uppercase">{stallRequest.shopkeeperId.GSTNumber}</p></>);
+                      }
+                      if (stallRequest.shopkeeperId?.UENNumber) {
+                        return (<><Label className="text-muted-foreground">UEN Number</Label><p className="font-medium uppercase">{stallRequest.shopkeeperId.UENNumber}</p></>);
+                      }
+                      if (stallRequest.registrationNumber) {
+                        return (<><Label className="text-muted-foreground">Registration No.</Label><p className="font-medium uppercase">{stallRequest.registrationNumber}</p></>);
+                      }
+                      return (<><Label className="text-muted-foreground">Registration</Label><p className="font-medium text-muted-foreground italic text-sm">Not Provided</p></>);
+                    })()}
                   </div>
 
                   <div>
@@ -1505,7 +1516,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                       </Label>
                       <div className="flex items-center gap-2">
                         <p className="font-bold text-lg">
-                          {stallRequest.eventId.title}
+                          {stallRequest.eventId?.title || "Unknown Event"}
                         </p>
                         {/* <Badge
                           variant={
@@ -1521,7 +1532,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                     <div>
                       <Label className="text-muted-foreground">Category</Label>
                       <p className="font-medium">
-                        {stallRequest.eventId.category}
+                        {stallRequest.eventId?.category || "—"}
                       </p>
                     </div>
                   </div>
@@ -1533,11 +1544,11 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                         <Calendar className="w-3 h-3" /> Duration
                       </Label>
                       <p className="text-sm font-medium">
-                        {formatDate(stallRequest.eventId.startDate)} -{" "}
-                        {formatDate(stallRequest.eventId.endDate)}
+                        {formatDate(stallRequest.eventId?.startDate)} -{" "}
+                        {formatDate(stallRequest.eventId?.endDate)}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Starts at: {stallRequest.eventId.time}
+                        Starts at: {stallRequest.eventId?.time || "TBA"}
                       </p>
                     </div>
                     <div>
@@ -1545,10 +1556,10 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                         <MapPin className="w-3 h-3" /> Venue
                       </Label>
                       <p className="text-sm font-medium">
-                        {stallRequest.eventId.location}
+                        {stallRequest.eventId?.location || "TBA"}
                       </p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {stallRequest.eventId.address}
+                        {stallRequest.eventId?.address}
                       </p>
                     </div>
                   </div>
@@ -1559,7 +1570,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                       Included Features
                     </Label>
                     <div className="flex flex-wrap gap-2">
-                      {stallRequest.eventId.features.parking && (
+                      {stallRequest.eventId?.features?.parking && (
                         <Badge
                           variant="outline"
                           className="flex gap-1 items-center bg-green-50"
@@ -1567,7 +1578,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                           <ParkingCircle className="w-3 h-3" /> Parking
                         </Badge>
                       )}
-                      {stallRequest.eventId.features.photography && (
+                      {stallRequest.eventId?.features?.photography && (
                         <Badge
                           variant="outline"
                           className="flex gap-1 items-center bg-blue-50"
@@ -1575,7 +1586,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                           <Camera className="w-3 h-3" /> Photography
                         </Badge>
                       )}
-                      {stallRequest.eventId.features.security && (
+                      {stallRequest.eventId?.features?.security && (
                         <Badge
                           variant="outline"
                           className="flex gap-1 items-center bg-red-50"
@@ -1583,7 +1594,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                           <ShieldCheck className="w-3 h-3" /> Security
                         </Badge>
                       )}
-                      {!stallRequest.eventId.features.food && (
+                      {stallRequest.eventId?.features?.food && (
                         <Badge
                           variant="outline"
                           className="flex gap-1 items-center bg-pink-50"
@@ -1601,13 +1612,13 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                         Dress Code
                       </Label>
                       <p className="text-sm font-medium">
-                        {stallRequest.eventId.dresscode || "Casual"}
+                        {stallRequest.eventId?.dresscode || "Casual"}
                       </p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Age Limit</Label>
                       <p className="text-sm font-medium">
-                        {stallRequest.eventId.ageRestriction || "No Limit"}
+                        {stallRequest.eventId?.ageRestriction || "No Limit"}
                       </p>
                     </div>
                   </div>
@@ -1623,7 +1634,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                           Ticket Price
                         </span>
                         <span className="font-bold">
-                          {formatPrice(stallRequest.eventId.ticketPrice)}
+                          {stallRequest.eventId?.ticketPrice ? formatPrice(stallRequest.eventId.ticketPrice) : "N/A"}
                         </span>
                       </div>
                       <div className="text-center p-2 border rounded-md flex-1">
@@ -1631,20 +1642,20 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                           Available Slots
                         </span>
                         <span className="font-bold">
-                          {stallRequest.eventId.totalTickets}
+                          {stallRequest.eventId?.totalTickets || "Unlimited"}
                         </span>
                       </div>
                     </div>
                   </div>
 
                   {/* Gallery Preview */}
-                  {stallRequest.eventId.gallery?.length > 0 && (
+                  {stallRequest.eventId?.gallery?.length > 0 && (
                     <div className="border-t pt-4">
                       <Label className="text-muted-foreground block mb-2">
                         Event Gallery
                       </Label>
                       <div className="flex gap-2 overflow-x-auto pb-2">
-                        {stallRequest.eventId.gallery.map((img, idx) => (
+                        {stallRequest.eventId?.gallery?.map((img: string, idx: number) => (
                           <img
                             key={idx}
                             src={`${__API_URL__}${img}`}
@@ -1928,10 +1939,10 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   </CardHeader>
                   <CardContent className="text-sm space-y-2">
                     <div className="font-bold text-lg">
-                      {selectedExhibitor.shopName}
+                      {selectedExhibitor.shopName || selectedExhibitor.ownerName || "Unknown"}
                     </div>
                     <Badge variant="outline">
-                      {selectedExhibitor.category}
+                      {selectedExhibitor.category || "Uncategorized"}
                     </Badge>
                     <Separator className="my-2" />
                     <div className="flex items-center gap-2">

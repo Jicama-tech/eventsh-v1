@@ -206,6 +206,8 @@ interface FetchedEvent {
   speakers?: any[];
   speakerSlotTemplates?: any[];
   venueSpeakerZones?: any[];
+  roundTableTemplates?: any[];
+  venueRoundTables?: any[];
   status: string;
   featured: boolean;
   createdAt: string;
@@ -253,6 +255,33 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [otpError, setOtpError] = useState("");
   const [shopkeeperExists, setShopkeeperExists] = useState(false);
+
+  // Round Table Booking States
+  const [roundTableData, setRoundTableData] = useState<any[]>([]);
+  const [roundTableSelections, setRoundTableSelections] = useState<
+    {
+      tablePositionId: string;
+      tableName: string;
+      tableCategory: string;
+      sellingMode: string;
+      selectedChairIndices: number[];
+      amount: number;
+      color: string;
+    }[]
+  >([]);
+  const [rtVisitorInfo, setRtVisitorInfo] = useState({
+    name: "",
+    email: "",
+    phone: "",
+  });
+  const [rtBookingLoading, setRtBookingLoading] = useState(false);
+  const [rtSeatGuests, setRtSeatGuests] = useState<
+    Record<
+      string,
+      Record<number, { name: string; whatsApp: string; email: string }>
+    >
+  >({});
+  const [showGuestForm, setShowGuestForm] = useState(false);
 
   // Speaker Application States (WhatsApp-first flow like stalls)
   const [showSpeakerDialog, setShowSpeakerDialog] = useState(false);
@@ -483,6 +512,30 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       fetchEvent();
     }
   }, [eventId, id]);
+
+  // Fetch round table availability — only when event has round tables
+  const hasRoundTables = (eventData?.venueRoundTables?.length || 0) > 0;
+  useEffect(() => {
+    if (!hasRoundTables) return;
+    const eid = eventId || id;
+    if (!eid) return;
+    const fetchRoundTables = async () => {
+      try {
+        const res = await fetch(
+          `${apiURL}/round-table-bookings/available/${eid}`,
+        );
+        if (res.ok) {
+          const result = await res.json();
+          if (result.success && result.data?.roundTables) {
+            setRoundTableData(result.data.roundTables);
+          }
+        }
+      } catch {
+        // Non-critical
+      }
+    };
+    fetchRoundTables();
+  }, [hasRoundTables, eventId, id]);
 
   useEffect(() => {
     if (showTableSelection && venueContainerRef.current) {
@@ -2085,48 +2138,52 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       const vt = visitorTypes[selectedVisitorType];
       if (!vt) return;
 
-      cartItems = [{
-        eventId: eventData._id,
-        eventTitle: eventData.title,
-        ticketType: vt.name,
-        price: Number(vt.price) || 0,
-        quantity: 1,
-        maxQuantity: Number(vt.maxCount) || 100,
-        organizerId: eventData.organizer._id,
-        organizerName: eventData.organizer.name,
-        organizationName: eventData.organizer.organizationName,
-        eventDate: eventData.startDate,
-        eventTime: eventData.time,
-        venue: eventData.location || eventData.address,
-        category: eventData.category,
-        ageRestriction: eventData.ageRestriction,
-        dressCode: eventData.dresscode,
-        validUntil: eventData.endDate,
-        image: eventData.image,
-        description: eventData.description,
-      }];
+      cartItems = [
+        {
+          eventId: eventData._id,
+          eventTitle: eventData.title,
+          ticketType: vt.name,
+          price: Number(vt.price) || 0,
+          quantity: 1,
+          maxQuantity: Number(vt.maxCount) || 100,
+          organizerId: eventData.organizer._id,
+          organizerName: eventData.organizer.name,
+          organizationName: eventData.organizer.organizationName,
+          eventDate: eventData.startDate,
+          eventTime: eventData.time,
+          venue: eventData.location || eventData.address,
+          category: eventData.category,
+          ageRestriction: eventData.ageRestriction,
+          dressCode: eventData.dresscode,
+          validUntil: eventData.endDate,
+          image: eventData.image,
+          description: eventData.description,
+        },
+      ];
     } else {
       // Single ticket type (legacy)
-      cartItems = [{
-        eventId: eventData._id,
-        eventTitle: eventData.title,
-        ticketType: "General",
-        price: Number(eventData.ticketPrice) || 0,
-        quantity: ticketQuantity,
-        maxQuantity: Number(eventData.totalTickets) || 1,
-        organizerId: eventData.organizer._id,
-        organizerName: eventData.organizer.name,
-        organizationName: eventData.organizer.organizationName,
-        eventDate: eventData.startDate,
-        eventTime: eventData.time,
-        venue: eventData.location || eventData.address,
-        category: eventData.category,
-        ageRestriction: eventData.ageRestriction,
-        dressCode: eventData.dresscode,
-        validUntil: eventData.endDate,
-        image: eventData.image,
-        description: eventData.description,
-      }];
+      cartItems = [
+        {
+          eventId: eventData._id,
+          eventTitle: eventData.title,
+          ticketType: "General",
+          price: Number(eventData.ticketPrice) || 0,
+          quantity: ticketQuantity,
+          maxQuantity: Number(eventData.totalTickets) || 1,
+          organizerId: eventData.organizer._id,
+          organizerName: eventData.organizer.name,
+          organizationName: eventData.organizer.organizationName,
+          eventDate: eventData.startDate,
+          eventTime: eventData.time,
+          venue: eventData.location || eventData.address,
+          category: eventData.category,
+          ageRestriction: eventData.ageRestriction,
+          dressCode: eventData.dresscode,
+          validUntil: eventData.endDate,
+          image: eventData.image,
+          description: eventData.description,
+        },
+      ];
     }
 
     const existingCart = JSON.parse(localStorage.getItem("ticketCart") || "{}");
@@ -2542,7 +2599,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       <div className="bg-[#f5f5f5] border-b border-gray-200 mt-6 sm:mt-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-0">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-5 sm:-mt-1">
-            {/* Price Card */}
+            {/* Price Card — contextual */}
             <div className="rounded-2xl sm:rounded-tl-2xl sm:rounded-bl-2xl bg-white border border-gray-200 p-4 sm:p-5 lg:p-6 flex flex-col gap-1 shadow-sm col-span-2 sm:col-span-1">
               <div
                 className="w-9 h-9 rounded-xl flex items-center justify-center mb-1"
@@ -2550,17 +2607,41 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   backgroundColor: `${design?.primaryColor}18` || "#ffffff",
                 }}
               >
-                <DollarSign
-                  className="h-4 w-4"
-                  style={{ color: design?.primaryColor || "#f97316" }}
-                />
+                {visitorTypes && visitorTypes.length > 0 ? (
+                  <DollarSign
+                    className="h-4 w-4"
+                    style={{ color: design?.primaryColor || "#f97316" }}
+                  />
+                ) : (
+                  <CalendarDays
+                    className="h-4 w-4"
+                    style={{ color: design?.primaryColor || "#f97316" }}
+                  />
+                )}
               </div>
-              <p className="text-gray-400 text-xs font-medium uppercase tracking-widest">
-                Ticket Price
-              </p>
-              <p className="text-gray-900 font-bold text-xl sm:text-2xl">
-                {ticketPrice === 0 ? "Free" : formatPrice(ticketPrice)}
-              </p>
+              {visitorTypes && visitorTypes.length > 0 ? (
+                <>
+                  <p className="text-gray-400 text-xs font-medium uppercase tracking-widest">
+                    Ticket Price
+                  </p>
+                  <p className="text-gray-900 font-bold text-xl sm:text-2xl">
+                    {ticketPrice === 0 ? "Free" : formatPrice(ticketPrice)}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-gray-400 text-xs font-medium uppercase tracking-widest">
+                    Event Date
+                  </p>
+                  <p className="text-gray-900 font-bold text-sm sm:text-base">
+                    {new Date(startDate).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </p>
+                </>
+              )}
             </div>
 
             {/* Time Card */}
@@ -2961,29 +3042,33 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
                 </div>
 
-                {/* Attendees */}
-                <div className="flex items-center gap-3 bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{
-                      backgroundColor: `${design?.primaryColor}15` || "#fff7ed",
-                    }}
-                  >
-                    <Users
-                      className="h-4 w-4"
-                      style={{ color: design?.primaryColor || "#f97316" }}
-                    />
+                {/* Attendees — only if tickets exist */}
+                {visitorTypes && visitorTypes.length > 0 && (
+                  <div className="flex items-center gap-3 bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{
+                        backgroundColor:
+                          `${design?.primaryColor}15` || "#fff7ed",
+                      }}
+                    >
+                      <Users
+                        className="h-4 w-4"
+                        style={{ color: design?.primaryColor || "#f97316" }}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-gray-400 text-xs uppercase tracking-widest mb-0.5">
+                        Attendees
+                      </p>
+                      <p className="text-gray-900 font-semibold text-sm">
+                        {totalTickets > 0
+                          ? `${availableTickets.toLocaleString()} / ${totalTickets.toLocaleString()}`
+                          : "Unlimited"}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-gray-400 text-xs uppercase tracking-widest mb-0.5">
-                      Attendees
-                    </p>
-                    <p className="text-gray-900 font-semibold text-sm">
-                      {availableTickets.toLocaleString()} /{" "}
-                      {totalTickets.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
+                )}
               </div>
             </section>
           </div>
@@ -2991,224 +3076,354 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           {/* ── RIGHT: Sticky Sidebar ── */}
           <div className="w-full lg:w-80 xl:w-96 flex-shrink-0 order-1 lg:order-2">
             <div className="sticky-sidebar space-y-4">
-              {/* ── Ticket Purchase Card ── */}
-              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                <div className="p-5 sm:p-6">
-
-                  {/* Multiple Visitor Types — select one */}
-                  {visitorTypes && visitorTypes.length > 0 ? (
-                    <>
-                      <p className="text-gray-900 font-bold text-lg mb-3">Select Ticket Type</p>
-                      <div className="space-y-2 mb-4">
-                        {visitorTypes.map((vt: any, idx: number) => {
-                          const isSelected = selectedVisitorType === idx;
-                          return (
-                            <button
-                              key={vt.id || idx}
-                              type="button"
-                              onClick={() => setSelectedVisitorType(idx)}
-                              className={`w-full text-left rounded-xl border p-4 transition-all cursor-pointer ${isSelected ? "border-2 bg-gray-50/80 shadow-sm" : "border-gray-200 bg-white hover:bg-gray-50"}`}
-                              style={isSelected ? { borderColor: design?.primaryColor || "#6366f1" } : {}}
-                            >
-                              <div className="flex items-center gap-3">
-                                {/* Radio indicator */}
-                                <div
-                                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${isSelected ? "border-transparent" : "border-gray-300"}`}
-                                  style={isSelected ? { backgroundColor: design?.primaryColor || "#6366f1" } : {}}
-                                >
-                                  {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between mb-0.5">
-                                    <h4 className="font-semibold text-gray-900 text-sm">{vt.name}</h4>
-                                    <span className="font-bold text-base flex-shrink-0 ml-2" style={{ color: design?.secondaryColor || "#ef4444" }}>
-                                      {vt.price === 0 ? "Free" : formatPrice(vt.price)}
-                                    </span>
-                                  </div>
-                                  {vt.description && (
-                                    <p className="text-xs text-gray-500 mb-1">{vt.description}</p>
-                                  )}
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs text-gray-400">
-                                      {vt.maxCount ? `${vt.maxCount} spots` : "Unlimited"}
-                                    </span>
-                                    {vt.featureAccess && (
-                                      <div className="flex gap-1 flex-wrap justify-end">
-                                        {Object.entries(vt.featureAccess)
-                                          .filter(([, v]) => v)
-                                          .map(([k]) => (
-                                            <span key={k} className="px-1.5 py-0.5 bg-gray-100 rounded text-[9px] capitalize text-gray-500">{k}</span>
-                                          ))}
-                                      </div>
+              {/* ── Ticket Purchase Card — only if tickets exist ── */}
+              {visitorTypes && visitorTypes.length > 0 ? (
+                <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <div className="p-5 sm:p-6">
+                    {/* Multiple Visitor Types — select one */}
+                    {visitorTypes && visitorTypes.length > 0 ? (
+                      <>
+                        <p className="text-gray-900 font-bold text-lg mb-3">
+                          Select Ticket Type
+                        </p>
+                        <div className="space-y-2 mb-4">
+                          {visitorTypes.map((vt: any, idx: number) => {
+                            const isSelected = selectedVisitorType === idx;
+                            return (
+                              <button
+                                key={vt.id || idx}
+                                type="button"
+                                onClick={() => setSelectedVisitorType(idx)}
+                                className={`w-full text-left rounded-xl border p-4 transition-all cursor-pointer ${isSelected ? "border-2 bg-gray-50/80 shadow-sm" : "border-gray-200 bg-white hover:bg-gray-50"}`}
+                                style={
+                                  isSelected
+                                    ? {
+                                        borderColor:
+                                          design?.primaryColor || "#6366f1",
+                                      }
+                                    : {}
+                                }
+                              >
+                                <div className="flex items-center gap-3">
+                                  {/* Radio indicator */}
+                                  <div
+                                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${isSelected ? "border-transparent" : "border-gray-300"}`}
+                                    style={
+                                      isSelected
+                                        ? {
+                                            backgroundColor:
+                                              design?.primaryColor || "#6366f1",
+                                          }
+                                        : {}
+                                    }
+                                  >
+                                    {isSelected && (
+                                      <div className="w-2 h-2 rounded-full bg-white" />
                                     )}
                                   </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between mb-0.5">
+                                      <h4 className="font-semibold text-gray-900 text-sm">
+                                        {vt.name}
+                                      </h4>
+                                      <span
+                                        className="font-bold text-base flex-shrink-0 ml-2"
+                                        style={{
+                                          color:
+                                            design?.secondaryColor || "#ef4444",
+                                        }}
+                                      >
+                                        {vt.price === 0
+                                          ? "Free"
+                                          : formatPrice(vt.price)}
+                                      </span>
+                                    </div>
+                                    {vt.description && (
+                                      <p className="text-xs text-gray-500 mb-1">
+                                        {vt.description}
+                                      </p>
+                                    )}
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs text-gray-400">
+                                        {vt.maxCount
+                                          ? `${vt.maxCount} spots`
+                                          : "Unlimited"}
+                                      </span>
+                                      {vt.featureAccess && (
+                                        <div className="flex gap-1 flex-wrap justify-end">
+                                          {Object.entries(vt.featureAccess)
+                                            .filter(([, v]) => v)
+                                            .map(([k]) => (
+                                              <span
+                                                key={k}
+                                                className="px-1.5 py-0.5 bg-gray-100 rounded text-[9px] capitalize text-gray-500"
+                                              >
+                                                {k}
+                                              </span>
+                                            ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
+                              </button>
+                            );
+                          })}
+                        </div>
 
-                      {/* Total for selected type */}
-                      <div className="border-t border-gray-100 pt-4 mb-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-gray-600 text-sm font-medium">Total</span>
-                            <p className="text-xs text-gray-400">{visitorTypes[selectedVisitorType]?.name} x1</p>
+                        {/* Total for selected type */}
+                        <div className="border-t border-gray-100 pt-4 mb-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-gray-600 text-sm font-medium">
+                                Total
+                              </span>
+                              <p className="text-xs text-gray-400">
+                                {visitorTypes[selectedVisitorType]?.name} x1
+                              </p>
+                            </div>
+                            <span className="text-2xl font-black text-gray-900">
+                              {visitorTypes[selectedVisitorType]?.price === 0
+                                ? "Free"
+                                : formatPrice(
+                                    visitorTypes[selectedVisitorType]?.price ||
+                                      0,
+                                  )}
+                            </span>
                           </div>
-                          <span className="text-2xl font-black text-gray-900">
-                            {visitorTypes[selectedVisitorType]?.price === 0
-                              ? "Free"
-                              : formatPrice(visitorTypes[selectedVisitorType]?.price || 0)}
-                          </span>
                         </div>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      {/* Single ticket type (legacy) */}
-                      <p className="text-gray-500 text-sm mb-1">Price per ticket</p>
-                      <p
-                        className="text-4xl sm:text-5xl font-black mb-4 leading-none"
-                        style={{ color: design?.secondaryColor || "#ef4444" }}
+                      </>
+                    ) : (
+                      <>
+                        {/* Single ticket type (legacy) */}
+                        <p className="text-gray-500 text-sm mb-1">
+                          Price per ticket
+                        </p>
+                        <p
+                          className="text-4xl sm:text-5xl font-black mb-4 leading-none"
+                          style={{ color: design?.secondaryColor || "#ef4444" }}
+                        >
+                          {ticketPrice === 0
+                            ? "Free"
+                            : formatPrice(ticketPrice)}
+                        </p>
+
+                        {/* Availability bar */}
+                        <div className="mb-5">
+                          {totalTickets > 0 ? (
+                            <>
+                              <div className="flex items-center justify-between text-sm mb-1.5">
+                                <span className="text-gray-600 font-medium">
+                                  {availableTickets} tickets left
+                                </span>
+                                <span
+                                  className="font-semibold"
+                                  style={{
+                                    color: design?.secondaryColor || "#ef4444",
+                                  }}
+                                >
+                                  {Math.round(
+                                    ((totalTickets - availableTickets) /
+                                      totalTickets) *
+                                      100,
+                                  )}
+                                  % sold
+                                </span>
+                              </div>
+                              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-500"
+                                  style={{
+                                    width: `${Math.min(((totalTickets - availableTickets) / totalTickets) * 100, 100)}%`,
+                                    background: `linear-gradient(to right, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                                  }}
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <p className="text-sm text-gray-500 font-medium">
+                              Unlimited tickets available
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Divider + Total */}
+                        <div className="border-t border-gray-100 pt-4 mb-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-600 text-sm font-medium">
+                              Total
+                            </span>
+                            <span className="text-2xl font-black text-gray-900">
+                              {ticketPrice === 0
+                                ? "Free"
+                                : formatPrice(ticketPrice * ticketQuantity)}
+                            </span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Buy Tickets CTA — only if visitorTypes exist */}
+                    {visitorTypes && visitorTypes.length > 0 && (
+                      <button
+                        onClick={handleGetTickets}
+                        className="w-full h-12 sm:h-14 rounded-xl font-bold text-base text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 shadow-md hover:shadow-lg mb-3"
+                        style={{
+                          background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                        }}
                       >
-                        {ticketPrice === 0 ? "Free" : formatPrice(ticketPrice)}
-                      </p>
+                        <Ticket className="h-5 w-5" />
+                        Buy Tickets
+                      </button>
+                    )}
 
-                      {/* Availability bar */}
-                      <div className="mb-5">
-                        <div className="flex items-center justify-between text-sm mb-1.5">
-                          <span className="text-gray-600 font-medium">
-                            {availableTickets} tickets left
-                          </span>
-                          <span
-                            className="font-semibold"
-                            style={{ color: design?.secondaryColor || "#ef4444" }}
-                          >
-                            {totalTickets > 0
-                              ? Math.round(((totalTickets - availableTickets) / totalTickets) * 100)
-                              : 0}% sold
-                          </span>
-                        </div>
-                        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all duration-500"
-                            style={{
-                              width: `${totalTickets > 0 ? Math.min(((totalTickets - availableTickets) / totalTickets) * 100, 100) : 0}%`,
-                              background: `linear-gradient(to right, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
-                            }}
-                          />
-                        </div>
+                    {/* Share */}
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleShare}
+                        className="flex-1 h-10 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center gap-2 text-sm font-medium text-gray-600 transition-all"
+                      >
+                        <Share2 className="h-4 w-4" />
+                        Share
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Organized by footer */}
+                  <div className="border-t border-gray-100 px-5 sm:px-6 py-4">
+                    <p className="text-gray-400 text-xs font-medium mb-3">
+                      Organized by
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                        style={{
+                          background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                        }}
+                      >
+                        {organizer.organizationName.charAt(0).toUpperCase()}
                       </div>
-
-                      {/* Divider + Total */}
-                      <div className="border-t border-gray-100 pt-4 mb-4">
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-600 text-sm font-medium">Total</span>
-                          <span className="text-2xl font-black text-gray-900">
-                            {ticketPrice === 0 ? "Free" : formatPrice(ticketPrice * ticketQuantity)}
-                          </span>
-                        </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900 text-sm truncate">
+                          {organizer.organizationName}
+                        </p>
+                        <p className="text-gray-400 text-xs">Event Organizer</p>
                       </div>
-                    </>
-                  )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <div className="p-5 sm:p-6">
+                    <p className="text-gray-900 font-bold text-lg mb-2">
+                      {title}
+                    </p>
+                    <p className="text-gray-500 text-sm mb-4">
+                      {new Date(startDate).toLocaleDateString("en-US", {
+                        weekday: "long",
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                      {time ? ` · ${time}` : ""}
+                    </p>
+                    {location && (
+                      <p className="text-gray-600 text-sm mb-1">{location}</p>
+                    )}
+                    {address && (
+                      <p className="text-gray-400 text-xs mb-4">{address}</p>
+                    )}
 
-                  {/* Buy Tickets CTA */}
+                    {/* Share */}
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleShare}
+                        className="flex-1 h-10 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center gap-2 text-sm font-medium text-gray-600 transition-all"
+                      >
+                        <Share2 className="h-4 w-4" />
+                        Share
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Organized by footer */}
+                  <div className="border-t border-gray-100 px-5 sm:px-6 py-4">
+                    <p className="text-gray-400 text-xs font-medium mb-3">
+                      Organized by
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                        style={{
+                          background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                        }}
+                      >
+                        {organizer.organizationName.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900 text-sm truncate">
+                          {organizer.organizationName}
+                        </p>
+                        <p className="text-gray-400 text-xs">Event Organizer</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Exhibitor Card — only if event has stall spaces ── */}
+              {venueTables && Object.keys(venueTables).length > 0 && (
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <p className="text-gray-700 font-semibold text-sm mb-1">
+                    Book a Stall
+                  </p>
+                  <p className="text-gray-400 text-xs mb-4">
+                    Showcase your business at this event as an exhibitor.
+                  </p>
                   <button
-                    onClick={handleGetTickets}
-                    className="w-full h-12 sm:h-14 rounded-xl font-bold text-base text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 shadow-md hover:shadow-lg mb-3"
+                    onClick={handleRentStallClick}
+                    className="w-full h-11 rounded-xl border-2 font-semibold text-sm transition-all hover:opacity-90"
                     style={{
-                      background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                      borderColor: design?.primaryColor || "#f97316",
+                      color: design?.primaryColor || "#f97316",
                     }}
                   >
-                    <Ticket className="h-5 w-5" />
-                    Buy Tickets
+                    Rent a Stall
                   </button>
-
-                  {/* Share */}
-                  <div className="flex gap-3">
-                    <button
-                      onClick={handleShare}
-                      className="flex-1 h-10 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center gap-2 text-sm font-medium text-gray-600 transition-all"
-                    >
-                      <Share2 className="h-4 w-4" />
-                      Share
-                    </button>
-                  </div>
                 </div>
+              )}
 
-                {/* Organized by footer */}
-                <div className="border-t border-gray-100 px-5 sm:px-6 py-4">
-                  <p className="text-gray-400 text-xs font-medium mb-3">
-                    Organized by
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+              {/* ── Apply as Speaker — only if event has speaker slots ── */}
+              {eventData?.speakerSlotTemplates &&
+                eventData.speakerSlotTemplates.length > 0 && (
+                  <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <p className="text-gray-700 font-semibold text-sm mb-1">
+                      Apply as Speaker
+                    </p>
+                    <p className="text-gray-400 text-xs mb-4">
+                      Have expertise to share? Apply to deliver a session at
+                      this event.
+                    </p>
+                    <button
+                      onClick={() => {
+                        setShowSpeakerDialog(true);
+                        setSpeakerStep("whatsapp");
+                        setSpeakerWhatsApp("");
+                        setSpeakerOtp("");
+                        setSpeakerOtpSent(false);
+                        setSpeakerVerified(false);
+                        setExistingSpeakerRequest(null);
+                      }}
+                      className="w-full h-11 rounded-xl border-2 font-semibold text-sm transition-all hover:opacity-90"
                       style={{
-                        background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                        borderColor: design?.primaryColor || "#6366f1",
+                        color: design?.primaryColor || "#6366f1",
                       }}
                     >
-                      {organizer.organizationName.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-gray-900 text-sm truncate">
-                        {organizer.organizationName}
-                      </p>
-                      <p className="text-gray-400 text-xs">Event Organizer</p>
-                    </div>
+                      Apply to Speak
+                    </button>
                   </div>
-                </div>
-              </div>
-
-              {/* ── Exhibitor Card ── */}
-              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                <p className="text-gray-700 font-semibold text-sm mb-1">
-                  Book a Stall
-                </p>
-                <p className="text-gray-400 text-xs mb-4">
-                  Showcase your business at this event as an exhibitor.
-                </p>
-                <button
-                  onClick={handleRentStallClick}
-                  className="w-full h-11 rounded-xl border-2 font-semibold text-sm transition-all hover:opacity-90"
-                  style={{
-                    borderColor: design?.primaryColor || "#f97316",
-                    color: design?.primaryColor || "#f97316",
-                  }}
-                >
-                  Rent a Stall
-                </button>
-              </div>
-
-              {/* ── Apply as Speaker ── */}
-              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                <p className="text-gray-700 font-semibold text-sm mb-1">
-                  Apply as Speaker
-                </p>
-                <p className="text-gray-400 text-xs mb-4">
-                  Have expertise to share? Apply to deliver a session at this
-                  event.
-                </p>
-                <button
-                  onClick={() => {
-                    setShowSpeakerDialog(true);
-                    setSpeakerStep("whatsapp");
-                    setSpeakerWhatsApp("");
-                    setSpeakerOtp("");
-                    setSpeakerOtpSent(false);
-                    setSpeakerVerified(false);
-                    setExistingSpeakerRequest(null);
-                  }}
-                  className="w-full h-11 rounded-xl border-2 font-semibold text-sm transition-all hover:opacity-90"
-                  style={{
-                    borderColor: design?.primaryColor || "#6366f1",
-                    color: design?.primaryColor || "#6366f1",
-                  }}
-                >
-                  Apply to Speak
-                </button>
-              </div>
+                )}
 
               {/* ── Contact Organizer ── */}
               {(organizer.phoneNumber ||
@@ -3314,33 +3529,43 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         <Separator className="mt-5 mb-5" />
         {/* Tabs */}
         <Tabs defaultValue="details" className="w-full">
-          <TabsList
-            className={`bg-gray-100 border border-gray-200 rounded-2xl p-1 h-auto grid w-full mt-5 ${venueTables && Object.keys(venueTables).length > 0 ? "grid-cols-4" : "grid-cols-2"}`}
-          >
+          <TabsList className="bg-gray-100 border border-gray-200 rounded-2xl p-1 h-auto flex flex-wrap w-full mt-5 gap-1">
             <TabsTrigger
               value="details"
-              className="rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
+              className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
             >
               Features
             </TabsTrigger>
             <TabsTrigger
               value="organizer"
-              className="rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
+              className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
             >
               Organizer
             </TabsTrigger>
-            <TabsTrigger
-              value="speakers"
-              className={`rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5 ${!(eventData?.speakers && eventData.speakers.length > 0) ? "hidden" : ""}`}
-            >
-              Speakers
-            </TabsTrigger>
-            <TabsTrigger
-              value="venue"
-              className={`rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5 ${!(venueTables && Object.keys(venueTables).length > 0) ? "hidden" : ""}`}
-            >
-              Venue Layout
-            </TabsTrigger>
+            {eventData?.speakers && eventData.speakers.length > 0 && (
+              <TabsTrigger
+                value="speakers"
+                className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
+              >
+                Speakers
+              </TabsTrigger>
+            )}
+            {venueTables && Object.keys(venueTables).length > 0 && (
+              <TabsTrigger
+                value="venue"
+                className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
+              >
+                Venue Layout
+              </TabsTrigger>
+            )}
+            {roundTableData.length > 0 && (
+              <TabsTrigger
+                value="roundtables"
+                className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
+              >
+                Round Tables
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="details" className="mt-4 space-y-4">
@@ -4167,6 +4392,1007 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
                 <p className="text-gray-400">
                   No venue layouts available for this event
+                </p>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* ROUND TABLES TAB */}
+          <TabsContent value="roundtables" className="mt-4 space-y-6">
+            {roundTableData.length > 0 ? (
+              <div className="space-y-5">
+                {/* Header */}
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">
+                        Reserve Your Seats
+                      </h3>
+                      <p className="text-sm text-gray-500 mt-0.5">
+                        Click on available chairs to select your preferred
+                        seating
+                      </p>
+                    </div>
+                    {roundTableSelections.length > 0 && (
+                      <div
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl"
+                        style={{ backgroundColor: `${design?.primaryColor}10` }}
+                      >
+                        <span className="text-sm font-medium text-gray-600">
+                          {roundTableSelections.reduce(
+                            (sum, s) => sum + s.selectedChairIndices.length,
+                            0,
+                          )}{" "}
+                          seat(s)
+                        </span>
+                        <span className="text-sm text-gray-400">&middot;</span>
+                        <span
+                          className="text-sm font-bold"
+                          style={{ color: design?.primaryColor }}
+                        >
+                          {formatPrice(
+                            roundTableSelections.reduce(
+                              (sum, s) => sum + s.amount,
+                              0,
+                            ),
+                          )}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Table category cards */}
+                  {(() => {
+                    const categories = [
+                      ...new Set(
+                        roundTableData.map(
+                          (rt: any) => rt.category || "Standard",
+                        ),
+                      ),
+                    ];
+                    return (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {categories.map((cat) => {
+                          const tablesInCat = roundTableData.filter(
+                            (rt: any) => (rt.category || "Standard") === cat,
+                          );
+                          const sample = tablesInCat[0];
+                          const totalSeats = tablesInCat.reduce(
+                            (s: number, rt: any) => s + rt.numberOfChairs,
+                            0,
+                          );
+                          const bookedSeats = tablesInCat.reduce(
+                            (s: number, rt: any) =>
+                              s + (rt.bookedChairs?.length || 0),
+                            0,
+                          );
+                          return (
+                            <div
+                              key={cat}
+                              className="rounded-xl border p-3 sm:p-4"
+                              style={{
+                                borderColor: `${sample.color || "#8B5CF6"}33`,
+                                backgroundColor: `${sample.color || "#8B5CF6"}06`,
+                              }}
+                            >
+                              <div className="flex items-center gap-2 mb-2">
+                                <div
+                                  className="w-2.5 h-2.5 rounded-full"
+                                  style={{
+                                    backgroundColor: sample.color || "#8B5CF6",
+                                  }}
+                                />
+                                <span className="font-bold text-sm text-gray-800">
+                                  {cat}
+                                </span>
+                              </div>
+                              <div className="space-y-1 text-xs text-gray-500">
+                                <p>
+                                  {tablesInCat.length} table
+                                  {tablesInCat.length > 1 ? "s" : ""}
+                                </p>
+                                <p
+                                  className="font-medium"
+                                  style={{ color: sample.color || "#8B5CF6" }}
+                                >
+                                  {sample.sellingMode === "table"
+                                    ? formatPrice(sample.tablePrice) +
+                                      " / table"
+                                    : formatPrice(sample.chairPrice) +
+                                      " / seat"}
+                                </p>
+                                <div className="flex items-center gap-1.5 mt-1">
+                                  <div className="flex-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full"
+                                      style={{
+                                        width: `${totalSeats > 0 ? (bookedSeats / totalSeats) * 100 : 0}%`,
+                                        backgroundColor:
+                                          sample.color || "#8B5CF6",
+                                      }}
+                                    />
+                                  </div>
+                                  <span className="text-[10px] text-gray-400">
+                                    {totalSeats - bookedSeats} left
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Round Tables Venue Layout */}
+                {venueConfig &&
+                  venueConfig[currentLayoutIndex] &&
+                  (() => {
+                    const vc = venueConfig[currentLayoutIndex];
+                    const canvasW = vc.width || 800;
+                    const canvasH = vc.height || 500;
+                    const pad = 25;
+                    const totalW = canvasW + pad * 2;
+                    const totalH = canvasH + pad * 2;
+                    const s = venueDisplayScale;
+
+                    return (
+                      <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+                        <div className="px-5 pt-5 pb-3">
+                          <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-8 h-8 rounded-lg flex items-center justify-center"
+                                style={{
+                                  backgroundColor: `${design?.primaryColor}15`,
+                                }}
+                              >
+                                <MapPin
+                                  className="h-4 w-4"
+                                  style={{ color: design?.primaryColor }}
+                                />
+                              </div>
+                              <div>
+                                <p className="text-sm font-bold text-gray-800">
+                                  {vc.name}
+                                </p>
+                                <p className="text-[10px] text-gray-400">
+                                  Tap chairs to select seats
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-sm" />
+                                <span className="text-[10px] font-medium text-gray-600">
+                                  Open
+                                </span>
+                              </div>
+                              <div className="w-px h-3 bg-gray-200" />
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm" />
+                                <span className="text-[10px] font-medium text-gray-600">
+                                  Selected
+                                </span>
+                              </div>
+                              <div className="w-px h-3 bg-gray-200" />
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
+                                <span className="text-[10px] font-medium text-gray-600">
+                                  Taken
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="px-3 pb-5">
+                          <div
+                            ref={venueDisplayContainerRef}
+                            style={{
+                              position: "relative",
+                              overflow: "hidden",
+                              width: "100%",
+                              height: `${Math.round(totalH * s) + 8}px`,
+                              borderRadius: "12px",
+                              border: "1px solid #e5e7eb",
+                              background: "#fafbfc",
+                            }}
+                          >
+                            <div
+                              style={{
+                                position: "absolute",
+                                top: "50%",
+                                left: "50%",
+                                width: `${totalW}px`,
+                                height: `${totalH}px`,
+                                transform: `translate(-50%, -50%) scale(${s})`,
+                                transformOrigin: "center center",
+                              }}
+                            >
+                              {/* Grid background — offset by padding */}
+                              <div
+                                className="absolute rounded-lg"
+                                style={{
+                                  left: pad,
+                                  top: pad,
+                                  width: canvasW,
+                                  height: canvasH,
+                                  backgroundImage: `
+                                  linear-gradient(to right, rgba(0,0,0,0.04) 1px, transparent 1px),
+                                  linear-gradient(to bottom, rgba(0,0,0,0.04) 1px, transparent 1px)
+                                `,
+                                  backgroundSize: `${vc.gridSize || 20}px ${vc.gridSize || 20}px`,
+                                  backgroundColor: "#ffffff",
+                                  border: "1px solid #e5e7eb",
+                                }}
+                              >
+                                {/* Main Stage */}
+                                {vc.hasMainStage && (
+                                  <div
+                                    className="absolute flex items-center justify-center font-bold rounded-b-lg"
+                                    style={{
+                                      top: 0,
+                                      left: "50%",
+                                      transform: "translateX(-50%)",
+                                      width: 200,
+                                      height: 50,
+                                      zIndex: 10,
+                                      fontSize: 11,
+                                      letterSpacing: 3,
+                                      background:
+                                        "linear-gradient(180deg, #ddd6fe, #c4b5fd)",
+                                      color: "#6d28d9",
+                                      borderBottom: "2px solid #8b5cf6",
+                                    }}
+                                  >
+                                    MAIN STAGE
+                                  </div>
+                                )}
+
+                                {/* Entrance */}
+                                <div
+                                  className="absolute flex items-center justify-center font-bold"
+                                  style={{
+                                    bottom: 0,
+                                    left: "50%",
+                                    transform: "translateX(-50%)",
+                                    width: 140,
+                                    height: 28,
+                                    borderTopLeftRadius: 8,
+                                    borderTopRightRadius: 8,
+                                    fontSize: 10,
+                                    letterSpacing: 2,
+                                    background:
+                                      "linear-gradient(0deg, #374151, #4b5563)",
+                                    color: "#e5e7eb",
+                                  }}
+                                >
+                                  ENTRANCE
+                                </div>
+                              </div>
+
+                              {/* Round Tables — positioned relative to pad offset */}
+                              {roundTableData.map((rt: any) => {
+                                const bookedChairs: number[] =
+                                  rt.bookedChairs || [];
+                                const mySelection = roundTableSelections.find(
+                                  (sel) =>
+                                    sel.tablePositionId === rt.positionId,
+                                );
+                                const mySelectedChairs =
+                                  mySelection?.selectedChairIndices || [];
+                                const isFullyBooked =
+                                  rt.isFullyBooked ||
+                                  bookedChairs.length >= rt.numberOfChairs;
+                                const d = Math.round(
+                                  (rt.tableDiameter || 120) * 0.55,
+                                );
+                                const chairSz = 14;
+                                const chairR = d / 2 + chairSz / 2 + 3;
+                                // Center in the padded canvas
+                                const cx = pad + (rt.x || 0) + d / 2;
+                                const cy = pad + (rt.y || 0) + d / 2;
+
+                                const handleChairClick = (ci: number) => {
+                                  if (bookedChairs.includes(ci)) return;
+                                  if (rt.sellingMode === "table") {
+                                    if (mySelection) {
+                                      setRoundTableSelections(
+                                        roundTableSelections.filter(
+                                          (x) =>
+                                            x.tablePositionId !== rt.positionId,
+                                        ),
+                                      );
+                                    } else if (!isFullyBooked) {
+                                      setRoundTableSelections([
+                                        ...roundTableSelections,
+                                        {
+                                          tablePositionId: rt.positionId,
+                                          tableName: rt.name,
+                                          tableCategory:
+                                            rt.category || "Standard",
+                                          sellingMode: rt.sellingMode,
+                                          selectedChairIndices: Array.from(
+                                            { length: rt.numberOfChairs },
+                                            (_, i) => i,
+                                          ),
+                                          amount: rt.tablePrice || 0,
+                                          color: rt.color || "#8B5CF6",
+                                        },
+                                      ]);
+                                    }
+                                  } else {
+                                    const sel = mySelectedChairs.includes(ci)
+                                      ? mySelectedChairs.filter((c) => c !== ci)
+                                      : [...mySelectedChairs, ci];
+                                    const amt =
+                                      (rt.chairPrice || 0) * sel.length;
+                                    const rest = roundTableSelections.filter(
+                                      (x) =>
+                                        x.tablePositionId !== rt.positionId,
+                                    );
+                                    if (sel.length === 0) {
+                                      setRoundTableSelections(rest);
+                                    } else {
+                                      setRoundTableSelections([
+                                        ...rest,
+                                        {
+                                          tablePositionId: rt.positionId,
+                                          tableName: rt.name,
+                                          tableCategory:
+                                            rt.category || "Standard",
+                                          sellingMode: rt.sellingMode,
+                                          selectedChairIndices: sel,
+                                          amount: amt,
+                                          color: rt.color || "#8B5CF6",
+                                        },
+                                      ]);
+                                    }
+                                  }
+                                };
+
+                                const hasSel = mySelectedChairs.length > 0;
+
+                                const col = rt.color || "#8B5CF6";
+
+                                return (
+                                  <div
+                                    key={rt.positionId}
+                                    className="group"
+                                    style={{
+                                      position: "absolute",
+                                      left: 0,
+                                      top: 0,
+                                      pointerEvents: "none",
+                                    }}
+                                  >
+                                    {/* Table circle */}
+                                    <div
+                                      className="rounded-full flex flex-col items-center justify-center transition-shadow"
+                                      style={{
+                                        position: "absolute",
+                                        left: cx - d / 2,
+                                        top: cy - d / 2,
+                                        width: d,
+                                        height: d,
+                                        background: hasSel
+                                          ? `radial-gradient(circle at 40% 35%, ${col}30, ${col}15)`
+                                          : `radial-gradient(circle at 40% 35%, ${col}18, ${col}08)`,
+                                        border: hasSel
+                                          ? `2.5px solid ${col}`
+                                          : `1.5px solid ${col}55`,
+                                        boxShadow: hasSel
+                                          ? `0 0 0 3px ${col}15, 0 4px 12px ${col}20`
+                                          : `0 1px 4px rgba(0,0,0,0.06)`,
+                                        zIndex: 6,
+                                        cursor:
+                                          rt.sellingMode === "table"
+                                            ? "pointer"
+                                            : "default",
+                                        pointerEvents: "auto",
+                                      }}
+                                      onClick={() => {
+                                        if (rt.sellingMode === "table")
+                                          handleChairClick(0);
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          fontSize: 7,
+                                          fontWeight: 800,
+                                          color: col,
+                                          textAlign: "center",
+                                          lineHeight: 1.1,
+                                          letterSpacing: 0.2,
+                                        }}
+                                      >
+                                        {rt.name}
+                                      </span>
+                                      <span
+                                        style={{
+                                          fontSize: 5,
+                                          color: "white",
+                                          backgroundColor: col,
+                                          borderRadius: 4,
+                                          padding: "0.5px 3px",
+                                          marginTop: 1,
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {rt.category}
+                                      </span>
+                                    </div>
+
+                                    {/* Chairs */}
+                                    {Array.from({
+                                      length: rt.numberOfChairs,
+                                    }).map((_, i) => {
+                                      const a =
+                                        (2 * Math.PI * i) / rt.numberOfChairs -
+                                        Math.PI / 2;
+                                      const px =
+                                        cx + chairR * Math.cos(a) - chairSz / 2;
+                                      const py =
+                                        cy + chairR * Math.sin(a) - chairSz / 2;
+                                      const bk = bookedChairs.includes(i);
+                                      const sl = mySelectedChairs.includes(i);
+                                      return (
+                                        <button
+                                          key={i}
+                                          type="button"
+                                          onClick={() => handleChairClick(i)}
+                                          disabled={bk}
+                                          className="rounded-full flex items-center justify-center font-bold transition-all"
+                                          style={{
+                                            position: "absolute",
+                                            left: px,
+                                            top: py,
+                                            width: chairSz,
+                                            height: chairSz,
+                                            fontSize: 6,
+                                            pointerEvents: "auto",
+                                            color: bk ? "#9ca3af" : "white",
+                                            backgroundColor: bk
+                                              ? "#f3f4f6"
+                                              : sl
+                                                ? "#2563eb"
+                                                : col,
+                                            border: bk
+                                              ? "1.5px solid #d1d5db"
+                                              : sl
+                                                ? "2px solid #1d4ed8"
+                                                : "1.5px solid rgba(255,255,255,0.8)",
+                                            cursor: bk
+                                              ? "not-allowed"
+                                              : "pointer",
+                                            opacity: bk ? 0.6 : 1,
+                                            transform: sl
+                                              ? "scale(1.2)"
+                                              : "scale(1)",
+                                            zIndex: sl ? 12 : 7,
+                                            boxShadow: sl
+                                              ? "0 0 0 2px rgba(37,99,235,0.25), 0 2px 8px rgba(37,99,235,0.3)"
+                                              : bk
+                                                ? "none"
+                                                : "0 1px 3px rgba(0,0,0,0.12)",
+                                          }}
+                                          title={`Seat ${i + 1} — ${bk ? "Taken" : sl ? "Selected" : "Available"}${rt.sellingMode === "chair" ? ` · ${formatPrice(rt.chairPrice)}` : ""}`}
+                                        >
+                                          {i + 1}
+                                        </button>
+                                      );
+                                    })}
+
+                                    {/* Tooltip on hover */}
+                                    <div
+                                      className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                                      style={{
+                                        position: "absolute",
+                                        left: cx - 60,
+                                        top: cy - d / 2 - 40,
+                                        width: 120,
+                                        zIndex: 50,
+                                      }}
+                                    >
+                                      <div className="bg-gray-900/95 backdrop-blur-sm text-white text-[9px] px-3 py-2 rounded-lg shadow-xl text-center">
+                                        <p className="font-bold text-[10px]">
+                                          {rt.name}
+                                        </p>
+                                        <p className="text-gray-300 mt-0.5">
+                                          {rt.sellingMode === "table"
+                                            ? formatPrice(rt.tablePrice)
+                                            : `${formatPrice(rt.chairPrice)} / seat`}
+                                        </p>
+                                        <div className="w-2 h-2 bg-gray-900/95 rotate-45 absolute -bottom-1 left-1/2 -translate-x-1/2" />
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                {/* Booking Summary & Checkout */}
+                {roundTableSelections.length > 0 && (
+                  <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                    {/* Header bar */}
+                    <div
+                      className="px-5 py-4 border-b"
+                      style={{
+                        background: `linear-gradient(135deg, ${design?.primaryColor}08, ${design?.secondaryColor}08)`,
+                      }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-7 h-7 rounded-lg flex items-center justify-center"
+                            style={{
+                              backgroundColor: design?.primaryColor,
+                              color: "white",
+                            }}
+                          >
+                            <Ticket className="h-3.5 w-3.5" />
+                          </div>
+                          <span className="font-bold text-sm text-gray-800">
+                            Your Selection
+                          </span>
+                        </div>
+                        <span className="text-xs text-gray-400">
+                          {roundTableSelections.reduce(
+                            (sum, s) => sum + s.selectedChairIndices.length,
+                            0,
+                          )}{" "}
+                          seat(s)
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-5 space-y-5">
+                      {/* Selected items */}
+                      <div className="space-y-2">
+                        {roundTableSelections.map((sel) => (
+                          <div
+                            key={sel.tablePositionId}
+                            className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div
+                                className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                                style={{ backgroundColor: sel.color }}
+                              >
+                                {sel.selectedChairIndices.length}
+                              </div>
+                              <div>
+                                <p className="font-semibold text-sm text-gray-800">
+                                  {sel.tableName}
+                                </p>
+                                <p className="text-[11px] text-gray-400">
+                                  {sel.sellingMode === "table"
+                                    ? `Whole table · ${sel.selectedChairIndices.length} seats`
+                                    : `Seat ${sel.selectedChairIndices.map((c) => c + 1).join(", ")}`}
+                                  <span
+                                    className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] font-medium"
+                                    style={{
+                                      backgroundColor: `${sel.color}15`,
+                                      color: sel.color,
+                                    }}
+                                  >
+                                    {sel.tableCategory}
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="font-bold text-sm text-gray-800">
+                                {formatPrice(sel.amount)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setRoundTableSelections(
+                                    roundTableSelections.filter(
+                                      (s) =>
+                                        s.tablePositionId !==
+                                        sel.tablePositionId,
+                                    ),
+                                  )
+                                }
+                                className="w-6 h-6 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all text-sm"
+                              >
+                                &times;
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Total */}
+                      <div className="flex justify-between items-center py-3 border-y border-gray-100">
+                        <span className="font-bold text-gray-800">
+                          Total Amount
+                        </span>
+                        <span
+                          className="text-xl font-black"
+                          style={{ color: design?.primaryColor }}
+                        >
+                          {formatPrice(
+                            roundTableSelections.reduce(
+                              (sum, s) => sum + s.amount,
+                              0,
+                            ),
+                          )}
+                        </span>
+                      </div>
+
+                      {/* Visitor info */}
+                      <div className="space-y-4">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Contact Details
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div>
+                            <label className="text-[11px] font-medium text-gray-500 mb-1 block">
+                              Full Name *
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="John Doe"
+                              value={rtVisitorInfo.name}
+                              onChange={(e) =>
+                                setRtVisitorInfo({
+                                  ...rtVisitorInfo,
+                                  name: e.target.value,
+                                })
+                              }
+                              className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:border-transparent transition-shadow"
+                              style={
+                                { focusRingColor: design?.primaryColor } as any
+                              }
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-medium text-gray-500 mb-1 block">
+                              Email *
+                            </label>
+                            <input
+                              type="email"
+                              placeholder="john@email.com"
+                              value={rtVisitorInfo.email}
+                              onChange={(e) =>
+                                setRtVisitorInfo({
+                                  ...rtVisitorInfo,
+                                  email: e.target.value,
+                                })
+                              }
+                              className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:border-transparent transition-shadow"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-medium text-gray-500 mb-1 block">
+                              Phone *
+                            </label>
+                            <PhoneInput
+                              value={rtVisitorInfo.phone}
+                              onChange={(value) =>
+                                setRtVisitorInfo({
+                                  ...rtVisitorInfo,
+                                  phone: value,
+                                })
+                              }
+                              enableSearch={true}
+                              countryCodeEditable={false}
+                              preferredCountries={[
+                                "in",
+                                "sg",
+                                "us",
+                                "gb",
+                                "ae",
+                              ]}
+                              inputProps={{ name: "rtPhone", required: true }}
+                              inputStyle={{
+                                width: "100%",
+                                height: "42px",
+                                borderRadius: "12px",
+                                fontSize: "14px",
+                                border: "1px solid #e5e7eb",
+                              }}
+                              containerStyle={{ width: "100%" }}
+                              buttonStyle={{
+                                borderRadius: "12px 0 0 12px",
+                                border: "1px solid #e5e7eb",
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Per-seat guest details — collapsible, optional */}
+                      {(() => {
+                        const totalSeats = roundTableSelections.reduce(
+                          (s, sel) => s + sel.selectedChairIndices.length,
+                          0,
+                        );
+                        const filledGuests = Object.values(rtSeatGuests)
+                          .flatMap((chairs) => Object.values(chairs))
+                          .filter((g) => g.name.trim()).length;
+                        return (
+                          <div className="rounded-xl border border-gray-100 overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => setShowGuestForm(!showGuestForm)}
+                              className="w-full flex items-center justify-between px-4 py-3 bg-gray-50/80 hover:bg-gray-100/80 transition-colors text-left"
+                            >
+                              <div>
+                                <p className="text-xs font-semibold text-gray-700">
+                                  Add Guest Details
+                                </p>
+                                <p className="text-[10px] text-gray-400 mt-0.5">
+                                  {filledGuests > 0
+                                    ? `${filledGuests} of ${totalSeats} guests added — each gets their own QR via WhatsApp`
+                                    : `Optional — add guest names & WhatsApp to send individual QR tickets`}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {filledGuests > 0 && (
+                                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                                    {filledGuests}/{totalSeats}
+                                  </span>
+                                )}
+                                <span
+                                  className={`text-gray-400 text-sm transition-transform ${showGuestForm ? "rotate-180" : ""}`}
+                                >
+                                  &#9662;
+                                </span>
+                              </div>
+                            </button>
+                            {showGuestForm && (
+                              <div className="p-3 space-y-3 border-t border-gray-100">
+                                {roundTableSelections.map((sel) => (
+                                  <div
+                                    key={sel.tablePositionId}
+                                    className="space-y-2"
+                                  >
+                                    <p className="text-xs font-semibold text-gray-600 flex items-center gap-2">
+                                      <span
+                                        className="w-2 h-2 rounded-full"
+                                        style={{ backgroundColor: sel.color }}
+                                      />
+                                      {sel.tableName} — {sel.tableCategory}
+                                    </p>
+                                    {sel.selectedChairIndices.map(
+                                      (chairIdx) => {
+                                        const guest = rtSeatGuests[
+                                          sel.tablePositionId
+                                        ]?.[chairIdx] || {
+                                          name: "",
+                                          whatsApp: "",
+                                          email: "",
+                                        };
+                                        const updateGuest = (
+                                          field: string,
+                                          value: string,
+                                        ) => {
+                                          setRtSeatGuests((prev) => ({
+                                            ...prev,
+                                            [sel.tablePositionId]: {
+                                              ...prev[sel.tablePositionId],
+                                              [chairIdx]: {
+                                                ...guest,
+                                                [field]: value,
+                                              },
+                                            },
+                                          }));
+                                        };
+                                        const isFilled =
+                                          guest.name.trim().length > 0;
+                                        return (
+                                          <div
+                                            key={`${sel.tablePositionId}-${chairIdx}`}
+                                            className={`rounded-lg border p-3 transition-colors ${isFilled ? "border-green-200 bg-green-50/30" : "border-gray-200 bg-white"}`}
+                                          >
+                                            <p className="text-[10px] font-bold text-gray-400 mb-2 flex items-center gap-1.5">
+                                              <span
+                                                className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[8px]"
+                                                style={{
+                                                  backgroundColor: isFilled
+                                                    ? "#22c55e"
+                                                    : sel.color,
+                                                }}
+                                              >
+                                                {chairIdx + 1}
+                                              </span>
+                                              Seat {chairIdx + 1}
+                                              {isFilled && (
+                                                <span className="text-green-600 text-[9px] ml-auto">
+                                                  &#10003;
+                                                </span>
+                                              )}
+                                            </p>
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                              <input
+                                                type="text"
+                                                placeholder="Guest Name"
+                                                value={guest.name}
+                                                onChange={(e) =>
+                                                  updateGuest(
+                                                    "name",
+                                                    e.target.value,
+                                                  )
+                                                }
+                                                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                              />
+                                              <PhoneInput
+                                                value={guest.whatsApp}
+                                                onChange={(value) =>
+                                                  updateGuest("whatsApp", value)
+                                                }
+                                                enableSearch={true}
+                                                countryCodeEditable={false}
+                                                preferredCountries={[
+                                                  "in",
+                                                  "sg",
+                                                  "us",
+                                                  "gb",
+                                                  "ae",
+                                                ]}
+                                                inputProps={{
+                                                  name: `seat-phone-${chairIdx}`,
+                                                }}
+                                                inputStyle={{
+                                                  width: "100%",
+                                                  height: "34px",
+                                                  borderRadius: "8px",
+                                                  fontSize: "12px",
+                                                  border: "1px solid #e5e7eb",
+                                                }}
+                                                containerStyle={{
+                                                  width: "100%",
+                                                }}
+                                                buttonStyle={{
+                                                  borderRadius: "8px 0 0 8px",
+                                                  border: "1px solid #e5e7eb",
+                                                  height: "34px",
+                                                }}
+                                              />
+                                              <input
+                                                type="email"
+                                                placeholder="Email"
+                                                value={guest.email}
+                                                onChange={(e) =>
+                                                  updateGuest(
+                                                    "email",
+                                                    e.target.value,
+                                                  )
+                                                }
+                                                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                              />
+                                            </div>
+                                          </div>
+                                        );
+                                      },
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Book button */}
+                      <button
+                        type="button"
+                        disabled={
+                          rtBookingLoading ||
+                          !rtVisitorInfo.name ||
+                          !rtVisitorInfo.email ||
+                          !rtVisitorInfo.phone
+                        }
+                        onClick={async () => {
+                          setRtBookingLoading(true);
+                          try {
+                            const organizerId = eventData?.organizer?._id;
+                            const eid = eventId || id;
+                            const bookingPromises = roundTableSelections.map(
+                              (sel) => {
+                                const seatGuestsForTable =
+                                  sel.selectedChairIndices
+                                    .map((chairIdx) => {
+                                      const g =
+                                        rtSeatGuests[sel.tablePositionId]?.[
+                                          chairIdx
+                                        ];
+                                      return {
+                                        chairIndex: chairIdx,
+                                        name: g?.name || "",
+                                        whatsApp: g?.whatsApp || "",
+                                        email: g?.email || "",
+                                      };
+                                    })
+                                    .filter((g) => g.name.trim() !== "");
+
+                                return fetch(
+                                  `${apiURL}/round-table-bookings/create`,
+                                  {
+                                    method: "POST",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                    },
+                                    body: JSON.stringify({
+                                      eventId: eid,
+                                      organizerId,
+                                      tablePositionId: sel.tablePositionId,
+                                      selectedChairIndices:
+                                        sel.selectedChairIndices,
+                                      visitorName: rtVisitorInfo.name,
+                                      visitorEmail: rtVisitorInfo.email,
+                                      visitorPhone: rtVisitorInfo.phone,
+                                      seatGuests: seatGuestsForTable,
+                                    }),
+                                  },
+                                ).then((r) => r.json());
+                              },
+                            );
+                            const results = await Promise.all(bookingPromises);
+                            const failed = results.filter((r) => !r.success);
+                            if (failed.length > 0) {
+                              toast({
+                                title: "Some bookings failed",
+                                description: failed
+                                  .map((f) => f.message)
+                                  .join(", "),
+                                variant: "destructive",
+                                duration: 5000,
+                              });
+                            }
+                            const successful = results.filter((r) => r.success);
+                            if (successful.length > 0) {
+                              // Navigate to payment page with booking IDs
+                              navigate("/round-table-payment", {
+                                state: {
+                                  bookings: successful.map((r) => r.data),
+                                  eventTitle: eventData?.title,
+                                  totalAmount: successful.reduce(
+                                    (sum, r) => sum + r.data.amount,
+                                    0,
+                                  ),
+                                  organizerId: eventData?.organizer?._id,
+                                },
+                              });
+                            }
+                          } catch (err: any) {
+                            toast({
+                              title: "Booking failed",
+                              description: err.message,
+                              variant: "destructive",
+                              duration: 5000,
+                            });
+                          } finally {
+                            setRtBookingLoading(false);
+                          }
+                        }}
+                        className="w-full py-3.5 rounded-xl font-bold text-white text-sm transition-all disabled:opacity-50 shadow-lg hover:shadow-xl hover:opacity-95"
+                        style={{
+                          background: `linear-gradient(135deg, ${design?.primaryColor || "#3b82f6"}, ${design?.secondaryColor || "#6366f1"})`,
+                        }}
+                      >
+                        {rtBookingLoading
+                          ? "Processing..."
+                          : "Proceed to Payment"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+                <p className="text-gray-400">
+                  No round tables available for this event
                 </p>
               </div>
             )}
@@ -5980,10 +7206,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         Deposit + Full Table Price + Add-ons
                       </p>
 
-                      <p className="text-[10px] text-green-500 mt-0.5">
+                      {/* <p className="text-[10px] text-green-500 mt-0.5">
                         Remaining:{" "}
                         {formatPrice(calculateTotals().remainingAfterBooking)}
-                      </p>
+                      </p> */}
                     </div>
                   </CardContent>
                 </Card>
@@ -6293,352 +7519,869 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   )}
 
                   {(existingStallRequest.status === "Completed" ||
-                    existingStallRequest.status === "Returned") && (() => {
-                    const stallRequest = existingStallRequest;
-                    return (
-                    <div className="space-y-6">
-                      {/* Status and Payment */}
-                      <div className="grid grid-cols-2 gap-4">
-                        <Card>
-                          <CardHeader className="pb-3">
-                            <CardTitle className="text-sm">Request Status</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            {getStatusBadge(stallRequest.status)}
-                          </CardContent>
-                        </Card>
-                        <Card>
-                          <CardHeader className="pb-3">
-                            <CardTitle className="text-sm">Payment Status</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            {getPaymentBadge(stallRequest.paymentStatus)}
-                          </CardContent>
-                        </Card>
-                      </div>
-
-                      {/* Shopkeeper Info */}
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-lg">Shopkeeper Information</CardTitle>
-                        </CardHeader>
-                        <CardContent className="grid grid-cols-2 gap-4">
-                          {stallRequest.companyLogo && (
-                            <div className="col-span-2 mb-2 flex items-center gap-4">
-                              <img src={`${__API_URL__}${stallRequest.companyLogo}`} alt="Company Logo" className="w-16 h-16 rounded-md object-contain border bg-gray-50" />
-                              <div>
-                                <p className="font-bold text-lg">{stallRequest.brandName}</p>
-                              </div>
-                            </div>
-                          )}
-                          <div>
-                            <Label className="text-muted-foreground">Owner Name</Label>
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium">{stallRequest.shopkeeperId?.name || stallRequest.nameOfApplicant || "—"}</p>
-                              {stallRequest.shopkeeperId?.hasDocVerification && (
-                                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] h-5">Verified</Badge>
-                              )}
-                            </div>
-                          </div>
-                          <div>
-                            <Label className="text-muted-foreground">Business Name</Label>
-                            <p className="font-medium">{stallRequest.shopkeeperId?.shopName || stallRequest.brandName || "—"}</p>
-                          </div>
-                          {stallRequest.shopkeeperId?.businessEmail && (
-                            <div>
-                              <Label className="text-muted-foreground">Business Email</Label>
-                              <p className="font-medium">
-                                <a href={`mailto:${stallRequest.shopkeeperId?.businessEmail}`} className="text-blue-600 hover:underline block truncate" target="_blank" rel="noopener noreferrer">{stallRequest.shopkeeperId?.businessEmail}</a>
-                              </p>
-                            </div>
-                          )}
-                          {(stallRequest.shopkeeperId?.whatsappNumber || stallRequest.shopkeeperId?.whatsAppNumber) && (
-                            <div>
-                              <Label className="text-muted-foreground">WhatsApp</Label>
-                              <p className="font-medium">
-                                <a href={`https://wa.me/${(stallRequest.shopkeeperId?.whatsappNumber || stallRequest.shopkeeperId?.whatsAppNumber || "").replace(/\+/g, "")}`} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:underline">
-                                  {stallRequest.shopkeeperId?.whatsappNumber || stallRequest.shopkeeperId?.whatsAppNumber}
-                                </a>
-                              </p>
-                            </div>
-                          )}
-                          <div>
-                            <Label className="text-muted-foreground">Country</Label>
-                            <p className="font-medium">{stallRequest.shopkeeperId?.country === "IN" ? "India" : stallRequest.shopkeeperId?.country === "SG" ? "Singapore" : stallRequest.shopkeeperId?.country || "—"}</p>
-                          </div>
-                          <div>
-                            <Label className="text-muted-foreground">Instagram</Label>
-                            <p className="font-medium">
-                              {stallRequest.shopkeeperId?.instagramHandle ? (
-                                <a href={stallRequest.shopkeeperId?.instagramHandle} target="_blank" rel="noopener noreferrer" className="text-pink-600 hover:underline truncate block">@{stallRequest.shopkeeperId?.instagramHandle.split("/").pop()}</a>
-                              ) : (<span className="text-muted-foreground italic text-sm">Not linked</span>)}
-                            </p>
-                          </div>
-                          <div>
-                            <Label className="text-muted-foreground">Category</Label>
-                            <p className="font-medium">{stallRequest.shopkeeperId?.businessCategory || "—"}</p>
-                          </div>
-                          <div>
-                            <Label className="text-muted-foreground">Applicant Name</Label>
-                            <p className="font-medium">{stallRequest.nameOfApplicant}</p>
-                          </div>
-                          <div>
-                            <Label className="text-muted-foreground">Owner Nationality</Label>
-                            <p className="font-medium">{stallRequest.businessOwnerNationality}</p>
-                          </div>
-                          <div>
-                            <Label className="text-muted-foreground">Residency</Label>
-                            <p className="font-medium">{stallRequest.residency || "Not Provided"}</p>
-                          </div>
-                          <div>
-                            <Label className="text-muted-foreground">No. Of Operators</Label>
-                            <p className="font-medium">{stallRequest.noOfOperators || "Not Provided"}</p>
-                          </div>
-                          <div>
-                            <Label className="text-muted-foreground">Coupon Assigned</Label>
-                            <p className="text-sm">{stallRequest.couponCodeAssigned || "None Assigned"}</p>
-                          </div>
-                          {stallRequest.registrationNumber && (
-                            <div className="pt-2 border-t">
-                              <Label className="text-muted-foreground">Registration Number</Label>
-                              <p className="font-medium">{stallRequest.registrationNumber}</p>
-                            </div>
-                          )}
-                          {stallRequest.registrationImage && (
-                            <div className="col-span-2 pt-2 border-t">
-                              <Label className="text-muted-foreground block mb-2">Registration Document</Label>
-                              <img src={`${__API_URL__}${stallRequest.registrationImage}`} alt="Registration" className="max-w-xs rounded-md border" />
-                            </div>
-                          )}
-                          <div className="pt-2 border-t col-span-2">
-                            <Label className="text-muted-foreground text-xs">Business Address</Label>
-                            <p className="text-sm leading-tight mt-1 italic">{stallRequest.shopkeeperId?.address}</p>
-                          </div>
-                          {stallRequest.refundPaymentDescription && (
-                            <div className="pt-2 border-t col-span-2">
-                              <Label className="text-muted-foreground text-xs">Refund Payment Details</Label>
-                              <p className="text-sm leading-tight mt-1 italic">{stallRequest.refundPaymentDescription}</p>
-                            </div>
-                          )}
-                          {stallRequest.productDescription && (
-                            <div className="col-span-2 pt-2 border-t">
-                              <Label className="text-muted-foreground">Product Description</Label>
-                              <p className="text-sm mt-1 text-gray-700">{stallRequest.productDescription}</p>
-                            </div>
-                          )}
-                          {stallRequest.productImage && stallRequest.productImage.length > 0 && (
-                            <div className="col-span-2 pt-2 border-t">
-                              <Label className="text-muted-foreground mb-2 block">Product Images</Label>
-                              <div className="flex gap-2 overflow-x-auto">
-                                {stallRequest.productImage.map((img: string, idx: number) => (
-                                  <img key={idx} src={`${__API_URL__}${img}`} alt="Product" className="w-20 h-20 object-cover rounded-md border" />
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-
-                      {/* Event Info */}
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-lg">Event Information</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-6">
+                    existingStallRequest.status === "Returned") &&
+                    (() => {
+                      const stallRequest = existingStallRequest;
+                      return (
+                        <div className="space-y-6">
+                          {/* Status and Payment */}
                           <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label className="text-muted-foreground">Event Title</Label>
-                              <p className="font-bold text-lg">{stallRequest.eventId?.title}</p>
-                            </div>
-                            <div>
-                              <Label className="text-muted-foreground">Category</Label>
-                              <p className="font-medium">{stallRequest.eventId?.category}</p>
-                            </div>
+                            <Card>
+                              <CardHeader className="pb-3">
+                                <CardTitle className="text-sm">
+                                  Request Status
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                {getStatusBadge(stallRequest.status)}
+                              </CardContent>
+                            </Card>
+                            <Card>
+                              <CardHeader className="pb-3">
+                                <CardTitle className="text-sm">
+                                  Payment Status
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                {getPaymentBadge(stallRequest.paymentStatus)}
+                              </CardContent>
+                            </Card>
                           </div>
-                          <div className="grid grid-cols-2 gap-4 p-3 bg-muted/30 rounded-lg">
-                            <div>
-                              <Label className="text-muted-foreground flex items-center gap-1"><Calendar className="w-3 h-3" /> Duration</Label>
-                              <p className="text-sm font-medium">{stallRequest.eventId?.startDate && formatDate(stallRequest.eventId.startDate)} - {stallRequest.eventId?.endDate && formatDate(stallRequest.eventId.endDate)}</p>
-                              <p className="text-xs text-muted-foreground">Starts at: {stallRequest.eventId?.time}</p>
-                            </div>
-                            <div>
-                              <Label className="text-muted-foreground flex items-center gap-1"><MapPin className="w-3 h-3" /> Venue</Label>
-                              <p className="text-sm font-medium">{stallRequest.eventId?.location}</p>
-                              <p className="text-xs text-muted-foreground truncate">{stallRequest.eventId?.address}</p>
-                            </div>
-                          </div>
-                          {stallRequest.eventId?.features && (
-                            <div>
-                              <Label className="text-muted-foreground mb-2 block text-xs uppercase tracking-wider">Included Features</Label>
-                              <div className="flex flex-wrap gap-2">
-                                {stallRequest.eventId.features.parking && (<Badge variant="outline" className="flex gap-1 items-center bg-green-50"><ParkingCircle className="w-3 h-3" /> Parking</Badge>)}
-                                {stallRequest.eventId.features.wifi && (<Badge variant="outline" className="flex gap-1 items-center bg-yellow-50"><Wifi className="w-3 h-3" /> WiFi</Badge>)}
-                                {stallRequest.eventId.features.photography && (<Badge variant="outline" className="flex gap-1 items-center bg-blue-50"><Camera className="w-3 h-3" /> Photography</Badge>)}
-                                {stallRequest.eventId.features.security && (<Badge variant="outline" className="flex gap-1 items-center bg-red-50"><ShieldCheck className="w-3 h-3" /> Security</Badge>)}
-                                {stallRequest.eventId.features.food && (<Badge variant="outline" className="flex gap-1 items-center bg-pink-50"><FaUtensilSpoon className="w-3 h-3" /> Food Available</Badge>)}
-                              </div>
-                            </div>
-                          )}
-                          <div className="grid grid-cols-2 gap-4 border-t pt-4">
-                            <div>
-                              <Label className="text-muted-foreground">Dress Code</Label>
-                              <p className="text-sm font-medium">{stallRequest.eventId?.dresscode || "Casual"}</p>
-                            </div>
-                            <div>
-                              <Label className="text-muted-foreground">Age Limit</Label>
-                              <p className="text-sm font-medium">{stallRequest.eventId?.ageRestriction || "No Limit"}</p>
-                            </div>
-                          </div>
-                          <div className="border-t pt-4">
-                            <Label className="text-muted-foreground block mb-2">Venue Configuration</Label>
-                            <div className="flex gap-4 text-sm">
-                              <div className="text-center p-2 border rounded-md flex-1">
-                                <span className="block text-xs text-muted-foreground">Ticket Price</span>
-                                <span className="font-bold">{formatPrice(stallRequest.eventId?.ticketPrice || 0)}</span>
-                              </div>
-                              <div className="text-center p-2 border rounded-md flex-1">
-                                <span className="block text-xs text-muted-foreground">Available Slots</span>
-                                <span className="font-bold">{stallRequest.eventId?.totalTickets}</span>
-                              </div>
-                            </div>
-                          </div>
-                          {stallRequest.eventId?.gallery?.length > 0 && (
-                            <div className="border-t pt-4">
-                              <Label className="text-muted-foreground block mb-2">Event Gallery</Label>
-                              <div className="flex gap-2 overflow-x-auto pb-2">
-                                {stallRequest.eventId.gallery.map((img: string, idx: number) => (
-                                  <img key={idx} src={`${__API_URL__}${img}`} className="w-16 h-16 rounded-md object-cover border shadow-sm" alt="Event" />
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
 
-                      {/* Selected Tables */}
-                      {stallRequest.selectedTables?.length > 0 && (
-                        <Card>
-                          <CardHeader><CardTitle className="text-lg">Selected Tables</CardTitle></CardHeader>
-                          <CardContent>
-                            <div className="space-y-2">
-                              {stallRequest.selectedTables.map((table: any, index: number) => (
-                                <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded">
-                                  <div><p className="font-medium">{table.tableName}</p><p className="text-sm text-muted-foreground">{table.tableType}</p></div>
-                                  <div className="text-right"><p className="font-semibold">{formatPrice(table.price)}</p><p className="text-sm text-muted-foreground">+{formatPrice(table.depositAmount)} deposit</p></div>
+                          {/* Shopkeeper Info */}
+                          <Card>
+                            <CardHeader>
+                              <CardTitle className="text-lg">
+                                Shopkeeper Information
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="grid grid-cols-2 gap-4">
+                              {stallRequest.companyLogo && (
+                                <div className="col-span-2 mb-2 flex items-center gap-4">
+                                  <img
+                                    src={`${__API_URL__}${stallRequest.companyLogo}`}
+                                    alt="Company Logo"
+                                    className="w-16 h-16 rounded-md object-contain border bg-gray-50"
+                                  />
+                                  <div>
+                                    <p className="font-bold text-lg">
+                                      {stallRequest.brandName}
+                                    </p>
+                                  </div>
                                 </div>
-                              ))}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
-
-                      {/* Selected Add-ons */}
-                      {stallRequest.selectedAddOns?.length > 0 && (
-                        <Card>
-                          <CardHeader><CardTitle className="text-lg">Selected Add-ons</CardTitle></CardHeader>
-                          <CardContent>
-                            <div className="space-y-2">
-                              {stallRequest.selectedAddOns.map((addon: any, index: number) => (
-                                <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded">
-                                  <div><p className="font-medium">{addon.name}</p><p className="text-sm text-muted-foreground">Quantity: {addon.quantity}</p></div>
-                                  <div className="text-right"><p className="font-semibold">{formatPrice(addon.price * addon.quantity)}</p><p className="text-sm text-muted-foreground">{formatPrice(addon.price)} each</p></div>
+                              )}
+                              <div>
+                                <Label className="text-muted-foreground">
+                                  Owner Name
+                                </Label>
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium">
+                                    {stallRequest.shopkeeperId?.name ||
+                                      stallRequest.nameOfApplicant ||
+                                      "—"}
+                                  </p>
+                                  {stallRequest.shopkeeperId
+                                    ?.hasDocVerification && (
+                                    <Badge
+                                      variant="outline"
+                                      className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] h-5"
+                                    >
+                                      Verified
+                                    </Badge>
+                                  )}
                                 </div>
-                              ))}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
-
-                      {/* Price Summary */}
-                      <Card>
-                        <CardHeader><CardTitle className="text-lg">Price Summary</CardTitle></CardHeader>
-                        <CardContent className="space-y-2">
-                          <div className="flex justify-between"><span>Tables Rental</span><span className="font-semibold">{formatPrice(stallRequest.tablesTotal)}</span></div>
-                          <div className="flex justify-between"><span>Deposit</span><span className="font-semibold">{formatPrice(stallRequest.depositTotal)}</span></div>
-                          {stallRequest.addOnsTotal > 0 && (<div className="flex justify-between"><span>Add-ons</span><span className="font-semibold">{formatPrice(stallRequest.addOnsTotal)}</span></div>)}
-                          <Separator className="my-2" />
-                          <div className="flex justify-between text-lg font-bold"><span>Grand Total</span><span className="text-green-600">{formatPrice(stallRequest.grandTotal)}</span></div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Timeline */}
-                      <Card>
-                        <CardHeader><CardTitle className="text-lg">Timeline</CardTitle></CardHeader>
-                        <CardContent className="space-y-3">
-                          <div className="flex items-start gap-3"><div className="bg-blue-100 rounded-full p-2"><FileText className="h-4 w-4 text-blue-600" /></div><div><p className="font-medium">Request Submitted</p><p className="text-sm text-muted-foreground">{formatDate(stallRequest.requestDate)}</p></div></div>
-                          {stallRequest.confirmationDate && (<div className="flex items-start gap-3"><div className="bg-green-100 rounded-full p-2"><CheckCircle2 className="h-4 w-4 text-green-600" /></div><div><p className="font-medium">Request Confirmed</p><p className="text-sm text-muted-foreground">{formatDate(stallRequest.confirmationDate)}</p></div></div>)}
-                          {stallRequest.selectionDate && (<div className="flex items-start gap-3"><div className="bg-purple-100 rounded-full p-2"><Package className="h-4 w-4 text-purple-600" /></div><div><p className="font-medium">Tables Selected</p><p className="text-sm text-muted-foreground">{formatDate(stallRequest.selectionDate)}</p></div></div>)}
-                          {stallRequest.paymentDate && (<div className="flex items-start gap-3"><div className="bg-yellow-100 rounded-full p-2"><CreditCard className="h-4 w-4 text-yellow-600" /></div><div><p className="font-medium">Payment Received</p><p className="text-sm text-muted-foreground">{formatDate(stallRequest.paymentDate)}</p></div></div>)}
-                          {stallRequest.completionDate && (<div className="flex items-start gap-3"><div className="bg-green-100 rounded-full p-2"><CheckCircle2 className="h-4 w-4 text-green-600" /></div><div><p className="font-medium">Booking Completed</p><p className="text-sm text-muted-foreground">{formatDate(stallRequest.completionDate)}</p></div></div>)}
-                          {stallRequest.hasCheckedIn && stallRequest.checkInTime && (<div className="flex items-start gap-3"><div className="bg-green-100 rounded-full p-2"><Clock1 className="h-4 w-4 text-green-600" /></div><div><p className="font-medium">Checked In Time</p><p className="text-sm text-muted-foreground">{formatDateTime(stallRequest.checkInTime)}</p></div></div>)}
-                          {stallRequest.hasCheckedOut && stallRequest.checkOutTime && (<div className="flex items-start gap-3"><div className="bg-green-100 rounded-full p-2"><Clock12 className="h-4 w-4 text-green-600" /></div><div><p className="font-medium">Checked Out Time</p><p className="text-sm text-muted-foreground">{formatDateTime(stallRequest.checkOutTime)}</p></div></div>)}
-                        </CardContent>
-                      </Card>
-
-                      {/* Status History */}
-                      {stallRequest.statusHistory && stallRequest.statusHistory.length > 0 && (
-                        <Card>
-                          <CardHeader><CardTitle className="text-lg flex items-center gap-2"><FileText className="h-5 w-5" />Status History & Notes</CardTitle></CardHeader>
-                          <CardContent>
-                            <div className="relative space-y-0">
-                              <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" />
-                              {stallRequest.statusHistory.map((entry: any, index: number) => {
-                                const statusConfig: Record<string, { bg: string; text: string; border: string }> = {
-                                  Pending: { bg: "bg-yellow-100", text: "text-yellow-700", border: "border-yellow-300" },
-                                  Confirmed: { bg: "bg-green-100", text: "text-green-700", border: "border-green-300" },
-                                  Approved: { bg: "bg-green-100", text: "text-green-700", border: "border-green-300" },
-                                  Processing: { bg: "bg-blue-100", text: "text-blue-700", border: "border-blue-300" },
-                                  Completed: { bg: "bg-emerald-100", text: "text-emerald-700", border: "border-emerald-300" },
-                                  Cancelled: { bg: "bg-red-100", text: "text-red-700", border: "border-red-300" },
-                                  Returned: { bg: "bg-purple-100", text: "text-purple-700", border: "border-purple-300" },
-                                };
-                                const config = statusConfig[entry.status] || { bg: "bg-gray-100", text: "text-gray-700", border: "border-gray-300" };
-                                return (
-                                  <div key={index} className="relative flex gap-4 pb-6 last:pb-0">
-                                    <div className={`relative z-10 flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${config.bg} border-2 ${config.border}`}>
-                                      <span className="text-xs font-bold">{index + 1}</span>
-                                    </div>
-                                    <div className={`flex-1 rounded-lg border ${config.border} ${config.bg} p-3`}>
-                                      <div className="flex items-center justify-between flex-wrap gap-2">
-                                        <Badge className={`${config.bg} ${config.text} border ${config.border} font-semibold`}>{entry.status}</Badge>
-                                        <span className="text-xs text-muted-foreground">{formatDateTime(entry.changedAt)}</span>
-                                      </div>
-                                      {entry.note && <p className={`text-sm mt-2 ${config.text}`}>📝 {entry.note}</p>}
-                                      {entry.changedBy && <p className="text-xs text-muted-foreground mt-1">By: <span className="font-medium capitalize">{entry.changedBy}</span></p>}
+                              </div>
+                              <div>
+                                <Label className="text-muted-foreground">
+                                  Business Name
+                                </Label>
+                                <p className="font-medium">
+                                  {stallRequest.shopkeeperId?.shopName ||
+                                    stallRequest.brandName ||
+                                    "—"}
+                                </p>
+                              </div>
+                              {stallRequest.shopkeeperId?.businessEmail && (
+                                <div>
+                                  <Label className="text-muted-foreground">
+                                    Business Email
+                                  </Label>
+                                  <p className="font-medium">
+                                    <a
+                                      href={`mailto:${stallRequest.shopkeeperId?.businessEmail}`}
+                                      className="text-blue-600 hover:underline block truncate"
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      {stallRequest.shopkeeperId?.businessEmail}
+                                    </a>
+                                  </p>
+                                </div>
+                              )}
+                              {(stallRequest.shopkeeperId?.whatsappNumber ||
+                                stallRequest.shopkeeperId?.whatsAppNumber) && (
+                                <div>
+                                  <Label className="text-muted-foreground">
+                                    WhatsApp
+                                  </Label>
+                                  <p className="font-medium">
+                                    <a
+                                      href={`https://wa.me/${(stallRequest.shopkeeperId?.whatsappNumber || stallRequest.shopkeeperId?.whatsAppNumber || "").replace(/\+/g, "")}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-green-600 hover:underline"
+                                    >
+                                      {stallRequest.shopkeeperId
+                                        ?.whatsappNumber ||
+                                        stallRequest.shopkeeperId
+                                          ?.whatsAppNumber}
+                                    </a>
+                                  </p>
+                                </div>
+                              )}
+                              <div>
+                                <Label className="text-muted-foreground">
+                                  Country
+                                </Label>
+                                <p className="font-medium">
+                                  {stallRequest.shopkeeperId?.country === "IN"
+                                    ? "India"
+                                    : stallRequest.shopkeeperId?.country ===
+                                        "SG"
+                                      ? "Singapore"
+                                      : stallRequest.shopkeeperId?.country ||
+                                        "—"}
+                                </p>
+                              </div>
+                              <div>
+                                <Label className="text-muted-foreground">
+                                  Instagram
+                                </Label>
+                                <p className="font-medium">
+                                  {stallRequest.shopkeeperId
+                                    ?.instagramHandle ? (
+                                    <a
+                                      href={
+                                        stallRequest.shopkeeperId
+                                          ?.instagramHandle
+                                      }
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-pink-600 hover:underline truncate block"
+                                    >
+                                      @
+                                      {stallRequest.shopkeeperId?.instagramHandle
+                                        .split("/")
+                                        .pop()}
+                                    </a>
+                                  ) : (
+                                    <span className="text-muted-foreground italic text-sm">
+                                      Not linked
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                              <div>
+                                <Label className="text-muted-foreground">
+                                  Category
+                                </Label>
+                                <p className="font-medium">
+                                  {stallRequest.shopkeeperId
+                                    ?.businessCategory || "—"}
+                                </p>
+                              </div>
+                              <div>
+                                <Label className="text-muted-foreground">
+                                  Applicant Name
+                                </Label>
+                                <p className="font-medium">
+                                  {stallRequest.nameOfApplicant}
+                                </p>
+                              </div>
+                              <div>
+                                <Label className="text-muted-foreground">
+                                  Owner Nationality
+                                </Label>
+                                <p className="font-medium">
+                                  {stallRequest.businessOwnerNationality}
+                                </p>
+                              </div>
+                              <div>
+                                <Label className="text-muted-foreground">
+                                  Residency
+                                </Label>
+                                <p className="font-medium">
+                                  {stallRequest.residency || "Not Provided"}
+                                </p>
+                              </div>
+                              <div>
+                                <Label className="text-muted-foreground">
+                                  No. Of Operators
+                                </Label>
+                                <p className="font-medium">
+                                  {stallRequest.noOfOperators || "Not Provided"}
+                                </p>
+                              </div>
+                              <div>
+                                <Label className="text-muted-foreground">
+                                  Coupon Assigned
+                                </Label>
+                                <p className="text-sm">
+                                  {stallRequest.couponCodeAssigned ||
+                                    "None Assigned"}
+                                </p>
+                              </div>
+                              {stallRequest.registrationNumber && (
+                                <div className="pt-2 border-t">
+                                  <Label className="text-muted-foreground">
+                                    Registration Number
+                                  </Label>
+                                  <p className="font-medium">
+                                    {stallRequest.registrationNumber}
+                                  </p>
+                                </div>
+                              )}
+                              {stallRequest.registrationImage && (
+                                <div className="col-span-2 pt-2 border-t">
+                                  <Label className="text-muted-foreground block mb-2">
+                                    Registration Document
+                                  </Label>
+                                  <img
+                                    src={`${__API_URL__}${stallRequest.registrationImage}`}
+                                    alt="Registration"
+                                    className="max-w-xs rounded-md border"
+                                  />
+                                </div>
+                              )}
+                              <div className="pt-2 border-t col-span-2">
+                                <Label className="text-muted-foreground text-xs">
+                                  Business Address
+                                </Label>
+                                <p className="text-sm leading-tight mt-1 italic">
+                                  {stallRequest.shopkeeperId?.address}
+                                </p>
+                              </div>
+                              {stallRequest.refundPaymentDescription && (
+                                <div className="pt-2 border-t col-span-2">
+                                  <Label className="text-muted-foreground text-xs">
+                                    Refund Payment Details
+                                  </Label>
+                                  <p className="text-sm leading-tight mt-1 italic">
+                                    {stallRequest.refundPaymentDescription}
+                                  </p>
+                                </div>
+                              )}
+                              {stallRequest.productDescription && (
+                                <div className="col-span-2 pt-2 border-t">
+                                  <Label className="text-muted-foreground">
+                                    Product Description
+                                  </Label>
+                                  <p className="text-sm mt-1 text-gray-700">
+                                    {stallRequest.productDescription}
+                                  </p>
+                                </div>
+                              )}
+                              {stallRequest.productImage &&
+                                stallRequest.productImage.length > 0 && (
+                                  <div className="col-span-2 pt-2 border-t">
+                                    <Label className="text-muted-foreground mb-2 block">
+                                      Product Images
+                                    </Label>
+                                    <div className="flex gap-2 overflow-x-auto">
+                                      {stallRequest.productImage.map(
+                                        (img: string, idx: number) => (
+                                          <img
+                                            key={idx}
+                                            src={`${__API_URL__}${img}`}
+                                            alt="Product"
+                                            className="w-20 h-20 object-cover rounded-md border"
+                                          />
+                                        ),
+                                      )}
                                     </div>
                                   </div>
-                                );
-                              })}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
+                                )}
+                            </CardContent>
+                          </Card>
 
-                      {/* Cancellation Reason */}
-                      {stallRequest.cancellationReason && (
-                        <Card className="border-red-200">
-                          <CardHeader><CardTitle className="text-lg text-red-600">Cancellation Reason</CardTitle></CardHeader>
-                          <CardContent><p className="text-sm">{stallRequest.cancellationReason}</p></CardContent>
-                        </Card>
-                      )}
+                          {/* Event Info */}
+                          <Card>
+                            <CardHeader>
+                              <CardTitle className="text-lg">
+                                Event Information
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <Label className="text-muted-foreground">
+                                    Event Title
+                                  </Label>
+                                  <p className="font-bold text-lg">
+                                    {stallRequest.eventId?.title}
+                                  </p>
+                                </div>
+                                <div>
+                                  <Label className="text-muted-foreground">
+                                    Category
+                                  </Label>
+                                  <p className="font-medium">
+                                    {stallRequest.eventId?.category}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4 p-3 bg-muted/30 rounded-lg">
+                                <div>
+                                  <Label className="text-muted-foreground flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" /> Duration
+                                  </Label>
+                                  <p className="text-sm font-medium">
+                                    {stallRequest.eventId?.startDate &&
+                                      formatDate(
+                                        stallRequest.eventId.startDate,
+                                      )}{" "}
+                                    -{" "}
+                                    {stallRequest.eventId?.endDate &&
+                                      formatDate(stallRequest.eventId.endDate)}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Starts at: {stallRequest.eventId?.time}
+                                  </p>
+                                </div>
+                                <div>
+                                  <Label className="text-muted-foreground flex items-center gap-1">
+                                    <MapPin className="w-3 h-3" /> Venue
+                                  </Label>
+                                  <p className="text-sm font-medium">
+                                    {stallRequest.eventId?.location}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {stallRequest.eventId?.address}
+                                  </p>
+                                </div>
+                              </div>
+                              {stallRequest.eventId?.features && (
+                                <div>
+                                  <Label className="text-muted-foreground mb-2 block text-xs uppercase tracking-wider">
+                                    Included Features
+                                  </Label>
+                                  <div className="flex flex-wrap gap-2">
+                                    {stallRequest.eventId.features.parking && (
+                                      <Badge
+                                        variant="outline"
+                                        className="flex gap-1 items-center bg-green-50"
+                                      >
+                                        <ParkingCircle className="w-3 h-3" />{" "}
+                                        Parking
+                                      </Badge>
+                                    )}
+                                    {stallRequest.eventId.features.wifi && (
+                                      <Badge
+                                        variant="outline"
+                                        className="flex gap-1 items-center bg-yellow-50"
+                                      >
+                                        <Wifi className="w-3 h-3" /> WiFi
+                                      </Badge>
+                                    )}
+                                    {stallRequest.eventId.features
+                                      .photography && (
+                                      <Badge
+                                        variant="outline"
+                                        className="flex gap-1 items-center bg-blue-50"
+                                      >
+                                        <Camera className="w-3 h-3" />{" "}
+                                        Photography
+                                      </Badge>
+                                    )}
+                                    {stallRequest.eventId.features.security && (
+                                      <Badge
+                                        variant="outline"
+                                        className="flex gap-1 items-center bg-red-50"
+                                      >
+                                        <ShieldCheck className="w-3 h-3" />{" "}
+                                        Security
+                                      </Badge>
+                                    )}
+                                    {stallRequest.eventId.features.food && (
+                                      <Badge
+                                        variant="outline"
+                                        className="flex gap-1 items-center bg-pink-50"
+                                      >
+                                        <FaUtensilSpoon className="w-3 h-3" />{" "}
+                                        Food Available
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                              <div className="grid grid-cols-2 gap-4 border-t pt-4">
+                                <div>
+                                  <Label className="text-muted-foreground">
+                                    Dress Code
+                                  </Label>
+                                  <p className="text-sm font-medium">
+                                    {stallRequest.eventId?.dresscode ||
+                                      "Casual"}
+                                  </p>
+                                </div>
+                                <div>
+                                  <Label className="text-muted-foreground">
+                                    Age Limit
+                                  </Label>
+                                  <p className="text-sm font-medium">
+                                    {stallRequest.eventId?.ageRestriction ||
+                                      "No Limit"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="border-t pt-4">
+                                <Label className="text-muted-foreground block mb-2">
+                                  Venue Configuration
+                                </Label>
+                                <div className="flex gap-4 text-sm">
+                                  <div className="text-center p-2 border rounded-md flex-1">
+                                    <span className="block text-xs text-muted-foreground">
+                                      Ticket Price
+                                    </span>
+                                    <span className="font-bold">
+                                      {formatPrice(
+                                        stallRequest.eventId?.ticketPrice || 0,
+                                      )}
+                                    </span>
+                                  </div>
+                                  <div className="text-center p-2 border rounded-md flex-1">
+                                    <span className="block text-xs text-muted-foreground">
+                                      Available Slots
+                                    </span>
+                                    <span className="font-bold">
+                                      {stallRequest.eventId?.totalTickets}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              {stallRequest.eventId?.gallery?.length > 0 && (
+                                <div className="border-t pt-4">
+                                  <Label className="text-muted-foreground block mb-2">
+                                    Event Gallery
+                                  </Label>
+                                  <div className="flex gap-2 overflow-x-auto pb-2">
+                                    {stallRequest.eventId.gallery.map(
+                                      (img: string, idx: number) => (
+                                        <img
+                                          key={idx}
+                                          src={`${__API_URL__}${img}`}
+                                          className="w-16 h-16 rounded-md object-cover border shadow-sm"
+                                          alt="Event"
+                                        />
+                                      ),
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
 
-                      {/* Footer: Download + Close */}
-                      <div className="flex gap-2 sm:justify-between sticky bottom-0 bg-background pt-4 pb-2 border-t">
-                        <Button variant="buttonOutline" onClick={() => setExistingStallRequest(null)}>
-                          Close
-                        </Button>
-                        <Button
-                          className="bg-green-600 hover:bg-green-700"
-                          onClick={() => handleDownload(existingStallRequest)}
-                          disabled={existingStallRequest.paymentStatus !== "Paid"}
-                        >
-                          <Download className="mr-2 h-4 w-4" />
-                          Download Stall Ticket
-                        </Button>
-                      </div>
-                    </div>
-                    );
-                  })()}
+                          {/* Selected Tables */}
+                          {stallRequest.selectedTables?.length > 0 && (
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="text-lg">
+                                  Selected Tables
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="space-y-2">
+                                  {stallRequest.selectedTables.map(
+                                    (table: any, index: number) => (
+                                      <div
+                                        key={index}
+                                        className="flex justify-between items-center p-3 bg-gray-50 rounded"
+                                      >
+                                        <div>
+                                          <p className="font-medium">
+                                            {table.tableName}
+                                          </p>
+                                          <p className="text-sm text-muted-foreground">
+                                            {table.tableType}
+                                          </p>
+                                        </div>
+                                        <div className="text-right">
+                                          <p className="font-semibold">
+                                            {formatPrice(table.price)}
+                                          </p>
+                                          <p className="text-sm text-muted-foreground">
+                                            +{formatPrice(table.depositAmount)}{" "}
+                                            deposit
+                                          </p>
+                                        </div>
+                                      </div>
+                                    ),
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+
+                          {/* Selected Add-ons */}
+                          {stallRequest.selectedAddOns?.length > 0 && (
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="text-lg">
+                                  Selected Add-ons
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="space-y-2">
+                                  {stallRequest.selectedAddOns.map(
+                                    (addon: any, index: number) => (
+                                      <div
+                                        key={index}
+                                        className="flex justify-between items-center p-3 bg-gray-50 rounded"
+                                      >
+                                        <div>
+                                          <p className="font-medium">
+                                            {addon.name}
+                                          </p>
+                                          <p className="text-sm text-muted-foreground">
+                                            Quantity: {addon.quantity}
+                                          </p>
+                                        </div>
+                                        <div className="text-right">
+                                          <p className="font-semibold">
+                                            {formatPrice(
+                                              addon.price * addon.quantity,
+                                            )}
+                                          </p>
+                                          <p className="text-sm text-muted-foreground">
+                                            {formatPrice(addon.price)} each
+                                          </p>
+                                        </div>
+                                      </div>
+                                    ),
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+
+                          {/* Price Summary */}
+                          <Card>
+                            <CardHeader>
+                              <CardTitle className="text-lg">
+                                Price Summary
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                              <div className="flex justify-between">
+                                <span>Tables Rental</span>
+                                <span className="font-semibold">
+                                  {formatPrice(stallRequest.tablesTotal)}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Deposit</span>
+                                <span className="font-semibold">
+                                  {formatPrice(stallRequest.depositTotal)}
+                                </span>
+                              </div>
+                              {stallRequest.addOnsTotal > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Add-ons</span>
+                                  <span className="font-semibold">
+                                    {formatPrice(stallRequest.addOnsTotal)}
+                                  </span>
+                                </div>
+                              )}
+                              <Separator className="my-2" />
+                              <div className="flex justify-between text-lg font-bold">
+                                <span>Grand Total</span>
+                                <span className="text-green-600">
+                                  {formatPrice(stallRequest.grandTotal)}
+                                </span>
+                              </div>
+                            </CardContent>
+                          </Card>
+
+                          {/* Timeline */}
+                          <Card>
+                            <CardHeader>
+                              <CardTitle className="text-lg">
+                                Timeline
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                              <div className="flex items-start gap-3">
+                                <div className="bg-blue-100 rounded-full p-2">
+                                  <FileText className="h-4 w-4 text-blue-600" />
+                                </div>
+                                <div>
+                                  <p className="font-medium">
+                                    Request Submitted
+                                  </p>
+                                  <p className="text-sm text-muted-foreground">
+                                    {formatDate(stallRequest.requestDate)}
+                                  </p>
+                                </div>
+                              </div>
+                              {stallRequest.confirmationDate && (
+                                <div className="flex items-start gap-3">
+                                  <div className="bg-green-100 rounded-full p-2">
+                                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                  </div>
+                                  <div>
+                                    <p className="font-medium">
+                                      Request Confirmed
+                                    </p>
+                                    <p className="text-sm text-muted-foreground">
+                                      {formatDate(
+                                        stallRequest.confirmationDate,
+                                      )}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                              {stallRequest.selectionDate && (
+                                <div className="flex items-start gap-3">
+                                  <div className="bg-purple-100 rounded-full p-2">
+                                    <Package className="h-4 w-4 text-purple-600" />
+                                  </div>
+                                  <div>
+                                    <p className="font-medium">
+                                      Tables Selected
+                                    </p>
+                                    <p className="text-sm text-muted-foreground">
+                                      {formatDate(stallRequest.selectionDate)}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                              {stallRequest.paymentDate && (
+                                <div className="flex items-start gap-3">
+                                  <div className="bg-yellow-100 rounded-full p-2">
+                                    <CreditCard className="h-4 w-4 text-yellow-600" />
+                                  </div>
+                                  <div>
+                                    <p className="font-medium">
+                                      Payment Received
+                                    </p>
+                                    <p className="text-sm text-muted-foreground">
+                                      {formatDate(stallRequest.paymentDate)}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                              {stallRequest.completionDate && (
+                                <div className="flex items-start gap-3">
+                                  <div className="bg-green-100 rounded-full p-2">
+                                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                  </div>
+                                  <div>
+                                    <p className="font-medium">
+                                      Booking Completed
+                                    </p>
+                                    <p className="text-sm text-muted-foreground">
+                                      {formatDate(stallRequest.completionDate)}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                              {stallRequest.hasCheckedIn &&
+                                stallRequest.checkInTime && (
+                                  <div className="flex items-start gap-3">
+                                    <div className="bg-green-100 rounded-full p-2">
+                                      <Clock1 className="h-4 w-4 text-green-600" />
+                                    </div>
+                                    <div>
+                                      <p className="font-medium">
+                                        Checked In Time
+                                      </p>
+                                      <p className="text-sm text-muted-foreground">
+                                        {formatDateTime(
+                                          stallRequest.checkInTime,
+                                        )}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                              {stallRequest.hasCheckedOut &&
+                                stallRequest.checkOutTime && (
+                                  <div className="flex items-start gap-3">
+                                    <div className="bg-green-100 rounded-full p-2">
+                                      <Clock12 className="h-4 w-4 text-green-600" />
+                                    </div>
+                                    <div>
+                                      <p className="font-medium">
+                                        Checked Out Time
+                                      </p>
+                                      <p className="text-sm text-muted-foreground">
+                                        {formatDateTime(
+                                          stallRequest.checkOutTime,
+                                        )}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                            </CardContent>
+                          </Card>
+
+                          {/* Status History */}
+                          {stallRequest.statusHistory &&
+                            stallRequest.statusHistory.length > 0 && (
+                              <Card>
+                                <CardHeader>
+                                  <CardTitle className="text-lg flex items-center gap-2">
+                                    <FileText className="h-5 w-5" />
+                                    Status History & Notes
+                                  </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                  <div className="relative space-y-0">
+                                    <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" />
+                                    {stallRequest.statusHistory.map(
+                                      (entry: any, index: number) => {
+                                        const statusConfig: Record<
+                                          string,
+                                          {
+                                            bg: string;
+                                            text: string;
+                                            border: string;
+                                          }
+                                        > = {
+                                          Pending: {
+                                            bg: "bg-yellow-100",
+                                            text: "text-yellow-700",
+                                            border: "border-yellow-300",
+                                          },
+                                          Confirmed: {
+                                            bg: "bg-green-100",
+                                            text: "text-green-700",
+                                            border: "border-green-300",
+                                          },
+                                          Approved: {
+                                            bg: "bg-green-100",
+                                            text: "text-green-700",
+                                            border: "border-green-300",
+                                          },
+                                          Processing: {
+                                            bg: "bg-blue-100",
+                                            text: "text-blue-700",
+                                            border: "border-blue-300",
+                                          },
+                                          Completed: {
+                                            bg: "bg-emerald-100",
+                                            text: "text-emerald-700",
+                                            border: "border-emerald-300",
+                                          },
+                                          Cancelled: {
+                                            bg: "bg-red-100",
+                                            text: "text-red-700",
+                                            border: "border-red-300",
+                                          },
+                                          Returned: {
+                                            bg: "bg-purple-100",
+                                            text: "text-purple-700",
+                                            border: "border-purple-300",
+                                          },
+                                        };
+                                        const config = statusConfig[
+                                          entry.status
+                                        ] || {
+                                          bg: "bg-gray-100",
+                                          text: "text-gray-700",
+                                          border: "border-gray-300",
+                                        };
+                                        return (
+                                          <div
+                                            key={index}
+                                            className="relative flex gap-4 pb-6 last:pb-0"
+                                          >
+                                            <div
+                                              className={`relative z-10 flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${config.bg} border-2 ${config.border}`}
+                                            >
+                                              <span className="text-xs font-bold">
+                                                {index + 1}
+                                              </span>
+                                            </div>
+                                            <div
+                                              className={`flex-1 rounded-lg border ${config.border} ${config.bg} p-3`}
+                                            >
+                                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                                <Badge
+                                                  className={`${config.bg} ${config.text} border ${config.border} font-semibold`}
+                                                >
+                                                  {entry.status}
+                                                </Badge>
+                                                <span className="text-xs text-muted-foreground">
+                                                  {formatDateTime(
+                                                    entry.changedAt,
+                                                  )}
+                                                </span>
+                                              </div>
+                                              {entry.note && (
+                                                <p
+                                                  className={`text-sm mt-2 ${config.text}`}
+                                                >
+                                                  📝 {entry.note}
+                                                </p>
+                                              )}
+                                              {entry.changedBy && (
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                  By:{" "}
+                                                  <span className="font-medium capitalize">
+                                                    {entry.changedBy}
+                                                  </span>
+                                                </p>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      },
+                                    )}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )}
+
+                          {/* Cancellation Reason */}
+                          {stallRequest.cancellationReason && (
+                            <Card className="border-red-200">
+                              <CardHeader>
+                                <CardTitle className="text-lg text-red-600">
+                                  Cancellation Reason
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <p className="text-sm">
+                                  {stallRequest.cancellationReason}
+                                </p>
+                              </CardContent>
+                            </Card>
+                          )}
+
+                          {/* Footer: Download + Close */}
+                          <div className="flex gap-2 sm:justify-between sticky bottom-0 bg-background pt-4 pb-2 border-t">
+                            <Button
+                              variant="buttonOutline"
+                              onClick={() => setExistingStallRequest(null)}
+                            >
+                              Close
+                            </Button>
+                            <Button
+                              className="bg-green-600 hover:bg-green-700"
+                              onClick={() =>
+                                handleDownload(existingStallRequest)
+                              }
+                              disabled={
+                                existingStallRequest.paymentStatus !== "Paid"
+                              }
+                            >
+                              <Download className="mr-2 h-4 w-4" />
+                              Download Stall Ticket
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                 </div>
               </div>
             )}

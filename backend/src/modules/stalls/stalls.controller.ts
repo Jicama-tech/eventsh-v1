@@ -13,6 +13,7 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { Response } from "express";
+import { StallPaymentSchedulerService } from "./stall-payment-scheduler.service";
 import { StallsService } from "./stalls.service";
 import { CreateStallDto } from "./dto/create-stall.dto";
 import { SelectTablesAndAddOnsDto } from "./dto/tableSelect.dto";
@@ -42,7 +43,17 @@ const imageFilter = (req: any, file: any, cb: any) => {
 
 @Controller("stalls")
 export class StallsController {
-  constructor(private readonly stallsService: StallsService) {}
+  constructor(
+    private readonly stallsService: StallsService,
+    private readonly paymentScheduler: StallPaymentSchedulerService,
+  ) {}
+
+  @Post("run-payment-check")
+  @HttpCode(HttpStatus.OK)
+  async runPaymentCheck() {
+    await this.paymentScheduler.handlePaymentRemindersAndForfeits();
+    return { success: true, message: "Payment check completed" };
+  }
 
   /**
    * PHASE 1: Create initial stall request

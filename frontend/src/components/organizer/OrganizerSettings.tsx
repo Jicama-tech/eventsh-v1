@@ -78,6 +78,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { lazy, Suspense } from "react";
+import "react-quill/dist/quill.snow.css";
 const ReactQuill = lazy(() => import("react-quill"));
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";

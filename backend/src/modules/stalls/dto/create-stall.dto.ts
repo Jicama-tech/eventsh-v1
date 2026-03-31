@@ -56,6 +56,10 @@ export class CreateStallDto {
 
   @IsOptional()
   @IsString()
+  businessCategory?: string;
+
+  @IsOptional()
+  @IsString()
   businessDescription?: string;
 
   @IsOptional()
