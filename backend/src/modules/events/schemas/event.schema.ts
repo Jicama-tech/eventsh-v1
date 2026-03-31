@@ -306,6 +306,7 @@ export class Event {
     bookingPrice: number; // NEW: Partial payment (must be <= tablePrice)
     depositPrice: number;
     color?: string;
+    forSale?: boolean;
     isBooked: boolean;
     bookedBy?: string;
     customDimensions?: boolean;
@@ -330,6 +331,7 @@ export class Event {
     bookingPrice: number;
     depositPrice: number;
     color?: string;
+    forSale?: boolean;
     isBooked: boolean;
     bookedBy?: string;
   }[];

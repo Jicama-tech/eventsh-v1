@@ -4119,16 +4119,22 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             )}
                             {venueTables[currentLayoutId]?.map((table) => {
                               const isBooked = table.isBooked;
+                              const notForSale = (table as any).forSale === false;
                               return (
                                 <div
                                   key={table.positionId}
-                                  className={`absolute border flex items-center justify-center transition-all cursor-pointer group hover:z-50 hover:shadow-xl hover:ring-2 hover:ring-offset-1 hover:ring-blue-400 ${
+                                  className={`absolute border flex items-center justify-center transition-all group hover:z-50 ${
                                     table.type === "Round"
                                       ? "rounded-full"
                                       : table.type === "Corner"
                                         ? "rounded-lg"
                                         : "rounded-sm"
-                                  } ${isBooked ? "border-gray-500 bg-gray-400/80 cursor-not-allowed" : "shadow-sm"}`}
+                                  } ${notForSale
+                                    ? "cursor-default"
+                                    : isBooked
+                                      ? "border-gray-500 bg-gray-400/80 cursor-not-allowed"
+                                      : "cursor-pointer hover:shadow-xl hover:ring-2 hover:ring-offset-1 hover:ring-blue-400 shadow-sm"
+                                  }`}
                                   style={{
                                     left: `${table.x}px`,
                                     top: `${table.y}px`,
@@ -4137,10 +4143,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     transform: `rotate(${table.rotation || 0}deg)`,
                                     transformOrigin: "center center",
                                     zIndex: 5,
-                                    ...(!isBooked && {
-                                      backgroundColor: (table.color || "#22c55e") + "33",
-                                      borderColor: table.color || "#22c55e",
-                                    }),
+                                    ...(notForSale ? {
+                                      backgroundColor: ((table as any).color || "#f59e0b") + "20",
+                                      borderColor: ((table as any).color || "#f59e0b") + "55",
+                                      backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.03) 3px, rgba(0,0,0,0.03) 6px)",
+                                    } : !isBooked ? {
+                                      backgroundColor: ((table as any).color || "#22c55e") + "33",
+                                      borderColor: (table as any).color || "#22c55e",
+                                    } : {}),
                                   }}
                                 >
                                   <div className="relative group hover:z-50">

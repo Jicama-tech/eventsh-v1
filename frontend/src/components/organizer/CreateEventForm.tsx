@@ -125,6 +125,7 @@ interface TableTemplate {
   bookingPrice: number;
   depositPrice: number;
   color?: string;
+  forSale?: boolean;
   isBooked?: boolean;
   bookedBy?: string;
   customDimensions?: boolean;
@@ -771,6 +772,7 @@ const TableManagement = ({
     bookingPrice: string;
     depositPrice: string;
     color: string;
+    forSale: boolean;
   };
   setCurrentTable: React.Dispatch<
     React.SetStateAction<{
@@ -783,6 +785,7 @@ const TableManagement = ({
       bookingPrice: string;
       depositPrice: string;
       color: string;
+      forSale: boolean;
     }>
   >;
   // Update the currentAddOn prop type in TableManagement:
@@ -904,18 +907,16 @@ const TableManagement = ({
 
   const addTable = () => {
     // Validate required fields
-    if (
-      !currentTable.name ||
-      !currentTable.rowNumber ||
-      !currentTable.tablePrice ||
-      !currentTable.bookingPrice ||
-      !currentTable.depositPrice
-    ) {
+    if (!currentTable.name) {
+      toast({ duration: 5000, title: "Name is required", variant: "destructive" });
+      return;
+    }
+
+    if (currentTable.forSale && (!currentTable.tablePrice || !currentTable.bookingPrice || !currentTable.depositPrice)) {
       toast({
         duration: 5000,
-        title: "Please fill in all required fields",
-        description:
-          "Name, Row, Table Price, Booking Price, and Deposit are required",
+        title: "Please fill in all pricing fields",
+        description: "Table Price, Booking Price, and Deposit are required for spaces that are for sale",
         variant: "destructive",
       });
       return;
@@ -967,6 +968,7 @@ const TableManagement = ({
       bookingPrice: bookingPrice,
       depositPrice: depositPrice,
       color: currentTable.color || "#6b7280",
+      forSale: currentTable.forSale,
       customDimensions: currentTable.type === "Straight",
       isBooked: false,
     };
@@ -984,6 +986,7 @@ const TableManagement = ({
       bookingPrice: "",
       depositPrice: "",
       color: "#6b7280",
+      forSale: true,
     });
 
     toast({
@@ -1121,6 +1124,13 @@ const TableManagement = ({
               <h4 className="font-semibold text-blue-900">Pricing</h4>
             </div>
 
+            {!currentTable.forSale && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-700">
+                This space is <strong>not for sale</strong> — it will appear on the venue layout as a reference point (e.g., Food Court, Registration Desk) but cannot be booked by exhibitors.
+              </div>
+            )}
+
+            {currentTable.forSale && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Table Price */}
               <div>
@@ -1205,6 +1215,31 @@ const TableManagement = ({
                 )}
               </div>
             </div>
+            )}
+
+            {/* For Sale Toggle */}
+            <div>
+              <Label className="flex items-center gap-1 mb-2">Space Type</Label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${currentTable.forSale ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+                  onClick={() => setCurrentTable((prev) => ({ ...prev, forSale: true }))}
+                >
+                  For Sale
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${!currentTable.forSale ? "border-orange-500 bg-orange-50 text-orange-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+                  onClick={() => setCurrentTable((prev) => ({ ...prev, forSale: false, tablePrice: "0", bookingPrice: "0", depositPrice: "0" }))}
+                >
+                  Not for Sale
+                </button>
+              </div>
+              <p className="text-[10px] text-gray-400 mt-1">
+                {currentTable.forSale ? "Exhibitors can book this space" : "Reference only (Food Court, Registration Desk, etc.)"}
+              </p>
+            </div>
 
             {/* Color Picker */}
             <div>
@@ -1230,7 +1265,8 @@ const TableManagement = ({
             </div>
 
             {/* Pricing Summary */}
-            {currentTable.tablePrice &&
+            {currentTable.forSale &&
+              currentTable.tablePrice &&
               currentTable.bookingPrice &&
               currentTable.depositPrice && (
                 <div className="bg-white p-3 rounded border border-blue-200">
@@ -1298,6 +1334,9 @@ const TableManagement = ({
                       <div className="font-medium flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: table.color || "#6b7280" }} />
                         {table.name}
+                        {table.forSale === false && (
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-orange-300 text-orange-600 bg-orange-50">Not for Sale</Badge>
+                        )}
                         {/* <Badge variant="buttonOutline">
                           Row {table.rowNumber}
                         </Badge> */}
@@ -1886,6 +1925,9 @@ const VenueDesigner = ({
           : (table.color || "#6b7280"),
       color: "white",
       border: isSelected ? "3px solid #1d4ed8" : `2px solid ${table.color ? table.color + "88" : "#374151"}`,
+      ...(table.forSale === false && !isSelected && {
+        backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 6px)",
+      }),
       cursor: isDragging ? "grabbing" : "grab",
       display: "flex",
       alignItems: "center",
@@ -2523,6 +2565,7 @@ export function CreateEventForm({
     bookingPrice: "",
     depositPrice: "",
     color: "#6b7280",
+    forSale: true,
   });
 
   // Replace your currentAddOn state with this:
