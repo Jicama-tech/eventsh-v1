@@ -83,6 +83,13 @@ export class Stall {
   @Prop({ type: Types.ObjectId, ref: "Organizer", required: true })
   organizerId: Types.ObjectId;
 
+  // Preferred space template — vendor's interest during registration
+  @Prop({ default: null })
+  preferredTemplateId: string;
+
+  @Prop({ default: null })
+  preferredTemplateName: string;
+
   // Request Status - Workflow status
   @Prop({
     enum: StallStatusEnum,

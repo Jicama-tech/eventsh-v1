@@ -228,6 +228,8 @@ export class StallsService {
         instagramLink: createStallDto.instagramLink,
         productDescription: createStallDto.productDescription,
         productImage: createStallDto.productImage,
+        preferredTemplateId: createStallDto.preferredTemplateId || null,
+        preferredTemplateName: createStallDto.preferredTemplateName || null,
       });
 
       const populatedStall = await newStall.populate([

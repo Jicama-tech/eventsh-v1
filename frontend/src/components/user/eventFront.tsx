@@ -382,6 +382,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     productDescription: "",
     instagramLink: "",
     faceBookLink: "",
+    preferredTemplateId: "",
+    preferredTemplateName: "",
   };
 
   const [regImageFile, setRegImageFile] = useState<File | null>(null);
@@ -1551,6 +1553,21 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       return;
     }
 
+    // Check if vendor has a preferred template and this table doesn't match
+    const preferredId = existingStallRequest?.preferredTemplateId;
+    if (preferredId && table.id !== preferredId) {
+      toast({
+        duration: 5000,
+        title: "Not Available for Your Category",
+        description: `You registered for "${existingStallRequest?.preferredTemplateName}" spaces only. This space belongs to a different category.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Not for sale spaces can't be selected
+    if (table.forSale === false) return;
+
     const isSelected = selectedTables.some(
       (t) => t.positionId === table.positionId,
     );
@@ -2055,6 +2072,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         formData.append("faceBookLink", shopkeeperDetails.faceBookLink);
       if (shopkeeperDetails.instagramLink)
         formData.append("instagramLink", shopkeeperDetails.instagramLink);
+      if (shopkeeperDetails.preferredTemplateId)
+        formData.append("preferredTemplateId", shopkeeperDetails.preferredTemplateId);
+      if (shopkeeperDetails.preferredTemplateName)
+        formData.append("preferredTemplateName", shopkeeperDetails.preferredTemplateName);
 
       // Append Files
       if (regImageFile) formData.append("registrationImage", regImageFile);
@@ -6756,16 +6777,27 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 (t) => t.positionId === table.positionId,
                               );
                               const isBooked = table.isBooked;
+                              const preferredId = existingStallRequest?.preferredTemplateId;
+                              const isWrongTemplate = preferredId && table.id !== preferredId;
+                              const isNotForSale = table.forSale === false;
 
                               let bgColor = "bg-green-200/80";
                               let borderColor = "border-green-600";
                               let cursor =
                                 "cursor-pointer hover:shadow-xl hover:ring-2 hover:ring-blue-400";
 
-                              if (isBooked) {
+                              if (isNotForSale) {
+                                bgColor = "bg-amber-100/50";
+                                borderColor = "border-amber-300";
+                                cursor = "cursor-default opacity-60";
+                              } else if (isBooked) {
                                 bgColor = "bg-gray-400/80";
                                 borderColor = "border-gray-500";
                                 cursor = "cursor-not-allowed opacity-70";
+                              } else if (isWrongTemplate) {
+                                bgColor = "bg-gray-200/60";
+                                borderColor = "border-gray-300";
+                                cursor = "cursor-not-allowed opacity-40";
                               } else if (isSelected) {
                                 bgColor = "bg-blue-300";
                                 borderColor = "border-blue-600";
@@ -8841,6 +8873,41 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   rows={2}
                 />
               </div>
+
+              {/* Preferred Space Template */}
+              {eventData?.tableTemplates && eventData.tableTemplates.filter((t: any) => t.forSale !== false).length > 0 && (
+                <div className="space-y-2 border-t pt-4">
+                  <Label>Preferred Space Type <span className="text-red-500">*</span></Label>
+                  <p className="text-[11px] text-gray-400 mb-2">Select the type of space you're interested in. You'll only be able to book spaces of this type.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {eventData.tableTemplates.filter((t: any) => t.forSale !== false).map((template: any) => {
+                      const isSelected = shopkeeperDetails.preferredTemplateId === template.id;
+                      return (
+                        <button
+                          key={template.id}
+                          type="button"
+                          onClick={() => setShopkeeperDetails({
+                            ...shopkeeperDetails,
+                            preferredTemplateId: template.id,
+                            preferredTemplateName: template.name,
+                          })}
+                          className={`text-left p-3 rounded-xl border-2 transition-all ${isSelected ? "shadow-md" : "border-gray-200 hover:border-gray-300"}`}
+                          style={isSelected ? { borderColor: template.color || "#3b82f6", backgroundColor: (template.color || "#3b82f6") + "08" } : {}}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: template.color || "#6b7280" }} />
+                            <span className="font-semibold text-sm text-gray-800">{template.name}</span>
+                            {isSelected && <span className="ml-auto text-xs font-medium" style={{ color: template.color || "#3b82f6" }}>Selected</span>}
+                          </div>
+                          <div className="text-[11px] text-gray-500">
+                            {template.width}x{template.height}cm &middot; {formatPrice(template.tablePrice)}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <CardFooter className="flex justify-end gap-3 p-0 pt-4 border-t">
                 <Button

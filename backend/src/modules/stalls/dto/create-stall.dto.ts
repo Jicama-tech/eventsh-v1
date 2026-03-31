@@ -60,6 +60,14 @@ export class CreateStallDto {
 
   @IsOptional()
   @IsString()
+  preferredTemplateId?: string;
+
+  @IsOptional()
+  @IsString()
+  preferredTemplateName?: string;
+
+  @IsOptional()
+  @IsString()
   businessDescription?: string;
 
   @IsOptional()
