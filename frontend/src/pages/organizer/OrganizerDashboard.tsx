@@ -348,9 +348,8 @@ export function OrganizerDashboard({
           await createDefaultSettings(orgId, token);
           setActiveTab("storefront");
         }
-      }
-
-      if (checkResponse.status === 404) {
+      } else {
+        // 404 or any other non-ok status — create default settings
         await createDefaultSettings(orgId, token);
         setActiveTab("storefront");
       }

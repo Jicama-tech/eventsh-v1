@@ -76,6 +76,7 @@ class FeaturesSettingsDto {
   @IsBoolean() showSocialMedia: boolean;
   @IsBoolean() enableChat: boolean;
   @IsBoolean() showNewsletter: boolean;
+  @IsOptional() @IsBoolean() showQuickView?: boolean;
 }
 
 class SeoSettingsDto {
