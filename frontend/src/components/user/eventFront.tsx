@@ -4067,29 +4067,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       </p>
                     </div>
                     <div className="px-5 pb-5 space-y-5">
-                      {/* Venue map - outer container clips overflow so scale() never expands the page */}
+                      {/* Venue map */}
                       <div
                         ref={venueDisplayContainerRef}
-                        style={{
-                          position: "relative",
-                          overflow: "hidden",
-                          width: "100%",
-                          height: `${Math.round((venueConfig[currentLayoutIndex]?.height || 500) * venueDisplayScale) + 8}px`,
-                          borderRadius: "12px",
-                          border: "1px solid #e5e7eb",
-                          background: "#f9fafb",
-                        }}
+                        className="overflow-x-auto rounded-xl border border-gray-200"
+                        style={{ background: "#f9fafb" }}
                       >
-                        {/* Absolutely positioned so its pre-scale pixel size never affects layout */}
                         <div
+                          className="relative mx-auto"
                           style={{
-                            position: "absolute",
-                            top: "50%",
-                            left: "50%",
                             width: `${venueConfig[currentLayoutIndex]?.width || 800}px`,
                             height: `${venueConfig[currentLayoutIndex]?.height || 500}px`,
-                            transform: `translate(-50%, -50%) scale(${venueDisplayScale})`,
-                            transformOrigin: "center center",
+                            minWidth: `${venueConfig[currentLayoutIndex]?.width || 800}px`,
                           }}
                         >
                           <div
@@ -4602,26 +4591,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         </div>
                         <div className="px-3 pb-5">
                           <div
-                            ref={venueDisplayContainerRef}
-                            style={{
-                              position: "relative",
-                              overflow: "hidden",
-                              width: "100%",
-                              height: `${Math.round(totalH * s) + 8}px`,
-                              borderRadius: "12px",
-                              border: "1px solid #e5e7eb",
-                              background: "#fafbfc",
-                            }}
+                            className="overflow-x-auto rounded-xl border border-gray-200"
+                            style={{ background: "#fafbfc" }}
                           >
                             <div
+                              className="relative mx-auto"
                               style={{
-                                position: "absolute",
-                                top: "50%",
-                                left: "50%",
                                 width: `${totalW}px`,
                                 height: `${totalH}px`,
-                                transform: `translate(-50%, -50%) scale(${s})`,
-                                transformOrigin: "center center",
+                                minWidth: `${totalW}px`,
                               }}
                             >
                               {/* Grid background — offset by padding */}
