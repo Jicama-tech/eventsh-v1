@@ -725,7 +725,9 @@ export function OrganizerStorefrontCustomizer({
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center space-x-4">
             <div>
-              <h1 className="text-3xl font-bold">Store Customizer</h1>
+              <h1 className="text-3xl font-bold">
+                Organization Store Customizer
+              </h1>
               <p className="text-sm text-muted-foreground">
                 Design your perfect store experience
               </p>
@@ -769,7 +771,7 @@ export function OrganizerStorefrontCustomizer({
           <TabsContent value="general" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Store Information</CardTitle>
+                <CardTitle>Organization Store Information</CardTitle>
                 <CardDescription>
                   Basic information about your store
                 </CardDescription>
@@ -777,7 +779,7 @@ export function OrganizerStorefrontCustomizer({
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="storeName">Store Name</Label>
+                    <Label htmlFor="storeName">Organization Store Name</Label>
                     <Input
                       id="storeName"
                       value={settings.general.storeName}
@@ -822,7 +824,9 @@ export function OrganizerStorefrontCustomizer({
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="description">Store Description</Label>
+                  <Label htmlFor="description">
+                    Organization Store Description
+                  </Label>
                   <Textarea
                     id="description"
                     value={settings.general.description}
@@ -926,7 +930,7 @@ export function OrganizerStorefrontCustomizer({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="slug">Store Link (slug)</Label>
+                    <Label htmlFor="slug">Organizer Store Link (slug)</Label>
                     <div className="flex items-center">
                       <span className="text-muted-foreground mr-1 text-sm">
                         [www.eventsh.com/]

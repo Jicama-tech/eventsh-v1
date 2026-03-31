@@ -404,8 +404,6 @@ const TablePaymentPage = () => {
   async function extractUpiFromImage() {
     if (!orderData?.paymentURL || upiId) return;
 
-
-
     try {
       setLoading(true);
       const img = new Image();
@@ -484,7 +482,6 @@ const TablePaymentPage = () => {
 
         const value = qrData.slice(pos + 4, pos + 4 + len);
 
-
         // Look for proxy type field (ID=01, value="01" for UEN proxy)
         if (id === "01" && value === "01") {
           foundProxyType = true;
@@ -495,7 +492,6 @@ const TablePaymentPage = () => {
             const uenLenHex = qrData.slice(nextPos + 2, nextPos + 4);
             const uenLen = parseInt(uenLenHex, 16);
             const uen = qrData.slice(nextPos + 4, nextPos + 4 + uenLen);
-
 
             // Validate UEN format
             if (
@@ -559,7 +555,6 @@ const TablePaymentPage = () => {
       const encodedExpiry = encodeURIComponent(formattedExpiry);
 
       const payNowString = `https://www.sgqrcode.com/paynow?mobile=${cleanedMobileId}&uen=&editable=0&amount=${AmountToBePaid}&expiry=${encodedExpiry}&ref_id=&company=`;
-
 
       setLoading(false);
       return payNowString;
@@ -1185,7 +1180,7 @@ const TablePaymentPage = () => {
                   <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
                     <p className="text-xs text-blue-700">
                       <span className="font-semibold">Note:</span> Clicking the
-                      button above will notify the shopkeeper to verify your
+                      button above will notify the Organizer to verify your
                       payment and process your order.
                     </p>
                   </div>

@@ -375,22 +375,64 @@ export function OrganizerDashboard({
       try {
         const decoded = jwtDecode<organizerToken>(token);
         orgEmail = decoded.email;
-        // Set organizerId for child components (SpeakerRequests, etc.)
         if (decoded.sub) setOrganizerId(decoded.sub);
 
+        // Try fetching organizer by email first
+        let orgData: any = null;
         const res = await fetch(`${apiURL}/organizers/${orgEmail}`, {
           method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
-          const shopData = await res.json();
-          if (shopData.data.organizationName) {
-            setCountry(shopData.data.country);
-            setOrganizationName(shopData.data.organizationName);
-            setWhatsAppNumber(shopData.data.whatsAppNumber);
+          const result = await res.json();
+          if (result.data?.organizationName) {
+            orgData = result.data;
           }
+        }
+
+        // If not found (operator login), try fetching by ID, then check if operator
+        if (!orgData && decoded.sub) {
+          const idRes = await fetch(`${apiURL}/organizers/profile-get/${decoded.sub}`, {
+            method: "GET",
+          });
+          if (idRes.ok) {
+            const idResult = await idRes.json();
+            if (idResult.data?.organizationName) {
+              orgData = idResult.data;
+            }
+          }
+
+          // Still not found — might be an operator, fetch operator to get parent organizerId
+          if (!orgData) {
+            try {
+              const opRes = await fetch(`${apiURL}/operators/${decoded.sub}`, {
+                method: "GET",
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (opRes.ok) {
+                const opResult = await opRes.json();
+                const parentOrgId = opResult.data?.organizerId;
+                if (parentOrgId) {
+                  setOrganizerId(parentOrgId);
+                  const parentRes = await fetch(`${apiURL}/organizers/profile-get/${parentOrgId}`);
+                  if (parentRes.ok) {
+                    const parentResult = await parentRes.json();
+                    if (parentResult.data?.organizationName) {
+                      orgData = parentResult.data;
+                    }
+                  }
+                }
+              }
+            } catch {
+              // Operator fetch failed, continue with defaults
+            }
+          }
+        }
+
+        if (orgData) {
+          setCountry(orgData.country || "IN");
+          setOrganizationName(orgData.organizationName);
+          setWhatsAppNumber(orgData.whatsAppNumber || "");
         }
       } catch (error) {
         console.error("Error loading Name:", error);
