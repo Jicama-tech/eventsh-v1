@@ -2282,63 +2282,6 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 </p> */}
               </div>
 
-              {/* PAYMENT QR */}
-              {/* <div className="md:col-span-2">
-                <Label>Payment QR</Label>
-                <div className="flex flex-col md:flex-row gap-4 items-start">
-                  <div className="w-48 h-48 rounded-md border flex items-center justify-center overflow-hidden bg-white">
-                    {paymentQrPreview ? (
-                      <img
-                        src={paymentQrPreview}
-                        alt="Payment QR preview"
-                        className="w-full h-full object-contain"
-                      />
-                    ) : shopProfile.paymentURL ? (
-                      <img
-                        src={apiURL + shopProfile.paymentURL}
-                        alt="Payment QR"
-                        className="w-full h-full object-contain"
-                      />
-                    ) : (
-                      <span className="text-xs text-muted-foreground px-2 text-center">
-                        No QR uploaded
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex-1 space-y-2">
-                    <Input
-                      type="file"
-                      accept="image/*"
-                      onChange={onPaymentQrChange}
-                    />
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={removePaymentQr}
-                        disabled={!paymentQrPreview && !shopProfile.paymentURL}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                    {shopProfile.paymentURL && (
-                      <div>
-                        <Label>Public URL</Label>
-                        <Input
-                          value={`${apiURL}${shopProfile.paymentURL}`}
-                          readOnly
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Copy and use this URL to view or embed your QR image.
-                        </p>
-                      </div>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Recommended: Square PNG/JPG around 512×512.
-                    </p>
-                  </div>
-                </div>
-              </div> */}
 
               {/* Bank Transfer Details */}
               <Separator className="my-6" />
