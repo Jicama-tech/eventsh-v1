@@ -11,6 +11,8 @@ import {
   ParseUUIDPipe,
   UploadedFile,
   BadRequestException,
+  UsePipes,
+  ValidationPipe,
 } from "@nestjs/common";
 import { OrganizersService } from "./organizers.service";
 import { LocalDto } from "../auth/dto/local.dto";
@@ -118,6 +120,7 @@ export class OrganizersController {
   }
 
   @Patch("profile/:id")
+  @UsePipes(new ValidationPipe({ whitelist: false, forbidNonWhitelisted: false, transform: true }))
   @UseInterceptors(
     FileInterceptor("paymentURL", {
       fileFilter: (_req, file, cb) => {
@@ -135,7 +138,7 @@ export class OrganizersController {
   async updateProfile(
     @Param("id") id: string,
     @UploadedFile(WebpValidationPipe) paymentFile: any,
-    @Body() body: UpdateOrganizerDto,
+    @Body() body: any,
   ) {
     try {
       const paymentQrPublicUrl = paymentFile?.filename

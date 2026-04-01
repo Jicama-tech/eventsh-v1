@@ -174,6 +174,18 @@ export class Organizer {
   bankTransferEnabled: boolean;
 
   @Prop()
+  bankAccountNumber: string;
+
+  @Prop()
+  bankIfscCode: string;
+
+  @Prop()
+  bankName: string;
+
+  @Prop()
+  accountHolderName: string;
+
+  @Prop()
   bankSwiftCode: string;
 
   @Prop()
