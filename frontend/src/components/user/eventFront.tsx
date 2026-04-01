@@ -3592,8 +3592,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           </TabsList>
 
           <TabsContent value="details" className="mt-4 space-y-4">
-            {/* Features */}
-            {features && (
+            {/* Features — only show if at least one is active */}
+            {features && Object.values(features).some(Boolean) && (
               <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
                 <p
                   className="text-xs font-semibold tracking-[0.2em] uppercase mb-4"
@@ -7146,14 +7146,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         {formatPrice(calculateTotals().tablesTotal.tablePrice)}
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Booking Amount</span>
-                      <span className="font-semibold">
-                        {formatPrice(
-                          calculateTotals().tablesTotal.bookingPrice,
-                        )}
-                      </span>
-                    </div>
+                    {showMinimumPayment && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Booking Amount</span>
+                        <span className="font-semibold">
+                          {formatPrice(
+                            calculateTotals().tablesTotal.bookingPrice,
+                          )}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-gray-600">Deposit</span>
                       <span className="font-semibold">

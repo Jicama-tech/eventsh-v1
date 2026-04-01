@@ -2665,7 +2665,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     </div>
                   </div>
 
-                  {/* Event Features - Visual Icons */}
+                  {/* Event Features — only show if at least one is active */}
+                  {stallRequest.eventId?.features && Object.values(stallRequest.eventId.features).some(Boolean) && (
                   <div>
                     <Label className="text-muted-foreground mb-2 block text-xs uppercase tracking-wider">
                       Included Features
@@ -2713,6 +2714,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       )}
                     </div>
                   </div>
+                  )}
 
                   {/* Management Details */}
                   <div className="grid grid-cols-2 gap-4 border-t pt-4">
@@ -2732,30 +2734,32 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     </div>
                   </div>
 
-                  {/* Stall Booking Stats for this Event */}
-                  <div className="border-t pt-4">
-                    <Label className="text-muted-foreground block mb-2">
-                      Venue Configuration
-                    </Label>
-                    <div className="flex gap-4 text-sm">
-                      <div className="text-center p-2 border rounded-md flex-1">
-                        <span className="block text-xs text-muted-foreground">
-                          Ticket Price
-                        </span>
-                        <span className="font-bold">
-                          {formatPrice(stallRequest.eventId?.ticketPrice)}
-                        </span>
-                      </div>
-                      <div className="text-center p-2 border rounded-md flex-1">
-                        <span className="block text-xs text-muted-foreground">
-                          Available Slots
-                        </span>
-                        <span className="font-bold">
-                          {stallRequest.eventId?.totalTickets || "Unlimited"}
-                        </span>
+                  {/* Stall Booking Stats — only if event has tickets */}
+                  {(stallRequest.eventId?.ticketPrice || stallRequest.eventId?.visitorTypes?.length > 0) && (
+                    <div className="border-t pt-4">
+                      <Label className="text-muted-foreground block mb-2">
+                        Ticketing
+                      </Label>
+                      <div className="flex gap-4 text-sm">
+                        <div className="text-center p-2 border rounded-md flex-1">
+                          <span className="block text-xs text-muted-foreground">
+                            Ticket Price
+                          </span>
+                          <span className="font-bold">
+                            {stallRequest.eventId?.ticketPrice ? formatPrice(stallRequest.eventId.ticketPrice) : "Free"}
+                          </span>
+                        </div>
+                        <div className="text-center p-2 border rounded-md flex-1">
+                          <span className="block text-xs text-muted-foreground">
+                            Available Slots
+                          </span>
+                          <span className="font-bold">
+                            {stallRequest.eventId?.totalTickets || "Unlimited"}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Gallery Preview */}
                   {stallRequest.eventId?.gallery?.length > 0 && (
