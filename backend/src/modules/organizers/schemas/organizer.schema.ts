@@ -182,6 +182,12 @@ export class Organizer {
   @Prop()
   bankBranch: string;
 
+  @Prop()
+  bankAccountType: string;
+
+  @Prop()
+  payNowId: string;
+
   // --- Settings ---
   @Prop({
     type: String,

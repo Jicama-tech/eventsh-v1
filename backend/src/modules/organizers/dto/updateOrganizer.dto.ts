@@ -157,6 +157,14 @@ export class UpdateOrganizerDto {
   @IsOptional()
   bankBranch?: string;
 
+  @IsString()
+  @IsOptional()
+  bankAccountType?: string;
+
+  @IsString()
+  @IsOptional()
+  payNowId?: string;
+
   @IsBoolean()
   @IsOptional()
   @Transform(({ value }) => value === "true" || value === true)

@@ -940,9 +940,11 @@ const TablePaymentPage = () => {
                         <div><span className="text-gray-500">Bank:</span><p className="font-medium">{organizer.bankName || "—"}</p></div>
                         <div><span className="text-gray-500">Account No:</span><p className="font-medium font-mono">{organizer.bankAccountNumber || "—"}</p></div>
                         {organizer.bankIfscCode && <div><span className="text-gray-500">IFSC:</span><p className="font-medium font-mono">{organizer.bankIfscCode}</p></div>}
-                        {organizer.bankSwiftCode && <div><span className="text-gray-500">SWIFT:</span><p className="font-medium font-mono">{organizer.bankSwiftCode}</p></div>}
+                        {organizer.bankAccountType && <div><span className="text-gray-500">Account Type:</span><p className="font-medium">{organizer.bankAccountType}</p></div>}
+                        {organizer.bankSwiftCode && <div><span className="text-gray-500">SWIFT/BIC:</span><p className="font-medium font-mono">{organizer.bankSwiftCode}</p></div>}
+                        {organizer.bankBranchCode && <div><span className="text-gray-500">Bank/Branch Code:</span><p className="font-medium font-mono">{organizer.bankBranchCode}</p></div>}
                         {organizer.bankBranch && <div><span className="text-gray-500">Branch:</span><p className="font-medium">{organizer.bankBranch}</p></div>}
-                        {organizer.bankBranchCode && <div><span className="text-gray-500">Branch Code:</span><p className="font-medium">{organizer.bankBranchCode}</p></div>}
+                        {organizer.payNowId && <div className="col-span-2"><span className="text-gray-500">PayNow ID:</span><p className="font-medium font-mono">{organizer.payNowId}</p></div>}
                       </div>
                       <div className="text-center pt-2 border-t border-green-200">
                         <p className="text-lg font-bold text-green-700">Transfer Amount: {formatPrice(AmountToBePaid)}</p>

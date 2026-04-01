@@ -237,6 +237,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     bankBranchCode: "",
     bankBranch: "",
     accountHolderName: "",
+    bankAccountType: "",
+    payNowId: "",
     businessHours: {
       monday: { open: "09:00", close: "18:00", closed: false },
       tuesday: { open: "09:00", close: "18:00", closed: false },
@@ -1326,6 +1328,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
       fd.append("bankBranchCode", shopProfile.bankBranchCode || "");
       fd.append("bankBranch", shopProfile.bankBranch || "");
       fd.append("accountHolderName", shopProfile.accountHolderName || "");
+      fd.append("bankAccountType", shopProfile.bankAccountType || "");
+      fd.append("payNowId", shopProfile.payNowId || "");
 
       // File
       if (paymentQrFile) fd.append("paymentURL", paymentQrFile);
@@ -1377,6 +1381,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
         bankBranchCode: d?.bankBranchCode ?? p.bankBranchCode,
         bankBranch: d?.bankBranch ?? p.bankBranch,
         accountHolderName: d?.accountHolderName ?? p.accountHolderName,
+        bankAccountType: d?.bankAccountType ?? p.bankAccountType,
+        payNowId: d?.payNowId ?? p.payNowId,
       }));
 
       if (paymentQrPreview) {
@@ -1570,6 +1576,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           bankBranchCode: d?.bankBranchCode ?? "",
           bankBranch: d?.bankBranch ?? "",
           accountHolderName: d?.accountHolderName ?? "",
+          bankAccountType: d?.bankAccountType ?? "",
+          payNowId: d?.payNowId ?? "",
         }));
 
         setSelectedCountry(d?.country || "IN");
@@ -2339,35 +2347,61 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
                     {/* Country-specific fields */}
                     {selectedCountry === "IN" ? (
-                      <div className="space-y-2">
-                        <Label>IFSC Code *</Label>
-                        <Input
-                          value={shopProfile.bankIfscCode}
-                          onChange={(e) => setOrganizerProfile({ ...shopProfile, bankIfscCode: e.target.value.toUpperCase() })}
-                          placeholder="e.g. HDFC0001234"
-                          maxLength={11}
-                        />
-                        <p className="text-xs text-muted-foreground">11-character Indian Financial System Code</p>
-                      </div>
-                    ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label>SWIFT / BIC Code *</Label>
+                          <Label>IFSC Code *</Label>
                           <Input
-                            value={shopProfile.bankSwiftCode}
-                            onChange={(e) => setOrganizerProfile({ ...shopProfile, bankSwiftCode: e.target.value.toUpperCase() })}
-                            placeholder="e.g. DBSSSGSG"
+                            value={shopProfile.bankIfscCode}
+                            onChange={(e) => setOrganizerProfile({ ...shopProfile, bankIfscCode: e.target.value.toUpperCase() })}
+                            placeholder="e.g. HDFC0001234"
                             maxLength={11}
                           />
-                          <p className="text-xs text-muted-foreground">8 or 11 character SWIFT code for international transfers</p>
+                          <p className="text-xs text-muted-foreground">11-character Indian Financial System Code</p>
                         </div>
                         <div className="space-y-2">
-                          <Label>Bank / Branch Code</Label>
+                          <Label>Account Type *</Label>
+                          <select
+                            className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            value={shopProfile.bankAccountType}
+                            onChange={(e) => setOrganizerProfile({ ...shopProfile, bankAccountType: e.target.value })}
+                          >
+                            <option value="">Select Type</option>
+                            <option value="Savings">Savings</option>
+                            <option value="Current">Current</option>
+                          </select>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>SWIFT / BIC Code *</Label>
+                            <Input
+                              value={shopProfile.bankSwiftCode}
+                              onChange={(e) => setOrganizerProfile({ ...shopProfile, bankSwiftCode: e.target.value.toUpperCase() })}
+                              placeholder="e.g. DBSSSGSG"
+                              maxLength={11}
+                            />
+                            <p className="text-xs text-muted-foreground">8 or 11 character SWIFT code</p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Bank Code + Branch Code</Label>
+                            <Input
+                              value={shopProfile.bankBranchCode}
+                              onChange={(e) => setOrganizerProfile({ ...shopProfile, bankBranchCode: e.target.value })}
+                              placeholder="e.g. 7171-003"
+                            />
+                            <p className="text-xs text-muted-foreground">Bank code (4 digits) - Branch code (3 digits)</p>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>PayNow ID (UEN / Mobile / NRIC)</Label>
                           <Input
-                            value={shopProfile.bankBranchCode}
-                            onChange={(e) => setOrganizerProfile({ ...shopProfile, bankBranchCode: e.target.value })}
-                            placeholder="e.g. 003"
+                            value={shopProfile.payNowId}
+                            onChange={(e) => setOrganizerProfile({ ...shopProfile, payNowId: e.target.value })}
+                            placeholder="e.g. 202012345K or +65 9123 4567"
                           />
+                          <p className="text-xs text-muted-foreground">PayNow registered UEN, mobile number, or NRIC for instant transfers</p>
                         </div>
                       </div>
                     )}
