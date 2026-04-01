@@ -2291,123 +2291,6 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               </div>
 
 
-              {/* Bank Transfer Details */}
-              <Separator className="my-6" />
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-base font-semibold">Bank Transfer Details</h3>
-                    <p className="text-sm text-muted-foreground">Enable bank transfers for international payments</p>
-                  </div>
-                  <Switch
-                    checked={shopProfile.bankTransferEnabled}
-                    onCheckedChange={(val) => setOrganizerProfile({ ...shopProfile, bankTransferEnabled: val })}
-                  />
-                </div>
-
-                {shopProfile.bankTransferEnabled && (
-                  <div className="space-y-4 p-4 border rounded-lg bg-gray-50/50">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Account Holder Name *</Label>
-                        <Input
-                          value={shopProfile.accountHolderName}
-                          onChange={(e) => setOrganizerProfile({ ...shopProfile, accountHolderName: e.target.value })}
-                          placeholder="Full name as on bank account"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Bank Name *</Label>
-                        <Input
-                          value={shopProfile.bankName}
-                          onChange={(e) => setOrganizerProfile({ ...shopProfile, bankName: e.target.value })}
-                          placeholder="e.g. HDFC Bank, DBS Bank"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Account Number *</Label>
-                        <Input
-                          value={shopProfile.bankAccountNumber}
-                          onChange={(e) => setOrganizerProfile({ ...shopProfile, bankAccountNumber: e.target.value })}
-                          placeholder="Bank account number"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Branch</Label>
-                        <Input
-                          value={shopProfile.bankBranch}
-                          onChange={(e) => setOrganizerProfile({ ...shopProfile, bankBranch: e.target.value })}
-                          placeholder="Branch name"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Country-specific fields */}
-                    {selectedCountry === "IN" ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>IFSC Code *</Label>
-                          <Input
-                            value={shopProfile.bankIfscCode}
-                            onChange={(e) => setOrganizerProfile({ ...shopProfile, bankIfscCode: e.target.value.toUpperCase() })}
-                            placeholder="e.g. HDFC0001234"
-                            maxLength={11}
-                          />
-                          <p className="text-xs text-muted-foreground">11-character Indian Financial System Code</p>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Account Type *</Label>
-                          <select
-                            className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            value={shopProfile.bankAccountType}
-                            onChange={(e) => setOrganizerProfile({ ...shopProfile, bankAccountType: e.target.value })}
-                          >
-                            <option value="">Select Type</option>
-                            <option value="Savings">Savings</option>
-                            <option value="Current">Current</option>
-                          </select>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label>SWIFT / BIC Code *</Label>
-                            <Input
-                              value={shopProfile.bankSwiftCode}
-                              onChange={(e) => setOrganizerProfile({ ...shopProfile, bankSwiftCode: e.target.value.toUpperCase() })}
-                              placeholder="e.g. DBSSSGSG"
-                              maxLength={11}
-                            />
-                            <p className="text-xs text-muted-foreground">8 or 11 character SWIFT code</p>
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Bank Code + Branch Code</Label>
-                            <Input
-                              value={shopProfile.bankBranchCode}
-                              onChange={(e) => setOrganizerProfile({ ...shopProfile, bankBranchCode: e.target.value })}
-                              placeholder="e.g. 7171-003"
-                            />
-                            <p className="text-xs text-muted-foreground">Bank code (4 digits) - Branch code (3 digits)</p>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>PayNow ID (UEN / Mobile / NRIC)</Label>
-                          <Input
-                            value={shopProfile.payNowId}
-                            onChange={(e) => setOrganizerProfile({ ...shopProfile, payNowId: e.target.value })}
-                            placeholder="e.g. 202012345K or +65 9123 4567"
-                          />
-                          <p className="text-xs text-muted-foreground">PayNow registered UEN, mobile number, or NRIC for instant transfers</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -3495,6 +3378,128 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               "Save All Payment Methods"
             )}
           </Button> */}
+
+          {/* Bank Transfer Details */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <CreditCard className="w-5 h-5" />
+                    Bank Transfer
+                  </CardTitle>
+                  <CardDescription>Accept bank transfers for international payments</CardDescription>
+                </div>
+                <Switch
+                  checked={shopProfile.bankTransferEnabled}
+                  onCheckedChange={(val) => setOrganizerProfile({ ...shopProfile, bankTransferEnabled: val })}
+                />
+              </div>
+            </CardHeader>
+
+            {shopProfile.bankTransferEnabled && (
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Account Holder Name *</Label>
+                    <Input
+                      value={shopProfile.accountHolderName}
+                      onChange={(e) => setOrganizerProfile({ ...shopProfile, accountHolderName: e.target.value })}
+                      placeholder="Full name as on bank account"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Bank Name *</Label>
+                    <Input
+                      value={shopProfile.bankName}
+                      onChange={(e) => setOrganizerProfile({ ...shopProfile, bankName: e.target.value })}
+                      placeholder="e.g. HDFC Bank, DBS Bank"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Account Number *</Label>
+                    <Input
+                      value={shopProfile.bankAccountNumber}
+                      onChange={(e) => setOrganizerProfile({ ...shopProfile, bankAccountNumber: e.target.value })}
+                      placeholder="Bank account number"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Branch</Label>
+                    <Input
+                      value={shopProfile.bankBranch}
+                      onChange={(e) => setOrganizerProfile({ ...shopProfile, bankBranch: e.target.value })}
+                      placeholder="Branch name"
+                    />
+                  </div>
+                </div>
+
+                {/* Country-specific fields */}
+                {selectedCountry === "IN" ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>IFSC Code *</Label>
+                      <Input
+                        value={shopProfile.bankIfscCode}
+                        onChange={(e) => setOrganizerProfile({ ...shopProfile, bankIfscCode: e.target.value.toUpperCase() })}
+                        placeholder="e.g. HDFC0001234"
+                        maxLength={11}
+                      />
+                      <p className="text-xs text-muted-foreground">11-character Indian Financial System Code</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Account Type *</Label>
+                      <select
+                        className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={shopProfile.bankAccountType}
+                        onChange={(e) => setOrganizerProfile({ ...shopProfile, bankAccountType: e.target.value })}
+                      >
+                        <option value="">Select Type</option>
+                        <option value="Savings">Savings</option>
+                        <option value="Current">Current</option>
+                      </select>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>SWIFT / BIC Code *</Label>
+                        <Input
+                          value={shopProfile.bankSwiftCode}
+                          onChange={(e) => setOrganizerProfile({ ...shopProfile, bankSwiftCode: e.target.value.toUpperCase() })}
+                          placeholder="e.g. DBSSSGSG"
+                          maxLength={11}
+                        />
+                        <p className="text-xs text-muted-foreground">8 or 11 character SWIFT code</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Bank Code + Branch Code</Label>
+                        <Input
+                          value={shopProfile.bankBranchCode}
+                          onChange={(e) => setOrganizerProfile({ ...shopProfile, bankBranchCode: e.target.value })}
+                          placeholder="e.g. 7171-003"
+                        />
+                        <p className="text-xs text-muted-foreground">Bank code (4 digits) - Branch code (3 digits)</p>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>PayNow ID (UEN / Mobile / NRIC)</Label>
+                      <Input
+                        value={shopProfile.payNowId}
+                        onChange={(e) => setOrganizerProfile({ ...shopProfile, payNowId: e.target.value })}
+                        placeholder="e.g. 202012345K or +65 9123 4567"
+                      />
+                      <p className="text-xs text-muted-foreground">PayNow registered UEN, mobile number, or NRIC for instant transfers</p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            )}
+          </Card>
         </TabsContent>
 
         <TabsContent value="shipping">
