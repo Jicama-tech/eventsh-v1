@@ -90,6 +90,16 @@ export class Stall {
   @Prop({ default: null })
   preferredTemplateName: string;
 
+  // Payment verification
+  @Prop({ default: null })
+  transactionId: string;
+
+  @Prop({ default: null })
+  transactionScreenshot: string;
+
+  @Prop({ default: null })
+  paymentMethod: string; // "qr" | "bank_transfer"
+
   // Request Status - Workflow status
   @Prop({
     enum: StallStatusEnum,

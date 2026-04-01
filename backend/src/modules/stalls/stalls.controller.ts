@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
   Res,
+  UploadedFile,
   UploadedFiles,
   UseInterceptors,
 } from "@nestjs/common";
@@ -23,7 +24,10 @@ import { ConfirmPaymentDto } from "./dto/confirm-Payment.dto";
 import { ScanQRDto } from "./dto/scan-qr.dto";
 import { SendBulkInvitationDto } from "./dto/sendBulkInvitation.dto";
 import { diskStorage } from "multer";
-import { FileFieldsInterceptor } from "@nestjs/platform-express";
+import {
+  FileFieldsInterceptor,
+  FileInterceptor,
+} from "@nestjs/platform-express";
 import { v4 as uuidv4 } from "uuid";
 import * as path from "path";
 
@@ -53,6 +57,33 @@ export class StallsController {
   async runPaymentCheck() {
     await this.paymentScheduler.handlePaymentRemindersAndForfeits();
     return { success: true, message: "Payment check completed" };
+  }
+
+  @Post("upload-transaction-screenshot")
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(
+    FileInterceptor("screenshot", {
+      storage: diskStorage({
+        destination: "./uploads/stalls",
+        filename: generateFileName,
+      }),
+      fileFilter: imageFilter,
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  async uploadTransactionScreenshot(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { stallId: string; transactionId?: string },
+  ) {
+    const screenshotPath = file
+      ? `/uploads/stalls/${(file as any).filename}`
+      : null;
+    const stall = await this.stallsService.updateTransactionDetails(
+      body.stallId,
+      body.transactionId,
+      screenshotPath,
+    );
+    return { success: true, data: stall };
   }
 
   /**

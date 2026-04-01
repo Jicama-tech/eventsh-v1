@@ -20,6 +20,7 @@ import {
   Loader,
   CheckCircle,
   Calendar,
+  Camera,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrencyhook";
@@ -64,8 +65,14 @@ const TablePaymentPage = () => {
 
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState("");
-  const [discount, setDiscount] = useState(0); // stores discount percentage
+  const [discount, setDiscount] = useState(0);
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+
+  // Bank transfer & transaction verification
+  const [paymentMode, setPaymentMode] = useState<"qr" | "bank">("qr");
+  const [transactionId, setTransactionId] = useState("");
+  const [transactionScreenshot, setTransactionScreenshot] = useState<File | null>(null);
+  const [screenshotPreview, setScreenshotPreview] = useState("");
 
   const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const isAndroid = /Android/i.test(navigator.userAgent);
@@ -353,6 +360,8 @@ const TablePaymentPage = () => {
             paidAmount: amountToPay,
             couponCodeApplied: appliedCoupon || null,
             paymentStatus: "pending",
+            transactionId: transactionId || null,
+            paymentMethod: paymentMode,
           }),
         },
       );
@@ -363,10 +372,26 @@ const TablePaymentPage = () => {
         setPaymentStatus("success");
         setBookingId(result.data?._id);
 
+        // Upload transaction screenshot if provided
+        if (transactionScreenshot && result.data?._id) {
+          try {
+            const ssFormData = new FormData();
+            ssFormData.append("stallId", result.data._id);
+            ssFormData.append("screenshot", transactionScreenshot);
+            if (transactionId) ssFormData.append("transactionId", transactionId);
+            await fetch(`${apiURL}/stalls/upload-transaction-screenshot`, {
+              method: "POST",
+              body: ssFormData,
+            });
+          } catch {
+            // Non-critical
+          }
+        }
+
         toast({
           duration: 5000,
           title: "Success!",
-          description: "Your booking has been confirmed",
+          description: "Your booking has been submitted. The organizer will confirm your payment.",
         });
 
         // Auto redirect to event page after 3s
@@ -889,16 +914,100 @@ const TablePaymentPage = () => {
                     </div>
                   </RadioGroup>
 
+                  {/* Payment Mode Selector */}
+                  {AmountToBePaid > 0 && organizer?.bankTransferEnabled && (
+                    <div className="mt-4 mb-2">
+                      <p className="text-sm font-semibold text-gray-700 mb-2">Payment Method</p>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => setPaymentMode("qr")}
+                          className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium border-2 transition-all ${paymentMode === "qr" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500"}`}>
+                          QR / UPI Payment
+                        </button>
+                        <button type="button" onClick={() => setPaymentMode("bank")}
+                          className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium border-2 transition-all ${paymentMode === "bank" ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 text-gray-500"}`}>
+                          Bank Transfer
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Bank Transfer Details */}
+                  {paymentMode === "bank" && organizer?.bankTransferEnabled && AmountToBePaid > 0 && (
+                    <div className="mt-4 p-4 border-2 border-green-200 bg-green-50/50 rounded-xl space-y-3">
+                      <p className="font-semibold text-sm text-green-800">Bank Transfer Details</p>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div><span className="text-gray-500">Account Holder:</span><p className="font-medium">{organizer.accountHolderName || "—"}</p></div>
+                        <div><span className="text-gray-500">Bank:</span><p className="font-medium">{organizer.bankName || "—"}</p></div>
+                        <div><span className="text-gray-500">Account No:</span><p className="font-medium font-mono">{organizer.bankAccountNumber || "—"}</p></div>
+                        {organizer.bankIfscCode && <div><span className="text-gray-500">IFSC:</span><p className="font-medium font-mono">{organizer.bankIfscCode}</p></div>}
+                        {organizer.bankSwiftCode && <div><span className="text-gray-500">SWIFT:</span><p className="font-medium font-mono">{organizer.bankSwiftCode}</p></div>}
+                        {organizer.bankBranch && <div><span className="text-gray-500">Branch:</span><p className="font-medium">{organizer.bankBranch}</p></div>}
+                        {organizer.bankBranchCode && <div><span className="text-gray-500">Branch Code:</span><p className="font-medium">{organizer.bankBranchCode}</p></div>}
+                      </div>
+                      <div className="text-center pt-2 border-t border-green-200">
+                        <p className="text-lg font-bold text-green-700">Transfer Amount: {formatPrice(AmountToBePaid)}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Transaction Verification */}
+                  {AmountToBePaid > 0 && (showQR || paymentMode === "bank") && (
+                    <div className="mt-4 p-4 border rounded-xl bg-gray-50/50 space-y-3">
+                      <p className="font-semibold text-sm text-gray-700">Payment Verification</p>
+                      <p className="text-xs text-gray-500">Provide your transaction details so the organizer can verify your payment.</p>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-xs font-medium text-gray-600 block mb-1">Transaction ID / Reference Number</label>
+                          <Input
+                            value={transactionId}
+                            onChange={(e) => setTransactionId(e.target.value)}
+                            placeholder="e.g. UPI123456789 or bank ref number"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-600 block mb-1">Transaction Screenshot</label>
+                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-3">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  setTransactionScreenshot(file);
+                                  setScreenshotPreview(URL.createObjectURL(file));
+                                }
+                              }}
+                              className="hidden"
+                              id="tx-screenshot"
+                            />
+                            {screenshotPreview ? (
+                              <div className="relative">
+                                <img src={screenshotPreview} alt="Screenshot" className="w-full max-h-40 object-contain rounded" />
+                                <button type="button" onClick={() => { setTransactionScreenshot(null); setScreenshotPreview(""); }}
+                                  className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center">✕</button>
+                              </div>
+                            ) : (
+                              <label htmlFor="tx-screenshot" className="flex flex-col items-center cursor-pointer py-2">
+                                <Camera className="h-6 w-6 text-gray-400 mb-1" />
+                                <span className="text-xs text-gray-500">Upload payment screenshot</span>
+                              </label>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="mt-6">
                     {AmountToBePaid > 0 ? (
-                      !showQR && (
+                      paymentMode === "qr" && !showQR ? (
                         <Button
                           className="w-full py-6 text-lg font-bold bg-blue-600 hover:bg-blue-700"
                           onClick={() => setShowQR(true)}
                         >
                           Generate QR for {formatPrice(AmountToBePaid)}
                         </Button>
-                      )
+                      ) : null
                     ) : (
                       <div className="p-4 bg-green-50 border-2 border-green-200 rounded-xl text-center">
                         <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-2" />

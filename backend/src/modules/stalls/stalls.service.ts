@@ -367,6 +367,9 @@ export class StallsService {
             status: "Processing",
             selectionDate: new Date(),
             notes: selectDto.notes || stall.notes,
+            transactionId: selectDto.transactionId || null,
+            transactionScreenshot: selectDto.transactionScreenshot || null,
+            paymentMethod: selectDto.paymentMethod || null,
           },
           { new: true },
         )
@@ -1699,6 +1702,21 @@ Thank you for choosing Eventsh! 🎊`;
         data: null,
       };
     }
+  }
+
+  async updateTransactionDetails(
+    stallId: string,
+    transactionId?: string,
+    transactionScreenshot?: string,
+  ) {
+    if (!Types.ObjectId.isValid(stallId)) {
+      throw new BadRequestException("Invalid stall ID");
+    }
+    const updateData: any = {};
+    if (transactionId) updateData.transactionId = transactionId;
+    if (transactionScreenshot) updateData.transactionScreenshot = transactionScreenshot;
+
+    return this.stallModel.findByIdAndUpdate(stallId, updateData, { new: true });
   }
 
   async remove(id: string) {

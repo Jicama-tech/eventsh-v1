@@ -169,6 +169,19 @@ export class Organizer {
   @Prop({ default: false })
   dynamicQR: boolean;
 
+  // --- Bank Transfer Details ---
+  @Prop({ default: false })
+  bankTransferEnabled: boolean;
+
+  @Prop()
+  bankSwiftCode: string;
+
+  @Prop()
+  bankBranchCode: string;
+
+  @Prop()
+  bankBranch: string;
+
   // --- Settings ---
   @Prop({
     type: String,

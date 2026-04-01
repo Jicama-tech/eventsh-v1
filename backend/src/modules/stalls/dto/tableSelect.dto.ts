@@ -90,4 +90,16 @@ export class SelectTablesAndAddOnsDto {
   @IsOptional()
   @IsString()
   paymentStatus?: string;
+
+  @IsOptional()
+  @IsString()
+  transactionId?: string;
+
+  @IsOptional()
+  @IsString()
+  transactionScreenshot?: string;
+
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
 }

@@ -127,6 +127,39 @@ export class UpdateOrganizerDto {
   @IsBoolean()
   @IsOptional()
   @Transform(({ value }) => value === "true" || value === true)
+  bankTransferEnabled?: boolean;
+
+  @IsString()
+  @IsOptional()
+  bankAccountNumber?: string;
+
+  @IsString()
+  @IsOptional()
+  bankIfscCode?: string;
+
+  @IsString()
+  @IsOptional()
+  bankName?: string;
+
+  @IsString()
+  @IsOptional()
+  accountHolderName?: string;
+
+  @IsString()
+  @IsOptional()
+  bankSwiftCode?: string;
+
+  @IsString()
+  @IsOptional()
+  bankBranchCode?: string;
+
+  @IsString()
+  @IsOptional()
+  bankBranch?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value === "true" || value === true)
   hasDocVerification?: boolean;
 
   @IsEnum(ReceiptType, {
