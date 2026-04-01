@@ -1327,6 +1327,32 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                 </Card>
               </div>
 
+              {/* Transaction Details */}
+              {(stallRequest.transactionId || stallRequest.transactionScreenshot) && (
+                <Card className="border-amber-200 bg-amber-50/50">
+                  <CardContent className="p-4 space-y-3">
+                    <p className="font-semibold text-sm text-amber-900">Transaction Details from Vendor</p>
+                    {stallRequest.transactionId && (
+                      <div>
+                        <Label className="text-xs text-amber-700">Transaction ID</Label>
+                        <p className="font-mono font-bold text-sm bg-white rounded px-3 py-1.5 border border-amber-200 mt-1">{stallRequest.transactionId}</p>
+                      </div>
+                    )}
+                    {stallRequest.transactionScreenshot && (
+                      <div>
+                        <Label className="text-xs text-amber-700">Payment Screenshot</Label>
+                        <a href={`${__API_URL__}${stallRequest.transactionScreenshot}`} target="_blank" rel="noopener noreferrer">
+                          <img src={`${__API_URL__}${stallRequest.transactionScreenshot}`} alt="Transaction" className="max-w-xs max-h-60 rounded-lg border border-amber-200 mt-1 hover:shadow-md transition-shadow" />
+                        </a>
+                      </div>
+                    )}
+                    {stallRequest.paymentMethod && (
+                      <p className="text-xs text-amber-700">Method: <span className="font-semibold">{stallRequest.paymentMethod === "bank" ? "Bank Transfer" : "QR / UPI"}</span></p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Shopkeeper Info */}
               <Card>
                 <CardHeader>

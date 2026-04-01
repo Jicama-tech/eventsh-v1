@@ -6725,33 +6725,28 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
                     </div>
                   ) : (
-                    <div className="bg-[#f8fafc] rounded-lg border-2 border-gray-200 w-full overflow-auto">
+                    <div
+                      className="bg-[#f8fafc] rounded-lg border-2 border-gray-200 w-full overflow-auto"
+                      style={{ maxHeight: "60vh" }}
+                    >
                       <div
                         ref={venueContainerRef}
-                        className="relative w-full"
+                        className="relative mx-auto"
                         style={{
-                          height: `${
-                            (eventData?.venueConfig?.[currentLayoutIndex]
-                              ?.height || 500) *
-                              dynamicScale +
-                            80
-                          }px`,
-                          minHeight: "350px",
+                          width: `${eventData?.venueConfig?.[currentLayoutIndex]?.width || 800}px`,
+                          height: `${eventData?.venueConfig?.[currentLayoutIndex]?.height || 500}px`,
+                          minWidth: `${eventData?.venueConfig?.[currentLayoutIndex]?.width || 800}px`,
                         }}
                       >
                         <div
-                          className="absolute transition-transform duration-200 shadow-sm border border-gray-300"
+                          className="relative shadow-sm border border-gray-300"
                           style={{
-                            width: `${eventData?.venueConfig?.[currentLayoutIndex]?.width || 800}px`,
-                            height: `${eventData?.venueConfig?.[currentLayoutIndex]?.height || 500}px`,
-                            transform: `scale(${dynamicScale})`,
-                            transformOrigin: "top left",
-                            top: "20px",
-                            left: "20px",
+                            width: "100%",
+                            height: "100%",
                             backgroundImage:
-                              "linear-gradient(to right, #cbd5e1 1px, transparent 1px), linear-gradient(to bottom, #cbd5e1 1px, transparent 1px)",
+                              "linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)",
                             backgroundSize: `${eventData?.venueConfig?.[currentLayoutIndex]?.gridSize || 40}px ${eventData?.venueConfig?.[currentLayoutIndex]?.gridSize || 40}px`,
-                            backgroundColor: "#f1f5f9",
+                            backgroundColor: "#ffffff",
                           }}
                         >
                           {/* Main Stage */}

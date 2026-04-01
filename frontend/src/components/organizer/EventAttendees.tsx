@@ -2193,6 +2193,12 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                   </Button>
                                 )}
 
+                              {(stall.transactionId || stall.transactionScreenshot) && stall.paymentStatus !== "Paid" && (
+                                <Badge className="bg-amber-100 text-amber-700 text-[10px]">
+                                  TX Proof
+                                </Badge>
+                              )}
+
                               {stall.paymentStatus === "Paid" &&
                                 stall.status === "Completed" &&
                                 !stall.hasCheckedIn && (
@@ -2276,6 +2282,49 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                         Confirm Payment
                       </Button>
                     </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Transaction Verification Details */}
+              {(stallRequest.transactionId || stallRequest.transactionScreenshot) && (
+                <Card className="border-amber-200 bg-amber-50/50">
+                  <CardContent className="p-4 space-y-3">
+                    <p className="font-semibold text-sm text-amber-900 flex items-center gap-2">
+                      <CreditCard className="h-4 w-4" />
+                      Transaction Details from Vendor
+                    </p>
+                    {stallRequest.transactionId && (
+                      <div>
+                        <p className="text-xs text-amber-700">Transaction ID / Reference</p>
+                        <p className="font-mono font-bold text-sm text-gray-800 bg-white rounded px-3 py-1.5 border border-amber-200 mt-1">
+                          {stallRequest.transactionId}
+                        </p>
+                      </div>
+                    )}
+                    {stallRequest.transactionScreenshot && (
+                      <div>
+                        <p className="text-xs text-amber-700 mb-1">Payment Screenshot</p>
+                        <a
+                          href={`${__API_URL__}${stallRequest.transactionScreenshot}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block"
+                        >
+                          <img
+                            src={`${__API_URL__}${stallRequest.transactionScreenshot}`}
+                            alt="Transaction Screenshot"
+                            className="max-w-xs max-h-60 rounded-lg border border-amber-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                          />
+                          <p className="text-[10px] text-amber-600 mt-1">Click to view full size</p>
+                        </a>
+                      </div>
+                    )}
+                    {stallRequest.paymentMethod && (
+                      <p className="text-xs text-amber-700">
+                        Payment Method: <span className="font-semibold capitalize">{stallRequest.paymentMethod === "bank" ? "Bank Transfer" : "QR / UPI Payment"}</span>
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               )}
