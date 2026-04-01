@@ -677,6 +677,16 @@ export class OrganizersService {
       shopClosedFromDate?: Date; // Accept string from FormData
       shopClosedToDate?: Date; // Accept string from FormData
       country?: string; // IN/SG
+      bankTransferEnabled?: boolean | string;
+      bankName?: string;
+      bankAccountNumber?: string;
+      bankIfscCode?: string;
+      bankSwiftCode?: string;
+      bankBranchCode?: string;
+      bankBranch?: string;
+      accountHolderName?: string;
+      bankAccountType?: string;
+      payNowId?: string;
     },
     paymentQrPublicUrl?: string | null,
   ) {
@@ -770,6 +780,22 @@ export class OrganizersService {
 
       // ✅ NEW: Country field
       if (body.country !== undefined) update.country = body.country;
+
+      // ✅ Bank Transfer fields
+      if (body.bankTransferEnabled !== undefined)
+        update.bankTransferEnabled =
+          typeof body.bankTransferEnabled === "boolean"
+            ? body.bankTransferEnabled
+            : body.bankTransferEnabled === "true";
+      if (body.bankName !== undefined) update.bankName = body.bankName;
+      if (body.bankAccountNumber !== undefined) update.bankAccountNumber = body.bankAccountNumber;
+      if (body.bankIfscCode !== undefined) update.bankIfscCode = body.bankIfscCode;
+      if (body.bankSwiftCode !== undefined) update.bankSwiftCode = body.bankSwiftCode;
+      if (body.bankBranchCode !== undefined) update.bankBranchCode = body.bankBranchCode;
+      if (body.bankBranch !== undefined) update.bankBranch = body.bankBranch;
+      if (body.accountHolderName !== undefined) update.accountHolderName = body.accountHolderName;
+      if (body.bankAccountType !== undefined) update.bankAccountType = body.bankAccountType;
+      if (body.payNowId !== undefined) update.payNowId = body.payNowId;
 
       if (body.receiptType !== undefined) {
         const allowedValues = Object.values(ReceiptType);
