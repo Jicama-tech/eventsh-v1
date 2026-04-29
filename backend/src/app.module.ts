@@ -21,6 +21,8 @@ import { CouponModule } from "./modules/coupon/coupon.module";
 import { OperatorsModule } from "./modules/operators/operators.module";
 import { SpeakerRequestsModule } from "./modules/speaker-requests/speaker-requests.module";
 import { RoundTableBookingsModule } from "./modules/round-table-bookings/round-table-bookings.module";
+import { AgentsModule } from "./modules/agents/agents.module";
+import { ChatbotModule } from "./modules/chatbot/chatbot.module";
 
 @Module({
   imports: [
@@ -54,6 +56,8 @@ import { RoundTableBookingsModule } from "./modules/round-table-bookings/round-t
     OperatorsModule,
     SpeakerRequestsModule,
     RoundTableBookingsModule,
+    AgentsModule,
+    ChatbotModule,
   ],
 })
 export class AppModule {}

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useCountry } from "@/hooks/useCountry";
+import { useSubscription } from "@/hooks/useSubscription";
+import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -23,10 +25,14 @@ import {
   Mic2,
   HelpCircle,
   Circle,
+  Bot,
 } from "lucide-react";
 import { lazy, Suspense } from "react";
 import { EventfrontTemplate } from "./EventfrontTemplate";
 import DashboardOverview from "@/components/organizer/DashboardOverview";
+import { OrganizerAnalyticsCharts } from "@/components/organizer/OrganizerAnalyticsCharts";
+import { ChatbotWidget } from "@/components/organizer/ChatbotWidget";
+import { ModuleGate } from "@/components/ui/ModuleGate";
 import { jwtDecode } from "jwt-decode";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrencyhook";
@@ -156,10 +162,30 @@ export function OrganizerDashboard({
   const { toast } = useToast();
   const { country, setCountry } = useCountry();
   const apiURL = __API_URL__;
+  const { isModuleEnabled, subscription } = useSubscription();
+
+  // Read operator restrictions from JWT (set when an operator logs in via WhatsApp).
+  const operatorAccessTabs: string[] = (() => {
+    try {
+      const token = sessionStorage.getItem("token");
+      if (!token) return [];
+      const decoded: any = jwtDecode(token);
+      if (decoded.operatorId && Array.isArray(decoded.accessTabs)) {
+        return decoded.accessTabs as string[];
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  })();
+  const isOperator = operatorAccessTabs.length > 0;
+  const isTabAllowedForOperator = (tabId: string) =>
+    !isOperator || operatorAccessTabs.includes(tabId);
 
   // UI State
   const [organizerId, setOrganizerId] = useState("");
-  const [activeTab, setActiveTab] = useState("dashboard");
+  // Chatbot is the landing tab — organizer sees AI panel first.
+  const [activeTab, setActiveTab] = useState("chatbot");
   const [selectedRTEventId, setSelectedRTEventId] = useState<string | null>(null);
   const [showEventfront, setShowEventfront] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -561,16 +587,15 @@ export function OrganizerDashboard({
   // --- Configuration ---
 
   const navigationItems = [
-    { id: "dashboard", label: "Dashboard", icon: Store },
-    { id: "eventAttendees", label: "Attendees", icon: Users },
-    { id: "speakerRequests", label: "Speaker Requests", icon: Mic2 },
-    // { id: "shopkeepers", label: "Shopkeepers", icon: UserCheck },
-    // { id: "tickets", label: "Sales", icon: Ticket },
-    { id: "users", label: "Exhibitors/Visitors", icon: Users },
-    { id: "roundTableBookings", label: "Round Tables", icon: Circle },
-    { id: "events", label: "Events", icon: CalendarDays },
-    { id: "storefront", label: "Eventfront", icon: Globe, isAction: true },
-    { id: "settings", label: "Settings", icon: Settings },
+    { id: "chatbot", label: "AI Assistant", icon: Bot, moduleKey: null },
+    { id: "dashboard", label: "Dashboard", icon: Store, moduleKey: null },
+    { id: "eventAttendees", label: "Attendees", icon: Users, moduleKey: "events" },
+    { id: "speakerRequests", label: "Speaker Requests", icon: Mic2, moduleKey: "speakerRequests" },
+    { id: "users", label: "Exhibitors/Visitors", icon: Users, moduleKey: "stalls" },
+    { id: "roundTableBookings", label: "Round Tables", icon: Circle, moduleKey: "roundTableBookings" },
+    { id: "events", label: "Events", icon: CalendarDays, moduleKey: "events" },
+    { id: "storefront", label: "Eventfront", icon: Globe, isAction: true, moduleKey: "storefront" },
+    { id: "settings", label: "Settings", icon: Settings, moduleKey: null },
   ];
 
   if (showPreview) {
@@ -654,40 +679,81 @@ export function OrganizerDashboard({
         >
           <div className="h-full flex flex-col">
             <nav className="p-3 sm:p-4 space-y-1 sm:space-y-2 flex-1 overflow-y-auto">
-              {navigationItems.map((item) => (
-                <Button
-                  key={item.id}
-                  variant={activeTab === item.id ? "default" : "buttonOutline"}
-                  className="w-full justify-start text-sm"
-                  onClick={() => {
-                    if (item.id === "storefront") {
-                      handleViewStorefront();
-                    } else {
-                      handleTabChange(item.id);
+              {navigationItems
+                .filter((item) => isTabAllowedForOperator(item.id))
+                .map((item) => {
+                // Items without a moduleKey (Dashboard, Settings) are always available.
+                const locked =
+                  !!item.moduleKey && !isModuleEnabled(item.moduleKey);
+                return (
+                  <Button
+                    key={item.id}
+                    variant={
+                      activeTab === item.id ? "default" : "buttonOutline"
                     }
-                  }}
-                  disabled={item.id === "storefront" && loading}
-                >
-                  <item.icon className="h-4 w-4 mr-2 flex-shrink-0" />
-                  <span className="truncate">
-                    {item.id === "storefront" && loading
-                      ? "Loading..."
-                      : item.label}
-                  </span>
-                </Button>
-              ))}
+                    className={`w-full justify-start text-sm ${locked ? "opacity-60" : ""}`}
+                    onClick={() => {
+                      if (item.id === "storefront") {
+                        handleViewStorefront();
+                      } else {
+                        handleTabChange(item.id);
+                      }
+                    }}
+                    disabled={item.id === "storefront" && loading}
+                    title={locked ? "Upgrade your plan to unlock" : undefined}
+                  >
+                    <item.icon className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span className="truncate flex-1 text-left">
+                      {item.id === "storefront" && loading
+                        ? "Loading..."
+                        : item.label}
+                    </span>
+                    {locked && (
+                      <Lock className="h-3 w-3 ml-1 text-muted-foreground" />
+                    )}
+                  </Button>
+                );
+              })}
             </nav>
           </div>
         </aside>
 
         {/* Main Content - Scrollable */}
-        <main className="flex-1 overflow-y-auto">
-          <div className="p-3 sm:p-4 lg:p-6">
+        <main className="flex-1 overflow-hidden flex flex-col">
+          <div
+            className={
+              activeTab === "chatbot"
+                ? "flex-1 overflow-hidden"
+                : "flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6"
+            }
+          >
             <Tabs
               value={activeTab}
               onValueChange={setActiveTab}
-              className="w-full"
+              className={activeTab === "chatbot" ? "h-full" : "w-full"}
             >
+              {/* AI Assistant — landing tab. Fills the entire main area. */}
+              <TabsContent
+                value="chatbot"
+                className="mt-0 h-full data-[state=inactive]:hidden"
+              >
+                <ChatbotWidget
+                  mode="page"
+                  navItems={navigationItems
+                    .filter((n) => n.id !== "chatbot")
+                    .filter((n) => isTabAllowedForOperator(n.id))
+                    .map((n) => ({
+                      id: n.id,
+                      label: n.label,
+                      icon: n.icon,
+                    }))}
+                  onNavigate={(tab) => {
+                    if (tab === "storefront") handleViewStorefront();
+                    else handleTabChange(tab);
+                  }}
+                />
+              </TabsContent>
+
               <TabsContent value="dashboard" className="mt-0">
                 <div className="space-y-4 sm:space-y-6">
                   {/* Quick Actions */}
@@ -764,15 +830,20 @@ export function OrganizerDashboard({
                     onViewEvent={onViewEvent}
                     handleEditEvent={handleEditEvent}
                   />
+
+                  {/* Analytics charts (Recharts) */}
+                  <OrganizerAnalyticsCharts />
                 </div>
               </TabsContent>
 
               <TabsContent value="events" className="mt-0">
-                <Suspense fallback={<TabLoader />}>
-                  <div className="space-y-4">
-                    <MyEvents />
-                  </div>
-                </Suspense>
+                <ModuleGate moduleKey="events" hideWhenLocked>
+                  <Suspense fallback={<TabLoader />}>
+                    <div className="space-y-4">
+                      <MyEvents />
+                    </div>
+                  </Suspense>
+                </ModuleGate>
               </TabsContent>
 
               <TabsContent value="users" className="mt-0">
@@ -792,20 +863,22 @@ export function OrganizerDashboard({
               </TabsContent>
 
               <TabsContent value="speakerRequests" className="mt-0">
-                <Suspense fallback={<TabLoader />}>
-                  <div className="space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                      <h2 className="text-2xl sm:text-3xl font-bold">
-                        Speaker Requests
-                      </h2>
-                      <p className="text-muted-foreground">
-                        Manage speaker applications for your events and track
-                        session assignments
-                      </p>
+                <ModuleGate moduleKey="speakerRequests" hideWhenLocked>
+                  <Suspense fallback={<TabLoader />}>
+                    <div className="space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <h2 className="text-2xl sm:text-3xl font-bold">
+                          Speaker Requests
+                        </h2>
+                        <p className="text-muted-foreground">
+                          Manage speaker applications for your events and track
+                          session assignments
+                        </p>
+                      </div>
+                      <SpeakerRequests organizerId={organizerId} />
                     </div>
-                    <SpeakerRequests organizerId={organizerId} />
-                  </div>
-                </Suspense>
+                  </Suspense>
+                </ModuleGate>
               </TabsContent>
 
               <TabsContent value="shopkeepers" className="mt-0">
@@ -848,9 +921,11 @@ export function OrganizerDashboard({
               </TabsContent>
 
               <TabsContent value="roundTableBookings" className="mt-0">
-                <Suspense fallback={<TabLoader />}>
-                  <RoundTableBookingsTab apiURL={apiURL} />
-                </Suspense>
+                <ModuleGate moduleKey="roundTableBookings" hideWhenLocked>
+                  <Suspense fallback={<TabLoader />}>
+                    <RoundTableBookingsTab apiURL={apiURL} />
+                  </Suspense>
+                </ModuleGate>
               </TabsContent>
 
               <TabsContent value="settings" className="mt-0">
@@ -862,14 +937,16 @@ export function OrganizerDashboard({
               </TabsContent>
 
               <TabsContent value="storefront" className="mt-0 outline-none">
-                <Suspense fallback={<TabLoader />}>
-                  <div className="space-y-4">
-                    <OrganizerStorefrontCustomizer
-                      onBack={() => setActiveTab("dashboard")}
-                      onSave={() => setShowPreview(true)}
-                    />
-                  </div>
-                </Suspense>
+                <ModuleGate moduleKey="storefront" hideWhenLocked>
+                  <Suspense fallback={<TabLoader />}>
+                    <div className="space-y-4">
+                      <OrganizerStorefrontCustomizer
+                        onBack={() => setActiveTab("dashboard")}
+                        onSave={() => setShowPreview(true)}
+                      />
+                    </div>
+                  </Suspense>
+                </ModuleGate>
               </TabsContent>
 
               <TabsContent value="help" className="mt-0">
@@ -959,6 +1036,20 @@ export function OrganizerDashboard({
           />
         )}
       </Suspense>
+
+      {/* Floating EventSH AI bubble — only on non-chatbot tabs (chatbot tab has the full panel) */}
+      {activeTab !== "chatbot" && (
+        <ChatbotWidget
+          navItems={navigationItems
+            .filter((n) => n.id !== "chatbot")
+            .filter((n) => isTabAllowedForOperator(n.id))
+            .map((n) => ({ id: n.id, label: n.label, icon: n.icon }))}
+          onNavigate={(tab) => {
+            if (tab === "storefront") handleViewStorefront();
+            else handleTabChange(tab);
+          }}
+        />
+      )}
     </div>
   );
 }

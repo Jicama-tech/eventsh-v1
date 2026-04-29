@@ -4,7 +4,9 @@ import {
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from "@nestjs/common";
+import { Cron, CronExpression } from "@nestjs/schedule";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import {
@@ -33,6 +35,8 @@ import {
 
 @Injectable()
 export class OrganizersService {
+  private readonly logger = new Logger(OrganizersService.name);
+
   constructor(
     @InjectModel(Organizer.name)
     private organizerModel: Model<OrganizerDocument>,
@@ -161,27 +165,74 @@ export class OrganizersService {
   }
 
   async registerOrganizer(dto: CreateOrganizerDto) {
-    const existing = await this.organizerModel.findOne({ email: dto.email });
+    const normalizedEmail = this.normalizeEmail(dto.email);
+    const existing = await this.organizerModel.findOne({
+      email: normalizedEmail,
+    });
     if (existing)
       throw new ConflictException("Organizer with this email already exists");
 
+    // 1. Resolve referral attribution (optional)
+    let provider = "self";
+    let providerId: string | null = null;
+    if (dto.agentReferralCode) {
+      const agent = await this.organizerModel.db
+        .collection("eventsh_agents")
+        .findOne({ referralCode: dto.agentReferralCode, isActive: true });
+      if (agent) {
+        provider = "Agent";
+        providerId = agent._id.toString();
+      }
+    }
+
+    // 2. Find default Organizer plan and auto-assign with expiry.
+    const defaultPlan =
+      (await this.planModel.findOne({
+        moduleType: "Organizer",
+        isDefault: true,
+        isActive: true,
+      })) ||
+      (await this.planModel.findOne({
+        moduleType: "Organizer",
+        planName: { $regex: /^starter/i },
+        isActive: true,
+      }));
+
+    const subscriptionFields = defaultPlan
+      ? {
+          subscribed: true,
+          planId: defaultPlan._id,
+          planStartDate: new Date(),
+          planExpiryDate: new Date(
+            Date.now() + defaultPlan.validityInDays * 24 * 60 * 60 * 1000,
+          ),
+          pricePaid: defaultPlan.price.toString(),
+        }
+      : {};
+
+    // 3. Create organizer auto-approved (no manual gate).
+    const { agentReferralCode, ...rest } = dto;
     const organizer = await new this.organizerModel({
-      ...dto,
-      status: "pending",
-      approved: false,
+      ...rest,
+      email: normalizedEmail,
+      approved: true,
       rejected: false,
+      provider,
+      providerId,
+      ...subscriptionFields,
     }).save();
 
-    await this.mailService.sendApprovalRequestToAdmin({
-      name: dto.name,
-      email: dto.email,
-      role: "organizer",
-    });
-    await this.mailService.sendConfirmationToUser({
-      name: dto.name,
-      email: dto.email,
-      role: "organizer",
-    });
+    try {
+      await this.mailService.sendOrganizerWelcome({
+        name: dto.name,
+        email: normalizedEmail,
+        organizationName: dto.organizationName,
+        planName: defaultPlan?.planName || null,
+        validityInDays: defaultPlan?.validityInDays || null,
+      });
+    } catch {
+      // Email failures shouldn't block registration.
+    }
 
     return organizer;
   }
@@ -304,6 +355,8 @@ export class OrganizersService {
         name: organizer.name,
         email: organizer.email,
         sub: organizer._id,
+        country: organizer.country,
+        organizationName: organizer.organizationName,
         roles: ["organizer"],
       };
 
@@ -511,6 +564,7 @@ export class OrganizersService {
           email: organizer.email,
           sub: organizer._id.toString(),
           country: organizer.country,
+          organizationName: organizer.organizationName,
           roles: ["organizer"],
         };
       } else {
@@ -531,7 +585,9 @@ export class OrganizersService {
           email: op.email ?? "",
           sub: parentOrg._id.toString(),
           operatorId: op._id.toString(),
+          accessTabs: (op as any).accessTabs || [],
           country: parentOrg.country,
+          organizationName: parentOrg.organizationName,
           roles: ["organizer"],
         };
       }
@@ -850,6 +906,297 @@ export class OrganizersService {
     }
   }
 
+  // 7-day grace window after expiry — kioscart parity.
+  private readonly GRACE_PERIOD_DAYS = 7;
+
+  /**
+   * Daily 09:00 server-time job: send a warning email to any organizer whose
+   * plan expires in exactly 3 days. Runs once a day so each organizer gets at
+   * most one warning per cycle.
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_9AM)
+  async sendDailyExpiryWarnings() {
+    try {
+      const DAY = 24 * 60 * 60 * 1000;
+      const now = Date.now();
+      const targetWindowStart = new Date(now + 3 * DAY);
+      const targetWindowEnd = new Date(now + 4 * DAY);
+
+      const expiring = await this.organizerModel
+        .find({
+          subscribed: true,
+          planExpiryDate: { $gte: targetWindowStart, $lt: targetWindowEnd },
+        })
+        .lean();
+
+      for (const org of expiring as any[]) {
+        try {
+          const plan = org.planId
+            ? await this.planModel.findById(org.planId).lean()
+            : null;
+          if (!plan) continue;
+          const daysLeft = Math.ceil(
+            (new Date(org.planExpiryDate).getTime() - now) / DAY,
+          );
+          await this.mailService.sendPlanExpiryWarning({
+            name: org.name,
+            email: org.email,
+            organizationName: org.organizationName,
+            planName: plan.planName,
+            daysLeft,
+            expiryDate: org.planExpiryDate,
+          });
+        } catch (err) {
+          this.logger.warn(
+            `Failed to send expiry warning to ${org.email}: ${err}`,
+          );
+        }
+      }
+      this.logger.log(
+        `Sent expiry warnings to ${expiring.length} organizers.`,
+      );
+    } catch (err) {
+      this.logger.error("Expiry warning cron failed", err as any);
+    }
+  }
+
+  // Per-organizer analytics for the dashboard charts: revenue trend, ticket
+  // sales over time, top events. 30-day window.
+  async getAnalytics(id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException("Invalid organizer id");
+    }
+    const orgObjId = new Types.ObjectId(id);
+    // Look up the organizer's country to attach currency context — frontend
+    // (and chatbot) can use this for proper money formatting.
+    const orgForCurrency = await this.organizerModel
+      .findById(orgObjId)
+      .select("country")
+      .lean();
+    const country = (orgForCurrency as any)?.country || "US";
+    const CURRENCY_MAP: Record<
+      string,
+      { symbol: string; code: string; locale: string }
+    > = {
+      IN: { symbol: "₹", code: "INR", locale: "en-IN" },
+      SG: { symbol: "S$", code: "SGD", locale: "en-SG" },
+      US: { symbol: "$", code: "USD", locale: "en-US" },
+      GB: { symbol: "£", code: "GBP", locale: "en-GB" },
+      AE: { symbol: "AED ", code: "AED", locale: "en-AE" },
+      AU: { symbol: "A$", code: "AUD", locale: "en-AU" },
+      EU: { symbol: "€", code: "EUR", locale: "en-IE" },
+    };
+    const currency =
+      CURRENCY_MAP[String(country).toUpperCase()] || CURRENCY_MAP.US;
+    const DAY = 24 * 60 * 60 * 1000;
+    const now = new Date();
+    const startOfWindow = new Date(now.getTime() - 30 * DAY);
+
+    // Need raw ticket model — already injected via OrganizersModule?
+    // We don't currently inject TicketModel; load via raw collection.
+    const ticketsCol = this.organizerModel.db.collection("tickets");
+
+    const [dailyRevenue, topEvents, totalsAgg, statusBreakdown] =
+      await Promise.all([
+        ticketsCol
+          .aggregate([
+            {
+              $match: {
+                organizerId: orgObjId,
+                purchaseDate: { $gte: startOfWindow },
+              },
+            },
+            {
+              $group: {
+                _id: {
+                  $dateToString: {
+                    format: "%Y-%m-%d",
+                    date: "$purchaseDate",
+                  },
+                },
+                tickets: { $sum: 1 },
+                revenue: {
+                  $sum: {
+                    $cond: ["$paymentConfirmed", "$totalAmount", 0],
+                  },
+                },
+              },
+            },
+            { $sort: { _id: 1 } },
+          ])
+          .toArray(),
+        ticketsCol
+          .aggregate([
+            { $match: { organizerId: orgObjId } },
+            {
+              $group: {
+                _id: "$eventId",
+                eventTitle: { $first: "$eventTitle" },
+                tickets: { $sum: 1 },
+                revenue: {
+                  $sum: {
+                    $cond: ["$paymentConfirmed", "$totalAmount", 0],
+                  },
+                },
+              },
+            },
+            { $sort: { revenue: -1 } },
+            { $limit: 5 },
+          ])
+          .toArray(),
+        ticketsCol
+          .aggregate([
+            { $match: { organizerId: orgObjId } },
+            {
+              $group: {
+                _id: null,
+                tickets: { $sum: 1 },
+                revenue: {
+                  $sum: {
+                    $cond: ["$paymentConfirmed", "$totalAmount", 0],
+                  },
+                },
+              },
+            },
+          ])
+          .toArray(),
+        ticketsCol
+          .aggregate([
+            { $match: { organizerId: orgObjId } },
+            { $group: { _id: "$status", count: { $sum: 1 } } },
+          ])
+          .toArray(),
+      ]);
+
+    // Ensure 30 contiguous days, filling 0s for missing dates.
+    const trend: { date: string; tickets: number; revenue: number }[] = [];
+    const map = new Map<
+      string,
+      { tickets: number; revenue: number }
+    >(
+      dailyRevenue.map((d: any) => [
+        d._id,
+        { tickets: d.tickets, revenue: d.revenue || 0 },
+      ]),
+    );
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * DAY);
+      const key = d.toISOString().slice(0, 10);
+      const v = map.get(key) || { tickets: 0, revenue: 0 };
+      trend.push({ date: key, tickets: v.tickets, revenue: v.revenue });
+    }
+
+    const totalEvents = await this.eventModel.countDocuments({
+      organizer: orgObjId,
+    });
+
+    const fmt = (n: number) =>
+      `${currency.symbol}${new Intl.NumberFormat(currency.locale, { maximumFractionDigits: 0 }).format(Number.isFinite(n) ? n : 0)}`;
+    const totalRev = totalsAgg[0]?.revenue || 0;
+    return {
+      window: { from: startOfWindow, to: now, days: 30 },
+      currency,
+      country,
+      totals: {
+        events: totalEvents,
+        tickets: totalsAgg[0]?.tickets || 0,
+        revenue: totalRev,
+        revenueFormatted: fmt(totalRev),
+      },
+      revenueTrend: trend.map((t: any) => ({
+        ...t,
+        revenueFormatted: fmt(t.revenue),
+      })),
+      topEvents: topEvents.map((e: any) => ({
+        eventId: String(e._id),
+        eventTitle: e.eventTitle || "Untitled",
+        tickets: e.tickets,
+        revenue: e.revenue || 0,
+        revenueFormatted: fmt(e.revenue || 0),
+      })),
+      statusBreakdown: statusBreakdown.map((s: any) => ({
+        status: s._id || "unknown",
+        count: s.count,
+      })),
+    };
+  }
+
+  async getSubscriptionDetail(id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException("Invalid organizer id");
+    }
+    const organizer = await this.organizerModel.findById(id).lean();
+    if (!organizer) throw new NotFoundException("Organizer not found");
+
+    let plan = organizer.planId
+      ? await this.planModel.findById(organizer.planId).lean()
+      : null;
+
+    // Fallback: if the organizer has no plan, OR their plan has no module
+    // configuration, look up the default plan in eventsh_plans and use that.
+    // This ensures legacy organizers (created before module-gating) and any
+    // edge cases all get sensible module access.
+    const planHasNoModules =
+      !plan ||
+      !(plan as any).modules ||
+      Object.keys((plan as any).modules || {}).length === 0;
+    if (planHasNoModules) {
+      const defaultPlan = await this.planModel
+        .findOne({
+          moduleType: "Organizer",
+          isDefault: true,
+          isActive: true,
+        })
+        .lean();
+      if (defaultPlan) {
+        plan = plan
+          ? // Keep the user's plan name/price/expiry but use default's modules + features
+            { ...plan, modules: (defaultPlan as any).modules, features: defaultPlan.features }
+          : (defaultPlan as any);
+      }
+    }
+
+    const DAY = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const expiry = organizer.planExpiryDate
+      ? new Date(organizer.planExpiryDate).getTime()
+      : 0;
+    const subscribed = !!organizer.subscribed;
+    const isExpired = subscribed && expiry > 0 && expiry < now;
+    const daysLeft = expiry > now ? Math.ceil((expiry - now) / DAY) : 0;
+
+    // Grace window: from expiry to expiry + 7 days. Plan is "expired" but
+    // organizer keeps access until grace runs out.
+    const graceEnd = expiry > 0 ? expiry + this.GRACE_PERIOD_DAYS * DAY : 0;
+    const inGracePeriod = isExpired && graceEnd > now;
+    const graceDaysLeft = inGracePeriod
+      ? Math.ceil((graceEnd - now) / DAY)
+      : 0;
+    const fullyLapsed = isExpired && !inGracePeriod;
+    const planActive = subscribed && (!isExpired || inGracePeriod);
+
+    return {
+      subscribed,
+      planId: organizer.planId ? String(organizer.planId) : null,
+      planName: plan?.planName || null,
+      pricePaid: organizer.pricePaid || null,
+      validityInDays: plan?.validityInDays || null,
+      planStartDate: organizer.planStartDate || null,
+      planExpiryDate: organizer.planExpiryDate || null,
+      isExpired,
+      daysLeft,
+      // Grace window fields (kioscart parity)
+      gracePeriodDays: this.GRACE_PERIOD_DAYS,
+      inGracePeriod,
+      graceDaysLeft,
+      fullyLapsed,
+      planActive,
+      features: plan?.features || [],
+      modules: (plan as any)?.modules || {},
+      description: plan?.description || null,
+    };
+  }
+
   async addSubscriptionPlan(id: string, planSelected: string) {
     try {
       const organizer = await this.organizerModel.findById(id);
@@ -870,22 +1217,21 @@ export class OrganizersService {
       );
       organizer.pricePaid = plan.price.toString();
 
-      let message =
-        `🔄 *Plan Activated*\n\n` +
-        `Dear ${organizer.name},\n\n` +
-        `Your Subscription Plan for *${plan.planName}* has been successfully Activated for *${organizer.organizationName}*.\n\n` +
-        `• Plan Validity: ${plan.validityInDays} days\n` +
-        `• Features Included:\n${plan.features.map((f) => `  - ${f}`).join("\n")}\n\n` +
-        `Thank you for choosing us! We’re excited to support your journey.\n\n` +
-        `Best regards,\n` +
-        `The Eventsh Team`;
-
       await organizer.save();
 
-      // await this.otpService.sendWhatsAppMessage(
-      //   organizer.whatsAppNumber,
-      //   message
-      // );
+      try {
+        await this.mailService.sendPlanPurchaseConfirmation({
+          name: organizer.name,
+          email: organizer.email,
+          organizationName: organizer.organizationName,
+          planName: plan.planName,
+          pricePaid: plan.price.toString(),
+          validityInDays: plan.validityInDays,
+          expiryDate: organizer.planExpiryDate,
+        });
+      } catch {
+        // Email failures shouldn't block plan switch.
+      }
 
       return { message: "Plan Added", data: organizer };
     } catch (error) {
@@ -901,22 +1247,26 @@ export class OrganizersService {
         throw new NotFoundException("Organizer Not Found");
       }
 
+      const previousPlanId = organizer.planId;
       organizer.subscribed = false;
       organizer.planId = null;
-      // organizer.planStartDate = null;
       organizer.planExpiryDate = new Date();
-
-      let message =
-        `🔄 *Subscription Cancelled*\n\n` +
-        `Dear ${organizer.name},\n\n` +
-        `Your Subscription Plan for *${organizer.organizationName}* has been successfully Cancelled.\n\n`;
 
       await organizer.save();
 
-      // await this.otpService.sendWhatsAppMessage(
-      //   organizer.whatsAppNumber,
-      //   message
-      // );
+      try {
+        const previousPlan = previousPlanId
+          ? await this.planModel.findById(previousPlanId).lean()
+          : null;
+        await this.mailService.sendSubscriptionCancelled({
+          name: organizer.name,
+          email: organizer.email,
+          organizationName: organizer.organizationName,
+          planName: previousPlan?.planName || null,
+        });
+      } catch {
+        // Email failures shouldn't block cancellation.
+      }
 
       return { message: "Subscription Cancelled", data: organizer };
     } catch (error) {

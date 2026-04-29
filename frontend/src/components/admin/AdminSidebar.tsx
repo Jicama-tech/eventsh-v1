@@ -6,6 +6,7 @@ import {
   BarChart3,
   DollarSign,
   LogOut,
+  Briefcase,
 } from "lucide-react";
 import {
   Sidebar,
@@ -22,10 +23,11 @@ import {
 
 const navigationItems = [
   { title: "Dashboard", url: "/admin-dashboard", icon: LayoutDashboard },
-  { title: "Users", url: "/admin/users", icon: Users },
-  { title: "Pricing", url: "/admin/pricing", icon: DollarSign },
-  { title: "Analytics", url: "/admin/analytics", icon: BarChart3 },
-  { title: "Settings", url: "/admin/settings", icon: Settings },
+  { title: "Users", url: "/admin-dashboard/users", icon: Users },
+  { title: "Agents", url: "/admin-dashboard/agents", icon: Briefcase },
+  { title: "Pricing", url: "/admin-dashboard/pricing", icon: DollarSign },
+  { title: "Analytics", url: "/admin-dashboard/analytics", icon: BarChart3 },
+  { title: "Settings", url: "/admin-dashboard/settings", icon: Settings },
 ];
 
 interface AdminSidebarProps {

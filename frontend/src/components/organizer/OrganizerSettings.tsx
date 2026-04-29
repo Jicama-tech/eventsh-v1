@@ -137,6 +137,87 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
   const [paymentQrPreview, setPaymentQrPreview] = useState<string | null>(null);
   const apiURL = __API_URL__;
 
+  // --- Subscription tab state ---
+  const [subscription, setSubscription] = useState<any>(null);
+  const [loadingSubscription, setLoadingSubscription] = useState(true);
+  const [changePlanOpen, setChangePlanOpen] = useState(false);
+  const [availablePlans, setAvailablePlans] = useState<any[]>([]);
+  const [loadingPlans, setLoadingPlans] = useState(false);
+  const [switchingPlanId, setSwitchingPlanId] = useState<string | null>(null);
+
+  const loadSubscription = async () => {
+    try {
+      setLoadingSubscription(true);
+      const token = sessionStorage.getItem("token");
+      if (!token) return;
+      const decoded: any = jwtDecode(token);
+      const id = decoded.sub;
+      const res = await fetch(`${apiURL}/organizers/subscription/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setSubscription(await res.json());
+    } catch (err) {
+      console.error("Failed to load subscription:", err);
+    } finally {
+      setLoadingSubscription(false);
+    }
+  };
+
+  const openChangePlan = async () => {
+    setChangePlanOpen(true);
+    setLoadingPlans(true);
+    try {
+      const res = await fetch(`${apiURL}/plans/get-plans?active=true`);
+      if (res.ok) {
+        const data = await res.json();
+        setAvailablePlans(Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      console.error("Failed to load plans:", err);
+    } finally {
+      setLoadingPlans(false);
+    }
+  };
+
+  const switchToPlan = async (planId: string) => {
+    try {
+      setSwitchingPlanId(planId);
+      const token = sessionStorage.getItem("token");
+      if (!token) return;
+      const decoded: any = jwtDecode(token);
+      const id = decoded.sub;
+      const res = await fetch(
+        `${apiURL}/organizers/add-subscription-plan-for-organizer/${id}/plan/${planId}`,
+        {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!res.ok) throw new Error("Failed to switch plan");
+      setChangePlanOpen(false);
+      await loadSubscription();
+      toast({
+        duration: 5000,
+        title: "Plan switched successfully",
+        description: "Your subscription has been updated.",
+      });
+    } catch (err: any) {
+      toast({
+        duration: 5000,
+        title: "Failed to switch plan",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setSwitchingPlanId(null);
+    }
+  };
+
+  useEffect(() => {
+    loadSubscription();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Country codes for WhatsApp
   const [countries, setCountries] = useState<Country[]>([]);
   const [loadingCountries, setLoadingCountries] = useState(true);
@@ -831,11 +912,13 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     operatorCountryCode: string;
     operatorEmail: string;
     operatorLocalNumber: string;
+    accessTabs: string[];
   }>({
     name: "",
     operatorCountryCode: "+91",
     operatorEmail: "",
     operatorLocalNumber: "",
+    accessTabs: [],
   });
   const [isSavingOperators, setIsSavingOperators] = useState(false);
 
@@ -1136,6 +1219,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           name: operatorForm.name,
           whatsAppNumber: fullWhatsApp,
           email: operatorForm.operatorEmail,
+          accessTabs: operatorForm.accessTabs,
         }),
       });
 
@@ -1155,6 +1239,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
         operatorCountryCode: "+91",
         operatorEmail: "",
         operatorLocalNumber: "",
+        accessTabs: [],
       });
       setEditingOperatorIndex(null);
     } catch (err: any) {
@@ -1646,10 +1731,14 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
       </div>
 
       <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="profile" className="flex items-center gap-2">
             <Store className="w-4 h-4" />
             Profile
+          </TabsTrigger>
+          <TabsTrigger value="subscription" className="flex items-center gap-2">
+            <Package className="w-4 h-4" />
+            Subscription
           </TabsTrigger>
           <TabsTrigger value="operator" className="flex items-center gap-2">
             <UserPlus2 className="w-4 h-4" />
@@ -2295,6 +2384,316 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           </Card>
         </TabsContent>
 
+        <TabsContent value="subscription" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="w-5 h-5" />
+                Subscription Plan
+              </CardTitle>
+              <CardDescription>
+                Your current plan and what's included
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingSubscription ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : !subscription?.subscribed ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <ShieldCheck className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p className="text-lg font-medium">No Active Plan</p>
+                  <p className="text-sm mt-1 mb-4">
+                    Choose a plan to get started.
+                  </p>
+                  <Button onClick={openChangePlan}>Browse Plans</Button>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Plan summary banner */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg bg-primary/5 border border-primary/20">
+                    <div>
+                      <h3 className="text-xl font-bold text-primary">
+                        {subscription.planName || "—"}
+                      </h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        ${subscription.pricePaid || 0}
+                        {subscription.validityInDays
+                          ? ` / ${subscription.validityInDays} days`
+                          : ""}
+                      </p>
+                      {subscription.description && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {subscription.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={
+                          subscription.fullyLapsed
+                            ? "destructive"
+                            : subscription.inGracePeriod
+                              ? "destructive"
+                              : "default"
+                        }
+                        className="text-sm px-3 py-1 w-fit"
+                      >
+                        {subscription.inGracePeriod
+                          ? `Grace: ${subscription.graceDaysLeft}d left`
+                          : subscription.fullyLapsed
+                            ? "Expired"
+                            : subscription.daysLeft > 0
+                              ? `${subscription.daysLeft} day${subscription.daysLeft === 1 ? "" : "s"} left`
+                              : "Active"}
+                      </Badge>
+                      <Button size="sm" onClick={openChangePlan}>
+                        Change Plan
+                      </Button>
+                    </div>
+                  </div>
+
+                  {subscription.inGracePeriod && (
+                    <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900">
+                      Your plan expired but you're in a {subscription.gracePeriodDays}-day grace
+                      window — <strong>{subscription.graceDaysLeft} day{subscription.graceDaysLeft === 1 ? "" : "s"}</strong> left
+                      before features start getting locked. Renew or switch to keep going uninterrupted.
+                    </div>
+                  )}
+                  {subscription.fullyLapsed && (
+                    <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-800">
+                      Your plan has expired and the grace window is over. Renew
+                      or switch to a new plan to restore premium features.
+                    </div>
+                  )}
+
+                  {/* Dates */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-3 rounded-lg border">
+                      <p className="text-xs text-muted-foreground">
+                        Start Date
+                      </p>
+                      <p className="font-medium">
+                        {subscription.planStartDate
+                          ? new Date(
+                              subscription.planStartDate,
+                            ).toLocaleDateString("en-US", {
+                              year: "numeric",
+                              month: "long",
+                              day: "numeric",
+                            })
+                          : "—"}
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-lg border">
+                      <p className="text-xs text-muted-foreground">
+                        Expiry Date
+                      </p>
+                      <p className="font-medium">
+                        {subscription.planExpiryDate
+                          ? new Date(
+                              subscription.planExpiryDate,
+                            ).toLocaleDateString("en-US", {
+                              year: "numeric",
+                              month: "long",
+                              day: "numeric",
+                            })
+                          : "—"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Features list */}
+                  {subscription.features?.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold mb-2">
+                        Features
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {subscription.features.map(
+                          (f: string, i: number) => (
+                            <Badge key={i} variant="secondary">
+                              {f}
+                            </Badge>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Modules grid */}
+                  {subscription.modules &&
+                    Object.keys(subscription.modules).length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-semibold mb-3">
+                          Module Access
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {[
+                            { key: "events", label: "Events" },
+                            { key: "tickets", label: "Tickets" },
+                            { key: "stalls", label: "Stalls" },
+                            {
+                              key: "speakerRequests",
+                              label: "Speaker Requests",
+                            },
+                            {
+                              key: "roundTableBookings",
+                              label: "Round Table Bookings",
+                            },
+                            { key: "razorpay", label: "Razorpay" },
+                            { key: "coupons", label: "Coupons" },
+                            { key: "storefront", label: "Storefront" },
+                            {
+                              key: "customDomain",
+                              label: "Custom Domain",
+                            },
+                            { key: "analytics", label: "Analytics" },
+                            { key: "crm", label: "CRM" },
+                            { key: "whatsappQR", label: "WhatsApp QR" },
+                            { key: "instagram", label: "Instagram" },
+                            { key: "operators", label: "Operators" },
+                          ].map((m) => {
+                            const cfg = subscription.modules[m.key];
+                            const on = !!cfg?.enabled;
+                            return (
+                              <div
+                                key={m.key}
+                                className={`flex items-center justify-between px-3 py-2 rounded-lg border ${
+                                  on
+                                    ? "bg-green-50 border-green-200"
+                                    : "bg-gray-50 border-gray-200 opacity-60"
+                                }`}
+                              >
+                                <span className="text-sm">{m.label}</span>
+                                <div className="flex items-center gap-2">
+                                  {cfg?.limit > 0 && on && (
+                                    <span className="text-xs text-muted-foreground">
+                                      Limit: {cfg.limit}
+                                    </span>
+                                  )}
+                                  <Badge
+                                    variant={on ? "default" : "secondary"}
+                                    className="text-[10px] px-1.5 py-0"
+                                  >
+                                    {on ? "ON" : "OFF"}
+                                  </Badge>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Change Plan Dialog */}
+          <Dialog open={changePlanOpen} onOpenChange={setChangePlanOpen}>
+            <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Choose a Plan</DialogTitle>
+                <DialogDescription>
+                  Select a plan to switch to. You'll be moved to the new plan
+                  immediately and the validity timer resets.
+                </DialogDescription>
+              </DialogHeader>
+              {loadingPlans ? (
+                <div className="py-12 text-center">
+                  <Loader className="h-6 w-6 animate-spin text-primary mx-auto" />
+                </div>
+              ) : availablePlans.length === 0 ? (
+                <div className="py-8 text-center text-muted-foreground">
+                  <p>No plans available right now.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                  {availablePlans.map((plan: any) => {
+                    const isCurrent =
+                      subscription?.planId === plan._id;
+                    return (
+                      <Card
+                        key={plan._id}
+                        className={`relative ${
+                          plan.isDefault ? "ring-2 ring-amber-400" : ""
+                        } ${isCurrent ? "ring-2 ring-primary" : ""}`}
+                      >
+                        {plan.isDefault && !isCurrent && (
+                          <div className="absolute -top-2 left-1/2 -translate-x-1/2">
+                            <Badge className="bg-amber-500 text-white text-xs">
+                              Default
+                            </Badge>
+                          </div>
+                        )}
+                        {isCurrent && (
+                          <div className="absolute -top-2 left-1/2 -translate-x-1/2">
+                            <Badge className="text-xs">Current</Badge>
+                          </div>
+                        )}
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-lg">
+                            {plan.planName}
+                          </CardTitle>
+                          {plan.description && (
+                            <CardDescription>
+                              {plan.description}
+                            </CardDescription>
+                          )}
+                          <div className="text-2xl font-bold pt-1">
+                            ${plan.price}
+                            <span className="text-sm font-normal text-muted-foreground">
+                              {" "}
+                              / {plan.validityInDays}d
+                            </span>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          {plan.features?.length > 0 && (
+                            <ul className="text-sm space-y-1">
+                              {plan.features
+                                .slice(0, 6)
+                                .map((f: string, i: number) => (
+                                  <li
+                                    key={i}
+                                    className="flex items-start"
+                                  >
+                                    <CheckCircle2 className="h-3 w-3 text-green-600 mr-1 mt-1 shrink-0" />
+                                    <span className="text-xs">{f}</span>
+                                  </li>
+                                ))}
+                              {plan.features.length > 6 && (
+                                <li className="text-xs text-muted-foreground">
+                                  +{plan.features.length - 6} more
+                                </li>
+                              )}
+                            </ul>
+                          )}
+                          <Button
+                            className="w-full"
+                            disabled={
+                              isCurrent || switchingPlanId === plan._id
+                            }
+                            onClick={() => switchToPlan(plan._id)}
+                          >
+                            {isCurrent
+                              ? "Current Plan"
+                              : switchingPlanId === plan._id
+                                ? "Switching..."
+                                : "Switch to this Plan"}
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+
         <TabsContent value="operator">
           <Card>
             <CardHeader>
@@ -2494,6 +2893,50 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       }))
                     }
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Lock className="w-3 h-3" />
+                    Tab Access
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Pick which tabs this operator can use. Leave all unchecked
+                    for full access.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: "dashboard", label: "Dashboard" },
+                      { id: "events", label: "Events" },
+                      { id: "eventAttendees", label: "Attendees" },
+                      { id: "speakerRequests", label: "Speakers" },
+                      { id: "users", label: "Exhibitors/Visitors" },
+                      { id: "roundTableBookings", label: "Round Tables" },
+                      { id: "storefront", label: "Eventfront" },
+                      { id: "settings", label: "Settings" },
+                    ].map((t) => {
+                      const checked = operatorForm.accessTabs.includes(t.id);
+                      return (
+                        <label
+                          key={t.id}
+                          className="flex items-center gap-2 text-sm border rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/30"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) =>
+                              setOperatorForm((prev) => ({
+                                ...prev,
+                                accessTabs: e.target.checked
+                                  ? [...prev.accessTabs, t.id]
+                                  : prev.accessTabs.filter((x) => x !== t.id),
+                              }))
+                            }
+                          />
+                          {t.label}
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
               <Button

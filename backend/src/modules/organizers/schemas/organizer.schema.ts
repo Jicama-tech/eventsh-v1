@@ -208,6 +208,13 @@ export class Organizer {
   })
   receiptType: ReceiptType;
 
+  // --- Referral / Provider tracking (Agent referral system) ---
+  @Prop({ default: "self" })
+  provider?: string; // "self" | "Agent" | future providers
+
+  @Prop({ default: null })
+  providerId?: string; // Agent._id when provider === "Agent"
+
   // --- Subscription / Plan Logic (Specific to Organizer - Kept Intact) ---
   @Prop({ default: false })
   subscribed?: boolean;

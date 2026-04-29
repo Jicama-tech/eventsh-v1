@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Card,
   CardContent,
@@ -30,1067 +30,684 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Users,
-  UserCheck,
-  Calendar,
   Search,
-  Filter,
   RefreshCw,
   Eye,
-  Edit,
-  Ban,
-  CheckCircle,
-  XCircle,
   Phone,
   Mail,
-  MapPin,
-  Calendar as CalendarIcon,
-  Heart,
-  Activity,
-  Settings,
-  TrendingUp,
-  TrendingDown,
-  BarChart3,
-  PieChart,
+  Building2,
+  Calendar,
+  Ticket,
+  Mic2,
+  Briefcase,
+  Store,
+  UserCheck,
+  Layers,
   Download,
-  UserPlus,
-  Clock,
-  Shield,
+  ShieldCheck,
+  CheckCircle2,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
-interface User {
-  id: string;
-  user_id: string;
-  full_name: string;
-  email: string;
-  phone?: string;
-  role: string;
-  status: string;
-  created_at: string;
-  last_login?: string;
-  profile_image_url?: string;
-  gender?: string;
-  address?: string;
-  date_of_birth?: string;
-  emergency_contact_name?: string;
-  emergency_contact_phone?: string;
-  blood_type?: string;
-  allergies?: string[];
-  chronic_conditions?: string[];
-  current_medications?: string[];
-}
+const apiURL = __API_URL__;
 
-interface Organizer {
-  id: string;
-  user_id: string;
+interface UnifiedUser {
+  key: string;
   name: string;
   email: string;
-  phone?: string;
-  qualification: string;
-  bio?: string;
-  status: string;
-  created_at: string;
-  total_events?: number;
-  profile_image_url?: string;
+  phone: string;
+  whatsAppNumber: string;
+  country?: string;
+  organizationName?: string;
+  roles: string[];
+  eventsCreated: number;
+  ticketsPurchased: number;
+  ticketRevenue: number;
+  stallsRegistered: number;
+  speakerRequests: number;
+  operatorOf: string[];
+  referralCode?: string;
+  referredOrganizers: number;
+  subscribed: boolean;
+  planExpiryDate?: string | null;
+  approvedOrganizer?: boolean | null;
+  firstSeen: string;
+  lastSeen: string;
+  sources: { type: string; id: string }[];
 }
 
-interface Analytics {
-  totalUsers: number;
-  activeUsers: number;
-  newUsersThisMonth: number;
-  totalOrganizers: number;
-  userGrowthRate: number;
-  roleDistribution: { role: string; count: number; percentage: number }[];
-  statusDistribution: { status: string; count: number; percentage: number }[];
-  monthlyGrowth: {
-    month: string;
-    users: number;
-    organizers: number;
-  }[];
-  topLocations: { location: string; count: number }[];
-  ageDistribution: { ageGroup: string; count: number }[];
+interface Summary {
+  totalUnique: number;
+  organizers: number;
+  visitors: number;
+  exhibitors: number;
+  speakers: number;
+  ticketBuyers: number;
+  operators: number;
+  agents: number;
+  multiRole: number;
+}
+
+const ROLE_STYLE: Record<
+  string,
+  { bg: string; text: string; icon: any }
+> = {
+  Organizer: { bg: "bg-indigo-100", text: "text-indigo-700", icon: Building2 },
+  Visitor: { bg: "bg-amber-100", text: "text-amber-700", icon: Users },
+  Exhibitor: { bg: "bg-orange-100", text: "text-orange-700", icon: Store },
+  Speaker: { bg: "bg-purple-100", text: "text-purple-700", icon: Mic2 },
+  "Ticket Buyer": {
+    bg: "bg-pink-100",
+    text: "text-pink-700",
+    icon: Ticket,
+  },
+  Operator: {
+    bg: "bg-cyan-100",
+    text: "text-cyan-700",
+    icon: UserCheck,
+  },
+  Agent: {
+    bg: "bg-emerald-100",
+    text: "text-emerald-700",
+    icon: Briefcase,
+  },
+  Admin: {
+    bg: "bg-slate-200",
+    text: "text-slate-700",
+    icon: ShieldCheck,
+  },
+};
+
+function RoleBadge({ role }: { role: string }) {
+  const style = ROLE_STYLE[role] || {
+    bg: "bg-gray-100",
+    text: "text-gray-700",
+    icon: Users,
+  };
+  const Icon = style.icon;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${style.bg} ${style.text}`}
+    >
+      <Icon className="h-3 w-3" />
+      {role}
+    </span>
+  );
 }
 
 export function UsersPage() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [organizers, setOrganizers] = useState<Organizer[]>([]);
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
-  const [filteredOrganizers, setFilteredOrganizers] = useState<Organizer[]>([]);
-  const [analytics, setAnalytics] = useState<Analytics | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [roleFilter, setRoleFilter] = useState("all");
+  const [data, setData] = useState<UnifiedUser[]>([]);
+  const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [selected, setSelected] = useState<UnifiedUser | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchAllUsers();
-  }, []);
+  const token = sessionStorage.getItem("token");
 
-  useEffect(() => {
-    filterUsers();
-    calculateAnalytics();
-  }, [users, organizers, searchTerm, statusFilter, roleFilter]);
-
-  const fetchAllUsers = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
-
-      // Fetch regular users from profiles
-      const { data: profilesData, error: profilesError } = await supabase
-        .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (profilesError) throw profilesError;
-
-      // Fetch organizers
-      const { data: organizersData, error: organizersError } = await supabase
-        .from("doctors")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (organizersError) throw organizersError;
-
-      setUsers(profilesData || []);
-      setOrganizers(organizersData || []);
-
-      toast({
-        duration: 5000,
-        title: "Success",
-        description: "User data synced successfully",
+      setError(null);
+      const res = await fetch(`${apiURL}/admin/users-overview`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      toast({
-        duration: 5000,
-        title: "Error",
-        description: "Failed to sync user data",
-        variant: "destructive",
-      });
+      if (!res.ok) throw new Error(`Failed: ${res.statusText}`);
+      const json = await res.json();
+      setSummary(json.summary || null);
+      setData(json.users || []);
+    } catch (err: any) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const calculateAnalytics = () => {
-    const allUsers = [...users, ...organizers];
-    const totalUsers = allUsers.length;
-    const activeUsers = allUsers.filter((u) => u.status === "active").length;
+  useEffect(() => {
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    // Calculate monthly growth
-    const currentMonth = new Date().getMonth();
-    const newUsersThisMonth = allUsers.filter(
-      (u) => new Date(u.created_at).getMonth() === currentMonth
-    ).length;
-
-    const lastMonthUsers = allUsers.filter(
-      (u) => new Date(u.created_at).getMonth() === currentMonth - 1
-    ).length;
-
-    const userGrowthRate =
-      lastMonthUsers > 0
-        ? ((newUsersThisMonth - lastMonthUsers) / lastMonthUsers) * 100
-        : 0;
-
-    // Role distribution
-    const roleCounts = allUsers.reduce((acc, user) => {
-      const role = "role" in user ? user.role : "organizer";
-      acc[role] = (acc[role] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const roleDistribution = Object.entries(roleCounts).map(
-      ([role, count]) => ({
-        role,
-        count,
-        percentage: (count / totalUsers) * 100,
-      })
-    );
-
-    // Status distribution
-    const statusCounts = allUsers.reduce((acc, user) => {
-      acc[user.status] = (acc[user.status] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const statusDistribution = Object.entries(statusCounts).map(
-      ([status, count]) => ({
-        status,
-        count,
-        percentage: (count / totalUsers) * 100,
-      })
-    );
-
-    // Top locations (from user addresses)
-    const locationCounts = users
-      .filter((user) => user.address)
-      .reduce((acc, user) => {
-        const location = user.address?.split(",").pop()?.trim() || "Unknown";
-        acc[location] = (acc[location] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
-
-    const topLocations = Object.entries(locationCounts)
-      .map(([location, count]) => ({ location, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-
-    // Age distribution
-    const currentYear = new Date().getFullYear();
-    const ageGroups = users
-      .filter((user) => user.date_of_birth)
-      .map((user) => {
-        const age = currentYear - new Date(user.date_of_birth!).getFullYear();
-        if (age < 18) return "< 18";
-        if (age < 30) return "18-29";
-        if (age < 50) return "30-49";
-        if (age < 65) return "50-64";
-        return "65+";
-      })
-      .reduce((acc, ageGroup) => {
-        acc[ageGroup] = (acc[ageGroup] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
-
-    const ageDistribution = Object.entries(ageGroups).map(
-      ([ageGroup, count]) => ({
-        ageGroup,
-        count,
-      })
-    );
-
-    // Monthly growth data (last 6 months)
-    const monthlyGrowth = Array.from({ length: 6 }, (_, i) => {
-      const month = new Date();
-      month.setMonth(month.getMonth() - i);
-      const monthName = month.toLocaleDateString("en-US", { month: "short" });
-
-      const monthUsers = users.filter(
+  const filtered = useMemo(() => {
+    let list = data;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
         (u) =>
-          new Date(u.created_at).getMonth() === month.getMonth() &&
-          new Date(u.created_at).getFullYear() === month.getFullYear()
-      ).length;
-
-      const monthOrganizers = organizers.filter(
-        (u) =>
-          new Date(u.created_at).getMonth() === month.getMonth() &&
-          new Date(u.created_at).getFullYear() === month.getFullYear()
-      ).length;
-
-      return {
-        month: monthName,
-        users: monthUsers,
-        organizers: monthOrganizers,
-      };
-    }).reverse();
-
-    setAnalytics({
-      totalUsers,
-      activeUsers,
-      newUsersThisMonth,
-      totalOrganizers: organizers.length,
-      userGrowthRate,
-      roleDistribution,
-      statusDistribution,
-      monthlyGrowth,
-      topLocations,
-      ageDistribution,
-    });
-  };
-
-  const filterUsers = () => {
-    let filtered = users;
-
-    if (searchTerm) {
-      filtered = filtered.filter(
-        (user) =>
-          user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          user.phone?.toLowerCase().includes(searchTerm.toLowerCase())
+          u.name?.toLowerCase().includes(q) ||
+          u.email?.toLowerCase().includes(q) ||
+          u.phone?.toLowerCase().includes(q) ||
+          u.whatsAppNumber?.toLowerCase().includes(q) ||
+          u.organizationName?.toLowerCase().includes(q),
       );
     }
-
-    if (statusFilter !== "all") {
-      filtered = filtered.filter((user) => user.status === statusFilter);
-    }
-
     if (roleFilter !== "all") {
-      filtered = filtered.filter((user) => user.role === roleFilter);
+      list = list.filter((u) => u.roles.includes(roleFilter));
     }
+    return list;
+  }, [data, search, roleFilter]);
 
-    setFilteredUsers(filtered);
-
-    // Filter organizers
-    let filteredOrgs = organizers;
-    if (searchTerm) {
-      filteredOrgs = filteredOrgs.filter(
-        (org) =>
-          org.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          org.email.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-    if (statusFilter !== "all") {
-      filteredOrgs = filteredOrgs.filter((org) => org.status === statusFilter);
-    }
-    setFilteredOrganizers(filteredOrgs);
-
-  };
-
-  const updateUserStatus = async (
-    userId: string,
-    newStatus: string,
-    userType: "user" | "organizer"
-  ) => {
-    try {
-      const table = userType === "organizer" ? "doctors" : "profiles";
-
-      const { error } = await supabase
-        .from(table)
-        .update({ status: newStatus })
-        .eq("id", userId);
-
-      if (error) throw error;
-
-      toast({
-        duration: 5000,
-        title: "Success",
-        description: `User status updated to ${newStatus}`,
-      });
-
-      fetchAllUsers();
-    } catch (error) {
-      console.error("Error updating user status:", error);
-      toast({
-        duration: 5000,
-        title: "Error",
-        description: "Failed to update user status",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const exportUserData = () => {
-    const allUserData = [
-      ...users.map((u) => ({ ...u, type: "user" })),
-      ...organizers.map((u) => ({ ...u, type: "organizer" })),
+  const exportCSV = () => {
+    const headers = [
+      "Name",
+      "Email",
+      "Phone",
+      "WhatsApp",
+      "Organization",
+      "Country",
+      "Roles",
+      "Events Created",
+      "Tickets Purchased",
+      "Ticket Revenue",
+      "Stalls",
+      "Speaker Requests",
+      "Referrals",
+      "First Seen",
+      "Last Active",
     ];
-
-    const csvContent = [
-      ["Name", "Email", "Phone", "Type", "Status", "Joined Date"].join(","),
-      ...allUserData.map((user) =>
-        [
-          ("full_name" in user ? user.full_name : user.name) || "",
-          user.email,
-          user.phone || "",
-          user.type,
-          user.status,
-          new Date(user.created_at).toLocaleDateString(),
-        ].join(",")
-      ),
-    ].join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv" });
+    const rows = filtered.map((u) =>
+      [
+        u.name,
+        u.email,
+        u.phone,
+        u.whatsAppNumber,
+        u.organizationName || "",
+        u.country || "",
+        u.roles.join("|"),
+        u.eventsCreated,
+        u.ticketsPurchased,
+        u.ticketRevenue,
+        u.stallsRegistered,
+        u.speakerRequests,
+        u.referredOrganizers,
+        u.firstSeen ? new Date(u.firstSeen).toLocaleDateString() : "",
+        u.lastSeen ? new Date(u.lastSeen).toLocaleDateString() : "",
+      ]
+        .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`)
+        .join(","),
+    );
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `users_export_${new Date().toISOString().split("T")[0]}.csv`;
+    a.download = `users_${new Date().toISOString().split("T")[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-
-    toast({
-      duration: 5000,
-      title: "Success",
-      description: "User data exported successfully",
-    });
+    toast({ title: "Exported", description: `${filtered.length} rows` });
   };
 
-  const UserDetailDialog = ({ user }: { user: User }) => (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="buttonOutline">
-          <Eye className="h-3 w-3" />
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>User Details</DialogTitle>
-          <DialogDescription>
-            Complete information for {user.full_name}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <h4 className="font-semibold mb-2">Basic Information</h4>
-              <div className="space-y-2 text-sm">
-                <p>
-                  <strong>Name:</strong> {user.full_name}
-                </p>
-                <p>
-                  <strong>Email:</strong> {user.email}
-                </p>
-                <p>
-                  <strong>Phone:</strong> {user.phone || "Not provided"}
-                </p>
-                <p>
-                  <strong>Role:</strong> <Badge>{user.role}</Badge>
-                </p>
-                <p>
-                  <strong>Status:</strong>{" "}
-                  <Badge
-                    variant={user.status === "active" ? "default" : "secondary"}
-                  >
-                    {user.status}
-                  </Badge>
-                </p>
-                <p>
-                  <strong>Gender:</strong> {user.gender || "Not specified"}
-                </p>
-                <p>
-                  <strong>Date of Birth:</strong>{" "}
-                  {user.date_of_birth || "Not provided"}
-                </p>
-              </div>
-            </div>
-            <div>
-              <h4 className="font-semibold mb-2">Contact & Address</h4>
-              <div className="space-y-2 text-sm">
-                <p>
-                  <strong>Address:</strong> {user.address || "Not provided"}
-                </p>
-                <p>
-                  <strong>Emergency Contact:</strong>{" "}
-                  {user.emergency_contact_name || "Not provided"}
-                </p>
-                <p>
-                  <strong>Emergency Phone:</strong>{" "}
-                  {user.emergency_contact_phone || "Not provided"}
-                </p>
-                <p>
-                  <strong>Joined:</strong>{" "}
-                  {new Date(user.created_at).toLocaleDateString()}
-                </p>
-                <p>
-                  <strong>Last Login:</strong>{" "}
-                  {user.last_login
-                    ? new Date(user.last_login).toLocaleDateString()
-                    : "Never"}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="font-semibold mb-2">Medical Information</h4>
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div>
-                <p>
-                  <strong>Blood Type:</strong>{" "}
-                  {user.blood_type || "Not provided"}
-                </p>
-              </div>
-              <div>
-                <p>
-                  <strong>Allergies:</strong>
-                </p>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {user.allergies?.map((allergy, index) => (
-                    <Badge
-                      key={index}
-                      variant="buttonOutline"
-                      className="text-xs"
-                    >
-                      {allergy}
-                    </Badge>
-                  )) || (
-                    <span className="text-muted-foreground">None listed</span>
-                  )}
-                </div>
-              </div>
-              <div>
-                <p>
-                  <strong>Chronic Conditions:</strong>
-                </p>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {user.chronic_conditions?.map((condition, index) => (
-                    <Badge
-                      key={index}
-                      variant="buttonOutline"
-                      className="text-xs"
-                    >
-                      {condition}
-                    </Badge>
-                  )) || (
-                    <span className="text-muted-foreground">None listed</span>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="mt-2">
-              <p>
-                <strong>Current Medications:</strong>
-              </p>
-              <div className="flex flex-wrap gap-1 mt-1">
-                {user.current_medications?.map((medication, index) => (
-                  <Badge
-                    key={index}
-                    variant="buttonOutline"
-                    className="text-xs"
-                  >
-                    {medication}
-                  </Badge>
-                )) || (
-                  <span className="text-muted-foreground">None listed</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
+  const STAT_CARDS = summary
+    ? [
+        {
+          title: "Total Unique",
+          value: summary.totalUnique,
+          icon: Users,
+          bg: "bg-slate-50",
+          color: "text-slate-700",
+        },
+        {
+          title: "Organizers",
+          value: summary.organizers,
+          icon: Building2,
+          bg: "bg-indigo-50",
+          color: "text-indigo-600",
+        },
+        {
+          title: "Visitors",
+          value: summary.visitors,
+          icon: Users,
+          bg: "bg-amber-50",
+          color: "text-amber-600",
+        },
+        {
+          title: "Exhibitors",
+          value: summary.exhibitors,
+          icon: Store,
+          bg: "bg-orange-50",
+          color: "text-orange-600",
+        },
+        {
+          title: "Speakers",
+          value: summary.speakers,
+          icon: Mic2,
+          bg: "bg-purple-50",
+          color: "text-purple-600",
+        },
+        {
+          title: "Ticket Buyers",
+          value: summary.ticketBuyers,
+          icon: Ticket,
+          bg: "bg-pink-50",
+          color: "text-pink-600",
+        },
+        {
+          title: "Operators",
+          value: summary.operators,
+          icon: UserCheck,
+          bg: "bg-cyan-50",
+          color: "text-cyan-600",
+        },
+        {
+          title: "Multi-role",
+          value: summary.multiRole,
+          icon: Layers,
+          bg: "bg-emerald-50",
+          color: "text-emerald-600",
+        },
+      ]
+    : [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
-          <h1 className="text-3xl font-bold">Users Management</h1>
-          <p className="text-muted-foreground">
-            Comprehensive user analytics and management
+          <h2 className="text-2xl sm:text-3xl font-bold">Users</h2>
+          <p className="text-sm text-muted-foreground">
+            Every unique person on the platform — organizers, visitors,
+            exhibitors, speakers, ticket buyers, operators and agents — merged
+            by email/WhatsApp.
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={exportUserData} variant="buttonOutline">
+          <Button variant="outline" onClick={exportCSV} disabled={loading}>
             <Download className="h-4 w-4 mr-2" />
-            Export Data
+            Export
           </Button>
-          <Button onClick={fetchAllUsers} disabled={loading}>
+          <Button onClick={fetchData} disabled={loading}>
             <RefreshCw
               className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
             />
-            Sync Users
+            Refresh
           </Button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs
-        value={activeTab}
-        onValueChange={setActiveTab}
-        className="space-y-6"
-      >
-        <TabsList>
-          <TabsTrigger value="overview">Overview & Analytics</TabsTrigger>
-          <TabsTrigger value="users">
-            Users ({filteredUsers.length})
-          </TabsTrigger>
-          <TabsTrigger value="organizers">
-            Organizers ({filteredOrganizers.length})
-          </TabsTrigger>
-        </TabsList>
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+        {STAT_CARDS.map((s, i) => (
+          <Card key={i} className="border-slate-100">
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
+                  {s.title}
+                </p>
+                <div
+                  className={`${s.bg} p-1.5 rounded-md flex items-center justify-center shrink-0`}
+                >
+                  <s.icon className={`h-3.5 w-3.5 ${s.color}`} />
+                </div>
+              </div>
+              <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
-        <TabsContent value="overview">
-          {analytics && (
-            <div className="space-y-6">
-              {/* Key Metrics */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground">
-                          Total Users
-                        </p>
-                        <p className="text-2xl font-bold">
-                          {analytics.totalUsers}
-                        </p>
-                      </div>
-                      <Users className="h-8 w-8 text-muted-foreground" />
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground">
-                          Active Users
-                        </p>
-                        <p className="text-2xl font-bold">
-                          {analytics.activeUsers}
-                        </p>
-                      </div>
-                      <Activity className="h-8 w-8 text-green-600" />
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground">
-                          Organizers
-                        </p>
-                        <p className="text-2xl font-bold">
-                          {analytics.totalOrganizers}
-                        </p>
-                      </div>
-                      <UserCheck className="h-8 w-8 text-blue-600" />
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground">
-                          Growth Rate
-                        </p>
-                        <p className="text-2xl font-bold flex items-center">
-                          {analytics.userGrowthRate.toFixed(1)}%
-                          {analytics.userGrowthRate > 0 ? (
-                            <TrendingUp className="h-4 w-4 ml-1 text-green-600" />
-                          ) : (
-                            <TrendingDown className="h-4 w-4 ml-1 text-red-600" />
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-3 sm:p-4 flex flex-wrap gap-2 sm:gap-3 items-center">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name, email, phone, organization…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Filter by role" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Roles</SelectItem>
+              <SelectItem value="Organizer">Organizers</SelectItem>
+              <SelectItem value="Visitor">Visitors</SelectItem>
+              <SelectItem value="Exhibitor">Exhibitors</SelectItem>
+              <SelectItem value="Speaker">Speakers</SelectItem>
+              <SelectItem value="Ticket Buyer">Ticket Buyers</SelectItem>
+              <SelectItem value="Operator">Operators</SelectItem>
+              <SelectItem value="Agent">Agents</SelectItem>
+              <SelectItem value="Admin">Admins</SelectItem>
+            </SelectContent>
+          </Select>
+          <Badge variant="outline" className="ml-auto text-xs">
+            {filtered.length} {filtered.length === 1 ? "result" : "results"}
+          </Badge>
+        </CardContent>
+      </Card>
+
+      {/* Table */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base sm:text-lg">
+            All Users
+          </CardTitle>
+          <CardDescription>
+            Unified by email/WhatsApp — same person across roles is one row
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="py-12 text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">Loading users…</p>
+            </div>
+          ) : error ? (
+            <div className="py-8 text-center text-red-600 text-sm">
+              {error}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground">
+              <Users className="h-10 w-10 mx-auto mb-2 text-gray-300" />
+              <p className="text-sm">No users match this filter</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="font-semibold">Person</TableHead>
+                    <TableHead className="font-semibold">Contact</TableHead>
+                    <TableHead className="font-semibold">Roles</TableHead>
+                    <TableHead className="font-semibold">Activity</TableHead>
+                    <TableHead className="font-semibold">First Seen</TableHead>
+                    <TableHead className="font-semibold">Last Active</TableHead>
+                    <TableHead className="text-right font-semibold">
+                      Details
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((u) => (
+                    <TableRow
+                      key={u.key}
+                      className="hover:bg-muted/30 cursor-pointer"
+                      onClick={() => setSelected(u)}
+                    >
+                      <TableCell>
+                        <div className="font-medium text-sm">
+                          {u.name || "—"}
+                        </div>
+                        {u.organizationName && (
+                          <div className="text-xs text-muted-foreground truncate max-w-[200px]">
+                            {u.organizationName}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {u.email && (
+                          <div className="flex items-center gap-1 text-muted-foreground truncate max-w-[200px]">
+                            <Mail className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{u.email}</span>
+                          </div>
+                        )}
+                        {u.whatsAppNumber && (
+                          <div className="flex items-center gap-1 text-muted-foreground">
+                            <Phone className="h-3 w-3 shrink-0" />
+                            {u.whatsAppNumber}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1 max-w-[280px]">
+                          {u.roles.map((r) => (
+                            <RoleBadge key={r} role={r} />
+                          ))}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        <div className="space-y-0.5">
+                          {u.eventsCreated > 0 && (
+                            <div className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3 text-blue-500" />
+                              {u.eventsCreated} events
+                            </div>
                           )}
-                        </p>
-                      </div>
-                      <BarChart3 className="h-8 w-8 text-muted-foreground" />
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Analytics Charts */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Role Distribution */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <PieChart className="h-5 w-5" />
-                      User Role Distribution
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {analytics.roleDistribution.map((item) => (
-                        <div
-                          key={item.role}
-                          className="flex items-center justify-between"
-                        >
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-primary"></div>
-                            <span className="capitalize">{item.role}</span>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-medium">{item.count}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {item.percentage.toFixed(1)}%
+                          {u.ticketsPurchased > 0 && (
+                            <div className="flex items-center gap-1">
+                              <Ticket className="h-3 w-3 text-pink-500" />
+                              {u.ticketsPurchased} tickets
+                              {u.ticketRevenue > 0 && (
+                                <span className="text-muted-foreground">
+                                  (${u.ticketRevenue.toFixed(0)})
+                                </span>
+                              )}
                             </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Status Distribution */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Shield className="h-5 w-5" />
-                      User Status Distribution
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {analytics.statusDistribution.map((item) => (
-                        <div
-                          key={item.status}
-                          className="flex items-center justify-between"
-                        >
-                          <div className="flex items-center gap-2">
-                            <div
-                              className={`w-3 h-3 rounded-full ${
-                                item.status === "active"
-                                  ? "bg-green-500"
-                                  : item.status === "pending"
-                                  ? "bg-yellow-500"
-                                  : "bg-red-500"
-                              }`}
-                            ></div>
-                            <span className="capitalize">{item.status}</span>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-medium">{item.count}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {item.percentage.toFixed(1)}%
+                          )}
+                          {u.stallsRegistered > 0 && (
+                            <div className="flex items-center gap-1">
+                              <Store className="h-3 w-3 text-orange-500" />
+                              {u.stallsRegistered} stalls
                             </div>
-                          </div>
+                          )}
+                          {u.speakerRequests > 0 && (
+                            <div className="flex items-center gap-1">
+                              <Mic2 className="h-3 w-3 text-purple-500" />
+                              {u.speakerRequests} speaker
+                            </div>
+                          )}
+                          {u.referredOrganizers > 0 && (
+                            <div className="flex items-center gap-1">
+                              <Briefcase className="h-3 w-3 text-emerald-500" />
+                              {u.referredOrganizers} referrals
+                            </div>
+                          )}
+                          {!u.eventsCreated &&
+                            !u.ticketsPurchased &&
+                            !u.stallsRegistered &&
+                            !u.speakerRequests &&
+                            !u.referredOrganizers && (
+                              <span className="text-muted-foreground">—</span>
+                            )}
                         </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Top Locations */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <MapPin className="h-5 w-5" />
-                      Top User Locations
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {analytics.topLocations.map((item, index) => (
-                        <div
-                          key={item.location}
-                          className="flex items-center justify-between"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-muted-foreground">
-                              #{index + 1}
-                            </span>
-                            <span>{item.location}</span>
-                          </div>
-                          <div className="font-medium">{item.count} users</div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Age Distribution */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Calendar className="h-5 w-5" />
-                      Age Distribution
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {analytics.ageDistribution.map((item) => (
-                        <div
-                          key={item.ageGroup}
-                          className="flex items-center justify-between"
-                        >
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                            <span>{item.ageGroup} years</span>
-                          </div>
-                          <div className="font-medium">{item.count} users</div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Monthly Growth Chart */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5" />
-                    Monthly User Growth (Last 6 Months)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-end space-x-4 h-64">
-                    {analytics.monthlyGrowth.map((month, index) => (
-                      <div
-                        key={index}
-                        className="flex-1 flex flex-col items-center"
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                        {u.firstSeen
+                          ? new Date(u.firstSeen).toLocaleDateString()
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                        {u.lastSeen
+                          ? new Date(u.lastSeen).toLocaleDateString()
+                          : "—"}
+                      </TableCell>
+                      <TableCell
+                        className="text-right"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <div className="flex space-x-1 mb-2">
-                          <div
-                            className="w-4 bg-blue-500 rounded-t"
-                            style={{ height: `${(month.users / 20) * 100}px` }}
-                          ></div>
-                          <div
-                            className="w-4 bg-green-500 rounded-t"
-                            style={{
-                              height: `${(month.organizers / 5) * 100}px`,
-                            }}
-                          ></div>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {month.month}
-                        </div>
-                        <div className="text-xs font-medium">
-                          {month.users + month.organizers}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex justify-center space-x-4 mt-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-blue-500 rounded"></div>
-                      <span className="text-sm">Users</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-green-500 rounded"></div>
-                      <span className="text-sm">Organizers</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setSelected(u)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           )}
-        </TabsContent>
+        </CardContent>
+      </Card>
 
-        {/* Filters (shared across user tabs) */}
-        {(activeTab === "users" ||
-          activeTab === "organizers") && (
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex flex-wrap gap-4">
-                <div className="flex-1 min-w-[200px]">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search users..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10"
-                    />
+      {/* Detail Dialog */}
+      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selected?.name || "User"}
+              {selected?.approvedOrganizer && (
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              Full activity across the platform
+            </DialogDescription>
+          </DialogHeader>
+          {selected && (
+            <div className="space-y-4 mt-2">
+              {/* Identity */}
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: "Email", value: selected.email },
+                  { label: "Phone", value: selected.phone },
+                  { label: "WhatsApp", value: selected.whatsAppNumber },
+                  { label: "Country", value: selected.country },
+                  {
+                    label: "Organization",
+                    value: selected.organizationName,
+                  },
+                  {
+                    label: "Referral Code",
+                    value: selected.referralCode,
+                  },
+                ].map((f, i) =>
+                  f.value ? (
+                    <div key={i}>
+                      <p className="text-xs text-muted-foreground">
+                        {f.label}
+                      </p>
+                      <p className="text-sm font-medium break-all">{f.value}</p>
+                    </div>
+                  ) : null,
+                )}
+              </div>
+
+              {/* Roles */}
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">Roles</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {selected.roles.map((r) => (
+                    <RoleBadge key={r} role={r} />
+                  ))}
+                </div>
+              </div>
+
+              {/* Activity grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {[
+                  {
+                    label: "Events Created",
+                    value: selected.eventsCreated,
+                    icon: Calendar,
+                    color: "text-blue-600",
+                  },
+                  {
+                    label: "Tickets Bought",
+                    value: selected.ticketsPurchased,
+                    icon: Ticket,
+                    color: "text-pink-600",
+                  },
+                  {
+                    label: "Spent on Tickets",
+                    value: `$${selected.ticketRevenue.toFixed(2)}`,
+                    icon: Ticket,
+                    color: "text-emerald-600",
+                  },
+                  {
+                    label: "Stalls Registered",
+                    value: selected.stallsRegistered,
+                    icon: Store,
+                    color: "text-orange-600",
+                  },
+                  {
+                    label: "Speaker Requests",
+                    value: selected.speakerRequests,
+                    icon: Mic2,
+                    color: "text-purple-600",
+                  },
+                  {
+                    label: "Organizers Referred",
+                    value: selected.referredOrganizers,
+                    icon: Briefcase,
+                    color: "text-emerald-600",
+                  },
+                ].map((m, i) => (
+                  <Card key={i}>
+                    <CardContent className="py-3 px-3">
+                      <div className="flex items-center gap-2">
+                        <m.icon className={`h-4 w-4 ${m.color}`} />
+                        <span className="text-xs text-muted-foreground">
+                          {m.label}
+                        </span>
+                      </div>
+                      <p className={`text-lg font-bold mt-1 ${m.color}`}>
+                        {m.value}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* Subscription */}
+              {selected.roles.includes("Organizer") && (
+                <div className="border rounded-lg p-3 bg-muted/30">
+                  <p className="text-xs font-medium mb-1">
+                    Organizer Subscription
+                  </p>
+                  <div className="flex items-center justify-between text-sm">
+                    <span>
+                      {selected.subscribed ? "Active" : "Inactive"}
+                      {selected.planExpiryDate &&
+                        ` · expires ${new Date(selected.planExpiryDate).toLocaleDateString()}`}
+                    </span>
+                    <Badge
+                      variant={
+                        selected.approvedOrganizer ? "default" : "secondary"
+                      }
+                    >
+                      {selected.approvedOrganizer ? "Approved" : "Pending"}
+                    </Badge>
                   </div>
                 </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="Filter by status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="suspended">Suspended</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={roleFilter} onValueChange={setRoleFilter}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="Filter by role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Roles</SelectItem>
-                    <SelectItem value="patient">Patient</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                  </SelectContent>
-                </Select>
+              )}
+
+              {/* Sources */}
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Source records ({selected.sources.length})
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {selected.sources.map((s, i) => (
+                    <Badge
+                      key={i}
+                      variant="outline"
+                      className="text-[11px] font-mono"
+                    >
+                      {s.type}:{s.id.slice(-6)}
+                    </Badge>
+                  ))}
+                </div>
               </div>
-            </CardContent>
-          </Card>
-        )}
 
-        <TabsContent value="users">
-          <Card>
-            <CardHeader>
-              <CardTitle>Regular Users</CardTitle>
-              <CardDescription>
-                Direct registrations and patient accounts
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Joined</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredUsers.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{user.full_name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {user.email}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          {user.phone && (
-                            <div className="flex items-center gap-1">
-                              <Phone className="h-3 w-3" />
-                              {user.phone}
-                            </div>
-                          )}
-                          {user.address && (
-                            <div className="flex items-center gap-1 text-muted-foreground">
-                              <MapPin className="h-3 w-3" />
-                              {user.address}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="buttonOutline">{user.role}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            user.status === "active"
-                              ? "default"
-                              : user.status === "pending"
-                              ? "secondary"
-                              : "destructive"
-                          }
-                        >
-                          {user.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {new Date(user.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <UserDetailDialog user={user} />
-                          <Button size="sm" variant="buttonOutline">
-                            <Edit className="h-3 w-3" />
-                          </Button>
-                          {user.status === "pending" && (
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() =>
-                                updateUserStatus(user.id, "active", "user")
-                              }
-                            >
-                              <CheckCircle className="h-3 w-3" />
-                            </Button>
-                          )}
-                          {user.status === "active" && (
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() =>
-                                updateUserStatus(user.id, "suspended", "user")
-                              }
-                            >
-                              <Ban className="h-3 w-3" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="organizers">
-          <Card>
-            <CardHeader>
-              <CardTitle>Organizers</CardTitle>
-              <CardDescription>Event organizers and doctors</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Organizer</TableHead>
-                    <TableHead>Qualification</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Joined</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredOrganizers.map((organizer) => (
-                    <TableRow key={organizer.id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{organizer.name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {organizer.email}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="buttonOutline">
-                          {organizer.qualification}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          {organizer.phone && (
-                            <div className="flex items-center gap-1">
-                              <Phone className="h-3 w-3" />
-                              {organizer.phone}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            organizer.status === "active"
-                              ? "default"
-                              : organizer.status === "pending"
-                              ? "secondary"
-                              : "destructive"
-                          }
-                        >
-                          {organizer.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {new Date(organizer.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="buttonOutline">
-                            <Eye className="h-3 w-3" />
-                          </Button>
-                          <Button size="sm" variant="buttonOutline">
-                            <Edit className="h-3 w-3" />
-                          </Button>
-                          {organizer.status === "pending" && (
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() =>
-                                updateUserStatus(
-                                  organizer.id,
-                                  "active",
-                                  "organizer"
-                                )
-                              }
-                            >
-                              <CheckCircle className="h-3 w-3" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-      </Tabs>
+              <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground border-t pt-3">
+                <div>
+                  First seen:{" "}
+                  {selected.firstSeen
+                    ? new Date(selected.firstSeen).toLocaleString()
+                    : "—"}
+                </div>
+                <div>
+                  Last active:{" "}
+                  {selected.lastSeen
+                    ? new Date(selected.lastSeen).toLocaleString()
+                    : "—"}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

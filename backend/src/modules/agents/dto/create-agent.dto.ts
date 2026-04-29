@@ -1,11 +1,12 @@
 import {
-  IsArray,
+  IsBoolean,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
 } from "class-validator";
 
-export class CreateOperatorDto {
+export class CreateAgentDto {
   @IsString()
   @IsNotEmpty()
   name: string;
@@ -15,20 +16,22 @@ export class CreateOperatorDto {
   whatsAppNumber: string;
 
   @IsString()
-  @IsOptional()
-  email?: string;
+  @IsNotEmpty()
+  email: string;
 
   @IsString()
   @IsOptional()
-  shopkeeperId?: string;
+  secondaryContact?: string;
+
+  @IsNumber()
+  @IsOptional()
+  salesTarget?: number;
 
   @IsString()
   @IsOptional()
-  organizerId?: string;
+  referralCode?: string;
 
-  // Empty = full access; non-empty = restricted to listed tab IDs
-  @IsArray()
+  @IsBoolean()
   @IsOptional()
-  @IsString({ each: true })
-  accessTabs?: string[];
+  isActive?: boolean;
 }

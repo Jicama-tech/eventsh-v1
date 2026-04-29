@@ -49,6 +49,11 @@ export class PlansController {
     return this.plansService.toggleActive(id);
   }
 
+  @Patch(":id/set-default")
+  setDefault(@Param("id") id: string) {
+    return this.plansService.setDefault(id);
+  }
+
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.plansService.remove(id);

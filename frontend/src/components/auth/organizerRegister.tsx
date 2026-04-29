@@ -46,6 +46,17 @@ export function OrganizerRegister() {
     location.state || {};
   const { toast } = useToast();
 
+  // Capture agent referral code from ?ref=CODE in URL
+  const initialReferralCode = (() => {
+    try {
+      return new URLSearchParams(location.search).get("ref") || "";
+    } catch {
+      return "";
+    }
+  })();
+  const [agentReferralCode, setAgentReferralCode] =
+    useState(initialReferralCode);
+
   // Country selection
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const currentCountry = selectedCountry
@@ -320,22 +331,9 @@ export function OrganizerRegister() {
     }
 
     setIsSubmitting(true);
-    const token = sessionStorage.getItem("token");
-
-    if (!token) {
-      toast({
-        duration: 5000,
-        title: "Authentication required",
-        description: "Please login to continue",
-        variant: "destructive",
-      });
-      navigate("/login");
-      setIsSubmitting(false);
-      return;
-    }
 
     try {
-      const payload = {
+      const payload: Record<string, any> = {
         name: profile.name,
         email: profile.email,
         phone: profile.phone.startsWith("+")
@@ -352,12 +350,13 @@ export function OrganizerRegister() {
         role: "organizer",
       };
 
+      if (agentReferralCode) {
+        payload.agentReferralCode = agentReferralCode.trim();
+      }
+
       const response = await fetch(`${apiURL}/organizers/register`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
@@ -370,9 +369,9 @@ export function OrganizerRegister() {
         duration: 5000,
         title: "Registration Success",
         description:
-          "Your organization registration is complete and under review.",
+          "Your account is active and the starter plan is assigned. Please log in via WhatsApp OTP.",
       });
-      navigate("/");
+      navigate("/login");
     } catch (error: any) {
       toast({
         title: "Error",
@@ -645,8 +644,31 @@ export function OrganizerRegister() {
               />
             </div>
 
+            {/* Agent Referral Code (optional) */}
+            <div className="grid gap-2">
+              <Label htmlFor="agentReferralCode">
+                Referral Code{" "}
+                <span className="text-xs text-muted-foreground">
+                  (optional)
+                </span>
+              </Label>
+              <Input
+                id="agentReferralCode"
+                value={agentReferralCode}
+                onChange={(e) => setAgentReferralCode(e.target.value)}
+                placeholder="Enter referral code if you have one"
+                disabled={shouldDisableFollowingFields}
+              />
+              {initialReferralCode && (
+                <p className="text-xs text-green-600">
+                  Referral code applied from invitation link.
+                </p>
+              )}
+            </div>
+
             <p className="text-lg font-medium text-slate-700 mt-6">
-              Post Review! You will be Notified via Email...
+              Your starter plan will be assigned automatically — no manual
+              approval needed.
             </p>
 
             <CardFooter className="flex justify-end gap-3 p-0 pt-2">

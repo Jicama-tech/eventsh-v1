@@ -103,6 +103,14 @@ const Footer = () => {
                   Admin
                 </a>
               </li>
+              <li>
+                <a
+                  href="/agent-login"
+                  className="hover:text-primary-foreground transition-colors"
+                >
+                  Agent Login
+                </a>
+              </li>
             </ul>
           </div>
 
