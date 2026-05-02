@@ -160,6 +160,16 @@ export class OrganizersController {
     }
   }
 
+  @Get("subscription/:id")
+  async getSubscription(@Param("id") id: string) {
+    return this.organizersService.getSubscriptionDetail(id);
+  }
+
+  @Get("analytics/:id")
+  async getAnalytics(@Param("id") id: string) {
+    return this.organizersService.getAnalytics(id);
+  }
+
   @Patch("add-subscription-plan-for-organizer/:id/plan/:planSelected")
   async addSubscriptionPlan(
     @Param("id") id: string,

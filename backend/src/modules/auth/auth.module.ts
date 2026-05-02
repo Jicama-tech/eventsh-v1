@@ -10,6 +10,7 @@ import { InstagramStrategy } from "./strategies/instagram.strategy";
 import { RolesModule } from "../roles/roles.module";
 import { GoogleOrganizerStrategy } from "./strategies/organizer-google.strategy";
 import { GoogleBuyerStrategy } from "./strategies/google-buyer.strategy";
+import { OrganizersModule } from "../organizers/organizers.module";
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { GoogleBuyerStrategy } from "./strategies/google-buyer.strategy";
     }),
     UsersModule,
     RolesModule,
+    OrganizersModule,
   ],
   providers: [
     AuthService,

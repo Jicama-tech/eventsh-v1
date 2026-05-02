@@ -13,6 +13,7 @@ import { HelmetProvider } from "react-helmet-async";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { CountryProvider } from "./hooks/useCountry";
+import { SubscriptionProvider } from "./hooks/useSubscription";
 import { lazy, Suspense, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 
@@ -34,6 +35,7 @@ const AdminLogs = lazy(() => import("./components/auth/loginAdmin").then(m => ({
 const OrganizerLogin = lazy(() => import("./components/auth/organizerLogin").then(m => ({ default: m.OrganizerLogin })));
 const OrganizerRegister = lazy(() => import("./components/auth/organizerRegister").then(m => ({ default: m.OrganizerRegister })));
 const OrganizerEShopLogin = lazy(() => import("./components/auth/organizerAuthlogin").then(m => ({ default: m.OrganizerEShopLogin })));
+const AgentLogin = lazy(() => import("./components/auth/AgentLogin").then(m => ({ default: m.AgentLogin })));
 
 // Public pages
 const AboutUsPage = lazy(() => import("./pages/aboutUs").then(m => ({ default: m.AboutUsPage })));
@@ -45,11 +47,8 @@ const OrganizerStorefront = lazy(() => import("./components/user/organizerStoreF
 const EventFront = lazy(() => import("./components/user/eventFront").then(m => ({ default: m.EventFront })));
 
 // Dashboards (heavy components)
-const AdminLayout = lazy(() => import("./pages/admin/AdminLayout").then(m => ({ default: m.AdminLayout })));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard").then(m => ({ default: m.AdminDashboard })));
-const UsersPage = lazy(() => import("./pages/admin/UsersPage").then(m => ({ default: m.UsersPage })));
-const PricingPage = lazy(() => import("./pages/admin/PricingPage").then(m => ({ default: m.PricingPage })));
-const SettingsPage = lazy(() => import("./pages/admin/SettingsPage").then(m => ({ default: m.SettingsPage })));
+const AgentDashboard = lazy(() => import("./pages/agent/AgentDashboard").then(m => ({ default: m.AgentDashboard })));
 const OrganizerDashboard = lazy(() => import("./pages/organizer/OrganizerDashboard").then(m => ({ default: m.OrganizerDashboard })));
 const UserDashboard = lazy(() => import("./pages/user/UserDashboard").then(m => ({ default: m.UserDashboard })));
 const QRTicketScanner = lazy(() => import("./components/organizer/ORCodeScanner"));
@@ -208,6 +207,7 @@ function AppContent() {
           <Route path="/terms" element={<TermsAndConditionsPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/admin-login" element={<AdminLogs />} />
+          <Route path="/agent-login" element={<AgentLogin />} />
           <Route
             path="/events/:eventId/scan-tickets"
             element={<QRTicketScanner />}
@@ -216,7 +216,10 @@ function AppContent() {
           <Route path="/table-payment" element={<TablePaymentPage />} />
           <Route path="/speaker-payment" element={<SpeakerPaymentPage />} />
           <Route path="/round-table-payment" element={<RoundTablePaymentPage />} />
-          <Route path="/event-login" element={<OrganizerLogin />} />
+          <Route
+            path="/event-login"
+            element={<Navigate to="/organizer/login" replace />}
+          />
           <Route
             path="/:organizationName"
             element={<OrganizerStorefront onBack={() => navigate(-1)} />}
@@ -226,7 +229,10 @@ function AppContent() {
             path="/:organizationName/events/:id"
             element={<EventFront eventId={""} onBack={() => {}} />}
           />
-          <Route path="/login" element={<OrganizerLogin />} />
+          <Route
+            path="/login"
+            element={<Navigate to="/organizer/login" replace />}
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       ) : (
@@ -234,38 +240,20 @@ function AppContent() {
           switch (user.roles[0]) {
             case "admin":
               return (
-                <AdminLayout onLogout={logout}>
-                  <Routes>
-                    <Route
-                      path="/"
-                      element={<Navigate to="/admin-dashboard" replace />}
-                    />
-                    <Route
-                      path="/admin-dashboard"
-                      element={<AdminDashboard />}
-                    />
-                    <Route
-                      path="/admin-dashboard/users"
-                      element={<UsersPage />}
-                    />
-                    <Route
-                      path="/admin-dashboard/pricing"
-                      element={<PricingPage />}
-                    />
-                    <Route
-                      path="/admin-dashboard/analytics"
-                      element={<div className="p-6">Analytics Dashboard</div>}
-                    />
-                    <Route
-                      path="/admin-dashboard/settings"
-                      element={<SettingsPage />}
-                    />
-                    <Route
-                      path="*"
-                      element={<Navigate to="/admin-dashboard" replace />}
-                    />
-                  </Routes>
-                </AdminLayout>
+                <Routes>
+                  <Route
+                    path="/"
+                    element={<Navigate to="/admin-dashboard" replace />}
+                  />
+                  <Route
+                    path="/admin-dashboard"
+                    element={<AdminDashboard onLogout={logout} />}
+                  />
+                  <Route
+                    path="*"
+                    element={<Navigate to="/admin-dashboard" replace />}
+                  />
+                </Routes>
               );
             case "organizer":
               return (
@@ -314,6 +302,23 @@ function AppContent() {
                   />
                 </Routes>
               );
+            case "agent":
+              return (
+                <Routes>
+                  <Route
+                    path="/"
+                    element={<Navigate to="/agent-dashboard" replace />}
+                  />
+                  <Route
+                    path="/agent-dashboard"
+                    element={<AgentDashboard onLogout={logout} />}
+                  />
+                  <Route
+                    path="*"
+                    element={<Navigate to="/agent-dashboard" replace />}
+                  />
+                </Routes>
+              );
             case "user":
               return (
                 <Routes>
@@ -347,11 +352,7 @@ function AppContent() {
 
                   <Route
                     path="/login"
-                    element={
-                      <RequireUserRole>
-                        <OrganizerLogin />
-                      </RequireUserRole>
-                    }
+                    element={<Navigate to="/organizer/login" replace />}
                   />
                   <Route
                     path="/register"
@@ -423,7 +424,9 @@ const App = () => (
           <BrowserRouter>
             <AuthProvider>
               <CountryProvider>
-                <AppContent />
+                <SubscriptionProvider>
+                  <AppContent />
+                </SubscriptionProvider>
               </CountryProvider>
             </AuthProvider>
           </BrowserRouter>

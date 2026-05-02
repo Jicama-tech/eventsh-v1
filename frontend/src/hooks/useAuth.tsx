@@ -101,6 +101,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Logout clears token and user, navigates home
   const logout = () => {
+    // Clear any per-organizer scratch state (chatbot history, etc.)
+    Object.keys(sessionStorage)
+      .filter((k) => k.startsWith("chatbot:msgs:"))
+      .forEach((k) => sessionStorage.removeItem(k));
     sessionStorage.removeItem("token");
     setUser(null);
     navigate("/");

@@ -46,6 +46,18 @@ export class AdminController {
     }
   }
 
+  @Get("users-overview")
+  @UseGuards(JwtAuthGuard)
+  usersOverview() {
+    return this.adminService.getUsersOverview();
+  }
+
+  @Get("organizers-overview")
+  @UseGuards(JwtAuthGuard)
+  organizersOverview() {
+    return this.adminService.getOrganizersOverview();
+  }
+
   @Patch("approve/:id")
   @UseGuards(JwtAuthGuard)
   approveApplicant(

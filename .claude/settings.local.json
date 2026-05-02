@@ -6,7 +6,12 @@
       "WebFetch(domain:localhost)",
       "Bash(grep -rn localhost C:/Users/vansh/Desktop/VAnsh/eventsh/backend/src --include=*.ts)",
       "Bash(npx tsc:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(echo \"BE_EXIT: $?\")",
+      "Bash(curl -s -o /dev/null -w \"BE 3000  → %{http_code}\\\\n\" http://localhost:3000/plans/get-plans)",
+      "Bash(curl -s -o /dev/null -w \"FE 8081  → %{http_code}\\\\n\" http://localhost:8081/)",
+      "Bash(curl -s -o /dev/null -w \"FE 8080  → %{http_code}\\\\n\" http://localhost:8080/)"
     ]
   }
 }

@@ -370,9 +370,15 @@ Thank you for choosing Eventsh! 🎊`;
     const event = await this.eventModel.findOne({ _id: eventId });
     if (!event) throw new NotFoundException("Event not found");
 
-    // Backfill originalTotalTickets for existing events
-    if (!event.originalTotalTickets) {
-      event.originalTotalTickets = event.totalTickets + quantity;
+    // Coerce existing values to numbers — older events may have missing/NaN.
+    const currentTotal = Number(event.totalTickets);
+    const hasCap = Number.isFinite(currentTotal);
+
+    // Backfill originalTotalTickets only when we have a real cap to track.
+    if (!Number.isFinite(Number(event.originalTotalTickets))) {
+      if (hasCap) {
+        event.originalTotalTickets = currentTotal + quantity;
+      }
     }
 
     // Deduct from specific visitorType maxCount if visitorTypes exist
@@ -393,18 +399,20 @@ Thank you for choosing Eventsh! 🎊`;
         }
       }
       event.markModified("visitorTypes");
-      // Recalculate totalTickets from visitorTypes
+      // Recalculate totalTickets from visitorTypes — coerce to numbers so a
+      // missing maxCount on any tier doesn't poison the sum with NaN.
       event.totalTickets = event.visitorTypes.reduce(
-        (sum: number, v: any) => sum + (v.maxCount || 0),
+        (sum: number, v: any) => sum + (Number(v.maxCount) || 0),
         0,
       );
-    } else {
-      // No visitor types — use totalTickets directly
-      if (event.totalTickets < quantity) {
+    } else if (hasCap) {
+      // No visitor types AND a real cap exists — deduct from totalTickets.
+      if (currentTotal < quantity) {
         throw new BadRequestException("Not enough tickets available");
       }
-      event.totalTickets -= quantity;
+      event.totalTickets = currentTotal - quantity;
     }
+    // else: free / unlimited entry — leave totalTickets as-is.
 
     await event.save();
   }

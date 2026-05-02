@@ -62,4 +62,8 @@ export class CreateOrganizerDto {
   @IsString()
   @IsOptional()
   role?: string;
+
+  @IsString()
+  @IsOptional()
+  agentReferralCode?: string;
 }

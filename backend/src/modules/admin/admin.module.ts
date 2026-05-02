@@ -4,10 +4,15 @@ import { AdminController } from "./admin.controller";
 import { AdminSchema } from "./entities/admin.entity";
 import { MongooseModule } from "@nestjs/mongoose/dist";
 import { JwtModule } from "@nestjs/jwt";
-import { OrganizersModule } from "../organizers/organizers.module";
 import { OrganizerSchema } from "../organizers/schemas/organizer.schema";
 import { EventSchema } from "../events/schemas/event.schema";
 import { UserSchema } from "../users/schemas/user.schema";
+import { TicketSchema } from "../tickets/entities/ticket.entity";
+import { PlanSchema } from "../plans/entities/plan.entity";
+import { AgentSchema } from "../agents/schemas/agent.schema";
+import { OperatorSchema } from "../operators/entities/operator.entity";
+import { VendorSchema } from "../stalls/schemas/vendor.schema";
+import { SpeakerRequestSchema } from "../speaker-requests/entities/speaker-request.entity";
 import { MailModule } from "../roles/mail.module";
 import { MailService } from "../roles/mail.service";
 
@@ -18,6 +23,12 @@ import { MailService } from "../roles/mail.service";
       { name: "Organizer", schema: OrganizerSchema },
       { name: "Event", schema: EventSchema },
       { name: "User", schema: UserSchema },
+      { name: "Ticket", schema: TicketSchema },
+      { name: "Plan", schema: PlanSchema },
+      { name: "Agent", schema: AgentSchema },
+      { name: "Operator", schema: OperatorSchema },
+      { name: "Vendor", schema: VendorSchema },
+      { name: "SpeakerRequest", schema: SpeakerRequestSchema },
     ]),
     MailModule,
     JwtModule.register({

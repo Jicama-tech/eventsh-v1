@@ -39,89 +39,47 @@ export function OrganizerEShopLogin() {
 
   useEffect(() => {
     const token = searchParams.get("token");
-    const email = searchParams.get("email");
-    const name = searchParams.get("name") || "";
+    const direct = searchParams.get("direct");
+    const errorCode = searchParams.get("error");
 
-    // If no token/email in URL, show normal login UI
-    if (!token || !email) {
+    if (errorCode === "auth_failed") {
+      toast({
+        duration: 6000,
+        title: "Sign-in failed",
+        description: "Couldn't sign you in with Google. Please try again.",
+        variant: "destructive",
+      });
+      setIsChecking(false);
+      return;
+    }
+    if (errorCode === "pending_approval") {
+      toast({
+        duration: 8000,
+        title: "Approval pending",
+        description:
+          "Your organizer account is awaiting admin approval. You'll be able to sign in once it's approved.",
+        variant: "destructive",
+      });
       setIsChecking(false);
       return;
     }
 
-    setIsChecking(true);
-    sessionStorage.setItem("token", token);
+    // Backend has already minted the organizer JWT — log in directly.
+    if (token && direct === "1") {
+      sessionStorage.setItem("token", token);
+      login(token);
+      toast({
+        duration: 3000,
+        title: "Welcome back!",
+        description: "Signed in via Google.",
+      });
+      navigate("/organizer-dashboard", { replace: true });
+      return;
+    }
 
-    (async () => {
-      try {
-        const res = await fetch(`${apiURL}/auth/check-role`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            email,
-            name,
-            role: "organizer",
-          }),
-        });
-
-        if (!res.ok) {
-          throw new Error("Failed to check role");
-        }
-
-        const data = await res.json();
-
-
-        // CASE 1: Shopkeeper found, OTP sent
-        if (data.found && data.data?.role === "organizer") {
-          toast({
-            duration: 5000,
-            title: "Organizer Found",
-            description: data.message,
-          });
-          navigate("/login", {
-            replace: true,
-            state: { email },
-          });
-          return;
-        }
-
-        // CASE 2: Shopkeeper found but OTP failed
-        if (data.found && data.data?.role === "organizer") {
-          toast({
-            duration: 5000,
-            title: "New Organizer",
-            description: data.message,
-          });
-          setIsChecking(false);
-          return;
-        }
-
-        // CASE 3: No shopkeeper yet -> go to registration
-        if (!data.found) {
-          toast({
-            duration: 5000,
-            title: "Complete Registration",
-            description: data.message,
-          });
-          navigate("/register", {
-            replace: true,
-            state: { email, name },
-          });
-        }
-      } catch (error: any) {
-        console.error("Check role error:", error);
-        toast({
-          duration: 5000,
-          title: "Error",
-          description: "Could not verify Organizer availability.",
-          variant: "destructive",
-        });
-        setIsChecking(false);
-      }
-    })();
-  }, [searchParams, apiURL, navigate, toast]);
+    // No token, no error → show the normal login screen.
+    setIsChecking(false);
+  }, [searchParams, navigate, toast, login]);
 
   const handleGoogleLogin = async () => {
     setIsLoading({ ...isLoading, google: true });
