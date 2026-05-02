@@ -2,7 +2,7 @@
 
 > Server: Ubuntu (eventshadmin@srv866262)
 > Path: `/home/eventshadmin/eventsh/eventsh-v1/`
-> Backend port: **3001** (kioscart uses 3000 — must not collide)
+> Backend port: **3002** (kioscart uses 3000 — must not collide)
 > Webhook port: **9001** (kioscart uses 9000)
 
 ---
@@ -50,7 +50,7 @@ npm install --legacy-peer-deps
 # 2. Create .env file
 nano .env
 # Required variables:
-#   PORT=3001
+#   PORT=3002
 #   MONGODB_URI=mongodb://localhost:27017/eventsh
 #   JWT_SECRET=your_jwt_secret
 #   FRONTEND_URL=https://eventsh.com
@@ -136,9 +136,9 @@ server {
         try_files $uri =404;
     }
 
-    # API reverse proxy — routes /api/* to backend on port 3001
+    # API reverse proxy — routes /api/* to backend on port 3002
     location /api/ {
-        proxy_pass http://localhost:3001/;
+        proxy_pass http://localhost:3002/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -289,9 +289,9 @@ pm2 logs eventsh-backend --lines 50
 cat /home/eventshadmin/eventsh/eventsh-v1/backend/.env
 ```
 
-### Port 3001 collision?
+### Port 3002 collision?
 ```bash
-sudo lsof -i :3001     # confirm only eventsh-backend listens
+sudo lsof -i :3002     # confirm only eventsh-backend listens
 ```
 
 ### Frontend showing blank page?
@@ -313,7 +313,7 @@ pm2 logs eventsh-webhook
 ### 502 Bad Gateway?
 ```bash
 pm2 status
-curl http://localhost:3001
+curl http://localhost:3002
 ```
 
 ### SSL expired?
