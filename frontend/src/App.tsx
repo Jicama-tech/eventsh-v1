@@ -216,7 +216,10 @@ function AppContent() {
           <Route path="/table-payment" element={<TablePaymentPage />} />
           <Route path="/speaker-payment" element={<SpeakerPaymentPage />} />
           <Route path="/round-table-payment" element={<RoundTablePaymentPage />} />
-          <Route path="/event-login" element={<OrganizerLogin />} />
+          <Route
+            path="/event-login"
+            element={<Navigate to="/organizer/login" replace />}
+          />
           <Route
             path="/:organizationName"
             element={<OrganizerStorefront onBack={() => navigate(-1)} />}
@@ -226,7 +229,10 @@ function AppContent() {
             path="/:organizationName/events/:id"
             element={<EventFront eventId={""} onBack={() => {}} />}
           />
-          <Route path="/login" element={<OrganizerLogin />} />
+          <Route
+            path="/login"
+            element={<Navigate to="/organizer/login" replace />}
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       ) : (
@@ -346,11 +352,7 @@ function AppContent() {
 
                   <Route
                     path="/login"
-                    element={
-                      <RequireUserRole>
-                        <OrganizerLogin />
-                      </RequireUserRole>
-                    }
+                    element={<Navigate to="/organizer/login" replace />}
                   />
                   <Route
                     path="/register"

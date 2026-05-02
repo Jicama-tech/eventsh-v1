@@ -8,7 +8,9 @@ import { TicketSchema } from "../tickets/entities/ticket.entity";
 import { PlanSchema } from "../plans/entities/plan.entity";
 import { OperatorSchema } from "../operators/entities/operator.entity";
 import { VendorSchema } from "../stalls/schemas/vendor.schema";
+import { StallSchema } from "../stalls/entities/stall.entity";
 import { SpeakerRequestSchema } from "../speaker-requests/entities/speaker-request.entity";
+import { RoundTableBookingSchema } from "../round-table-bookings/entities/round-table-booking.entity";
 
 @Module({
   imports: [
@@ -19,7 +21,9 @@ import { SpeakerRequestSchema } from "../speaker-requests/entities/speaker-reque
       { name: "Plan", schema: PlanSchema },
       { name: "Operator", schema: OperatorSchema },
       { name: "Vendor", schema: VendorSchema },
+      { name: "Stall", schema: StallSchema },
       { name: "SpeakerRequest", schema: SpeakerRequestSchema },
+      { name: "RoundTableBooking", schema: RoundTableBookingSchema },
     ]),
   ],
   controllers: [ChatbotController],

@@ -39,23 +39,80 @@ import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useNavigate } from "react-router-dom";
 
 // Lazy-load heavy tab components (only loaded when their tab is active)
-const CreateEventForm = lazy(() => import("@/components/organizer/CreateEventForm").then(m => ({ default: m.CreateEventForm })));
-const ShopkeeperRequestForm = lazy(() => import("@/components/organizer/ShopkeeperRequestForm").then(m => ({ default: m.ShopkeeperRequestForm })));
-const EventQRCode = lazy(() => import("@/components/organizer/EventQRCode").then(m => ({ default: m.EventQRCode })));
-const AddUserForm = lazy(() => import("@/components/organizer/AddUserForm").then(m => ({ default: m.AddUserForm })));
-const UserDetailView = lazy(() => import("@/components/organizer/UserDetailView").then(m => ({ default: m.UserDetailView })));
-const AddShopkeeperForm = lazy(() => import("@/components/organizer/AddShopkeeperForm").then(m => ({ default: m.AddShopkeeperForm })));
-const ShopkeeperDetailView = lazy(() => import("@/components/organizer/ShopkeeperDetailView").then(m => ({ default: m.ShopkeeperDetailView })));
-const TicketSalesManagement = lazy(() => import("@/components/organizer/TicketSalesManagement").then(m => ({ default: m.TicketSalesManagement })));
-const OrganizerSettings = lazy(() => import("@/components/organizer/OrganizerSettings").then(m => ({ default: m.OrganizerSettings })));
+const CreateEventForm = lazy(() =>
+  import("@/components/organizer/CreateEventForm").then((m) => ({
+    default: m.CreateEventForm,
+  })),
+);
+const ShopkeeperRequestForm = lazy(() =>
+  import("@/components/organizer/ShopkeeperRequestForm").then((m) => ({
+    default: m.ShopkeeperRequestForm,
+  })),
+);
+const EventQRCode = lazy(() =>
+  import("@/components/organizer/EventQRCode").then((m) => ({
+    default: m.EventQRCode,
+  })),
+);
+const AddUserForm = lazy(() =>
+  import("@/components/organizer/AddUserForm").then((m) => ({
+    default: m.AddUserForm,
+  })),
+);
+const UserDetailView = lazy(() =>
+  import("@/components/organizer/UserDetailView").then((m) => ({
+    default: m.UserDetailView,
+  })),
+);
+const AddShopkeeperForm = lazy(() =>
+  import("@/components/organizer/AddShopkeeperForm").then((m) => ({
+    default: m.AddShopkeeperForm,
+  })),
+);
+const ShopkeeperDetailView = lazy(() =>
+  import("@/components/organizer/ShopkeeperDetailView").then((m) => ({
+    default: m.ShopkeeperDetailView,
+  })),
+);
+const TicketSalesManagement = lazy(() =>
+  import("@/components/organizer/TicketSalesManagement").then((m) => ({
+    default: m.TicketSalesManagement,
+  })),
+);
+const KioskMode = lazy(() =>
+  import("@/components/organizer/KioskMode").then((m) => ({
+    default: m.KioskMode,
+  })),
+);
+const OrganizerSettings = lazy(() =>
+  import("@/components/organizer/OrganizerSettings").then((m) => ({
+    default: m.OrganizerSettings,
+  })),
+);
 const MyEvents = lazy(() => import("@/components/organizer/MyEvents"));
 const MyEventUsers = lazy(() => import("@/components/organizer/MyUsers"));
 const VendorRequests = lazy(() => import("@/components/organizer/shopKeeper"));
-const SpeakerRequests = lazy(() => import("@/components/organizer/SpeakerRequests").then(m => ({ default: m.SpeakerRequests })));
-const HelpFAQ = lazy(() => import("@/components/organizer/HelpFAQ").then(m => ({ default: m.HelpFAQ })));
-const EventAttendees = lazy(() => import("@/components/organizer/EventAttendees"));
-const OrganizerStorefrontCustomizer = lazy(() => import("@/components/organizer/organizerStorefrontCustomizer").then(m => ({ default: m.OrganizerStorefrontCustomizer })));
-const RoundTableBookings = lazy(() => import("@/components/organizer/RoundTableBookings"));
+const SpeakerRequests = lazy(() =>
+  import("@/components/organizer/SpeakerRequests").then((m) => ({
+    default: m.SpeakerRequests,
+  })),
+);
+const HelpFAQ = lazy(() =>
+  import("@/components/organizer/HelpFAQ").then((m) => ({
+    default: m.HelpFAQ,
+  })),
+);
+const EventAttendees = lazy(
+  () => import("@/components/organizer/EventAttendees"),
+);
+const OrganizerStorefrontCustomizer = lazy(() =>
+  import("@/components/organizer/organizerStorefrontCustomizer").then((m) => ({
+    default: m.OrganizerStorefrontCustomizer,
+  })),
+);
+const RoundTableBookings = lazy(
+  () => import("@/components/organizer/RoundTableBookings"),
+);
 
 function RoundTableBookingsTab({ apiURL }: { apiURL: string }) {
   const [rtEvents, setRtEvents] = useState<any[]>([]);
@@ -115,7 +172,13 @@ function RoundTableBookingsTab({ apiURL }: { apiURL: string }) {
           </div>
 
           {selectedId ? (
-            <Suspense fallback={<div className="flex items-center justify-center py-8"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" /></div>}>
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+                </div>
+              }
+            >
               <RoundTableBookings eventId={selectedId} />
             </Suspense>
           ) : (
@@ -186,7 +249,9 @@ export function OrganizerDashboard({
   const [organizerId, setOrganizerId] = useState("");
   // Chatbot is the landing tab — organizer sees AI panel first.
   const [activeTab, setActiveTab] = useState("chatbot");
-  const [selectedRTEventId, setSelectedRTEventId] = useState<string | null>(null);
+  const [selectedRTEventId, setSelectedRTEventId] = useState<string | null>(
+    null,
+  );
   const [showEventfront, setShowEventfront] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -327,6 +392,10 @@ export function OrganizerDashboard({
   };
 
   async function logout() {
+    // Clear per-organizer scratch state (chatbot history, etc.)
+    Object.keys(sessionStorage)
+      .filter((k) => k.startsWith("chatbot:msgs:"))
+      .forEach((k) => sessionStorage.removeItem(k));
     sessionStorage.removeItem("token");
     setCountry("IN");
     if (storeSlug) {
@@ -418,9 +487,12 @@ export function OrganizerDashboard({
 
         // If not found (operator login), try fetching by ID, then check if operator
         if (!orgData && decoded.sub) {
-          const idRes = await fetch(`${apiURL}/organizers/profile-get/${decoded.sub}`, {
-            method: "GET",
-          });
+          const idRes = await fetch(
+            `${apiURL}/organizers/profile-get/${decoded.sub}`,
+            {
+              method: "GET",
+            },
+          );
           if (idRes.ok) {
             const idResult = await idRes.json();
             if (idResult.data?.organizationName) {
@@ -440,7 +512,9 @@ export function OrganizerDashboard({
                 const parentOrgId = opResult.data?.organizerId;
                 if (parentOrgId) {
                   setOrganizerId(parentOrgId);
-                  const parentRes = await fetch(`${apiURL}/organizers/profile-get/${parentOrgId}`);
+                  const parentRes = await fetch(
+                    `${apiURL}/organizers/profile-get/${parentOrgId}`,
+                  );
                   if (parentRes.ok) {
                     const parentResult = await parentRes.json();
                     if (parentResult.data?.organizationName) {
@@ -589,12 +663,44 @@ export function OrganizerDashboard({
   const navigationItems = [
     { id: "chatbot", label: "AI Assistant", icon: Bot, moduleKey: null },
     { id: "dashboard", label: "Dashboard", icon: Store, moduleKey: null },
-    { id: "eventAttendees", label: "Attendees", icon: Users, moduleKey: "events" },
-    { id: "speakerRequests", label: "Speaker Requests", icon: Mic2, moduleKey: "speakerRequests" },
-    { id: "users", label: "Exhibitors/Visitors", icon: Users, moduleKey: "stalls" },
-    { id: "roundTableBookings", label: "Round Tables", icon: Circle, moduleKey: "roundTableBookings" },
+    {
+      id: "eventAttendees",
+      label: "Attendees",
+      icon: Users,
+      moduleKey: "events",
+    },
+    {
+      id: "speakerRequests",
+      label: "Speaker Requests",
+      icon: Mic2,
+      moduleKey: "speakerRequests",
+    },
+    {
+      id: "users",
+      label: "Exhibitors/Visitors",
+      icon: Users,
+      moduleKey: "stalls",
+    },
+    {
+      id: "roundTableBookings",
+      label: "Round Tables",
+      icon: Circle,
+      moduleKey: "roundTableBookings",
+    },
     { id: "events", label: "Events", icon: CalendarDays, moduleKey: "events" },
-    { id: "storefront", label: "Eventfront", icon: Globe, isAction: true, moduleKey: "storefront" },
+    {
+      id: "kiosk",
+      label: "Walk-in Booking",
+      icon: Ticket,
+      moduleKey: "events",
+    },
+    {
+      id: "storefront",
+      label: "Eventfront",
+      icon: Globe,
+      isAction: true,
+      moduleKey: "storefront",
+    },
     { id: "settings", label: "Settings", icon: Settings, moduleKey: null },
   ];
 
@@ -682,38 +788,38 @@ export function OrganizerDashboard({
               {navigationItems
                 .filter((item) => isTabAllowedForOperator(item.id))
                 .map((item) => {
-                // Items without a moduleKey (Dashboard, Settings) are always available.
-                const locked =
-                  !!item.moduleKey && !isModuleEnabled(item.moduleKey);
-                return (
-                  <Button
-                    key={item.id}
-                    variant={
-                      activeTab === item.id ? "default" : "buttonOutline"
-                    }
-                    className={`w-full justify-start text-sm ${locked ? "opacity-60" : ""}`}
-                    onClick={() => {
-                      if (item.id === "storefront") {
-                        handleViewStorefront();
-                      } else {
-                        handleTabChange(item.id);
+                  // Items without a moduleKey (Dashboard, Settings) are always available.
+                  const locked =
+                    !!item.moduleKey && !isModuleEnabled(item.moduleKey);
+                  return (
+                    <Button
+                      key={item.id}
+                      variant={
+                        activeTab === item.id ? "default" : "buttonOutline"
                       }
-                    }}
-                    disabled={item.id === "storefront" && loading}
-                    title={locked ? "Upgrade your plan to unlock" : undefined}
-                  >
-                    <item.icon className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span className="truncate flex-1 text-left">
-                      {item.id === "storefront" && loading
-                        ? "Loading..."
-                        : item.label}
-                    </span>
-                    {locked && (
-                      <Lock className="h-3 w-3 ml-1 text-muted-foreground" />
-                    )}
-                  </Button>
-                );
-              })}
+                      className={`w-full justify-start text-sm ${locked ? "opacity-60" : ""}`}
+                      onClick={() => {
+                        if (item.id === "storefront") {
+                          handleViewStorefront();
+                        } else {
+                          handleTabChange(item.id);
+                        }
+                      }}
+                      disabled={item.id === "storefront" && loading}
+                      title={locked ? "Upgrade your plan to unlock" : undefined}
+                    >
+                      <item.icon className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span className="truncate flex-1 text-left">
+                        {item.id === "storefront" && loading
+                          ? "Loading..."
+                          : item.label}
+                      </span>
+                      {locked && (
+                        <Lock className="h-3 w-3 ml-1 text-muted-foreground" />
+                      )}
+                    </Button>
+                  );
+                })}
             </nav>
           </div>
         </aside>
@@ -832,7 +938,7 @@ export function OrganizerDashboard({
                   />
 
                   {/* Analytics charts (Recharts) */}
-                  <OrganizerAnalyticsCharts />
+                  {/* <OrganizerAnalyticsCharts /> */}
                 </div>
               </TabsContent>
 
@@ -842,6 +948,14 @@ export function OrganizerDashboard({
                     <div className="space-y-4">
                       <MyEvents />
                     </div>
+                  </Suspense>
+                </ModuleGate>
+              </TabsContent>
+
+              <TabsContent value="kiosk" className="mt-0">
+                <ModuleGate moduleKey="events" hideWhenLocked>
+                  <Suspense fallback={<TabLoader />}>
+                    <KioskMode />
                   </Suspense>
                 </ModuleGate>
               </TabsContent>

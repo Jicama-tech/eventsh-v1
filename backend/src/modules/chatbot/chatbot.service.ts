@@ -156,7 +156,10 @@ export class ChatbotService {
     @InjectModel("Plan") private planModel: Model<any>,
     @InjectModel("Operator") private operatorModel: Model<any>,
     @InjectModel("Vendor") private vendorModel: Model<any>,
+    @InjectModel("Stall") private stallModel: Model<any>,
     @InjectModel("SpeakerRequest") private speakerRequestModel: Model<any>,
+    @InjectModel("RoundTableBooking")
+    private roundTableBookingModel: Model<any>,
   ) {
     const useQwen = !!process.env.QWEN_API_KEY;
     const apiKey = useQwen
@@ -243,16 +246,18 @@ export class ChatbotService {
       type: "function",
       function: {
         name: "list_events",
-        description: "List the organizer's events. Optionally filter by status",
+        description:
+          "List the organizer's events. Use status='all' for 'list all events', 'every event', 'how many events'; status='upcoming' ONLY when the user explicitly says 'upcoming'/'future'; status='past' for 'past'/'previous'/'completed'. When in doubt, use 'all'.",
         parameters: {
           type: "object",
           properties: {
             status: {
               type: "string",
               enum: ["upcoming", "past", "all"],
-              description: "Defaults to all",
+              description:
+                "Default 'all'. Use 'upcoming' ONLY for explicit upcoming/future requests.",
             },
-            limit: { type: "number", description: "Defaults to 10" },
+            limit: { type: "number", description: "Defaults to 100" },
           },
           required: [],
         },
@@ -589,11 +594,16 @@ export class ChatbotService {
       type: "function",
       function: {
         name: "list_stalls",
-        description: "List stall registrations for the organizer",
+        description:
+          "List stall registrations for the organizer. Optionally filter by event title (event_name) — returns per-event stall bookings with vendor + payment info.",
         parameters: {
           type: "object",
           properties: {
             status: { type: "string", enum: ["pending", "approved", "all"] },
+            event_name: {
+              type: "string",
+              description: "Event title (or partial title) to filter stalls by event",
+            },
             limit: { type: "number" },
           },
           required: [],
@@ -666,6 +676,53 @@ export class ChatbotService {
       },
     },
 
+    // Deep analytics — full breakdowns per area
+    {
+      type: "function",
+      function: {
+        name: "get_events_breakdown",
+        description:
+          "Comprehensive analytics across the organizer's events: counts by status / visibility / category, total capacity vs sold, average ticket price, occupancy rate. Use for 'detailed events analytics', 'event breakdown', 'how are my events performing'.",
+        parameters: { type: "object", properties: {}, required: [] },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_stalls_analytics",
+        description:
+          "Comprehensive stall-booking analytics for the organizer: total bookings, by booking status (Pending/Approved/Rejected), by payment status (Unpaid/Partial/Paid), total stall revenue, top events by stall count. Use for 'stall analytics', 'stall stats', 'stall revenue'.",
+        parameters: { type: "object", properties: {}, required: [] },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_speakers_analytics",
+        description:
+          "Comprehensive speaker analytics for the organizer: total requests, by status (Pending/Approved/Rejected), by payment status (Unpaid/Paid/Waived), total fees, keynote count, top events by speaker count. Use for 'speaker analytics', 'speaker stats'.",
+        parameters: { type: "object", properties: {}, required: [] },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_round_tables_analytics",
+        description:
+          "Comprehensive round-table analytics across the organizer's events: total tables, total chairs (capacity), chairs booked, occupancy rate, total round-table revenue from bookings, top events by booking count. Use for 'round table analytics', 'round table stats'.",
+        parameters: { type: "object", properties: {}, required: [] },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_organization_settings",
+        description:
+          "Comprehensive organization settings: profile, country, currency, plan, plan modules / module access, operators count, bank/payment settings, storefront slug, business email. Use for 'show all my settings', 'organization details', 'my org configuration'.",
+        parameters: { type: "object", properties: {}, required: [] },
+      },
+    },
+
     // UI driver
     {
       type: "function",
@@ -703,10 +760,15 @@ export class ChatbotService {
       "get_revenue_trend",
       "get_top_events",
       "get_pending_approvals",
+      "get_events_breakdown",
+      "get_stalls_analytics",
+      "get_speakers_analytics",
+      "get_round_tables_analytics",
     ],
     events: [
       "list_events",
       "get_event_detail",
+      "get_events_breakdown",
       "create_event",
       "create_full_event",
       "add_ticket_type",
@@ -725,14 +787,20 @@ export class ChatbotService {
       "list_attendees",
     ],
     attendees: ["list_events", "list_attendees", "search_attendee"],
-    stalls: ["list_stalls", "navigate_to"],
-    speakers: ["list_events", "list_speakers", "navigate_to"],
+    stalls: ["list_stalls", "get_stalls_analytics", "navigate_to"],
+    speakers: [
+      "list_events",
+      "list_speakers",
+      "get_speakers_analytics",
+      "navigate_to",
+    ],
     storefront: ["navigate_to"],
     settings: [
       "get_subscription",
       "list_plans",
       "list_operators",
       "get_organizer_info",
+      "get_organization_settings",
       "navigate_to",
     ],
     general: [
@@ -740,6 +808,11 @@ export class ChatbotService {
       "get_organizer_info",
       "list_events",
       "get_pending_approvals",
+      "get_events_breakdown",
+      "get_stalls_analytics",
+      "get_speakers_analytics",
+      "get_round_tables_analytics",
+      "get_organization_settings",
       "navigate_to",
     ],
   };
@@ -778,24 +851,44 @@ export class ChatbotService {
    - Counts: bold the number. E.g. **12 events**.
 
 5. NEVER PASTE RAW TOOL OUTPUT (no JSON in replies, no curly braces, no array brackets).
+
+6. NAVIGATION INTENT — when the user says "open the X tab", "go to X", "switch to X", or "open X customizer", call navigate_to({tab: X}) IMMEDIATELY. Do NOT list / fetch / show anything first. Map "events"→events, "settings"→settings, "storefront"→storefront, "attendees"→eventAttendees, "speakers"→speakerRequests, "users"→users, "stalls"→users, "round tables"→roundTableBookings.
+
+7. AFTER TOOLS RUN — when you receive tool results, your job is to FORMAT them as the rendered reply (table or bold key-values). DO NOT request more tools, DO NOT emit any <tool_call>, <function_call>, JSON object, or function name in the response text. Just produce the final markdown reply.
+
+8. EMPTY RESULTS ARE OK. If a list-type tool returns an empty array (e.g. no speakers for that event yet, no tickets sold, no stalls registered), render the table headers with an empty row (or just say "**No records found.**") and STOP. Do NOT call navigate_to to "send the user somewhere else" — empty just means zero items, not a system error.
 === END RULES ===
 `;
 
   private static SPECIALIST_PROMPTS: Record<Tab, string> = {
     dashboard: `You are the Dashboard specialist for "{ORG}" on EventSH.
-Focus: analytics, revenue, ticket sales, top events, pending review counts.
+Focus: analytics, revenue, ticket sales, top events, pending review counts, deep breakdowns.
 - For ANY metric question, you MUST call a tool first. Never guess numbers.
 - Period words: "today" → get_revenue_trend(today); "this week" → week; "this month" → month; "this quarter" → quarter; "this year" → year.
 - Format: 1-line headline + 2-column markdown table (Metric | Value).
 - For top events, use a 3-column table: Event | Tickets | Revenue.
-- "How is my platform doing" / "give me an overview" → call get_dashboard_stats AND get_pending_approvals, then a single combined table.`,
+- "How is my platform doing" / "give me an overview" → call get_dashboard_stats AND get_pending_approvals, then a single combined table.
+
+DEEP ANALYTICS TOOLS (use them when the user asks for detailed breakdowns):
+- "Detailed events analytics" / "events breakdown" / "how are my events doing" → get_events_breakdown. Render 3 short tables: Status counts, Visibility counts, then a single Metrics row (Total Events, Capacity, Tickets Sold, Occupancy %, Avg Ticket Price, Revenue).
+- "Stall analytics" / "stall stats" / "stall revenue" → get_stalls_analytics. Render: a By Status table, a By Payment Status table, totals (Total Stalls, Booking Value, Collected), then a Top Events by Stall Count table.
+- "Speaker analytics" / "speaker stats" → get_speakers_analytics. Render: Status counts, Payment Status counts, totals (Total Requests, Keynote Count, Total Fees), then Top Events by Speaker Count.
+- "Round table analytics" / "round table stats" → get_round_tables_analytics. Render: 1 metrics table (Tables, Chairs, Chairs Booked, Occupancy %, Paid Bookings, Revenue) + Top Events by Round Tables (table).
+- For each, NEVER pick or invent extra columns; render only what the tool returned.`,
 
     events: `You are the Events specialist for "{ORG}" on EventSH. You build the entire event end-to-end via tools.
 Currency: {CURRENCY} ({CURRENCY_CODE}).
 
 LISTING / VIEWING:
-- "List events" / "upcoming events" → list_events. Tool returns { total, shown, events[] }. Headline: "You have **{total} events**." Then a markdown table: | # | Title | Date | Venue | Attendees |.
-- If "all events" or the user asks how many, render every row in the events array (the tool returns up to 200).
+- "List events" → list_events(status="all").
+- "Upcoming events" → list_events(status="upcoming").
+- "Past events" / "previous events" / "completed events" → list_events(status="past").
+- "All events" / "list all my events" / "every event" / "how many events do I have" → list_events(status="all"). NEVER pass "upcoming" for these.
+- Tool returns { total, shown, events[] } where each event has { id, title, startDate, endDate, venue, capacity, ticketsSold, status, visibility }.
+- Headline: "You have **{total} events**." Then a markdown table with these EXACT columns and headers: | # | Title | Date | Venue | Sold / Capacity | Status |.
+- "Date" = format startDate as "Apr 28, 2026" (use endDate too if present, e.g. "Apr 28 → Apr 30, 2026"). "Sold / Capacity" = e.g. "12 / 200" (use 0 / 0 if missing). "Status" = the status field as-is (draft / published / etc.).
+- If venue is empty, write "—" in that cell. NEVER make up a venue.
+- After rendering the table, STOP. Do NOT call list_attendees, list_tickets, or any other tool — the user only asked for the events list.
 - "Event details for X" → get_event_detail. Bold key-value pairs.
 
 CREATING — FULL AI FLOW (preferred):
@@ -826,31 +919,70 @@ After creating, ALWAYS confirm with a 2-line bold summary (event title + ID) and
 
     tickets: `You are the Tickets specialist for "{ORG}" on EventSH.
 Focus: tickets sold, payment status, attendance check-in.
-- "Tickets for <event>" → list_tickets(event_name=<event>). Render as table: | Ticket | Customer | Amount | Paid | Attended |.
-- "Recent tickets" → list_tickets() with no event filter.
+- "Recent tickets" / "recent tickets sold" / "latest tickets" → list_tickets() with NO event_name and NO status. Render as a table with these EXACT columns: | Ticket | Event | Customer | Amount | Paid | Attended |. Use the last 6 chars of ticketId. Format Amount with the currency symbol. "Paid" = ✓ or ✗. "Attended" = ✓ or ✗. After the table, STOP — do NOT call list_attendees, list_events, or any other tool.
+- "Tickets for <event>" → list_tickets(event_name=<event>) — same column set.
+- "Pending tickets" / "tickets with pending payments" → list_tickets(status="pending").
+- "Confirmed tickets" → list_tickets(status="confirmed").
 - "Mark ticket X used" → mark_ticket_used(ticketId=X). Confirm with one bold line.
 - "Get ticket X" → get_ticket_detail. Render as bold key-value pairs.
-- If the user says "my latest event" / "the latest event" / "current event" with no name, FIRST call list_events(status=upcoming, limit=1). Use the returned title as event_name. If no upcoming events, fall back to list_events(status=all, limit=1).`,
+
+LATEST-EVENT LOOKUP — for "my latest event" / "the latest event" / "current event":
+  Step 1: call list_events with { status:"upcoming", limit:1 }.
+  Step 2: Inspect the result. If result.events.length >= 1, set EVENT_TITLE = result.events[0].title. STOP this lookup — do NOT call list_events again.
+  Step 3: ONLY if result.events.length === 0, fall back to list_events with { status:"all", limit:1 } and use that title.
+  Step 4: After you have EVENT_TITLE, your VERY NEXT message MUST be a list_tickets tool call with event_name=EVENT_TITLE — emit ONLY that structured tool_call, no surrounding text, no explanation, no apology. The user is waiting for the table.
+
+EMPTY RESULTS:
+- If list_tickets returns an empty array, render this exact reply and STOP:
+    "**No tickets found for {EVENT_TITLE}.**
+    | Ticket | Event | Customer | Amount | Paid | Attended |
+    |---|---|---|---|---|---|"
+  Do NOT call navigate_to. Do NOT redirect. Empty just means zero tickets sold yet.
+- NEVER say "I'm unable to retrieve" or "may not be accessible" — those phrases are forbidden.`,
 
     attendees: `You are the Attendees specialist for "{ORG}" on EventSH.
 Focus: attendee rosters and lookups across all events.
 - "Who came to <event>" / "list attendees for <event>" → list_attendees(event_name=<event>). Table: | Name | Email | WhatsApp | Paid | Attended |.
 - "Find <name>" / "search <email>" → search_attendee(query=...). Table: | Event | Name | Email | WhatsApp |.
 - If the user says "my latest event" with no name, FIRST call list_events(status=upcoming, limit=1) and use that title.
-- For "find attendee by name or email" with no actual name, ask: "Who should I look up — name or email?".`,
+- For "find attendee by name or email" with no actual name, ask: "Who should I look up — name or email?".
+
+EMPTY RESULTS:
+- If list_attendees / search_attendee returns an empty array, render this exact reply and STOP:
+    "**No attendees yet.**
+    | Name | Email | WhatsApp | Paid | Attended |
+    |---|---|---|---|---|"
+  Do NOT call navigate_to. Do NOT redirect.`,
 
     stalls: `You are the Stalls/Exhibitors specialist for "{ORG}" on EventSH.
-Focus: vendor registrations.
+Focus: vendor registrations + stall analytics.
 - "Show stall requests" / "pending stalls" → list_stalls(status=pending). Table: | Vendor | Business | Email | WhatsApp | Approved |.
 - "All approved stalls" → list_stalls(status=approved).
-- For approving/rejecting an individual stall, call navigate_to(users) (tell user "Open Exhibitors/Visitors tab to approve").`,
+- "Show stalls for <event>" / "stalls for <event>" → list_stalls(event_name=<event>). Render this EXACT table: | Vendor | Business | Status | Payment | Total | Paid |. Use the per-event tool result fields.
+- "Stall analytics" / "stall stats" / "stall revenue" / "stall breakdown" / "how many stalls do I have" → get_stalls_analytics. Render: a "By Status" table, a "By Payment Status" table, a small totals table (Total Stalls / Booking Value / Collected), then a "Top Events by Stall Count" table.
+- For approving/rejecting an individual stall, call navigate_to(users) (tell user "Open Exhibitors/Visitors tab to approve").
+
+EMPTY RESULTS:
+- If list_stalls returns an empty array, render this exact reply and STOP:
+    "**No stalls registered for {EVENT_TITLE}.**
+    | Vendor | Business | Status | Payment | Total | Paid |
+    |---|---|---|---|---|---|"
+  Do NOT call navigate_to. Do NOT redirect.`,
 
     speakers: `You are the Speakers specialist for "{ORG}" on EventSH.
-Focus: speaker requests.
+Focus: speaker requests + speaker analytics.
 - "Speaker requests" / "speakers for <event>" → list_speakers. Table: | Name | Email | Organization | Status | Fee |.
 - "Pending speakers" → list_speakers(status="Pending").
+- "Speaker analytics" / "speaker stats" / "speaker breakdown" / "how many speakers do I have" → get_speakers_analytics. Render: "By Status" table, "By Payment Status" table, a totals table (Total Requests / Keynote Count / Total Fees), then "Top Events by Speaker Count" table.
 - If the user says "my latest event" with no name, FIRST call list_events(status=upcoming, limit=1) and use that title.
-- For approving / setting fees / assigning slots, call navigate_to(speakerRequests).`,
+- For approving / setting fees / assigning slots, call navigate_to(speakerRequests).
+
+EMPTY RESULTS:
+- If list_speakers returns an empty array, render this exact reply and STOP:
+    "**No speaker requests for {EVENT_TITLE}.**
+    | Name | Email | Organization | Status | Fee |
+    |---|---|---|---|---|"
+  Do NOT call navigate_to. Do NOT redirect to another tab. The user explicitly asked for this event — give them the empty table here.`,
 
     storefront: `You are the Storefront specialist for "{ORG}" on EventSH.
 The storefront customizer is the only place to actually edit settings — you cannot mutate them yourself.
@@ -858,11 +990,12 @@ The storefront customizer is the only place to actually edit settings — you ca
 - Do NOT pretend to apply changes. Do NOT show example settings.`,
 
     settings: `You are the Settings specialist for "{ORG}" on EventSH.
-Focus: subscription plan, operators, profile.
+Focus: subscription plan, operators, profile, organization configuration.
 - "What's my plan" / "subscription" → get_subscription. Render as bold key-value lines (Plan, Valid until, Modules count).
 - "Show all plans" / "list plans" → list_plans. Table: | Plan | Price | Validity | Default |.
 - "List operators" / "my operators" → list_operators. Table: | Name | Email | WhatsApp | Tabs |.
 - "My profile" → get_organizer_info. Render as bold key-value pairs.
+- "Show all my settings" / "organization details" / "my org configuration" / "organization settings" → get_organization_settings. Render as a 2-column key-value table with sections: Profile (Name / Org Name / Email / Country / WhatsApp), Plan (Plan Name / Price / Expiry / Subscribed), Payment Methods (UPI / Bank / PayNow / QR — show ✓ or ✗), Other (Operators count / Slug / Commission %). Use **bold** for section headers between rows or render as 4 separate small tables.
 - To CHANGE plan / add operator / edit profile, call navigate_to(settings).`,
 
     general: `You are the EventSH AI assistant for "{ORG}".
@@ -903,6 +1036,24 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     const history = this.getHistory(organizerId);
     history.push({ role: "user", content: message, ts: Date.now() });
 
+    // Deterministic short-circuit: walk-in / kiosk booking — render an
+    // inline ticket-booking form in the chat bubble.
+    const walkin = await this.maybeWalkinForm(message, organizerId);
+    if (walkin) {
+      history.push({ role: "assistant", content: walkin.text, ts: Date.now() });
+      this.trimHistory(organizerId);
+      return walkin;
+    }
+
+    // Deterministic short-circuit: per-event picker for tickets / stalls /
+    // speakers / attendees / round tables when no specific event was named.
+    const picker = await this.maybeEventPicker(message, organizerId);
+    if (picker) {
+      history.push({ role: "assistant", content: picker.text, ts: Date.now() });
+      this.trimHistory(organizerId);
+      return picker;
+    }
+
     try {
       // 1. Route to a specialist
       const tab = await this.route(message, history);
@@ -917,6 +1068,7 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
         country,
         currency,
         history,
+        userMessage: message,
       });
 
       // 3. Save assistant message
@@ -936,18 +1088,38 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
   private async route(message: string, _history: ConvEntry[]): Promise<Tab> {
     // Deterministic shortcuts first
     const m = message.toLowerCase();
+
+    // Analytics / dashboard metrics
     if (
       /\b(revenue|earned|earning|sales summary|top event|how am i doing|stats|analytics|overview|approval|approvals|pending review)\b/.test(
         m,
       )
     )
       return "dashboard";
-    if (/\b(event|create event|new event|add event)\b/.test(m)) return "events";
-    if (/\b(ticket|attendance|check.?in|sold)\b/.test(m)) return "tickets";
+
+    // Mutating event actions (create / add / publish / set venue / edit) →
+    // events tab, even when the message also mentions tickets / stalls /
+    // speakers / round tables. The events specialist owns these tools.
+    if (
+      /\b(create|add|publish|set\s+(?:the\s+)?venue|edit|update|delete|remove)\b/.test(
+        m,
+      ) &&
+      /\b(event|ticket\s*type|ticket\s*tier|tier|round\s*table|stall|booth|speaker|venue|tag|category)\b/.test(
+        m,
+      )
+    )
+      return "events";
+
+    // Specific subjects — read/query verbs win over the generic "event" word
     if (/\b(attendee|attendees|who came|visitors|guest list)\b/.test(m))
       return "attendees";
+    if (/\b(ticket|attendance|check.?in|sold)\b/.test(m)) return "tickets";
     if (/\b(stall|vendor|exhibitor)\b/.test(m)) return "stalls";
     if (/\b(speaker|speech|session)\b/.test(m)) return "speakers";
+
+    // Plain events queries (list / upcoming / past)
+    if (/\bevent(s)?\b/.test(m)) return "events";
+
     if (/\b(storefront|theme|banner|color|design|customize)\b/.test(m))
       return "storefront";
     if (/\b(plan|subscription|operator|settings|profile)\b/.test(m))
@@ -998,6 +1170,7 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     country,
     currency,
     history,
+    userMessage,
   }: {
     tab: Tab;
     organizerId: string;
@@ -1006,6 +1179,7 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     country: string;
     currency: { symbol: string; code: string; locale: string };
     history: ConvEntry[];
+    userMessage: string;
   }): Promise<{ text: string; botAction?: any }> {
     const tabPrompt = (
       ChatbotService.SPECIALIST_PROMPTS[tab] ||
@@ -1044,34 +1218,96 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
 
     let botAction: any = undefined;
 
-    // First call — may produce tool_calls
-    const first = await this.callWithFallback({
-      model: this.model,
-      messages,
-      tools: tools.length ? tools : undefined,
-      tool_choice: tools.length ? "auto" : undefined,
-      temperature: 0.1,
-    });
-    const firstMsg = first.choices?.[0]?.message;
+    // Iterative agent loop. Allow up to N tool calls so legitimate chains
+    // (e.g. list_events → list_tickets) work, then force tool_choice:"none"
+    // so the model MUST format text — preventing runaway hallucinated calls.
+    const MAX_ROUNDS = 5;
+    const TOOL_CALL_BUDGET = 3;
+    let finalContent = "";
+    let toolsExecuted = 0;
 
-    // If tool calls present, execute them
-    if (firstMsg?.tool_calls?.length) {
-      messages.push(firstMsg as any);
-      for (const call of firstMsg.tool_calls) {
+    for (let round = 0; round < MAX_ROUNDS; round++) {
+      const noMoreTools = toolsExecuted >= TOOL_CALL_BUDGET;
+      const res = await this.callWithFallback({
+        model: this.model,
+        messages,
+        tools: tools.length ? tools : undefined,
+        tool_choice: tools.length
+          ? noMoreTools
+            ? ("none" as any)
+            : "auto"
+          : undefined,
+        temperature: 0.1,
+      });
+      const msg = res.choices?.[0]?.message;
+      if (!msg) break;
+      this.logger.log(
+        `Round ${round} [${tab}] toolCalls=${(msg.tool_calls || []).length} contentLen=${(msg.content || "").length} contentPrev=${(msg.content || "").slice(0, 200).replace(/\n/g, " | ")}`,
+      );
+
+      // Try to recover tool calls that the model emitted as plain text
+      // (Qwen quirk). If found, synthesize structured tool_calls.
+      let recovered = msg.tool_calls;
+      if (!recovered?.length && typeof msg.content === "string") {
+        const synthetic = this.parseTextToolCalls(msg.content);
+        if (synthetic.length) {
+          recovered = synthetic as any;
+          (msg as any).tool_calls = synthetic;
+          (msg as any).content = "";
+          this.logger.log(
+            `Recovered ${synthetic.length} text-form tool_call(s) from model output`,
+          );
+        }
+      }
+
+      if (!recovered?.length) {
+        finalContent = (msg.content || "").trim();
+        break;
+      }
+
+      // If tool_choice was "none" but the model leaked tool-call markup
+      // anyway, drop the recovered calls — we want it to just format.
+      if (noMoreTools) {
+        finalContent = (msg.content || "").trim();
+        break;
+      }
+
+      messages.push(msg as any);
+      for (const call of recovered) {
         if (call.type !== "function") continue;
         const name = call.function.name;
         let args: any = {};
         try {
           args = JSON.parse(call.function.arguments || "{}");
         } catch {}
+        // Server-side override for list_events status — never trust the LLM
+        // to translate the user's intent into the right enum. Explicit time
+        // scope (upcoming/past) wins over the generic "all".
+        // EXCEPT when limit === 1 — that's an internal "find the latest
+        // event" lookup, where the model legitimately needs upcoming.
+        if (name === "list_events" && Number(args.limit) !== 1) {
+          const u = (userMessage || "").toLowerCase();
+          if (/\b(upcoming|future|coming up)\b/.test(u)) {
+            args.status = "upcoming";
+          } else if (
+            /\b(past|previous|completed|history|already happened)\b/.test(u)
+          ) {
+            args.status = "past";
+          } else if (
+            /\b(all|every)\b/.test(u) ||
+            /\bhow many\s+events?\b/.test(u) ||
+            /\bmy events\b/.test(u)
+          ) {
+            args.status = "all";
+          }
+        }
+        toolsExecuted++;
         let toolResult: any = "";
         try {
           const r = await this.runTool(name, args, organizerId, currency);
           if (name === "navigate_to" && r?.botAction) {
             botAction = r.botAction;
           }
-          // Annotate every tool result with currency context so the LLM
-          // can never accidentally render the wrong symbol.
           const annotated =
             r && typeof r === "object" && !Array.isArray(r)
               ? { ...r, _currency: currency.symbol, _currencyCode: currency.code }
@@ -1086,21 +1322,261 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
           content: toolResult,
         } as any);
       }
-      // Follow-up to format result — keep temperature low to prevent the
-      // model from "rephrasing" tool data with new (made-up) values.
-      const second = await this.callWithFallback({
-        model: this.model,
-        messages,
-        temperature: 0.1,
-      });
-      const text = second.choices?.[0]?.message?.content?.trim() || "Done.";
-      return { text, botAction };
+    }
+
+    // Final defensive cleanup — strip any leaked markup the model still emitted
+    let text = finalContent
+      .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
+      .replace(/<function_call>[\s\S]*?<\/function_call>/gi, "")
+      .replace(/^\s*\{\s*"name"\s*:\s*"[^"]+"[\s\S]*\}\s*$/m, "")
+      .trim();
+    if (!text) {
+      this.logger.warn(
+        `Empty finalContent after strip. Raw model output (first 500): ${
+          finalContent.slice(0, 500).replace(/\n/g, " | ") || "<empty>"
+        }`,
+      );
+      text = "I couldn't render that response. Try rephrasing the question.";
+    }
+    this.logger.log(
+      `Final assistant text: ${text.slice(0, 500).replace(/\n/g, " | ")}`,
+    );
+    return { text, botAction };
+  }
+
+  /** Detect walk-in / kiosk booking intent and return an inline
+   *  ticket-booking form payload that the chatbot widget renders inside the
+   *  bubble. The form drives the same /tickets/create-ticket endpoint the
+   *  Walk-in Booking tab uses, so backend logic stays in one place. */
+  private async maybeWalkinForm(
+    message: string,
+    organizerId: string,
+  ): Promise<{
+    text: string;
+    walkinForm: {
+      organizationName: string;
+      country: string;
+      whatsAppNumber?: string;
+      paymentURL?: string;
+      events: {
+        id: string;
+        title: string;
+        startDate?: any;
+        time?: string;
+        venue?: string;
+        visitorTypes: { id: string; name: string; price: number; description?: string; maxCount?: number }[];
+      }[];
+    };
+  } | null> {
+    const m = message.toLowerCase();
+    const intent =
+      /\b(walk[-\s]?in)\b/.test(m) ||
+      /\b(kiosk(?:\s+(?:order|booking|ticket))?)\b/.test(m) ||
+      /\bbook\s+(?:an?\s+)?(?:offline|in[-\s]?person|counter|on[-\s]?site)\s+ticket\b/.test(
+        m,
+      ) ||
+      /\b(book\s+a?\s+ticket\s+for\s+(?:a\s+)?(?:walk[-\s]?in|in[-\s]?person|customer))\b/.test(
+        m,
+      );
+    if (!intent) return null;
+
+    const orgObjId = Types.ObjectId.isValid(organizerId)
+      ? new Types.ObjectId(organizerId)
+      : null;
+    const [org, events] = await Promise.all([
+      this.organizerModel
+        .findById(orgObjId)
+        .select("organizationName country whatsAppNumber paymentURL")
+        .lean(),
+      this.eventModel
+        .find({
+          organizer: { $in: [orgObjId, String(organizerId)] as any[] },
+          $or: [{ status: "published" }, { status: { $exists: false } }],
+          visibility: { $ne: "private" },
+          startDate: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        })
+        .sort({ startDate: 1 })
+        .limit(40)
+        .select("title startDate time venue location visitorTypes")
+        .lean(),
+    ]);
+
+    if (!events.length) {
+      return {
+        text: "**No upcoming published events.** Create one and publish it first, then come back to book a walk-in ticket.",
+        walkinForm: {
+          organizationName: (org as any)?.organizationName || "",
+          country: (org as any)?.country || "",
+          whatsAppNumber: (org as any)?.whatsAppNumber,
+          paymentURL: (org as any)?.paymentURL,
+          events: [],
+        },
+      };
     }
 
     return {
-      text: firstMsg?.content?.trim() || "How can I help you today?",
-      botAction,
+      text: "Sure — pick the event, ticket type, and customer details below.",
+      walkinForm: {
+        organizationName: (org as any)?.organizationName || "",
+        country: (org as any)?.country || "",
+        whatsAppNumber: (org as any)?.whatsAppNumber,
+        paymentURL: (org as any)?.paymentURL,
+        events: events.map((e: any) => ({
+          id: String(e._id),
+          title: e.title,
+          startDate: e.startDate,
+          time: e.time,
+          venue: e.venue || e.location,
+          visitorTypes: (e.visitorTypes || []).map((v: any) => ({
+            id: v.id,
+            name: v.name,
+            price: Number(v.price) || 0,
+            description: v.description,
+            maxCount: v.maxCount,
+          })),
+        })),
+      },
     };
+  }
+
+  /** Detect "<thing> per event" / "show <thing> for an event" prompts and
+   *  return a deterministic event picker payload. Frontend renders a
+   *  dropdown form so the user picks the event explicitly — avoids the
+   *  LLM guessing "latest". */
+  private async maybeEventPicker(
+    message: string,
+    organizerId: string,
+  ): Promise<{
+    text: string;
+    eventPicker: {
+      intent: string;
+      label: string;
+      actionTemplate: string;
+      events: { id: string; title: string }[];
+    };
+  } | null> {
+    const m = message.toLowerCase();
+    const intentRe =
+      /\b(tickets?|stalls?|speakers?|attendees?|round\s*tables?)\s+(?:per|for)\s+(?:an?\s+|the\s+)?event\b/i;
+    const match = m.match(intentRe);
+    if (!match) return null;
+
+    // Skip if the user already pointed at a specific event.
+    if (
+      /\bmy\s+latest\s+event\b|\bthe\s+latest\s+event\b|\bcurrent\s+event\b/i.test(
+        m,
+      )
+    )
+      return null;
+    if (/"[^"]+"|'[^']+'/.test(message)) return null;
+
+    const rawIntent = match[1].toLowerCase().replace(/\s+/g, " ");
+    const intent = /round/.test(rawIntent)
+      ? "round tables"
+      : rawIntent.replace(/s$/, "") + "s";
+
+    const orgObjId = Types.ObjectId.isValid(organizerId)
+      ? new Types.ObjectId(organizerId)
+      : null;
+    const events = await this.eventModel
+      .find({
+        organizer: { $in: [orgObjId, String(organizerId)] as any[] },
+      })
+      .sort({ startDate: -1 })
+      .limit(50)
+      .select("title")
+      .lean();
+
+    if (!events.length) {
+      return {
+        text: "**No events yet.** Create one first.",
+        eventPicker: {
+          intent,
+          label: intent,
+          actionTemplate: "",
+          events: [],
+        },
+      };
+    }
+
+    const verb =
+      intent === "tickets"
+        ? "Show tickets for"
+        : intent === "stalls"
+          ? "Show stalls for"
+          : intent === "speakers"
+            ? "Show speakers for"
+            : intent === "attendees"
+              ? "List attendees for"
+              : "Show round tables for";
+
+    return {
+      text: `Pick an event to see its **${intent}**:`,
+      eventPicker: {
+        intent,
+        label: intent,
+        actionTemplate: `${verb} "{title}"`,
+        events: events.map((e: any) => ({
+          id: String(e._id),
+          title: e.title,
+        })),
+      },
+    };
+  }
+
+  /** Recover Qwen-style "<tool_call>{...}</tool_call>" markup from text and
+   *  return it as a structured tool_calls array the agent loop can execute. */
+  private parseTextToolCalls(content: string): any[] {
+    const out: any[] = [];
+    const tagPattern = /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/gi;
+    let m: RegExpExecArray | null;
+    while ((m = tagPattern.exec(content)) !== null) {
+      try {
+        const obj = JSON.parse(m[1]);
+        if (obj?.name && obj?.arguments !== undefined) {
+          out.push({
+            id: `tc_${Date.now()}_${out.length}`,
+            type: "function",
+            function: {
+              name: obj.name,
+              arguments:
+                typeof obj.arguments === "string"
+                  ? obj.arguments
+                  : JSON.stringify(obj.arguments),
+            },
+          });
+        }
+      } catch {
+        /* ignore malformed */
+      }
+    }
+    // Also look for a bare top-level {"name":..,"arguments":..} JSON
+    if (!out.length) {
+      const bare = content
+        .trim()
+        .match(/^\s*(\{[\s\S]*"name"\s*:\s*"[^"]+"[\s\S]*\})\s*$/);
+      if (bare) {
+        try {
+          const obj = JSON.parse(bare[1]);
+          if (obj?.name && obj?.arguments !== undefined) {
+            out.push({
+              id: `tc_${Date.now()}_0`,
+              type: "function",
+              function: {
+                name: obj.name,
+                arguments:
+                  typeof obj.arguments === "string"
+                    ? obj.arguments
+                    : JSON.stringify(obj.arguments),
+              },
+            });
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    return out;
   }
 
   // Resilient call (primary → fallback model on 429)
@@ -1236,7 +1712,11 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
         const status = args.status || "all";
         const limit = Math.min(args.limit || 100, 200);
         const now = new Date();
-        const filter: any = { organizer: orgObjId };
+        // Match both ObjectId and string forms — older docs may store either.
+        const orgMatch = orgObjId
+          ? { $in: [orgObjId, String(organizerId)] as any[] }
+          : String(organizerId);
+        const filter: any = { organizer: orgMatch };
         if (status === "upcoming") filter.startDate = { $gte: now };
         else if (status === "past") filter.startDate = { $lt: now };
         const events = await this.eventModel
@@ -1245,6 +1725,25 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
           .limit(limit)
           .lean();
         const totalCount = await this.eventModel.countDocuments(filter);
+        this.logger.log(
+          `list_events org=${organizerId} status=${status} found=${events.length} totalCount=${totalCount}`,
+        );
+        // Live ticket counts (paid) per event in one aggregation
+        const eventIds = events.map((e: any) => e._id);
+        const soldAgg = eventIds.length
+          ? await this.ticketModel.aggregate([
+              {
+                $match: {
+                  eventId: { $in: eventIds },
+                  paymentConfirmed: true,
+                },
+              },
+              { $group: { _id: "$eventId", sold: { $sum: 1 } } },
+            ])
+          : [];
+        const soldByEvent = new Map(
+          soldAgg.map((s: any) => [String(s._id), s.sold]),
+        );
         return {
           total: totalCount,
           shown: events.length,
@@ -1253,8 +1752,11 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
             title: e.title,
             startDate: e.startDate,
             endDate: e.endDate,
-            venue: e.venue,
-            attendees: e.attendees,
+            venue: e.location || "",
+            capacity: e.totalTickets || 0,
+            ticketsSold: soldByEvent.get(String(e._id)) || 0,
+            status: e.status || "draft",
+            visibility: e.visibility || "public",
           })),
         };
       }
@@ -1314,10 +1816,15 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
 
       case "list_tickets": {
         const limit = Math.min(args.limit || 10, 50);
-        const filter: any = { organizerId: orgObjId };
+        // Dual-form match — older tickets may have organizerId stored as string.
+        const filter: any = {
+          organizerId: orgObjId
+            ? { $in: [orgObjId, String(organizerId)] as any[] }
+            : String(organizerId),
+        };
         if (args.event_name) {
           const ev = await this.eventModel.findOne({
-            organizer: orgObjId,
+            organizer: { $in: [orgObjId, String(organizerId)] as any[] },
             title: { $regex: args.event_name, $options: "i" },
           });
           if (ev) filter.eventId = (ev as any)._id;
@@ -1329,14 +1836,19 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
           .sort({ purchaseDate: -1 })
           .limit(limit)
           .lean();
+        this.logger.log(
+          `list_tickets org=${organizerId} event=${args.event_name || ""} status=${args.status || "any"} returned=${tickets.length}`,
+        );
         return tickets.map((t: any) => ({
           ticketId: t.ticketId,
           eventTitle: t.eventTitle,
           customer: t.customerName,
+          email: t.customerEmail,
           amount: t.totalAmount,
           amountFormatted: fmt(t.totalAmount),
           paid: !!t.paymentConfirmed,
-          attendance: !!t.attendance,
+          attended: !!t.attendance,
+          purchaseDate: t.purchaseDate,
         }));
       }
 
@@ -1398,6 +1910,61 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
 
       case "list_stalls": {
         const limit = Math.min(args.limit || 20, 50);
+        // If event_name is given, query the Stall model (per-event bookings).
+        // Otherwise fall back to the global Vendor list (legacy behavior).
+        if (args.event_name) {
+          const ev = await this.eventModel.findOne({
+            organizer: { $in: [orgObjId, String(organizerId)] as any[] },
+            title: { $regex: args.event_name, $options: "i" },
+          });
+          if (!ev) return { error: `No event matching "${args.event_name}"` };
+          const stallFilter: any = {
+            organizerId: orgObjId,
+            eventId: (ev as any)._id,
+          };
+          if (args.status === "pending") stallFilter.status = "Pending";
+          else if (args.status === "approved") stallFilter.status = "Approved";
+          const stalls = await this.stallModel
+            .find(stallFilter)
+            .limit(limit)
+            .lean();
+          // Manual vendor lookup using the raw connection — sidesteps any
+          // model-registration weirdness across modules.
+          const vendorIds = Array.from(
+            new Set(stalls.map((s: any) => String(s.shopkeeperId)).filter(Boolean)),
+          );
+          const objIds = vendorIds
+            .filter((id) => Types.ObjectId.isValid(id))
+            .map((id) => new Types.ObjectId(id));
+          const vendorsCol = this.stallModel.db.collection("vendors");
+          const vendors = await vendorsCol
+            .find({
+              $or: [
+                { _id: { $in: objIds as any[] } },
+                { _id: { $in: vendorIds as any[] } },
+              ],
+            })
+            .toArray();
+          const vById = new Map(vendors.map((v: any) => [String(v._id), v]));
+          this.logger.log(
+            `list_stalls event="${args.event_name}" status=${args.status || "any"} returned=${stalls.length} vendors=${vendors.length} firstShopkeeperId=${vendorIds[0] || "none"}`,
+          );
+          return stalls.map((s: any) => {
+            const v: any = vById.get(String(s.shopkeeperId)) || {};
+            return {
+              vendor: v.name || "—",
+              business: v.businessName || v.shopName || "—",
+              email: v.email || "—",
+              whatsapp: v.whatsAppNumber || v.whatsappNumber || "—",
+              status: s.status,
+              paymentStatus: s.paymentStatus,
+              total: s.grandTotal || 0,
+              totalFormatted: fmt(s.grandTotal || 0),
+              paid: s.paidAmount || 0,
+              paidFormatted: fmt(s.paidAmount || 0),
+            };
+          });
+        }
         const filter: any = {};
         if (args.status === "pending") filter.approved = false;
         else if (args.status === "approved") filter.approved = true;
@@ -1493,11 +2060,318 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
             organizerId: orgObjId,
             status: "Pending",
           }),
-          this.vendorModel.countDocuments({ approved: false }),
+          this.stallModel.countDocuments({
+            organizerId: orgObjId,
+            status: "Pending",
+          }),
         ]);
         return {
           pendingSpeakerRequests: pendingSpeakers,
           pendingStallRegistrations: pendingStalls,
+        };
+      }
+
+      case "get_events_breakdown": {
+        const orgMatch = {
+          organizer: { $in: [orgObjId, String(organizerId)] as any[] },
+        };
+        const [statusBreak, visibilityBreak, categoryBreak, capacityAgg] =
+          await Promise.all([
+            this.eventModel.aggregate([
+              { $match: orgMatch },
+              { $group: { _id: "$status", count: { $sum: 1 } } },
+            ]),
+            this.eventModel.aggregate([
+              { $match: orgMatch },
+              { $group: { _id: "$visibility", count: { $sum: 1 } } },
+            ]),
+            this.eventModel.aggregate([
+              { $match: orgMatch },
+              { $group: { _id: "$category", count: { $sum: 1 } } },
+            ]),
+            this.eventModel.aggregate([
+              { $match: orgMatch },
+              {
+                $group: {
+                  _id: null,
+                  totalEvents: { $sum: 1 },
+                  totalCapacity: { $sum: { $ifNull: ["$totalTickets", 0] } },
+                },
+              },
+            ]),
+          ]);
+        const totalEvents = capacityAgg[0]?.totalEvents || 0;
+        const totalCapacity = capacityAgg[0]?.totalCapacity || 0;
+        // Tickets sold across all events
+        const sold = await this.ticketModel.aggregate([
+          {
+            $match: {
+              organizerId: orgObjId,
+              paymentConfirmed: true,
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              ticketsSold: { $sum: 1 },
+              revenue: { $sum: "$totalAmount" },
+            },
+          },
+        ]);
+        const ticketsSold = sold[0]?.ticketsSold || 0;
+        const revenue = sold[0]?.revenue || 0;
+        return {
+          totalEvents,
+          totalCapacity,
+          ticketsSold,
+          occupancyPercent: totalCapacity
+            ? Math.round((ticketsSold / totalCapacity) * 100)
+            : 0,
+          averageTicketPrice: ticketsSold ? Math.round(revenue / ticketsSold) : 0,
+          averageTicketPriceFormatted: fmt(
+            ticketsSold ? Math.round(revenue / ticketsSold) : 0,
+          ),
+          revenue,
+          revenueFormatted: fmt(revenue),
+          byStatus: statusBreak.map((s: any) => ({
+            status: s._id || "unknown",
+            count: s.count,
+          })),
+          byVisibility: visibilityBreak.map((s: any) => ({
+            visibility: s._id || "unknown",
+            count: s.count,
+          })),
+          byCategory: categoryBreak
+            .filter((c: any) => c._id)
+            .map((c: any) => ({ category: c._id, count: c.count })),
+        };
+      }
+
+      case "get_stalls_analytics": {
+        const [statusBreak, paymentBreak, totals, perEvent] = await Promise.all([
+          this.stallModel.aggregate([
+            { $match: { organizerId: orgObjId } },
+            { $group: { _id: "$status", count: { $sum: 1 } } },
+          ]),
+          this.stallModel.aggregate([
+            { $match: { organizerId: orgObjId } },
+            { $group: { _id: "$paymentStatus", count: { $sum: 1 } } },
+          ]),
+          this.stallModel.aggregate([
+            { $match: { organizerId: orgObjId } },
+            {
+              $group: {
+                _id: null,
+                total: { $sum: 1 },
+                grandTotalSum: { $sum: { $ifNull: ["$grandTotal", 0] } },
+                paidSum: { $sum: { $ifNull: ["$paidAmount", 0] } },
+              },
+            },
+          ]),
+          this.stallModel.aggregate([
+            { $match: { organizerId: orgObjId } },
+            {
+              $group: {
+                _id: "$eventId",
+                count: { $sum: 1 },
+                revenue: { $sum: { $ifNull: ["$paidAmount", 0] } },
+              },
+            },
+            { $sort: { count: -1 } },
+            { $limit: 5 },
+            {
+              $lookup: {
+                from: "events",
+                localField: "_id",
+                foreignField: "_id",
+                as: "event",
+              },
+            },
+            { $unwind: { path: "$event", preserveNullAndEmptyArrays: true } },
+          ]),
+        ]);
+        return {
+          totalStalls: totals[0]?.total || 0,
+          totalBookingValue: totals[0]?.grandTotalSum || 0,
+          totalBookingValueFormatted: fmt(totals[0]?.grandTotalSum || 0),
+          totalCollected: totals[0]?.paidSum || 0,
+          totalCollectedFormatted: fmt(totals[0]?.paidSum || 0),
+          byStatus: statusBreak.map((s: any) => ({
+            status: s._id || "unknown",
+            count: s.count,
+          })),
+          byPaymentStatus: paymentBreak.map((s: any) => ({
+            paymentStatus: s._id || "unknown",
+            count: s.count,
+          })),
+          topEventsByStallCount: perEvent.map((e: any) => ({
+            eventTitle: e.event?.title || "Untitled",
+            stallCount: e.count,
+            collected: e.revenue,
+            collectedFormatted: fmt(e.revenue),
+          })),
+        };
+      }
+
+      case "get_speakers_analytics": {
+        const [statusBreak, paymentBreak, totals, perEvent] = await Promise.all([
+          this.speakerRequestModel.aggregate([
+            { $match: { organizerId: orgObjId } },
+            { $group: { _id: "$status", count: { $sum: 1 } } },
+          ]),
+          this.speakerRequestModel.aggregate([
+            { $match: { organizerId: orgObjId } },
+            { $group: { _id: "$paymentStatus", count: { $sum: 1 } } },
+          ]),
+          this.speakerRequestModel.aggregate([
+            { $match: { organizerId: orgObjId } },
+            {
+              $group: {
+                _id: null,
+                total: { $sum: 1 },
+                feeSum: { $sum: { $ifNull: ["$fee", 0] } },
+                keynotes: {
+                  $sum: { $cond: [{ $eq: ["$isKeynote", true] }, 1, 0] },
+                },
+              },
+            },
+          ]),
+          this.speakerRequestModel.aggregate([
+            { $match: { organizerId: orgObjId } },
+            { $group: { _id: "$eventId", count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 5 },
+            {
+              $lookup: {
+                from: "events",
+                localField: "_id",
+                foreignField: "_id",
+                as: "event",
+              },
+            },
+            { $unwind: { path: "$event", preserveNullAndEmptyArrays: true } },
+          ]),
+        ]);
+        return {
+          totalRequests: totals[0]?.total || 0,
+          totalFees: totals[0]?.feeSum || 0,
+          totalFeesFormatted: fmt(totals[0]?.feeSum || 0),
+          keynoteCount: totals[0]?.keynotes || 0,
+          byStatus: statusBreak.map((s: any) => ({
+            status: s._id || "unknown",
+            count: s.count,
+          })),
+          byPaymentStatus: paymentBreak.map((s: any) => ({
+            paymentStatus: s._id || "unknown",
+            count: s.count,
+          })),
+          topEventsBySpeakerCount: perEvent.map((e: any) => ({
+            eventTitle: e.event?.title || "Untitled",
+            speakerCount: e.count,
+          })),
+        };
+      }
+
+      case "get_round_tables_analytics": {
+        // Round tables live embedded in event documents.
+        const events = await this.eventModel
+          .find({ organizer: { $in: [orgObjId, String(organizerId)] as any[] } })
+          .select("title venueRoundTables")
+          .lean();
+        let totalTables = 0;
+        let totalChairs = 0;
+        let chairsBooked = 0;
+        const perEvent: { title: string; tables: number; chairs: number; booked: number }[] = [];
+        for (const e of events as any[]) {
+          const rts: any[] = e.venueRoundTables || [];
+          if (!rts.length) continue;
+          let tables = 0,
+            chairs = 0,
+            booked = 0;
+          for (const rt of rts) {
+            tables++;
+            chairs += rt.numberOfChairs || 0;
+            booked += (rt.bookedChairs || []).length;
+          }
+          totalTables += tables;
+          totalChairs += chairs;
+          chairsBooked += booked;
+          perEvent.push({ title: e.title, tables, chairs, booked });
+        }
+        // Real revenue from RoundTableBooking model (paid bookings)
+        const bookingAgg = await this.roundTableBookingModel.aggregate([
+          {
+            $match: {
+              organizerId: orgObjId,
+              paymentStatus: "Paid",
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              count: { $sum: 1 },
+              revenue: { $sum: { $ifNull: ["$amount", 0] } },
+            },
+          },
+        ]);
+        const paidBookingsCount = bookingAgg[0]?.count || 0;
+        const paidRevenue = bookingAgg[0]?.revenue || 0;
+        return {
+          totalRoundTables: totalTables,
+          totalChairs,
+          chairsBooked,
+          occupancyPercent: totalChairs
+            ? Math.round((chairsBooked / totalChairs) * 100)
+            : 0,
+          paidBookings: paidBookingsCount,
+          revenue: paidRevenue,
+          revenueFormatted: fmt(paidRevenue),
+          topEventsByRoundTables: perEvent
+            .sort((a, b) => b.tables - a.tables)
+            .slice(0, 5),
+        };
+      }
+
+      case "get_organization_settings": {
+        const org: any = await this.organizerModel.findById(orgObjId).lean();
+        if (!org) return { error: "Organizer not found" };
+        const plan = org.planId
+          ? await this.planModel.findById(org.planId).lean()
+          : null;
+        const operatorCount = await this.operatorModel.countDocuments({
+          organizerId: String(organizerId),
+        });
+        return {
+          name: org.name,
+          organizationName: org.organizationName,
+          email: org.email,
+          businessEmail: org.businessEmail,
+          country: org.country,
+          whatsAppNumber: org.whatsAppNumber,
+          countryCode: org.countryCode,
+          commissionPercentage: org.commissionPercentage,
+          subscribed: !!org.subscribed,
+          planExpiryDate: org.planExpiryDate,
+          planName: plan ? (plan as any).planName : null,
+          planPrice: plan ? (plan as any).price : null,
+          planPriceFormatted: plan ? fmt((plan as any).price || 0) : null,
+          modules: plan ? (plan as any).modules : null,
+          slug: org.slug,
+          bankConfigured: !!(
+            org.bankAccountNumber ||
+            org.upiId ||
+            org.payNowNumber
+          ),
+          paymentMethods: {
+            upi: !!org.upiId,
+            bank:
+              !!org.bankAccountNumber && !!org.bankIfscCode
+                ? true
+                : !!org.bankAccountNumber,
+            payNow: !!org.payNowNumber,
+            qr: !!org.qrCode,
+          },
+          operatorCount,
         };
       }
 

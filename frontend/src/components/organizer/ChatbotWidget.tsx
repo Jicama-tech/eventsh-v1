@@ -3,6 +3,17 @@ import { jwtDecode } from "jwt-decode";
 import { useCountry } from "@/hooks/useCountry";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { InlineWalkinForm } from "./InlineWalkinForm";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Bot,
   Send,
@@ -25,14 +36,12 @@ import {
   Settings as SettingsIcon,
   User,
   Lightbulb,
+  RotateCcw,
 } from "lucide-react";
 
 const apiURL = __API_URL__;
 
-const COUNTRY_CURRENCY: Record<
-  string,
-  { symbol: string; locale: string }
-> = {
+const COUNTRY_CURRENCY: Record<string, { symbol: string; locale: string }> = {
   IN: { symbol: "₹", locale: "en-IN" },
   SG: { symbol: "S$", locale: "en-SG" },
   US: { symbol: "$", locale: "en-US" },
@@ -41,10 +50,7 @@ const COUNTRY_CURRENCY: Record<
   AU: { symbol: "A$", locale: "en-AU" },
   EU: { symbol: "€", locale: "en-IE" },
 };
-function formatMoney(
-  amount: number,
-  curr: { symbol: string; locale: string },
-) {
+function formatMoney(amount: number, curr: { symbol: string; locale: string }) {
   const safe = Number.isFinite(amount) ? amount : 0;
   return `${curr.symbol}${new Intl.NumberFormat(curr.locale, { maximumFractionDigits: 0 }).format(safe)}`;
 }
@@ -54,10 +60,40 @@ interface QuickAction {
   action: string;
 }
 
+interface EventPicker {
+  intent: string;
+  label: string;
+  actionTemplate: string; // e.g. 'Show tickets for "{title}"'
+  events: { id: string; title: string }[];
+}
+
+interface WalkinFormPayload {
+  organizationName: string;
+  country: string;
+  whatsAppNumber?: string;
+  paymentURL?: string;
+  events: {
+    id: string;
+    title: string;
+    startDate?: string;
+    time?: string;
+    venue?: string;
+    visitorTypes: {
+      id: string;
+      name: string;
+      price: number;
+      description?: string;
+      maxCount?: number;
+    }[];
+  }[];
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
   quickActions?: QuickAction[];
+  eventPicker?: EventPicker;
+  walkinForm?: WalkinFormPayload;
   botAction?: { type: "navigate"; tab: string };
   ts: number;
 }
@@ -153,6 +189,38 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
     sub: "Events / tickets / revenue summary",
     prompt: "Give me an overview of my platform",
   },
+  {
+    category: "Analytics",
+    Icon: Calendar,
+    tint: "text-emerald-600 bg-emerald-50",
+    title: "Events breakdown",
+    sub: "Status / visibility / occupancy / avg price",
+    prompt: "Give me a detailed events analytics breakdown",
+  },
+  {
+    category: "Analytics",
+    Icon: Building2,
+    tint: "text-orange-600 bg-orange-50",
+    title: "Stalls analytics",
+    sub: "Bookings, payments, revenue per event",
+    prompt: "Show me stall analytics",
+  },
+  {
+    category: "Analytics",
+    Icon: Mic2,
+    tint: "text-purple-600 bg-purple-50",
+    title: "Speakers analytics",
+    sub: "Requests, fees, keynotes, top events",
+    prompt: "Show me speaker analytics",
+  },
+  {
+    category: "Analytics",
+    Icon: Users,
+    tint: "text-cyan-600 bg-cyan-50",
+    title: "Round tables analytics",
+    sub: "Tables, chairs, occupancy, revenue",
+    prompt: "Show me round table analytics",
+  },
 
   // ========== EVENTS ==========
   {
@@ -179,73 +247,82 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
     sub: "Completed events",
     prompt: "Show me past events",
   },
-  {
-    category: "Events",
-    Icon: Sparkles,
-    tint: "text-purple-600 bg-purple-50",
-    title: "Create event (one-shot)",
-    sub: "Full event with everything in one prompt",
-    prompt:
-      "Create a tech meetup on May 15, 2026 in Bangalore at MG Road. 3 ticket types: Regular ₹500, VIP ₹1500, Student ₹250. Add 10 round tables of 8 seats each at ₹1000 per chair, and 5 stalls at ₹2000 each",
-  },
-  {
-    category: "Events",
-    Icon: Calendar,
-    tint: "text-blue-600 bg-blue-50",
-    title: "Create blank event",
-    sub: "Just title and date — refine later",
-    prompt: "Create a basic event with title and date",
-  },
-  {
-    category: "Events",
-    Icon: Sparkles,
-    tint: "text-emerald-600 bg-emerald-50",
-    title: "Add ticket types",
-    sub: "Add tiers to an existing event",
-    prompt: "Add 3 ticket types to my latest event: Regular, VIP, Student",
-  },
-  {
-    category: "Events",
-    Icon: Sparkles,
-    tint: "text-purple-600 bg-purple-50",
-    title: "Add round tables",
-    sub: "Auto-place tables on the venue grid",
-    prompt: "Add 10 round tables of 8 seats each to my latest event",
-  },
-  {
-    category: "Events",
-    Icon: Building2,
-    tint: "text-orange-600 bg-orange-50",
-    title: "Add stalls",
-    sub: "Auto-place vendor booths",
-    prompt: "Add 5 stalls at my latest event",
-  },
-  {
-    category: "Events",
-    Icon: Mic2,
-    tint: "text-purple-600 bg-purple-50",
-    title: "Add speakers",
-    sub: "Add speaker profiles",
-    prompt: "Add speakers to my latest event",
-  },
-  {
-    category: "Events",
-    Icon: Globe,
-    tint: "text-indigo-600 bg-indigo-50",
-    title: "Set venue size",
-    sub: "Resize the venue canvas",
-    prompt: "Set venue size to 1200x700 for my latest event",
-  },
-  {
-    category: "Events",
-    Icon: Sparkles,
-    tint: "text-emerald-600 bg-emerald-50",
-    title: "Publish event",
-    sub: "Make a draft event live",
-    prompt: "Publish my latest event",
-  },
+  // {
+  //   category: "Events",
+  //   Icon: Sparkles,
+  //   tint: "text-purple-600 bg-purple-50",
+  //   title: "Create event (one-shot)",
+  //   sub: "Full event with everything in one prompt",
+  //   prompt:
+  //     "Create a tech meetup on May 15, 2026 in Bangalore at MG Road. 3 ticket types: Regular ₹500, VIP ₹1500, Student ₹250. Add 10 round tables of 8 seats each at ₹1000 per chair, and 5 stalls at ₹2000 each",
+  // },
+  // {
+  //   category: "Events",
+  //   Icon: Calendar,
+  //   tint: "text-blue-600 bg-blue-50",
+  //   title: "Create blank event",
+  //   sub: "Just title and date — refine later",
+  //   prompt: "Create a basic event with title and date",
+  // },
+  // {
+  //   category: "Events",
+  //   Icon: Sparkles,
+  //   tint: "text-emerald-600 bg-emerald-50",
+  //   title: "Add ticket types",
+  //   sub: "Add tiers to an existing event",
+  //   prompt:
+  //     "Add 3 ticket types to my latest event: Regular ₹500, VIP ₹1500, Student ₹250",
+  // },
+  // {
+  //   category: "Events",
+  //   Icon: Sparkles,
+  //   tint: "text-purple-600 bg-purple-50",
+  //   title: "Add round tables",
+  //   sub: "Auto-place tables on the venue grid",
+  //   prompt: "Add 10 round tables of 8 seats each to my latest event",
+  // },
+  // {
+  //   category: "Events",
+  //   Icon: Building2,
+  //   tint: "text-orange-600 bg-orange-50",
+  //   title: "Add stalls",
+  //   sub: "Auto-place vendor booths",
+  //   prompt: "Add 5 stalls at ₹2000 each to my latest event",
+  // },
+  // {
+  //   category: "Events",
+  //   Icon: Mic2,
+  //   tint: "text-purple-600 bg-purple-50",
+  //   title: "Add speakers",
+  //   sub: "Add speaker profiles",
+  //   prompt: "Add speaker John Doe from Microsoft to my latest event",
+  // },
+  // {
+  //   category: "Events",
+  //   Icon: Globe,
+  //   tint: "text-indigo-600 bg-indigo-50",
+  //   title: "Set venue size",
+  //   sub: "Resize the venue canvas",
+  //   prompt: "Set venue size to 1200x700 for my latest event",
+  // },
+  // {
+  //   category: "Events",
+  //   Icon: Sparkles,
+  //   tint: "text-emerald-600 bg-emerald-50",
+  //   title: "Publish event",
+  //   sub: "Make a draft event live",
+  //   prompt: "Publish my latest event",
+  // }
 
   // ========== TICKETS ==========
+  {
+    category: "Tickets",
+    Icon: Ticket,
+    tint: "text-blue-600 bg-blue-50",
+    title: "Walk-in booking",
+    sub: "Book a ticket for an in-person customer",
+    prompt: "Book a walk-in ticket",
+  },
   {
     category: "Tickets",
     Icon: Ticket,
@@ -275,8 +352,8 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
     Icon: Ticket,
     tint: "text-blue-600 bg-blue-50",
     title: "Tickets per event",
-    sub: "Filter tickets by event title",
-    prompt: "Show all tickets for my latest event",
+    sub: "Pick an event to see its tickets",
+    prompt: "Show tickets per event",
   },
 
   // ========== ATTENDEES ==========
@@ -285,8 +362,8 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
     Icon: Users,
     tint: "text-cyan-600 bg-cyan-50",
     title: "Attendees per event",
-    sub: "Roster for a specific event",
-    prompt: "List attendees for my latest event",
+    sub: "Pick an event to see its attendees",
+    prompt: "List attendees per event",
   },
   {
     category: "Attendees",
@@ -314,6 +391,14 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
     sub: "Confirmed exhibitors",
     prompt: "Show approved stalls",
   },
+  {
+    category: "Stalls",
+    Icon: Building2,
+    tint: "text-blue-600 bg-blue-50",
+    title: "Stalls per event",
+    sub: "Pick an event to see its stalls",
+    prompt: "Show stalls per event",
+  },
 
   // ========== SPEAKERS ==========
   {
@@ -329,8 +414,8 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
     Icon: Mic2,
     tint: "text-purple-600 bg-purple-50",
     title: "Speakers per event",
-    sub: "Confirmed speakers for an event",
-    prompt: "Show speakers for my latest event",
+    sub: "Pick an event to see its speakers",
+    prompt: "Show speakers per event",
   },
 
   // ========== SETTINGS / PLAN ==========
@@ -365,6 +450,14 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
     title: "My profile",
     sub: "Organizer details",
     prompt: "Show my profile",
+  },
+  {
+    category: "Settings",
+    Icon: SettingsIcon,
+    tint: "text-emerald-600 bg-emerald-50",
+    title: "Organization settings",
+    sub: "Profile + plan + payments + operators",
+    prompt: "Show all my organization settings",
   },
 
   // ========== NAVIGATION ==========
@@ -516,7 +609,35 @@ export function ChatbotWidget({
   const isPage = mode === "page";
   const [open, setOpen] = useState(isPage);
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    // Restore previous chat history for this organizer (per-tab session).
+    try {
+      const token = sessionStorage.getItem("token");
+      if (!token) return [];
+      const decoded: any = jwtDecode(token);
+      const key = `chatbot:msgs:${decoded.sub}`;
+      const raw = sessionStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as Message[]) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Persist messages to sessionStorage so they survive tab navigation.
+  // sessionStorage clears on logout / tab close — ideal for "while logged in".
+  useEffect(() => {
+    try {
+      const token = sessionStorage.getItem("token");
+      if (!token) return;
+      const decoded: any = jwtDecode(token);
+      const key = `chatbot:msgs:${decoded.sub}`;
+      // Cap to last 200 messages to avoid quota issues.
+      const capped = messages.slice(-200);
+      sessionStorage.setItem(key, JSON.stringify(capped));
+    } catch {
+      /* quota or decode error — best-effort persist */
+    }
+  }, [messages]);
   const [loading, setLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(true);
@@ -532,7 +653,11 @@ export function ChatbotWidget({
   //   2. useCountry() context (set by OrganizerDashboard from /organizers/profile)
   //   3. fallback to "US"
   const { country: ctxCountry } = useCountry();
-  const effectiveCountry = (orgInfo?.country || ctxCountry || "US").toUpperCase();
+  const effectiveCountry = (
+    orgInfo?.country ||
+    ctxCountry ||
+    "US"
+  ).toUpperCase();
   const currency = COUNTRY_CURRENCY[effectiveCountry] || COUNTRY_CURRENCY.US;
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -622,9 +747,10 @@ export function ChatbotWidget({
       ]);
       if (!analyticsRes.ok) return;
       const a = await analyticsRes.json();
-      const pending = pendingRes && pendingRes.ok
-        ? await pendingRes.json().catch(() => null)
-        : null;
+      const pending =
+        pendingRes && pendingRes.ok
+          ? await pendingRes.json().catch(() => null)
+          : null;
       // Prefer backend-formatted revenue (uses organizer's country/locale).
       // Fall back to local formatter if older API response.
       const revenueDisplay =
@@ -632,7 +758,7 @@ export function ChatbotWidget({
         formatMoney(Number(a.totals?.revenue || 0), currency);
       const cards: AnalyticsCard[] = [
         {
-          label: "Revenue",
+          label: "Total Revenue",
           value: revenueDisplay,
           icon: TrendingUp,
           tint: "from-emerald-50 to-emerald-100/60",
@@ -712,6 +838,8 @@ export function ChatbotWidget({
           content:
             data.text || "Sorry, I didn't catch that. Could you rephrase?",
           quickActions: data.quickActions,
+          eventPicker: data.eventPicker,
+          walkinForm: data.walkinForm,
           botAction: data.botAction,
           ts: Date.now(),
         };
@@ -734,6 +862,23 @@ export function ChatbotWidget({
     },
     [loading, onNavigate],
   );
+
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+
+  const performReset = useCallback(() => {
+    setMessages([]);
+    setInput("");
+    try {
+      const token = sessionStorage.getItem("token");
+      if (token) {
+        const decoded: any = jwtDecode(token);
+        sessionStorage.removeItem(`chatbot:msgs:${decoded.sub}`);
+      }
+    } catch {
+      /* ignore */
+    }
+    setResetDialogOpen(false);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -765,10 +910,14 @@ export function ChatbotWidget({
 
   return (
     <>
-      {/* Floating bubble */}
+      {/* Floating bubble — when onNavigate is provided, route to the
+          chatbot page instead of opening the floating panel. */}
       {!isPage && !open && (
         <button
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            if (onNavigate) onNavigate("chatbot");
+            else setOpen(true);
+          }}
           className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center"
           title="Open EventSH AI"
         >
@@ -864,14 +1013,14 @@ export function ChatbotWidget({
             <div
               className={
                 isPage
-                  ? "border-b border-slate-200 bg-white px-4 sm:px-6 py-3 flex-shrink-0"
+                  ? "border-b border-slate-200 bg-white px-3 sm:px-4 lg:px-6 py-3 flex-shrink-0 w-full"
                   : "border-b border-slate-100 bg-white px-3 py-2 flex-shrink-0"
               }
             >
               <div
                 className={
                   isPage
-                    ? "grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 max-w-4xl"
+                    ? "grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 w-full"
                     : "grid grid-cols-2 gap-1.5"
                 }
               >
@@ -913,88 +1062,67 @@ export function ChatbotWidget({
             }
           >
             {messages.length === 0 && (
-              <div className="space-y-4">
-                {/* Greeting bubble */}
-                <div className="flex items-start gap-2">
+              <div
+                className={
+                  isPage
+                    ? "max-w-[900px] mx-auto pt-4 sm:pt-6 pb-6 sm:pb-10"
+                    : "pt-2 pb-4"
+                }
+              >
+                <div
+                  className={
+                    isPage
+                      ? "flex flex-col items-center text-center gap-3 sm:gap-4"
+                      : "flex flex-col items-center text-center gap-2"
+                  }
+                >
                   <div
                     className={
                       isPage
-                        ? "w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-sky-600 flex items-center justify-center shrink-0"
-                        : "w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-sky-600 flex items-center justify-center shrink-0"
+                        ? "relative w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-sky-600 flex items-center justify-center shadow-lg"
+                        : "relative w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-500 to-sky-600 flex items-center justify-center shadow-lg"
                     }
                   >
-                    <Bot className="h-4 w-4 text-white" />
+                    <Bot
+                      className={
+                        isPage
+                          ? "h-6 w-6 sm:h-7 sm:w-7 text-white"
+                          : "h-5 w-5 text-white"
+                      }
+                    />
+                    <span
+                      className={
+                        isPage
+                          ? "absolute -bottom-0.5 -right-0.5 w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-emerald-500 ring-2 ring-white"
+                          : "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white"
+                      }
+                    />
                   </div>
-                  <div
-                    className={
-                      isPage
-                        ? "bg-white border border-slate-200 rounded-2xl rounded-bl-sm shadow-sm px-4 py-3 text-[15px] leading-relaxed text-slate-800"
-                        : "bg-white border border-slate-200 rounded-2xl rounded-bl-sm shadow-sm px-3 py-2 text-sm text-slate-800"
-                    }
-                    dangerouslySetInnerHTML={{
-                      __html: renderMarkdown(
-                        greeting.replace(
-                          /\{ORG\}/g,
-                          orgInfo?.organizationName || "your organization",
+                  <div>
+                    <p
+                      className={
+                        isPage
+                          ? "text-lg sm:text-xl font-semibold text-slate-900 tracking-tight"
+                          : "text-base font-semibold text-slate-900 tracking-tight"
+                      }
+                    >
+                      How can I help?
+                    </p>
+                    <div
+                      className={
+                        isPage
+                          ? "text-xs sm:text-sm text-slate-500 mt-1"
+                          : "text-xs text-slate-500 mt-1"
+                      }
+                      dangerouslySetInnerHTML={{
+                        __html: renderMarkdown(
+                          greeting.replace(
+                            /\{ORG\}/g,
+                            orgInfo?.organizationName || "your organization",
+                          ),
                         ),
-                      ),
-                    }}
-                  />
-                </div>
-                {/* Suggestion cards */}
-                <div>
-                  <p
-                    className={
-                      isPage
-                        ? "text-xs text-slate-500 uppercase tracking-wide font-semibold mb-2 px-1 flex items-center gap-1"
-                        : "text-[10px] text-slate-500 uppercase tracking-wide font-semibold mb-1.5 px-1 flex items-center gap-1"
-                    }
-                  >
-                    <Sparkles className="h-3 w-3" />
-                    Try asking
-                  </p>
-                  <div
-                    className={
-                      isPage
-                        ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-w-3xl"
-                        : "flex flex-col gap-1.5"
-                    }
-                  >
-                    {SUGGESTION_CARDS.map((s, i) => (
-                      <button
-                        key={i}
-                        onClick={() => sendMessage(s.prompt)}
-                        className={
-                          isPage
-                            ? "text-left bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl px-3 py-2.5 transition-all group"
-                            : "text-left bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50/40 rounded-xl px-3 py-2 transition-colors"
-                        }
-                      >
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`inline-flex items-center justify-center w-7 h-7 rounded-lg ${s.tint} shrink-0`}
-                          >
-                            <s.Icon className="h-3.5 w-3.5" />
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <p
-                              className={
-                                isPage
-                                  ? "text-sm font-semibold text-slate-900 truncate"
-                                  : "text-xs font-semibold text-slate-900 truncate"
-                              }
-                            >
-                              {s.title}
-                            </p>
-                            {isPage && (
-                              <p className="text-xs text-slate-500 truncate">
-                                {s.sub}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
+                      }}
+                    />
                   </div>
                 </div>
               </div>
@@ -1023,7 +1151,11 @@ export function ChatbotWidget({
                     )}
                   </div>
                   <div
-                    className={`max-w-[78%] ${
+                    className={`${
+                      m.role === "user"
+                        ? "max-w-[85%] sm:max-w-[78%]"
+                        : "max-w-[92%] sm:max-w-[88%] lg:max-w-[80%]"
+                    } ${
                       isPage ? "px-4 py-3 text-[15px]" : "px-3 py-2 text-sm"
                     } leading-relaxed break-words ${
                       m.role === "user"
@@ -1071,6 +1203,38 @@ export function ChatbotWidget({
                     </button>
                   </div>
                 )}
+                {/* Event picker dropdown form */}
+                {m.role === "assistant" &&
+                  m.eventPicker &&
+                  m.eventPicker.events.length > 0 && (
+                    <EventPickerForm
+                      picker={m.eventPicker}
+                      disabled={loading}
+                      onSubmit={(title) =>
+                        sendMessage(
+                          m.eventPicker!.actionTemplate.replace("{title}", title),
+                        )
+                      }
+                    />
+                  )}
+                {/* Walk-in booking inline form */}
+                {m.role === "assistant" && m.walkinForm && (
+                  <div className="ml-9">
+                    <InlineWalkinForm
+                      payload={m.walkinForm}
+                      organizerId={(() => {
+                        try {
+                          const t = sessionStorage.getItem("token");
+                          if (!t) return "";
+                          const d: any = jwtDecode(t);
+                          return d?.sub || "";
+                        } catch {
+                          return "";
+                        }
+                      })()}
+                    />
+                  </div>
+                )}
               </div>
             ))}
 
@@ -1109,15 +1273,12 @@ export function ChatbotWidget({
 
           {/* JUMP TO SECTION — mirrors the dashboard sidebar tabs */}
           {isPage && messages.length === 0 && navItems.length > 0 && (
-            <div className="border-t border-slate-200 bg-white/60 px-4 sm:px-6 py-2 flex flex-wrap gap-1.5 flex-shrink-0">
-              <span className="text-[10px] uppercase tracking-wide font-semibold text-slate-500 self-center mr-1">
-                Jump to
-              </span>
+            <div className="border-t border-slate-200 bg-white/60 px-4 sm:px-6 py-2 flex flex-nowrap items-center gap-1.5 flex-shrink-0 overflow-x-auto">
               {navItems.map((n) => (
                 <button
                   key={n.id}
                   onClick={() => onNavigate?.(n.id)}
-                  className="text-xs px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1"
+                  className="shrink-0 text-xs px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1"
                   title={`Open ${n.label}`}
                 >
                   <n.icon className="h-3 w-3" />
@@ -1182,34 +1343,49 @@ export function ChatbotWidget({
               variant={showPromptPanel ? "default" : "outline"}
               size="icon"
               className={`${
-                isPage ? "h-11 w-11 sm:h-12 sm:w-12 rounded-xl" : "h-10 w-10 rounded-full"
+                isPage
+                  ? "h-11 w-11 sm:h-12 sm:w-12 rounded-xl"
+                  : "h-10 w-10 rounded-full"
               } shrink-0 ${showPromptPanel ? "bg-amber-500 hover:bg-amber-600 text-white border-0" : ""}`}
               onClick={() => setShowPromptPanel((v) => !v)}
               title="Show suggested prompts"
             >
               <Lightbulb className="h-4 w-4" />
             </Button>
-            <Input
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={
-                isPage ? "Message EventSH AI…" : "Ask EventSH AI anything…"
-              }
-              disabled={loading}
-              className={
-                isPage
-                  ? "flex-1 h-11 sm:h-12 rounded-xl bg-white border-slate-300 focus-visible:ring-1 focus-visible:ring-blue-500 text-sm sm:text-base"
-                  : "flex-1 h-10 rounded-full bg-slate-100 border-0 focus-visible:ring-1 focus-visible:ring-blue-500 text-sm"
-              }
-            />
+            <div className="relative flex-1">
+              <Input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={
+                  isPage ? "Message EventSH AI…" : "Ask EventSH AI anything…"
+                }
+                disabled={loading}
+                className={
+                  isPage
+                    ? "w-full h-11 sm:h-12 rounded-xl bg-white border-slate-300 focus-visible:ring-1 focus-visible:ring-blue-500 text-sm sm:text-base pr-10"
+                    : "w-full h-10 rounded-full bg-slate-100 border-0 focus-visible:ring-1 focus-visible:ring-blue-500 text-sm pr-10"
+                }
+              />
+              <button
+                type="button"
+                disabled={loading || messages.length === 0}
+                onClick={() => setResetDialogOpen(true)}
+                title="Reset chat"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-slate-500 hover:text-red-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </button>
+            </div>
             {recognitionRef.current && (
               <Button
                 type="button"
                 variant={isListening ? "destructive" : "outline"}
                 size="icon"
                 className={`${
-                  isPage ? "h-11 w-11 sm:h-12 sm:w-12 rounded-xl" : "h-10 w-10 rounded-full"
+                  isPage
+                    ? "h-11 w-11 sm:h-12 sm:w-12 rounded-xl"
+                    : "h-10 w-10 rounded-full"
                 } shrink-0 ${isListening ? "animate-pulse" : ""}`}
                 onClick={toggleVoice}
                 disabled={loading}
@@ -1227,7 +1403,9 @@ export function ChatbotWidget({
               size="icon"
               disabled={!input.trim() || loading}
               className={`${
-                isPage ? "h-11 w-11 sm:h-12 sm:w-12 rounded-xl" : "h-10 w-10 rounded-full"
+                isPage
+                  ? "h-11 w-11 sm:h-12 sm:w-12 rounded-xl"
+                  : "h-10 w-10 rounded-full"
               } bg-blue-600 hover:bg-blue-700 shrink-0`}
               title="Send"
             >
@@ -1240,6 +1418,72 @@ export function ChatbotWidget({
           </form>
         </div>
       )}
+      <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear this conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              All messages in this chat will be removed. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={performReset}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Clear chat
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
+  );
+}
+
+function EventPickerForm({
+  picker,
+  disabled,
+  onSubmit,
+}: {
+  picker: EventPicker;
+  disabled: boolean;
+  onSubmit: (title: string) => void;
+}) {
+  const [selected, setSelected] = useState<string>("");
+  const [submitted, setSubmitted] = useState(false);
+  return (
+    <div className="ml-9 mt-2 max-w-md rounded-xl border border-blue-200 bg-blue-50/40 p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 mb-1.5">
+        Choose event
+      </p>
+      <div className="flex gap-2">
+        <select
+          className="flex-1 text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
+          value={selected}
+          onChange={(e) => setSelected(e.target.value)}
+          disabled={disabled || submitted}
+        >
+          <option value="">— Select an event —</option>
+          {picker.events.map((ev) => (
+            <option key={ev.id} value={ev.title}>
+              {ev.title}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={disabled || submitted || !selected}
+          onClick={() => {
+            if (!selected) return;
+            setSubmitted(true);
+            onSubmit(selected);
+          }}
+          className="text-xs px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-semibold disabled:opacity-50"
+        >
+          {submitted ? "…" : "Show"}
+        </button>
+      </div>
+    </div>
   );
 }

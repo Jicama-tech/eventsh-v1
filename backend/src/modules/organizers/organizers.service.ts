@@ -1086,13 +1086,58 @@ export class OrganizersService {
       trend.push({ date: key, tickets: v.tickets, revenue: v.revenue });
     }
 
+    // Match both ObjectId and string forms — older docs may store either.
     const totalEvents = await this.eventModel.countDocuments({
-      organizer: orgObjId,
+      organizer: { $in: [orgObjId, String(id)] as any[] },
     });
+
+    // Aggregate paid revenue from round-table bookings and stall registrations
+    // so the analytics card reflects ALL income, not just ticket sales.
+    const rtbCol = this.organizerModel.db.collection("roundtablebookings");
+    const stallsCol = this.organizerModel.db.collection("stalls");
+    const [rtbAgg, stallAgg] = await Promise.all([
+      rtbCol
+        .aggregate([
+          {
+            $match: {
+              organizerId: orgObjId,
+              paymentStatus: "Paid",
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              revenue: { $sum: { $ifNull: ["$amount", 0] } },
+            },
+          },
+        ])
+        .toArray()
+        .catch(() => []),
+      stallsCol
+        .aggregate([
+          {
+            $match: {
+              organizerId: orgObjId,
+              paymentStatus: "Paid",
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              revenue: { $sum: { $ifNull: ["$grandTotal", 0] } },
+            },
+          },
+        ])
+        .toArray()
+        .catch(() => []),
+    ]);
+    const ticketRev = totalsAgg[0]?.revenue || 0;
+    const roundTableRev = (rtbAgg[0] as any)?.revenue || 0;
+    const stallRev = (stallAgg[0] as any)?.revenue || 0;
+    const totalRev = ticketRev + roundTableRev + stallRev;
 
     const fmt = (n: number) =>
       `${currency.symbol}${new Intl.NumberFormat(currency.locale, { maximumFractionDigits: 0 }).format(Number.isFinite(n) ? n : 0)}`;
-    const totalRev = totalsAgg[0]?.revenue || 0;
     return {
       window: { from: startOfWindow, to: now, days: 30 },
       currency,
@@ -1100,6 +1145,12 @@ export class OrganizersService {
       totals: {
         events: totalEvents,
         tickets: totalsAgg[0]?.tickets || 0,
+        ticketRevenue: ticketRev,
+        ticketRevenueFormatted: fmt(ticketRev),
+        roundTableRevenue: roundTableRev,
+        roundTableRevenueFormatted: fmt(roundTableRev),
+        stallRevenue: stallRev,
+        stallRevenueFormatted: fmt(stallRev),
         revenue: totalRev,
         revenueFormatted: fmt(totalRev),
       },

@@ -23,6 +23,7 @@ import { SpeakerRequestsModule } from "./modules/speaker-requests/speaker-reques
 import { RoundTableBookingsModule } from "./modules/round-table-bookings/round-table-bookings.module";
 import { AgentsModule } from "./modules/agents/agents.module";
 import { ChatbotModule } from "./modules/chatbot/chatbot.module";
+import { VenueDesignerModule } from "./modules/venue-designer/venue-designer.module";
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { ChatbotModule } from "./modules/chatbot/chatbot.module";
     RoundTableBookingsModule,
     AgentsModule,
     ChatbotModule,
+    VenueDesignerModule,
   ],
 })
 export class AppModule {}

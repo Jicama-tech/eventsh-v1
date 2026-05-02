@@ -42,18 +42,25 @@ export function OrganizerRegister() {
   const apiURL = __API_URL__;
   const navigate = useNavigate();
   const location = useLocation();
-  const { name: initialName = "", email: initialEmail = "" } =
-    location.state || {};
+  // Accept name/email either from router state (legacy in-app navigation) or
+  // from URL query params (Google OAuth backend redirect).
+  const queryParams = (() => {
+    try {
+      return new URLSearchParams(location.search);
+    } catch {
+      return new URLSearchParams();
+    }
+  })();
+  const stateInitial = (location.state || {}) as {
+    name?: string;
+    email?: string;
+  };
+  const initialName = stateInitial.name || queryParams.get("name") || "";
+  const initialEmail = stateInitial.email || queryParams.get("email") || "";
   const { toast } = useToast();
 
   // Capture agent referral code from ?ref=CODE in URL
-  const initialReferralCode = (() => {
-    try {
-      return new URLSearchParams(location.search).get("ref") || "";
-    } catch {
-      return "";
-    }
-  })();
+  const initialReferralCode = queryParams.get("ref") || "";
   const [agentReferralCode, setAgentReferralCode] =
     useState(initialReferralCode);
 

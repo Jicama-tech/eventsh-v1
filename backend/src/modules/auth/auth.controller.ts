@@ -20,6 +20,8 @@ import { JwtService } from "@nestjs/jwt";
 import { AuthGuard } from "@nestjs/passport";
 import { RoleService } from "../roles/roles.service";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { InjectModel } from "@nestjs/mongoose";
+import { Model } from "mongoose";
 
 @Controller("auth")
 export class AuthController {
@@ -28,7 +30,14 @@ export class AuthController {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly rolesService: RoleService,
+    @InjectModel("Organizer") private readonly organizerModel: Model<any>,
+    @InjectModel("Operator") private readonly operatorModel: Model<any>,
   ) {}
+
+  // Frontend base URL used for redirects after Google OAuth.
+  private get frontendBase() {
+    return process.env.FRONTEND_BASE_URL || "https://eventsh.com";
+  }
 
   @Post("login")
   async login(@Body() dto: LocalDto) {
@@ -121,7 +130,9 @@ export class AuthController {
     try {
       const userFromGoogle = req.user as any;
       if (!userFromGoogle) {
-        return res.redirect("http://localhost:8080/ticket-cart?error=auth_failed");
+        return res.redirect(
+          "http://localhost:8080/ticket-cart?error=auth_failed",
+        );
       }
 
       // Find or create user
@@ -139,7 +150,6 @@ export class AuthController {
         user = await this.usersService.create(createUserDto);
       }
 
-      // Encode user info as query params for the frontend to pick up
       const params = new URLSearchParams({
         google_auth: "success",
         email: userFromGoogle.email || "",
@@ -149,12 +159,13 @@ export class AuthController {
         existing: isExisting ? "true" : "false",
       });
 
-      // Redirect back to ticket cart with user info
-      const returnUrl = req.query?.state as string || "";
+      const returnUrl = (req.query?.state as string) || "";
       const baseUrl = returnUrl || "http://localhost:8080/ticket-cart";
       return res.redirect(`${baseUrl}?${params.toString()}`);
     } catch (error) {
-      return res.redirect("http://localhost:8080/ticket-cart?error=auth_failed");
+      return res.redirect(
+        "http://localhost:8080/ticket-cart?error=auth_failed",
+      );
     }
   }
 
@@ -167,68 +178,79 @@ export class AuthController {
   @Get("google-organizer/redirect")
   @UseGuards(AuthGuard("google-organizer"))
   async googleOrganizerRedirect(@Req() req: Request, @Res() res: Response) {
+    const fe = this.frontendBase;
     try {
       const userFromGoogle = req.user as any;
+      if (!userFromGoogle?.email) {
+        return res.redirect(`${fe}/organizer/login?error=auth_failed`);
+      }
+      const email = String(userFromGoogle.email).toLowerCase();
+      const name = userFromGoogle.name || "";
 
-      if (!userFromGoogle) {
-        return res.redirect(
-          "https://eventsh.com/organizer/login?error=auth_failed",
+      // 1. Approved organizer? Mint organizer JWT and log them straight in.
+      const approvedOrg: any = await this.organizerModel
+        .findOne({ email, approved: true })
+        .lean();
+      if (approvedOrg) {
+        const token = this.jwtService.sign(
+          {
+            name: approvedOrg.name,
+            email: approvedOrg.email,
+            sub: approvedOrg._id.toString(),
+            country: approvedOrg.country,
+            organizationName: approvedOrg.organizationName,
+            roles: ["organizer"],
+          },
+          { secret: process.env.JWT_ACCESS_SECRET, expiresIn: "24h" },
         );
-        // return res.redirect(
-        //   "http://localhost:8080/organizer/login?error=auth_failed",
-        // );
+        return res.redirect(
+          `${fe}/organizer/login?token=${encodeURIComponent(token)}&direct=1`,
+        );
       }
 
-
-      // Check if user exists, create if not
-      let user = await this.usersService.findByEmail(userFromGoogle.email);
-
-      if (!user) {
-        const createUserDto: CreateUserDto = {
-          name: userFromGoogle.name,
-          email: userFromGoogle.email,
-          password:
-            userFromGoogle.password || "oauth-" + userFromGoogle.oauthId,
-          provider: userFromGoogle.oauthProvider,
-          providerId: userFromGoogle.oauthId,
-        };
-        user = await this.usersService.create(createUserDto);
+      // 2. Organizer record exists but isn't approved yet → block with message.
+      const pendingOrg: any = await this.organizerModel
+        .findOne({ email, approved: { $ne: true } })
+        .lean();
+      if (pendingOrg) {
+        return res.redirect(
+          `${fe}/organizer/login?error=pending_approval`,
+        );
       }
 
-      // Generate JWT for this user
-      const payload = {
-        name: user.name,
-        email: user.email,
-        sub: user._id,
-        roles: user.roles,
-      };
+      // 3. Operator? Log in under the parent organizer's identity.
+      const operator: any = await this.operatorModel
+        .findOne({ email })
+        .lean();
+      if (operator?.organizerId) {
+        const parentOrg: any = await this.organizerModel
+          .findOne({ _id: operator.organizerId, approved: true })
+          .lean();
+        if (parentOrg) {
+          const token = this.jwtService.sign(
+            {
+              name: operator.name,
+              email: operator.email,
+              sub: parentOrg._id.toString(),
+              operatorId: operator._id.toString(),
+              accessTabs: operator.accessTabs || [],
+              country: parentOrg.country,
+              organizationName: parentOrg.organizationName,
+              roles: ["organizer"],
+            },
+            { secret: process.env.JWT_ACCESS_SECRET, expiresIn: "24h" },
+          );
+          return res.redirect(
+            `${fe}/organizer/login?token=${encodeURIComponent(token)}&direct=1`,
+          );
+        }
+      }
 
-      const token = this.jwtService.sign(payload, {
-        secret: process.env.JWT_ACCESS_SECRET,
-        expiresIn: "1h",
-      });
-
-      return res.redirect(
-        `https://eventsh.com/organizer/login?token=${encodeURIComponent(
-          token,
-        )}&email=${encodeURIComponent(user.email)}&name=${encodeURIComponent(
-          user.name,
-        )}`,
-      );
-      // return res.redirect(
-      //   `http://localhost:8080/organizer/login?token=${encodeURIComponent(
-      //     token,
-      //   )}&email=${encodeURIComponent(user.email)}&name=${encodeURIComponent(
-      //     user.name,
-      //   )}`,
-      // );
+      // 4. No organizer or operator found → send to registration prefilled.
+      const params = new URLSearchParams({ email, name });
+      return res.redirect(`${fe}/register?${params.toString()}`);
     } catch (error) {
-      return res.redirect(
-        "https://eventsh.com/organizer/login?error=auth_failed",
-      );
-      // return res.redirect(
-      //   "http://localhost:8080/organizer/login?error=auth_failed",
-      // );
+      return res.redirect(`${fe}/organizer/login?error=auth_failed`);
     }
   }
 
