@@ -93,10 +93,12 @@ export default function DashboardOverview({
       0,
     );
 
-    const ticketsRevenue = eventTickets.reduce(
-      (total, ticket) => total + ticket.totalAmount,
-      0,
-    );
+    // Only count CONFIRMED ticket revenue — matches the chatbot's
+    // /organizers/analytics endpoint and avoids inflating totals with
+    // pending payments.
+    const ticketsRevenue = eventTickets
+      .filter((ticket) => ticket.paymentConfirmed)
+      .reduce((total, ticket) => total + ticket.totalAmount, 0);
 
     const ticketsSoldToday = eventTickets.filter((ticket) =>
       isToday(new Date(ticket.purchaseDate)),
@@ -151,14 +153,20 @@ export default function DashboardOverview({
     };
   };
 
-  const calculateDashboardStats = (allEventsWithMetrics, stallsData = []) => {
+  const calculateDashboardStats = (
+    allEventsWithMetrics,
+    stallsData = [],
+    analyticsTotals = null,
+  ) => {
     const totalEvents = allEventsWithMetrics.length;
     const totalTicketsSold = allEventsWithMetrics.reduce(
       (sum, event) => sum + (event.ticketsSold || 0),
       0,
     );
+    // Use the per-event ticketsRevenue (paid tickets only) — NOT rawRevenue,
+    // which already mixes in stalls and would double-count below.
     const ticketsRevenue = allEventsWithMetrics.reduce(
-      (sum, event) => sum + (event.rawRevenue || 0),
+      (sum, event) => sum + (event.ticketsRevenue || 0),
       0,
     );
     const ticketsSoldToday = allEventsWithMetrics.reduce(
@@ -175,8 +183,13 @@ export default function DashboardOverview({
       .filter((stall) => stall.paymentStatus === "Paid")
       .reduce((sum, stall) => sum + (stall.grandTotal || 0), 0);
 
-    // Combined revenue from tickets and stalls
-    const totalRevenue = ticketsRevenue + stallsRevenue;
+    // Prefer the unified analytics endpoint total (tickets + round-tables +
+    // stalls) so this matches the chatbot's Total Revenue card exactly.
+    // Fall back to local calc if the endpoint isn't reachable.
+    const totalRevenue =
+      typeof analyticsTotals?.revenue === "number"
+        ? analyticsTotals.revenue
+        : ticketsRevenue + stallsRevenue;
 
     // NOTE: For 'Total Attendees', we use 'Total Tickets Sold' as a proxy,
     // since the API data doesn't provide a unique attendee count.
@@ -266,6 +279,22 @@ export default function DashboardOverview({
         setStallsData(stallsData);
       }
 
+      // 3b. Unified analytics totals — the same source the chatbot reads.
+      // Includes ticket + round-table + stall revenue.
+      let analyticsTotals = null;
+      try {
+        const analyticsResponse = await fetch(
+          `${apiURL}/organizers/analytics/${organizerIdFromToken}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (analyticsResponse.ok) {
+          const a = await analyticsResponse.json();
+          analyticsTotals = a.totals || null;
+        }
+      } catch {
+        /* fall back to local calc */
+      }
+
       // 4. Process and Merge Data (with stalls)
       const processedEvents = allEvents.map((event) =>
         calculateEventMetrics(event, ticketData, stallsData),
@@ -299,7 +328,9 @@ export default function DashboardOverview({
       setPastEvents(mapMetrics(eventData.pastEvents || []));
 
       // 5. Calculate Overall Stats (with stalls data already fetched)
-      setStats(calculateDashboardStats(processedEvents, stallsData));
+      setStats(
+        calculateDashboardStats(processedEvents, stallsData, analyticsTotals),
+      );
     } catch (error) {
       toast({
         duration: 5000,

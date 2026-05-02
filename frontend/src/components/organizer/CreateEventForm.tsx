@@ -37,9 +37,11 @@ import {
   Image,
   Mic,
   Circle,
+  Sparkles,
 } from "lucide-react";
 import { jwtDecode } from "jwt-decode";
 import BlurOverlay from "../ui/blurOverlay";
+import { AIVenueDesignerDialog } from "./AIVenueDesignerDialog";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import ImageCropModal from "../ui/imageCropModal";
 import { lazy, Suspense } from "react";
@@ -1598,6 +1600,7 @@ const VenueDesigner = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
   const { country } = useCountry();
   const { formatPrice, getSymbol } = useCurrency(country);
 
@@ -1609,6 +1612,35 @@ const VenueDesigner = ({
   const currentTables = venueTables[selectedVenueConfigId] || [];
   const currentSpeakerZones = venueSpeakerZones[selectedVenueConfigId] || [];
   const currentRoundTables = venueRoundTables[selectedVenueConfigId] || [];
+
+  const applyAILayout = (result: {
+    positionedTables: PositionedTable[];
+    positionedRoundTables: PositionedRoundTable[];
+    positionedSpeakerZones: any[];
+  }) => {
+    if (!venueConfig) return;
+    setVenueTables({
+      ...venueTables,
+      [selectedVenueConfigId]: result.positionedTables.map((t) => ({
+        ...t,
+        venueConfigId: selectedVenueConfigId,
+      })) as PositionedTable[],
+    });
+    setVenueRoundTables({
+      ...venueRoundTables,
+      [selectedVenueConfigId]: result.positionedRoundTables.map((rt) => ({
+        ...rt,
+        venueConfigId: selectedVenueConfigId,
+      })) as PositionedRoundTable[],
+    });
+    setVenueSpeakerZones({
+      ...venueSpeakerZones,
+      [selectedVenueConfigId]: result.positionedSpeakerZones.map((z) => ({
+        ...z,
+        venueConfigId: selectedVenueConfigId,
+      })),
+    });
+  };
 
   // --- Actions ---
 
@@ -1969,19 +2001,56 @@ const VenueDesigner = ({
             </Button>
           ))}
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={downloadVenueLayout}
-          disabled={
-            currentTables.length === 0 &&
-            currentSpeakerZones.length === 0 &&
-            currentRoundTables.length === 0
-          }
-        >
-          <Download size={14} className="mr-2" /> Export
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setAiOpen(true)}
+            className="border-amber-300 text-amber-700 hover:bg-amber-50"
+            title="Auto-arrange a layout from a brief"
+          >
+            <Sparkles size={14} className="mr-2" /> AI Layout
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={downloadVenueLayout}
+            disabled={
+              currentTables.length === 0 &&
+              currentSpeakerZones.length === 0 &&
+              currentRoundTables.length === 0
+            }
+          >
+            <Download size={14} className="mr-2" /> Export
+          </Button>
+        </div>
       </div>
+
+      {venueConfig && (
+        <AIVenueDesignerDialog
+          open={aiOpen}
+          onOpenChange={setAiOpen}
+          venueConfig={{
+            id: venueConfig.id,
+            name: venueConfig.name,
+            width: venueConfig.width,
+            height: venueConfig.height,
+            scale: venueConfig.scale,
+            gridSize: venueConfig.gridSize,
+          }}
+          templates={{
+            stalls: tableTemplates,
+            roundTables: roundTableTemplates,
+            speakerZones: speakerSlotTemplates,
+          }}
+          existingCounts={{
+            tables: currentTables.length,
+            rounds: currentRoundTables.length,
+            zones: currentSpeakerZones.length,
+          }}
+          onApply={applyAILayout}
+        />
+      )}
 
       {/* Templates Row - Full Width Horizontal */}
       <div className="border rounded-xl bg-slate-50 p-4">

@@ -1,4 +1,9 @@
-import { IsNotEmpty, IsOptional, IsString } from "class-validator";
+import {
+  IsArray,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from "class-validator";
 
 export class CreateOperatorDto {
   @IsString()
@@ -20,4 +25,10 @@ export class CreateOperatorDto {
   @IsString()
   @IsOptional()
   organizerId?: string;
+
+  // Empty = full access; non-empty = restricted to listed tab IDs
+  @IsArray()
+  @IsOptional()
+  @IsString({ each: true })
+  accessTabs?: string[];
 }

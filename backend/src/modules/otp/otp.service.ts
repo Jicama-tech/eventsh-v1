@@ -11,6 +11,7 @@ import { Model } from "mongoose";
 import { CreateOtpDto } from "./dto/create-otp.dto";
 import { Otp } from "./entities/otp.entity";
 import { MailService } from "../roles/mail.service";
+import { JwtService } from "@nestjs/jwt";
 
 // WhatsApp (Baileys)
 import makeWASocket, {
@@ -37,11 +38,15 @@ export class OtpService implements OnModuleInit {
   // WhatsApp socket
   private sock: WASocket | null = null;
   private reconnecting = false;
+  // Latest QR string from Baileys connection.update — exposed via /otp/whatsapp/qr-image
+  private currentQR: string | null = null;
 
   constructor(
     @InjectModel(Otp.name) private otpModel: Model<Otp>,
+    @InjectModel("Agent") private agentModel: Model<any>,
     private mailService: MailService,
     private readonly organizerService: OrganizersService,
+    private readonly jwtService: JwtService,
   ) {}
 
   async onModuleInit() {
@@ -70,26 +75,15 @@ export class OtpService implements OnModuleInit {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
-          try {
-            const termQR = await qrcode.toString(qr, {
-              type: "terminal",
-              small: true,
-            });
-            this.logger.log(
-              "\nScan this WhatsApp QR with the shop phone:\n" + termQR,
-            );
-            this.logger.log(
-              "Open WhatsApp > Linked Devices > Link a device, then scan within ~20s.",
-            );
-          } catch (e) {
-            this.logger.error(
-              "Failed to render QR. Raw head: " + qr.slice(0, 40) + "...",
-            );
-          }
+          this.currentQR = qr;
+          this.logger.log(
+            "WhatsApp QR refreshed. Open http://localhost:3000/otp/whatsapp/qr-image in your browser to scan it.",
+          );
         }
 
         if (connection === "open") {
           this.logger.log("WhatsApp connected.");
+          this.currentQR = null;
           this.reconnecting = false;
         }
 
@@ -128,6 +122,20 @@ export class OtpService implements OnModuleInit {
     return `${digits}@s.whatsapp.net`;
   }
 
+  // Returns the latest QR as a PNG Buffer for browser display, or null if paired.
+  async getCurrentQRImage(): Promise<Buffer | null> {
+    if (!this.currentQR) return null;
+    return qrcode.toBuffer(this.currentQR, {
+      width: 320,
+      margin: 2,
+      errorCorrectionLevel: "M",
+    });
+  }
+
+  isWhatsAppConnected(): boolean {
+    return !!(this.sock as any)?.user?.id;
+  }
+
   // Pairing via code (fallback if QR is troublesome)
   // IMPORTANT: Pass E.164 digits without '+' e.g. +91 987... -> 91987...
   async requestWhatsAppPairingCode(phoneDigitsE164NoPlus: string) {
@@ -144,7 +152,19 @@ export class OtpService implements OnModuleInit {
   }
 
   async sendWhatsAppMessage(whatsappNumber: string, text: string) {
-    if (!this.sock) throw new Error("WhatsApp not connected");
+    if (!this.sock) {
+      throw new BadRequestException(
+        "WhatsApp gateway not initialized. Please contact admin.",
+      );
+    }
+    // Baileys exposes the authenticated user under `sock.user`; if it's not
+    // set, the QR pairing hasn't completed yet — fail with a clear message
+    // instead of letting the deep TypeError bubble up as a 500.
+    if (!(this.sock as any).user?.id) {
+      throw new BadRequestException(
+        "WhatsApp gateway is not paired yet. Please scan the QR in the server terminal and try again.",
+      );
+    }
     const jid = this.toJid(whatsappNumber);
     await this.sock.sendMessage(jid, { text });
   }
@@ -344,6 +364,28 @@ export class OtpService implements OnModuleInit {
           organizations: result.organizations,
         };
       }
+    } else if (role === "agent") {
+      const digits = whatsappNumber.replace(/\D/g, "");
+      const agent = await this.agentModel.findOne({
+        whatsAppNumber: { $regex: digits + "$" },
+        isActive: true,
+      });
+      if (!agent) throw new NotFoundException("Agent not found");
+
+      const token = this.jwtService.sign(
+        {
+          name: agent.name,
+          email: agent.email,
+          sub: agent._id.toString(),
+          roles: ["agent"],
+          referralCode: agent.referralCode,
+        },
+        {
+          secret: process.env.JWT_ACCESS_SECRET,
+          expiresIn: "24h",
+        },
+      );
+      result = { token };
     } else if (role === "shopkeeper" || role === "vendor" || role === "speaker") {
       // Vendor/stall applicant - just verify OTP, no profile lookup needed
       await this.otpModel.deleteOne({ channel, role, identifier });

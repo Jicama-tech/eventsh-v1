@@ -300,6 +300,119 @@ export class MailService {
     });
   }
 
+  // ✅ Welcome email after a successful organizer registration
+  async sendOrganizerWelcome(data: {
+    name: string;
+    email: string;
+    organizationName: string;
+    planName?: string | null;
+    validityInDays?: number | null;
+  }) {
+    const subject = `Welcome to EventSH, ${data.organizationName}!`;
+    const planLine =
+      data.planName && data.validityInDays
+        ? `<p>You've been auto-assigned the <strong>${data.planName}</strong> plan (valid for ${data.validityInDays} days). You can upgrade anytime from <em>Settings → Subscription</em>.</p>`
+        : `<p>You can browse plans anytime from <em>Settings → Subscription</em>.</p>`;
+    const body = `
+      <div style="font-family: sans-serif; max-width: 600px; color: #1f2937; line-height: 1.6;">
+        <h2>Welcome aboard, ${data.name}! 🎉</h2>
+        <p>Your organizer account for <strong>${data.organizationName}</strong> is live and active.</p>
+        ${planLine}
+        <p>Log in via WhatsApp OTP at <a href="https://eventsh.com/login">eventsh.com/login</a> to start creating events.</p>
+        <p>Cheers,<br/>The EventSH Team</p>
+      </div>`;
+    await this.transporter.sendMail({
+      from: `"EventSH" <${process.env.SMTP_USER}>`,
+      to: data.email,
+      subject,
+      html: body,
+    });
+  }
+
+  // ✅ Receipt of plan switch / purchase
+  async sendPlanPurchaseConfirmation(data: {
+    name: string;
+    email: string;
+    organizationName: string;
+    planName: string;
+    pricePaid: string;
+    validityInDays: number;
+    expiryDate: Date;
+  }) {
+    const subject = `Plan activated: ${data.planName}`;
+    const body = `
+      <div style="font-family: sans-serif; max-width: 600px; color: #1f2937; line-height: 1.6;">
+        <h2>Plan activated 🎟️</h2>
+        <p>Hi ${data.name},</p>
+        <p>Your <strong>${data.planName}</strong> plan for <strong>${data.organizationName}</strong> is now active.</p>
+        <table style="border-collapse: collapse; margin: 12px 0;">
+          <tr><td style="padding: 4px 12px; color: #6b7280;">Price</td><td style="padding: 4px 12px; font-weight: 600;">$${data.pricePaid}</td></tr>
+          <tr><td style="padding: 4px 12px; color: #6b7280;">Validity</td><td style="padding: 4px 12px; font-weight: 600;">${data.validityInDays} days</td></tr>
+          <tr><td style="padding: 4px 12px; color: #6b7280;">Expires on</td><td style="padding: 4px 12px; font-weight: 600;">${new Date(data.expiryDate).toLocaleDateString()}</td></tr>
+        </table>
+        <p>You can review or change your plan from <em>Settings → Subscription</em>.</p>
+        <p>— The EventSH Team</p>
+      </div>`;
+    await this.transporter.sendMail({
+      from: `"EventSH" <${process.env.SMTP_USER}>`,
+      to: data.email,
+      subject,
+      html: body,
+    });
+  }
+
+  // ✅ Reminder N days before expiry
+  async sendPlanExpiryWarning(data: {
+    name: string;
+    email: string;
+    organizationName: string;
+    planName: string;
+    daysLeft: number;
+    expiryDate: Date;
+  }) {
+    const subject = `Your ${data.planName} plan expires in ${data.daysLeft} day${data.daysLeft === 1 ? "" : "s"}`;
+    const body = `
+      <div style="font-family: sans-serif; max-width: 600px; color: #1f2937; line-height: 1.6;">
+        <h2>Heads up — your plan is ending soon</h2>
+        <p>Hi ${data.name},</p>
+        <p>Your <strong>${data.planName}</strong> plan for <strong>${data.organizationName}</strong> will expire on
+          <strong>${new Date(data.expiryDate).toLocaleDateString()}</strong> — that's
+          <strong>${data.daysLeft} day${data.daysLeft === 1 ? "" : "s"}</strong> away.</p>
+        <p>After expiry, you'll get a 7-day grace window before premium features are locked. Renew or switch your plan from <em>Settings → Subscription</em> to avoid interruption.</p>
+        <p>— The EventSH Team</p>
+      </div>`;
+    await this.transporter.sendMail({
+      from: `"EventSH" <${process.env.SMTP_USER}>`,
+      to: data.email,
+      subject,
+      html: body,
+    });
+  }
+
+  // ✅ Subscription was cancelled
+  async sendSubscriptionCancelled(data: {
+    name: string;
+    email: string;
+    organizationName: string;
+    planName?: string | null;
+  }) {
+    const subject = `Your subscription has been cancelled`;
+    const body = `
+      <div style="font-family: sans-serif; max-width: 600px; color: #1f2937; line-height: 1.6;">
+        <h2>Subscription cancelled</h2>
+        <p>Hi ${data.name},</p>
+        <p>The <strong>${data.planName || "current"}</strong> plan for <strong>${data.organizationName}</strong> has been cancelled.</p>
+        <p>You can re-subscribe to a plan anytime from <em>Settings → Subscription</em>. Premium features will remain available until the end of any active billing period.</p>
+        <p>— The EventSH Team</p>
+      </div>`;
+    await this.transporter.sendMail({
+      from: `"EventSH" <${process.env.SMTP_USER}>`,
+      to: data.email,
+      subject,
+      html: body,
+    });
+  }
+
   async sendMail(options: { to: string; subject: string; html: string }) {
     try {
       await this.transporter.sendMail({

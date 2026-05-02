@@ -7,13 +7,43 @@ import {
   Delete,
   BadRequestException,
   Query,
+  Res,
 } from "@nestjs/common";
+import { Response } from "express";
 import { OtpService } from "./otp.service";
 import { CreateOtpDto } from "./dto/create-otp.dto";
 
 @Controller("otp")
 export class OtpController {
   constructor(private readonly otpService: OtpService) {}
+
+  // Open in a browser to scan the WhatsApp pairing QR.
+  @Get("whatsapp/qr-image")
+  async qrImage(@Res() res: Response) {
+    if (this.otpService.isWhatsAppConnected()) {
+      return res
+        .status(200)
+        .send(
+          "<html><body style='font-family:sans-serif;text-align:center;padding:40px'><h2>✅ WhatsApp is already paired</h2><p>OTPs will deliver normally.</p></body></html>",
+        );
+    }
+    const buf = await this.otpService.getCurrentQRImage();
+    if (!buf) {
+      return res
+        .status(503)
+        .send(
+          "<html><body style='font-family:sans-serif;text-align:center;padding:40px'><h2>QR not ready yet</h2><p>Waiting for Baileys to generate one. Refresh in a couple of seconds.</p></body></html>",
+        );
+    }
+    const html = `<!doctype html><html><head><meta http-equiv="refresh" content="15"><title>WhatsApp Pair</title></head>
+      <body style="font-family:sans-serif;text-align:center;padding:24px;background:#f8f9fb">
+        <h2>Scan to link WhatsApp</h2>
+        <p style="color:#555">WhatsApp → Settings → Linked Devices → Link a device. Page auto-refreshes every 15s.</p>
+        <img src="data:image/png;base64,${buf.toString("base64")}" alt="QR" style="border:8px solid #fff;border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,.08)" />
+      </body></html>`;
+    res.setHeader("Content-Type", "text/html");
+    return res.send(html);
+  }
 
   @Post()
   create(@Body() createOtpDto: CreateOtpDto) {
