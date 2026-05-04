@@ -37,6 +37,10 @@ import {
   User,
   Lightbulb,
   RotateCcw,
+  Plus,
+  Pencil,
+  UserPlus,
+  Store,
 } from "lucide-react";
 
 const apiURL = __API_URL__;
@@ -88,13 +92,20 @@ interface WalkinFormPayload {
   }[];
 }
 
+type BotAction =
+  | { type: "navigate"; tab: string }
+  | { type: "openCreateEvent" }
+  | { type: "openEditEvent"; eventId: string; eventTitle?: string }
+  | { type: "openAddVisitor" }
+  | { type: "openAddExhibitor" };
+
 interface Message {
   role: "user" | "assistant";
   content: string;
   quickActions?: QuickAction[];
   eventPicker?: EventPicker;
   walkinForm?: WalkinFormPayload;
-  botAction?: { type: "navigate"; tab: string };
+  botAction?: BotAction;
   ts: number;
 }
 
@@ -106,6 +117,16 @@ interface NavItem {
 
 interface ChatbotWidgetProps {
   onNavigate?: (tab: string) => void;
+  /** Open the event editor in the dashboard. Mode "create" → blank form;
+   *  mode "edit" → pre-filled with the given eventId. */
+  onOpenEventForm?: (
+    mode: "create" | "edit",
+    payload?: { eventId: string; eventTitle?: string },
+  ) => void;
+  /** Open the Add Visitor (user) form in the Users tab. */
+  onOpenAddVisitor?: () => void;
+  /** Open the Add Exhibitor (shopkeeper) form in the Users tab. */
+  onOpenAddExhibitor?: () => void;
   greeting?: string;
   mode?: "floating" | "page";
   /** Sidebar nav items rendered as "jump to" pills. If omitted, a default
@@ -223,6 +244,22 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   },
 
   // ========== EVENTS ==========
+  {
+    category: "Events",
+    Icon: Plus,
+    tint: "text-blue-600 bg-blue-50",
+    title: "Create new event",
+    sub: "Open the blank event form",
+    prompt: "Create a new event",
+  },
+  {
+    category: "Events",
+    Icon: Pencil,
+    tint: "text-purple-600 bg-purple-50",
+    title: "Edit an event",
+    sub: "Open editor pre-filled (give the title)",
+    prompt: "Edit event ",
+  },
   {
     category: "Events",
     Icon: Calendar,
@@ -359,6 +396,14 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   // ========== ATTENDEES ==========
   {
     category: "Attendees",
+    Icon: UserPlus,
+    tint: "text-emerald-600 bg-emerald-50",
+    title: "Add visitor",
+    sub: "Open the Add Customer form",
+    prompt: "Add a new visitor",
+  },
+  {
+    category: "Attendees",
     Icon: Users,
     tint: "text-cyan-600 bg-cyan-50",
     title: "Attendees per event",
@@ -375,6 +420,14 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   },
 
   // ========== STALLS / VENDORS ==========
+  {
+    category: "Stalls",
+    Icon: Store,
+    tint: "text-orange-600 bg-orange-50",
+    title: "Add exhibitor",
+    sub: "Open the Add Exhibitor form",
+    prompt: "Add a new exhibitor",
+  },
   {
     category: "Stalls",
     Icon: Building2,
@@ -602,6 +655,9 @@ const DEFAULT_NAV_ITEMS: NavItem[] = [
 
 export function ChatbotWidget({
   onNavigate,
+  onOpenEventForm,
+  onOpenAddVisitor,
+  onOpenAddExhibitor,
   greeting = "Hi! I am **EventSH AI** for **{ORG}**. Ask me about events, tickets, attendees, vendors, speakers — or just say hi.",
   mode = "floating",
   navItems = DEFAULT_NAV_ITEMS,
@@ -844,8 +900,46 @@ export function ChatbotWidget({
           ts: Date.now(),
         };
         setMessages((prev) => [...prev, botMsg]);
-        if (data.botAction?.type === "navigate" && onNavigate) {
-          setTimeout(() => onNavigate(data.botAction.tab), 800);
+        // Auto-trigger UI driver actions after a short delay so the user can
+        // read the bot's reply first.
+        const ba = data.botAction as BotAction | undefined;
+        // eslint-disable-next-line no-console
+        console.log("[chatbot] botAction received:", ba, "onOpenEventForm?", !!onOpenEventForm);
+        if (ba?.type === "navigate" && onNavigate) {
+          setTimeout(() => onNavigate(ba.tab), 800);
+        } else if (ba?.type === "openCreateEvent") {
+          if (onOpenEventForm) {
+            setTimeout(() => {
+              // eslint-disable-next-line no-console
+              console.log("[chatbot] firing onOpenEventForm(create)");
+              onOpenEventForm("create");
+            }, 800);
+          } else {
+            // eslint-disable-next-line no-console
+            console.warn("[chatbot] openCreateEvent received but onOpenEventForm prop is missing");
+          }
+        } else if (ba?.type === "openEditEvent") {
+          if (onOpenEventForm) {
+            setTimeout(() => {
+              // eslint-disable-next-line no-console
+              console.log("[chatbot] firing onOpenEventForm(edit)", ba);
+              onOpenEventForm("edit", {
+                eventId: ba.eventId,
+                eventTitle: ba.eventTitle,
+              });
+            }, 800);
+          } else {
+            // eslint-disable-next-line no-console
+            console.warn("[chatbot] openEditEvent received but onOpenEventForm prop is missing");
+          }
+        } else if (ba?.type === "openAddVisitor") {
+          if (onOpenAddVisitor) {
+            setTimeout(() => onOpenAddVisitor(), 800);
+          }
+        } else if (ba?.type === "openAddExhibitor") {
+          if (onOpenAddExhibitor) {
+            setTimeout(() => onOpenAddExhibitor(), 800);
+          }
         }
       } catch (err: any) {
         setMessages((prev) => [
@@ -860,7 +954,7 @@ export function ChatbotWidget({
         setLoading(false);
       }
     },
-    [loading, onNavigate],
+    [loading, onNavigate, onOpenEventForm, onOpenAddVisitor, onOpenAddExhibitor],
   );
 
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
@@ -1195,14 +1289,84 @@ export function ChatbotWidget({
                 {m.role === "assistant" && m.botAction?.type === "navigate" && (
                   <div className="ml-9 mt-1.5">
                     <button
-                      onClick={() => onNavigate?.(m.botAction!.tab)}
+                      onClick={() =>
+                        onNavigate?.(
+                          (m.botAction as { type: "navigate"; tab: string })
+                            .tab,
+                        )
+                      }
                       className="text-xs px-3 py-1 rounded-full border border-emerald-200 text-emerald-700 bg-emerald-50/60 hover:bg-emerald-100 transition font-medium inline-flex items-center gap-1"
                     >
                       <ChevronUp className="h-3 w-3 rotate-45" />
-                      Open {m.botAction.tab}
+                      Open {(m.botAction as any).tab}
                     </button>
                   </div>
                 )}
+                {/* Open Create Event form pill */}
+                {m.role === "assistant" &&
+                  m.botAction?.type === "openCreateEvent" && (
+                    <div className="ml-9 mt-1.5">
+                      <button
+                        onClick={() => onOpenEventForm?.("create")}
+                        className="text-xs px-3 py-1 rounded-full border border-blue-200 text-blue-700 bg-blue-50/60 hover:bg-blue-100 transition font-medium inline-flex items-center gap-1"
+                      >
+                        <ChevronUp className="h-3 w-3 rotate-45" />
+                        Open Create Event Form
+                      </button>
+                    </div>
+                  )}
+                {/* Open Edit Event form pill */}
+                {m.role === "assistant" &&
+                  m.botAction?.type === "openEditEvent" && (
+                    <div className="ml-9 mt-1.5">
+                      <button
+                        onClick={() => {
+                          const ba = m.botAction as {
+                            type: "openEditEvent";
+                            eventId: string;
+                            eventTitle?: string;
+                          };
+                          onOpenEventForm?.("edit", {
+                            eventId: ba.eventId,
+                            eventTitle: ba.eventTitle,
+                          });
+                        }}
+                        className="text-xs px-3 py-1 rounded-full border border-purple-200 text-purple-700 bg-purple-50/60 hover:bg-purple-100 transition font-medium inline-flex items-center gap-1"
+                      >
+                        <ChevronUp className="h-3 w-3 rotate-45" />
+                        Edit "
+                        {(m.botAction as { eventTitle?: string }).eventTitle ||
+                          "event"}
+                        "
+                      </button>
+                    </div>
+                  )}
+                {/* Open Add Visitor form pill */}
+                {m.role === "assistant" &&
+                  m.botAction?.type === "openAddVisitor" && (
+                    <div className="ml-9 mt-1.5">
+                      <button
+                        onClick={() => onOpenAddVisitor?.()}
+                        className="text-xs px-3 py-1 rounded-full border border-emerald-200 text-emerald-700 bg-emerald-50/60 hover:bg-emerald-100 transition font-medium inline-flex items-center gap-1"
+                      >
+                        <ChevronUp className="h-3 w-3 rotate-45" />
+                        Open Add Visitor Form
+                      </button>
+                    </div>
+                  )}
+                {/* Open Add Exhibitor form pill */}
+                {m.role === "assistant" &&
+                  m.botAction?.type === "openAddExhibitor" && (
+                    <div className="ml-9 mt-1.5">
+                      <button
+                        onClick={() => onOpenAddExhibitor?.()}
+                        className="text-xs px-3 py-1 rounded-full border border-orange-200 text-orange-700 bg-orange-50/60 hover:bg-orange-100 transition font-medium inline-flex items-center gap-1"
+                      >
+                        <ChevronUp className="h-3 w-3 rotate-45" />
+                        Open Add Exhibitor Form
+                      </button>
+                    </div>
+                  )}
                 {/* Event picker dropdown form */}
                 {m.role === "assistant" &&
                   m.eventPicker &&

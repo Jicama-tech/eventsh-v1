@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -65,6 +66,7 @@ import {
   Trash,
   Edit3,
   UserPlus2,
+  Plus,
 } from "lucide-react";
 import { jwtDecode } from "jwt-decode";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
@@ -99,6 +101,7 @@ interface Operator {
   email: string;
   whatsAppNumber: string;
   organizerId?: string;
+  accessTabs?: string[];
 }
 
 interface ShopkeeperSettingsProps {
@@ -144,6 +147,66 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
   const [availablePlans, setAvailablePlans] = useState<any[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(false);
   const [switchingPlanId, setSwitchingPlanId] = useState<string | null>(null);
+
+  // --- Business categories (shared across all organizers) ---
+  const [categories, setCategories] = useState<{ _id: string; name: string }[]>(
+    [],
+  );
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [savingCategory, setSavingCategory] = useState(false);
+
+  const loadCategories = async () => {
+    try {
+      const res = await fetch(`${apiURL}/categories`);
+      if (res.ok) {
+        const data = await res.json();
+        setCategories(Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      console.error("Failed to load categories:", err);
+    }
+  };
+
+  const handleAddCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    setSavingCategory(true);
+    try {
+      const token = sessionStorage.getItem("token");
+      const res = await fetch(`${apiURL}/categories`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Failed to add category");
+      }
+      const created = await res.json();
+      await loadCategories();
+      setOrganizerProfile((p) => ({ ...p, businessCategory: created.name }));
+      setNewCategoryName("");
+      setShowAddCategory(false);
+      toast({
+        duration: 4000,
+        title: "Category added",
+        description: `"${created.name}" is now available to all organizers.`,
+      });
+    } catch (err: any) {
+      toast({
+        duration: 5000,
+        title: "Failed to add category",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setSavingCategory(false);
+    }
+  };
 
   const loadSubscription = async () => {
     try {
@@ -215,6 +278,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
   useEffect(() => {
     loadSubscription();
+    loadCategories();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -972,7 +1036,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     expiryDate: "",
     appliesTo: "GLOBAL",
     isActive: true,
-    eventId: "NONE", // ✅ ADDED: Default to "NONE"
+    eventIds: [] as string[], // multi-event support
   });
 
   const resetCoupon = () => {
@@ -986,7 +1050,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
       expiryDate: "",
       appliesTo: "GLOBAL",
       isActive: true,
-      eventId: "NONE", // ✅ ADDED
+      eventIds: [] as string[],
     });
   };
 
@@ -1020,8 +1084,15 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
   };
 
   const handleEditCoupon = (data: any) => {
+    // Migrate legacy single-event coupons (eventId) to the new multi-event shape (eventIds).
+    const migratedEventIds: string[] = Array.isArray(data.eventIds)
+      ? data.eventIds
+      : data.eventId && data.eventId !== "NONE"
+        ? [data.eventId]
+        : [];
     setCoupon({
       ...data,
+      eventIds: migratedEventIds,
       expiryDate: data.expiryDate?.split("T")[0],
     });
     setIsEditMode(true);
@@ -1099,13 +1170,12 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
         isActive: true,
         appliesTo: "ORGANIZER",
 
-        // ✅ ADDED: Send the eventId if one was selected
-        eventId:
-          coupon.eventId && coupon.eventId !== "NONE"
-            ? coupon.eventId
+        // Multi-event support: send array if any events selected, otherwise undefined (= global coupon)
+        eventIds:
+          Array.isArray(coupon.eventIds) && coupon.eventIds.length > 0
+            ? coupon.eventIds
             : undefined,
       };
-
 
       if (isEditMode && coupon._id) {
         await updateCoupon(coupon._id, payload);
@@ -1418,7 +1488,6 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
       // File
       if (paymentQrFile) fd.append("paymentURL", paymentQrFile);
-
 
       const res = await fetch(`${apiURL}/organizers/profile/${id}`, {
         method: "PATCH",
@@ -1781,10 +1850,10 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
         <TabsContent value="profile" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Shop Profile</CardTitle>
-              <CardDescription>
-                Manage shopkeeper details and public info
-              </CardDescription>
+              <CardTitle>Profile</CardTitle>
+              {/* <CardDescription>
+                Manage Organizer details and public info
+              </CardDescription> */}
             </CardHeader>
 
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2277,29 +2346,87 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
               {/* BUSINESS CATEGORY */}
               <div className="md:col-span-2">
-                <Label>Events Category</Label>
-                <Select
-                  value={shopProfile.businessCategory}
-                  onValueChange={(val) =>
-                    setOrganizerProfile((p) => ({
-                      ...p,
-                      businessCategory: val,
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Technology">Technology</SelectItem>
-                    <SelectItem value="Music">Music</SelectItem>
-                    <SelectItem value="Food">Food</SelectItem>
-                    <SelectItem value="Sports">Sports</SelectItem>
-                    <SelectItem value="Arts">Arts</SelectItem>
-                    <SelectItem value="Fashion">Fashion</SelectItem>
-                    <SelectItem value="Electronics">Electronics</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Category</Label>
+                {showAddCategory ? (
+                  <div className="flex gap-2">
+                    <Input
+                      autoFocus
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddCategory();
+                        } else if (e.key === "Escape") {
+                          setShowAddCategory(false);
+                          setNewCategoryName("");
+                        }
+                      }}
+                      placeholder="New category name"
+                      maxLength={50}
+                      disabled={savingCategory}
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleAddCategory}
+                      disabled={savingCategory || !newCategoryName.trim()}
+                    >
+                      {savingCategory ? "Saving..." : "Save"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setShowAddCategory(false);
+                        setNewCategoryName("");
+                      }}
+                      disabled={savingCategory}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <Select
+                    value={shopProfile.businessCategory}
+                    onValueChange={(val) =>
+                      setOrganizerProfile((p) => ({
+                        ...p,
+                        businessCategory: val,
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.length === 0 ? (
+                        <div className="px-2 py-1.5 text-sm text-gray-500">
+                          Loading...
+                        </div>
+                      ) : (
+                        categories.map((c) => (
+                          <SelectItem key={c._id} value={c.name}>
+                            {c.name}
+                          </SelectItem>
+                        ))
+                      )}
+                      <div className="border-t my-1" />
+                      <button
+                        type="button"
+                        className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent text-primary font-medium"
+                        onMouseDown={(e) => {
+                          // Prevent Radix Select from swallowing the click as a selection
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setShowAddCategory(true);
+                        }}
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add new category
+                      </button>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               {/* TAX PERCENTAGE */}
@@ -2315,24 +2442,6 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     setOrganizerProfile((p) => ({
                       ...p,
                       taxPercentage: parseFloat(e.target.value),
-                    }))
-                  }
-                  placeholder="e.g., 5.0"
-                />
-              </div>
-
-              <div>
-                <Label>Overall Organization Based Discount Percentage %</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={shopProfile.discountPercentage}
-                  onChange={(e) =>
-                    setOrganizerProfile((p) => ({
-                      ...p,
-                      discountPercentage: parseFloat(e.target.value),
                     }))
                   }
                   placeholder="e.g., 5.0"
@@ -2357,7 +2466,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               <div className="md:col-span-2">
                 <Label className="mb-2 block">Terms & Conditions</Label>
                 <div className="bg-white dark:bg-slate-950 rounded-md">
-                  <Suspense fallback={<div className="h-[150px] border rounded-md animate-pulse bg-muted" />}>
+                  <Suspense
+                    fallback={
+                      <div className="h-[150px] border rounded-md animate-pulse bg-muted" />
+                    }
+                  >
                     <ReactQuill
                       theme="snow"
                       value={shopProfile.termsAndConditions || ""}
@@ -2378,8 +2491,6 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   invoices.
                 </p> */}
               </div>
-
-
             </CardContent>
           </Card>
         </TabsContent>
@@ -2456,9 +2567,14 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
                   {subscription.inGracePeriod && (
                     <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900">
-                      Your plan expired but you're in a {subscription.gracePeriodDays}-day grace
-                      window — <strong>{subscription.graceDaysLeft} day{subscription.graceDaysLeft === 1 ? "" : "s"}</strong> left
-                      before features start getting locked. Renew or switch to keep going uninterrupted.
+                      Your plan expired but you're in a{" "}
+                      {subscription.gracePeriodDays}-day grace window —{" "}
+                      <strong>
+                        {subscription.graceDaysLeft} day
+                        {subscription.graceDaysLeft === 1 ? "" : "s"}
+                      </strong>{" "}
+                      left before features start getting locked. Renew or switch
+                      to keep going uninterrupted.
                     </div>
                   )}
                   {subscription.fullyLapsed && (
@@ -2507,17 +2623,13 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   {/* Features list */}
                   {subscription.features?.length > 0 && (
                     <div>
-                      <h4 className="text-sm font-semibold mb-2">
-                        Features
-                      </h4>
+                      <h4 className="text-sm font-semibold mb-2">Features</h4>
                       <div className="flex flex-wrap gap-2">
-                        {subscription.features.map(
-                          (f: string, i: number) => (
-                            <Badge key={i} variant="secondary">
-                              {f}
-                            </Badge>
-                          ),
-                        )}
+                        {subscription.features.map((f: string, i: number) => (
+                          <Badge key={i} variant="secondary">
+                            {f}
+                          </Badge>
+                        ))}
                       </div>
                     </div>
                   )}
@@ -2612,8 +2724,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
                   {availablePlans.map((plan: any) => {
-                    const isCurrent =
-                      subscription?.planId === plan._id;
+                    const isCurrent = subscription?.planId === plan._id;
                     return (
                       <Card
                         key={plan._id}
@@ -2656,10 +2767,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                               {plan.features
                                 .slice(0, 6)
                                 .map((f: string, i: number) => (
-                                  <li
-                                    key={i}
-                                    className="flex items-start"
-                                  >
+                                  <li key={i} className="flex items-start">
                                     <CheckCircle2 className="h-3 w-3 text-green-600 mr-1 mt-1 shrink-0" />
                                     <span className="text-xs">{f}</span>
                                   </li>
@@ -2673,9 +2781,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                           )}
                           <Button
                             className="w-full"
-                            disabled={
-                              isCurrent || switchingPlanId === plan._id
-                            }
+                            disabled={isCurrent || switchingPlanId === plan._id}
                             onClick={() => switchToPlan(plan._id)}
                           >
                             {isCurrent
@@ -2722,6 +2828,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       operatorCountryCode: countryCode,
                       operatorEmail: "",
                       operatorLocalNumber: "",
+                      accessTabs: [],
                     });
                     setEditingOperatorIndex(null);
                     setOperatorDialogOpen(true);
@@ -2770,6 +2877,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                                 operatorCountryCode: splitCode,
                                 operatorEmail: op.email,
                                 operatorLocalNumber: splitLocal,
+                                accessTabs: op.accessTabs ?? [],
                               });
                               setEditingOperatorIndex(index);
                               setOperatorDialogOpen(true);
@@ -2800,8 +2908,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
             open={operatorDialogOpen}
             onOpenChange={setOperatorDialogOpen}
           >
-            <DialogContent className="max-w-md">
-              <DialogHeader>
+            <DialogContent className="max-w-md max-h-[90vh] flex flex-col p-0">
+              <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
                 <DialogTitle>
                   {editingOperatorIndex !== null
                     ? "Edit Operator"
@@ -2811,7 +2919,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   Operators can manage orders on behalf of your shop.
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 mt-2">
+              <div className="space-y-4 mt-2 flex-1 overflow-y-auto px-6">
                 <div className="space-y-1">
                   <Label>Operator Name *</Label>
                   <Input
@@ -2915,7 +3023,9 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       { id: "storefront", label: "Eventfront" },
                       { id: "settings", label: "Settings" },
                     ].map((t) => {
-                      const checked = operatorForm.accessTabs.includes(t.id);
+                      const checked = (operatorForm.accessTabs ?? []).includes(
+                        t.id,
+                      );
                       return (
                         <label
                           key={t.id}
@@ -2940,17 +3050,19 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   </div>
                 </div>
               </div>
-              <Button
-                className="w-full mt-4"
-                onClick={handleSubmitOperator}
-                disabled={isSavingOperators}
-              >
-                {isSavingOperators
-                  ? "Saving..."
-                  : editingOperatorIndex !== null
-                    ? "Update Operator"
-                    : "Add Operator"}
-              </Button>
+              <div className="px-6 pb-6 pt-3 border-t shrink-0">
+                <Button
+                  className="w-full"
+                  onClick={handleSubmitOperator}
+                  disabled={isSavingOperators}
+                >
+                  {isSavingOperators
+                    ? "Saving..."
+                    : editingOperatorIndex !== null
+                      ? "Update Operator"
+                      : "Add Operator"}
+                </Button>
+              </div>
             </DialogContent>
           </Dialog>
         </TabsContent>
@@ -3832,11 +3944,18 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     <CreditCard className="w-5 h-5" />
                     Bank Transfer
                   </CardTitle>
-                  <CardDescription>Accept bank transfers for international payments</CardDescription>
+                  <CardDescription>
+                    Accept bank transfers for international payments
+                  </CardDescription>
                 </div>
                 <Switch
                   checked={shopProfile.bankTransferEnabled}
-                  onCheckedChange={(val) => setOrganizerProfile({ ...shopProfile, bankTransferEnabled: val })}
+                  onCheckedChange={(val) =>
+                    setOrganizerProfile({
+                      ...shopProfile,
+                      bankTransferEnabled: val,
+                    })
+                  }
                 />
               </div>
             </CardHeader>
@@ -3848,7 +3967,12 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     <Label>Account Holder Name *</Label>
                     <Input
                       value={shopProfile.accountHolderName}
-                      onChange={(e) => setOrganizerProfile({ ...shopProfile, accountHolderName: e.target.value })}
+                      onChange={(e) =>
+                        setOrganizerProfile({
+                          ...shopProfile,
+                          accountHolderName: e.target.value,
+                        })
+                      }
                       placeholder="Full name as on bank account"
                     />
                   </div>
@@ -3856,7 +3980,12 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     <Label>Bank Name *</Label>
                     <Input
                       value={shopProfile.bankName}
-                      onChange={(e) => setOrganizerProfile({ ...shopProfile, bankName: e.target.value })}
+                      onChange={(e) =>
+                        setOrganizerProfile({
+                          ...shopProfile,
+                          bankName: e.target.value,
+                        })
+                      }
                       placeholder="e.g. HDFC Bank, DBS Bank"
                     />
                   </div>
@@ -3867,7 +3996,12 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     <Label>Account Number *</Label>
                     <Input
                       value={shopProfile.bankAccountNumber}
-                      onChange={(e) => setOrganizerProfile({ ...shopProfile, bankAccountNumber: e.target.value })}
+                      onChange={(e) =>
+                        setOrganizerProfile({
+                          ...shopProfile,
+                          bankAccountNumber: e.target.value,
+                        })
+                      }
                       placeholder="Bank account number"
                     />
                   </div>
@@ -3875,7 +4009,12 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     <Label>Branch</Label>
                     <Input
                       value={shopProfile.bankBranch}
-                      onChange={(e) => setOrganizerProfile({ ...shopProfile, bankBranch: e.target.value })}
+                      onChange={(e) =>
+                        setOrganizerProfile({
+                          ...shopProfile,
+                          bankBranch: e.target.value,
+                        })
+                      }
                       placeholder="Branch name"
                     />
                   </div>
@@ -3888,18 +4027,30 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       <Label>IFSC Code *</Label>
                       <Input
                         value={shopProfile.bankIfscCode}
-                        onChange={(e) => setOrganizerProfile({ ...shopProfile, bankIfscCode: e.target.value.toUpperCase() })}
+                        onChange={(e) =>
+                          setOrganizerProfile({
+                            ...shopProfile,
+                            bankIfscCode: e.target.value.toUpperCase(),
+                          })
+                        }
                         placeholder="e.g. HDFC0001234"
                         maxLength={11}
                       />
-                      <p className="text-xs text-muted-foreground">11-character Indian Financial System Code</p>
+                      <p className="text-xs text-muted-foreground">
+                        11-character Indian Financial System Code
+                      </p>
                     </div>
                     <div className="space-y-2">
                       <Label>Account Type *</Label>
                       <select
                         className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                         value={shopProfile.bankAccountType}
-                        onChange={(e) => setOrganizerProfile({ ...shopProfile, bankAccountType: e.target.value })}
+                        onChange={(e) =>
+                          setOrganizerProfile({
+                            ...shopProfile,
+                            bankAccountType: e.target.value,
+                          })
+                        }
                       >
                         <option value="">Select Type</option>
                         <option value="Savings">Savings</option>
@@ -3914,30 +4065,52 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                         <Label>SWIFT / BIC Code *</Label>
                         <Input
                           value={shopProfile.bankSwiftCode}
-                          onChange={(e) => setOrganizerProfile({ ...shopProfile, bankSwiftCode: e.target.value.toUpperCase() })}
+                          onChange={(e) =>
+                            setOrganizerProfile({
+                              ...shopProfile,
+                              bankSwiftCode: e.target.value.toUpperCase(),
+                            })
+                          }
                           placeholder="e.g. DBSSSGSG"
                           maxLength={11}
                         />
-                        <p className="text-xs text-muted-foreground">8 or 11 character SWIFT code</p>
+                        <p className="text-xs text-muted-foreground">
+                          8 or 11 character SWIFT code
+                        </p>
                       </div>
                       <div className="space-y-2">
                         <Label>Bank Code + Branch Code</Label>
                         <Input
                           value={shopProfile.bankBranchCode}
-                          onChange={(e) => setOrganizerProfile({ ...shopProfile, bankBranchCode: e.target.value })}
+                          onChange={(e) =>
+                            setOrganizerProfile({
+                              ...shopProfile,
+                              bankBranchCode: e.target.value,
+                            })
+                          }
                           placeholder="e.g. 7171-003"
                         />
-                        <p className="text-xs text-muted-foreground">Bank code (4 digits) - Branch code (3 digits)</p>
+                        <p className="text-xs text-muted-foreground">
+                          Bank code (4 digits) - Branch code (3 digits)
+                        </p>
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label>PayNow ID (UEN / Mobile / NRIC)</Label>
                       <Input
                         value={shopProfile.payNowId}
-                        onChange={(e) => setOrganizerProfile({ ...shopProfile, payNowId: e.target.value })}
+                        onChange={(e) =>
+                          setOrganizerProfile({
+                            ...shopProfile,
+                            payNowId: e.target.value,
+                          })
+                        }
                         placeholder="e.g. 202012345K or +65 9123 4567"
                       />
-                      <p className="text-xs text-muted-foreground">PayNow registered UEN, mobile number, or NRIC for instant transfers</p>
+                      <p className="text-xs text-muted-foreground">
+                        PayNow registered UEN, mobile number, or NRIC for
+                        instant transfers
+                      </p>
                     </div>
                   </div>
                 )}
@@ -4267,11 +4440,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       <CardContent className="flex items-center justify-between p-4">
                         <div>
                           <p className="font-semibold">{c.code}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {c.discountType === "PERCENTAGE"
-                                ? `${c.discountPercentage}% off`
-                                : `${formatPrice(c.flatDiscountAmount)} off`}
-                            </p>
+                          <p className="text-sm text-muted-foreground">
+                            {c.discountType === "PERCENTAGE"
+                              ? `${c.discountPercentage}% off`
+                              : `${formatPrice(c.flatDiscountAmount)} off`}
+                          </p>
                           <p className="text-xs">
                             Expires: {new Date(c.expiryDate).toDateString()}
                           </p>
@@ -4437,29 +4610,77 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               {/* MAX USAGE */}
             </div>
 
-            {/* SELECT EVENT (OPTIONAL) */}
+            {/* SELECT EVENTS (OPTIONAL, MULTIPLE) */}
             <div className="space-y-1">
-              <Label>Linked Event (Optional)</Label>
-              <Select
-                value={coupon.eventId}
-                onValueChange={(value) => handleChange("eventId", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select an event" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NONE">None (Global Coupon)</SelectItem>
-                  {events.map((evt) => (
-                    <SelectItem key={evt._id} value={evt._id}>
-                      {evt.title} {/* Adjust based on your event object */}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Linked Events (Optional)</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-between font-normal"
+                  >
+                    <span className="truncate">
+                      {coupon.eventIds.length === 0
+                        ? "All events (Global Coupon)"
+                        : coupon.eventIds.length === 1
+                          ? events.find((e) => e._id === coupon.eventIds[0])
+                              ?.title || "1 event selected"
+                          : `${coupon.eventIds.length} events selected`}
+                    </span>
+                    <Plus className="h-4 w-4 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[320px] p-2 max-h-[300px] overflow-y-auto">
+                  {events.length === 0 ? (
+                    <div className="text-sm text-muted-foreground px-2 py-1.5">
+                      No events found.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between px-2 py-1 mb-1 border-b">
+                        <span className="text-xs text-muted-foreground">
+                          {coupon.eventIds.length} of {events.length} selected
+                        </span>
+                        <button
+                          type="button"
+                          className="text-xs text-primary hover:underline"
+                          onClick={() => handleChange("eventIds", [] as any)}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      {events.map((evt) => {
+                        const checked = coupon.eventIds.includes(evt._id);
+                        return (
+                          <label
+                            key={evt._id}
+                            className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-accent cursor-pointer"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(val) => {
+                                const next = val
+                                  ? [...coupon.eventIds, evt._id]
+                                  : coupon.eventIds.filter(
+                                      (id: string) => id !== evt._id,
+                                    );
+                                handleChange("eventIds", next as any);
+                              }}
+                            />
+                            <span className="text-sm truncate">
+                              {evt.title}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </>
+                  )}
+                </PopoverContent>
+              </Popover>
               <p className="text-[11px] text-muted-foreground mt-1">
-                Optional: Select an event if you are creating this coupon
-                specifically for an exhibitor or stall booking at a certain
-                event.
+                Leave empty for an organizer-wide coupon. Select one or more
+                events to limit this coupon to those events only.
               </p>
             </div>
 

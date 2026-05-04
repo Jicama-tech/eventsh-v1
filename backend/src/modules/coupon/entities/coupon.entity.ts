@@ -44,8 +44,14 @@ export class Coupon {
   @Prop({ default: false })
   isDeleted: boolean;
 
+  // Legacy single-event field (kept for backward compatibility with old coupons)
   @Prop()
   eventId?: string;
+
+  // New multi-event field — coupon applies to any event whose id is in this list.
+  // Empty/missing means the coupon is global (organizer-wide).
+  @Prop({ type: [String], default: [] })
+  eventIds?: string[];
 }
 
 export const CouponSchema = SchemaFactory.createForClass(Coupon);

@@ -77,6 +77,7 @@ import {
 import { Input } from "../ui/input";
 import { toast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrencyhook";
+import RoundTableBookings from "@/components/organizer/RoundTableBookings";
 import { useCountry } from "@/hooks/useCountry";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { StallRequest } from "./shopKeeper";
@@ -297,6 +298,15 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     "none" | "latest" | "oldest"
   >("latest");
   const [stalls, setStalls] = useState<any[]>([]);
+  // New: speakers loaded for the currently-viewed event (one-shot fetch per dialog open)
+  const [eventSpeakers, setEventSpeakers] = useState<any[]>([]);
+  const [loadingSpeakers, setLoadingSpeakers] = useState(false);
+  // New: single-speaker detail view
+  const [selectedSpeaker, setSelectedSpeaker] = useState<any | null>(null);
+  // Inner-tab state for the unified View dialog
+  const [detailTab, setDetailTab] = useState<
+    "visitors" | "exhibitors" | "speakers" | "roundtables" | "layout"
+  >("visitors");
   const [stallRequest, setStallRequest] = useState<StallRequest | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -319,6 +329,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
   const fetchTicketsForEvents = async (events: Event[]) => {
     let totalTicketsSum = 0;
+    let totalStallsSum = 0;
+    let totalSpeakersSum = 0;
+    let totalRoundTableSum = 0;
     let todaysAttendeesSum = 0;
     const map: Record<string, TicketCustomer[]> = {};
 
@@ -340,33 +353,89 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
     await Promise.all(
       events.map(async (event) => {
-        const response = await fetch(`${apiURL}/tickets/event/${event._id}`, {
-          method: "GET",
-        });
-        if (!response.ok) {
+        // Tickets (visitors)
+        try {
+          const response = await fetch(
+            `${apiURL}/tickets/event/${event._id}`,
+            { method: "GET" },
+          );
+          if (response.ok) {
+            const data = await response.json();
+            const tickets: TicketCustomer[] = data.tickets || [];
+            map[event._id] = tickets;
+
+            const eventTicketsSold = tickets.reduce(
+              (sum, ticket) =>
+                sum +
+                (ticket.ticketDetails?.reduce(
+                  (acc, t) => acc + t.quantity,
+                  0,
+                ) || 0),
+              0,
+            );
+            totalTicketsSum += eventTicketsSold;
+
+            const eventStartDate = new Date(event.startDate);
+            if (
+              eventStartDate >= startOfToday &&
+              eventStartDate <= endOfToday
+            ) {
+              const attendedCount = tickets.filter(
+                (t) => t.attendance === true,
+              ).length;
+              todaysAttendeesSum += attendedCount;
+            }
+          } else {
+            map[event._id] = [];
+          }
+        } catch {
           map[event._id] = [];
-          return;
         }
-        const data = await response.json();
-        const tickets: TicketCustomer[] = data.tickets || [];
-        map[event._id] = tickets;
 
-        const eventTicketsSold = tickets.reduce(
-          (sum, ticket) =>
-            sum +
-            (ticket.ticketDetails?.reduce((acc, t) => acc + t.quantity, 0) ||
-              0),
-          0,
-        );
-        totalTicketsSum += eventTicketsSold;
+        // Stalls (exhibitors)
+        try {
+          const r = await fetch(`${apiURL}/stalls/event/${event._id}`);
+          if (r.ok) {
+            const d = await r.json();
+            const arr = Array.isArray(d) ? d : d?.data || [];
+            totalStallsSum += arr.length;
+          }
+        } catch {
+          /* ignore */
+        }
 
-        const eventStartDate = new Date(event.startDate);
+        // Speaker requests
+        try {
+          const r = await fetch(
+            `${apiURL}/speaker-requests/event/${event._id}`,
+          );
+          if (r.ok) {
+            const d = await r.json();
+            const arr = Array.isArray(d) ? d : d?.data || d?.requests || [];
+            totalSpeakersSum += arr.length;
+          }
+        } catch {
+          /* ignore */
+        }
 
-        if (eventStartDate >= startOfToday && eventStartDate <= endOfToday) {
-          const attendedCount = tickets.filter(
-            (t) => t.attendance === true,
-          ).length;
-          todaysAttendeesSum += attendedCount;
+        // Round table bookings (count seats booked, not bookings)
+        try {
+          const r = await fetch(
+            `${apiURL}/round-table-bookings/event/${event._id}`,
+          );
+          if (r.ok) {
+            const d = await r.json();
+            const arr = d?.data || d || [];
+            const seats = Array.isArray(arr)
+              ? arr.reduce(
+                  (s: number, b: any) => s + (b.numberOfSeats || 0),
+                  0,
+                )
+              : 0;
+            totalRoundTableSum += seats;
+          }
+        } catch {
+          /* ignore */
         }
       }),
     );
@@ -374,7 +443,13 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     setEventTicketsMap(map);
     setStats((prev) => ({
       ...prev,
-      totalAttendees: totalTicketsSum,
+      // "Total Participants" — every person who has booked anything: ticket
+      // visitors + exhibitors with stalls + speakers + round-table seats.
+      totalAttendees:
+        totalTicketsSum +
+        totalStallsSum +
+        totalSpeakersSum +
+        totalRoundTableSum,
       todaysAttendees: todaysAttendeesSum,
     }));
   };
@@ -1144,6 +1219,29 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     }
   };
 
+  const fetchEventSpeakers = async (eventId: string) => {
+    try {
+      setLoadingSpeakers(true);
+      const res = await fetch(
+        `${apiURL}/speaker-requests/event/${eventId}`,
+      );
+      if (res.ok) {
+        const data = await res.json();
+        // Endpoint may return either an array or { data: [...] } — handle both.
+        setEventSpeakers(
+          Array.isArray(data) ? data : data?.data ?? data?.requests ?? [],
+        );
+      } else {
+        setEventSpeakers([]);
+      }
+    } catch (e) {
+      console.error("Error fetching speakers:", e);
+      setEventSpeakers([]);
+    } finally {
+      setLoadingSpeakers(false);
+    }
+  };
+
   const fetchStallTickets = async (eventId: string) => {
     try {
       setLoading(true);
@@ -1438,10 +1536,85 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     fetchEventsData();
   }, []);
 
+  // Decide which inner-dialog tabs to expose based on what the event was
+  // configured with. An event without any speakers shouldn't surface a
+  // "Speakers" tab, etc.
+  const eventHasSection = (event: Event | null) => {
+    if (!event) {
+      return {
+        visitors: false,
+        exhibitors: false,
+        speakers: false,
+        roundtables: false,
+      };
+    }
+    const e: any = event;
+    const visitors =
+      (Array.isArray(e.visitorTypes) && e.visitorTypes.length > 0) ||
+      (typeof e.totalTickets === "number" && e.totalTickets > 0) ||
+      (typeof e.ticketPrice === "number" && e.ticketPrice > 0);
+    const exhibitors =
+      !!e.venueTables &&
+      (Array.isArray(e.venueTables)
+        ? e.venueTables.length > 0
+        : Object.keys(e.venueTables).length > 0);
+    const speakers =
+      Array.isArray(e.speakerSlotTemplates) && e.speakerSlotTemplates.length > 0;
+    const roundtables =
+      Array.isArray(e.venueRoundTables) && e.venueRoundTables.length > 0;
+    // Layout tab is useful whenever there's any placed table, round table, or
+    // venue config — that's where the organizer sees the booked-vs-available view.
+    const layout =
+      exhibitors ||
+      roundtables ||
+      (Array.isArray(e.venueConfig) && e.venueConfig.length > 0);
+    return { visitors, exhibitors, speakers, roundtables, layout };
+  };
+
   const handleViewAttendance = async (event: Event) => {
+    // Open immediately with the trimmed list event; we'll swap in the full
+    // event (with venueTables / venueRoundTables / venueConfig) once it loads.
     setSelectedEvent(event);
     setShowDetailsDialog(true);
-    await fetchEventTickets(event._id);
+    // Provisional landing tab from the trimmed shape; we'll re-pick after the
+    // full event loads in case Layout / Speakers / etc. become available.
+    const provisional = eventHasSection(event);
+    const provisionalFirst = (
+      ["visitors", "exhibitors", "speakers", "roundtables", "layout"] as const
+    ).find((k) => provisional[k]);
+    setDetailTab(provisionalFirst ?? "visitors");
+
+    // 1) Fetch the FULL event so the Venue Layout / per-section tabs see
+    //    venueTables, venueRoundTables, venueConfig, speakerSlotTemplates, etc.
+    let fullEvent: Event = event;
+    try {
+      const res = await fetch(`${apiURL}/events/${event._id}`);
+      if (res.ok) {
+        const data = await res.json();
+        fullEvent = (data?.data || data) as Event;
+        setSelectedEvent(fullEvent);
+      }
+    } catch (e) {
+      console.error("Failed to load full event details:", e);
+    }
+
+    // 2) Re-pick landing tab now that we know what the event actually has.
+    const sections = eventHasSection(fullEvent);
+    const firstAvailable = (
+      ["visitors", "exhibitors", "speakers", "roundtables", "layout"] as const
+    ).find((k) => sections[k]);
+    if (firstAvailable && !sections[provisionalFirst as keyof typeof sections]) {
+      setDetailTab(firstAvailable);
+    }
+
+    // 3) Fetch only what's relevant in parallel. Round Tables loads itself via
+    //    its own component once mounted.
+    const tasks: Promise<any>[] = [];
+    if (sections.visitors) tasks.push(fetchEventTickets(event._id));
+    if (sections.exhibitors || sections.layout)
+      tasks.push(fetchStallTickets(event._id));
+    if (sections.speakers) tasks.push(fetchEventSpeakers(event._id));
+    await Promise.all(tasks);
   };
 
   const handleViewStallAttendance = async (event: Event) => {
@@ -1527,14 +1700,14 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Total Attendees
+              Total Participants
             </CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalAttendees}</div>
             <p className="text-xs text-muted-foreground">
-              Total people who attended
+              Visitors + exhibitors + speakers + round-table seats
             </p>
           </CardContent>
         </Card>
@@ -1555,96 +1728,89 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         </Card>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-half">
-        <TabsList className="grid w-full grid-cols-2 h-auto">
-          <TabsTrigger value="user">User Attendance</TabsTrigger>
-          <TabsTrigger value="shopkeeper">Exhibitor Attendance</TabsTrigger>
+      {/* Single unified events list — click "View" to open the details dialog
+          which contains tabs for Visitors / Exhibitors / Speakers / Round Tables. */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Participants</CardTitle>
+          <CardDescription>
+            View attendance for visitors, exhibitors, speakers and round
+            tables across all your events.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <EventFilters />
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Event</TableHead>
+                <TableHead>Date & Time</TableHead>
+                <TableHead>Venue</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {displayedEvents.map((event) => (
+                <TableRow key={event._id}>
+                  <TableCell>
+                    <div>
+                      <div className="font-medium">{event.title}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {event.description?.slice(0, 50)}...
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {formatDate(event.startDate)}
+                      </div>
+                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        {formatTime(event.time)}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      {event.location}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="buttonOutline"
+                      size="sm"
+                      onClick={() => handleViewAttendance(event)}
+                    >
+                      <Eye className="h-3 w-3 mr-1" />
+                      View
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+
+          {events.length === 0 && !loading && (
+            <div className="text-center py-8 text-muted-foreground">
+              No events found. Create your first event to get started.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Old Visitors / Participants top-level tabs collapsed into the unified
+          dialog above. Kept the inner shopkeeper tab block hidden so the rest of
+          the file's stall handlers (confirm/cancel/payment dialogs) keep working
+          via state references that still exist below. */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="hidden">
+        <TabsList>
+          <TabsTrigger value="user">user</TabsTrigger>
+          <TabsTrigger value="shopkeeper">shopkeeper</TabsTrigger>
         </TabsList>
-
-        {/* Current Events Content */}
-        <TabsContent value="user" className="space-y-4 pt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>User Management</CardTitle>
-              <CardDescription>
-                View and manage attendance for Users of all your events
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <EventFilters />
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Event</TableHead>
-                    <TableHead>Date & Time</TableHead>
-                    <TableHead>Venue</TableHead>
-                    <TableHead>Status</TableHead>
-                    {/* <TableHead>Tickets Sold</TableHead>
-                <TableHead>Attended</TableHead> */}
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {displayedEvents.map((event) => (
-                    <TableRow key={event._id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{event.title}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {event.description?.slice(0, 50)}...
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {formatDate(event.startDate)}
-                          </div>
-                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                            <Clock className="h-3 w-3" />
-                            {formatTime(event.time)}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3" />
-                          {event.location}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {event.isLive ? (
-                          <Badge className="bg-green-100 text-green-800">
-                            Live
-                          </Badge>
-                        ) : (
-                          <Badge variant="buttonOutline">Not Live</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="buttonOutline"
-                          size="sm"
-                          onClick={() => handleViewAttendance(event)}
-                        >
-                          <Eye className="h-3 w-3 mr-1" />
-                          View Attendance
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-
-              {events.length === 0 && !loading && (
-                <div className="text-center py-8 text-muted-foreground">
-                  No events found. Create your first event to get started.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+        <TabsContent value="user" />
 
         <TabsContent value="shopkeeper" className="space-y-4 pt-4">
           <Card>
@@ -1742,67 +1908,165 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
             </DialogDescription>
           </DialogHeader>
 
-          {selectedEvent && sortedTickets && (
+          {selectedEvent && (
             <div className="space-y-6">
-              {/* Event Info */}
+              {/* Event Info — full event details + per-section counts */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Event Information</CardTitle>
+                  <CardTitle className="text-lg flex items-center justify-between">
+                    <span>Event Information</span>
+                    <div className="flex items-center gap-2">
+                      {(selectedEvent as any).category && (
+                        <Badge variant="secondary">
+                          {(selectedEvent as any).category}
+                        </Badge>
+                      )}
+                    </div>
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
+                    <div className="flex items-start gap-2">
+                      <Calendar className="h-4 w-4 mt-0.5" />
                       <div>
-                        <div className="font-medium">Date</div>
+                        <div className="font-medium text-sm">Dates</div>
                         <div className="text-sm text-muted-foreground">
                           {formatDate(selectedEvent.startDate)}
+                          {selectedEvent.endDate &&
+                          selectedEvent.endDate !== selectedEvent.startDate
+                            ? ` → ${formatDate(selectedEvent.endDate)}`
+                            : ""}
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4" />
+                    <div className="flex items-start gap-2">
+                      <Clock className="h-4 w-4 mt-0.5" />
                       <div>
-                        <div className="font-medium">Time</div>
+                        <div className="font-medium text-sm">Time</div>
                         <div className="text-sm text-muted-foreground">
                           {formatTime(selectedEvent.time)}
+                          {selectedEvent.endTime
+                            ? ` – ${formatTime(selectedEvent.endTime)}`
+                            : ""}
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4" />
+                    <div className="flex items-start gap-2">
+                      <MapPin className="h-4 w-4 mt-0.5" />
                       <div>
-                        <div className="font-medium">Venue</div>
+                        <div className="font-medium text-sm">Venue</div>
                         <div className="text-sm text-muted-foreground">
-                          {selectedEvent.location}
+                          {selectedEvent.location || "—"}
                         </div>
+                        {selectedEvent.address && (
+                          <div className="text-xs text-muted-foreground">
+                            {selectedEvent.address}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-4 border-t">
+                  {/* Per-section summary counts */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mt-5 pt-4 border-t">
                     <div>
-                      <div className="font-medium">Tickets Sold:</div>
+                      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Tickets Sold
+                      </div>
                       <div className="text-2xl font-bold text-blue-600">
                         {totalTicketsSold}
                       </div>
                     </div>
                     <div>
-                      <div className="font-medium">Total Attended:</div>
+                      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Attended
+                      </div>
                       <div className="text-2xl font-bold text-green-600">
                         {totalAttended}
                       </div>
                     </div>
                     <div>
-                      <div className="font-medium">Revenue:</div>
+                      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Revenue
+                      </div>
                       <div className="text-2xl font-bold text-purple-600">
                         {formatPrice(totalRevenue)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Exhibitors
+                      </div>
+                      <div className="text-2xl font-bold text-orange-600">
+                        {stalls.length}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Speakers
+                      </div>
+                      <div className="text-2xl font-bold text-indigo-600">
+                        {eventSpeakers.length}
                       </div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
+              {/* Inner tabs: Visitors / Exhibitors / Speakers / Round Tables —
+                  each only shown if the event was configured with that section. */}
+              {(() => {
+                const sections = eventHasSection(selectedEvent);
+                const visibleCount =
+                  (sections.visitors ? 1 : 0) +
+                  (sections.exhibitors ? 1 : 0) +
+                  (sections.speakers ? 1 : 0) +
+                  (sections.roundtables ? 1 : 0) +
+                  (sections.layout ? 1 : 0);
+                if (visibleCount === 0) {
+                  return (
+                    <Card>
+                      <CardContent className="py-12 text-center text-muted-foreground">
+                        This event has no visitor, exhibitor, speaker or round
+                        table sections enabled. Add at least one in the event
+                        editor to see attendance data here.
+                      </CardContent>
+                    </Card>
+                  );
+                }
+                const colsClass =
+                  ({
+                    1: "grid-cols-1",
+                    2: "grid-cols-2",
+                    3: "grid-cols-3",
+                    4: "grid-cols-4",
+                    5: "grid-cols-5",
+                  } as Record<number, string>)[visibleCount] || "grid-cols-5";
+                return (
+              <Tabs
+                value={detailTab}
+                onValueChange={(v) => setDetailTab(v as any)}
+              >
+                <TabsList className={`grid w-full ${colsClass}`}>
+                  {sections.visitors && (
+                    <TabsTrigger value="visitors">Visitors</TabsTrigger>
+                  )}
+                  {sections.exhibitors && (
+                    <TabsTrigger value="exhibitors">Exhibitors</TabsTrigger>
+                  )}
+                  {sections.speakers && (
+                    <TabsTrigger value="speakers">Speakers</TabsTrigger>
+                  )}
+                  {sections.roundtables && (
+                    <TabsTrigger value="roundtables">Round Tables</TabsTrigger>
+                  )}
+                  {sections.layout && (
+                    <TabsTrigger value="layout">Venue Layout</TabsTrigger>
+                  )}
+                </TabsList>
+
+                {sections.visitors && (
+                <TabsContent value="visitors" className="pt-4">
               {/* Tickets Table */}
               <Card>
                 <CardHeader>
@@ -1932,6 +2196,522 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   )}
                 </CardContent>
               </Card>
+                </TabsContent>
+                )}
+
+                {/* EXHIBITORS TAB */}
+                {sections.exhibitors && (
+                <TabsContent value="exhibitors" className="pt-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">
+                        Exhibitor Bookings
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {loading ? (
+                        <div className="text-center py-8">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 mx-auto mb-2"></div>
+                          Loading exhibitor bookings...
+                        </div>
+                      ) : stalls.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          No exhibitor bookings for this event yet.
+                        </div>
+                      ) : (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Exhibitor</TableHead>
+                              <TableHead>Business</TableHead>
+                              <TableHead>Contact</TableHead>
+                              <TableHead>Tables</TableHead>
+                              <TableHead>Amount</TableHead>
+                              <TableHead>Payment</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead className="text-right">Action</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {stalls.map((s: any) => (
+                              <TableRow key={s._id}>
+                                <TableCell className="font-medium">
+                                  {s.shopkeeperId?.name ||
+                                    s.nameOfApplicant ||
+                                    s.brandName ||
+                                    "—"}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="font-medium">
+                                    {s.shopkeeperId?.shopName ||
+                                      s.businessName ||
+                                      s.brandName ||
+                                      "—"}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {(() => {
+                                    // Vendor schema has multiple phone fields with
+                                    // different casing — check all of them.
+                                    const v = s.shopkeeperId || {};
+                                    const phone =
+                                      v.whatsAppNumber ||
+                                      v.whatsappNumber ||
+                                      v.phoneNumber ||
+                                      s.whatsAppNumber ||
+                                      s.whatsappNumber ||
+                                      s.phoneNumber ||
+                                      s.phone ||
+                                      "";
+                                    const email = v.email || s.email || "";
+                                    return (
+                                      <>
+                                        <div className="text-sm flex items-center gap-1">
+                                          <FaWhatsapp className="h-3 w-3 text-green-600" />
+                                          {phone || "—"}
+                                        </div>
+                                        {email && (
+                                          <div className="text-xs text-muted-foreground flex items-center gap-1 break-all">
+                                            <Mail className="h-3 w-3" />
+                                            {email}
+                                          </div>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </TableCell>
+                                <TableCell>
+                                  {Array.isArray(s.selectedTables) &&
+                                  s.selectedTables.length > 0
+                                    ? s.selectedTables
+                                        .map((t: any) => t.tableName)
+                                        .join(", ")
+                                    : "—"}
+                                </TableCell>
+                                <TableCell>
+                                  {formatPrice(s.grandTotal || 0)}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    className={
+                                      s.paymentStatus === "Paid"
+                                        ? "bg-green-100 text-green-800"
+                                        : "bg-yellow-100 text-yellow-800"
+                                    }
+                                  >
+                                    {s.paymentStatus || "Unpaid"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary">
+                                    {s.status || "Pending"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => openStallDialog(s)}
+                                    title="View exhibitor details"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                )}
+
+                {/* SPEAKERS TAB */}
+                {sections.speakers && (
+                <TabsContent value="speakers" className="pt-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Speakers</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {loadingSpeakers ? (
+                        <div className="text-center py-8">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 mx-auto mb-2"></div>
+                          Loading speakers...
+                        </div>
+                      ) : eventSpeakers.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          No speakers for this event yet.
+                        </div>
+                      ) : (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Speaker</TableHead>
+                              <TableHead>Organization</TableHead>
+                              <TableHead>Contact</TableHead>
+                              <TableHead>Topic</TableHead>
+                              <TableHead>Fee</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Payment</TableHead>
+                              <TableHead className="text-right">Action</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {eventSpeakers.map((req: any) => (
+                              <TableRow key={req._id}>
+                                <TableCell>
+                                  <div className="font-medium flex items-center gap-2">
+                                    {req.name}
+                                    {req.isKeynote && (
+                                      <Badge className="bg-purple-100 text-purple-700 text-[10px]">
+                                        Keynote
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {req.title || "—"}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="font-medium text-sm">
+                                    {req.organization || "—"}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {(() => {
+                                    const phone =
+                                      req.phone ||
+                                      req.whatsAppNumber ||
+                                      req.whatsappNumber ||
+                                      req.phoneNumber ||
+                                      "";
+                                    return (
+                                      <>
+                                        <div className="text-sm flex items-center gap-1 break-all">
+                                          <Mail className="h-3 w-3" />
+                                          {req.email || "—"}
+                                        </div>
+                                        {phone && (
+                                          <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                            <FaWhatsapp className="h-3 w-3 text-green-600" />
+                                            {phone}
+                                          </div>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </TableCell>
+                                <TableCell className="text-sm">
+                                  {req.sessions?.[0]?.topic || "—"}
+                                </TableCell>
+                                <TableCell>
+                                  {req.isCharged
+                                    ? formatPrice(req.fee || 0)
+                                    : "Free"}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary">
+                                    {req.status || "Pending"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    className={
+                                      req.paymentStatus === "Paid"
+                                        ? "bg-green-100 text-green-800"
+                                        : ""
+                                    }
+                                    variant={
+                                      req.paymentStatus === "Paid"
+                                        ? undefined
+                                        : "secondary"
+                                    }
+                                  >
+                                    {req.paymentStatus || "Unpaid"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setSelectedSpeaker(req)}
+                                    title="View speaker details"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                )}
+
+                {/* ROUND TABLES TAB — reuses the dedicated component */}
+                {sections.roundtables && (
+                <TabsContent value="roundtables" className="pt-4">
+                  <RoundTableBookings eventId={selectedEvent._id} />
+                </TabsContent>
+                )}
+
+                {/* VENUE LAYOUT TAB — visual + sold/available summary */}
+                {sections.layout && (
+                <TabsContent value="layout" className="pt-4 space-y-4">
+                  {(() => {
+                    const e: any = selectedEvent;
+                    const configs: any[] = Array.isArray(e.venueConfig)
+                      ? e.venueConfig
+                      : [];
+                    // Tables/round tables can be a flat array (with venueConfigId
+                    // on each item) or a Record. Normalize to a flat array.
+                    const flatTables: any[] = Array.isArray(e.venueTables)
+                      ? e.venueTables
+                      : Object.values(e.venueTables || {}).flat();
+                    const flatRounds: any[] = Array.isArray(e.venueRoundTables)
+                      ? e.venueRoundTables
+                      : Object.values(e.venueRoundTables || {}).flat();
+
+                    if (configs.length === 0) {
+                      return (
+                        <Card>
+                          <CardContent className="py-8 text-center text-muted-foreground">
+                            No venue configuration found for this event.
+                          </CardContent>
+                        </Card>
+                      );
+                    }
+
+                    return configs.map((cfg: any) => {
+                      const cfgId =
+                        cfg.venueConfigId || cfg.id || "default";
+                      const tables = flatTables.filter(
+                        (t) => (t.venueConfigId || "default") === cfgId,
+                      );
+                      const rounds = flatRounds.filter(
+                        (r) => (r.venueConfigId || "default") === cfgId,
+                      );
+                      const tablesBooked = tables.filter(
+                        (t) => t.isBooked,
+                      ).length;
+                      const totalChairs = rounds.reduce(
+                        (sum, r) => sum + (r.numberOfChairs || 0),
+                        0,
+                      );
+                      const bookedChairs = rounds.reduce(
+                        (sum, r) =>
+                          sum +
+                          (Array.isArray(r.bookedChairs)
+                            ? r.bookedChairs.length
+                            : 0),
+                        0,
+                      );
+
+                      // Mini-canvas at fixed width (max 760px), aspect-correct
+                      const canvasMaxW = 760;
+                      const previewScale = Math.min(
+                        canvasMaxW / (cfg.width || 800),
+                        1,
+                      );
+                      const cw = (cfg.width || 800) * previewScale;
+                      const ch = (cfg.height || 500) * previewScale;
+
+                      return (
+                        <Card key={cfgId}>
+                          <CardHeader>
+                            <CardTitle className="text-base flex items-center justify-between">
+                              <span>{cfg.name || "Venue"}</span>
+                              <span className="text-xs font-normal text-muted-foreground">
+                                {(cfg.width || 0) / 10}m ×{" "}
+                                {(cfg.height || 0) / 10}m
+                              </span>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            {/* Visual mini canvas */}
+                            <div className="flex justify-center">
+                              <div
+                                className="relative bg-slate-50 border-2 border-dashed border-slate-300 rounded-md overflow-hidden"
+                                style={{
+                                  width: cw,
+                                  height: ch,
+                                  backgroundImage: cfg.showGrid
+                                    ? `linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px)`
+                                    : "none",
+                                  backgroundSize: `${(cfg.gridSize || 20) * previewScale}px ${(cfg.gridSize || 20) * previewScale}px`,
+                                }}
+                              >
+                                {cfg.hasMainStage && (
+                                  <div className="absolute top-1 left-1/2 -translate-x-1/2 bg-purple-100 border border-purple-300 px-3 py-0.5 rounded text-[8px] font-bold text-purple-700">
+                                    MAIN STAGE
+                                  </div>
+                                )}
+                                {/* Tables (rectangles) — color reflects stall state:
+                                    White  = available (no stall selected this table)
+                                    Yellow = exhibitor paid, awaiting organizer approval
+                                    Green  = approved / confirmed by organizer */}
+                                {tables.map((t: any) => {
+                                  // Find any stall that has selected this table
+                                  const stall = stalls.find((s: any) =>
+                                    Array.isArray(s.selectedTables)
+                                      ? s.selectedTables.some(
+                                          (st: any) =>
+                                            st.tableId === t.id ||
+                                            st.positionId === t.positionId,
+                                        )
+                                      : false,
+                                  );
+                                  const paid =
+                                    stall?.paymentStatus === "Paid";
+                                  const approved =
+                                    stall?.status === "Confirmed" ||
+                                    stall?.status === "Completed" ||
+                                    stall?.status === "Approved";
+                                  let bg = "bg-white border-slate-400 text-slate-700";
+                                  let label = "Available";
+                                  if (stall && paid && approved) {
+                                    bg =
+                                      "bg-green-500/80 border-green-700 text-white";
+                                    label = `Approved · ${stall.shopkeeperId?.name || stall.nameOfApplicant || "Booked"}`;
+                                  } else if (stall && paid && !approved) {
+                                    bg =
+                                      "bg-yellow-300/80 border-yellow-600 text-yellow-900";
+                                    label = `Paid · awaiting approval (${stall.shopkeeperId?.name || stall.nameOfApplicant || "exhibitor"})`;
+                                  } else if (stall) {
+                                    bg =
+                                      "bg-blue-200 border-blue-500 text-blue-900";
+                                    label = `Selected · unpaid (${stall.shopkeeperId?.name || stall.nameOfApplicant || "exhibitor"})`;
+                                  }
+                                  return (
+                                    <div
+                                      key={t.positionId}
+                                      title={`${t.name} — ${label}`}
+                                      className={`absolute flex items-center justify-center text-[7px] font-semibold border ${bg}`}
+                                      style={{
+                                        left: (t.x || 0) * previewScale,
+                                        top: (t.y || 0) * previewScale,
+                                        width: (t.width || 60) * previewScale,
+                                        height: (t.height || 30) * previewScale,
+                                        transform: `rotate(${t.rotation || 0}deg)`,
+                                        transformOrigin: "center center",
+                                      }}
+                                    >
+                                      <span className="truncate px-0.5">
+                                        {t.name}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                                {/* Round tables (circles) — booked vs not.
+                                    No "partial" yellow here: any chair booked
+                                    counts as Booked. */}
+                                {rounds.map((r: any) => {
+                                  const d = (r.tableDiameter || 120) *
+                                    previewScale;
+                                  const seatsBooked =
+                                    r.bookedChairs?.length || 0;
+                                  const hasBooking = seatsBooked > 0;
+                                  const bg = hasBooking
+                                    ? "bg-green-500/80"
+                                    : "bg-white";
+                                  return (
+                                    <div
+                                      key={r.positionId}
+                                      title={`${r.name} — ${seatsBooked}/${r.numberOfChairs} chairs booked`}
+                                      className={`absolute rounded-full border flex items-center justify-center text-[7px] font-semibold ${bg}`}
+                                      style={{
+                                        left: (r.x || 0) * previewScale,
+                                        top: (r.y || 0) * previewScale,
+                                        width: d,
+                                        height: d,
+                                        borderColor: r.color || "#8B5CF6",
+                                      }}
+                                    >
+                                      <span className="truncate px-1 text-center leading-tight">
+                                        {r.name}
+                                        <br />
+                                        {seatsBooked}/{r.numberOfChairs}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Legend */}
+                            <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <span className="w-3 h-3 inline-block bg-white border border-slate-400" />
+                                Available
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="w-3 h-3 inline-block bg-blue-200 border border-blue-500" />
+                                Selected · unpaid
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="w-3 h-3 inline-block bg-yellow-300/80 border border-yellow-600" />
+                                Paid · awaiting your approval
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="w-3 h-3 inline-block bg-green-500/80 border" />
+                                Approved / Booked
+                              </span>
+                            </div>
+
+                            {/* Summary tiles */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t">
+                              <div>
+                                <div className="text-xs uppercase text-muted-foreground">
+                                  Tables Booked
+                                </div>
+                                <div className="text-xl font-bold">
+                                  {tablesBooked} / {tables.length}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs uppercase text-muted-foreground">
+                                  Round Tables
+                                </div>
+                                <div className="text-xl font-bold">
+                                  {rounds.length}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs uppercase text-muted-foreground">
+                                  Chairs Booked
+                                </div>
+                                <div className="text-xl font-bold">
+                                  {bookedChairs} / {totalChairs}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs uppercase text-muted-foreground">
+                                  Occupancy
+                                </div>
+                                <div className="text-xl font-bold">
+                                  {totalChairs
+                                    ? Math.round(
+                                        (bookedChairs / totalChairs) * 100,
+                                      )
+                                    : 0}
+                                  %
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    });
+                  })()}
+                </TabsContent>
+                )}
+              </Tabs>
+                );
+              })()}
             </div>
           )}
         </DialogContent>
@@ -2212,6 +2992,164 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       ))}
                     </TableBody>
                   </Table>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Speaker detail dialog — opened from the Eye button on the Speakers tab */}
+      <Dialog
+        open={!!selectedSpeaker}
+        onOpenChange={(open) => !open && setSelectedSpeaker(null)}
+      >
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedSpeaker?.name || "Speaker"}
+              {selectedSpeaker?.isKeynote && (
+                <Badge className="bg-purple-100 text-purple-700">Keynote</Badge>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              Full speaker request details
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedSpeaker && (
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Profile</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <div className="font-medium">Name</div>
+                    <div className="text-muted-foreground">
+                      {selectedSpeaker.name || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium">Title</div>
+                    <div className="text-muted-foreground">
+                      {selectedSpeaker.title || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium">Organization</div>
+                    <div className="text-muted-foreground">
+                      {selectedSpeaker.organization || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium">Email</div>
+                    <div className="text-muted-foreground break-all">
+                      {selectedSpeaker.email || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium">Phone</div>
+                    <div className="text-muted-foreground">
+                      {selectedSpeaker.phone ||
+                        selectedSpeaker.whatsAppNumber ||
+                        selectedSpeaker.whatsappNumber ||
+                        selectedSpeaker.phoneNumber ||
+                        "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium">Source</div>
+                    <div className="text-muted-foreground">
+                      {selectedSpeaker.source || "—"}
+                    </div>
+                  </div>
+                  {selectedSpeaker.bio && (
+                    <div className="md:col-span-2">
+                      <div className="font-medium">Bio</div>
+                      <div className="text-muted-foreground whitespace-pre-line">
+                        {selectedSpeaker.bio}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {Array.isArray(selectedSpeaker.sessions) &&
+                selectedSpeaker.sessions.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Sessions</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {selectedSpeaker.sessions.map((s: any, i: number) => (
+                        <div
+                          key={i}
+                          className="border rounded-md p-3 text-sm space-y-1"
+                        >
+                          <div className="font-medium">
+                            {s.topic || `Session ${i + 1}`}
+                          </div>
+                          {s.description && (
+                            <div className="text-muted-foreground">
+                              {s.description}
+                            </div>
+                          )}
+                          {(s.confirmedStartTime ||
+                            s.preferredStartTime) && (
+                            <div className="text-xs text-muted-foreground">
+                              {s.confirmedStartTime || s.preferredStartTime} —{" "}
+                              {s.confirmedEndTime || s.preferredEndTime || ""}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                )}
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Status & Payment</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  <div>
+                    <div className="font-medium">Status</div>
+                    <Badge variant="secondary">
+                      {selectedSpeaker.status || "Pending"}
+                    </Badge>
+                  </div>
+                  <div>
+                    <div className="font-medium">Payment</div>
+                    <Badge
+                      className={
+                        selectedSpeaker.paymentStatus === "Paid"
+                          ? "bg-green-100 text-green-800"
+                          : ""
+                      }
+                      variant={
+                        selectedSpeaker.paymentStatus === "Paid"
+                          ? undefined
+                          : "secondary"
+                      }
+                    >
+                      {selectedSpeaker.paymentStatus || "Unpaid"}
+                    </Badge>
+                  </div>
+                  <div>
+                    <div className="font-medium">Charged</div>
+                    <div className="text-muted-foreground">
+                      {selectedSpeaker.isCharged ? "Yes" : "No"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium">Fee</div>
+                    <div className="text-muted-foreground">
+                      {selectedSpeaker.isCharged
+                        ? formatPrice(selectedSpeaker.fee || 0)
+                        : "Free"}
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </div>

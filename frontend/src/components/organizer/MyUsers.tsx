@@ -213,6 +213,26 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
   const [customerToEdit, setCustomerToEdit] = useState<any>(null);
   const [exhibitorToEdit, setExhibitorToEdit] = useState<any>(null);
 
+  // Listen for cross-component triggers from the chatbot (handler lives in
+  // OrganizerDashboard) so "add visitor" / "add exhibitor" prompts open the
+  // right form without lifting all this state up.
+  useEffect(() => {
+    const openCustomer = () => {
+      setCustomerToEdit(null);
+      setShowAddCustomer(true);
+    };
+    const openExhibitor = () => {
+      setExhibitorToEdit(null);
+      setShowAddExhibitor(true);
+    };
+    window.addEventListener("open-add-customer", openCustomer);
+    window.addEventListener("open-add-exhibitor", openExhibitor);
+    return () => {
+      window.removeEventListener("open-add-customer", openCustomer);
+      window.removeEventListener("open-add-exhibitor", openExhibitor);
+    };
+  }, []);
+
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [selectedQRCode, setSelectedQRCode] = useState<string>("");
 

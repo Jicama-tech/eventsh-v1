@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { CreateOrganizerStoreDto } from "./dto/create-organizer-store.dto";
 import { UpdateOrganizerStoreDto } from "./dto/update-organizer-store.dto";
 import { InjectModel } from "@nestjs/mongoose/dist";
@@ -153,10 +153,16 @@ export class OrganizerStoresService {
         }
       }
 
-      return { message: "Shopfront store not found" };
+      // No store with this slug or matching storeName — surface a real 404 so
+      // the frontend can branch on it cleanly instead of getting a 200 with a
+      // bare `{ message }` and confusing follow-on errors.
+      throw new NotFoundException(
+        `No storefront found for "${slug}".`,
+      );
     } catch (error) {
+      if (error instanceof NotFoundException) throw error;
       console.error("Error in findBySlug:", error);
-      return null;
+      throw error;
     }
   }
 

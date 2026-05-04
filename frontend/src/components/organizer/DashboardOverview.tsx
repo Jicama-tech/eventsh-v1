@@ -14,7 +14,17 @@ import {
   LineChart,
   Clock,
   Building,
+  Download,
+  FileText,
+  FileSpreadsheet,
+  ChevronDown,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/use-toast";
 import { EnhancedEventsDetailDialog } from "./EventsDetailDialog";
 import { format, isToday, isPast } from "date-fns";
@@ -129,12 +139,16 @@ export default function DashboardOverview({
     const totalCapacity = event.visitorTypes?.length > 0
       ? event.visitorTypes.reduce((sum: number, v: any) => sum + (v.maxCount || 0), 0)
       : (Number(event.totalTickets) || 0);
+    // Only compute a percentage when we actually have a capacity to compare
+    // against. Faking 100% for unlimited-capacity events was misleading — it's
+    // not "100% sold", it's "capacity unknown / unlimited".
     const salesPercent =
       totalCapacity > 0
-        ? Math.round((ticketsSold / totalCapacity) * 100)
-        : ticketsSold > 0
-          ? 100
-          : 0;
+        ? Math.min(
+            100,
+            Math.round((ticketsSold / totalCapacity) * 100),
+          )
+        : 0;
 
     return {
       ...event,
@@ -565,13 +579,34 @@ export default function DashboardOverview({
                   >
                     Analytics
                   </Button>
-                  <Button
-                    variant="buttonOutline"
-                    size="sm"
-                    onClick={() => handleExportData(event)}
-                  >
-                    Export Data
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="sm"
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        <Download className="h-3 w-3 mr-1" />
+                        Export Data
+                        <ChevronDown className="h-3 w-3 ml-1" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() => exportEventToCSV(event)}
+                        className="focus:bg-blue-600 focus:text-white cursor-pointer"
+                      >
+                        <FileSpreadsheet className="h-4 w-4 mr-2" />
+                        Export as CSV
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => exportEventToPDF(event)}
+                        className="focus:bg-blue-600 focus:text-white cursor-pointer"
+                      >
+                        <FileText className="h-4 w-4 mr-2" />
+                        Export as PDF
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </>
               )}
             </div>
@@ -592,43 +627,47 @@ export default function DashboardOverview({
     setShowAnalyticsDialog(true);
   };
 
-  const handleExportData = (event) => {
-    // Import the export function at the top of the file
-    // import { exportEventToExcel } from './exportToExcel';
-    // For now, we'll use a simple CSV export
-    exportEventToExcel(event);
-  };
+  // Build the row data once — both CSV and PDF render the same content.
+  const buildEventReportRows = (event: any): [string, string][] => [
+    ["Event Information", ""],
+    ["Event Title", event.title || ""],
+    ["Category", event.category || ""],
+    ["Location", event.location || ""],
+    [
+      "Start Date",
+      event.startDate ? new Date(event.startDate).toLocaleDateString() : "",
+    ],
+    [
+      "End Date",
+      event.endDate ? new Date(event.endDate).toLocaleDateString() : "",
+    ],
+    ["", ""],
+    ["Ticket Metrics", ""],
+    ["Tickets Sold", String(event.ticketsSold ?? 0)],
+    ["Total Tickets", String(event.totalTickets ?? "Unlimited")],
+    ["Sales Progress", `${event.salesPercent ?? 0}%`],
+    ["Tickets Revenue", `${formatPrice(event.ticketsRevenue ?? 0)}`],
+    ["", ""],
+    ["Stall Metrics", ""],
+    ["Stalls Booked", String(event.stallsBooked ?? 0)],
+    ["Pending Stalls", String(event.stallsPending ?? 0)],
+    ["Stalls Revenue", `${formatPrice(event.stallsRevenue ?? 0)}`],
+    ["", ""],
+    ["Revenue Summary", ""],
+    ["Total Revenue", `${formatPrice(event.revenue ?? 0)}`],
+  ];
 
-  const exportEventToExcel = (event) => {
-    const csvContent = [
-      ["Event Information", ""],
-      ["Event Title", event.title || ""],
-      ["Category", event.category || ""],
-      ["Location", event.location || ""],
-      [
-        "Start Date",
-        event.startDate ? new Date(event.startDate).toLocaleDateString() : "",
-      ],
-      [
-        "End Date",
-        event.endDate ? new Date(event.endDate).toLocaleDateString() : "",
-      ],
-      ["", ""],
-      ["Ticket Metrics", ""],
-      ["Tickets Sold", event.ticketsSold || 0],
-      ["Total Tickets", event.totalTickets || "Unlimited"],
-      ["Sales Progress", `${event.salesPercent || 0}%`],
-      ["Tickets Revenue", `${formatPrice(event.ticketsRevenue || 0)}`],
-      ["", ""],
-      ["Stall Metrics", ""],
-      ["Stalls Booked", event.stallsBooked || 0],
-      ["Pending Stalls", event.stallsPending || 0],
-      ["Stalls Revenue", `${formatPrice(event.stallsRevenue || 0)}`],
-      ["", ""],
-      ["Revenue Summary", ""],
-      ["Total Revenue", formatPrice(event.revenue) || "0"],
-    ]
-      .map((row) => row.join(","))
+  const exportEventToCSV = (event: any) => {
+    const csvContent = buildEventReportRows(event)
+      .map((row) =>
+        row
+          .map((cell) => {
+            const s = String(cell ?? "");
+            // Escape any commas / quotes / newlines in the cell
+            return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+          })
+          .join(","),
+      )
       .join("\n");
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -637,13 +676,531 @@ export default function DashboardOverview({
     const fileName = `${event.title.replace(/[^a-z0-9]/gi, "_")}_Report_${
       new Date().toISOString().split("T")[0]
     }.csv`;
-
     link.setAttribute("href", url);
     link.setAttribute("download", fileName);
     link.style.visibility = "hidden";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportEventToPDF = async (event: any) => {
+    try {
+      const { default: jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ unit: "pt", format: "a4" });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const margin = 36;
+      const innerW = pageW - margin * 2;
+
+      // --- Pie / arc helper (jsPDF has no native arc fill) ---
+      const drawPieSlice = (
+        cx: number,
+        cy: number,
+        r: number,
+        startA: number,
+        sweepA: number,
+        color: [number, number, number],
+      ) => {
+        if (sweepA <= 0) return;
+        const steps = Math.max(16, Math.ceil(Math.abs(sweepA) * 32));
+        const pts: [number, number][] = [[cx, cy]];
+        for (let i = 0; i <= steps; i++) {
+          const a = startA + sweepA * (i / steps);
+          pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+        }
+        const deltas: [number, number][] = [];
+        for (let i = 1; i < pts.length; i++) {
+          deltas.push([
+            pts[i][0] - pts[i - 1][0],
+            pts[i][1] - pts[i - 1][1],
+          ]);
+        }
+        doc.setFillColor(color[0], color[1], color[2]);
+        (doc as any).lines(deltas, pts[0][0], pts[0][1], [1, 1], "F", true);
+      };
+
+      // Concentric rings → donut effect (overlay smaller filled circle in center)
+      const drawDonutHole = (
+        cx: number,
+        cy: number,
+        innerR: number,
+        color: [number, number, number],
+      ) => {
+        doc.setFillColor(color[0], color[1], color[2]);
+        doc.circle(cx, cy, innerR, "F");
+      };
+
+      // Color palette (mirrors the dashboard tones)
+      const C = {
+        primary: [99, 102, 241] as [number, number, number], // indigo-500
+        primaryDark: [79, 70, 229] as [number, number, number], // indigo-600
+        blue: [59, 130, 246] as [number, number, number],
+        green: [34, 197, 94] as [number, number, number],
+        purple: [139, 92, 246] as [number, number, number],
+        orange: [249, 115, 22] as [number, number, number],
+        gray: [107, 114, 128] as [number, number, number],
+        light: [243, 244, 246] as [number, number, number],
+        white: [255, 255, 255] as [number, number, number],
+      };
+      const setFill = (c: [number, number, number]) =>
+        doc.setFillColor(c[0], c[1], c[2]);
+      const setText = (c: [number, number, number]) =>
+        doc.setTextColor(c[0], c[1], c[2]);
+
+      // ===== HEADER BANNER =====
+      const headerH = 90;
+      setFill(C.primaryDark);
+      doc.rect(0, 0, pageW, headerH, "F");
+      // Decorative circle accents
+      setFill(C.primary);
+      doc.circle(pageW - 30, 18, 60, "F");
+      doc.circle(pageW - 90, headerH - 5, 35, "F");
+
+      setText(C.white);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      const title = doc.splitTextToSize(
+        event.title || "Event Report",
+        innerW - 200,
+      );
+      doc.text(title, margin, 38);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      let metaY = 38 + 18 * title.length;
+      const metaParts: string[] = [];
+      if (event.category) metaParts.push(event.category);
+      if (event.location) metaParts.push(event.location);
+      if (event.startDate)
+        metaParts.push(new Date(event.startDate).toLocaleDateString());
+      doc.text(metaParts.join("  •  "), margin, metaY);
+
+      doc.setFontSize(9);
+      doc.setTextColor(220, 225, 255);
+      doc.text(
+        `Report generated ${new Date().toLocaleString()}`,
+        margin,
+        headerH - 12,
+      );
+
+      let y = headerH + 28;
+
+      // ===== KPI CARDS — single row of 4, with colored icon-badge =====
+      const kpis = [
+        {
+          label: "Tickets Sold",
+          value: String(event.ticketsSold ?? 0),
+          sub: `of ${event.totalTickets ?? "∞"}`,
+          color: C.blue,
+          glyph: "T",
+        },
+        {
+          label: "Total Revenue",
+          value: formatPrice(event.revenue ?? 0),
+          sub: "all sources",
+          color: C.green,
+          glyph: "$",
+        },
+        {
+          label: "Stalls Booked",
+          value: String(event.stallsBooked ?? 0),
+          sub: `${event.stallsPending ?? 0} pending`,
+          color: C.orange,
+          glyph: "B",
+        },
+        {
+          label: "Sales %",
+          value: `${event.salesPercent ?? 0}%`,
+          sub: "of capacity",
+          color: C.purple,
+          glyph: "%",
+        },
+      ];
+      const cardGap = 10;
+      const cardW = (innerW - cardGap * 3) / 4;
+      const cardH = 92;
+      kpis.forEach((kpi, i) => {
+        const cx = margin + i * (cardW + cardGap);
+        const cy = y;
+        // shadow-ish backdrop
+        setFill([240, 241, 245]);
+        doc.roundedRect(cx + 1, cy + 2, cardW, cardH, 8, 8, "F");
+        // card
+        setFill(C.white);
+        doc.setDrawColor(230, 232, 240);
+        doc.roundedRect(cx, cy, cardW, cardH, 8, 8, "FD");
+        // colored top accent
+        setFill(kpi.color);
+        doc.roundedRect(cx, cy, cardW, 4, 8, 8, "F");
+        doc.rect(cx, cy + 2, cardW, 2, "F");
+        // icon circle
+        setFill(kpi.color);
+        doc.circle(cx + 22, cy + 32, 12, "F");
+        setText(C.white);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(13);
+        const gw = doc.getTextWidth(kpi.glyph);
+        doc.text(kpi.glyph, cx + 22 - gw / 2, cy + 36);
+        // big value
+        setText([20, 20, 20]);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(18);
+        doc.text(kpi.value, cx + 42, cy + 38);
+        // label
+        setText(C.gray);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8);
+        doc.text(kpi.label.toUpperCase(), cx + 12, cy + 60);
+        // sub
+        setText(C.gray);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.text(kpi.sub, cx + 12, cy + 76);
+      });
+      y += cardH + 28;
+
+      // ===== TWO-PANEL VIZ ROW: Donut (revenue) + Gauge (sales %) =====
+      const panelGap = 16;
+      const panelW = (innerW - panelGap) / 2;
+      const panelH = 200;
+      const ticketsRev = Number(event.ticketsRevenue ?? 0);
+      const stallsRev = Number(event.stallsRevenue ?? 0);
+      const totalRev = ticketsRev + stallsRev;
+
+      // -- Panel A: Revenue Donut --
+      const aX = margin;
+      setFill([250, 251, 254]);
+      doc.setDrawColor(230, 232, 240);
+      doc.roundedRect(aX, y, panelW, panelH, 8, 8, "FD");
+      setText([20, 20, 20]);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text("Revenue Breakdown", aX + 14, y + 20);
+      // Donut on left half of panel
+      const donutCx = aX + panelW / 3;
+      const donutCy = y + panelH / 2 + 6;
+      const donutR = 52;
+      if (totalRev > 0) {
+        const ticketShare = ticketsRev / totalRev;
+        const stallShare = stallsRev / totalRev;
+        const TWO_PI = Math.PI * 2;
+        // start from -90° (top)
+        const start = -Math.PI / 2;
+        drawPieSlice(
+          donutCx,
+          donutCy,
+          donutR,
+          start,
+          ticketShare * TWO_PI,
+          C.blue,
+        );
+        drawPieSlice(
+          donutCx,
+          donutCy,
+          donutR,
+          start + ticketShare * TWO_PI,
+          stallShare * TWO_PI,
+          C.orange,
+        );
+      } else {
+        setFill([220, 223, 230]);
+        doc.circle(donutCx, donutCy, donutR, "F");
+      }
+      // donut hole
+      drawDonutHole(donutCx, donutCy, donutR * 0.55, [250, 251, 254]);
+      // total in middle
+      setText([20, 20, 20]);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      const totalLabel = formatPrice(totalRev);
+      const tw = doc.getTextWidth(totalLabel);
+      doc.text(totalLabel, donutCx - tw / 2, donutCy);
+      setText(C.gray);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      const totW = doc.getTextWidth("TOTAL");
+      doc.text("TOTAL", donutCx - totW / 2, donutCy + 10);
+      // Legend on right half
+      const legendX = aX + panelW / 2 + 14;
+      let legY = y + 56;
+      const legendItem = (
+        color: [number, number, number],
+        name: string,
+        value: number,
+      ) => {
+        setFill(color);
+        doc.roundedRect(legendX, legY - 8, 10, 10, 2, 2, "F");
+        setText([20, 20, 20]);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.text(name, legendX + 16, legY);
+        setText(C.gray);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        const pct =
+          totalRev > 0 ? Math.round((value / totalRev) * 100) : 0;
+        doc.text(`${formatPrice(value)}  ·  ${pct}%`, legendX + 16, legY + 12);
+        legY += 36;
+      };
+      legendItem(C.blue, "Tickets", ticketsRev);
+      legendItem(C.orange, "Stalls", stallsRev);
+
+      // -- Panel B: Sales Gauge (semicircle arc) --
+      const bX = margin + panelW + panelGap;
+      setFill([250, 251, 254]);
+      doc.setDrawColor(230, 232, 240);
+      doc.roundedRect(bX, y, panelW, panelH, 8, 8, "FD");
+      setText([20, 20, 20]);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text("Capacity Utilisation", bX + 14, y + 20);
+      const pct = Math.max(0, Math.min(100, event.salesPercent ?? 0));
+      const gaugeCx = bX + panelW / 2;
+      const gaugeCy = y + panelH / 2 + 28;
+      const gaugeR = 64;
+      // Background arc (full half circle)
+      drawPieSlice(gaugeCx, gaugeCy, gaugeR, Math.PI, Math.PI, [
+        230, 232, 240,
+      ]);
+      // Filled arc up to pct
+      drawPieSlice(
+        gaugeCx,
+        gaugeCy,
+        gaugeR,
+        Math.PI,
+        (Math.PI * pct) / 100,
+        C.primary,
+      );
+      // Inner cutout for "ring" look
+      drawDonutHole(gaugeCx, gaugeCy, gaugeR * 0.6, [250, 251, 254]);
+      // Hide bottom half of donut hole (since gauge is only top semicircle)
+      setFill([250, 251, 254]);
+      doc.rect(
+        gaugeCx - gaugeR - 4,
+        gaugeCy,
+        gaugeR * 2 + 8,
+        gaugeR + 6,
+        "F",
+      );
+      // Re-draw the baseline of the arc
+      doc.setDrawColor(230, 232, 240);
+      doc.line(gaugeCx - gaugeR, gaugeCy, gaugeCx + gaugeR, gaugeCy);
+      // Big % in center
+      setText(C.primary);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(28);
+      const pctLabel = `${pct}%`;
+      const pw = doc.getTextWidth(pctLabel);
+      doc.text(pctLabel, gaugeCx - pw / 2, gaugeCy - 8);
+      setText(C.gray);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      const subLabel = `${event.ticketsSold ?? 0} / ${
+        event.totalTickets ?? "Unlimited"
+      } sold`;
+      const sw = doc.getTextWidth(subLabel);
+      doc.text(subLabel, gaugeCx - sw / 2, gaugeCy + 16);
+
+      y += panelH + 24;
+
+      // ===== HORIZONTAL STACKED REVENUE BAR =====
+      setText([20, 20, 20]);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text("Revenue Split", margin, y);
+      y += 12;
+      const stackH = 22;
+      setFill([235, 237, 244]);
+      doc.roundedRect(margin, y, innerW, stackH, 4, 4, "F");
+      if (totalRev > 0) {
+        const tW = (innerW * ticketsRev) / totalRev;
+        const sW = innerW - tW;
+        setFill(C.blue);
+        doc.roundedRect(margin, y, tW, stackH, 4, 4, "F");
+        // Right segment (clip-feel by overlaying rect on the shared seam)
+        setFill(C.orange);
+        doc.roundedRect(margin + tW, y, sW, stackH, 4, 4, "F");
+        // Inline labels
+        setText(C.white);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        const tPct = Math.round((ticketsRev / totalRev) * 100);
+        const sPct = 100 - tPct;
+        if (tW > 50)
+          doc.text(`Tickets ${tPct}%`, margin + 8, y + 14);
+        if (sW > 50)
+          doc.text(`Stalls ${sPct}%`, margin + tW + 8, y + 14);
+      }
+      y += stackH + 24;
+
+      // ===== STRUCTURED DATA TABLES =====
+      // A clean, bordered table per section. Header row is filled with the
+      // section color and white bold text. Body rows alternate background for
+      // readability. Values are right-aligned. Auto page-break between rows.
+      const tableRowH = 22;
+      const headerRowH = 26;
+      const labelColX = margin + 14;
+      const valueColRight = pageW - margin - 14;
+
+      const dataTable = (
+        sectionName: string,
+        headerColor: [number, number, number],
+        rows: [string, string][],
+      ) => {
+        const tableTopGap = 8;
+        const tableHeight =
+          headerRowH + rows.length * tableRowH;
+        // page-break if entire section won't fit; otherwise just header + 1 row
+        if (y + tableHeight > pageH - margin - 30) {
+          doc.addPage();
+          y = margin;
+        }
+        y += tableTopGap;
+
+        // Header row
+        setFill(headerColor);
+        doc.roundedRect(margin, y, innerW, headerRowH, 4, 4, "F");
+        // Square off bottom corners by overlaying a rect (so table feels joined)
+        doc.rect(margin, y + headerRowH - 4, innerW, 4, "F");
+        setText(C.white);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.text(sectionName.toUpperCase(), labelColX, y + 17);
+        // small "Section" tag on the right of the header
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        const tagText = `${rows.length} item${rows.length === 1 ? "" : "s"}`;
+        doc.text(
+          tagText,
+          valueColRight - doc.getTextWidth(tagText),
+          y + 17,
+        );
+        y += headerRowH;
+
+        // Body rows
+        rows.forEach(([label, value], idx) => {
+          if (y + tableRowH > pageH - margin - 30) {
+            doc.addPage();
+            y = margin;
+            // Re-draw a slim header on continuation pages
+            setFill(headerColor);
+            doc.rect(margin, y, innerW, 4, "F");
+            y += 8;
+          }
+          // Alt row background
+          if (idx % 2 === 0) {
+            setFill([249, 250, 252]);
+            doc.rect(margin, y, innerW, tableRowH, "F");
+          }
+          // Label
+          setText([60, 65, 78]);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(10);
+          doc.text(label, labelColX, y + 15);
+          // Value (right-aligned, bold)
+          setText([20, 20, 20]);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(10);
+          const wrapped = doc.splitTextToSize(
+            String(value),
+            innerW / 2,
+          );
+          const valueText = wrapped[0]; // single line in body rows
+          doc.text(
+            valueText,
+            valueColRight - doc.getTextWidth(valueText),
+            y + 15,
+          );
+          // bottom border
+          doc.setDrawColor(232, 234, 240);
+          doc.line(margin, y + tableRowH, margin + innerW, y + tableRowH);
+          y += tableRowH;
+        });
+        // Outer border
+        doc.setDrawColor(220, 224, 232);
+        doc.setLineWidth(0.7);
+        doc.roundedRect(
+          margin,
+          y - (headerRowH + rows.length * tableRowH),
+          innerW,
+          headerRowH + rows.length * tableRowH,
+          4,
+          4,
+          "S",
+        );
+        doc.setLineWidth(0.2);
+        y += 4;
+      };
+
+      dataTable("Event Details", C.purple, [
+        ["Title", event.title || "—"],
+        ["Category", event.category || "—"],
+        ["Location", event.location || "—"],
+        [
+          "Start Date",
+          event.startDate
+            ? new Date(event.startDate).toLocaleDateString()
+            : "—",
+        ],
+        [
+          "End Date",
+          event.endDate
+            ? new Date(event.endDate).toLocaleDateString()
+            : "—",
+        ],
+      ]);
+
+      dataTable("Ticket Metrics", C.blue, [
+        ["Tickets Sold", String(event.ticketsSold ?? 0)],
+        ["Total Tickets", String(event.totalTickets ?? "Unlimited")],
+        ["Sales Progress", `${event.salesPercent ?? 0}%`],
+        ["Tickets Revenue", formatPrice(event.ticketsRevenue ?? 0)],
+      ]);
+
+      dataTable("Stall Metrics", C.orange, [
+        ["Stalls Booked", String(event.stallsBooked ?? 0)],
+        ["Pending Stalls", String(event.stallsPending ?? 0)],
+        ["Stalls Revenue", formatPrice(event.stallsRevenue ?? 0)],
+      ]);
+
+      dataTable("Revenue Summary", C.green, [
+        ["Tickets Revenue", formatPrice(event.ticketsRevenue ?? 0)],
+        ["Stalls Revenue", formatPrice(event.stallsRevenue ?? 0)],
+        ["Total Revenue", formatPrice(event.revenue ?? 0)],
+      ]);
+
+      // ===== FOOTER on every page =====
+      const pageCount = doc.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        setText(C.gray);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.text(
+          `EventSH • ${event.title || "Report"}`,
+          margin,
+          pageH - 16,
+        );
+        doc.text(
+          `Page ${i} of ${pageCount}`,
+          pageW - margin - doc.getTextWidth(`Page ${i} of ${pageCount}`),
+          pageH - 16,
+        );
+      }
+
+      const fileName = `${event.title.replace(/[^a-z0-9]/gi, "_")}_Report_${
+        new Date().toISOString().split("T")[0]
+      }.pdf`;
+      doc.save(fileName);
+    } catch (e) {
+      console.error("PDF export failed:", e);
+      toast({
+        title: "PDF export failed",
+        description: "Please try again or use CSV export.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (

@@ -39,7 +39,12 @@ import {
   Share2,
 } from "lucide-react";
 import { EventFront } from "./eventFront";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import {
+  Navigate,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import {
   FaFacebook,
   FaInstagram,
@@ -206,6 +211,8 @@ export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
   const [settings, setsettings] = useState<OrganizerStore | null>(null);
   const [sortBy, setSortBy] = useState("featured");
   const { organizationName } = useParams();
+  const [searchParams] = useSearchParams();
+  const isPreview = searchParams.get("preview") === "true";
   const [events, setEvents] = useState<Event[]>([]);
   const [organizerInfo, setOrganizerInfo] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -296,6 +303,20 @@ export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
     return () => window.removeEventListener("storage", storageListener);
   }, []);
 
+  // Live preview channel — when running inside the customizer iframe, accept
+  // settings updates via postMessage so unsaved edits appear without reload.
+  useEffect(() => {
+    if (!isPreview) return;
+    const onMsg = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === "EVENTFRONT_PREVIEW_UPDATE" && event.data.settings) {
+        setsettings(event.data.settings);
+      }
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [isPreview]);
+
   useEffect(() => {
     const handleScroll = () => {
       const navBarThreshold = 140; // Height of top bar
@@ -339,22 +360,60 @@ export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
       setError(null);
 
       try {
-        const slug = slugify(organizationName);
-        // Fetch storefront details by shopName/slug
-        const storefrontRes = await fetch(
-          `${apiURL}/organizer-stores/organizer-stores-detail/${slug}`,
-          { method: "GET" },
-        );
-        if (!storefrontRes.ok)
-          throw new Error("Failed to load storefront details");
+        // PREVIEW MODE: read settings + organizerId from sessionStorage instead
+        // of hitting the API. The customizer iframe wrapper writes them there
+        // before this page loads, and pushes live updates via postMessage.
+        let storefrontData: any;
+        let organizerId: string | undefined;
+        if (isPreview) {
+          const cached = sessionStorage.getItem("eventfrontPreviewSettings");
+          const cachedOrgId = sessionStorage.getItem(
+            "eventfrontPreviewOrganizerId",
+          );
+          if (!cached || !cachedOrgId) {
+            throw new Error(
+              "Preview not initialized — open the Eventfront customizer first.",
+            );
+          }
+          storefrontData = { data: JSON.parse(cached) };
+          setsettings(storefrontData.data);
+          organizerId = cachedOrgId;
+        } else {
+          const slug = slugify(organizationName);
+          const storefrontRes = await fetch(
+            `${apiURL}/organizer-stores/organizer-stores-detail/${slug}`,
+            { method: "GET" },
+          );
+          if (storefrontRes.status === 404) {
+            throw new Error(
+              `Storefront "${organizationName}" not found. Check the URL or ask the organizer for the correct link.`,
+            );
+          }
+          if (!storefrontRes.ok)
+            throw new Error("Failed to load storefront details");
 
-        const storefrontData = await storefrontRes.json();
-        setsettings(storefrontData.data || storefrontData);
+          storefrontData = await storefrontRes.json();
+          // Service may have legacy responses with a stray "Shopfront store not
+          // found" message body even when status is 200 — guard against that.
+          if (
+            storefrontData?.message &&
+            !storefrontData?.organizerId &&
+            !storefrontData?.data?.organizerId
+          ) {
+            throw new Error(
+              `Storefront "${organizationName}" not found. Check the URL or ask the organizer for the correct link.`,
+            );
+          }
+          setsettings(storefrontData.data || storefrontData);
 
-        const organizerId =
-          storefrontData.data?.organizerId || storefrontData.organizerId;
+          organizerId =
+            storefrontData.data?.organizerId || storefrontData.organizerId;
+        }
 
-        if (!organizerId) throw new Error("No shopkeeperId in storefront data");
+        if (!organizerId)
+          throw new Error(
+            `Storefront "${organizationName}" is not configured yet.`,
+          );
         // Fetch shopkeeper WhatsApp number directly
         try {
           const res = await fetch(
@@ -557,8 +616,8 @@ export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
       "--muted": "#f3f4f6",
       "--muted-foreground": "#6b7280",
       "--border": "#e5e7eb",
-      "--primary": design.primaryColor,
-      "--secondary": design.secondaryColor,
+      "--primary": design?.primaryColor ?? "#6366f1",
+      "--secondary": design?.secondaryColor ?? "#8b5cf6",
     };
   };
 

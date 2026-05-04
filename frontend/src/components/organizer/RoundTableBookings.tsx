@@ -2,8 +2,15 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Circle, Download, Loader2, Eye, X } from "lucide-react";
+import { Circle, Download, Loader2, Eye } from "lucide-react";
 import { useCountry } from "@/hooks/useCountry";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 
@@ -89,6 +96,21 @@ const RoundTableBookings = ({ eventId }: RoundTableBookingsProps) => {
     }
   }, [apiURL, toast]);
 
+  // IMPORTANT: this hook MUST stay above any early returns. React requires
+  // hooks to be called in the same order on every render — moving useMemo
+  // below an `if (...) return` triggers "Rendered more hooks than during the
+  // previous render" and blanks the screen as soon as bookings load.
+  const { totalRevenue, totalSeats, confirmedCount, submittedCount } = useMemo(() => {
+    const paid = bookings.filter((b) => b.paymentStatus === "Paid");
+    const submitted = bookings.filter((b) => b.paymentStatus === "Submitted");
+    return {
+      totalRevenue: paid.reduce((sum, b) => sum + (b.amount || 0), 0),
+      totalSeats: paid.reduce((sum, b) => sum + (b.numberOfSeats || 0), 0),
+      confirmedCount: paid.length,
+      submittedCount: submitted.length,
+    };
+  }, [bookings]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -107,17 +129,6 @@ const RoundTableBookings = ({ eventId }: RoundTableBookingsProps) => {
       </Card>
     );
   }
-
-  const { totalRevenue, totalSeats, confirmedCount, submittedCount } = useMemo(() => {
-    const paid = bookings.filter((b) => b.paymentStatus === "Paid");
-    const submitted = bookings.filter((b) => b.paymentStatus === "Submitted");
-    return {
-      totalRevenue: paid.reduce((sum, b) => sum + (b.amount || 0), 0),
-      totalSeats: paid.reduce((sum, b) => sum + (b.numberOfSeats || 0), 0),
-      confirmedCount: paid.length,
-      submittedCount: submitted.length,
-    };
-  }, [bookings]);
 
   return (
     <div className="space-y-4">
@@ -305,20 +316,23 @@ const RoundTableBookings = ({ eventId }: RoundTableBookingsProps) => {
           </div>
         </CardContent>
       </Card>
-      {/* Detail Modal */}
-      {selectedBooking && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedBooking(null)}>
-          <Card className="w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <CardHeader className="flex flex-row items-start justify-between pb-3">
-              <div>
-                <CardTitle className="text-base">Booking Details</CardTitle>
-                <p className="text-xs text-gray-400 mt-1">ID: {selectedBooking._id}</p>
-              </div>
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setSelectedBooking(null)}>
-                <X size={16} />
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-4">
+      {/* Detail Dialog — Radix-based so it nests cleanly inside other dialogs
+          (the Participants > Round Tables tab opens this from inside another
+          Dialog, and a hand-rolled fixed overlay clashed with the parent's
+          focus trap and z-index management). */}
+      <Dialog
+        open={!!selectedBooking}
+        onOpenChange={(open) => !open && setSelectedBooking(null)}
+      >
+        {selectedBooking && (
+          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-base">Booking Details</DialogTitle>
+              <DialogDescription className="text-xs">
+                ID: {selectedBooking._id}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
               {/* Visitor */}
               <div className="rounded-lg border p-3 space-y-1">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Visitor</p>
@@ -431,10 +445,10 @@ const RoundTableBookings = ({ eventId }: RoundTableBookingsProps) => {
                   <Download size={14} className="mr-2" /> Download Ticket
                 </Button>
               )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
+            </div>
+          </DialogContent>
+        )}
+      </Dialog>
     </div>
   );
 };

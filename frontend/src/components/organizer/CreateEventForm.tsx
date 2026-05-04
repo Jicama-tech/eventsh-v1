@@ -13,6 +13,7 @@ import {
   SelectContent,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
@@ -21,8 +22,6 @@ import {
   X,
   Plus,
   Trash2,
-  ChevronLeft,
-  ChevronRight,
   Download,
   Share2,
   RotateCw,
@@ -192,7 +191,19 @@ interface VenueConfig {
   gridSize: number;
   showGrid: boolean;
   hasMainStage: boolean;
+  hasEntrance?: boolean;
+  hasExit?: boolean;
   totalRows: number; // NEW: Total number of rows
+}
+
+// Placed entrance/exit markers on the venue canvas — multiple per venue allowed.
+interface PositionedDoor {
+  id: string;
+  x: number;
+  y: number;
+  type: "entrance" | "exit";
+  rotation: number; // degrees, multiples of 90
+  label?: string;
 }
 
 interface VenueLayout {
@@ -739,6 +750,24 @@ const VenueConfiguration = ({
                 />
                 <Label className="text-sm">Main Stage</Label>
               </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  checked={!!selectedConfig.hasEntrance}
+                  onCheckedChange={(checked) =>
+                    updateSelectedConfig({ hasEntrance: !!checked })
+                  }
+                />
+                <Label className="text-sm">Entrance</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  checked={!!selectedConfig.hasExit}
+                  onCheckedChange={(checked) =>
+                    updateSelectedConfig({ hasExit: !!checked })
+                  }
+                />
+                <Label className="text-sm">Exit</Label>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -910,15 +939,25 @@ const TableManagement = ({
   const addTable = () => {
     // Validate required fields
     if (!currentTable.name) {
-      toast({ duration: 5000, title: "Name is required", variant: "destructive" });
+      toast({
+        duration: 5000,
+        title: "Name is required",
+        variant: "destructive",
+      });
       return;
     }
 
-    if (currentTable.forSale && (!currentTable.tablePrice || !currentTable.bookingPrice || !currentTable.depositPrice)) {
+    if (
+      currentTable.forSale &&
+      (!currentTable.tablePrice ||
+        !currentTable.bookingPrice ||
+        !currentTable.depositPrice)
+    ) {
       toast({
         duration: 5000,
         title: "Please fill in all pricing fields",
-        description: "Table Price, Booking Price, and Deposit are required for spaces that are for sale",
+        description:
+          "Table Price, Booking Price, and Deposit are required for spaces that are for sale",
         variant: "destructive",
       });
       return;
@@ -1128,95 +1167,97 @@ const TableManagement = ({
 
             {!currentTable.forSale && (
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-700">
-                This space is <strong>not for sale</strong> — it will appear on the venue layout as a reference point (e.g., Food Court, Registration Desk) but cannot be booked by exhibitors.
+                This space is <strong>not for sale</strong> — it will appear on
+                the venue layout as a reference point (e.g., Food Court,
+                Registration Desk) but cannot be booked by exhibitors.
               </div>
             )}
 
             {currentTable.forSale && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Table Price */}
-              <div>
-                <Label className="flex items-center gap-1">
-                  Space Price ({getSymbol()}) *
-                </Label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Table Price */}
+                <div>
+                  <Label className="flex items-center gap-1">
+                    Space Price ({getSymbol()}) *
+                  </Label>
 
-                <Input
-                  type="number"
-                  min="0"
-                  value={currentTable.tablePrice}
-                  onChange={(e) => handleTablePriceChange(e.target.value)}
-                  placeholder="10000"
-                />
-                <p className="text-xs text-gray-600 mt-1">
-                  Full rental price for this table
-                </p>
-              </div>
-
-              {/* Booking Price */}
-              <div>
-                <Label className="flex items-center gap-1">
-                  Booking Price ({getSymbol()}) *
-                </Label>
-                <Input
-                  type="number"
-                  min="0"
-                  max={currentTable.tablePrice || undefined}
-                  value={currentTable.bookingPrice}
-                  onChange={(e) =>
-                    setCurrentTable((prev) => ({
-                      ...prev,
-                      bookingPrice: e.target.value,
-                    }))
-                  }
-                  placeholder="4000"
-                />
-                <p className="text-xs text-gray-600 mt-1">
-                  Partial payment (≤ Space Price)
-                </p>
-                {currentTable.tablePrice && (
-                  <p className="text-xs text-blue-600 mt-1">
-                    Suggested:
-                    {formatPrice(
-                      calculateSuggestedBookingPrice(
-                        parseFloat(currentTable.tablePrice),
-                      ),
-                    )}
+                  <Input
+                    type="number"
+                    min="0"
+                    value={currentTable.tablePrice}
+                    onChange={(e) => handleTablePriceChange(e.target.value)}
+                    placeholder="10000"
+                  />
+                  <p className="text-xs text-gray-600 mt-1">
+                    Full rental price for this table
                   </p>
-                )}
-              </div>
+                </div>
 
-              {/* Deposit Price */}
-              <div>
-                <Label className="flex items-center gap-1">
-                  Deposit Price ({getSymbol()}) *
-                </Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={currentTable.depositPrice}
-                  onChange={(e) =>
-                    setCurrentTable((prev) => ({
-                      ...prev,
-                      depositPrice: e.target.value,
-                    }))
-                  }
-                  placeholder="5000"
-                />
-                <p className="text-xs text-gray-600 mt-1">
-                  Security deposit (refundable)
-                </p>
-                {currentTable.tablePrice && (
-                  <p className="text-xs text-blue-600 mt-1">
-                    Suggested:
-                    {formatPrice(
-                      calculateSuggestedDepositPrice(
-                        parseFloat(currentTable.tablePrice),
-                      ),
-                    )}
+                {/* Booking Price */}
+                <div>
+                  <Label className="flex items-center gap-1">
+                    Booking Price ({getSymbol()}) *
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max={currentTable.tablePrice || undefined}
+                    value={currentTable.bookingPrice}
+                    onChange={(e) =>
+                      setCurrentTable((prev) => ({
+                        ...prev,
+                        bookingPrice: e.target.value,
+                      }))
+                    }
+                    placeholder="4000"
+                  />
+                  <p className="text-xs text-gray-600 mt-1">
+                    Partial payment (≤ Space Price)
                   </p>
-                )}
+                  {currentTable.tablePrice && (
+                    <p className="text-xs text-blue-600 mt-1">
+                      Suggested:
+                      {formatPrice(
+                        calculateSuggestedBookingPrice(
+                          parseFloat(currentTable.tablePrice),
+                        ),
+                      )}
+                    </p>
+                  )}
+                </div>
+
+                {/* Deposit Price */}
+                <div>
+                  <Label className="flex items-center gap-1">
+                    Deposit Price ({getSymbol()}) *
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={currentTable.depositPrice}
+                    onChange={(e) =>
+                      setCurrentTable((prev) => ({
+                        ...prev,
+                        depositPrice: e.target.value,
+                      }))
+                    }
+                    placeholder="5000"
+                  />
+                  <p className="text-xs text-gray-600 mt-1">
+                    Security deposit (refundable)
+                  </p>
+                  {currentTable.tablePrice && (
+                    <p className="text-xs text-blue-600 mt-1">
+                      Suggested:
+                      {formatPrice(
+                        calculateSuggestedDepositPrice(
+                          parseFloat(currentTable.tablePrice),
+                        ),
+                      )}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
             )}
 
             {/* For Sale Toggle */}
@@ -1226,40 +1267,72 @@ const TableManagement = ({
                 <button
                   type="button"
                   className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${currentTable.forSale ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
-                  onClick={() => setCurrentTable((prev) => ({ ...prev, forSale: true }))}
+                  onClick={() =>
+                    setCurrentTable((prev) => ({ ...prev, forSale: true }))
+                  }
                 >
                   For Sale
                 </button>
                 <button
                   type="button"
                   className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${!currentTable.forSale ? "border-orange-500 bg-orange-50 text-orange-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
-                  onClick={() => setCurrentTable((prev) => ({ ...prev, forSale: false, tablePrice: "0", bookingPrice: "0", depositPrice: "0" }))}
+                  onClick={() =>
+                    setCurrentTable((prev) => ({
+                      ...prev,
+                      forSale: false,
+                      tablePrice: "0",
+                      bookingPrice: "0",
+                      depositPrice: "0",
+                    }))
+                  }
                 >
                   Not for Sale
                 </button>
               </div>
               <p className="text-[10px] text-gray-400 mt-1">
-                {currentTable.forSale ? "Exhibitors can book this space" : "Reference only (Food Court, Registration Desk, etc.)"}
+                {currentTable.forSale
+                  ? "Exhibitors can book this space"
+                  : "Reference only (Food Court, Registration Desk, etc.)"}
               </p>
             </div>
 
             {/* Color Picker */}
             <div>
-              <Label className="flex items-center gap-1 mb-2">Space Color</Label>
+              <Label className="flex items-center gap-1 mb-2">
+                Space Color
+              </Label>
               <div className="flex items-center gap-2 flex-wrap">
-                {["#6b7280", "#ef4444", "#f59e0b", "#10b981", "#3b82f6", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316", "#6366f1"].map((c) => (
+                {[
+                  "#6b7280",
+                  "#ef4444",
+                  "#f59e0b",
+                  "#10b981",
+                  "#3b82f6",
+                  "#8b5cf6",
+                  "#ec4899",
+                  "#14b8a6",
+                  "#f97316",
+                  "#6366f1",
+                ].map((c) => (
                   <button
                     key={c}
                     type="button"
                     className={`w-8 h-8 rounded-full border-2 transition-all ${currentTable.color === c ? "border-gray-800 scale-110 shadow-md" : "border-gray-200 hover:scale-105"}`}
                     style={{ backgroundColor: c }}
-                    onClick={() => setCurrentTable((prev) => ({ ...prev, color: c }))}
+                    onClick={() =>
+                      setCurrentTable((prev) => ({ ...prev, color: c }))
+                    }
                   />
                 ))}
                 <input
                   type="color"
                   value={currentTable.color}
-                  onChange={(e) => setCurrentTable((prev) => ({ ...prev, color: e.target.value }))}
+                  onChange={(e) =>
+                    setCurrentTable((prev) => ({
+                      ...prev,
+                      color: e.target.value,
+                    }))
+                  }
                   className="w-8 h-8 rounded-full cursor-pointer border-2 border-gray-200"
                   title="Custom color"
                 />
@@ -1334,10 +1407,18 @@ const TableManagement = ({
                   >
                     <div className="space-y-1">
                       <div className="font-medium flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: table.color || "#6b7280" }} />
+                        <span
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: table.color || "#6b7280" }}
+                        />
                         {table.name}
                         {table.forSale === false && (
-                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-orange-300 text-orange-600 bg-orange-50">Not for Sale</Badge>
+                          <Badge
+                            variant="outline"
+                            className="text-[9px] px-1.5 py-0 border-orange-300 text-orange-600 bg-orange-50"
+                          >
+                            Not for Sale
+                          </Badge>
                         )}
                         {/* <Badge variant="buttonOutline">
                           Row {table.rowNumber}
@@ -1560,6 +1641,26 @@ const TableManagement = ({
 };
 
 // Enhanced Venue Designer with Improved Drag & Drop
+interface VenueDesignerProps {
+  tableTemplates: TableTemplate[];
+  venueTables: Record<string, PositionedTable[]>;
+  setVenueTables: (tables: Record<string, PositionedTable[]>) => void;
+  venueConfigurations: VenueConfig[];
+  selectedVenueConfigId: string;
+  setSelectedVenueConfigId: (id: string) => void;
+  venueRef: React.RefObject<HTMLDivElement>;
+  venueLayoutImages: Record<string, string>;
+  setVenueLayoutImages: (images: Record<string, string>) => void;
+  speakerSlotTemplates: any[];
+  venueSpeakerZones: Record<string, any[]>;
+  setVenueSpeakerZones: (zones: Record<string, any[]>) => void;
+  roundTableTemplates: RoundTableTemplate[];
+  venueRoundTables: Record<string, PositionedRoundTable[]>;
+  setVenueRoundTables: (tables: Record<string, PositionedRoundTable[]>) => void;
+  venueDoors: Record<string, PositionedDoor[]>;
+  setVenueDoors: (doors: Record<string, PositionedDoor[]>) => void;
+}
+
 const VenueDesigner = ({
   tableTemplates,
   venueTables,
@@ -1576,26 +1677,9 @@ const VenueDesigner = ({
   roundTableTemplates,
   venueRoundTables,
   setVenueRoundTables,
-}: {
-  tableTemplates: TableTemplate[];
-  venueTables: Record<string, PositionedTable[]>;
-  setVenueTables: (tables: Record<string, PositionedTable[]>) => void;
-  venueConfigurations: VenueConfig[];
-  selectedVenueConfigId: string;
-  setSelectedVenueConfigId: (id: string) => void;
-  venueRef: React.RefObject<HTMLDivElement>;
-  venueLayoutImages: Record<string, string>;
-  setVenueLayoutImages: (images: Record<string, string>) => void;
-  speakerSlotTemplates: any[];
-  venueSpeakerZones: Record<string, any[]>;
-  setVenueSpeakerZones: (zones: Record<string, any[]>) => void;
-  roundTableTemplates: RoundTableTemplate[];
-  venueRoundTables: Record<string, PositionedRoundTable[]>;
-  setVenueRoundTables: (tables: Record<string, PositionedRoundTable[]>) => void;
-  roundTableTemplates: RoundTableTemplate[];
-  venueRoundTables: Record<string, PositionedRoundTable[]>;
-  setVenueRoundTables: (tables: Record<string, PositionedRoundTable[]>) => void;
-}) => {
+  venueDoors,
+  setVenueDoors,
+}: VenueDesignerProps) => {
   const { toast } = useToast();
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -1612,6 +1696,7 @@ const VenueDesigner = ({
   const currentTables = venueTables[selectedVenueConfigId] || [];
   const currentSpeakerZones = venueSpeakerZones[selectedVenueConfigId] || [];
   const currentRoundTables = venueRoundTables[selectedVenueConfigId] || [];
+  const currentDoors = venueDoors[selectedVenueConfigId] || [];
 
   const applyAILayout = (result: {
     positionedTables: PositionedTable[];
@@ -1643,6 +1728,47 @@ const VenueDesigner = ({
   };
 
   // --- Actions ---
+
+  // Add an entrance/exit door to the current venue. Multiple per type allowed.
+  const addDoorToVenue = (type: "entrance" | "exit") => {
+    if (!venueConfig) return;
+    const existing = currentDoors.filter((d) => d.type === type).length;
+    const newDoor: PositionedDoor = {
+      id: Math.random().toString(36).slice(2, 15),
+      type,
+      rotation: 0,
+      label: `${type === "entrance" ? "IN" : "OUT"}${
+        existing > 0 ? " " + (existing + 1) : ""
+      }`,
+      x:
+        type === "entrance"
+          ? 50 + existing * 30
+          : venueConfig.width - 90 - existing * 30,
+      y: venueConfig.height / 2,
+    };
+    setVenueDoors({
+      ...venueDoors,
+      [selectedVenueConfigId]: [...currentDoors, newDoor],
+    });
+    setSelectedTable("door-" + newDoor.id);
+  };
+
+  const removeDoorFromVenue = (id: string) => {
+    setVenueDoors({
+      ...venueDoors,
+      [selectedVenueConfigId]: currentDoors.filter((d) => d.id !== id),
+    });
+    setSelectedTable(null);
+  };
+
+  const rotateDoor = (id: string) => {
+    setVenueDoors({
+      ...venueDoors,
+      [selectedVenueConfigId]: currentDoors.map((d) =>
+        d.id === id ? { ...d, rotation: ((d.rotation || 0) + 90) % 360 } : d,
+      ),
+    });
+  };
 
   const addTableToVenue = (template: TableTemplate) => {
     if (!venueConfig) return;
@@ -1813,7 +1939,33 @@ const VenueDesigner = ({
     const rect = venueRef.current?.getBoundingClientRect();
     if (!rect) return;
 
-    if (selectedTable.startsWith("rt-")) {
+    if (selectedTable.startsWith("door-")) {
+      const doorId = selectedTable.replace("door-", "");
+      const door = currentDoors.find((d) => d.id === doorId);
+      if (!door) return;
+      const doorSize = 50; // matches the circular marker diameter (logical units)
+      const newX = Math.max(
+        0,
+        Math.min(
+          (e.clientX - rect.left - dragOffset.x) / venueConfig.scale,
+          venueConfig.width - doorSize,
+        ),
+      );
+      const newY = Math.max(
+        0,
+        Math.min(
+          (e.clientY - rect.top - dragOffset.y) / venueConfig.scale,
+          venueConfig.height - doorSize,
+        ),
+      );
+      const updatedDoors = currentDoors.map((d) =>
+        d.id === doorId ? { ...d, x: newX, y: newY } : d,
+      );
+      setVenueDoors({
+        ...venueDoors,
+        [selectedVenueConfigId]: updatedDoors,
+      });
+    } else if (selectedTable.startsWith("rt-")) {
       const rtId = selectedTable.replace("rt-", "");
       const rt = currentRoundTables.find((r) => r.positionId === rtId);
       if (!rt) return;
@@ -1954,12 +2106,16 @@ const VenueDesigner = ({
         ? "#ef4444"
         : isSelected
           ? "#3b82f6"
-          : (table.color || "#6b7280"),
+          : table.color || "#6b7280",
       color: "white",
-      border: isSelected ? "3px solid #1d4ed8" : `2px solid ${table.color ? table.color + "88" : "#374151"}`,
-      ...(table.forSale === false && !isSelected && {
-        backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 6px)",
-      }),
+      border: isSelected
+        ? "3px solid #1d4ed8"
+        : `2px solid ${table.color ? table.color + "88" : "#374151"}`,
+      ...(table.forSale === false &&
+        !isSelected && {
+          backgroundImage:
+            "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 6px)",
+        }),
       cursor: isDragging ? "grabbing" : "grab",
       display: "flex",
       alignItems: "center",
@@ -2067,7 +2223,10 @@ const VenueDesigner = ({
               onClick={() => addTableToVenue(template)}
             >
               <div className="flex items-center gap-1 mb-1">
-                <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: template.color || "#6b7280" }} />
+                <div
+                  className="w-3 h-3 rounded-sm"
+                  style={{ backgroundColor: template.color || "#6b7280" }}
+                />
                 <span className="font-bold text-xs truncate">
                   {template.name}
                 </span>
@@ -2075,7 +2234,10 @@ const VenueDesigner = ({
               <p className="text-[10px] text-muted-foreground">
                 {template.width}×{template.height}
               </p>
-              <p className="text-[10px] font-semibold" style={{ color: template.color || "#6b7280" }}>
+              <p
+                className="text-[10px] font-semibold"
+                style={{ color: template.color || "#6b7280" }}
+              >
                 {formatPrice(template.tablePrice)}
               </p>
             </div>
@@ -2152,13 +2314,61 @@ const VenueDesigner = ({
             </div>
           ))}
 
+          {/* Divider before doors */}
+          {(tableTemplates.length > 0 ||
+            speakerSlotTemplates.length > 0 ||
+            roundTableTemplates.length > 0) &&
+            (venueConfig?.hasEntrance || venueConfig?.hasExit) && (
+              <div className="flex-shrink-0 w-px bg-gray-300 mx-1" />
+            )}
+
+          {/* Entrance / Exit door templates — appear when enabled in Venue Setup */}
+          {venueConfig?.hasEntrance && (
+            <div
+              key="door-entrance-template"
+              className="flex-shrink-0 w-32 p-3 border-2 border-green-300 rounded-xl cursor-pointer hover:border-green-500 hover:shadow-md transition-all bg-green-50/60"
+              onClick={() => addDoorToVenue("entrance")}
+              title="Click to drop an entrance on the venue"
+            >
+              <div className="flex items-center gap-1 mb-1">
+                <div className="w-3 h-3 rounded-full bg-green-600" />
+                <span className="font-bold text-xs text-green-800">
+                  Entrance
+                </span>
+              </div>
+              <p className="text-[10px] text-green-700">Click to add → drag</p>
+              <p className="text-[10px] text-muted-foreground">
+                Multiple allowed
+              </p>
+            </div>
+          )}
+          {venueConfig?.hasExit && (
+            <div
+              key="door-exit-template"
+              className="flex-shrink-0 w-32 p-3 border-2 border-red-300 rounded-xl cursor-pointer hover:border-red-500 hover:shadow-md transition-all bg-red-50/60"
+              onClick={() => addDoorToVenue("exit")}
+              title="Click to drop an exit on the venue"
+            >
+              <div className="flex items-center gap-1 mb-1">
+                <div className="w-3 h-3 rounded-full bg-red-600" />
+                <span className="font-bold text-xs text-red-800">Exit</span>
+              </div>
+              <p className="text-[10px] text-red-700">Click to add → drag</p>
+              <p className="text-[10px] text-muted-foreground">
+                Multiple allowed
+              </p>
+            </div>
+          )}
+
           {tableTemplates.length === 0 &&
             speakerSlotTemplates.length === 0 &&
-            roundTableTemplates.length === 0 && (
+            roundTableTemplates.length === 0 &&
+            !venueConfig?.hasEntrance &&
+            !venueConfig?.hasExit && (
               <p className="text-sm text-muted-foreground py-4 w-full text-center">
                 No templates yet. Create Spaces in "Space / AddOns" tab, Speaker
                 Slots in "Speakers" tab, or Round Tables in "Round Tables" tab
-                first.
+                first. Or enable Entrance / Exit in Venue Setup.
               </p>
             )}
         </div>
@@ -2192,10 +2402,92 @@ const VenueDesigner = ({
                   MAIN STAGE
                 </div>
               )}
-              {/* Entrance */}
-              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 bg-green-100 border-t border-x border-green-300 px-4 py-1 rounded-t text-[9px] font-bold text-green-700">
-                ENTRANCE
-              </div>
+              {/* Placed Entrance / Exit doors — circular, draggable, rotatable */}
+              {currentDoors.map((door) => {
+                const isSelected = selectedTable === "door-" + door.id;
+                const isEntrance = door.type === "entrance";
+                const diameter = 50; // logical diameter in venue units
+                return (
+                  <div
+                    key={door.id}
+                    onMouseDown={(e) => {
+                      const containerRect =
+                        venueRef.current?.getBoundingClientRect();
+                      if (!containerRect) return;
+                      setDragOffset({
+                        x:
+                          e.clientX -
+                          containerRect.left -
+                          door.x * venueConfig.scale,
+                        y:
+                          e.clientY -
+                          containerRect.top -
+                          door.y * venueConfig.scale,
+                      });
+                      setSelectedTable("door-" + door.id);
+                      setIsDragging(true);
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedTable("door-" + door.id);
+                    }}
+                    className={`absolute flex items-center justify-center rounded-full text-[10px] font-bold text-white cursor-grab shadow-md select-none ${
+                      isDragging && isSelected ? "cursor-grabbing" : ""
+                    } ${
+                      isEntrance
+                        ? "bg-green-600 border-2 border-green-700"
+                        : "bg-red-600 border-2 border-red-700"
+                    } ${isSelected ? "ring-2 ring-offset-1 ring-blue-400" : ""}`}
+                    style={{
+                      left: door.x * venueConfig.scale,
+                      top: door.y * venueConfig.scale,
+                      width: diameter * venueConfig.scale,
+                      height: diameter * venueConfig.scale,
+                      transform: `rotate(${door.rotation || 0}deg)`,
+                      transformOrigin: "center center",
+                    }}
+                    title={`${isEntrance ? "Entrance" : "Exit"} — drag to move, click to select`}
+                  >
+                    <span className="absolute top-0.5 left-1/2 -translate-x-1/2 text-[10px] leading-none">
+                      ▲
+                    </span>
+                    <span>{door.label || (isEntrance ? "IN" : "OUT")}</span>
+                    {isSelected && (
+                      <div
+                        className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-1 bg-white border p-1 rounded-md shadow-xl z-50"
+                        style={{
+                          transform: `rotate(${-(door.rotation || 0)}deg)`,
+                        }}
+                      >
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            rotateDoor(door.id);
+                          }}
+                          title="Rotate 90°"
+                        >
+                          <RotateCw size={12} />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-red-500 hover:text-red-600"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeDoorFromVenue(door.id);
+                          }}
+                          title="Remove this door"
+                        >
+                          <Trash2 size={12} />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
 
               {/* Placed Tables */}
               {currentTables.map((table) => (
@@ -2753,13 +3045,29 @@ export function CreateEventForm({
     visibility: initialData?.visibility ?? "public",
     inviteLink: initialData?.inviteLink ?? "",
     tags: initialData?.tags ?? [],
-    features: initialData?.features ?? {
-      food: false,
-      parking: false,
-      wifi: false,
-      photography: false,
-      security: false,
-      accessibility: false,
+    features: {
+      food: initialData?.features?.food ?? false,
+      parking: initialData?.features?.parking ?? false,
+      wifi: initialData?.features?.wifi ?? false,
+      photography: initialData?.features?.photography ?? false,
+      security: initialData?.features?.security ?? false,
+      accessibility: initialData?.features?.accessibility ?? false,
+      // Section toggles — control which tabs appear in this form. For existing
+      // events without explicit values, infer from whether related data exists
+      // so editing an old event doesn't suddenly hide its filled-in sections.
+      hasStalls:
+        initialData?.features?.hasStalls ??
+        (Array.isArray(initialData?.venueTables)
+          ? initialData.venueTables.length > 0
+          : !!initialData?.venueTables),
+      hasRoundTables:
+        initialData?.features?.hasRoundTables ??
+        (Array.isArray(initialData?.venueRoundTables) &&
+          initialData.venueRoundTables.length > 0),
+      hasSpeakers:
+        initialData?.features?.hasSpeakers ??
+        (Array.isArray(initialData?.speakerSlotTemplates) &&
+          initialData.speakerSlotTemplates.length > 0),
     },
     ageRestriction: initialData?.ageRestriction ?? "All Ages",
     dresscode: initialData?.dresscode ?? "Business Casual",
@@ -2802,6 +3110,7 @@ export function CreateEventForm({
     startTime: "",
     endTime: "",
     isMainStage: false,
+    maxVisitors: "0",
     width: "200",
     height: "100",
     slotPrice: "0",
@@ -2825,6 +3134,23 @@ export function CreateEventForm({
         : initialData.venueSpeakerZones
       : {},
   );
+
+  // Placed entrance / exit markers per venue config. Empty array = none placed.
+  const [venueDoors, setVenueDoors] = useState<
+    Record<string, PositionedDoor[]>
+  >(() => {
+    const init = initialData?.venueDoors;
+    if (!init) return {};
+    if (Array.isArray(init)) {
+      return init.reduce((acc: Record<string, PositionedDoor[]>, d: any) => {
+        const key = d.venueConfigId || "default";
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(d);
+        return acc;
+      }, {});
+    }
+    return init;
+  });
 
   // Round Table states
   const [roundTableTemplates, setRoundTableTemplates] = useState<
@@ -3003,6 +3329,31 @@ export function CreateEventForm({
       features: { ...old.features, [feature]: checked },
     }));
   };
+
+  // If the user toggles off the section they're currently viewing, bounce them
+  // back to Basic Info so they don't end up looking at an empty pane.
+  useEffect(() => {
+    const f = formData.features;
+    const anyDoors = venueConfigurations.some(
+      (v) => v.hasEntrance || v.hasExit,
+    );
+    const hidden =
+      (currentTab === "tables" && !f.hasStalls) ||
+      (currentTab === "speakers" && !f.hasSpeakers) ||
+      (currentTab === "roundtables" && !f.hasRoundTables) ||
+      (currentTab === "layout" &&
+        !f.hasStalls &&
+        !f.hasSpeakers &&
+        !f.hasRoundTables &&
+        !anyDoors);
+    if (hidden) setCurrentTab("basic");
+  }, [
+    currentTab,
+    formData.features.hasStalls,
+    formData.features.hasSpeakers,
+    formData.features.hasRoundTables,
+    venueConfigurations,
+  ]);
 
   const addTag = () => {
     if (currentTag.trim() && !formData.tags.includes(currentTag.trim())) {
@@ -3305,37 +3656,77 @@ export function CreateEventForm({
         </div>
       </div>
 
-      {/* Sticky Tabs */}
-      <div className="sticky top-[73px] z-40 bg-white border-b">
-        <Tabs value={currentTab} onValueChange={setCurrentTab}>
-          <TabsList className="grid w-full grid-cols-8 h-12">
-            <TabsTrigger value="basic" className="text-sm">
-              Basic Info
-            </TabsTrigger>
-            <TabsTrigger value="media" className="text-sm">
-              Media
-            </TabsTrigger>
-            <TabsTrigger value="visitors" className="text-sm">
-              Visitors
-            </TabsTrigger>
-            <TabsTrigger value="speakers" className="text-sm">
-              Speakers
-            </TabsTrigger>
-            <TabsTrigger value="venue" className="text-sm">
-              Venue Setup
-            </TabsTrigger>
-            <TabsTrigger value="tables" className="text-sm">
-              Space / AddOns
-            </TabsTrigger>
-            <TabsTrigger value="roundtables" className="text-sm">
-              Round Tables
-            </TabsTrigger>
-            <TabsTrigger value="layout" className="text-sm">
-              Space Layout
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
+      {/* Sticky Tabs — only show sections enabled in Basic Info > Event Sections */}
+      {(() => {
+        const showStalls = !!formData.features.hasStalls;
+        const showRoundTables = !!formData.features.hasRoundTables;
+        const showSpeakers = !!formData.features.hasSpeakers;
+        // Layout tab is also useful when only Entrance/Exit are enabled (per venue),
+        // since the user needs the canvas to place those door markers.
+        const anyDoorsEnabled = venueConfigurations.some(
+          (v) => v.hasEntrance || v.hasExit,
+        );
+        const showLayout =
+          showStalls || showRoundTables || showSpeakers || anyDoorsEnabled;
+        // Always-on tabs: basic, media, venue, visitors (4)
+        const visibleCount =
+          4 +
+          (showStalls ? 1 : 0) +
+          (showSpeakers ? 1 : 0) +
+          (showRoundTables ? 1 : 0) +
+          (showLayout ? 1 : 0);
+        const colsClass =
+          (
+            {
+              4: "grid-cols-4",
+              5: "grid-cols-5",
+              6: "grid-cols-6",
+              7: "grid-cols-7",
+              8: "grid-cols-8",
+            } as Record<number, string>
+          )[visibleCount] || "grid-cols-8";
+        return (
+          <div className="sticky top-[73px] z-40 bg-white border-b">
+            <Tabs value={currentTab} onValueChange={setCurrentTab}>
+              <TabsList className={`grid w-full ${colsClass} h-12`}>
+                <TabsTrigger value="basic" className="text-sm">
+                  Basic Info
+                </TabsTrigger>
+                <TabsTrigger value="media" className="text-sm">
+                  Images
+                </TabsTrigger>
+                <TabsTrigger value="visitors" className="text-sm">
+                  Visitors
+                </TabsTrigger>
+                <TabsTrigger value="venue" className="text-sm">
+                  Venue Setup
+                </TabsTrigger>
+                {showStalls && (
+                  <TabsTrigger value="tables" className="text-sm">
+                    Space / AddOns
+                  </TabsTrigger>
+                )}
+
+                {showSpeakers && (
+                  <TabsTrigger value="speakers" className="text-sm">
+                    Speakers
+                  </TabsTrigger>
+                )}
+                {showRoundTables && (
+                  <TabsTrigger value="roundtables" className="text-sm">
+                    Round Tables
+                  </TabsTrigger>
+                )}
+                {showLayout && (
+                  <TabsTrigger value="layout" className="text-sm">
+                    Space Layout
+                  </TabsTrigger>
+                )}
+              </TabsList>
+            </Tabs>
+          </div>
+        );
+      })()}
 
       <div className="p-6 max-w-7xl mx-auto">
         <Tabs value={currentTab} onValueChange={setCurrentTab}>
@@ -4662,7 +5053,9 @@ export function CreateEventForm({
           </TabsContent>
 
           {/* VENUE SETUP TAB */}
-          <TabsContent value="venue">
+          <TabsContent value="venue" className="space-y-6">
+            {/* Event Sections — controls which tabs appear in this form */}
+
             <BlurOverlay visible={!blurActive}>
               <VenueConfiguration
                 venueConfigurations={venueConfigurations}
@@ -4670,6 +5063,62 @@ export function CreateEventForm({
                 selectedVenueConfigId={selectedVenueConfigId}
                 setSelectedVenueConfigId={setSelectedVenueConfigId}
               />
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Event Sections</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Pick the modules this event uses. Tabs you turn off will be
+                    hidden from this form.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <label className="flex items-start gap-3 border rounded-lg p-3 cursor-pointer hover:bg-muted/30">
+                      <Switch
+                        checked={!!formData.features.hasStalls}
+                        onCheckedChange={(checked) =>
+                          handleFeatureChange("hasStalls", checked)
+                        }
+                      />
+                      <div>
+                        <p className="font-medium text-sm">Spaces / AddOns</p>
+                        <p className="text-xs text-muted-foreground">
+                          Booths, stalls, exhibitor spaces
+                        </p>
+                      </div>
+                    </label>
+                    <label className="flex items-start gap-3 border rounded-lg p-3 cursor-pointer hover:bg-muted/30">
+                      <Switch
+                        checked={!!formData.features.hasRoundTables}
+                        onCheckedChange={(checked) =>
+                          handleFeatureChange("hasRoundTables", checked)
+                        }
+                      />
+                      <div>
+                        <p className="font-medium text-sm">Round Tables</p>
+                        <p className="text-xs text-muted-foreground">
+                          Gala / banquet seating
+                        </p>
+                      </div>
+                    </label>
+                    <label className="flex items-start gap-3 border rounded-lg p-3 cursor-pointer hover:bg-muted/30">
+                      <Switch
+                        checked={!!formData.features.hasSpeakers}
+                        onCheckedChange={(checked) =>
+                          handleFeatureChange("hasSpeakers", checked)
+                        }
+                      />
+                      <div>
+                        <p className="font-medium text-sm">Speaker Spaces</p>
+                        <p className="text-xs text-muted-foreground">
+                          Sessions, keynotes, panels
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </CardContent>
+              </Card>
             </BlurOverlay>
           </TabsContent>
 
@@ -5059,6 +5508,8 @@ export function CreateEventForm({
                 roundTableTemplates={roundTableTemplates}
                 venueRoundTables={venueRoundTables}
                 setVenueRoundTables={setVenueRoundTables}
+                venueDoors={venueDoors}
+                setVenueDoors={setVenueDoors}
               />
             </BlurOverlay>
           </TabsContent>

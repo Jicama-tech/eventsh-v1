@@ -280,21 +280,36 @@ export class ChatbotService {
     {
       type: "function",
       function: {
-        name: "create_event",
+        name: "request_edit_event",
         description:
-          "Create a basic event with title, description, date, venue. The shopkeeper can refine details in the UI later.",
+          "Open the Edit Event form pre-filled with the matching event's data. CALL THIS whenever the user says 'edit event X', 'update event X', 'change event X', 'modify event X'. " +
+          "**MUST be called every single time the user makes such a request, even if you have already called this tool for the same event earlier in the conversation.** Each call re-opens the form fresh; never reply 'already opened' — always call the tool again. " +
+          "Pass the event title (partial match OK).",
         parameters: {
           type: "object",
           properties: {
-            title: { type: "string" },
-            description: { type: "string" },
-            startDate: { type: "string", description: "ISO date" },
-            endDate: { type: "string", description: "ISO date — optional" },
-            venue: { type: "string" },
-            ticketPrice: { type: "number" },
-            attendeeLimit: { type: "number" },
+            event_name: {
+              type: "string",
+              description: "Title or partial title of the event to edit",
+            },
           },
-          required: ["title", "startDate"],
+          required: ["event_name"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "create_event",
+        description:
+          "Open the BLANK Create Event form in the Events tab. CALL THIS IMMEDIATELY whenever the user says anything like 'create event', 'create a new event', 'new event', 'add event', 'make an event'. " +
+          "**MUST be called every single time the user makes such a request, even if you have already called this tool earlier in the same conversation.** Each call opens a fresh form for the user — there is no memory between calls and there is no harm in calling it repeatedly. " +
+          "NEVER reply with text like 'I already opened the form' or 'Did you want to add something to it?'. ALWAYS call the tool. " +
+          "NEVER ask for title/date/venue first — the form collects everything. Takes NO required arguments.",
+        parameters: {
+          type: "object",
+          properties: {},
+          required: [],
         },
       },
     },
@@ -303,7 +318,7 @@ export class ChatbotService {
       function: {
         name: "create_full_event",
         description:
-          "Create an event with the complete set of fields including ticket types, venue config, stalls, round tables, speakers — everything except images and drag-drop layout positioning. Round tables and stalls are auto-placed on a grid. Returns the new event's id.",
+          "Same as create_event — opens the blank Create Event form. Call this for richer one-shot phrasings like 'create a tech meetup on May 15 with 200 attendees and 10 round tables'. Do NOT try to parse fields yourself; the form collects everything. Takes NO required arguments.",
         parameters: {
           type: "object",
           properties: {
@@ -391,7 +406,7 @@ export class ChatbotService {
               },
             },
           },
-          required: ["title", "startDate"],
+          required: [],
         },
       },
     },
@@ -722,6 +737,61 @@ export class ChatbotService {
         parameters: { type: "object", properties: {}, required: [] },
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "get_event_full_analytics",
+        description:
+          "Single-event 360° analytics: tickets sold/attended/revenue, visitor-type breakdown, exhibitor/stall booking + payment status, speaker count by status, round-table chair occupancy + revenue, total combined revenue. Use for 'how is event X doing', 'analytics for event X', 'full breakdown of event X', 'tell me everything about event X'. Always pass event_name (partial match OK).",
+        parameters: {
+          type: "object",
+          properties: {
+            event_name: {
+              type: "string",
+              description: "Title or partial title of the event",
+            },
+          },
+          required: ["event_name"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_ticket_type_breakdown",
+        description:
+          "For one event, return tickets sold + revenue grouped by visitor type / ticket tier (e.g. Regular, VIP, Student). Use for 'which ticket type sells best for X', 'break down tickets for X by tier'.",
+        parameters: {
+          type: "object",
+          properties: {
+            event_name: {
+              type: "string",
+              description: "Title or partial title of the event",
+            },
+          },
+          required: ["event_name"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_attendance_analytics",
+        description:
+          "Across all events: tickets sold vs attended, attendance rate %, no-show count. Optionally narrow to upcoming/past events. Use for 'attendance rate', 'how many actually showed up', 'attendance statistics'.",
+        parameters: {
+          type: "object",
+          properties: {
+            status: {
+              type: "string",
+              enum: ["all", "upcoming", "past"],
+              description: "Limit to upcoming, past, or all events (default all)",
+            },
+          },
+          required: [],
+        },
+      },
+    },
 
     // UI driver
     {
@@ -764,13 +834,19 @@ export class ChatbotService {
       "get_stalls_analytics",
       "get_speakers_analytics",
       "get_round_tables_analytics",
+      "get_event_full_analytics",
+      "get_ticket_type_breakdown",
+      "get_attendance_analytics",
     ],
     events: [
       "list_events",
       "get_event_detail",
+      "get_event_full_analytics",
+      "get_ticket_type_breakdown",
       "get_events_breakdown",
       "create_event",
       "create_full_event",
+      "request_edit_event",
       "add_ticket_type",
       "add_round_tables",
       "add_stalls",
@@ -812,7 +888,12 @@ export class ChatbotService {
       "get_stalls_analytics",
       "get_speakers_analytics",
       "get_round_tables_analytics",
+      "get_event_full_analytics",
+      "get_ticket_type_breakdown",
+      "get_attendance_analytics",
       "get_organization_settings",
+      "create_event",
+      "request_edit_event",
       "navigate_to",
     ],
   };
@@ -874,6 +955,9 @@ DEEP ANALYTICS TOOLS (use them when the user asks for detailed breakdowns):
 - "Stall analytics" / "stall stats" / "stall revenue" → get_stalls_analytics. Render: a By Status table, a By Payment Status table, totals (Total Stalls, Booking Value, Collected), then a Top Events by Stall Count table.
 - "Speaker analytics" / "speaker stats" → get_speakers_analytics. Render: Status counts, Payment Status counts, totals (Total Requests, Keynote Count, Total Fees), then Top Events by Speaker Count.
 - "Round table analytics" / "round table stats" → get_round_tables_analytics. Render: 1 metrics table (Tables, Chairs, Chairs Booked, Occupancy %, Paid Bookings, Revenue) + Top Events by Round Tables (table).
+- "How is event X doing" / "analytics for event X" / "tell me everything about event X" → get_event_full_analytics(event_name). Render 4 tables: Tickets (Sold, Attended, Attendance %, Capacity, Occupancy %, Revenue), Stalls (totals + status counts), Speakers (status counts), Round Tables (Tables, Chairs, Chairs Booked, Occupancy %, Revenue), then a single bold "Total Revenue" line at the bottom.
+- "Ticket type breakdown for X" / "which ticket tier sells best for X" → get_ticket_type_breakdown(event_name). Render a single table: Type | Sold | Capacity | Occupancy % | Revenue.
+- "Attendance rate" / "how many actually showed up" / "no-shows" → get_attendance_analytics(status). Render: 1 metrics table (Tickets Sold, Attended, No-shows, Attendance %), then Top Events by Sold (table).
 - For each, NEVER pick or invent extra columns; render only what the tool returned.`,
 
     events: `You are the Events specialist for "{ORG}" on EventSH. You build the entire event end-to-end via tools.
@@ -891,31 +975,20 @@ LISTING / VIEWING:
 - After rendering the table, STOP. Do NOT call list_attendees, list_tickets, or any other tool — the user only asked for the events list.
 - "Event details for X" → get_event_detail. Bold key-value pairs.
 
-CREATING — FULL AI FLOW (preferred):
-When the user describes an event in one shot ("create a tech meetup on May 15 at MG Road, Bangalore, 200 attendees, ticket {CURRENCY}500, with 10 round tables of 8 seats each and 5 stalls"), call create_full_event with EVERYTHING parsed in one call — title, dates, venue, ticketTypes[], roundTables{}, stalls{}, speakers[], etc. The tool auto-places round tables and stalls on a grid layout.
+CREATING:
+- ANY phrasing like "create event", "create a new event", "new event", "add event", "make an event" → call **create_event()** with no arguments. The tool returns a botAction that opens the blank Create Event form. Reply with ONE short line: "**Opening the Create Event form for you.**"
+- For richer one-shot phrasing ("create a tech meetup on May 15 ...") still call create_event — the form opens blank and the user fills it in. Don't try to parse fields yourself.
+- **ALWAYS CALL create_event EVERY TIME THE USER ASKS — even if you called it earlier in this same conversation.** Each request needs a fresh tool call so the form actually opens again. NEVER reply with "I already opened the form" — instead, call create_event again.
 
-CREATING — STEP BY STEP:
-If the user gives partial info, use create_event for the basic shell first, then add layers as the user describes them:
-- "Add 3 ticket types: Regular {CURRENCY}500, VIP {CURRENCY}1500, Student {CURRENCY}250" → call add_ticket_type 3 times.
-- "Add 10 round tables, 8 seats, {CURRENCY}1000 per chair" → add_round_tables(count=10, chairsPerTable=8, pricePerChair=1000).
-- "Add 5 stalls 8x6 ft at {CURRENCY}2000 each" → add_stalls(count=5, width=80, height=60, bookingPrice=2000).
-- "Add speakers: John Doe MS, Jane Google" → add_speakers([{name:"John Doe", organization:"MS"}, {name:"Jane", organization:"Google"}]).
-- "Set venue 1000x600" → set_venue_config(width=1000, height=600).
-- "Publish it" → publish_event.
-
-REQUIRED CLARIFICATIONS:
-- If date missing, ask: "What date and time?"
-- If round tables count missing, ask once.
-- If user just says "publish event X" with no edits — call publish_event directly.
-- If the user says "my latest event" / "current event" / "the new event" with no name, FIRST call list_events(status=upcoming, limit=1). Use the returned title for event_name in subsequent tool calls. If no upcoming events, fall back to list_events(status=all, limit=1).
-- For "Add speakers to my latest event" with no speaker names, look up the event then ask "Who are the speakers? Give me name + organization for each".
-- For "Create a basic event with title and date" with no specifics, ask: "What's the event title and start date?".
+EDITING:
+- "Edit event X" / "Update event X" / "Modify event X" / "Change event X" → call **request_edit_event(event_name=X)**. The tool returns a botAction that opens the Edit form pre-filled.
+- Reply with ONE short line: "**Opening the editor for \"<event title>\".**"
+- If the tool returns an error (event not found), say "I couldn't find an event matching \"<X>\"." and call list_events(status="all") so the user can see their actual titles.
+- **ALWAYS CALL request_edit_event EVERY TIME THE USER ASKS** — even if you've edited that same event earlier in the conversation.
 
 LIMITATIONS (be honest):
-- Image uploads (banner, gallery, speaker photos) — say: "I can't upload images via chat. Open the Events tab to upload."  Call navigate_to(events).
-- Drag-drop layout positioning — say: "Tables/stalls are auto-placed on a grid. Open Events tab to fine-tune positions."
-
-After creating, ALWAYS confirm with a 2-line bold summary (event title + ID) and offer next steps as quickActions.`,
+- Image uploads, drag-drop layout, ticket type details — happen in the form itself, not chat.
+- Don't pretend to "save" or "publish" from chat — the user finalises in the form.`,
 
     tickets: `You are the Tickets specialist for "{ORG}" on EventSH.
 Focus: tickets sold, payment status, attendance check-in.
@@ -1043,6 +1116,24 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
       history.push({ role: "assistant", content: walkin.text, ts: Date.now() });
       this.trimHistory(organizerId);
       return walkin;
+    }
+
+    // Deterministic short-circuit: create / edit event form requests.
+    // Bypasses the LLM completely so repeated requests always re-open the
+    // form (the LLM otherwise tends to skip the second tool call thinking
+    // it's already done).
+    const formShortcut = await this.maybeEventFormShortcut(
+      message,
+      organizerId,
+    );
+    if (formShortcut) {
+      history.push({
+        role: "assistant",
+        content: formShortcut.text,
+        ts: Date.now(),
+      });
+      this.trimHistory(organizerId);
+      return formShortcut;
     }
 
     // Deterministic short-circuit: per-event picker for tickets / stalls /
@@ -1305,7 +1396,9 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
         let toolResult: any = "";
         try {
           const r = await this.runTool(name, args, organizerId, currency);
-          if (name === "navigate_to" && r?.botAction) {
+          // Capture any UI driver actions emitted by tools (navigation, opening
+          // a form, etc.) so the frontend can act on them after the reply.
+          if (r?.botAction) {
             botAction = r.botAction;
           }
           const annotated =
@@ -1437,6 +1530,110 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
         })),
       },
     };
+  }
+
+  /** Deterministic short-circuit for "create event" / "edit event X" prompts.
+   *  Bypasses the LLM so repeated requests always re-open the form (the LLM
+   *  otherwise tends to skip the second tool call after already calling it
+   *  earlier in the same conversation). Returns null if the message doesn't
+   *  match either pattern. */
+  private async maybeEventFormShortcut(
+    message: string,
+    organizerId: string,
+  ): Promise<{ text: string; botAction: any } | null> {
+    const m = message.toLowerCase().trim();
+    this.logger.log(`[shortcut] checking message: "${m}"`);
+
+    // ---------- helpers ----------
+    // Verbs that mean "open the form for me"
+    const CREATE_VERBS =
+      "create|new|add|make|start|build|open|launch|set\\s*up|set-up";
+    const EDIT_VERBS = "edit|update|modify|change|rename";
+    // Articles / qualifiers that may sit between the verb and the noun. Any
+    // sequence of these (with single spaces) is allowed — covers "an", "the",
+    // "my", "another", "one more", "new", "fresh", "blank", "please", etc.
+    const FILLERS =
+      "(?:\\s+(?:a|an|the|my|new|another|one|more|fresh|blank|empty|please|now|quick|just|kindly|some))*";
+
+    // ---------- ADD VISITOR ----------
+    const visitorRe = new RegExp(
+      `\\b(?:${CREATE_VERBS})${FILLERS}\\s+(?:visitor|attendee|customer|user|guest|patron)s?\\b`,
+      "i",
+    );
+    if (visitorRe.test(m)) {
+      this.logger.log(`[shortcut] matched ADD VISITOR`);
+      return {
+        text: "**Opening the Add Customer form for you.**",
+        botAction: { type: "openAddVisitor" },
+      };
+    }
+
+    // ---------- ADD EXHIBITOR ----------
+    const exhibitorRe = new RegExp(
+      `\\b(?:${CREATE_VERBS})${FILLERS}\\s+(?:exhibitor|shopkeeper|vendor|seller|stall(?:\\s*holder)?)s?\\b`,
+      "i",
+    );
+    if (exhibitorRe.test(m)) {
+      this.logger.log(`[shortcut] matched ADD EXHIBITOR`);
+      return {
+        text: "**Opening the Add Exhibitor form for you.**",
+        botAction: { type: "openAddExhibitor" },
+      };
+    }
+
+    // ---------- EDIT EVENT (must run before CREATE EVENT) ----------
+    // Captures the event name after "edit/update/modify/change [the/my] event".
+    const editMatch = m.match(
+      new RegExp(
+        `\\b(?:${EDIT_VERBS})${FILLERS}\\s+(?:event\\s+)?["']?(.+?)["']?\\s*$`,
+        "i",
+      ),
+    );
+    if (editMatch && editMatch[1] && editMatch[1].length >= 2) {
+      const name = editMatch[1].trim();
+      const banned = ["event", "the event", "my event", "this event"];
+      if (!banned.includes(name)) {
+        const orgObjId = Types.ObjectId.isValid(organizerId)
+          ? new Types.ObjectId(organizerId)
+          : null;
+        const ev = await this.eventModel
+          .findOne({
+            organizer: { $in: [orgObjId, String(organizerId)] as any[] },
+            title: { $regex: name, $options: "i" },
+          })
+          .lean();
+        if (ev) {
+          this.logger.log(`[shortcut] matched EDIT EVENT for "${name}"`);
+          const evObj: any = ev;
+          return {
+            text: `**Opening the editor for "${evObj.title}".**`,
+            botAction: {
+              type: "openEditEvent",
+              eventId: String(evObj._id),
+              eventTitle: evObj.title,
+            },
+          };
+        }
+        // Event not found — fall through to LLM so it can list events
+        return null;
+      }
+    }
+
+    // ---------- CREATE EVENT ----------
+    const createEventRe = new RegExp(
+      `\\b(?:${CREATE_VERBS})${FILLERS}\\s+event\\b`,
+      "i",
+    );
+    if (createEventRe.test(m)) {
+      this.logger.log(`[shortcut] matched CREATE EVENT`);
+      return {
+        text: "**Opening the Create Event form for you.**",
+        botAction: { type: "openCreateEvent" },
+      };
+    }
+
+    this.logger.log(`[shortcut] no match — falling through to LLM`);
+    return null;
   }
 
   /** Detect "<thing> per event" / "show <thing> for an event" prompts and
@@ -1790,28 +1987,39 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
         };
       }
 
-      case "create_event": {
-        try {
-          const created = await this.eventModel.create({
-            organizer: orgObjId,
-            title: args.title,
-            description: args.description || "",
-            startDate: args.startDate
-              ? new Date(args.startDate)
-              : new Date(),
-            endDate: args.endDate ? new Date(args.endDate) : undefined,
-            venue: args.venue || "",
-            ticketPrice: args.ticketPrice || 0,
-            attendeeLimit: args.attendeeLimit || 0,
-          });
-          return {
-            id: String((created as any)._id),
-            title: (created as any).title,
-            message: "Event created. Edit further in the Events tab.",
-          };
-        } catch (e: any) {
-          return { error: e?.message };
+      case "create_event":
+      case "create_full_event": {
+        // Don't actually write to the DB from the chat — the user wanted us to
+        // hand them off to the Create Event form so they can finish in the UI.
+        return {
+          message: "Opening the Create Event form for you.",
+          botAction: { type: "openCreateEvent" },
+        };
+      }
+
+      case "request_edit_event": {
+        // Resolve event by partial title and tell the dashboard to open the
+        // Edit form pre-filled with that event's data.
+        const ev = await this.eventModel
+          .findOne({
+            organizer: { $in: [orgObjId, String(organizerId)] as any[] },
+            title: { $regex: args.event_name, $options: "i" },
+          })
+          .lean();
+        if (!ev) {
+          return { error: `No event matching "${args.event_name}"` };
         }
+        const evObj: any = ev;
+        return {
+          eventId: String(evObj._id),
+          eventTitle: evObj.title,
+          message: `Opening the editor for "${evObj.title}".`,
+          botAction: {
+            type: "openEditEvent",
+            eventId: String(evObj._id),
+            eventTitle: evObj.title,
+          },
+        };
       }
 
       case "list_tickets": {
@@ -2329,6 +2537,301 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
           topEventsByRoundTables: perEvent
             .sort((a, b) => b.tables - a.tables)
             .slice(0, 5),
+        };
+      }
+
+      case "get_event_full_analytics": {
+        const ev = await this.eventModel
+          .findOne({
+            organizer: { $in: [orgObjId, String(organizerId)] as any[] },
+            title: { $regex: args.event_name, $options: "i" },
+          })
+          .lean();
+        if (!ev)
+          return { error: `No event matching "${args.event_name}"` };
+        const evObj: any = ev;
+
+        const [tickAgg, attendAgg, stallStatusAgg, stallTotals, spkAgg, rtBookings] =
+          await Promise.all([
+            this.ticketModel.aggregate([
+              {
+                $match: {
+                  eventId: evObj._id,
+                  organizerId: orgObjId,
+                  paymentConfirmed: true,
+                },
+              },
+              {
+                $group: {
+                  _id: null,
+                  count: { $sum: 1 },
+                  revenue: { $sum: { $ifNull: ["$totalAmount", 0] } },
+                },
+              },
+            ]),
+            this.ticketModel.aggregate([
+              {
+                $match: {
+                  eventId: evObj._id,
+                  organizerId: orgObjId,
+                  attendance: true,
+                },
+              },
+              { $group: { _id: null, count: { $sum: 1 } } },
+            ]),
+            this.stallModel.aggregate([
+              { $match: { eventId: evObj._id, organizerId: orgObjId } },
+              { $group: { _id: "$status", count: { $sum: 1 } } },
+            ]),
+            this.stallModel.aggregate([
+              { $match: { eventId: evObj._id, organizerId: orgObjId } },
+              {
+                $group: {
+                  _id: null,
+                  total: { $sum: 1 },
+                  booked: { $sum: { $ifNull: ["$paidAmount", 0] } },
+                  value: { $sum: { $ifNull: ["$grandTotal", 0] } },
+                },
+              },
+            ]),
+            this.speakerRequestModel.aggregate([
+              { $match: { eventId: evObj._id, organizerId: orgObjId } },
+              { $group: { _id: "$status", count: { $sum: 1 } } },
+            ]),
+            this.roundTableBookingModel.aggregate([
+              {
+                $match: {
+                  eventId: evObj._id,
+                  organizerId: orgObjId,
+                  paymentStatus: "Paid",
+                },
+              },
+              {
+                $group: {
+                  _id: null,
+                  count: { $sum: 1 },
+                  revenue: { $sum: { $ifNull: ["$amount", 0] } },
+                },
+              },
+            ]),
+          ]);
+
+        const ticketsSold = tickAgg[0]?.count || 0;
+        const ticketRevenue = tickAgg[0]?.revenue || 0;
+        const attended = attendAgg[0]?.count || 0;
+        const stallRevenue = stallTotals[0]?.booked || 0;
+        const rtRevenue = rtBookings[0]?.revenue || 0;
+        // Capacity
+        const capacity =
+          (evObj.visitorTypes || []).reduce(
+            (s: number, v: any) => s + (v.maxCount || 0),
+            0,
+          ) || Number(evObj.totalTickets || 0);
+
+        const rtTables: any[] = evObj.venueRoundTables || [];
+        const totalChairs = rtTables.reduce(
+          (s, t: any) => s + (t.numberOfChairs || 0),
+          0,
+        );
+        const chairsBooked = rtTables.reduce(
+          (s, t: any) => s + (t.bookedChairs?.length || 0),
+          0,
+        );
+
+        return {
+          eventId: String(evObj._id),
+          title: evObj.title,
+          startDate: evObj.startDate,
+          location: evObj.location,
+          capacity,
+          ticketsSold,
+          attended,
+          attendanceRate:
+            ticketsSold > 0
+              ? Math.round((attended / ticketsSold) * 100)
+              : 0,
+          ticketRevenue,
+          ticketRevenueFormatted: fmt(ticketRevenue),
+          occupancyPercent:
+            capacity > 0
+              ? Math.min(100, Math.round((ticketsSold / capacity) * 100))
+              : null,
+          stalls: {
+            total: stallTotals[0]?.total || 0,
+            byStatus: stallStatusAgg.map((s: any) => ({
+              status: s._id || "unknown",
+              count: s.count,
+            })),
+            collected: stallRevenue,
+            collectedFormatted: fmt(stallRevenue),
+          },
+          speakers: {
+            byStatus: spkAgg.map((s: any) => ({
+              status: s._id || "unknown",
+              count: s.count,
+            })),
+          },
+          roundTables: {
+            tables: rtTables.length,
+            chairs: totalChairs,
+            chairsBooked,
+            occupancyPercent: totalChairs
+              ? Math.round((chairsBooked / totalChairs) * 100)
+              : 0,
+            paidBookings: rtBookings[0]?.count || 0,
+            revenue: rtRevenue,
+            revenueFormatted: fmt(rtRevenue),
+          },
+          totalRevenue: ticketRevenue + stallRevenue + rtRevenue,
+          totalRevenueFormatted: fmt(
+            ticketRevenue + stallRevenue + rtRevenue,
+          ),
+        };
+      }
+
+      case "get_ticket_type_breakdown": {
+        const ev = await this.eventModel
+          .findOne({
+            organizer: { $in: [orgObjId, String(organizerId)] as any[] },
+            title: { $regex: args.event_name, $options: "i" },
+          })
+          .lean();
+        if (!ev)
+          return { error: `No event matching "${args.event_name}"` };
+        const evObj: any = ev;
+        const visitorTypes: any[] = evObj.visitorTypes || [];
+
+        // Aggregate sold tickets per visitor-type name on this event
+        const tickets: any[] = await this.ticketModel
+          .find({
+            eventId: evObj._id,
+            organizerId: orgObjId,
+            paymentConfirmed: true,
+          })
+          .select("ticketDetails totalAmount")
+          .lean();
+
+        const perType: Record<
+          string,
+          { name: string; quantity: number; revenue: number; capacity: number }
+        > = {};
+        for (const v of visitorTypes) {
+          const key = v.name || "Unnamed";
+          perType[key] = {
+            name: key,
+            quantity: 0,
+            revenue: 0,
+            capacity: v.maxCount || 0,
+          };
+        }
+        for (const t of tickets) {
+          for (const d of t.ticketDetails || []) {
+            const key = d.name || d.type || "Unknown";
+            if (!perType[key])
+              perType[key] = {
+                name: key,
+                quantity: 0,
+                revenue: 0,
+                capacity: 0,
+              };
+            perType[key].quantity += d.quantity || 0;
+            perType[key].revenue +=
+              (d.price || 0) * (d.quantity || 0);
+          }
+        }
+        return {
+          eventTitle: evObj.title,
+          breakdown: Object.values(perType).map((r) => ({
+            name: r.name,
+            sold: r.quantity,
+            capacity: r.capacity || null,
+            occupancyPercent:
+              r.capacity > 0
+                ? Math.min(
+                    100,
+                    Math.round((r.quantity / r.capacity) * 100),
+                  )
+                : null,
+            revenue: r.revenue,
+            revenueFormatted: fmt(r.revenue),
+          })),
+        };
+      }
+
+      case "get_attendance_analytics": {
+        const status = args.status || "all";
+        const now = new Date();
+        const eventFilter: any = {
+          organizer: { $in: [orgObjId, String(organizerId)] as any[] },
+        };
+        if (status === "upcoming") eventFilter.startDate = { $gte: now };
+        else if (status === "past") eventFilter.startDate = { $lt: now };
+        const events = await this.eventModel
+          .find(eventFilter)
+          .select("_id title startDate")
+          .lean();
+        const ids = events.map((e: any) => e._id);
+        const [soldAgg, attendedAgg, perEventAgg] = await Promise.all([
+          this.ticketModel.aggregate([
+            {
+              $match: {
+                eventId: { $in: ids },
+                organizerId: orgObjId,
+                paymentConfirmed: true,
+              },
+            },
+            { $group: { _id: null, count: { $sum: 1 } } },
+          ]),
+          this.ticketModel.aggregate([
+            {
+              $match: {
+                eventId: { $in: ids },
+                organizerId: orgObjId,
+                attendance: true,
+              },
+            },
+            { $group: { _id: null, count: { $sum: 1 } } },
+          ]),
+          this.ticketModel.aggregate([
+            {
+              $match: {
+                eventId: { $in: ids },
+                organizerId: orgObjId,
+                paymentConfirmed: true,
+              },
+            },
+            {
+              $group: {
+                _id: "$eventId",
+                sold: { $sum: 1 },
+                attended: {
+                  $sum: { $cond: ["$attendance", 1, 0] },
+                },
+              },
+            },
+            { $sort: { sold: -1 } },
+            { $limit: 5 },
+          ]),
+        ]);
+        const sold = soldAgg[0]?.count || 0;
+        const attended = attendedAgg[0]?.count || 0;
+        const titleById: Record<string, string> = {};
+        events.forEach((e: any) => (titleById[String(e._id)] = e.title));
+        return {
+          scope: status,
+          totalEvents: events.length,
+          ticketsSold: sold,
+          attended,
+          noShows: Math.max(0, sold - attended),
+          attendanceRate:
+            sold > 0 ? Math.round((attended / sold) * 100) : 0,
+          topEvents: perEventAgg.map((r: any) => ({
+            eventTitle: titleById[String(r._id)] || "Untitled",
+            sold: r.sold,
+            attended: r.attended,
+            attendanceRate:
+              r.sold > 0 ? Math.round((r.attended / r.sold) * 100) : 0,
+          })),
         };
       }
 

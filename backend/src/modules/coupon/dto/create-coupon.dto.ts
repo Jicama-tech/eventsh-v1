@@ -6,6 +6,7 @@ import {
   IsBoolean,
   IsEnum,
   IsDateString,
+  IsArray,
   Min,
   Max,
 } from "class-validator";
@@ -57,7 +58,12 @@ export class CreateCouponDto {
 
   @IsOptional()
   @IsString()
-  eventId: string;
+  eventId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  eventIds?: string[];
 
   @IsEnum(["SHOPKEEPER", "ORGANIZER", "GLOBAL"])
   appliesTo: "SHOPKEEPER" | "ORGANIZER" | "GLOBAL";
