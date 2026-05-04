@@ -224,6 +224,10 @@ function AppContent() {
             path="/:organizationName"
             element={<OrganizerStorefront onBack={() => navigate(-1)} />}
           />
+          {/* No-param fallback so /ticket-cart (without organizerId) loads
+              the cart from localStorage instead of being captured by the
+              catch-all /:organizationName storefront route below. */}
+          <Route path="/ticket-cart" element={<TicketCart />} />
           <Route path="/ticket-cart/:organizerId" element={<TicketCart />} />
           <Route
             path="/:organizationName/events/:id"
@@ -272,6 +276,8 @@ function AppContent() {
                       <OrganizerStorefront onBack={() => navigate(-1)} />
                     }
                   />
+                  {/* No-param fallback for /ticket-cart */}
+                  <Route path="/ticket-cart" element={<TicketCart />} />
                   <Route
                     path="/ticket-cart/:organizerId"
                     element={<TicketCart />}
@@ -338,6 +344,8 @@ function AppContent() {
                       <OrganizerStorefront onBack={() => navigate(-1)} />
                     }
                   />
+                  {/* No-param fallback for /ticket-cart */}
+                  <Route path="/ticket-cart" element={<TicketCart />} />
                   <Route
                     path="/ticket-cart/:organizerId"
                     element={<TicketCart />}

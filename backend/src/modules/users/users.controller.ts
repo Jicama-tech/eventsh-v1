@@ -206,9 +206,27 @@ export class UsersController {
   //   }
   // }
   @Post("get-by-email")
-  async getProfile(@Body() email: string) {
+  async getProfile(@Body() body: { email: string }) {
     try {
-      return await this.usersService.findByEmail(email);
+      const email = body?.email;
+      if (!email) return { success: false, user: null };
+      const user = await this.usersService.findByEmail(email);
+      // Wrap in a stable envelope so the frontend can reliably check
+      // `data.success && data.user`. Returning the raw doc made it look like
+      // a falsy response when the user was missing certain fields.
+      if (!user) return { success: false, user: null };
+      const u: any = (user as any).toObject ? (user as any).toObject() : user;
+      return {
+        success: true,
+        user: {
+          _id: u._id,
+          email: u.email,
+          name: u.name,
+          firstName: u.firstName,
+          lastName: u.lastName,
+          whatsAppNumber: u.whatsAppNumber,
+        },
+      };
     } catch (error) {
       throw error;
     }

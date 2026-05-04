@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   CalendarDays,
   Users,
@@ -26,7 +27,15 @@ import {
   HelpCircle,
   Circle,
   Bot,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { lazy, Suspense } from "react";
 import { EventfrontTemplate } from "./EventfrontTemplate";
 import DashboardOverview from "@/components/organizer/DashboardOverview";
@@ -255,6 +264,15 @@ export function OrganizerDashboard({
   const [showEventfront, setShowEventfront] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Desktop-only collapse — narrows the sidebar to icon-only rail. Persisted
+  // so the user's preference survives reloads.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("organizerSidebarCollapsed") === "true";
+  });
+  useEffect(() => {
+    localStorage.setItem("organizerSidebarCollapsed", String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
   const [loading, setLoading] = useState(false);
   const [OrganizationName, setOrganizationName] = useState(
     "EventFlow Organizer",
@@ -596,6 +614,66 @@ export function OrganizerDashboard({
     setShowCreateEvent(false);
   };
 
+  // Triggered by the chatbot when the user asks to create/edit an event.
+  // 1) Switch to Events tab (so closing the dialog leaves them on Events,
+  //    not back on the chatbot panel).
+  // 2) Open the form (Radix Dialog renders into a portal on top of whatever
+  //    tab is mounted, so the user sees Events behind the dialog).
+  // Triggered by the chatbot when the user asks to add a visitor.
+  // The Add Customer form lives inside MyUsers.tsx (component-local state),
+  // so we navigate to the Users tab and emit a window event that MyUsers
+  // listens for to flip its own showAddCustomer state.
+  const handleOpenAddVisitor = () => {
+    handleTabChange("users");
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("open-add-customer"));
+    }, 50);
+  };
+
+  // Triggered by the chatbot when the user asks to add an exhibitor.
+  // Same pattern as handleOpenAddVisitor — the form lives inside MyUsers.tsx.
+  const handleOpenAddExhibitor = () => {
+    handleTabChange("users");
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("open-add-exhibitor"));
+    }, 50);
+  };
+
+  const handleOpenEventForm = async (
+    mode: "create" | "edit",
+    payload?: { eventId: string; eventTitle?: string },
+  ) => {
+    // eslint-disable-next-line no-console
+    console.log("[dashboard] handleOpenEventForm called:", mode, payload);
+    if (mode === "create") {
+      setEditingEvent(null);
+      handleTabChange("events");
+      setShowCreateEvent(true);
+      // eslint-disable-next-line no-console
+      console.log("[dashboard] setShowCreateEvent(true) for create");
+      return;
+    }
+    if (mode === "edit" && payload?.eventId) {
+      try {
+        const res = await fetch(`${apiURL}/events/${payload.eventId}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        const ev = json?.data || json;
+        setEditingEvent(ev);
+        handleTabChange("events");
+        setShowCreateEvent(true);
+      } catch (e: any) {
+        toast({
+          title: "Couldn't load event",
+          description:
+            e?.message ||
+            `Failed to fetch event "${payload.eventTitle || payload.eventId}"`,
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
   const handleShopkeeperRequest = (requestData: any) => {
     setShowShopkeeperForm(false);
   };
@@ -661,19 +739,31 @@ export function OrganizerDashboard({
   // --- Configuration ---
 
   const navigationItems = [
-    { id: "chatbot", label: "AI Assistant", icon: Bot, moduleKey: null },
-    { id: "dashboard", label: "Dashboard", icon: Store, moduleKey: null },
+    { id: "chatbot", label: "Chatbot", icon: Bot, moduleKey: null },
+    { id: "dashboard", label: "Analytics", icon: Store, moduleKey: null },
+    // {
+    //   id: "speakerRequests",
+    //   label: "Speaker Requests",
+    //   icon: Mic2,
+    //   moduleKey: "speakerRequests",
+    // },
+    // {
+    //   id: "roundTableBookings",
+    //   label: "Round Tables",
+    //   icon: Circle,
+    //   moduleKey: "roundTableBookings",
+    // },
     {
-      id: "eventAttendees",
-      label: "Attendees",
-      icon: Users,
+      id: "kiosk",
+      label: "In-Person Booking",
+      icon: Ticket,
       moduleKey: "events",
     },
     {
-      id: "speakerRequests",
-      label: "Speaker Requests",
-      icon: Mic2,
-      moduleKey: "speakerRequests",
+      id: "eventAttendees",
+      label: "Participants",
+      icon: Users,
+      moduleKey: "events",
     },
     {
       id: "users",
@@ -681,19 +771,7 @@ export function OrganizerDashboard({
       icon: Users,
       moduleKey: "stalls",
     },
-    {
-      id: "roundTableBookings",
-      label: "Round Tables",
-      icon: Circle,
-      moduleKey: "roundTableBookings",
-    },
     { id: "events", label: "Events", icon: CalendarDays, moduleKey: "events" },
-    {
-      id: "kiosk",
-      label: "Walk-in Booking",
-      icon: Ticket,
-      moduleKey: "events",
-    },
     {
       id: "storefront",
       label: "Eventfront",
@@ -772,8 +850,9 @@ export function OrganizerDashboard({
         {/* Sidebar */}
         <aside
           className={`
-            fixed lg:static lg:translate-x-0 
-            w-64 border-r bg-card/95 backdrop-blur-sm lg:bg-muted/30 
+            fixed lg:static lg:translate-x-0
+            w-64 ${sidebarCollapsed ? "lg:w-16" : "lg:w-64"}
+            border-r bg-card/95 backdrop-blur-sm lg:bg-muted/30
             h-full z-50 transition-all duration-300 ease-in-out
             flex-shrink-0
             ${
@@ -785,42 +864,92 @@ export function OrganizerDashboard({
         >
           <div className="h-full flex flex-col">
             <nav className="p-3 sm:p-4 space-y-1 sm:space-y-2 flex-1 overflow-y-auto">
-              {navigationItems
-                .filter((item) => isTabAllowedForOperator(item.id))
-                .map((item) => {
-                  // Items without a moduleKey (Dashboard, Settings) are always available.
-                  const locked =
-                    !!item.moduleKey && !isModuleEnabled(item.moduleKey);
-                  return (
-                    <Button
-                      key={item.id}
-                      variant={
-                        activeTab === item.id ? "default" : "buttonOutline"
-                      }
-                      className={`w-full justify-start text-sm ${locked ? "opacity-60" : ""}`}
-                      onClick={() => {
-                        if (item.id === "storefront") {
-                          handleViewStorefront();
-                        } else {
-                          handleTabChange(item.id);
+              <TooltipProvider delayDuration={0}>
+                {navigationItems
+                  .filter((item) => isTabAllowedForOperator(item.id))
+                  .map((item) => {
+                    // Items without a moduleKey (Dashboard, Settings) are always available.
+                    const locked =
+                      !!item.moduleKey && !isModuleEnabled(item.moduleKey);
+                    const button = (
+                      <Button
+                        key={item.id}
+                        variant={
+                          activeTab === item.id ? "default" : "buttonOutline"
                         }
-                      }}
-                      disabled={item.id === "storefront" && loading}
-                      title={locked ? "Upgrade your plan to unlock" : undefined}
-                    >
-                      <item.icon className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span className="truncate flex-1 text-left">
-                        {item.id === "storefront" && loading
-                          ? "Loading..."
-                          : item.label}
-                      </span>
-                      {locked && (
-                        <Lock className="h-3 w-3 ml-1 text-muted-foreground" />
-                      )}
-                    </Button>
-                  );
-                })}
+                        className={`w-full text-sm ${
+                          sidebarCollapsed
+                            ? "lg:justify-center lg:px-2 justify-start"
+                            : "justify-start"
+                        } ${locked ? "opacity-60" : ""}`}
+                        onClick={() => {
+                          if (item.id === "storefront") {
+                            handleViewStorefront();
+                          } else {
+                            handleTabChange(item.id);
+                          }
+                        }}
+                        disabled={item.id === "storefront" && loading}
+                        title={
+                          locked ? "Upgrade your plan to unlock" : undefined
+                        }
+                      >
+                        <item.icon
+                          className={`h-4 w-4 flex-shrink-0 ${
+                            sidebarCollapsed ? "lg:mr-0 mr-2" : "mr-2"
+                          }`}
+                        />
+                        <span
+                          className={`truncate flex-1 text-left ${
+                            sidebarCollapsed ? "lg:hidden" : ""
+                          }`}
+                        >
+                          {item.id === "storefront" && loading
+                            ? "Loading..."
+                            : item.label}
+                        </span>
+                        {locked && (
+                          <Lock
+                            className={`h-3 w-3 ml-1 text-muted-foreground ${
+                              sidebarCollapsed ? "lg:hidden" : ""
+                            }`}
+                          />
+                        )}
+                      </Button>
+                    );
+                    return sidebarCollapsed ? (
+                      <Tooltip key={item.id}>
+                        <TooltipTrigger asChild>{button}</TooltipTrigger>
+                        <TooltipContent
+                          side="right"
+                          className="hidden lg:block"
+                        >
+                          {item.label}
+                          {locked && " (locked)"}
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      button
+                    );
+                  })}
+              </TooltipProvider>
             </nav>
+            {/* Desktop collapse toggle — pinned to bottom of sidebar */}
+            <div className="hidden lg:flex border-t p-2 justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSidebarCollapsed((v) => !v)}
+                title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                className="h-8 w-8 p-0"
+              >
+                {sidebarCollapsed ? (
+                  <PanelLeftOpen className="h-4 w-4" />
+                ) : (
+                  <PanelLeftClose className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
         </aside>
 
@@ -857,6 +986,9 @@ export function OrganizerDashboard({
                     if (tab === "storefront") handleViewStorefront();
                     else handleTabChange(tab);
                   }}
+                  onOpenEventForm={handleOpenEventForm}
+                  onOpenAddVisitor={handleOpenAddVisitor}
+                  onOpenAddExhibitor={handleOpenAddExhibitor}
                 />
               </TabsContent>
 
@@ -1077,17 +1209,35 @@ export function OrganizerDashboard({
 
       {/* --- Modals and Forms (lazy-loaded on demand) --- */}
       <Suspense fallback={null}>
-        {showCreateEvent && (
-          <CreateEventForm
-            onClose={() => {
+        {/* Wrap CreateEventForm in a Dialog so it appears as a constrained
+            modal (matches the MyEvents flow), not a fullscreen takeover. */}
+        <Dialog
+          open={showCreateEvent}
+          onOpenChange={(open) => {
+            if (!open) {
               setShowCreateEvent(false);
               setEditingEvent(null);
-            }}
-            onSave={editingEvent ? handleUpdateEvent : handleCreateEvent}
-            editMode={!!editingEvent}
-            initialData={editingEvent}
-          />
-        )}
+            }
+          }}
+        >
+          <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden p-0">
+            <div className="overflow-y-auto max-h-[90vh]">
+              {showCreateEvent && (
+                <CreateEventForm
+                  onClose={() => {
+                    setShowCreateEvent(false);
+                    setEditingEvent(null);
+                  }}
+                  onSave={
+                    editingEvent ? handleUpdateEvent : handleCreateEvent
+                  }
+                  editMode={!!editingEvent}
+                  initialData={editingEvent}
+                />
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {showShopkeeperForm && (
           <ShopkeeperRequestForm
@@ -1162,6 +1312,7 @@ export function OrganizerDashboard({
             if (tab === "storefront") handleViewStorefront();
             else handleTabChange(tab);
           }}
+          onOpenEventForm={handleOpenEventForm}
         />
       )}
     </div>

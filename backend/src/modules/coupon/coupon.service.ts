@@ -195,11 +195,13 @@ export class CouponService {
     eventId: string,
     orderAmount: number,
   ) {
+    // Match coupons that either have this eventId in the new eventIds array
+    // OR have it as the legacy single eventId field.
     const coupon = await this.couponModel.findOne({
       code: code,
       isDeleted: false,
       isActive: true,
-      eventId: eventId,
+      $or: [{ eventIds: eventId }, { eventId: eventId }],
     });
 
     if (!coupon) {

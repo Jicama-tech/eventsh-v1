@@ -24,6 +24,7 @@ import { RoundTableBookingsModule } from "./modules/round-table-bookings/round-t
 import { AgentsModule } from "./modules/agents/agents.module";
 import { ChatbotModule } from "./modules/chatbot/chatbot.module";
 import { VenueDesignerModule } from "./modules/venue-designer/venue-designer.module";
+import { CategoriesModule } from "./modules/categories/categories.module";
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { VenueDesignerModule } from "./modules/venue-designer/venue-designer.mod
     AgentsModule,
     ChatbotModule,
     VenueDesignerModule,
+    CategoriesModule,
   ],
 })
 export class AppModule {}
