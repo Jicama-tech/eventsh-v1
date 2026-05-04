@@ -776,6 +776,24 @@ export class ChatbotService {
     {
       type: "function",
       function: {
+        name: "get_event_participants",
+        description:
+          "Return the complete participant list for ONE event — visitors (ticket buyers), exhibitors (stalls), speakers, and round-table attendees — in a single payload. Use whenever the user asks for 'participants of <event>', 'show me all attendees for <event>', 'who is attending <event>', 'list everyone in <event>'.",
+        parameters: {
+          type: "object",
+          properties: {
+            event_name: {
+              type: "string",
+              description: "Title or partial title of the event",
+            },
+          },
+          required: ["event_name"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
         name: "get_attendance_analytics",
         description:
           "Across all events: tickets sold vs attended, attendance rate %, no-show count. Optionally narrow to upcoming/past events. Use for 'attendance rate', 'how many actually showed up', 'attendance statistics'.",
@@ -837,12 +855,14 @@ export class ChatbotService {
       "get_event_full_analytics",
       "get_ticket_type_breakdown",
       "get_attendance_analytics",
+      "get_event_participants",
     ],
     events: [
       "list_events",
       "get_event_detail",
       "get_event_full_analytics",
       "get_ticket_type_breakdown",
+      "get_event_participants",
       "get_events_breakdown",
       "create_event",
       "create_full_event",
@@ -891,6 +911,7 @@ export class ChatbotService {
       "get_event_full_analytics",
       "get_ticket_type_breakdown",
       "get_attendance_analytics",
+      "get_event_participants",
       "get_organization_settings",
       "create_event",
       "request_edit_event",
@@ -958,6 +979,7 @@ DEEP ANALYTICS TOOLS (use them when the user asks for detailed breakdowns):
 - "How is event X doing" / "analytics for event X" / "tell me everything about event X" → get_event_full_analytics(event_name). Render 4 tables: Tickets (Sold, Attended, Attendance %, Capacity, Occupancy %, Revenue), Stalls (totals + status counts), Speakers (status counts), Round Tables (Tables, Chairs, Chairs Booked, Occupancy %, Revenue), then a single bold "Total Revenue" line at the bottom.
 - "Ticket type breakdown for X" / "which ticket tier sells best for X" → get_ticket_type_breakdown(event_name). Render a single table: Type | Sold | Capacity | Occupancy % | Revenue.
 - "Attendance rate" / "how many actually showed up" / "no-shows" → get_attendance_analytics(status). Render: 1 metrics table (Tickets Sold, Attended, No-shows, Attendance %), then Top Events by Sold (table).
+- "Participants of event X" / "everyone attending event X" / "list all attendees for X" → get_event_participants(event_name). Render in this order: 1) headline "**X has Y participants**" using totals.combined; 2) "Visitors (N)" markdown table | Name | Email | Phone | Tickets | Amount | Attended |; 3) "Exhibitors (N)" table | Name | Business | Phone | Status | Payment |; 4) "Speakers (N)" table | Name | Organization | Phone | Status | Fee |; 5) "Round Tables (N)" table | Name | Phone | Table | Seats | Payment |. Skip any section whose array is empty (don't render its header). NEVER fabricate rows — render only what the tool returned.
 - For each, NEVER pick or invent extra columns; render only what the tool returned.`,
 
     events: `You are the Events specialist for "{ORG}" on EventSH. You build the entire event end-to-end via tools.
@@ -2755,6 +2777,112 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
             revenue: r.revenue,
             revenueFormatted: fmt(r.revenue),
           })),
+        };
+      }
+
+      case "get_event_participants": {
+        const ev = await this.eventModel
+          .findOne({
+            organizer: { $in: [orgObjId, String(organizerId)] as any[] },
+            title: { $regex: args.event_name, $options: "i" },
+          })
+          .lean();
+        if (!ev) return { error: `No event matching "${args.event_name}"` };
+        const evObj: any = ev;
+
+        const [tickets, stalls, speakers, roundBookings] = await Promise.all([
+          this.ticketModel
+            .find({
+              eventId: evObj._id,
+              organizerId: orgObjId,
+              paymentConfirmed: true,
+            })
+            .sort({ purchaseDate: -1 })
+            .lean(),
+          this.stallModel
+            .find({ eventId: evObj._id, organizerId: orgObjId })
+            .populate("shopkeeperId", "name email whatsAppNumber shopName")
+            .lean(),
+          this.speakerRequestModel
+            .find({ eventId: evObj._id, organizerId: orgObjId })
+            .lean(),
+          this.roundTableBookingModel
+            .find({ eventId: evObj._id, organizerId: orgObjId })
+            .lean(),
+        ]);
+
+        const visitors = tickets.map((t: any) => ({
+          name: t.customerName || "—",
+          email: t.customerEmail || "",
+          phone: t.customerWhatsapp || "",
+          tickets:
+            t.ticketDetails?.reduce(
+              (s: number, d: any) => s + (d.quantity || 0),
+              0,
+            ) || 0,
+          amount: t.totalAmount || 0,
+          attended: !!t.attendance,
+        }));
+        const exhibitors = stalls.map((s: any) => ({
+          name:
+            s.shopkeeperId?.name ||
+            s.nameOfApplicant ||
+            s.brandName ||
+            "—",
+          business:
+            s.shopkeeperId?.shopName || s.businessName || s.brandName || "",
+          phone:
+            s.shopkeeperId?.whatsAppNumber ||
+            s.shopkeeperId?.whatsappNumber ||
+            "",
+          email: s.shopkeeperId?.email || "",
+          tables: (s.selectedTables || [])
+            .map((t: any) => t.name || t.tableName)
+            .filter(Boolean),
+          status: s.status || "Pending",
+          paymentStatus: s.paymentStatus || "Unpaid",
+          amount: s.grandTotal || 0,
+        }));
+        const speakerList = speakers.map((sp: any) => ({
+          name: sp.name || "—",
+          organization: sp.organization || "",
+          email: sp.email || "",
+          phone: sp.phone || sp.whatsAppNumber || "",
+          isKeynote: !!sp.isKeynote,
+          status: sp.status || "Pending",
+          paymentStatus: sp.paymentStatus || "Unpaid",
+          fee: sp.isCharged ? sp.fee || 0 : 0,
+        }));
+        const roundTableAttendees = roundBookings.map((b: any) => ({
+          name: b.visitorName || "—",
+          email: b.visitorEmail || "",
+          phone: b.visitorPhone || "",
+          tableName: b.tableName || "",
+          seats: b.numberOfSeats || 0,
+          isWholeTable: !!b.isWholeTable,
+          paymentStatus: b.paymentStatus || "Unpaid",
+          amount: b.amount || 0,
+        }));
+
+        const totals = {
+          visitors: visitors.length,
+          exhibitors: exhibitors.length,
+          speakers: speakerList.length,
+          roundTableAttendees: roundTableAttendees.length,
+          combined:
+            visitors.length +
+            exhibitors.length +
+            speakerList.length +
+            roundTableAttendees.length,
+        };
+
+        return {
+          eventTitle: evObj.title,
+          totals,
+          visitors,
+          exhibitors,
+          speakers: speakerList,
+          roundTableAttendees,
         };
       }
 

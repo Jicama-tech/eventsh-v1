@@ -1,7 +1,6 @@
 import {
   Injectable,
   NotFoundException,
-  UnauthorizedException,
   ConflictException,
   BadRequestException,
   Logger,
@@ -14,20 +13,13 @@ import {
   OrganizerDocument,
   ReceiptType,
 } from "./schemas/organizer.schema";
-import { LocalDto } from "../auth/dto/local.dto";
-import * as bcrypt from "bcrypt";
 import { JwtService } from "@nestjs/jwt";
-import { LoginDto } from "../admin/dto/login.dto";
 import { EventDocument } from "../events/schemas/event.schema";
 import { User } from "../users/schemas/user.schema";
 import { MailService } from "../roles/mail.service";
 import { CreateOrganizerDto } from "./dto/createOrganizer.dto";
 import { Otp } from "../otp/entities/otp.entity";
-import { UpdateOrganizerDto } from "./dto/updateOrganizer.dto";
-import * as path from "path";
-import * as fs from "fs";
 import { Plan } from "../plans/entities/plan.entity";
-import { OtpService } from "../otp/otp.service";
 import {
   Operator,
   OperatorDocument,
@@ -166,22 +158,41 @@ export class OrganizersService {
 
   async registerOrganizer(dto: CreateOrganizerDto) {
     const normalizedEmail = this.normalizeEmail(dto.email);
+    const normalizedBusinessEmail = this.normalizeEmail(dto.businessEmail);
+    const normalizedWhatsApp = (dto.whatsAppNumber || "").trim();
+
+    // Pre-check all three unique fields so we can return a clean 409 instead
+    // of letting MongoDB E11000 bubble up as a 500.
     const existing = await this.organizerModel.findOne({
-      email: normalizedEmail,
+      $or: [
+        { email: normalizedEmail },
+        { businessEmail: normalizedBusinessEmail },
+        { whatsAppNumber: normalizedWhatsApp },
+      ],
     });
-    if (existing)
-      throw new ConflictException("Organizer with this email already exists");
+    if (existing) {
+      let field = "email";
+      if (existing.businessEmail === normalizedBusinessEmail) field = "business email";
+      else if (existing.whatsAppNumber === normalizedWhatsApp) field = "WhatsApp number";
+      throw new ConflictException(
+        `An organizer with this ${field} already exists`,
+      );
+    }
 
     // 1. Resolve referral attribution (optional)
     let provider = "self";
     let providerId: string | null = null;
     if (dto.agentReferralCode) {
-      const agent = await this.organizerModel.db
-        .collection("eventsh_agents")
-        .findOne({ referralCode: dto.agentReferralCode, isActive: true });
-      if (agent) {
-        provider = "Agent";
-        providerId = agent._id.toString();
+      try {
+        const agent = await this.organizerModel.db
+          .collection("eventsh_agents")
+          .findOne({ referralCode: dto.agentReferralCode, isActive: true });
+        if (agent) {
+          provider = "Agent";
+          providerId = agent._id.toString();
+        }
+      } catch (err) {
+        this.logger.warn(`Referral lookup failed: ${err}`);
       }
     }
 
@@ -198,29 +209,52 @@ export class OrganizersService {
         isActive: true,
       }));
 
-    const subscriptionFields = defaultPlan
-      ? {
-          subscribed: true,
-          planId: defaultPlan._id,
-          planStartDate: new Date(),
-          planExpiryDate: new Date(
-            Date.now() + defaultPlan.validityInDays * 24 * 60 * 60 * 1000,
-          ),
-          pricePaid: defaultPlan.price.toString(),
-        }
-      : {};
+    const validity = Number(defaultPlan?.validityInDays);
+    const subscriptionFields =
+      defaultPlan && Number.isFinite(validity) && validity > 0
+        ? {
+            subscribed: true,
+            planId: defaultPlan._id,
+            planStartDate: new Date(),
+            planExpiryDate: new Date(
+              Date.now() + validity * 24 * 60 * 60 * 1000,
+            ),
+            pricePaid: defaultPlan.price?.toString?.() ?? "0",
+          }
+        : {};
 
     // 3. Create organizer auto-approved (no manual gate).
     const { agentReferralCode, ...rest } = dto;
-    const organizer = await new this.organizerModel({
-      ...rest,
-      email: normalizedEmail,
-      approved: true,
-      rejected: false,
-      provider,
-      providerId,
-      ...subscriptionFields,
-    }).save();
+    let organizer;
+    try {
+      organizer = await new this.organizerModel({
+        ...rest,
+        email: normalizedEmail,
+        businessEmail: normalizedBusinessEmail,
+        whatsAppNumber: normalizedWhatsApp,
+        approved: true,
+        rejected: false,
+        provider,
+        providerId,
+        ...subscriptionFields,
+      }).save();
+    } catch (err: any) {
+      // Race-condition fallback for unique-index collisions that slipped past
+      // the pre-check above.
+      if (err?.code === 11000) {
+        const dupField = Object.keys(err.keyPattern || err.keyValue || {})[0] || "field";
+        throw new ConflictException(
+          `An organizer with this ${dupField} already exists`,
+        );
+      }
+      this.logger.error(
+        `Organizer registration failed for ${normalizedEmail}: ${err?.message || err}`,
+        err?.stack,
+      );
+      throw new BadRequestException(
+        err?.message || "Failed to create organizer",
+      );
+    }
 
     try {
       await this.mailService.sendOrganizerWelcome({
@@ -351,7 +385,7 @@ export class OrganizersService {
         throw new NotFoundException("Organizer not found or not approved");
       }
 
-      const payload = {
+      const payload: Record<string, any> = {
         name: organizer.name,
         email: organizer.email,
         sub: organizer._id,
@@ -363,7 +397,7 @@ export class OrganizersService {
       const token = this.jwtService.sign(payload, {
         secret: process.env.JWT_ACCESS_SECRET,
         expiresIn: "24h",
-      });
+      } as any);
 
       await this.otpModel.deleteOne({ _id: otpDoc._id });
 
@@ -499,10 +533,13 @@ export class OrganizersService {
       });
 
 
-      const orgLookup = operatorOrgs.reduce((acc, org) => {
-        acc[org._id.toString()] = org.organizationName;
-        return acc;
-      }, {});
+      const orgLookup = operatorOrgs.reduce<Record<string, string>>(
+        (acc, org) => {
+          acc[org._id.toString()] = org.organizationName;
+          return acc;
+        },
+        {},
+      );
 
 
       // 4️⃣ Map to unified options
@@ -513,14 +550,16 @@ export class OrganizersService {
         approved: o.approved,
       }));
 
-      const operatorOptions = operators.map((o) => ({
-        id: o.organizerId.toString(),
-        name: `${
-          orgLookup[o.organizerId.toString()] || "Unknown Organization"
-        } (Operator: ${o.name})`,
-        type: "operator",
-        approved: true,
-      }));
+      const operatorOptions = operators
+        .filter((o) => !!o.organizerId)
+        .map((o) => ({
+          id: o.organizerId!.toString(),
+          name: `${
+            orgLookup[o.organizerId!.toString()] || "Unknown Organization"
+          } (Operator: ${o.name})`,
+          type: "operator",
+          approved: true,
+        }));
 
       const allOptions = [...organizerOptions, ...operatorOptions];
 
@@ -556,8 +595,11 @@ export class OrganizersService {
 
       if (selectedOption.type === "organizer") {
         const organizer = organizers.find(
-          (o) => o._id.toString() === selectedOption.id,
+          (o) => o._id.toString() === selectedOption!.id,
         );
+        if (!organizer) {
+          throw new NotFoundException("Organizer not found.");
+        }
 
         payload = {
           name: organizer.name,
@@ -569,11 +611,14 @@ export class OrganizersService {
         };
       } else {
         const op = operators.find(
-          (o) => o.organizerId.toString() === selectedOption.id,
+          (o) => o.organizerId?.toString() === selectedOption!.id,
         );
+        if (!op || !op.organizerId) {
+          throw new NotFoundException("Operator not found.");
+        }
 
         const parentOrg = operatorOrgs.find(
-          (o) => o._id.toString() === op.organizerId.toString(),
+          (o) => o._id.toString() === op.organizerId!.toString(),
         );
 
         if (!parentOrg) {
@@ -595,7 +640,7 @@ export class OrganizersService {
       const token = this.jwtService.sign(payload, {
         secret: process.env.JWT_ACCESS_SECRET,
         expiresIn: "24h",
-      });
+      } as any);
 
       return { message: "Token found", token };
     } catch (error) {
