@@ -301,6 +301,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   // New: speakers loaded for the currently-viewed event (one-shot fetch per dialog open)
   const [eventSpeakers, setEventSpeakers] = useState<any[]>([]);
   const [loadingSpeakers, setLoadingSpeakers] = useState(false);
+  // Round-table bookings for the open event — pulled here too so the
+  // combined revenue tile in the Event Information card can include it.
+  const [eventRoundBookings, setEventRoundBookings] = useState<any[]>([]);
   // New: single-speaker detail view
   const [selectedSpeaker, setSelectedSpeaker] = useState<any | null>(null);
   // Inner-tab state for the unified View dialog
@@ -1219,6 +1222,59 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     }
   };
 
+  // Quick approve/reject for a speaker request from the Participants > Speakers
+  // tab. Calls PATCH /speaker-requests/:id/status, refreshes the list, toasts.
+  const updateSpeakerStatus = async (
+    speakerId: string,
+    status: "Confirmed" | "Rejected",
+  ) => {
+    try {
+      const res = await fetch(
+        `${apiURL}/speaker-requests/${speakerId}/status`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast({
+        duration: 3000,
+        title: status === "Confirmed" ? "Speaker approved" : "Speaker rejected",
+      });
+      if (selectedEvent) await fetchEventSpeakers(selectedEvent._id);
+    } catch (e: any) {
+      toast({
+        duration: 4000,
+        title: "Failed to update speaker",
+        description: e?.message || "Please try again",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Fetch round-table bookings for the open event so we can roll them into
+  // the combined Total Revenue (the RoundTableBookings child component
+  // fetches its own copy too — fine, two GETs is cheap and they don't share
+  // state).
+  const fetchEventRoundBookings = async (eventId: string) => {
+    try {
+      const res = await fetch(
+        `${apiURL}/round-table-bookings/event/${eventId}`,
+      );
+      if (!res.ok) {
+        setEventRoundBookings([]);
+        return;
+      }
+      const data = await res.json();
+      setEventRoundBookings(
+        Array.isArray(data) ? data : data?.data || [],
+      );
+    } catch {
+      setEventRoundBookings([]);
+    }
+  };
+
   const fetchEventSpeakers = async (eventId: string) => {
     try {
       setLoadingSpeakers(true);
@@ -1528,9 +1584,32 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     (ticket) => ticket.attendance,
   ).length;
 
-  const totalRevenue = eventTickets.reduce((sum, ticket) => {
-    return sum + (ticket.totalAmount || 0);
-  }, 0);
+  // Combined revenue across all participant types for the open event.
+  //   tickets   — sum of paid ticket totalAmount
+  //   stalls    — sum of paidAmount on stalls
+  //   speakers  — sum of fees collected from speakers (Paid only)
+  //   round     — sum of paid round-table booking amounts (eventRoundBookings
+  //               state — populated alongside other fetches in handleViewAttendance)
+  const ticketsRevenue = eventTickets.reduce(
+    (sum, ticket) => sum + (ticket.totalAmount || 0),
+    0,
+  );
+  const stallsRevenue = stalls.reduce(
+    (sum: number, s: any) => sum + (s.paidAmount || 0),
+    0,
+  );
+  const speakersRevenue = eventSpeakers.reduce(
+    (sum: number, sp: any) =>
+      sum + (sp.paymentStatus === "Paid" ? sp.fee || 0 : 0),
+    0,
+  );
+  const roundTablesRevenue = eventRoundBookings.reduce(
+    (sum: number, b: any) =>
+      sum + (b.paymentStatus === "Paid" ? b.amount || 0 : 0),
+    0,
+  );
+  const totalRevenue =
+    ticketsRevenue + stallsRevenue + speakersRevenue + roundTablesRevenue;
 
   useEffect(() => {
     fetchEventsData();
@@ -1614,6 +1693,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     if (sections.exhibitors || sections.layout)
       tasks.push(fetchStallTickets(event._id));
     if (sections.speakers) tasks.push(fetchEventSpeakers(event._id));
+    if (sections.roundtables || sections.layout)
+      tasks.push(fetchEventRoundBookings(event._id));
     await Promise.all(tasks);
   };
 
@@ -2308,14 +2389,52 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                   </Badge>
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => openStallDialog(s)}
-                                    title="View exhibitor details"
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
+                                  <div className="flex items-center justify-end gap-1">
+                                    {/* Approve / Reject only show while still
+                                        actionable (Pending / Approved). Once
+                                        Confirmed/Cancelled/etc. they hide. */}
+                                    {(!s.status ||
+                                      s.status === "Pending" ||
+                                      s.status === "Approved") && (
+                                      <>
+                                        <Button
+                                          variant="outline"
+                                          size="icon"
+                                          className="h-7 w-7 text-green-700 border-green-300 hover:bg-green-50"
+                                          onClick={() => {
+                                            setSelectedRequest(s);
+                                            setActionNotes("");
+                                            setShowConfirmDialog(true);
+                                          }}
+                                          title="Approve / confirm this exhibitor"
+                                        >
+                                          <Check className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="icon"
+                                          className="h-7 w-7 text-red-700 border-red-300 hover:bg-red-50"
+                                          onClick={() => {
+                                            setSelectedRequest(s);
+                                            setCancellationReason("");
+                                            setActionNotes("");
+                                            setShowCancelDialog(true);
+                                          }}
+                                          title="Reject / cancel this exhibitor"
+                                        >
+                                          <X className="h-4 w-4" />
+                                        </Button>
+                                      </>
+                                    )}
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => openStallDialog(s)}
+                                      title="View exhibitor details"
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                  </div>
                                 </TableCell>
                               </TableRow>
                             ))}
@@ -2433,14 +2552,49 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                   </Badge>
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setSelectedSpeaker(req)}
-                                    title="View speaker details"
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
+                                  <div className="flex items-center justify-end gap-1">
+                                    {(!req.status ||
+                                      req.status === "Pending") && (
+                                      <>
+                                        <Button
+                                          variant="outline"
+                                          size="icon"
+                                          className="h-7 w-7 text-green-700 border-green-300 hover:bg-green-50"
+                                          onClick={() =>
+                                            updateSpeakerStatus(
+                                              req._id,
+                                              "Confirmed",
+                                            )
+                                          }
+                                          title="Approve speaker request"
+                                        >
+                                          <Check className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="icon"
+                                          className="h-7 w-7 text-red-700 border-red-300 hover:bg-red-50"
+                                          onClick={() =>
+                                            updateSpeakerStatus(
+                                              req._id,
+                                              "Rejected",
+                                            )
+                                          }
+                                          title="Reject speaker request"
+                                        >
+                                          <X className="h-4 w-4" />
+                                        </Button>
+                                      </>
+                                    )}
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => setSelectedSpeaker(req)}
+                                      title="View speaker details"
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                  </div>
                                 </TableCell>
                               </TableRow>
                             ))}
