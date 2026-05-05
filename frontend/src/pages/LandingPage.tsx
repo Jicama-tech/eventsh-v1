@@ -72,25 +72,25 @@ const eventSteps = [
   {
     number: 1,
     title: "Register",
-    image: "/assets/step1.png",
+    image: "/step1.webp",
     icon: CalendarDays,
   },
   {
     number: 2,
     title: "Customize",
-    image: "/assets/step2.png",
+    image: "/step2.webp",
     icon: Sparkles,
   },
   {
     number: 3,
     title: "Create",
-    image: "/assets/step3.png",
+    image: "/step3.webp",
     icon: TrendingUp,
   },
   {
     number: 4,
     title: "Manage",
-    image: "/assets/step4.png",
+    image: "/step4.webp",
     icon: BarChart3,
   },
 ];
@@ -233,12 +233,12 @@ const LandingPage = () => {
   ];
 
   const bentoImages = [
-    "/assets/image1.jpg",
-    "/assets/image2.jpg",
-    "/assets/image3.jpg",
-    "/assets/image4.jpg",
-    "/assets/image5.jpg",
-    "/assets/image6.jpg"
+    "/image1.webp",
+    "/image2.webp",
+    "/image3.webp",
+    "/image4.webp",
+    "/image5.webp",
+    "/image6.webp",
   ];
 
   return (
@@ -476,6 +476,8 @@ const LandingPage = () => {
               <motion.img
                 key={activeStepIndex}
                 src={eventSteps[activeStepIndex].image}
+                loading="lazy"
+                decoding="async"
                 initial={{ opacity: 0, scale: 1.05 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
