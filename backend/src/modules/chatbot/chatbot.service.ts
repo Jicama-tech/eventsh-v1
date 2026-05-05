@@ -1259,6 +1259,25 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
       return listShortcut;
     }
 
+    // Deterministic short-circuit: participation report for a specific
+    // event. The LLM was returning only stats and skipping the tables when
+    // any of the four sections was large; rendering directly guarantees
+    // every row reaches the user.
+    const partReport = await this.maybeParticipationReport(
+      message,
+      organizerId,
+      currency,
+    );
+    if (partReport) {
+      history.push({
+        role: "assistant",
+        content: partReport.text,
+        ts: Date.now(),
+      });
+      this.trimHistory(organizerId);
+      return partReport;
+    }
+
     try {
       // 1. Route to a specialist
       const tab = await this.route(message, history);
@@ -1880,6 +1899,164 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     }
 
     return null;
+  }
+
+  /** Participation report for a single event — Visitors, Exhibitors,
+   *  Speakers, Round-Table attendees as four detailed markdown tables.
+   *  Skips the LLM so every row makes it to the user (the LLM was reliably
+   *  emitting only the totals stats and dropping the tables when sections
+   *  got large). */
+  private async maybeParticipationReport(
+    message: string,
+    organizerId: string,
+    currency: { symbol: string; code?: string; locale?: string },
+  ): Promise<{ text: string } | null> {
+    const orgObjId = Types.ObjectId.isValid(organizerId)
+      ? new Types.ObjectId(organizerId)
+      : null;
+    if (!orgObjId) return null;
+
+    // Recognise either the explicit follow-up form ('show participation
+    // report for "<title>"') or natural variants ('participants of <title>').
+    const m = message.trim();
+    const lower = m.toLowerCase();
+    const isParticipationIntent =
+      /participation\s*report/.test(lower) ||
+      /\bparticipants?\s+of\b/.test(lower) ||
+      /\bwho\s+is\s+attending\b/.test(lower) ||
+      /\blist\s+all\s+attendees\s+for\b/.test(lower) ||
+      /\beveryone\s+attending\b/.test(lower);
+    if (!isParticipationIntent) return null;
+
+    // Pull the event name from a quoted span first; fall back to text after
+    // the trigger phrase.
+    let eventName: string | null = null;
+    const quoted = m.match(/"([^"]+)"|'([^']+)'/);
+    if (quoted) eventName = quoted[1] || quoted[2] || null;
+    if (!eventName) {
+      const after = m.match(
+        /(?:report|participants?\s+of|attending|attendees\s+for)\s+(?:the\s+)?(.+)$/i,
+      );
+      if (after) eventName = after[1].replace(/[.?!]+$/, "").trim();
+    }
+    if (!eventName) return null;
+
+    const ev = await this.eventModel
+      .findOne({
+        organizer: { $in: [orgObjId, String(organizerId)] as any[] },
+        title: { $regex: this.escapeRegex(eventName), $options: "i" },
+      })
+      .lean();
+    if (!ev) {
+      return { text: `**No event matching "${eventName}".** Try the exact title.` };
+    }
+    const evObj: any = ev;
+
+    const [tickets, stalls, speakers, roundBookings] = await Promise.all([
+      this.ticketModel
+        .find({
+          eventId: evObj._id,
+          organizerId: orgObjId,
+          paymentConfirmed: true,
+        })
+        .sort({ purchaseDate: -1 })
+        .lean(),
+      this.stallModel
+        .find({ eventId: evObj._id, organizerId: orgObjId })
+        .populate("shopkeeperId", "name email whatsAppNumber whatsappNumber shopName")
+        .lean(),
+      this.speakerRequestModel
+        .find({ eventId: evObj._id, organizerId: orgObjId })
+        .lean(),
+      this.roundTableBookingModel
+        .find({ eventId: evObj._id, organizerId: orgObjId })
+        .lean(),
+    ]);
+
+    const sym = currency?.symbol || "";
+    const cell = (v: any) => {
+      const s = v == null || v === "" ? "—" : String(v);
+      return s.replace(/\|/g, "│").replace(/\n/g, " ");
+    };
+    const money = (v: number) => `${sym}${Number(v || 0).toLocaleString()}`;
+
+    const sections: string[] = [];
+
+    if (tickets.length) {
+      sections.push(`### Visitors (${tickets.length})`);
+      sections.push("| # | Name | Email | WhatsApp | Tickets | Amount | Attended |");
+      sections.push("| --- | --- | --- | --- | --- | --- | --- |");
+      (tickets as any[]).forEach((t, i) => {
+        const qty =
+          t.ticketDetails?.reduce(
+            (s: number, d: any) => s + (d.quantity || 0),
+            0,
+          ) || 0;
+        sections.push(
+          `| ${i + 1} | ${cell(t.customerName)} | ${cell(t.customerEmail)} | ${cell(t.customerWhatsapp)} | ${qty} | ${money(t.totalAmount)} | ${t.attendance ? "✓" : "✗"} |`,
+        );
+      });
+      sections.push("");
+    }
+
+    if (stalls.length) {
+      sections.push(`### Exhibitors (${stalls.length})`);
+      sections.push("| # | Name | Business | Phone | Status | Payment | Amount |");
+      sections.push("| --- | --- | --- | --- | --- | --- | --- |");
+      (stalls as any[]).forEach((s, i) => {
+        const name =
+          s.shopkeeperId?.name || s.nameOfApplicant || s.brandName || "";
+        const biz =
+          s.shopkeeperId?.shopName || s.businessName || s.brandName || "";
+        const ph =
+          s.shopkeeperId?.whatsAppNumber ||
+          s.shopkeeperId?.whatsappNumber ||
+          "";
+        sections.push(
+          `| ${i + 1} | ${cell(name)} | ${cell(biz)} | ${cell(ph)} | ${cell(s.status || "Pending")} | ${cell(s.paymentStatus || "Unpaid")} | ${money(s.grandTotal)} |`,
+        );
+      });
+      sections.push("");
+    }
+
+    if (speakers.length) {
+      sections.push(`### Speakers (${speakers.length})`);
+      sections.push("| # | Name | Organization | Phone | Status | Fee |");
+      sections.push("| --- | --- | --- | --- | --- | --- |");
+      (speakers as any[]).forEach((sp, i) => {
+        sections.push(
+          `| ${i + 1} | ${cell(sp.name)} | ${cell(sp.organization)} | ${cell(sp.phone || sp.whatsAppNumber)} | ${cell(sp.status || "Pending")} | ${money(sp.isCharged ? sp.fee || 0 : 0)} |`,
+        );
+      });
+      sections.push("");
+    }
+
+    if (roundBookings.length) {
+      sections.push(`### Round Tables (${roundBookings.length})`);
+      sections.push("| # | Name | Phone | Table | Seats | Payment | Amount |");
+      sections.push("| --- | --- | --- | --- | --- | --- | --- |");
+      (roundBookings as any[]).forEach((b, i) => {
+        sections.push(
+          `| ${i + 1} | ${cell(b.visitorName)} | ${cell(b.visitorPhone)} | ${cell(b.tableName)} | ${b.numberOfSeats || 0} | ${cell(b.paymentStatus || "Unpaid")} | ${money(b.amount)} |`,
+        );
+      });
+      sections.push("");
+    }
+
+    const total =
+      tickets.length + stalls.length + speakers.length + roundBookings.length;
+    if (total === 0) {
+      return {
+        text: `**${evObj.title}** has no participants yet — no tickets sold, no stalls booked, no speakers, no round-table bookings.`,
+      };
+    }
+
+    const header = `**${evObj.title}** has **${total} participants** across all categories.\n\n`;
+    return { text: header + sections.join("\n") };
+  }
+
+  private escapeRegex(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   private async maybeEventPicker(
