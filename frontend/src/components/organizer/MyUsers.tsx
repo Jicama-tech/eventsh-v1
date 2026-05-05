@@ -1070,13 +1070,15 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                 >
                   <Download className="mr-2 h-4 w-4" /> Export
                 </Button>
-                <Button
+                {/* Invite Visitors hidden for now — re-enable when invitation
+                    flow is ready. */}
+                {/* <Button
                   onClick={() => handleOpenInvite("visitor")}
                   size="sm"
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   <Send className="mr-2 h-4 w-4" /> Invite Visitors
-                </Button>
+                </Button> */}
                 <Button
                   onClick={() => setShowAddCustomer(true)}
                   variant="outline"
@@ -1237,13 +1239,15 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                 >
                   <Download className="mr-2 h-4 w-4" /> Export
                 </Button>
-                <Button
+                {/* Invite Exhibitors hidden for now — re-enable when invitation
+                    flow is ready. */}
+                {/* <Button
                   onClick={() => handleOpenInvite("exhibitor")}
                   size="sm"
                   className="bg-purple-600 hover:bg-purple-700"
                 >
                   <Send className="mr-2 h-4 w-4" /> Invite Exhibitors
-                </Button>
+                </Button> */}
                 <Button
                   onClick={() => setShowAddExhibitor(true)}
                   variant="outline"

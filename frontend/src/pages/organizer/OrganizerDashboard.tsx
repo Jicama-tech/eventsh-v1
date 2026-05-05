@@ -1028,7 +1028,7 @@ export function OrganizerDashboard({
                           className="h-14 sm:h-16 flex flex-col gap-1 sm:gap-2 text-xs sm:text-sm"
                         >
                           <User2Icon className="h-4 w-4 sm:h-5 sm:w-5" />
-                          Attendees
+                          Participants
                         </Button>
                         <Button
                           onClick={() => handleTabChange("shopkeepers")}

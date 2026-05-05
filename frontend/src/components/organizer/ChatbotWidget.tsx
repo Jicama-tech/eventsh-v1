@@ -404,7 +404,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
 
   // ========== ATTENDEES ==========
   {
-    category: "Attendees",
+    category: "Participants",
     Icon: UserPlus,
     tint: "text-emerald-600 bg-emerald-50",
     title: "Add visitor",
@@ -412,7 +412,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
     prompt: "Add a new visitor",
   },
   {
-    category: "Attendees",
+    category: "Participants",
     Icon: Users,
     tint: "text-cyan-600 bg-cyan-50",
     title: "Attendees per event",
@@ -420,7 +420,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
     prompt: "List attendees per event",
   },
   {
-    category: "Attendees",
+    category: "Participants",
     Icon: Users,
     tint: "text-cyan-600 bg-cyan-50",
     title: "Find attendee",
@@ -428,12 +428,28 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
     prompt: "Find attendee by name or email",
   },
   {
-    category: "Attendees",
+    category: "Participants",
     Icon: Users,
     tint: "text-emerald-600 bg-emerald-50",
     title: "Participation report",
     sub: "Visitors, exhibitors, speakers, round tables — pick an event",
     prompt: "Show participation report per event",
+  },
+  {
+    category: "Participants",
+    Icon: UserPlus,
+    tint: "text-blue-600 bg-blue-50",
+    title: "All my visitors",
+    sub: "Every visitor across the org as a table",
+    prompt: "List my visitors",
+  },
+  {
+    category: "Participants",
+    Icon: Store,
+    tint: "text-orange-600 bg-orange-50",
+    title: "All my exhibitors",
+    sub: "Every exhibitor across the org as a table",
+    prompt: "List my exhibitors",
   },
 
   // ========== STALLS / VENDORS ==========
@@ -557,33 +573,147 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   },
 ];
 
-// Markdown parser — bold, lists, tables, code spans.
-function renderMarkdown(text: string) {
+// Page size for in-chat tables. Tables longer than this get prev/next + page
+// counter controls so the chat doesn't blow up vertically when the bot
+// returns hundreds of rows.
+const TABLE_PAGE_SIZE = 20;
+
+// React-rendered table that paginates rows past TABLE_PAGE_SIZE. Cell content
+// still flows through `formatInline` (bold + code spans) which returns
+// already-escaped HTML, so dangerouslySetInnerHTML on the cell is safe.
+const PaginatedTable: React.FC<{ headers: string[]; rows: string[][] }> = ({
+  headers,
+  rows,
+}) => {
+  const [page, setPage] = useState(0);
+  const total = rows.length;
+  const pageCount = Math.max(1, Math.ceil(total / TABLE_PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const start = safePage * TABLE_PAGE_SIZE;
+  const end = Math.min(start + TABLE_PAGE_SIZE, total);
+  const view = rows.slice(start, end);
+
+  return (
+    <div className="overflow-x-auto my-2 rounded-lg border border-slate-200">
+      <table className="w-full text-xs">
+        <thead className="bg-slate-50">
+          <tr>
+            {headers.map((h, idx) => (
+              <th
+                key={idx}
+                className="px-2 py-1.5 text-left font-semibold text-slate-700 border-b border-slate-200"
+                dangerouslySetInnerHTML={{ __html: formatInline(h) }}
+              />
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {view.map((row, ri) => (
+            <tr
+              key={start + ri}
+              className="hover:bg-slate-50/50 border-b border-slate-100 last:border-0"
+            >
+              {row.map((c, ci) => (
+                <td
+                  key={ci}
+                  className="px-2 py-1.5 text-slate-700"
+                  dangerouslySetInnerHTML={{ __html: formatInline(c) }}
+                />
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {total > TABLE_PAGE_SIZE && (
+        <div className="flex items-center justify-between px-2 py-1.5 border-t border-slate-200 bg-slate-50/50 text-[11px] text-slate-600">
+          <span>
+            Showing <span className="font-medium">{start + 1}-{end}</span> of{" "}
+            <span className="font-medium">{total}</span>
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={safePage === 0}
+              className="px-2 py-0.5 rounded border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Prev
+            </button>
+            <span className="px-1">
+              Page {safePage + 1} / {pageCount}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+              disabled={safePage >= pageCount - 1}
+              className="px-2 py-0.5 rounded border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Markdown parser — bold, lists, tables, code spans. Returns React nodes so
+// tables render as a stateful <PaginatedTable> instead of a static HTML
+// string. Inline formatting (bold/code) still flows through formatInline()
+// which returns safe HTML.
+function renderMarkdown(text: string): React.ReactNode {
   const escaped = text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
   const lines = escaped.split("\n");
-  const out: string[] = [];
+  const out: React.ReactNode[] = [];
   let i = 0;
-  let inList: "ul" | "ol" | null = null;
+  let listBuffer: { kind: "ul" | "ol"; items: string[] } | null = null;
+  let key = 0;
+
+  const flushList = () => {
+    if (!listBuffer) return;
+    const items = listBuffer.items;
+    if (listBuffer.kind === "ul") {
+      out.push(
+        <ul key={`l-${key++}`} className="list-disc ml-5 my-1 space-y-0.5">
+          {items.map((it, idx) => (
+            <li
+              key={idx}
+              dangerouslySetInnerHTML={{ __html: formatInline(it) }}
+            />
+          ))}
+        </ul>,
+      );
+    } else {
+      out.push(
+        <ol key={`l-${key++}`} className="list-decimal ml-5 my-1 space-y-0.5">
+          {items.map((it, idx) => (
+            <li
+              key={idx}
+              dangerouslySetInnerHTML={{ __html: formatInline(it) }}
+            />
+          ))}
+        </ol>,
+      );
+    }
+    listBuffer = null;
+  };
+
   while (i < lines.length) {
     const line = lines[i].trimEnd();
-    // Detect a markdown table starting on this line
     const isTableHeader =
       /^\s*\|.*\|\s*$/.test(line) &&
       i + 1 < lines.length &&
       /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1]);
     if (isTableHeader) {
-      if (inList) {
-        out.push(`</${inList}>`);
-        inList = null;
-      }
+      flushList();
       const headers = line
         .split("|")
         .map((c) => c.trim())
         .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
-      i += 2; // skip separator
+      i += 2;
       const rows: string[][] = [];
       while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
         const cells = lines[i]
@@ -594,61 +724,36 @@ function renderMarkdown(text: string) {
         i++;
       }
       out.push(
-        '<div class="overflow-x-auto my-2 rounded-lg border border-slate-200">' +
-          '<table class="w-full text-xs">' +
-          '<thead class="bg-slate-50"><tr>' +
-          headers
-            .map(
-              (h) =>
-                `<th class="px-2 py-1.5 text-left font-semibold text-slate-700 border-b border-slate-200">${formatInline(h)}</th>`,
-            )
-            .join("") +
-          "</tr></thead><tbody>" +
-          rows
-            .map(
-              (row) =>
-                '<tr class="hover:bg-slate-50/50 border-b border-slate-100 last:border-0">' +
-                row
-                  .map(
-                    (c) =>
-                      `<td class="px-2 py-1.5 text-slate-700">${formatInline(c)}</td>`,
-                  )
-                  .join("") +
-                "</tr>",
-            )
-            .join("") +
-          "</tbody></table></div>",
+        <PaginatedTable key={`t-${key++}`} headers={headers} rows={rows} />,
       );
       continue;
     }
     const ulMatch = line.match(/^[\s]*[-*]\s+(.*)/);
     const olMatch = line.match(/^[\s]*\d+\.\s+(.*)/);
     if (ulMatch) {
-      if (inList !== "ul") {
-        if (inList) out.push(`</${inList}>`);
-        out.push('<ul class="list-disc ml-5 my-1 space-y-0.5">');
-        inList = "ul";
-      }
-      out.push(`<li>${formatInline(ulMatch[1])}</li>`);
+      if (listBuffer && listBuffer.kind !== "ul") flushList();
+      if (!listBuffer) listBuffer = { kind: "ul", items: [] };
+      listBuffer.items.push(ulMatch[1]);
     } else if (olMatch) {
-      if (inList !== "ol") {
-        if (inList) out.push(`</${inList}>`);
-        out.push('<ol class="list-decimal ml-5 my-1 space-y-0.5">');
-        inList = "ol";
-      }
-      out.push(`<li>${formatInline(olMatch[1])}</li>`);
+      if (listBuffer && listBuffer.kind !== "ol") flushList();
+      if (!listBuffer) listBuffer = { kind: "ol", items: [] };
+      listBuffer.items.push(olMatch[1]);
     } else {
-      if (inList) {
-        out.push(`</${inList}>`);
-        inList = null;
+      flushList();
+      if (line) {
+        out.push(
+          <p
+            key={`p-${key++}`}
+            className="my-1"
+            dangerouslySetInnerHTML={{ __html: formatInline(line) }}
+          />,
+        );
       }
-      if (!line) out.push("");
-      else out.push(`<p class="my-1">${formatInline(line)}</p>`);
     }
     i++;
   }
-  if (inList) out.push(`</${inList}>`);
-  return out.join("");
+  flushList();
+  return <>{out}</>;
 }
 
 function formatInline(s: string) {
@@ -663,7 +768,7 @@ function formatInline(s: string) {
 const DEFAULT_NAV_ITEMS: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: TrendingUp },
   { id: "events", label: "Events", icon: Calendar },
-  { id: "eventAttendees", label: "Attendees", icon: Users },
+  { id: "eventAttendees", label: "Participants", icon: Users },
   { id: "speakerRequests", label: "Speakers", icon: Mic2 },
   { id: "users", label: "Exhibitors/Visitors", icon: Building2 },
   { id: "storefront", label: "Eventfront", icon: Globe },
@@ -1225,15 +1330,14 @@ export function ChatbotWidget({
                           ? "text-xs sm:text-sm text-slate-500 mt-1"
                           : "text-xs text-slate-500 mt-1"
                       }
-                      dangerouslySetInnerHTML={{
-                        __html: renderMarkdown(
-                          greeting.replace(
-                            /\{ORG\}/g,
-                            orgInfo?.organizationName || "your organization",
-                          ),
+                    >
+                      {renderMarkdown(
+                        greeting.replace(
+                          /\{ORG\}/g,
+                          orgInfo?.organizationName || "your organization",
                         ),
-                      }}
-                    />
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1275,11 +1379,7 @@ export function ChatbotWidget({
                     }`}
                   >
                     {m.role === "assistant" ? (
-                      <div
-                        dangerouslySetInnerHTML={{
-                          __html: renderMarkdown(m.content),
-                        }}
-                      />
+                      <div>{renderMarkdown(m.content)}</div>
                     ) : (
                       <span className="whitespace-pre-wrap">{m.content}</span>
                     )}

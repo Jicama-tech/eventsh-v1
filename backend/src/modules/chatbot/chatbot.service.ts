@@ -161,6 +161,7 @@ export class ChatbotService {
     @InjectModel("RoundTableBooking")
     private roundTableBookingModel: Model<any>,
     @InjectModel("Template") private templateModel: Model<any>,
+    @InjectModel("User") private userModel: Model<any>,
   ) {
     const useQwen = !!process.env.QWEN_API_KEY;
     const apiKey = useQwen
@@ -815,6 +816,44 @@ export class ChatbotService {
     {
       type: "function",
       function: {
+        name: "list_visitors",
+        description:
+          "Return the organizer's saved Visitors (User records created via the organizer's customer list, not per-event ticket buyers). Use for 'list my visitors', 'show all visitors', 'my customers'. Returns up to 1000 rows by default — call WITHOUT a `limit` argument so the user gets every visitor. Do NOT call navigate_to for these.",
+        parameters: {
+          type: "object",
+          properties: {
+            limit: {
+              type: "number",
+              description:
+                "Optional cap. Leave UNSET to return all visitors (default 1000, max 2000). Only set if the user asked for a specific number.",
+            },
+          },
+          required: [],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "list_exhibitors",
+        description:
+          "Return the organizer's saved Exhibitors (Vendor records under this organizer, both bulk-imported and manually created). Use for 'list my exhibitors', 'show all exhibitors', 'my vendors'. Returns up to 1000 rows by default — call WITHOUT a `limit` argument so the user gets every exhibitor. Do NOT call navigate_to for these.",
+        parameters: {
+          type: "object",
+          properties: {
+            limit: {
+              type: "number",
+              description:
+                "Optional cap. Leave UNSET to return all exhibitors (default 1000, max 2000). Only set if the user asked for a specific number.",
+            },
+          },
+          required: [],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
         name: "list_space_templates",
         description:
           "Return the organizer's saved Space templates (the reusable stall/table configs captured from past events). Use when the user asks 'show my templates', 'list space templates', 'what templates do I have', 'reusable spaces'.",
@@ -903,8 +942,19 @@ export class ChatbotService {
       "mark_ticket_used",
       "list_attendees",
     ],
-    attendees: ["list_events", "list_attendees", "search_attendee"],
-    stalls: ["list_stalls", "get_stalls_analytics", "navigate_to"],
+    attendees: [
+      "list_events",
+      "list_attendees",
+      "search_attendee",
+      "list_visitors",
+      "list_exhibitors",
+    ],
+    stalls: [
+      "list_stalls",
+      "get_stalls_analytics",
+      "list_exhibitors",
+      "navigate_to",
+    ],
     speakers: [
       "list_events",
       "list_speakers",
@@ -937,6 +987,8 @@ export class ChatbotService {
       "create_event",
       "request_edit_event",
       "list_space_templates",
+      "list_visitors",
+      "list_exhibitors",
       "navigate_to",
     ],
   };
@@ -976,7 +1028,7 @@ export class ChatbotService {
 
 5. NEVER PASTE RAW TOOL OUTPUT (no JSON in replies, no curly braces, no array brackets).
 
-6. NAVIGATION INTENT — when the user says "open the X tab", "go to X", "switch to X", or "open X customizer", call navigate_to({tab: X}) IMMEDIATELY. Do NOT list / fetch / show anything first. Map "events"→events, "settings"→settings, "storefront"→storefront, "attendees"→eventAttendees, "speakers"→speakerRequests, "users"→users, "stalls"→users, "round tables"→roundTableBookings.
+6. NAVIGATION INTENT — ONLY call navigate_to when the user explicitly says "open the X tab", "go to X", "switch to X", "take me to X", or "open X customizer". Do NOT call navigate_to for prompts that say "list", "show me", "show all", "give me", "what are my", "how many" — those are LIST intents and must use the matching list_* / get_* tool instead. Map for navigation only: "events"→events, "settings"→settings, "storefront"→storefront, "attendees"→eventAttendees, "speakers"→speakerRequests, "users"→users, "stalls"→users, "round tables"→roundTableBookings. Examples: "list my exhibitors" → list_exhibitors (NOT navigate_to). "open users tab" → navigate_to({tab:"users"}).
 
 7. AFTER TOOLS RUN — when you receive tool results, your job is to FORMAT them as the rendered reply (table or bold key-values). DO NOT request more tools, DO NOT emit any <tool_call>, <function_call>, JSON object, or function name in the response text. Just produce the final markdown reply.
 
@@ -1002,6 +1054,8 @@ DEEP ANALYTICS TOOLS (use them when the user asks for detailed breakdowns):
 - "Ticket type breakdown for X" / "which ticket tier sells best for X" → get_ticket_type_breakdown(event_name). Render a single table: Type | Sold | Capacity | Occupancy % | Revenue.
 - "Attendance rate" / "how many actually showed up" / "no-shows" → get_attendance_analytics(status). Render: 1 metrics table (Tickets Sold, Attended, No-shows, Attendance %), then Top Events by Sold (table).
 - "My space templates" / "list space templates" / "show reusable spaces" / "what templates do I have" → list_space_templates(). Render: headline "You have **N saved Space templates**." Then a markdown table with columns | # | Name | Size | Table Price | Booking Price | Deposit | (Size = "WxHcm" if both, else "—"). NEVER fabricate rows; only render what the tool returned.
+- "List my visitors" / "show all visitors" / "my customers" / "show me visitors I added" → list_visitors() (call with NO arguments). Headline "You have **N visitors**." (use the EXACT total returned). Then a markdown table with columns | # | Name | Email | WhatsApp | Created |. Use "—" for missing values. **You MUST render every single row in the visitors[] array — do NOT truncate, do NOT say "and X more", do NOT cap at 50. The chat UI paginates the table to 20 rows per page automatically, so emit all rows.** NEVER call navigate_to for this.
+- "List my exhibitors" / "show all exhibitors" / "my vendors" / "list exhibitors I added" → list_exhibitors() (call with NO arguments). Headline "You have **N exhibitors**." (use the EXACT total returned). Then a markdown table with columns | # | Name | Shop / Business | Email | WhatsApp | Category | Country |. Use "—" for missing values. **You MUST render every single row in the exhibitors[] array — do NOT truncate, do NOT say "and X more", do NOT cap at 50. The chat UI paginates the table to 20 rows per page automatically, so emit all rows.** NEVER call navigate_to for this.
 - "Participants of event X" / "participation report for event X" / "everyone attending event X" / "list all attendees for X" → get_event_participants(event_name). Render in this order: 1) headline "**X has Y participants**" using totals.combined; 2) "Visitors (N)" markdown table | Name | Email | Phone | Tickets | Amount | Attended |; 3) "Exhibitors (N)" table | Name | Business | Phone | Status | Payment |; 4) "Speakers (N)" table | Name | Organization | Phone | Status | Fee |; 5) "Round Tables (N)" table | Name | Phone | Table | Seats | Payment |. Skip any section whose array is empty (don't render its header). NEVER fabricate rows — render only what the tool returned.
 - For each, NEVER pick or invent extra columns; render only what the tool returned.`,
 
@@ -1188,6 +1242,21 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
       history.push({ role: "assistant", content: picker.text, ts: Date.now() });
       this.trimHistory(organizerId);
       return picker;
+    }
+
+    // Deterministic short-circuit: org-wide list intents (visitors,
+    // exhibitors, space templates). Bypasses the LLM completely so 100+
+    // rows render in ~100ms (Mongo query + string format) instead of
+    // waiting on the LLM to token-generate every cell.
+    const listShortcut = await this.maybeListShortcut(message, organizerId);
+    if (listShortcut) {
+      history.push({
+        role: "assistant",
+        content: listShortcut.text,
+        ts: Date.now(),
+      });
+      this.trimHistory(organizerId);
+      return listShortcut;
     }
 
     try {
@@ -1685,6 +1754,134 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
    *  return a deterministic event picker payload. Frontend renders a
    *  dropdown form so the user picks the event explicitly — avoids the
    *  LLM guessing "latest". */
+  /** Org-wide list intents (visitors / exhibitors / space templates) — pure
+   *  data → markdown render. Skips the LLM entirely so 100+ rows return in
+   *  ~100ms instead of 5-15s. */
+  private async maybeListShortcut(
+    message: string,
+    organizerId: string,
+  ): Promise<{ text: string } | null> {
+    const m = message.toLowerCase().trim();
+    const orgObjId = Types.ObjectId.isValid(organizerId)
+      ? new Types.ObjectId(organizerId)
+      : null;
+    if (!orgObjId) return null;
+
+    const escapeCell = (v: any) => {
+      const s = v == null || v === "" ? "—" : String(v);
+      // Pipes break markdown tables; replace with the visually identical Unicode bar.
+      return s.replace(/\|/g, "│").replace(/\n/g, " ");
+    };
+
+    // ---- Visitors ----
+    if (
+      /\b(list|show( me)?|all)\b.*\b(visitors?|customers?)\b/.test(m) &&
+      !/\b(per|for)\s+(an?\s+|the\s+)?event\b/.test(m)
+    ) {
+      const docs = await this.userModel
+        .find({ provider: "Shopkeeper", providerId: String(organizerId) })
+        .sort({ createdAt: -1 })
+        .lean();
+      if (!docs.length) {
+        return { text: "**No visitors yet.** Add or import some from the Visitors tab." };
+      }
+      const header = "| # | Name | Email | WhatsApp | Created |";
+      const sep = "| --- | --- | --- | --- | --- |";
+      const rows = (docs as any[]).map((u, i) => {
+        const name =
+          u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim();
+        const created = u.createdAt
+          ? new Date(u.createdAt).toISOString().slice(0, 10)
+          : "";
+        return `| ${i + 1} | ${escapeCell(name)} | ${escapeCell(u.email)} | ${escapeCell(u.whatsAppNumber)} | ${escapeCell(created)} |`;
+      });
+      const text =
+        `You have **${docs.length} visitors**.\n\n` +
+        [header, sep, ...rows].join("\n");
+      return { text };
+    }
+
+    // ---- Exhibitors ----
+    if (
+      /\b(list|show( me)?|all)\b.*\b(exhibitors?|vendors?)\b/.test(m) &&
+      !/\b(per|for)\s+(an?\s+|the\s+)?event\b/.test(m) &&
+      !/\bpending\b/.test(m) &&
+      !/\bapproved\b/.test(m)
+    ) {
+      const [orgVendors, stalls] = await Promise.all([
+        this.vendorModel.find({ organizerId: orgObjId }).lean(),
+        this.stallModel
+          .find({ organizerId: orgObjId })
+          .populate(
+            "shopkeeperId",
+            "name email businessEmail whatsAppNumber whatsappNumber phone phoneNumber shopName businessName brandName businessCategory country createdAt",
+          )
+          .lean(),
+      ]);
+      const byId = new Map<string, any>();
+      for (const v of orgVendors as any[]) byId.set(String(v._id), v);
+      for (const s of stalls as any[]) {
+        const v = s.shopkeeperId;
+        if (!v?._id) continue;
+        const k = String(v._id);
+        if (!byId.has(k)) byId.set(k, v);
+      }
+      const merged = Array.from(byId.values()).sort(
+        (a, b) =>
+          new Date(b.createdAt || 0).getTime() -
+          new Date(a.createdAt || 0).getTime(),
+      );
+      if (!merged.length) {
+        return { text: "**No exhibitors yet.** Add or import some from the Exhibitors tab." };
+      }
+      const header =
+        "| # | Name | Shop / Business | Email | WhatsApp | Category | Country |";
+      const sep = "| --- | --- | --- | --- | --- | --- | --- |";
+      const rows = merged.map((v: any, i: number) => {
+        const business = v.shopName || v.businessName || v.brandName || "";
+        const email = v.email || v.businessEmail || "";
+        const wa = v.whatsAppNumber || v.whatsappNumber || "";
+        return `| ${i + 1} | ${escapeCell(v.name)} | ${escapeCell(business)} | ${escapeCell(email)} | ${escapeCell(wa)} | ${escapeCell(v.businessCategory)} | ${escapeCell(v.country)} |`;
+      });
+      const text =
+        `You have **${merged.length} exhibitors**.\n\n` +
+        [header, sep, ...rows].join("\n");
+      return { text };
+    }
+
+    // ---- Space templates ----
+    if (
+      /\b(list|show( me)?|my|all)\b.*\b(space\s+templates?|templates?)\b/.test(m) &&
+      !/\b(round\s*table|speaker)\s+template/.test(m)
+    ) {
+      const docs = await this.templateModel
+        .find({ organizerId: orgObjId, type: "space" })
+        .sort({ name: 1, createdAt: -1 })
+        .lean();
+      if (!docs.length) {
+        return {
+          text:
+            "**No space templates yet.** They're saved automatically the next time you add Spaces to an event.",
+        };
+      }
+      const header =
+        "| # | Name | Size | Table Price | Booking Price | Deposit |";
+      const sep = "| --- | --- | --- | --- | --- | --- |";
+      const rows = (docs as any[]).map((t, i) => {
+        const p = t.payload || {};
+        const size =
+          p.width && p.height ? `${p.width}×${p.height}cm` : "—";
+        return `| ${i + 1} | ${escapeCell(t.name)} | ${escapeCell(size)} | ${escapeCell(p.tablePrice)} | ${escapeCell(p.bookingPrice)} | ${escapeCell(p.depositPrice)} |`;
+      });
+      const text =
+        `You have **${docs.length} saved Space templates**.\n\n` +
+        [header, sep, ...rows].join("\n");
+      return { text };
+    }
+
+    return null;
+  }
+
   private async maybeEventPicker(
     message: string,
     organizerId: string,
@@ -3037,6 +3234,81 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
         return {
           message: `Switching to ${args.tab}.`,
           botAction: { type: "navigate", tab: args.tab },
+        };
+      }
+
+      case "list_visitors": {
+        // Default to a high cap so we return everything by default — the
+        // chat-side renderer paginates 20 rows per page, so there's no
+        // perf concern with sending the full set.
+        const limit = Math.min(Math.max(Number(args?.limit) || 1000, 1), 2000);
+        const docs = await this.userModel
+          .find({ provider: "Shopkeeper", providerId: String(organizerId) })
+          .sort({ createdAt: -1 })
+          .limit(limit)
+          .lean();
+        return {
+          total: docs.length,
+          visitors: (docs as any[]).map((u) => ({
+            name: u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim(),
+            email: u.email || "",
+            whatsapp: u.whatsAppNumber || "",
+            createdAt: u.createdAt
+              ? new Date(u.createdAt).toISOString().slice(0, 10)
+              : "",
+          })),
+        };
+      }
+
+      case "list_exhibitors": {
+        const limit = Math.min(Math.max(Number(args?.limit) || 1000, 1), 2000);
+
+        // Mirror the MyUsers merge: Source A = vendors directly tied to this
+        // organizer (manual + bulk-imported), Source B = vendors that show up
+        // only because they have a stall under this organizer. Stall-only
+        // vendors often have no organizerId set, so the second query is what
+        // surfaces the rows missing from the previous version of this tool.
+        const [orgVendors, stalls] = await Promise.all([
+          this.vendorModel.find({ organizerId: orgObjId }).lean(),
+          this.stallModel
+            .find({ organizerId: orgObjId })
+            .populate(
+              "shopkeeperId",
+              "name email businessEmail whatsAppNumber whatsappNumber phone phoneNumber shopName businessName brandName businessCategory country",
+            )
+            .lean(),
+        ]);
+
+        const byId = new Map<string, any>();
+        for (const v of orgVendors as any[]) {
+          byId.set(String(v._id), v);
+        }
+        for (const s of stalls as any[]) {
+          const v = s.shopkeeperId;
+          if (!v || !v._id) continue;
+          const k = String(v._id);
+          if (!byId.has(k)) byId.set(k, v);
+        }
+
+        const merged = Array.from(byId.values())
+          .sort((a, b) => {
+            const ta = new Date(a.createdAt || 0).getTime();
+            const tb = new Date(b.createdAt || 0).getTime();
+            return tb - ta;
+          })
+          .slice(0, limit);
+
+        return {
+          total: merged.length,
+          exhibitors: merged.map((v: any) => ({
+            name: v.name || "",
+            business: v.shopName || v.businessName || v.brandName || "",
+            email: v.email || v.businessEmail || "",
+            whatsapp: v.whatsAppNumber || v.whatsappNumber || "",
+            phone: v.phone || v.phoneNumber || "",
+            category: v.businessCategory || "",
+            country: v.country || "",
+          })),
         };
       }
 
