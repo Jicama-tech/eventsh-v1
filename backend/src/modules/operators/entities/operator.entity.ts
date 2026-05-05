@@ -5,14 +5,15 @@ import { Document } from "mongoose";
 export type OperatorDocument = Operator & Document;
 
 // All possible tabs an organizer-side operator can be granted access to.
-// Used to restrict an operator to a subset of the organizer dashboard.
+// Mirrors the dashboard sidebar (OrganizerDashboard.navigationItems);
+// keep these in sync when adding or removing a sidebar entry.
 export const OPERATOR_TABS = [
+  "chatbot",
   "dashboard",
-  "events",
+  "kiosk",
   "eventAttendees",
-  "speakerRequests",
   "users",
-  "roundTableBookings",
+  "events",
   "storefront",
   "settings",
 ] as const;

@@ -196,6 +196,8 @@ export class AuthController {
       const emailRegex = new RegExp(`^${escaped}$`, "i");
 
       // Gather every organizer + operator record tied to this email.
+      // Match against the organizer's primary `email` only — businessEmail
+      // is the contact address, not the sign-in identity.
       const [organizers, operators] = await Promise.all([
         this.organizerModel.find({ email: emailRegex }).lean(),
         this.operatorModel.find({ email: emailRegex }).lean(),

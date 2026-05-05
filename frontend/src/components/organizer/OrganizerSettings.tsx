@@ -3012,14 +3012,16 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     for full access.
                   </p>
                   <div className="grid grid-cols-2 gap-2">
+                    {/* Order + labels mirror the dashboard sidebar
+                        (OrganizerDashboard.navigationItems). Keep in sync if
+                        you add or rename a sidebar tab. */}
                     {[
-                      { id: "dashboard", label: "Dashboard" },
-                      { id: "events", label: "Events" },
-                      { id: "kiosk", label: "Walk-in Booking" },
+                      { id: "chatbot", label: "Chatbot" },
+                      { id: "dashboard", label: "Analytics" },
+                      { id: "kiosk", label: "In-Person Booking" },
                       { id: "eventAttendees", label: "Participants" },
-                      { id: "speakerRequests", label: "Speakers" },
                       { id: "users", label: "Exhibitors/Visitors" },
-                      { id: "roundTableBookings", label: "Round Tables" },
+                      { id: "events", label: "Events" },
                       { id: "storefront", label: "Eventfront" },
                       { id: "settings", label: "Settings" },
                     ].map((t) => {
