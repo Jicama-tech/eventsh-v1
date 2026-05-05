@@ -11,6 +11,7 @@ import { VendorSchema } from "../stalls/schemas/vendor.schema";
 import { StallSchema } from "../stalls/entities/stall.entity";
 import { SpeakerRequestSchema } from "../speaker-requests/entities/speaker-request.entity";
 import { RoundTableBookingSchema } from "../round-table-bookings/entities/round-table-booking.entity";
+import { TemplateSchema } from "../templates/schemas/template.schema";
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RoundTableBookingSchema } from "../round-table-bookings/entities/round-
       { name: "Stall", schema: StallSchema },
       { name: "SpeakerRequest", schema: SpeakerRequestSchema },
       { name: "RoundTableBooking", schema: RoundTableBookingSchema },
+      { name: "Template", schema: TemplateSchema },
     ]),
   ],
   controllers: [ChatbotController],

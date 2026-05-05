@@ -47,10 +47,18 @@ export class OperatorsService {
         );
       }
 
+      const normalizedEmail = createOperatorDto.email
+        ? createOperatorDto.email.trim().toLowerCase()
+        : undefined;
+
       const newOperator = new this.operatorModel({
         name: createOperatorDto.name,
         whatsAppNumber: createOperatorDto.whatsAppNumber,
         organizerId: organizerId,
+        ...(normalizedEmail ? { email: normalizedEmail } : {}),
+        ...(createOperatorDto.accessTabs
+          ? { accessTabs: createOperatorDto.accessTabs }
+          : {}),
       });
 
       const savedOperator = await newOperator.save();
@@ -113,9 +121,14 @@ export class OperatorsService {
         throw new BadRequestException("Invalid operator ID");
       }
 
+      const update: Record<string, any> = { ...updateOperatorDto };
+      if (typeof update.email === "string") {
+        update.email = update.email.trim().toLowerCase();
+      }
+
       const operator = await this.operatorModel.findByIdAndUpdate(
         id,
-        { $set: updateOperatorDto },
+        { $set: update },
         { new: true, runValidators: true },
       );
 

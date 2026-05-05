@@ -4,11 +4,13 @@ import { Model, Types } from "mongoose";
 import { Event, EventDocument } from "./schemas/event.schema";
 import { CreateEventDto } from "./dto/createEvent.dto";
 import { UpdateEventDto } from "./dto/updateEvent.dto";
+import { TemplatesService } from "../templates/templates.service";
 
 @Injectable()
 export class EventsService {
   constructor(
     @InjectModel(Event.name) private eventModel: Model<EventDocument>,
+    private readonly templatesService: TemplatesService,
   ) {}
 
   async create(createEventDto: CreateEventDto): Promise<Event> {
@@ -93,6 +95,16 @@ export class EventsService {
       });
 
       const savedEvent = await event.save();
+
+      // Mirror this event's space configs into the templates collection so
+      // they're available as picks when the organizer creates future events.
+      // Fire-and-forget — never block the create on template capture.
+      this.templatesService
+        .captureSpaceTemplates(
+          createEventDto.organizerId,
+          createEventDto.tableTemplates,
+        )
+        .catch(() => {});
 
       return savedEvent;
     } catch (error) {
@@ -181,6 +193,17 @@ export class EventsService {
       if (!updatedEvent) {
         throw new NotFoundException(`Event with ID ${id} not found`);
       }
+
+      // Capture any space templates touched by this update — covers both
+      // newly added templates AND legacy events whose tableTemplates were
+      // never previously stored in the templates collection.
+      const orgId = (updatedEvent as any).organizer?._id || (updatedEvent as any).organizer;
+      const tplSource =
+        (updateEventDto as any)?.tableTemplates ??
+        (updatedEvent as any)?.tableTemplates;
+      this.templatesService
+        .captureSpaceTemplates(orgId, tplSource)
+        .catch(() => {});
 
       return updatedEvent;
     } catch (error) {

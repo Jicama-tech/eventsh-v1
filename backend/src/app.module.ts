@@ -25,6 +25,9 @@ import { AgentsModule } from "./modules/agents/agents.module";
 import { ChatbotModule } from "./modules/chatbot/chatbot.module";
 import { VenueDesignerModule } from "./modules/venue-designer/venue-designer.module";
 import { CategoriesModule } from "./modules/categories/categories.module";
+import { ShopkeepersModule } from "./modules/shopkeepers/shopkeepers.module";
+import { BulkImportModule } from "./modules/bulk-import/bulk-import.module";
+import { TemplatesModule } from "./modules/templates/templates.module";
 
 @Module({
   imports: [
@@ -62,6 +65,9 @@ import { CategoriesModule } from "./modules/categories/categories.module";
     ChatbotModule,
     VenueDesignerModule,
     CategoriesModule,
+    ShopkeepersModule,
+    BulkImportModule,
+    TemplatesModule,
   ],
 })
 export class AppModule {}
