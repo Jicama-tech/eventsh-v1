@@ -1743,7 +1743,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       {/* Header */}
       <div className="flex items-center gap-2">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Attendees</h2>
+          <h2 className="text-3xl font-bold tracking-tight">Participants</h2>
           <p className="text-muted-foreground">
             Manage attendance for your events and track customer participation
           </p>

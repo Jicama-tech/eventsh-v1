@@ -3016,7 +3016,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       { id: "dashboard", label: "Dashboard" },
                       { id: "events", label: "Events" },
                       { id: "kiosk", label: "Walk-in Booking" },
-                      { id: "eventAttendees", label: "Attendees" },
+                      { id: "eventAttendees", label: "Participants" },
                       { id: "speakerRequests", label: "Speakers" },
                       { id: "users", label: "Exhibitors/Visitors" },
                       { id: "roundTableBookings", label: "Round Tables" },
