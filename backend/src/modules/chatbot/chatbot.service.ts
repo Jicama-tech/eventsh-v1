@@ -160,6 +160,7 @@ export class ChatbotService {
     @InjectModel("SpeakerRequest") private speakerRequestModel: Model<any>,
     @InjectModel("RoundTableBooking")
     private roundTableBookingModel: Model<any>,
+    @InjectModel("Template") private templateModel: Model<any>,
   ) {
     const useQwen = !!process.env.QWEN_API_KEY;
     const apiKey = useQwen
@@ -778,7 +779,7 @@ export class ChatbotService {
       function: {
         name: "get_event_participants",
         description:
-          "Return the complete participant list for ONE event — visitors (ticket buyers), exhibitors (stalls), speakers, and round-table attendees — in a single payload. Use whenever the user asks for 'participants of <event>', 'show me all attendees for <event>', 'who is attending <event>', 'list everyone in <event>'.",
+          "Return the complete participant list for ONE event — visitors (ticket buyers), exhibitors (stalls), speakers, and round-table attendees — in a single payload. Use whenever the user asks for 'participants of <event>', 'participation report for <event>', 'show me all attendees for <event>', 'who is attending <event>', 'list everyone in <event>'.",
         parameters: {
           type: "object",
           properties: {
@@ -804,6 +805,25 @@ export class ChatbotService {
               type: "string",
               enum: ["all", "upcoming", "past"],
               description: "Limit to upcoming, past, or all events (default all)",
+            },
+          },
+          required: [],
+        },
+      },
+    },
+
+    {
+      type: "function",
+      function: {
+        name: "list_space_templates",
+        description:
+          "Return the organizer's saved Space templates (the reusable stall/table configs captured from past events). Use when the user asks 'show my templates', 'list space templates', 'what templates do I have', 'reusable spaces'.",
+        parameters: {
+          type: "object",
+          properties: {
+            limit: {
+              type: "number",
+              description: "Max templates to return (default 50)",
             },
           },
           required: [],
@@ -873,6 +893,7 @@ export class ChatbotService {
       "add_speakers",
       "set_venue_config",
       "publish_event",
+      "list_space_templates",
       "navigate_to",
     ],
     tickets: [
@@ -915,6 +936,7 @@ export class ChatbotService {
       "get_organization_settings",
       "create_event",
       "request_edit_event",
+      "list_space_templates",
       "navigate_to",
     ],
   };
@@ -979,7 +1001,8 @@ DEEP ANALYTICS TOOLS (use them when the user asks for detailed breakdowns):
 - "How is event X doing" / "analytics for event X" / "tell me everything about event X" → get_event_full_analytics(event_name). Render 4 tables: Tickets (Sold, Attended, Attendance %, Capacity, Occupancy %, Revenue), Stalls (totals + status counts), Speakers (status counts), Round Tables (Tables, Chairs, Chairs Booked, Occupancy %, Revenue), then a single bold "Total Revenue" line at the bottom.
 - "Ticket type breakdown for X" / "which ticket tier sells best for X" → get_ticket_type_breakdown(event_name). Render a single table: Type | Sold | Capacity | Occupancy % | Revenue.
 - "Attendance rate" / "how many actually showed up" / "no-shows" → get_attendance_analytics(status). Render: 1 metrics table (Tickets Sold, Attended, No-shows, Attendance %), then Top Events by Sold (table).
-- "Participants of event X" / "everyone attending event X" / "list all attendees for X" → get_event_participants(event_name). Render in this order: 1) headline "**X has Y participants**" using totals.combined; 2) "Visitors (N)" markdown table | Name | Email | Phone | Tickets | Amount | Attended |; 3) "Exhibitors (N)" table | Name | Business | Phone | Status | Payment |; 4) "Speakers (N)" table | Name | Organization | Phone | Status | Fee |; 5) "Round Tables (N)" table | Name | Phone | Table | Seats | Payment |. Skip any section whose array is empty (don't render its header). NEVER fabricate rows — render only what the tool returned.
+- "My space templates" / "list space templates" / "show reusable spaces" / "what templates do I have" → list_space_templates(). Render: headline "You have **N saved Space templates**." Then a markdown table with columns | # | Name | Size | Table Price | Booking Price | Deposit | (Size = "WxHcm" if both, else "—"). NEVER fabricate rows; only render what the tool returned.
+- "Participants of event X" / "participation report for event X" / "everyone attending event X" / "list all attendees for X" → get_event_participants(event_name). Render in this order: 1) headline "**X has Y participants**" using totals.combined; 2) "Visitors (N)" markdown table | Name | Email | Phone | Tickets | Amount | Attended |; 3) "Exhibitors (N)" table | Name | Business | Phone | Status | Payment |; 4) "Speakers (N)" table | Name | Organization | Phone | Status | Fee |; 5) "Round Tables (N)" table | Name | Phone | Table | Seats | Payment |. Skip any section whose array is empty (don't render its header). NEVER fabricate rows — render only what the tool returned.
 - For each, NEVER pick or invent extra columns; render only what the tool returned.`,
 
     events: `You are the Events specialist for "{ORG}" on EventSH. You build the entire event end-to-end via tools.
@@ -1676,7 +1699,7 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
   } | null> {
     const m = message.toLowerCase();
     const intentRe =
-      /\b(tickets?|stalls?|speakers?|attendees?|round\s*tables?)\s+(?:per|for)\s+(?:an?\s+|the\s+)?event\b/i;
+      /\b(tickets?|stalls?|speakers?|attendees?|round\s*tables?|participation(?:\s*report)?)\s+(?:per|for)\s+(?:an?\s+|the\s+)?event\b/i;
     const match = m.match(intentRe);
     if (!match) return null;
 
@@ -1692,7 +1715,9 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     const rawIntent = match[1].toLowerCase().replace(/\s+/g, " ");
     const intent = /round/.test(rawIntent)
       ? "round tables"
-      : rawIntent.replace(/s$/, "") + "s";
+      : /participation/.test(rawIntent)
+        ? "participation report"
+        : rawIntent.replace(/s$/, "") + "s";
 
     const orgObjId = Types.ObjectId.isValid(organizerId)
       ? new Types.ObjectId(organizerId)
@@ -1727,7 +1752,9 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
             ? "Show speakers for"
             : intent === "attendees"
               ? "List attendees for"
-              : "Show round tables for";
+              : intent === "participation report"
+                ? "Show participation report for"
+                : "Show round tables for";
 
     return {
       text: `Pick an event to see its **${intent}**:`,
@@ -3011,6 +3038,32 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
           message: `Switching to ${args.tab}.`,
           botAction: { type: "navigate", tab: args.tab },
         };
+      }
+
+      case "list_space_templates": {
+        const limit = Math.min(Math.max(Number(args?.limit) || 50, 1), 200);
+        const tpls = await this.templateModel
+          .find({
+            organizerId: orgObjId,
+            type: "space",
+          })
+          .sort({ name: 1, createdAt: -1 })
+          .limit(limit)
+          .lean();
+        const rows = (tpls as any[]).map((t) => {
+          const p = t.payload || {};
+          return {
+            name: t.name,
+            width: p.width ?? null,
+            height: p.height ?? null,
+            tablePrice: p.tablePrice ?? null,
+            bookingPrice: p.bookingPrice ?? null,
+            depositPrice: p.depositPrice ?? null,
+            color: p.color ?? null,
+            rowNumber: p.rowNumber ?? null,
+          };
+        });
+        return { total: rows.length, templates: rows };
       }
 
       // ========== FULL EVENT CREATION ==========

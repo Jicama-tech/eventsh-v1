@@ -1,6 +1,6 @@
 // File: src/components/DashboardTabs/MyEventUsers.tsx
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -73,6 +73,9 @@ import {
   ParkingCircle,
   Camera,
   ShieldCheck,
+  Upload,
+  Download,
+  FileSpreadsheet,
 } from "lucide-react";
 import {
   FaWhatsapp,
@@ -263,6 +266,116 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
 
   const [stallRequest, setStallRequest] = useState<StallRequest | null>(null);
 
+  // Bulk import / export state — Visitors and Exhibitors share the same flow
+  // shape; the kind toggle controls which backend endpoint we hit.
+  const visitorFileRef = useRef<HTMLInputElement | null>(null);
+  const exhibitorFileRef = useRef<HTMLInputElement | null>(null);
+  const [bulkBusy, setBulkBusy] = useState<null | "visitors" | "exhibitors">(
+    null,
+  );
+  const [bulkResult, setBulkResult] = useState<{
+    kind: "visitors" | "exhibitors";
+    totalRows: number;
+    created: number;
+    skipped: number;
+    errors: number;
+    skippedRows?: { row: number; reason: string }[];
+    errorRows?: { row: number; reason: string }[];
+  } | null>(null);
+
+  const handleBulkUpload = async (
+    kind: "visitors" | "exhibitors",
+    file: File,
+  ) => {
+    const token = sessionStorage.getItem("token");
+    const organizerId = token ? (jwtDecode(token) as any).sub : null;
+    if (!organizerId) {
+      toast({
+        title: "Not signed in",
+        description: "Please sign in again",
+        variant: "destructive",
+      });
+      return;
+    }
+    setBulkBusy(kind);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`${apiURL}/bulk-import/${kind}/${organizerId}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: fd,
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json?.message || "Import failed");
+      }
+      setBulkResult({ kind, ...json });
+      toast({
+        title: `${kind === "visitors" ? "Visitors" : "Exhibitors"} imported`,
+        description: `${json.created} created · ${json.skipped} skipped · ${json.errors} errors`,
+      });
+      // Refresh underlying lists.
+      try {
+        await fetchAllData();
+      } catch {
+        /* fetch helper handles its own errors */
+      }
+    } catch (err: any) {
+      toast({
+        title: "Import failed",
+        description: err?.message || "Could not parse the file",
+        variant: "destructive",
+      });
+    } finally {
+      setBulkBusy(null);
+      if (visitorFileRef.current) visitorFileRef.current.value = "";
+      if (exhibitorFileRef.current) exhibitorFileRef.current.value = "";
+    }
+  };
+
+  const downloadBlob = async (url: string, fallbackName: string) => {
+    const token = sessionStorage.getItem("token");
+    try {
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objUrl;
+      a.download = fallbackName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objUrl);
+    } catch (err: any) {
+      toast({
+        title: "Download failed",
+        description: err?.message || "Could not download file",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleExport = (kind: "visitors" | "exhibitors") => {
+    const token = sessionStorage.getItem("token");
+    const organizerId = token ? (jwtDecode(token) as any).sub : null;
+    if (!organizerId) return;
+    downloadBlob(
+      `${apiURL}/bulk-import/${kind}/export/${organizerId}`,
+      `${kind}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    );
+  };
+
+  const handleTemplate = (kind: "visitors" | "exhibitors") => {
+    downloadBlob(
+      `${apiURL}/bulk-import/${kind}/template`,
+      `${kind}-template.xlsx`,
+    );
+  };
+
   // -- Helpers --
   const getOrganizerIdFromToken = () => {
     try {
@@ -356,7 +469,8 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
           headers: { Authorization: `Bearer ${token}` },
         }),
         // Fetch users manually created by this organizer
-        fetch(`${apiURL}/users/fetch-users-by-organizer/${organizerId}`, {
+        // Same org id; users were saved with provider="Shopkeeper", providerId=<organizerId>.
+        fetch(`${apiURL}/users/fetch-users-by-shopkeeper/${organizerId}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
@@ -915,7 +1029,47 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   View and manage users who purchased tickets.
                 </CardDescription>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                <input
+                  ref={visitorFileRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleBulkUpload("visitors", f);
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleTemplate("visitors")}
+                  title="Download a blank Excel template"
+                >
+                  <FileSpreadsheet className="mr-2 h-4 w-4" /> Template
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => visitorFileRef.current?.click()}
+                  disabled={bulkBusy === "visitors"}
+                  title="Bulk import from Excel/CSV (AI auto-maps columns)"
+                >
+                  {bulkBusy === "visitors" ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="mr-2 h-4 w-4" />
+                  )}
+                  Import
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleExport("visitors")}
+                  title="Download all visitors as Excel"
+                >
+                  <Download className="mr-2 h-4 w-4" /> Export
+                </Button>
                 <Button
                   onClick={() => handleOpenInvite("visitor")}
                   size="sm"
@@ -1042,7 +1196,47 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   View and manage shopkeepers participating in stalls.
                 </CardDescription>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                <input
+                  ref={exhibitorFileRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleBulkUpload("exhibitors", f);
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleTemplate("exhibitors")}
+                  title="Download a blank Excel template"
+                >
+                  <FileSpreadsheet className="mr-2 h-4 w-4" /> Template
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => exhibitorFileRef.current?.click()}
+                  disabled={bulkBusy === "exhibitors"}
+                  title="Bulk import from Excel/CSV (AI auto-maps columns)"
+                >
+                  {bulkBusy === "exhibitors" ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="mr-2 h-4 w-4" />
+                  )}
+                  Import
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleExport("exhibitors")}
+                  title="Download all exhibitors as Excel"
+                >
+                  <Download className="mr-2 h-4 w-4" /> Export
+                </Button>
                 <Button
                   onClick={() => handleOpenInvite("exhibitor")}
                   size="sm"
@@ -1166,6 +1360,71 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Bulk import result summary */}
+      {bulkResult && (
+        <Dialog open={!!bulkResult} onOpenChange={(o) => !o && setBulkResult(null)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>
+                {bulkResult.kind === "visitors" ? "Visitors" : "Exhibitors"} import
+              </DialogTitle>
+              <DialogDescription>
+                {bulkResult.totalRows} rows processed. AI mapped your columns and we
+                created the records below.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid grid-cols-3 gap-3 py-2">
+              <div className="rounded-md border p-3 text-center">
+                <div className="text-2xl font-semibold text-emerald-600">
+                  {bulkResult.created}
+                </div>
+                <div className="text-xs text-muted-foreground">Created</div>
+              </div>
+              <div className="rounded-md border p-3 text-center">
+                <div className="text-2xl font-semibold text-amber-600">
+                  {bulkResult.skipped}
+                </div>
+                <div className="text-xs text-muted-foreground">Skipped</div>
+              </div>
+              <div className="rounded-md border p-3 text-center">
+                <div className="text-2xl font-semibold text-rose-600">
+                  {bulkResult.errors}
+                </div>
+                <div className="text-xs text-muted-foreground">Errors</div>
+              </div>
+            </div>
+
+            {(bulkResult.skippedRows?.length || 0) +
+              (bulkResult.errorRows?.length || 0) >
+              0 && (
+              <div className="max-h-48 overflow-y-auto text-sm space-y-1 border rounded-md p-2">
+                {bulkResult.skippedRows?.slice(0, 25).map((s, i) => (
+                  <div key={`s-${i}`} className="flex justify-between gap-2">
+                    <span className="text-amber-700">Row {s.row}</span>
+                    <span className="text-muted-foreground truncate">
+                      {s.reason}
+                    </span>
+                  </div>
+                ))}
+                {bulkResult.errorRows?.slice(0, 25).map((s, i) => (
+                  <div key={`e-${i}`} className="flex justify-between gap-2">
+                    <span className="text-rose-700">Row {s.row}</span>
+                    <span className="text-muted-foreground truncate">
+                      {s.reason}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button onClick={() => setBulkResult(null)}>Done</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* --- Dialogs --- */}
 

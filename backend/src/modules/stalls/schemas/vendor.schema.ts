@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
-import { Document } from "mongoose";
+import { Document, Types } from "mongoose";
 
 export type VendorDocument = Vendor & Document;
 
@@ -9,11 +9,32 @@ export type VendorDocument = Vendor & Document;
  */
 @Schema({ collection: "vendors", timestamps: true })
 export class Vendor {
+  // Owning organizer — populated when the vendor is created via the
+  // organizer's exhibitor list. Vendors created through stall registration
+  // before this field existed will be null and surface only via stalls.
+  @Prop({ type: Types.ObjectId, ref: "Organizer", required: false, index: true })
+  organizerId?: Types.ObjectId;
+
   @Prop({ required: true })
   name: string;
 
   @Prop()
   email: string;
+
+  @Prop()
+  businessEmail: string;
+
+  @Prop()
+  phone: string;
+
+  @Prop()
+  country: string;
+
+  @Prop({ default: false })
+  hasDocVerification: boolean;
+
+  @Prop({ default: false })
+  rejected: boolean;
 
   @Prop()
   whatsAppNumber: string;

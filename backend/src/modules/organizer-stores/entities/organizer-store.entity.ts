@@ -169,10 +169,13 @@ export class OrganizerStore {
 export const OrganizerStoreSchema =
   SchemaFactory.createForClass(OrganizerStore);
 
-// Add pre-save hook to generate slug before saving
+// Generate slug only when one isn't already set. Overwriting on every
+// storeName change broke creation because the unique-index fires when two
+// organizers happen to land on the same slugified storeName — even when the
+// caller had supplied a uniquified slug in the payload.
 OrganizerStoreSchema.pre<OrganizerStoreDocument>("save", function (next) {
-  if (this.isModified("settings.general.storeName") || !this.slug) {
-    this.slug = slugify(this.settings.general.storeName, {
+  if (!this.slug) {
+    this.slug = slugify(this.settings?.general?.storeName || "store", {
       lower: true,
       strict: true,
     });

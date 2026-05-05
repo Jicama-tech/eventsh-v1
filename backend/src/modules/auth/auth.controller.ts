@@ -8,6 +8,9 @@ import {
   Res,
   ConflictException,
   InternalServerErrorException,
+  UnauthorizedException,
+  ForbiddenException,
+  NotFoundException,
 } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { LocalDto } from "./dto/local.dto";
@@ -187,71 +190,183 @@ export class AuthController {
       const email = String(userFromGoogle.email).toLowerCase();
       const name = userFromGoogle.name || "";
 
-      // 1. Approved organizer? Mint organizer JWT and log them straight in.
-      const approvedOrg: any = await this.organizerModel
-        .findOne({ email, approved: true })
-        .lean();
-      if (approvedOrg) {
-        const token = this.jwtService.sign(
-          {
-            name: approvedOrg.name,
-            email: approvedOrg.email,
-            sub: approvedOrg._id.toString(),
-            country: approvedOrg.country,
-            organizationName: approvedOrg.organizationName,
-            roles: ["organizer"],
-          },
-          { secret: process.env.JWT_ACCESS_SECRET, expiresIn: "24h" },
+      // Case-insensitive match — operator records aren't normalized to
+      // lowercase, so a plain equality check would silently miss them.
+      const escaped = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const emailRegex = new RegExp(`^${escaped}$`, "i");
+
+      // Gather every organizer + operator record tied to this email.
+      const [organizers, operators] = await Promise.all([
+        this.organizerModel.find({ email: emailRegex }).lean(),
+        this.operatorModel.find({ email: emailRegex }).lean(),
+      ]);
+
+      // Resolve parent organizers for any operator hits.
+      const parentIds = Array.from(
+        new Set(
+          operators
+            .filter((o: any) => o.organizerId)
+            .map((o: any) => String(o.organizerId)),
+        ),
+      );
+      const parentOrgs = parentIds.length
+        ? await this.organizerModel
+            .find({ _id: { $in: parentIds } })
+            .lean()
+        : [];
+      const parentLookup = new Map<string, any>(
+        parentOrgs.map((p: any) => [String(p._id), p]),
+      );
+
+      // Build a unified list. Pending organizers stay in but flagged
+      // approved=false so the UI can grey them out and block selection.
+      // Operator entries inherit the parent organization's approval state.
+      const accounts: Array<{
+        accountId: string;
+        accountType: "organizer" | "operator";
+        organizationName: string;
+        approved: boolean;
+      }> = [];
+      for (const org of organizers as any[]) {
+        accounts.push({
+          accountId: String(org._id),
+          accountType: "organizer",
+          organizationName: org.organizationName,
+          approved: !!org.approved && !org.rejected,
+        });
+      }
+      for (const op of operators as any[]) {
+        if (!op.organizerId) continue;
+        const parent = parentLookup.get(String(op.organizerId));
+        if (!parent) continue;
+        accounts.push({
+          accountId: String(op._id),
+          accountType: "operator",
+          organizationName: `${parent.organizationName} (Operator: ${op.name})`,
+          approved: !!parent.approved,
+        });
+      }
+
+      // 0 → registration
+      if (accounts.length === 0) {
+        const params = new URLSearchParams({ email, name });
+        return res.redirect(`${fe}/register?${params.toString()}`);
+      }
+
+      // 1 → direct login (or pending block)
+      if (accounts.length === 1) {
+        const only = accounts[0];
+        if (!only.approved) {
+          return res.redirect(`${fe}/organizer/login?error=pending_approval`);
+        }
+        const token = await this.mintOrganizerToken(
+          only.accountId,
+          only.accountType,
         );
         return res.redirect(
           `${fe}/organizer/login?token=${encodeURIComponent(token)}&direct=1`,
         );
       }
 
-      // 2. Organizer record exists but isn't approved yet → block with message.
-      const pendingOrg: any = await this.organizerModel
-        .findOne({ email, approved: { $ne: true } })
-        .lean();
-      if (pendingOrg) {
-        return res.redirect(
-          `${fe}/organizer/login?error=pending_approval`,
-        );
-      }
-
-      // 3. Operator? Log in under the parent organizer's identity.
-      const operator: any = await this.operatorModel
-        .findOne({ email })
-        .lean();
-      if (operator?.organizerId) {
-        const parentOrg: any = await this.organizerModel
-          .findOne({ _id: operator.organizerId, approved: true })
-          .lean();
-        if (parentOrg) {
-          const token = this.jwtService.sign(
-            {
-              name: operator.name,
-              email: operator.email,
-              sub: parentOrg._id.toString(),
-              operatorId: operator._id.toString(),
-              accessTabs: operator.accessTabs || [],
-              country: parentOrg.country,
-              organizationName: parentOrg.organizationName,
-              roles: ["organizer"],
-            },
-            { secret: process.env.JWT_ACCESS_SECRET, expiresIn: "24h" },
-          );
-          return res.redirect(
-            `${fe}/organizer/login?token=${encodeURIComponent(token)}&direct=1`,
-          );
-        }
-      }
-
-      // 4. No organizer or operator found → send to registration prefilled.
-      const params = new URLSearchParams({ email, name });
-      return res.redirect(`${fe}/register?${params.toString()}`);
+      // 2+ → mint short-lived selection token, send user to picker UI.
+      const selToken = this.jwtService.sign(
+        { typ: "organizer-select", email, name, accounts },
+        { secret: process.env.JWT_ACCESS_SECRET, expiresIn: "5m" } as any,
+      );
+      return res.redirect(
+        `${fe}/organizer/login?selToken=${encodeURIComponent(selToken)}`,
+      );
     } catch (error) {
       return res.redirect(`${fe}/organizer/login?error=auth_failed`);
     }
+  }
+
+  // Exchange a selection token + chosen account for the real organizer JWT.
+  // Used by the multi-account dropdown after Google sign-in.
+  @Post("select-organizer-account")
+  async selectOrganizerAccount(
+    @Body()
+    body: {
+      selToken: string;
+      accountId: string;
+      accountType: "organizer" | "operator";
+    },
+  ) {
+    if (!body?.selToken || !body?.accountId || !body?.accountType) {
+      throw new UnauthorizedException("Missing selection payload");
+    }
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(body.selToken, {
+        secret: process.env.JWT_ACCESS_SECRET,
+      });
+    } catch {
+      throw new UnauthorizedException(
+        "Selection link expired. Please sign in again.",
+      );
+    }
+    if (payload?.typ !== "organizer-select") {
+      throw new UnauthorizedException("Invalid selection token");
+    }
+    const match = (payload.accounts || []).find(
+      (a: any) =>
+        a.accountId === body.accountId && a.accountType === body.accountType,
+    );
+    if (!match) {
+      throw new UnauthorizedException("Account not in selection list");
+    }
+    if (!match.approved) {
+      throw new ForbiddenException(
+        "This account is awaiting approval and cannot be used yet.",
+      );
+    }
+    const token = await this.mintOrganizerToken(
+      body.accountId,
+      body.accountType,
+    );
+    return { token };
+  }
+
+  // Mint the organizer dashboard JWT for either an organizer record or an
+  // operator (which logs in under the parent organizer's identity).
+  private async mintOrganizerToken(
+    accountId: string,
+    accountType: "organizer" | "operator",
+  ): Promise<string> {
+    if (accountType === "organizer") {
+      const org: any = await this.organizerModel.findById(accountId).lean();
+      if (!org) throw new NotFoundException("Organizer not found");
+      return this.jwtService.sign(
+        {
+          name: org.name,
+          email: org.email,
+          sub: org._id.toString(),
+          country: org.country,
+          organizationName: org.organizationName,
+          roles: ["organizer"],
+        },
+        { secret: process.env.JWT_ACCESS_SECRET, expiresIn: "24h" } as any,
+      );
+    }
+    const op: any = await this.operatorModel.findById(accountId).lean();
+    if (!op?.organizerId) throw new NotFoundException("Operator not found");
+    const parent: any = await this.organizerModel
+      .findById(op.organizerId)
+      .lean();
+    if (!parent) throw new NotFoundException("Parent organization not found");
+    return this.jwtService.sign(
+      {
+        name: op.name,
+        email: op.email,
+        sub: parent._id.toString(),
+        operatorId: op._id.toString(),
+        accessTabs: op.accessTabs || [],
+        country: parent.country,
+        organizationName: parent.organizationName,
+        roles: ["organizer"],
+      },
+      { secret: process.env.JWT_ACCESS_SECRET, expiresIn: "24h" } as any,
+    );
   }
 
   @Post("check-role") // e.g. /auth/check-role

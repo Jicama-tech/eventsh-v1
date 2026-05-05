@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  Logger,
+} from "@nestjs/common";
 import { CreateOrganizerStoreDto } from "./dto/create-organizer-store.dto";
 import { UpdateOrganizerStoreDto } from "./dto/update-organizer-store.dto";
 import { InjectModel } from "@nestjs/mongoose/dist";
@@ -8,16 +13,59 @@ import { OrganizerStore } from "./entities/organizer-store.entity";
 
 @Injectable()
 export class OrganizerStoresService {
+  private readonly logger = new Logger(OrganizerStoresService.name);
+
   constructor(
     @InjectModel(OrganizerStore.name)
     private organizerStoreModel: Model<OrganizerStore>,
   ) {}
 
+  // Build a slug guaranteed to be unique by appending a short random suffix
+  // until the index accepts it. Caller passes the seed (storeName).
+  private async generateUniqueSlug(seed: string): Promise<string> {
+    const base =
+      slugify(seed || "store", { lower: true, strict: true }) || "store";
+    // First try the bare slug; if it's free, use it.
+    const exists = await this.organizerStoreModel.exists({ slug: base });
+    if (!exists) return base;
+    // Otherwise append a 4-char suffix and keep retrying.
+    for (let i = 0; i < 6; i++) {
+      const suffix = Math.random().toString(36).slice(2, 6);
+      const candidate = `${base}-${suffix}`;
+      const taken = await this.organizerStoreModel.exists({ slug: candidate });
+      if (!taken) return candidate;
+    }
+    // Final fallback — timestamp guarantees uniqueness.
+    return `${base}-${Date.now().toString(36)}`;
+  }
+
   async create(createOrganizerStoreDto: CreateOrganizerStoreDto) {
     try {
+      // Idempotency: if this organizer already has a store, return it instead
+      // of letting the unique organizerId index throw E11000.
+      if (createOrganizerStoreDto.organizerId) {
+        const existing = await this.organizerStoreModel
+          .findOne({ organizerId: createOrganizerStoreDto.organizerId })
+          .exec();
+        if (existing) {
+          return {
+            message: "Shopfront settings already exist for this organizer",
+            data: existing,
+          };
+        }
+      }
+
+      // Resolve a slug that won't collide with another organizer's store.
+      const requestedSlug = (createOrganizerStoreDto.slug || "").trim();
+      const safeSlug = requestedSlug
+        ? await this.generateUniqueSlug(requestedSlug)
+        : await this.generateUniqueSlug(
+            createOrganizerStoreDto.general?.storeName || "store",
+          );
+
       const shopfrontStore = new this.organizerStoreModel({
         organizerId: createOrganizerStoreDto.organizerId,
-        slug: createOrganizerStoreDto.slug,
+        slug: safeSlug,
         settings: {
           general: {
             storeName: createOrganizerStoreDto.general.storeName,
@@ -85,7 +133,30 @@ export class OrganizerStoresService {
         },
       });
 
-      const result = await shopfrontStore.save();
+      let result;
+      try {
+        result = await shopfrontStore.save();
+      } catch (err: any) {
+        // Race condition fallback — between the `exists` check and `save` a
+        // concurrent request could have grabbed the same slug/organizerId.
+        if (err?.code === 11000) {
+          if (createOrganizerStoreDto.organizerId) {
+            const existing = await this.organizerStoreModel
+              .findOne({ organizerId: createOrganizerStoreDto.organizerId })
+              .exec();
+            if (existing) {
+              return {
+                message: "Shopfront settings already exist for this organizer",
+                data: existing,
+              };
+            }
+          }
+          throw new ConflictException(
+            "A storefront with this slug already exists. Try a different store name.",
+          );
+        }
+        throw err;
+      }
 
 
       return {
@@ -93,7 +164,10 @@ export class OrganizerStoresService {
         data: result,
       };
     } catch (error) {
-      console.error("Error creating shopfront settings:", error);
+      this.logger.error(
+        `Error creating shopfront settings: ${error?.message || error}`,
+        error?.stack,
+      );
       throw error;
     }
   }

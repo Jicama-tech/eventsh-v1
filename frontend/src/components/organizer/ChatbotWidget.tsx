@@ -41,6 +41,7 @@ import {
   Pencil,
   UserPlus,
   Store,
+  Grid3x3,
 } from "lucide-react";
 
 const apiURL = __API_URL__;
@@ -284,6 +285,14 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
     sub: "Completed events",
     prompt: "Show me past events",
   },
+  {
+    category: "Events",
+    Icon: Grid3x3,
+    tint: "text-purple-600 bg-purple-50",
+    title: "Space templates",
+    sub: "Reusable Space configs from past events",
+    prompt: "Show my space templates",
+  },
   // {
   //   category: "Events",
   //   Icon: Sparkles,
@@ -417,6 +426,14 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
     title: "Find attendee",
     sub: "Search by name or email",
     prompt: "Find attendee by name or email",
+  },
+  {
+    category: "Attendees",
+    Icon: Users,
+    tint: "text-emerald-600 bg-emerald-50",
+    title: "Participation report",
+    sub: "Visitors, exhibitors, speakers, round tables — pick an event",
+    prompt: "Show participation report per event",
   },
 
   // ========== STALLS / VENDORS ==========

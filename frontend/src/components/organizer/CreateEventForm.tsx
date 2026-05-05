@@ -776,6 +776,170 @@ const VenueConfiguration = ({
   );
 };
 
+// Compact picker for previously-saved Space templates. Inserted above the
+// Space form so the organizer can prefill all fields from a past event with
+// one click. Editing any field after picking will create a NEW variant when
+// the event is saved (server-side dedupe on signature).
+const SavedSpaceTemplatePicker: React.FC<{
+  setCurrentTable: React.Dispatch<React.SetStateAction<any>>;
+}> = ({ setCurrentTable }) => {
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedId, setSelectedId] = useState<string>("");
+  const [filter, setFilter] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const token = sessionStorage.getItem("token");
+      if (!token) return;
+      const decoded: any = (() => {
+        try {
+          return jwtDecode(token);
+        } catch {
+          return null;
+        }
+      })();
+      if (!decoded?.sub) return;
+      setLoading(true);
+      try {
+        const res = await fetch(
+          `${__API_URL__}/templates/by-organizer/${decoded.sub}?type=space`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!cancelled) setTemplates(json?.data || []);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const apply = (id: string) => {
+    setSelectedId(id);
+    const t = templates.find((x) => String(x._id) === id);
+    if (!t) return;
+    const p = t.payload || {};
+    setCurrentTable((prev: any) => ({
+      ...prev,
+      name: p.name ?? prev.name,
+      type: p.type ?? prev.type ?? "Straight",
+      width: p.width != null ? String(p.width) : prev.width,
+      height: p.height != null ? String(p.height) : prev.height,
+      rowNumber: p.rowNumber != null ? String(p.rowNumber) : prev.rowNumber,
+      tablePrice:
+        p.tablePrice != null ? String(p.tablePrice) : prev.tablePrice,
+      bookingPrice:
+        p.bookingPrice != null ? String(p.bookingPrice) : prev.bookingPrice,
+      depositPrice:
+        p.depositPrice != null ? String(p.depositPrice) : prev.depositPrice,
+      color: p.color ?? prev.color,
+      forSale: prev.forSale,
+    }));
+  };
+
+  if (!loading && templates.length === 0) return null;
+
+  // Filter for large lists. Show the search input only above ~10 templates so
+  // small libraries don't get noisy chrome.
+  const visible = filter
+    ? templates.filter((t) => {
+        const f = filter.toLowerCase();
+        const p = t.payload || {};
+        return (
+          (t.name || "").toLowerCase().includes(f) ||
+          String(p.tablePrice ?? "").includes(f)
+        );
+      })
+    : templates;
+
+  return (
+    <div className="rounded-lg border border-purple-200 bg-purple-50/40 p-3">
+      <Label className="text-sm font-medium text-purple-900 flex items-center gap-2">
+        <Grid3x3 size={14} /> Reuse a saved Space template
+      </Label>
+      <div className="flex gap-2 mt-2">
+        <Select value={selectedId} onValueChange={apply}>
+          <SelectTrigger className="bg-white">
+            <SelectValue
+              placeholder={
+                loading
+                  ? "Loading…"
+                  : `Pick from ${templates.length} saved template${templates.length === 1 ? "" : "s"}`
+              }
+            />
+          </SelectTrigger>
+          {/* Cap height + scroll the inner viewport so 50+ entries are
+              comfortably navigable instead of relying on Radix scroll
+              chevrons alone. */}
+          <SelectContent className="max-h-80">
+            {templates.length > 10 && (
+              <div
+                className="sticky top-0 bg-popover px-2 py-1.5 border-b z-10"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <Input
+                  autoFocus
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder="Search templates…"
+                  className="h-8 text-xs"
+                />
+              </div>
+            )}
+            <div className="max-h-64 overflow-y-auto">
+              {visible.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-muted-foreground">
+                  No matches.
+                </div>
+              ) : (
+                visible.map((t) => {
+                  const p = t.payload || {};
+                  const sub = [
+                    p.tablePrice != null ? `Price ${p.tablePrice}` : null,
+                    p.width && p.height ? `${p.width}×${p.height}cm` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
+                  return (
+                    <SelectItem key={String(t._id)} value={String(t._id)}>
+                      {t.name}
+                      {sub ? ` — ${sub}` : ""}
+                    </SelectItem>
+                  );
+                })
+              )}
+            </div>
+          </SelectContent>
+        </Select>
+        {selectedId && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSelectedId("");
+              setFilter("");
+            }}
+          >
+            Clear
+          </Button>
+        )}
+      </div>
+      <p className="text-xs text-purple-700 mt-2">
+        Picking fills the form below. Change the price (or any field) and save —
+        it'll be stored as a new template variant.
+      </p>
+    </div>
+  );
+};
+
 // Professional Table Management Component
 const TableManagement = ({
   tableTemplates,
@@ -1078,6 +1242,11 @@ const TableManagement = ({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Saved templates picker — pulls from /templates collection so the
+              organizer can reuse a previous Space without retyping. Editing
+              fields after picking will create a new variant on save. */}
+          <SavedSpaceTemplatePicker setCurrentTable={setCurrentTable} />
+
           {/* Replace the "Create Table Templates" grid layout with this to remove the "Table Type" selector and enforce Straight tables. */}
           <div className="grid grid-cols-1 gap-4">
             <div className="md:col-span-1">
