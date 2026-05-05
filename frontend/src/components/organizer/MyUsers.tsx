@@ -175,7 +175,8 @@ interface ProcessedExhibitor {
   phone: string;
   whatsapp: string;
   category: string;
-  status: string; // From shopkeeper profile (approved/rejected)
+  status: string; // From shopkeeper profile (approved/rejected) — kept for legacy callers, no longer rendered
+  country: string;
   totalSpent: number;
   stallsBooked: number;
   requests: StallRequest[];
@@ -592,6 +593,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               : stall.shopkeeperId?.rejected
                 ? "Rejected"
                 : "Pending",
+            country: stall.shopkeeperId?.country || "",
             totalSpent: 0,
             stallsBooked: 0,
             requests: [],
@@ -628,6 +630,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               : shop.rejected
                 ? "Rejected"
                 : "Pending",
+            country: shop.country || "",
             totalSpent: 0,
             stallsBooked: 0,
             requests: [], // No stall requests yet
@@ -1267,7 +1270,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                     <TableRow>
                       <TableHead>Exhibitor</TableHead>
                       <TableHead>Contact</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Last Booking</TableHead>
                       <TableHead>Performance</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
@@ -1315,20 +1318,45 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                             </div>
                           </TableCell>
                           <TableCell>
-                            {exhibitor.status === "Verified" ? (
-                              <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
-                                <CheckCircle2 className="h-3 w-3 mr-1" />{" "}
-                                Verified
-                              </Badge>
-                            ) : exhibitor.status === "Rejected" ? (
-                              <Badge variant="destructive">
-                                <XCircle className="h-3 w-3 mr-1" /> Rejected
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary">
-                                <Clock className="h-3 w-3 mr-1" /> Pending
-                              </Badge>
-                            )}
+                            {(() => {
+                              // Pick the most recent request by requestDate;
+                              // fall back to createdAt if requestDate missing.
+                              const latest = exhibitor.requests
+                                .map((r: any) =>
+                                  new Date(
+                                    r.requestDate || r.createdAt || 0,
+                                  ).getTime(),
+                                )
+                                .filter((t) => t > 0)
+                                .sort((a, b) => b - a)[0];
+                              if (!latest) {
+                                return (
+                                  <span className="text-xs text-muted-foreground">
+                                    No bookings yet
+                                  </span>
+                                );
+                              }
+                              const diffMs = Date.now() - latest;
+                              const day = 24 * 60 * 60 * 1000;
+                              const days = Math.floor(diffMs / day);
+                              let rel: string;
+                              if (days === 0) rel = "Today";
+                              else if (days === 1) rel = "Yesterday";
+                              else if (days < 30) rel = `${days}d ago`;
+                              else if (days < 365)
+                                rel = `${Math.floor(days / 30)}mo ago`;
+                              else rel = `${Math.floor(days / 365)}y ago`;
+                              return (
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-medium">
+                                    {rel}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatDate(new Date(latest).toISOString())}
+                                  </span>
+                                </div>
+                              );
+                            })()}
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col text-sm">
