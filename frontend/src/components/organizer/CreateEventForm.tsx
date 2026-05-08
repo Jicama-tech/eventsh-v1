@@ -37,6 +37,8 @@ import {
   Mic,
   Circle,
   Sparkles,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { jwtDecode } from "jwt-decode";
 import BlurOverlay from "../ui/blurOverlay";
@@ -1864,6 +1866,33 @@ const VenueDesigner = ({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
+  const [isCanvasMaximized, setIsCanvasMaximized] = useState(false);
+
+  // Coalesce mousemove updates into one frame so dragging stays smooth even
+  // with many positioned items on the canvas.
+  const rafIdRef = useRef<number | null>(null);
+  const pendingMoveRef = useRef<React.MouseEvent | null>(null);
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
+    };
+  }, []);
+
+  // Lock body scroll while the canvas is maximized so background doesn't slide.
+  // Also let Escape exit full-screen, matching common dialog conventions.
+  useEffect(() => {
+    if (!isCanvasMaximized) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsCanvasMaximized(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [isCanvasMaximized]);
   const { country } = useCountry();
   const { formatPrice, getSymbol } = useCurrency(country);
 
@@ -2115,6 +2144,24 @@ const VenueDesigner = ({
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDragging || !selectedTable || !venueConfig) return;
+    // Throttle to one update per animation frame. The mouse fires move events
+    // far faster than React can render hundreds of positioned items; without
+    // this, large layouts feel laggy mid-drag. We persist the latest event in
+    // a ref and process it inside rAF, dropping intermediate ones.
+    e.persist?.();
+    pendingMoveRef.current = e;
+    if (rafIdRef.current != null) return;
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      const ev = pendingMoveRef.current;
+      if (!ev) return;
+      pendingMoveRef.current = null;
+      processDragMove(ev);
+    });
+  };
+
+  const processDragMove = (e: React.MouseEvent) => {
+    if (!selectedTable || !venueConfig) return;
     const rect = venueRef.current?.getBoundingClientRect();
     if (!rect) return;
 
@@ -2387,6 +2434,37 @@ const VenueDesigner = ({
         />
       )}
 
+      {/* Maximize-aware design surface. When `isCanvasMaximized` is true the
+          templates panel + canvas render inside a fixed-position overlay that
+          fills the viewport. Same JSX in both modes — only the wrapping
+          container's classes differ — so drag/click handlers don't change. */}
+      <div
+        className={
+          isCanvasMaximized
+            ? "fixed inset-0 z-50 bg-white overflow-auto p-4 space-y-4"
+            : "space-y-4"
+        }
+      >
+      {isCanvasMaximized && (
+        <div className="flex items-center justify-between sticky top-0 bg-white border-b pb-3 z-10">
+          <div>
+            <h3 className="text-lg font-bold">Venue Designer · Full screen</h3>
+            <p className="text-xs text-muted-foreground">
+              Drag templates from the panel below onto the canvas. Press Esc or
+              click Exit to return.
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setIsCanvasMaximized(false)}
+          >
+            <Minimize2 className="h-4 w-4 mr-1" />
+            Exit fullscreen
+          </Button>
+        </div>
+      )}
       {/* Templates Row - Full Width Horizontal */}
       <div className="border rounded-xl bg-slate-50 p-4">
         <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
@@ -2555,10 +2633,38 @@ const VenueDesigner = ({
 
       {/* Full Width Canvas */}
       <Card className="border-2">
-        <CardContent className="p-3">
+        <CardContent className="p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Canvas
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setIsCanvasMaximized((v) => !v)}
+              title={
+                isCanvasMaximized
+                  ? "Exit full-screen design"
+                  : "Maximize to full screen for design"
+              }
+            >
+              {isCanvasMaximized ? (
+                <>
+                  <Minimize2 className="h-4 w-4 mr-1" /> Minimize
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="h-4 w-4 mr-1" /> Maximize
+                </>
+              )}
+            </Button>
+          </div>
           <div
             className="relative border-2 border-dashed border-gray-300 rounded-xl bg-slate-50 overflow-auto flex justify-center items-start p-6"
-            style={{ minHeight: "700px" }}
+            style={{
+              minHeight: isCanvasMaximized ? "calc(100vh - 280px)" : "700px",
+            }}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
@@ -2931,6 +3037,8 @@ const VenueDesigner = ({
           </div>
         </CardContent>
       </Card>
+      </div>
+      {/* /maximize-aware design surface */}
 
       {/* Inventory Summary - Full Width */}
       {(currentTables.length > 0 ||
@@ -3518,8 +3626,33 @@ export function CreateEventForm({
   }, []);
 
   const handleInputChange = (field: string, value: any) => {
-    setFormData((old) => ({ ...old, [field]: value }));
+    setFormData((old) => {
+      const next: any = { ...old, [field]: value };
+      // When the user moves the start date forward past the current end date,
+      // bump the end date to match so we never end up with end < start. Only
+      // touches endDate when it actually trails behind — empty endDate stays
+      // empty (it's optional).
+      if (
+        field === "startDate" &&
+        typeof value === "string" &&
+        value &&
+        old.endDate &&
+        old.endDate < value
+      ) {
+        next.endDate = value;
+      }
+      return next;
+    });
   };
+
+  // Today's date as YYYY-MM-DD, used as the min for the Start Date picker on
+  // brand-new events (and duplicates). In Edit mode we don't constrain — an
+  // active event's startDate can legitimately be in the past.
+  const todayDateString = new Date().toISOString().slice(0, 10);
+  const startDateMin = editMode ? undefined : todayDateString;
+  // End date floor: at minimum the chosen start date (so end < start is
+  // physically blocked by the picker), or today if start isn't picked yet.
+  const endDateMin = formData.startDate || startDateMin;
 
   const applyImportedFields = async (
     payload: {
@@ -4238,6 +4371,7 @@ export function CreateEventForm({
                     <Input
                       type="date"
                       value={formData.startDate}
+                      min={startDateMin}
                       onChange={(e) =>
                         handleInputChange("startDate", e.target.value)
                       }
@@ -4260,6 +4394,7 @@ export function CreateEventForm({
                     <Input
                       type="date"
                       value={formData.endDate}
+                      min={endDateMin}
                       onChange={(e) =>
                         handleInputChange("endDate", e.target.value)
                       }

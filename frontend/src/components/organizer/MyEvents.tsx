@@ -480,7 +480,46 @@ const MyEvents: React.FC = () => {
     void createdAt;
     void updatedAt;
     void registrations;
-    setDuplicatingFrom(rest as Event);
+
+    // Wipe booking state from cloned layout — a duplicated event is brand
+    // new, no exhibitor or attendee has booked anything in it yet.
+    // Layout collections are sometimes flat arrays, sometimes Record<configId,
+    // item[]>; handle both shapes by walking values.
+    const clearStallBookings = (item: any) => ({
+      ...item,
+      isBooked: false,
+      bookedBy: null,
+    });
+    const clearRoundBookings = (item: any) => ({
+      ...item,
+      bookedChairs: [],
+      isFullyBooked: false,
+    });
+    const sanitizeLayoutCollection = <T,>(
+      raw: any,
+      transform: (item: T) => T,
+    ): any => {
+      if (Array.isArray(raw)) return raw.map(transform);
+      if (raw && typeof raw === "object") {
+        const out: Record<string, any> = {};
+        for (const [k, v] of Object.entries(raw)) {
+          out[k] = Array.isArray(v) ? v.map(transform) : v;
+        }
+        return out;
+      }
+      return raw;
+    };
+
+    const cloned: any = {
+      ...rest,
+      venueTables: sanitizeLayoutCollection(rest.venueTables, clearStallBookings),
+      venueRoundTables: sanitizeLayoutCollection(
+        rest.venueRoundTables,
+        clearRoundBookings,
+      ),
+    };
+
+    setDuplicatingFrom(cloned as Event);
     setEditingEvent(null);
     setShowDialog(true);
   };
