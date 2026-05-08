@@ -41,6 +41,7 @@ import {
   LogOut,
   LayoutDashboard,
   Settings as SettingsIcon,
+  Receipt,
 } from "lucide-react";
 import { useFetchWithLoading } from "@/hooks/useFetchWithLoading";
 import { useToast } from "@/hooks/use-toast";
@@ -54,6 +55,9 @@ const AgentsPage = lazy(() =>
 );
 const UsersPage = lazy(() =>
   import("./UsersPage").then((m) => ({ default: m.UsersPage })),
+);
+const BillingRatesPage = lazy(() =>
+  import("./BillingRatesPage").then((m) => ({ default: m.BillingRatesPage })),
 );
 const PricingPage = lazy(() =>
   import("./PricingPage").then((m) => ({ default: m.PricingPage })),
@@ -115,6 +119,30 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Global "session expired" handler. Any admin page that uses adminFetch
+  // dispatches this event when its API call returns 401; we toast once,
+  // clear the token, and redirect. The 800ms gap lets the toast register
+  // before the page unloads.
+  useEffect(() => {
+    let triggered = false;
+    const handler = () => {
+      if (triggered) return;
+      triggered = true;
+      sessionStorage.removeItem("token");
+      toast({
+        title: "Session expired",
+        description: "Please log in again to continue.",
+        variant: "destructive",
+        duration: 4000,
+      });
+      setTimeout(() => {
+        window.location.href = "/admin-login";
+      }, 800);
+    };
+    window.addEventListener("admin-session-expired", handler);
+    return () => window.removeEventListener("admin-session-expired", handler);
+  }, [toast]);
 
   const [stats, setStats] = useState<Stats>(initialStats);
   const [pendingApprovals, setPendingApprovals] = useState<any[]>([]);
@@ -308,6 +336,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     { id: "agents", label: "Agents", icon: Briefcase },
     { id: "users", label: "Users", icon: Users },
     { id: "pricing", label: "Plans & Pricing", icon: Package },
+    { id: "billing-rates", label: "Billing Rates", icon: Receipt },
     { id: "settings", label: "Settings", icon: SettingsIcon },
   ];
 
@@ -796,6 +825,12 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
               <TabsContent value="pricing" className="mt-0">
                 <Suspense fallback={<TabLoader />}>
                   <PricingPage />
+                </Suspense>
+              </TabsContent>
+
+              <TabsContent value="billing-rates" className="mt-0">
+                <Suspense fallback={<TabLoader />}>
+                  <BillingRatesPage />
                 </Suspense>
               </TabsContent>
 

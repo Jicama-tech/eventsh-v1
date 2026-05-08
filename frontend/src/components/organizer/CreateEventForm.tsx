@@ -37,10 +37,16 @@ import {
   Mic,
   Circle,
   Sparkles,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { jwtDecode } from "jwt-decode";
 import BlurOverlay from "../ui/blurOverlay";
 import { AIVenueDesignerDialog } from "./AIVenueDesignerDialog";
+import {
+  EventUrlImporter,
+  type ImportedEventFields,
+} from "./EventUrlImporter";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import ImageCropModal from "../ui/imageCropModal";
 import { lazy, Suspense } from "react";
@@ -112,6 +118,12 @@ interface CreateEventFormProps {
   onClose: () => void;
   onSave: (data: FormData) => Promise<void>;
   editMode?: boolean;
+  /**
+   * When true, the form pre-fills from `initialData` (banner, gallery, all
+   * field state) but submits as a NEW event — bottom button reads "Create
+   * Event" and the parent does POST. The original event is untouched.
+   */
+  duplicateMode?: boolean;
   initialData?: any;
 }
 
@@ -1854,6 +1866,33 @@ const VenueDesigner = ({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
+  const [isCanvasMaximized, setIsCanvasMaximized] = useState(false);
+
+  // Coalesce mousemove updates into one frame so dragging stays smooth even
+  // with many positioned items on the canvas.
+  const rafIdRef = useRef<number | null>(null);
+  const pendingMoveRef = useRef<React.MouseEvent | null>(null);
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
+    };
+  }, []);
+
+  // Lock body scroll while the canvas is maximized so background doesn't slide.
+  // Also let Escape exit full-screen, matching common dialog conventions.
+  useEffect(() => {
+    if (!isCanvasMaximized) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsCanvasMaximized(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [isCanvasMaximized]);
   const { country } = useCountry();
   const { formatPrice, getSymbol } = useCurrency(country);
 
@@ -2105,6 +2144,24 @@ const VenueDesigner = ({
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDragging || !selectedTable || !venueConfig) return;
+    // Throttle to one update per animation frame. The mouse fires move events
+    // far faster than React can render hundreds of positioned items; without
+    // this, large layouts feel laggy mid-drag. We persist the latest event in
+    // a ref and process it inside rAF, dropping intermediate ones.
+    e.persist?.();
+    pendingMoveRef.current = e;
+    if (rafIdRef.current != null) return;
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      const ev = pendingMoveRef.current;
+      if (!ev) return;
+      pendingMoveRef.current = null;
+      processDragMove(ev);
+    });
+  };
+
+  const processDragMove = (e: React.MouseEvent) => {
+    if (!selectedTable || !venueConfig) return;
     const rect = venueRef.current?.getBoundingClientRect();
     if (!rect) return;
 
@@ -2377,6 +2434,37 @@ const VenueDesigner = ({
         />
       )}
 
+      {/* Maximize-aware design surface. When `isCanvasMaximized` is true the
+          templates panel + canvas render inside a fixed-position overlay that
+          fills the viewport. Same JSX in both modes — only the wrapping
+          container's classes differ — so drag/click handlers don't change. */}
+      <div
+        className={
+          isCanvasMaximized
+            ? "fixed inset-0 z-50 bg-white overflow-auto p-4 space-y-4"
+            : "space-y-4"
+        }
+      >
+      {isCanvasMaximized && (
+        <div className="flex items-center justify-between sticky top-0 bg-white border-b pb-3 z-10">
+          <div>
+            <h3 className="text-lg font-bold">Venue Designer · Full screen</h3>
+            <p className="text-xs text-muted-foreground">
+              Drag templates from the panel below onto the canvas. Press Esc or
+              click Exit to return.
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setIsCanvasMaximized(false)}
+          >
+            <Minimize2 className="h-4 w-4 mr-1" />
+            Exit fullscreen
+          </Button>
+        </div>
+      )}
       {/* Templates Row - Full Width Horizontal */}
       <div className="border rounded-xl bg-slate-50 p-4">
         <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
@@ -2545,10 +2633,38 @@ const VenueDesigner = ({
 
       {/* Full Width Canvas */}
       <Card className="border-2">
-        <CardContent className="p-3">
+        <CardContent className="p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Canvas
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setIsCanvasMaximized((v) => !v)}
+              title={
+                isCanvasMaximized
+                  ? "Exit full-screen design"
+                  : "Maximize to full screen for design"
+              }
+            >
+              {isCanvasMaximized ? (
+                <>
+                  <Minimize2 className="h-4 w-4 mr-1" /> Minimize
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="h-4 w-4 mr-1" /> Maximize
+                </>
+              )}
+            </Button>
+          </div>
           <div
             className="relative border-2 border-dashed border-gray-300 rounded-xl bg-slate-50 overflow-auto flex justify-center items-start p-6"
-            style={{ minHeight: "700px" }}
+            style={{
+              minHeight: isCanvasMaximized ? "calc(100vh - 280px)" : "700px",
+            }}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
@@ -2921,6 +3037,8 @@ const VenueDesigner = ({
           </div>
         </CardContent>
       </Card>
+      </div>
+      {/* /maximize-aware design surface */}
 
       {/* Inventory Summary - Full Width */}
       {(currentTables.length > 0 ||
@@ -3025,6 +3143,7 @@ export function CreateEventForm({
   onClose,
   onSave,
   editMode = false,
+  duplicateMode = false,
   initialData,
 }: CreateEventFormProps) {
   const { toast } = useToast();
@@ -3142,8 +3261,9 @@ export function CreateEventForm({
     fetchOrganizer();
   }, []);
 
-  // Enhanced Options
-  const categoryOptions = [
+  // Enhanced Options. Held in state so URL-imported categories can be
+  // appended on the fly.
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([
     "Technology",
     "Food & Beverage",
     "Fashion",
@@ -3165,7 +3285,7 @@ export function CreateEventForm({
     "Market",
     "Conference",
     "Networking",
-  ];
+  ]);
 
   const ageRestrictionOptions = [
     "All Ages",
@@ -3350,12 +3470,40 @@ export function CreateEventForm({
     tableDiameter: "120",
   });
 
-  // Load initial data for editing
+  // Load initial data for editing or duplicating. Same field-by-field copy
+  // either way; the difference is the submit URL/method (handled in parent).
   useEffect(() => {
-    if (editMode && initialData) {
+    if ((editMode || duplicateMode) && initialData) {
       // Load existing data
       if (initialData.image) {
         setBannerPreview(initialData.image);
+        // Duplicate mode needs a real File for the multipart POST. Edit mode
+        // can submit without re-uploading because the backend keeps the
+        // original. Fetch + convert here so the new event ships with a banner.
+        if (duplicateMode) {
+          (async () => {
+            try {
+              const fullUrl = initialData.image.startsWith("http")
+                ? initialData.image
+                : `${__API_URL__}${
+                    initialData.image.startsWith("/") ? "" : "/"
+                  }${initialData.image}`;
+              const res = await fetch(fullUrl);
+              if (res.ok) {
+                const blob = await res.blob();
+                const ext =
+                  (initialData.image.split(".").pop() || "jpg").split("?")[0];
+                setBannerFile(
+                  new File([blob], `duplicated-banner.${ext}`, {
+                    type: blob.type || "image/jpeg",
+                  }),
+                );
+              }
+            } catch {
+              // Non-fatal — organizer can re-upload from the Media tab.
+            }
+          })();
+        }
       }
       if (initialData.gallery) {
         // Convert existing gallery URLs to GalleryImage objects
@@ -3422,7 +3570,7 @@ export function CreateEventForm({
         }
       }
     }
-  }, [editMode, initialData]);
+  }, [editMode, duplicateMode, initialData]);
 
   const addStallTerm = () => {
     setStallTerms((prev) => [
@@ -3478,7 +3626,261 @@ export function CreateEventForm({
   }, []);
 
   const handleInputChange = (field: string, value: any) => {
-    setFormData((old) => ({ ...old, [field]: value }));
+    setFormData((old) => {
+      const next: any = { ...old, [field]: value };
+      // When the user moves the start date forward past the current end date,
+      // bump the end date to match so we never end up with end < start. Only
+      // touches endDate when it actually trails behind — empty endDate stays
+      // empty (it's optional).
+      if (
+        field === "startDate" &&
+        typeof value === "string" &&
+        value &&
+        old.endDate &&
+        old.endDate < value
+      ) {
+        next.endDate = value;
+      }
+      return next;
+    });
+  };
+
+  // Today's date as YYYY-MM-DD, used as the min for the Start Date picker on
+  // brand-new events (and duplicates). In Edit mode we don't constrain — an
+  // active event's startDate can legitimately be in the past.
+  const todayDateString = new Date().toISOString().slice(0, 10);
+  const startDateMin = editMode ? undefined : todayDateString;
+  // End date floor: at minimum the chosen start date (so end < start is
+  // physically blocked by the picker), or today if start isn't picked yet.
+  const endDateMin = formData.startDate || startDateMin;
+
+  const applyImportedFields = async (
+    payload: {
+      fields: ImportedEventFields;
+      imageUrl?: string;
+      sourceUrl: string;
+    },
+    options: { overwriteExisting: boolean },
+  ) => {
+    const { fields, imageUrl } = payload;
+    const isEmpty = (v: any) =>
+      v === undefined ||
+      v === null ||
+      v === "" ||
+      (Array.isArray(v) && v.length === 0);
+
+    // 1. If the imported category isn't in our local options, append it. We
+    //    also try to persist it via /categories so future events get it
+    //    natively — failure is non-fatal (e.g. 409 if it already exists
+    //    server-side, or 401 if the user isn't authorized to create one).
+    const importedCategory = fields.category;
+    if (
+      importedCategory &&
+      !categoryOptions.some(
+        (c) => c.toLowerCase() === importedCategory.toLowerCase(),
+      )
+    ) {
+      setCategoryOptions((prev) => [...prev, importedCategory]);
+      try {
+        const token = sessionStorage.getItem("token");
+        await fetch(`${__API_URL__}/categories`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ name: importedCategory }),
+        });
+      } catch {
+        // Non-fatal; the category is still usable locally for this form.
+      }
+    }
+
+    // 2. Apply scalar fields to the form state.
+    setFormData((old) => {
+      const next = { ...old } as Record<string, any>;
+      (Object.keys(fields) as (keyof ImportedEventFields)[]).forEach((k) => {
+        const v = fields[k];
+        if (v === undefined) return;
+        if (!options.overwriteExisting && !isEmpty(next[k as string])) return;
+        next[k as string] = v;
+      });
+      return next as typeof old;
+    });
+
+    // 3. Fetch the imported image (served from our own /uploads, so no CORS)
+    //    and turn it into a File so the existing multipart submit picks it up.
+    if (imageUrl && (options.overwriteExisting || !bannerFile)) {
+      try {
+        const fullUrl = imageUrl.startsWith("http")
+          ? imageUrl
+          : `${__API_URL__}${imageUrl}`;
+        const res = await fetch(fullUrl);
+        if (res.ok) {
+          const blob = await res.blob();
+          const ext = imageUrl.split(".").pop() || "jpg";
+          const file = new File([blob], `imported-banner.${ext}`, {
+            type: blob.type || "image/jpeg",
+          });
+          setBannerFile(file);
+          setBannerPreview(URL.createObjectURL(blob));
+        }
+      } catch {
+        // Non-fatal — user can upload a banner manually.
+      }
+    }
+
+    // 4. Venue dimensions: update the currently-selected venue config
+    //    (defaults to the auto-created "Main Hall"). We never replace an
+    //    existing custom width/height unless overwrite is set.
+    if (fields.venue) {
+      setVenueConfigurations((prev) => {
+        const targetId = selectedVenueConfigId || prev[0]?.id;
+        if (!targetId) return prev;
+        return prev.map((vc) => {
+          if (vc.id !== targetId) return vc;
+          const next: typeof vc = { ...vc };
+          if (
+            fields.venue!.width &&
+            (options.overwriteExisting ||
+              vc.width === 800 /* default */ ||
+              !vc.width)
+          ) {
+            next.width = fields.venue!.width;
+          }
+          if (
+            fields.venue!.height &&
+            (options.overwriteExisting ||
+              vc.height === 500 /* default */ ||
+              !vc.height)
+          ) {
+            next.height = fields.venue!.height;
+          }
+          if (typeof fields.venue!.hasMainStage === "boolean") {
+            next.hasMainStage = fields.venue!.hasMainStage;
+          }
+          return next;
+        });
+      });
+    }
+
+    // 5. Stall / round-table / speaker-zone templates: append new ones whose
+    //    name doesn't already exist (case-insensitive). Generate IDs the same
+    //    way the existing handlers do.
+    const newId = () => Math.random().toString(36).slice(2, 15);
+    if (fields.stalls && fields.stalls.length > 0) {
+      setTableTemplates((prev) => {
+        const seen = new Set(prev.map((t) => (t.name || "").toLowerCase()));
+        const fresh = fields.stalls!
+          .filter((s) => s.name && !seen.has(s.name.toLowerCase()))
+          .map((s) => ({
+            id: newId(),
+            name: s.name,
+            type: "Square" as const,
+            width: s.width ?? 80,
+            height: s.height ?? 80,
+            rowNumber: 1,
+            tablePrice: s.tablePrice ?? 0,
+            bookingPrice: s.bookingPrice ?? s.tablePrice ?? 0,
+            depositPrice: s.depositPrice ?? 0,
+            color: "#3B82F6",
+            forSale: true,
+          }));
+        return [...prev, ...fresh];
+      });
+    }
+    if (fields.roundTables && fields.roundTables.length > 0) {
+      setRoundTableTemplates((prev) => {
+        const seen = new Set(prev.map((t) => (t.name || "").toLowerCase()));
+        const fresh = fields.roundTables!
+          .filter((r) => r.name && !seen.has(r.name.toLowerCase()))
+          .map((r) => ({
+            id: newId(),
+            name: r.name,
+            numberOfChairs: r.numberOfChairs ?? 8,
+            sellingMode: r.sellingMode ?? ("table" as const),
+            tablePrice: r.tablePrice ?? 0,
+            chairPrice: r.chairPrice ?? 0,
+            category: "",
+            color: "#8B5CF6",
+            tableDiameter: r.tableDiameter ?? 120,
+          }));
+        return [...prev, ...fresh];
+      });
+    }
+    if (fields.speakerZones && fields.speakerZones.length > 0) {
+      setSpeakerSlotTemplates((prev) => {
+        const seen = new Set(
+          prev.map((t: any) => (t.name || "").toLowerCase()),
+        );
+        const fresh = fields.speakerZones!
+          .filter((z) => z.name && !seen.has(z.name.toLowerCase()))
+          .map((z) => ({
+            id: newId(),
+            name: z.name,
+            isMainStage: !!z.isMainStage,
+            width: z.width ?? 240,
+            height: z.height ?? 140,
+            slotPrice: z.slotPrice ?? 0,
+            maxSpeakers: z.maxSpeakers ?? 1,
+            maxVisitors: z.maxVisitors ?? 100,
+            description: "",
+            openForApplications: true,
+            sessions: [],
+          }));
+        return [...prev, ...fresh];
+      });
+    }
+
+    // 6. Reference venue auto-size. If the import didn't give us an explicit
+    //    venue width/height but DID give us spaces, compute a starter canvas
+    //    big enough to fit them comfortably with aisles. This is a REFERENCE
+    //    layout — the user redesigns it on the Venue Setup tab.
+    const importedExplicitDims = !!(
+      fields.venue?.width || fields.venue?.height
+    );
+    const totalSpaces =
+      (fields.stalls || []).reduce((s, t) => s + (t.count ?? 10), 0) +
+      (fields.roundTables || []).reduce((s, t) => s + (t.count ?? 8), 0);
+    if (!importedExplicitDims && totalSpaces > 0) {
+      // Estimate footprint area in sq px and target a 3:2 canvas around it
+      // with 40% slack for aisles, stage band, and circulation.
+      let footprint = 0;
+      for (const s of fields.stalls || []) {
+        const c = s.count ?? 10;
+        const w = s.width ?? 80;
+        const h = s.height ?? 80;
+        footprint += c * w * h;
+      }
+      for (const r of fields.roundTables || []) {
+        const c = r.count ?? 8;
+        const d = (r.tableDiameter ?? 120) + 30; // include chair ring
+        footprint += c * d * d;
+      }
+      const target = footprint * 1.4;
+      // 3:2 aspect → width = sqrt(target * 1.5), height = width / 1.5
+      let w = Math.round(Math.sqrt(target * 1.5));
+      let h = Math.round(w / 1.5);
+      // Snap to 50-px multiples and clamp.
+      w = Math.max(800, Math.min(2400, Math.round(w / 50) * 50));
+      h = Math.max(500, Math.min(1600, Math.round(h / 50) * 50));
+
+      setVenueConfigurations((prev) => {
+        const targetId = selectedVenueConfigId || prev[0]?.id;
+        if (!targetId) return prev;
+        return prev.map((vc) => {
+          if (vc.id !== targetId) return vc;
+          // Only auto-resize if the user is still on the default canvas. Don't
+          // stomp dimensions they've already customized.
+          if (vc.width !== 800 || vc.height !== 500) return vc;
+          return { ...vc, width: w, height: h };
+        });
+      });
+      toast({
+        title: "Starter venue layout ready",
+        description: `Sized canvas to ${w}×${h} to fit imported spaces. This is a REFERENCE — drag and resize anything on the Venue Setup tab to match your real venue.`,
+      });
+    }
   };
 
   const handleNestedInputChange = (
@@ -3802,7 +4204,11 @@ export function CreateEventForm({
       <div className="sticky top-0 z-50 bg-white border-b shadow-sm">
         <div className="flex items-right justify-between p-4">
           <h1 className="text-xl font-bold ml-2">
-            {editMode ? "Edit Event" : "Create New Event"}
+            {editMode
+              ? "Edit Event"
+              : duplicateMode
+                ? "Duplicate Event"
+                : "Create New Event"}
           </h1>
           <div className="flex gap-2">
             <Button type="button" variant="buttonOutline" onClick={onClose}>
@@ -3901,6 +4307,10 @@ export function CreateEventForm({
         <Tabs value={currentTab} onValueChange={setCurrentTab}>
           {/* BASIC INFO TAB */}
           <TabsContent value="basic" className="space-y-6">
+            <EventUrlImporter
+              currentValues={formData as Record<string, any>}
+              onApply={applyImportedFields}
+            />
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -3961,6 +4371,7 @@ export function CreateEventForm({
                     <Input
                       type="date"
                       value={formData.startDate}
+                      min={startDateMin}
                       onChange={(e) =>
                         handleInputChange("startDate", e.target.value)
                       }
@@ -3983,6 +4394,7 @@ export function CreateEventForm({
                     <Input
                       type="date"
                       value={formData.endDate}
+                      min={endDateMin}
                       onChange={(e) =>
                         handleInputChange("endDate", e.target.value)
                       }

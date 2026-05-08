@@ -23,8 +23,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { CreateEventForm } from "./CreateEventForm";
+import { CouponsManager } from "./CouponsManager";
 import {
   Plus,
   Edit,
@@ -41,6 +48,7 @@ import {
   Image as ImageIcon,
   AlertTriangle,
   RefreshCw,
+  Copy,
 } from "lucide-react";
 import { format } from "date-fns";
 import { jwtDecode } from "jwt-decode";
@@ -149,6 +157,10 @@ const MyEvents: React.FC = () => {
   const [organizerId, setOrganizerId] = useState<string | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
+  // When set, the dialog opens in "duplicate" mode: form pre-fills with this
+  // event's data but submits as a NEW event (POST, not PUT). Original is
+  // untouched.
+  const [duplicatingFrom, setDuplicatingFrom] = useState<Event | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -425,20 +437,97 @@ const MyEvents: React.FC = () => {
     return `${apiURL}${imagePath}`;
   };
 
+  // True when the event's endDate is strictly before today (date-only). Falls
+  // back to startDate when no endDate is set.
+  const isEventPast = useCallback((event: Event): boolean => {
+    const ref = event?.endDate || event?.startDate;
+    if (!ref) return false;
+    const d = new Date(ref);
+    if (Number.isNaN(d.getTime())) return false;
+    const today = new Date();
+    const a = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const b = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate(),
+    );
+    return a < b;
+  }, []);
+
   // Event handlers
   const handleCreateEvent = () => {
     setEditingEvent(null);
+    setDuplicatingFrom(null);
     setShowDialog(true);
   };
 
   const handleEditEvent = (event: Event) => {
     setEditingEvent(event);
+    setDuplicatingFrom(null);
+    setShowDialog(true);
+  };
+
+  /**
+   * Open the form in "duplicate" mode — pre-fills with this event's data but
+   * the submit goes through the create-event POST. We strip server-only ids/
+   * timestamps so the new event starts clean. Banner image URL is preserved
+   * (CreateEventForm fetches it back into a File for the multipart submit).
+   */
+  const handleDuplicateEvent = (event: Event) => {
+    const { _id, createdAt, updatedAt, registrations, ...rest } =
+      (event as any) || {};
+    void _id;
+    void createdAt;
+    void updatedAt;
+    void registrations;
+
+    // Wipe booking state from cloned layout — a duplicated event is brand
+    // new, no exhibitor or attendee has booked anything in it yet.
+    // Layout collections are sometimes flat arrays, sometimes Record<configId,
+    // item[]>; handle both shapes by walking values.
+    const clearStallBookings = (item: any) => ({
+      ...item,
+      isBooked: false,
+      bookedBy: null,
+    });
+    const clearRoundBookings = (item: any) => ({
+      ...item,
+      bookedChairs: [],
+      isFullyBooked: false,
+    });
+    const sanitizeLayoutCollection = <T,>(
+      raw: any,
+      transform: (item: T) => T,
+    ): any => {
+      if (Array.isArray(raw)) return raw.map(transform);
+      if (raw && typeof raw === "object") {
+        const out: Record<string, any> = {};
+        for (const [k, v] of Object.entries(raw)) {
+          out[k] = Array.isArray(v) ? v.map(transform) : v;
+        }
+        return out;
+      }
+      return raw;
+    };
+
+    const cloned: any = {
+      ...rest,
+      venueTables: sanitizeLayoutCollection(rest.venueTables, clearStallBookings),
+      venueRoundTables: sanitizeLayoutCollection(
+        rest.venueRoundTables,
+        clearRoundBookings,
+      ),
+    };
+
+    setDuplicatingFrom(cloned as Event);
+    setEditingEvent(null);
     setShowDialog(true);
   };
 
   const handleCloseDialog = () => {
     setShowDialog(false);
     setEditingEvent(null);
+    setDuplicatingFrom(null);
   };
 
   const handleSaveEvent = async (eventData: FormData) => {
@@ -638,6 +727,17 @@ const MyEvents: React.FC = () => {
         </Card>
       </div>
 
+      {/* Inner tabs: switch between events list and coupons management.
+          The CreateEventForm dialog further below is shared (only opens via
+          the Events tab's "+ Create" button). */}
+      <Tabs defaultValue="events" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="events">Events</TabsTrigger>
+          <TabsTrigger value="coupons">Coupons</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="events" className="space-y-4 m-0">
+
       {/* Controls */}
       <Card>
         <CardHeader>
@@ -833,17 +933,32 @@ const MyEvents: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Action Buttons */}
+                      {/* Action Buttons — past events get Duplicate instead
+                          of Edit (the original event is read-only once it has
+                          ended; you can only spin up a new copy from it). */}
                       <div className="flex gap-2 w-full lg:w-auto">
-                        <Button
-                          variant="buttonOutline"
-                          size="sm"
-                          onClick={() => handleEditEvent(event)}
-                          className="flex-1 lg:flex-none"
-                        >
-                          <Edit size={16} className="mr-1" />
-                          Edit
-                        </Button>
+                        {isEventPast(event) ? (
+                          <Button
+                            variant="buttonOutline"
+                            size="sm"
+                            onClick={() => handleDuplicateEvent(event)}
+                            className="flex-1 lg:flex-none"
+                            title="Use this past event as a template for a new one"
+                          >
+                            <Copy size={16} className="mr-1" />
+                            Duplicate
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="buttonOutline"
+                            size="sm"
+                            onClick={() => handleEditEvent(event)}
+                            className="flex-1 lg:flex-none"
+                          >
+                            <Edit size={16} className="mr-1" />
+                            Edit
+                          </Button>
+                        )}
                         <Button
                           variant="buttonOutline"
                           size="sm"
@@ -863,6 +978,17 @@ const MyEvents: React.FC = () => {
         </CardContent>
       </Card>
 
+        </TabsContent>
+
+        <TabsContent value="coupons" className="m-0">
+          <Card>
+            <CardContent className="pt-6">
+              <CouponsManager />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
       {/* Create/Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden p-0">
@@ -878,7 +1004,8 @@ const MyEvents: React.FC = () => {
               onClose={handleCloseDialog}
               onSave={handleSaveEvent}
               editMode={!!editingEvent}
-              initialData={editingEvent}
+              duplicateMode={!!duplicatingFrom}
+              initialData={editingEvent ?? duplicatingFrom}
             />
           </div>
         </DialogContent>

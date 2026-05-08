@@ -17,6 +17,8 @@ import {
   ChevronDown,
   Bot,
   User,
+  ImagePlus,
+  X as XIcon,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -104,7 +106,43 @@ export function AIVenueDesignerDialog({
     "horizontal" | "vertical"
   >("horizontal");
   const [showSettings, setShowSettings] = useState(false);
+  const [blueprint, setBlueprint] = useState<{
+    file: File;
+    previewUrl: string;
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (blueprint?.previewUrl) URL.revokeObjectURL(blueprint.previewUrl);
+    };
+  }, [blueprint?.previewUrl]);
+
+  const pickBlueprint = (file: File | null) => {
+    if (blueprint?.previewUrl) URL.revokeObjectURL(blueprint.previewUrl);
+    if (!file) {
+      setBlueprint(null);
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast({
+        title: "Image too large",
+        description: "Blueprint must be under 8 MB. Try compressing it.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!/^image\/(png|jpe?g|webp)$/i.test(file.type)) {
+      toast({
+        title: "Unsupported file",
+        description: "Use PNG, JPG, or WEBP.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setBlueprint({ file, previewUrl: URL.createObjectURL(file) });
+  };
 
   const hasTemplates =
     templates.stalls.length +
@@ -133,40 +171,67 @@ export function AIVenueDesignerDialog({
 
   const sendMessage = async (text: string) => {
     const trimmed = text.trim();
-    if (!trimmed || loading) return;
-    const userMsg: ChatMsg = { role: "user", content: trimmed };
+    const hasBlueprint = !!blueprint;
+    if ((!trimmed && !hasBlueprint) || loading) return;
+    const defaultBlueprintAsk =
+      "Design a full layout from this blueprint: stage opposite the entrance, stalls along the longest clear walls, and round tables in the centre. Use all the templates I've defined.";
+    const userMsg: ChatMsg = {
+      role: "user",
+      content: hasBlueprint
+        ? `${trimmed || defaultBlueprintAsk}\n[blueprint: ${blueprint!.file.name}]`
+        : trimmed,
+    };
     const nextMessages = [...messages, userMsg];
     setMessages(nextMessages);
     setInput("");
     setLoading(true);
+    const token = sessionStorage.getItem("token");
+    const wireMessages = nextMessages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+    const venueConfigPayload = {
+      id: venueConfig.id,
+      width: venueConfig.width,
+      height: venueConfig.height,
+      name: venueConfig.name,
+      gridSize: venueConfig.gridSize,
+    };
+    const wallMarginPx = Math.round((Number(wallMargin) || 0.5) * 100);
+    const stallGapPx = Math.round((Number(stallGap) || 0.1) * 100);
     try {
-      const token = sessionStorage.getItem("token");
-      // Strip layout payloads — backend doesn't need them, only role+content.
-      const wireMessages = nextMessages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-      const res = await fetch(`${__API_URL__}/venue-designer/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          messages: wireMessages,
-          wallMargin: Math.round((Number(wallMargin) || 0.5) * 100),
-          stallGap: Math.round((Number(stallGap) || 0.1) * 100),
-          stallOrientation,
-          venueConfig: {
-            id: venueConfig.id,
-            width: venueConfig.width,
-            height: venueConfig.height,
-            name: venueConfig.name,
-            gridSize: venueConfig.gridSize,
+      let res: Response;
+      if (hasBlueprint) {
+        const fd = new FormData();
+        fd.append("blueprint", blueprint!.file);
+        fd.append("messages", JSON.stringify(wireMessages));
+        fd.append("wallMargin", String(wallMarginPx));
+        fd.append("stallGap", String(stallGapPx));
+        fd.append("stallOrientation", stallOrientation);
+        fd.append("venueConfig", JSON.stringify(venueConfigPayload));
+        fd.append("templates", JSON.stringify(templates));
+        res = await fetch(`${__API_URL__}/venue-designer/chat-vision`, {
+          method: "POST",
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: fd,
+        });
+      } else {
+        res = await fetch(`${__API_URL__}/venue-designer/chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          templates,
-        }),
-      });
+          body: JSON.stringify({
+            messages: wireMessages,
+            wallMargin: wallMarginPx,
+            stallGap: stallGapPx,
+            stallOrientation,
+            venueConfig: venueConfigPayload,
+            templates,
+          }),
+        });
+      }
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
         throw new Error(json.message || `Request failed (${res.status})`);
@@ -180,6 +245,7 @@ export function AIVenueDesignerDialog({
         reply.layout = data.layout as GenerateResult;
       }
       setMessages((prev) => [...prev, reply]);
+      if (hasBlueprint) pickBlueprint(null);
     } catch (e: any) {
       setMessages((prev) => [
         ...prev,
@@ -376,18 +442,69 @@ export function AIVenueDesignerDialog({
               </div>
             )}
 
+            {/* Blueprint preview strip */}
+            {blueprint && (
+              <div className="border-t bg-amber-50/60 px-4 sm:px-6 py-2 flex items-center gap-3">
+                <img
+                  src={blueprint.previewUrl}
+                  alt="Blueprint preview"
+                  className="h-12 w-16 object-cover rounded border border-amber-300"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold text-amber-900 truncate">
+                    {blueprint.file.name}
+                  </div>
+                  <div className="text-[11px] text-amber-700">
+                    AI will read this blueprint with your next message.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => pickBlueprint(null)}
+                  disabled={loading}
+                  className="p-1 rounded hover:bg-amber-100 disabled:opacity-50"
+                  title="Remove blueprint"
+                >
+                  <XIcon className="h-4 w-4 text-amber-700" />
+                </button>
+              </div>
+            )}
+
             {/* Input bar */}
             <form
               onSubmit={handleSubmit}
               className="p-3 sm:p-4 border-t bg-white flex gap-2 items-center flex-shrink-0"
             >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  pickBlueprint(e.target.files?.[0] || null);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                disabled={loading}
+                onClick={() => fileInputRef.current?.click()}
+                className="h-10 w-10 rounded-full shrink-0"
+                title={blueprint ? "Replace blueprint" : "Attach architect blueprint"}
+              >
+                <ImagePlus className="h-4 w-4" />
+              </Button>
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={
-                  latestLayout
-                    ? "Refine the layout (e.g. 'move stage to top')"
-                    : "Describe the venue setup…"
+                  blueprint
+                    ? "Add notes for the blueprint (optional)…"
+                    : latestLayout
+                      ? "Refine the layout (e.g. 'move stage to top')"
+                      : "Describe the venue setup…"
                 }
                 disabled={loading}
                 className="flex-1 h-10 rounded-full bg-slate-100 border-0 focus-visible:ring-1 focus-visible:ring-blue-500 text-sm"
@@ -395,7 +512,7 @@ export function AIVenueDesignerDialog({
               <Button
                 type="submit"
                 size="icon"
-                disabled={!input.trim() || loading}
+                disabled={(!input.trim() && !blueprint) || loading}
                 className="h-10 w-10 rounded-full bg-blue-600 hover:bg-blue-700 shrink-0"
                 title="Send"
               >

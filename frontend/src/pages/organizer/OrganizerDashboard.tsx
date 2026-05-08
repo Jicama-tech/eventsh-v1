@@ -771,7 +771,12 @@ export function OrganizerDashboard({
       icon: Users,
       moduleKey: "stalls",
     },
-    { id: "events", label: "Events", icon: CalendarDays, moduleKey: "events" },
+    {
+      id: "events",
+      label: "Events/Coupons",
+      icon: CalendarDays,
+      moduleKey: "events",
+    },
     {
       id: "storefront",
       label: "Eventfront",

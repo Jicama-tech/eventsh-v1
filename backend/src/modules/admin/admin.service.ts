@@ -32,9 +32,317 @@ export class AdminService {
     @InjectModel("Operator") private operatorModel: Model<any>,
     @InjectModel("Vendor") private vendorModel: Model<any>,
     @InjectModel("SpeakerRequest") private speakerRequestModel: Model<any>,
+    @InjectModel("OrganizerPayment") private organizerPaymentModel: Model<any>,
+    @InjectModel("PlatformBillingRates")
+    private platformBillingRatesModel: Model<any>,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService
   ) {}
+
+  // ===========================================================================
+  //  Super-admin billing — per-organizer aggregation + payment ledger.
+  //  Rates are now editable via /admin/billing-rates. Defaults if no doc:
+  //  $20 per booked stall, $20 per booked round-table, $5 per booked chair
+  //  (additive: a fully booked 8-chair table is $20+$40), $20 per Confirmed
+  //  SpeakerRequest. Currency: USD.
+  // ===========================================================================
+  private static readonly DEFAULT_RATES = {
+    stallRate: 20,
+    roundTableRate: 20,
+    chairRate: 5,
+    speakerRate: 20,
+    currency: "USD",
+  };
+
+  /**
+   * Returns the currently-active billing rates. The collection holds at most
+   * one document; if absent, returns the platform defaults (no implicit
+   * write — only `updateBillingRates` materializes a row).
+   */
+  async getBillingRates() {
+    const doc: any = await this.platformBillingRatesModel.findOne({}).lean();
+    if (!doc) {
+      return { ...AdminService.DEFAULT_RATES, persisted: false };
+    }
+    return {
+      stallRate: Number(doc.stallRate) || AdminService.DEFAULT_RATES.stallRate,
+      roundTableRate:
+        Number(doc.roundTableRate) ||
+        AdminService.DEFAULT_RATES.roundTableRate,
+      chairRate: Number(doc.chairRate) || AdminService.DEFAULT_RATES.chairRate,
+      speakerRate:
+        Number(doc.speakerRate) || AdminService.DEFAULT_RATES.speakerRate,
+      currency: doc.currency || AdminService.DEFAULT_RATES.currency,
+      updatedAt: doc.updatedAt,
+      updatedBy: doc.updatedBy ? String(doc.updatedBy) : null,
+      persisted: true,
+    };
+  }
+
+  /**
+   * Upsert the single billing-rates document. Negative or non-numeric values
+   * are rejected; missing keys keep their current (or default) value.
+   */
+  async updateBillingRates(
+    body: {
+      stallRate?: number;
+      roundTableRate?: number;
+      chairRate?: number;
+      speakerRate?: number;
+      currency?: string;
+    },
+    adminId?: string,
+  ) {
+    const validNumber = (v: any): number | undefined => {
+      if (v === undefined || v === null || v === "") return undefined;
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0) {
+        throw new ConflictException(
+          "Rates must be non-negative numbers",
+        );
+      }
+      return n;
+    };
+    const update: any = { $set: {} };
+    const s = validNumber(body.stallRate);
+    const r = validNumber(body.roundTableRate);
+    const c = validNumber(body.chairRate);
+    const sp = validNumber(body.speakerRate);
+    if (s !== undefined) update.$set.stallRate = s;
+    if (r !== undefined) update.$set.roundTableRate = r;
+    if (c !== undefined) update.$set.chairRate = c;
+    if (sp !== undefined) update.$set.speakerRate = sp;
+    if (body.currency && typeof body.currency === "string") {
+      update.$set.currency = body.currency.slice(0, 6).toUpperCase();
+    }
+    if (adminId) update.$set.updatedBy = adminId;
+
+    await this.platformBillingRatesModel.updateOne({}, update, { upsert: true });
+    return this.getBillingRates();
+  }
+
+  /**
+   * Returns the full billing snapshot for an organizer:
+   *  - their basic profile
+   *  - per-event counts (stalls/tables/chairs/speakers + amount)
+   *  - totals: billable, paid, owed
+   *  - payment ledger (most recent first)
+   */
+  async getOrganizerBilling(organizerId: string) {
+    const organizer = await this.organizerModel
+      .findById(organizerId)
+      .select("name organizationName email businessEmail country createdAt")
+      .lean();
+    if (!organizer) throw new NotFoundException("Organizer not found");
+
+    // Pull live, editable rates. Falls back to defaults when no doc is stored.
+    const rates = await this.getBillingRates();
+
+    // Pull all events for this organizer once. We compute stall / round-table
+    // counts directly from the embedded arrays — no aggregation pipeline needed
+    // because the data lives on the event doc.
+    const events = await this.eventModel
+      .find({ organizer: organizerId })
+      .select(
+        "title startDate endDate venueTables venueRoundTables status",
+      )
+      .lean();
+
+    // Speaker counts in one shot grouped by eventId for performance.
+    const speakerAgg: Array<{ _id: any; n: number }> = await this.speakerRequestModel
+      .aggregate([
+        {
+          $match: {
+            organizerId: new (require("mongoose").Types.ObjectId)(organizerId),
+            status: "Confirmed",
+          },
+        },
+        { $group: { _id: "$eventId", n: { $sum: 1 } } },
+      ])
+      .exec();
+    const speakersByEvent = new Map<string, number>(
+      speakerAgg.map((row) => [String(row._id), row.n]),
+    );
+
+    // venueTables / venueRoundTables can be either flat arrays (legacy/canonical
+    // schema) or `Record<configId, item[]>` (the shape the create-event form
+    // ships). Flatten defensively so older AND newer events both work.
+    const flatten = (v: any): any[] => {
+      if (Array.isArray(v)) return v;
+      if (v && typeof v === "object") {
+        return Object.values(v).flat() as any[];
+      }
+      return [];
+    };
+
+    const eventRows = events.map((e: any) => {
+      const tables = flatten(e.venueTables);
+      const rounds = flatten(e.venueRoundTables);
+      const stallsSold = tables.filter((t: any) => !!t?.isBooked).length;
+      const tablesBooked = rounds.filter(
+        (rt: any) =>
+          !!rt?.isFullyBooked ||
+          (Array.isArray(rt?.bookedChairs) && rt.bookedChairs.length > 0),
+      ).length;
+      const chairsBooked = rounds.reduce(
+        (acc: number, rt: any) =>
+          acc + (Array.isArray(rt?.bookedChairs) ? rt.bookedChairs.length : 0),
+        0,
+      );
+      const speakersBooked = speakersByEvent.get(String(e._id)) || 0;
+      const amount =
+        stallsSold * rates.stallRate +
+        tablesBooked * rates.roundTableRate +
+        chairsBooked * rates.chairRate +
+        speakersBooked * rates.speakerRate;
+      return {
+        eventId: String(e._id),
+        title: e.title,
+        startDate: e.startDate,
+        endDate: e.endDate,
+        status: e.status,
+        stallsSold,
+        tablesBooked,
+        chairsBooked,
+        speakersBooked,
+        amount,
+      };
+    });
+
+    const totalBillable = eventRows.reduce((s, r) => s + r.amount, 0);
+
+    const payments = await this.organizerPaymentModel
+      .find({ organizerId })
+      .sort({ paidOn: -1 })
+      .lean();
+    const totalPaid = payments.reduce(
+      (s: number, p: any) => s + (Number(p.amount) || 0),
+      0,
+    );
+
+    return {
+      organizer: {
+        _id: String(organizer._id),
+        name: organizer.name,
+        organizationName: organizer.organizationName,
+        email: organizer.email || organizer.businessEmail,
+        country: organizer.country,
+        createdAt: organizer.createdAt,
+      },
+      rates: {
+        stall: rates.stallRate,
+        roundTable: rates.roundTableRate,
+        chair: rates.chairRate,
+        speaker: rates.speakerRate,
+        currency: rates.currency,
+      },
+      events: eventRows,
+      totals: {
+        billable: totalBillable,
+        paid: totalPaid,
+        owed: Math.max(0, totalBillable - totalPaid),
+      },
+      payments: payments.map((p: any) => ({
+        _id: String(p._id),
+        amount: p.amount,
+        paidOn: p.paidOn,
+        note: p.note || "",
+        recordedBy: p.recordedBy ? String(p.recordedBy) : null,
+      })),
+    };
+  }
+
+  /**
+   * Get the per-event drill-down: which specific stalls / tables / speakers
+   * make up the counts for an event. Used by the second-level dialog.
+   */
+  async getEventBookingBreakdown(organizerId: string, eventId: string) {
+    const event = await this.eventModel
+      .findOne({ _id: eventId, organizer: organizerId })
+      .select("title startDate endDate venueTables venueRoundTables")
+      .lean();
+    if (!event) throw new NotFoundException("Event not found for organizer");
+
+    const flatten = (v: any): any[] => {
+      if (Array.isArray(v)) return v;
+      if (v && typeof v === "object") return Object.values(v).flat() as any[];
+      return [];
+    };
+
+    const stalls = flatten((event as any).venueTables)
+      .filter((t: any) => !!t?.isBooked)
+      .map((t: any) => ({
+        positionId: t.positionId,
+        name: t.tableName || t.name,
+        bookedBy: t.bookedBy || null,
+      }));
+
+    const rounds = flatten((event as any).venueRoundTables)
+      .filter(
+        (rt: any) =>
+          !!rt?.isFullyBooked ||
+          (Array.isArray(rt?.bookedChairs) && rt.bookedChairs.length > 0),
+      )
+      .map((rt: any) => ({
+        positionId: rt.positionId,
+        name: rt.name,
+        chairs: Array.isArray(rt.bookedChairs) ? rt.bookedChairs.length : 0,
+        isFullyBooked: !!rt.isFullyBooked,
+      }));
+
+    const speakers = await this.speakerRequestModel
+      .find({
+        organizerId,
+        eventId,
+        status: "Confirmed",
+      })
+      .select("speakerName speakerEmail status updatedAt")
+      .lean();
+
+    return {
+      event: {
+        _id: String((event as any)._id),
+        title: (event as any).title,
+        startDate: (event as any).startDate,
+        endDate: (event as any).endDate,
+      },
+      stalls,
+      rounds,
+      speakers: speakers.map((s: any) => ({
+        _id: String(s._id),
+        name: s.speakerName,
+        email: s.speakerEmail,
+        status: s.status,
+        updatedAt: s.updatedAt,
+      })),
+    };
+  }
+
+  /**
+   * Log a payment received from the organizer. The /billing endpoint will
+   * subtract the sum of these from the live total to compute "owed".
+   */
+  async recordOrganizerPayment(
+    organizerId: string,
+    body: { amount: number; paidOn?: string; note?: string },
+    recordedBy?: string,
+  ) {
+    const amount = Number(body?.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new ConflictException("amount must be a positive number");
+    }
+    const organizer = await this.organizerModel.findById(organizerId).lean();
+    if (!organizer) throw new NotFoundException("Organizer not found");
+
+    const doc = await this.organizerPaymentModel.create({
+      organizerId,
+      amount,
+      paidOn: body?.paidOn ? new Date(body.paidOn) : new Date(),
+      note: (body?.note || "").slice(0, 500),
+      recordedBy: recordedBy || undefined,
+    });
+    return { ok: true, paymentId: String(doc._id) };
+  }
 
   async create(createAdminDto: CreateAdminDto) {
     try {
@@ -799,7 +1107,7 @@ export class AdminService {
       };
       const token = this.jwtService.sign(payload, {
         secret: process.env.JWT_ACCESS_SECRET,
-        expiresIn: "1h",
+        expiresIn: "12h",
       });
 
       return { message: "login Successfull", data: token };

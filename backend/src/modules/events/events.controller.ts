@@ -23,6 +23,7 @@ import {
 import { diskStorage } from "multer";
 import { AuthGuard } from "@nestjs/passport";
 import { EventsService } from "./events.service";
+import { EventImportService } from "./event-import.service";
 import { CreateEventDto } from "./dto/createEvent.dto";
 import { UpdateEventDto } from "./dto/updateEvent.dto";
 import { v4 as uuidv4 } from "uuid";
@@ -45,7 +46,16 @@ const imageFilter = (req: any, file: any, cb: any) => {
 
 @Controller("events")
 export class EventsController {
-  constructor(private readonly eventsService: EventsService) {}
+  constructor(
+    private readonly eventsService: EventsService,
+    private readonly eventImportService: EventImportService,
+  ) {}
+
+  @Post("import-from-url")
+  @UseGuards(AuthGuard("jwt"))
+  async importFromUrl(@Body() body: { url: string }) {
+    return this.eventImportService.importFromUrl({ url: body?.url });
+  }
 
   @Post("create-event")
   @UseGuards(AuthGuard("jwt"))
