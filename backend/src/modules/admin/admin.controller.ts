@@ -58,6 +58,63 @@ export class AdminController {
     return this.adminService.getOrganizersOverview();
   }
 
+  // ===========================================================================
+  //  Super-admin billing — rate configuration + per-organizer aggregation.
+  // ===========================================================================
+  @Get("billing-rates")
+  @UseGuards(JwtAuthGuard)
+  getBillingRates() {
+    return this.adminService.getBillingRates();
+  }
+
+  @Patch("billing-rates")
+  @UseGuards(JwtAuthGuard)
+  updateBillingRates(
+    @Body()
+    body: {
+      stallRate?: number;
+      roundTableRate?: number;
+      chairRate?: number;
+      speakerRate?: number;
+      currency?: string;
+    },
+    @Req() req: any,
+  ) {
+    return this.adminService.updateBillingRates(
+      body,
+      req?.user?.userId || req?.user?.sub,
+    );
+  }
+
+  @Get("organizers/:id/billing")
+  @UseGuards(JwtAuthGuard)
+  organizerBilling(@Param("id") id: string) {
+    return this.adminService.getOrganizerBilling(id);
+  }
+
+  @Get("organizers/:id/events/:eventId/breakdown")
+  @UseGuards(JwtAuthGuard)
+  organizerEventBreakdown(
+    @Param("id") id: string,
+    @Param("eventId") eventId: string,
+  ) {
+    return this.adminService.getEventBookingBreakdown(id, eventId);
+  }
+
+  @Post("organizers/:id/payments")
+  @UseGuards(JwtAuthGuard)
+  recordOrganizerPayment(
+    @Param("id") id: string,
+    @Body() body: { amount: number; paidOn?: string; note?: string },
+    @Req() req: any,
+  ) {
+    return this.adminService.recordOrganizerPayment(
+      id,
+      body,
+      req?.user?.userId || req?.user?.sub,
+    );
+  }
+
   @Patch("approve/:id")
   @UseGuards(JwtAuthGuard)
   approveApplicant(

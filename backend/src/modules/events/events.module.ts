@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 import { EventsService } from "./events.service";
 import { EventsController } from "./events.controller";
+import { EventImportService } from "./event-import.service";
 import { Event, EventSchema } from "./schemas/event.schema";
 import { TemplatesModule } from "../templates/templates.module";
 
@@ -10,7 +11,7 @@ import { TemplatesModule } from "../templates/templates.module";
     MongooseModule.forFeature([{ name: Event.name, schema: EventSchema }]),
     TemplatesModule,
   ],
-  providers: [EventsService],
+  providers: [EventsService, EventImportService],
   controllers: [EventsController],
 })
 export class EventsModule {}

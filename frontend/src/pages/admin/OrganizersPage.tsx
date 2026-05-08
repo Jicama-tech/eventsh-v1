@@ -37,6 +37,7 @@ import {
   Search,
   RefreshCw,
   Eye,
+  Receipt,
   Phone,
   Mail,
   Calendar,
@@ -51,6 +52,7 @@ import {
   Clock,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { OrganizerBillingDialog } from "./OrganizerBillingDialog";
 
 const apiURL = __API_URL__;
 
@@ -116,6 +118,8 @@ export function OrganizersPage() {
   const [planFilter, setPlanFilter] = useState<string>("all");
   const [providerFilter, setProviderFilter] = useState<string>("all");
   const [selected, setSelected] = useState<Organizer | null>(null);
+  // The billing dialog opens with this organizer's id; null when closed.
+  const [billingFor, setBillingFor] = useState<string | null>(null);
   const { toast } = useToast();
 
   const token = sessionStorage.getItem("token");
@@ -591,13 +595,24 @@ export function OrganizersPage() {
                         className="text-right"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setSelected(o)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setSelected(o)}
+                            title="View details"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setBillingFor(o._id)}
+                            title="View billing & events"
+                          >
+                            <Receipt className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -607,6 +622,12 @@ export function OrganizersPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Billing dialog (events + amounts + payment ledger) */}
+      <OrganizerBillingDialog
+        organizerId={billingFor}
+        onClose={() => setBillingFor(null)}
+      />
 
       {/* Detail Dialog */}
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>

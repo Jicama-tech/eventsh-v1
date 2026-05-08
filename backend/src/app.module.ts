@@ -28,6 +28,7 @@ import { CategoriesModule } from "./modules/categories/categories.module";
 import { ShopkeepersModule } from "./modules/shopkeepers/shopkeepers.module";
 import { BulkImportModule } from "./modules/bulk-import/bulk-import.module";
 import { TemplatesModule } from "./modules/templates/templates.module";
+import { WebsiteContentModule } from "./modules/website-content/website-content.module";
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { TemplatesModule } from "./modules/templates/templates.module";
     ShopkeepersModule,
     BulkImportModule,
     TemplatesModule,
+    WebsiteContentModule,
   ],
 })
 export class AppModule {}

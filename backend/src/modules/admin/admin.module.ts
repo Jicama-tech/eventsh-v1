@@ -13,6 +13,8 @@ import { AgentSchema } from "../agents/schemas/agent.schema";
 import { OperatorSchema } from "../operators/entities/operator.entity";
 import { VendorSchema } from "../stalls/schemas/vendor.schema";
 import { SpeakerRequestSchema } from "../speaker-requests/entities/speaker-request.entity";
+import { OrganizerPaymentSchema } from "./entities/organizer-payment.entity";
+import { PlatformBillingRatesSchema } from "./entities/platform-billing-rates.entity";
 import { MailModule } from "../roles/mail.module";
 import { MailService } from "../roles/mail.service";
 
@@ -29,6 +31,8 @@ import { MailService } from "../roles/mail.service";
       { name: "Operator", schema: OperatorSchema },
       { name: "Vendor", schema: VendorSchema },
       { name: "SpeakerRequest", schema: SpeakerRequestSchema },
+      { name: "OrganizerPayment", schema: OrganizerPaymentSchema },
+      { name: "PlatformBillingRates", schema: PlatformBillingRatesSchema },
     ]),
     MailModule,
     JwtModule.register({

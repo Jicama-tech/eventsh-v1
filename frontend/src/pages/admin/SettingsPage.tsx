@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { adminFetch } from "@/lib/adminFetch";
 
 interface ContentItem {
   id: string;
@@ -149,15 +150,32 @@ export function SettingsPage() {
     fetchContentItems();
   }, []);
 
+  // Website-content CRUD now hits our own NestJS backend (was Supabase). The
+  // response shape matches the original Supabase rows so the rest of this
+  // component is unchanged.
+  const cmsFetch = async (path: string, init?: RequestInit) => {
+    const res = await adminFetch(`${__API_URL__}/website-content${path}`, {
+      ...init,
+      headers: {
+        ...(init?.body ? { "Content-Type": "application/json" } : {}),
+        ...(init?.headers || {}),
+      },
+    });
+    // 401 already triggered the global redirect; bail out of this caller.
+    if (res.status === 401) {
+      throw new Error("Session expired");
+    }
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(txt || `HTTP ${res.status}`);
+    }
+    return res.json();
+  };
+
   const fetchContentItems = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("website_content")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
+      const data = await cmsFetch("");
       setContentItems((data || []) as ContentItem[]);
     } catch (error) {
       console.error("Error fetching content:", error);
@@ -174,8 +192,9 @@ export function SettingsPage() {
 
   const handleCreateContent = async () => {
     try {
-      const { error } = await supabase.from("website_content").insert([
-        {
+      await cmsFetch("", {
+        method: "POST",
+        body: JSON.stringify({
           content_type: formData.content_type,
           title: formData.title || "",
           content: formData.content || "",
@@ -185,10 +204,8 @@ export function SettingsPage() {
           author: formData.author,
           slug:
             formData.slug || formData.title?.toLowerCase().replace(/\s+/g, "-"),
-        },
-      ]);
-
-      if (error) throw error;
+        }),
+      });
 
       toast({
         duration: 5000,
@@ -215,12 +232,10 @@ export function SettingsPage() {
     updates: Partial<ContentItem>
   ) => {
     try {
-      const { error } = await supabase
-        .from("website_content")
-        .update(updates)
-        .eq("id", itemId);
-
-      if (error) throw error;
+      await cmsFetch(`/${itemId}`, {
+        method: "PATCH",
+        body: JSON.stringify(updates),
+      });
 
       toast({
         duration: 5000,
@@ -244,12 +259,7 @@ export function SettingsPage() {
     if (!confirm("Are you sure you want to delete this content item?")) return;
 
     try {
-      const { error } = await supabase
-        .from("website_content")
-        .delete()
-        .eq("id", itemId);
-
-      if (error) throw error;
+      await cmsFetch(`/${itemId}`, { method: "DELETE" });
 
       toast({
         duration: 5000,

@@ -80,6 +80,10 @@ interface ChatInput {
   };
 }
 
+interface ChatVisionInput extends ChatInput {
+  blueprint: { buffer: Buffer; mimeType: string };
+}
+
 type Side = "top" | "bottom" | "left" | "right" | "central" | "none";
 
 type StallOrientation = "horizontal" | "vertical";
@@ -103,6 +107,7 @@ export class VenueDesignerService {
   private readonly logger = new Logger(VenueDesignerService.name);
   private ai: OpenAI;
   private model: string;
+  private visionModel: string;
   private provider: "qwen" | "groq";
 
   constructor() {
@@ -119,6 +124,10 @@ export class VenueDesignerService {
     this.model = useQwen
       ? process.env.QWEN_MODEL || "qwen-plus"
       : process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+    this.visionModel = useQwen
+      ? process.env.QWEN_VISION_MODEL || "qwen-vl-plus"
+      : process.env.GROQ_VISION_MODEL ||
+        "meta-llama/llama-4-scout-17b-16e-instruct";
   }
 
   private hasApiKey() {
@@ -407,6 +416,417 @@ ${JSON.stringify(userContext)}
         fallbackText ||
         "Tell me more about how you'd like to arrange your venue.",
     };
+  }
+
+  // ============ Chat with blueprint image ============
+  async chatVision(input: ChatVisionInput) {
+    if (!this.hasApiKey()) {
+      throw new BadRequestException(
+        "AI provider not configured (set QWEN_API_KEY or GROQ_API_KEY).",
+      );
+    }
+    const venue = input.venueConfig;
+    if (!venue || !(venue.width > 0) || !(venue.height > 0))
+      throw new BadRequestException("Invalid venue dimensions.");
+
+    const stalls = input.templates?.stalls || [];
+    const rounds = input.templates?.roundTables || [];
+    const stages = input.templates?.speakerZones || [];
+    if (stalls.length + rounds.length + stages.length === 0) {
+      throw new BadRequestException(
+        "Define at least one template before generating from a blueprint.",
+      );
+    }
+    if (!input.blueprint?.buffer?.length) {
+      throw new BadRequestException("blueprint image is required.");
+    }
+
+    const userText = (input.messages || [])
+      .filter((m) => m.role === "user")
+      .map((m) => m.content)
+      .join("\n")
+      .trim();
+
+    const sys = `You are an expert venue layout planner reading an architect's blueprint image. You ALWAYS produce a usable layout — never refuse.
+
+PROCEDURE — follow strictly:
+1. Look at the image. Identify the rough rectangular shape of the venue (it may be hand-drawn, low-contrast, photographed at an angle, partially cropped, or a CAD line drawing — that's fine). If you can see ANY rectangle, treat it as the venue and proceed.
+2. From that shape, make your BEST GUESS at:
+   - which side has the entrance (look for door swings, "ENTRY"/"EXIT" labels, a corridor, an opening, or just the side closest to a labeled lobby/road).
+   - which walls are LONGEST and clearest (no doors, no interior columns).
+3. Map blueprint orientation → canvas orientation: canvas "top" = top of image, "bottom" = bottom, etc. If the blueprint's long axis runs differently from the canvas, mentally rotate.
+4. Decide placements:
+   - stage.side: opposite the entrance, on the longest clear wall.
+   - stalls.wall: along the LONGEST clear walls. NEVER on the stage wall. Avoid the entrance wall unless the organizer explicitly asks.
+   - rounds.zone: "central" by default.
+5. Honor any organizer text request OVER your visual guesses.
+6. Counts — be GENEROUS, NOT conservative. The deterministic placer downstream already prevents overlap and trims excess that won't fit, so aim HIGH. Defaults when the organizer didn't specify a number:
+   - Stalls: aim to FILL each long clear wall — typically 12–25 stalls per wall.
+   - Round tables: ~10–20 in the central area. ALWAYS include round tables if they exist in templates and the venue has any central open space — only omit if the organizer explicitly said no tables or the centre is unusably small.
+   - Speaker zones: at minimum, include the main stage; add additional zones only if the organizer asked.
+7. USE THE TEMPLATES PROVIDED. If the templates list includes round tables AND stalls, your output MUST include both unless the organizer specifically said otherwise. Returning only stalls (or only one wall of stalls) when other templates are available is a FAILURE.
+
+CRITICAL — TEMPLATE IDS:
+- The user payload contains a "templates" block with the EXACT ids. COPY ids verbatim — do not invent, abbreviate, or rename them.
+- If a kind has no templates available, return [] for it.
+- For "stage", pick the speakerZone whose isMainStage is true; otherwise null.
+
+OUTPUT FORMAT — return ONLY one JSON object, no prose, no markdown, no code fences:
+{
+  "stage": { "templateId": "<exact-id-or-null>", "side": "top|bottom|left|right|none" },
+  "rounds": [ { "templateId": "<exact-id>", "count": <int>, "zone": "central|front|back" } ],
+  "stalls": [ { "templateId": "<exact-id>", "count": <int>, "wall": "top|bottom|left|right", "orientation": "horizontal|vertical" } ],
+  "speakerZones": [ { "templateId": "<exact-id>", "side": "top|bottom|left|right|central" } ],
+  "hasMainStage": <bool>,
+  "summary": "<1-2 short lines: name 1-2 visible features (entrance side, longest wall) and how you used them. If you had to guess heavily, say so honestly>"
+}
+
+ORIENTATION:
+- "top"/"bottom" walls are horizontal → use orientation:"horizontal" for stalls there.
+- "left"/"right" walls are vertical → use orientation:"vertical" for stalls there.
+
+DO NOT REFUSE. The ONLY case where you may return entirely empty arrays is if the image is COMPLETELY BLANK or shows something that is unmistakably NOT a venue (e.g. a photo of a person, a logo, an animal). Low contrast, hand-drawn sketch, partial crop, photo of a printed plan, CAD line drawing — all of these MUST get a reasonable layout. When in doubt, place items along reasonable walls and explain your guesses in the summary. Returning an empty plan when a rectangular space is visible is a FAILURE.`;
+
+    const userPayload = {
+      organizerRequest: userText || "(no text — go off the blueprint alone)",
+      defaultOrientation: input.stallOrientation || "horizontal",
+      venue: { width: venue.width, height: venue.height, name: venue.name || null },
+      templates: {
+        stalls: stalls.map((s) => ({
+          id: s.id,
+          name: s.name,
+          width: s.width,
+          height: s.height,
+        })),
+        roundTables: rounds.map((r) => ({
+          id: r.id,
+          name: r.name,
+          chairs: r.numberOfChairs,
+          diameter: r.tableDiameter,
+        })),
+        speakerZones: stages.map((sz) => ({
+          id: sz.id,
+          name: sz.name,
+          isMainStage: !!sz.isMainStage,
+          width: sz.width,
+          height: sz.height,
+        })),
+      },
+    };
+
+    const dataUri = `data:${input.blueprint.mimeType};base64,${input.blueprint.buffer.toString("base64")}`;
+    this.logger.log(
+      `chatVision incoming: mime=${input.blueprint.mimeType} bytes=${input.blueprint.buffer.length} venue=${venue.width}x${venue.height} userText="${userText.slice(0, 80)}"`,
+    );
+
+    // Try primary provider; if its plan is empty/broken, try the other one.
+    const primary = await this.callVisionProvider({
+      provider: this.provider,
+      apiKey:
+        this.provider === "qwen"
+          ? process.env.QWEN_API_KEY!
+          : process.env.GROQ_API_KEY!,
+      baseURL:
+        this.provider === "qwen"
+          ? process.env.QWEN_BASE_URL ||
+            "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+          : process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1",
+      model: this.visionModel,
+      sys,
+      userPayload,
+      dataUri,
+    });
+
+    let parsed = primary.parsed;
+    let providerUsed = this.provider;
+    let modelUsed = this.visionModel;
+    const warnings: string[] = [];
+    if (primary.error) warnings.push(primary.error);
+
+    const planIsEmpty = (p: any) =>
+      !p ||
+      ((!p.stalls || p.stalls.length === 0) &&
+        (!p.rounds || p.rounds.length === 0) &&
+        (!p.speakerZones || p.speakerZones.length === 0));
+
+    if (planIsEmpty(parsed)) {
+      const altProvider: "qwen" | "groq" =
+        this.provider === "groq" ? "qwen" : "groq";
+      const altKey =
+        altProvider === "qwen"
+          ? process.env.QWEN_API_KEY
+          : process.env.GROQ_API_KEY;
+      if (altKey) {
+        const altModel =
+          altProvider === "qwen"
+            ? process.env.QWEN_VISION_MODEL || "qwen-vl-plus"
+            : process.env.GROQ_VISION_MODEL ||
+              "meta-llama/llama-4-scout-17b-16e-instruct";
+        const altBase =
+          altProvider === "qwen"
+            ? process.env.QWEN_BASE_URL ||
+              "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+            : process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1";
+        this.logger.log(
+          `Primary vision provider (${this.provider}) returned empty plan; falling back to ${altProvider}/${altModel}`,
+        );
+        const fb = await this.callVisionProvider({
+          provider: altProvider,
+          apiKey: altKey,
+          baseURL: altBase,
+          model: altModel,
+          sys,
+          userPayload,
+          dataUri,
+        });
+        if (fb.parsed && !planIsEmpty(fb.parsed)) {
+          parsed = fb.parsed;
+          providerUsed = altProvider;
+          modelUsed = altModel;
+        } else if (fb.error) {
+          warnings.push(`Fallback ${altProvider}: ${fb.error}`);
+        }
+      }
+    }
+
+    const generateInput: GenerateInput = {
+      brief: userText,
+      wallMargin: input.wallMargin,
+      stallGap: input.stallGap,
+      stallOrientation: input.stallOrientation,
+      venueConfig: input.venueConfig,
+      templates: input.templates,
+    };
+
+    // If both vision providers refused, fall back to the text-only planner so
+    // the user always gets a usable starter layout — they can drag from there.
+    let usedFallback = false;
+    if (!parsed || planIsEmpty(parsed)) {
+      this.logger.warn(
+        `Both vision providers refused; falling back to text-only planner. providerUsed=${providerUsed}/${modelUsed}`,
+      );
+      try {
+        const textPlan = await this.askAiForPlan({
+          ...generateInput,
+          brief:
+            userText ||
+            `Generate a sensible default venue layout for "${venue.name || "this venue"}" — stage on the side opposite the entrance, stalls along the longest walls, round tables in the centre.`,
+        });
+        parsed = textPlan;
+        usedFallback = true;
+        warnings.push(
+          "Couldn't read your blueprint clearly — generated a generic layout from your description instead. Drag items to align with your floor plan.",
+        );
+      } catch (e: any) {
+        this.logger.warn(`Text-only fallback also failed: ${e?.message || e}`);
+        parsed = {
+          stage: { templateId: null, side: "none" },
+          rounds: [],
+          stalls: [],
+          speakerZones: [],
+          hasMainStage: false,
+          summary: "Could not interpret the blueprint.",
+        };
+      }
+    }
+
+    // Resolve fuzzy / mis-cased / hallucinated templateIds back to real ones.
+    parsed = this.resolveTemplateIds(parsed, input.templates);
+
+    const sanitized = this.sanitizePlan(parsed, generateInput);
+    const placement = this.placeFromPlan(sanitized, generateInput);
+    if (warnings.length)
+      placement.warnings = [...(placement.warnings || []), ...warnings];
+
+    if (planIsEmpty(sanitized)) {
+      this.logger.warn(
+        `chatVision produced empty plan after sanitize. provider=${providerUsed}/${modelUsed} usedFallback=${usedFallback}`,
+      );
+    }
+
+    return {
+      type: "layout" as const,
+      text: usedFallback
+        ? "I couldn't read your blueprint clearly, so I generated a starter layout from your description. Drag items to align with your floor plan, or upload a sharper / higher-contrast image."
+        : sanitized.summary ||
+          "Here's a draft layout based on your blueprint — drag any item to fine-tune.",
+      layout: placement,
+    };
+  }
+
+  /**
+   * Call a vision-capable LLM endpoint, parse its (possibly fenced) response
+   * into a plan. Returns { parsed, error } — never throws so the caller can
+   * cleanly fall back to the other provider.
+   */
+  private async callVisionProvider(args: {
+    provider: "qwen" | "groq";
+    apiKey: string;
+    baseURL: string;
+    model: string;
+    sys: string;
+    userPayload: any;
+    dataUri: string;
+  }): Promise<{ parsed: any; error?: string }> {
+    const client = new OpenAI({ apiKey: args.apiKey, baseURL: args.baseURL });
+    let raw = "";
+    try {
+      const res = await client.chat.completions.create({
+        model: args.model,
+        messages: [
+          { role: "system", content: args.sys },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: JSON.stringify(args.userPayload) },
+              { type: "image_url", image_url: { url: args.dataUri } } as any,
+            ] as any,
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: 1500,
+      } as any);
+      raw = (res.choices?.[0]?.message?.content || "").trim();
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      this.logger.warn(
+        `Vision call ${args.provider}/${args.model} threw: ${msg}`,
+      );
+      return { parsed: null, error: `${args.provider} call failed: ${msg}` };
+    }
+
+    if (!raw) {
+      this.logger.warn(`Vision call ${args.provider}/${args.model} returned empty response.`);
+      return { parsed: null, error: `${args.provider} returned no content` };
+    }
+
+    const jsonText = this.extractJsonObject(raw);
+    if (!jsonText) {
+      this.logger.warn(
+        `Vision raw not parseable (${args.provider}/${args.model}). First 400 chars: ${raw.slice(0, 400)}`,
+      );
+      return { parsed: null, error: `${args.provider} returned non-JSON content` };
+    }
+    try {
+      const parsed = JSON.parse(jsonText);
+      const stallTotal = (parsed?.stalls || []).reduce(
+        (s: number, e: any) => s + (Number(e?.count) || 0),
+        0,
+      );
+      const roundTotal = (parsed?.rounds || []).reduce(
+        (s: number, e: any) => s + (Number(e?.count) || 0),
+        0,
+      );
+      this.logger.log(
+        `Vision ${args.provider}/${args.model} → stage=${parsed?.stage?.side || "?"}, stallEntries=${(parsed?.stalls || []).length} stallTotal=${stallTotal}, roundEntries=${(parsed?.rounds || []).length} roundTotal=${roundTotal}, summary="${String(parsed?.summary || "").slice(0, 160)}"`,
+      );
+      return { parsed };
+    } catch (e: any) {
+      this.logger.warn(
+        `Vision JSON.parse failed (${args.provider}/${args.model}): ${e?.message}. First 400: ${jsonText.slice(0, 400)}`,
+      );
+      return { parsed: null, error: `${args.provider} returned malformed JSON` };
+    }
+  }
+
+  /**
+   * Pull a JSON object out of a possibly-fenced / prose-wrapped LLM response.
+   * Strategy: strip ```json``` fences first, then find the first balanced {...}
+   * span by depth-counting (handles cases where the model adds prose around it).
+   */
+  private extractJsonObject(raw: string): string | null {
+    let s = raw.trim();
+    // Strip ```json ... ``` or ``` ... ``` wrappers.
+    const fence = s.match(/^```(?:json)?\s*([\s\S]*?)```$/i);
+    if (fence) s = fence[1].trim();
+    // If it looks like an object already, return it.
+    if (s.startsWith("{") && s.endsWith("}")) return s;
+    // Otherwise scan for the first balanced {...} block.
+    let depth = 0;
+    let start = -1;
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (ch === "{") {
+        if (depth === 0) start = i;
+        depth++;
+      } else if (ch === "}") {
+        depth--;
+        if (depth === 0 && start >= 0) {
+          return s.slice(start, i + 1);
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Repair templateIds the model may have invented or mis-cased. For each entry,
+   * if its templateId already matches a real id we keep it; otherwise we try to
+   * find the closest real template by (a) case-insensitive id match, (b) name
+   * substring, (c) numeric index hint ("stall 2"), (d) fall back to the first
+   * template of that kind. This keeps the layout from collapsing to empty when
+   * the LLM returns near-correct IDs.
+   */
+  private resolveTemplateIds(
+    plan: any,
+    templates: ChatVisionInput["templates"],
+  ): any {
+    const stalls = templates?.stalls || [];
+    const rounds = templates?.roundTables || [];
+    const zones = templates?.speakerZones || [];
+
+    const fuzzyMatch = (
+      bad: any,
+      pool: { id: string; name?: string }[],
+    ): string | null => {
+      if (!pool.length) return null;
+      const idStr = String(bad ?? "").trim();
+      if (!idStr) return pool[0].id;
+      // Exact match — already fine.
+      const exact = pool.find((t) => t.id === idStr);
+      if (exact) return exact.id;
+      // Case-insensitive id match.
+      const ci = pool.find((t) => t.id.toLowerCase() === idStr.toLowerCase());
+      if (ci) return ci.id;
+      // Name substring match.
+      const lower = idStr.toLowerCase();
+      const byName = pool.find(
+        (t) =>
+          t.name &&
+          (t.name.toLowerCase() === lower ||
+            t.name.toLowerCase().includes(lower) ||
+            lower.includes(t.name.toLowerCase())),
+      );
+      if (byName) return byName.id;
+      // Numeric hint: "stall_2" / "template 1" → index 1 (0-based) or 0.
+      const num = idStr.match(/(\d+)/);
+      if (num) {
+        const idx = Math.max(0, Math.min(pool.length - 1, parseInt(num[1], 10) - 1));
+        return pool[idx].id;
+      }
+      // Last resort: first of kind.
+      return pool[0].id;
+    };
+
+    const out = { ...plan };
+    if (out.stage?.templateId) {
+      out.stage = {
+        ...out.stage,
+        templateId: fuzzyMatch(out.stage.templateId, zones) || null,
+      };
+    }
+    out.stalls = (Array.isArray(out.stalls) ? out.stalls : []).map((s: any) => ({
+      ...s,
+      templateId: fuzzyMatch(s.templateId, stalls),
+    }));
+    out.rounds = (Array.isArray(out.rounds) ? out.rounds : []).map((r: any) => ({
+      ...r,
+      templateId: fuzzyMatch(r.templateId, rounds),
+    }));
+    out.speakerZones = (Array.isArray(out.speakerZones) ? out.speakerZones : []).map(
+      (z: any) => ({ ...z, templateId: fuzzyMatch(z.templateId, zones) }),
+    );
+    return out;
   }
 
   // ============ LLM step ============
