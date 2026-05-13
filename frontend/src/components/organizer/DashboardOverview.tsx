@@ -18,6 +18,7 @@ import {
   FileText,
   FileSpreadsheet,
   ChevronDown,
+  Share,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -136,18 +137,19 @@ export default function DashboardOverview({
     // Combined revenue from tickets and stalls
     const totalRevenue = ticketsRevenue + stallsRevenue;
 
-    const totalCapacity = event.visitorTypes?.length > 0
-      ? event.visitorTypes.reduce((sum: number, v: any) => sum + (v.maxCount || 0), 0)
-      : (Number(event.totalTickets) || 0);
+    const totalCapacity =
+      event.visitorTypes?.length > 0
+        ? event.visitorTypes.reduce(
+            (sum: number, v: any) => sum + (v.maxCount || 0),
+            0,
+          )
+        : Number(event.totalTickets) || 0;
     // Only compute a percentage when we actually have a capacity to compare
     // against. Faking 100% for unlimited-capacity events was misleading — it's
     // not "100% sold", it's "capacity unknown / unlimited".
     const salesPercent =
       totalCapacity > 0
-        ? Math.min(
-            100,
-            Math.round((ticketsSold / totalCapacity) * 100),
-          )
+        ? Math.min(100, Math.round((ticketsSold / totalCapacity) * 100))
         : 0;
 
     return {
@@ -357,8 +359,6 @@ export default function DashboardOverview({
     }
   }, [apiURL]);
 
-
-
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
@@ -383,9 +383,13 @@ export default function DashboardOverview({
   const EventCard = ({ event, type }) => {
     // Safely pull processed metrics
     const ticketsSold = event.ticketsSold || 0;
-    const totalCapacity = event.visitorTypes?.length > 0
-      ? event.visitorTypes.reduce((sum: number, v: any) => sum + (v.maxCount || 0), 0)
-      : (Number(event.totalTickets) || 0);
+    const totalCapacity =
+      event.visitorTypes?.length > 0
+        ? event.visitorTypes.reduce(
+            (sum: number, v: any) => sum + (v.maxCount || 0),
+            0,
+          )
+        : Number(event.totalTickets) || 0;
     const salesPercent = event.salesPercent || 0;
     const revenue = event.revenue || 0;
     const ticketsSoldToday = event.ticketsSoldToday || 0;
@@ -427,13 +431,21 @@ export default function DashboardOverview({
           <div className="md:w-48 w-full h-40 md:h-auto bg-muted flex items-center justify-center relative overflow-hidden">
             {event.image ? (
               <img
-                src={event.image.startsWith("/") ? `${apiURL?.replace("/api", "")}${event.image}` : event.image}
+                src={
+                  event.image.startsWith("/")
+                    ? `${apiURL?.replace("/api", "")}${event.image}`
+                    : event.image
+                }
                 alt={event.title || event.name}
                 className="w-full h-full object-cover"
-                onError={(e) => { e.currentTarget.style.display = "none"; }}
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
               />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-3xl">🎪</div>
+              <div className="w-full h-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-3xl">
+                🎪
+              </div>
             )}
             <Badge className={`absolute top-2 right-2 ${badgeColor}`}>
               {badgeText}
@@ -557,8 +569,8 @@ export default function DashboardOverview({
                     size="sm"
                     onClick={() => handleShowQRCode(event)}
                   >
-                    <QrCode className="h-4 w-4 mr-1" />
-                    QR Code
+                    <Share className="h-4 w-4 mr-1" />
+                    Share
                   </Button>
                   {/* <Button
                     variant="buttonOutline"
@@ -712,10 +724,7 @@ export default function DashboardOverview({
         }
         const deltas: [number, number][] = [];
         for (let i = 1; i < pts.length; i++) {
-          deltas.push([
-            pts[i][0] - pts[i - 1][0],
-            pts[i][1] - pts[i - 1][1],
-          ]);
+          deltas.push([pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]]);
         }
         doc.setFillColor(color[0], color[1], color[2]);
         (doc as any).lines(deltas, pts[0][0], pts[0][1], [1, 1], "F", true);
@@ -938,8 +947,7 @@ export default function DashboardOverview({
         setText(C.gray);
         doc.setFont("helvetica", "normal");
         doc.setFontSize(8);
-        const pct =
-          totalRev > 0 ? Math.round((value / totalRev) * 100) : 0;
+        const pct = totalRev > 0 ? Math.round((value / totalRev) * 100) : 0;
         doc.text(`${formatPrice(value)}  ·  ${pct}%`, legendX + 16, legY + 12);
         legY += 36;
       };
@@ -960,9 +968,7 @@ export default function DashboardOverview({
       const gaugeCy = y + panelH / 2 + 28;
       const gaugeR = 64;
       // Background arc (full half circle)
-      drawPieSlice(gaugeCx, gaugeCy, gaugeR, Math.PI, Math.PI, [
-        230, 232, 240,
-      ]);
+      drawPieSlice(gaugeCx, gaugeCy, gaugeR, Math.PI, Math.PI, [230, 232, 240]);
       // Filled arc up to pct
       drawPieSlice(
         gaugeCx,
@@ -976,13 +982,7 @@ export default function DashboardOverview({
       drawDonutHole(gaugeCx, gaugeCy, gaugeR * 0.6, [250, 251, 254]);
       // Hide bottom half of donut hole (since gauge is only top semicircle)
       setFill([250, 251, 254]);
-      doc.rect(
-        gaugeCx - gaugeR - 4,
-        gaugeCy,
-        gaugeR * 2 + 8,
-        gaugeR + 6,
-        "F",
-      );
+      doc.rect(gaugeCx - gaugeR - 4, gaugeCy, gaugeR * 2 + 8, gaugeR + 6, "F");
       // Re-draw the baseline of the arc
       doc.setDrawColor(230, 232, 240);
       doc.line(gaugeCx - gaugeR, gaugeCy, gaugeCx + gaugeR, gaugeCy);
@@ -1027,10 +1027,8 @@ export default function DashboardOverview({
         doc.setFontSize(9);
         const tPct = Math.round((ticketsRev / totalRev) * 100);
         const sPct = 100 - tPct;
-        if (tW > 50)
-          doc.text(`Tickets ${tPct}%`, margin + 8, y + 14);
-        if (sW > 50)
-          doc.text(`Stalls ${sPct}%`, margin + tW + 8, y + 14);
+        if (tW > 50) doc.text(`Tickets ${tPct}%`, margin + 8, y + 14);
+        if (sW > 50) doc.text(`Stalls ${sPct}%`, margin + tW + 8, y + 14);
       }
       y += stackH + 24;
 
@@ -1049,8 +1047,7 @@ export default function DashboardOverview({
         rows: [string, string][],
       ) => {
         const tableTopGap = 8;
-        const tableHeight =
-          headerRowH + rows.length * tableRowH;
+        const tableHeight = headerRowH + rows.length * tableRowH;
         // page-break if entire section won't fit; otherwise just header + 1 row
         if (y + tableHeight > pageH - margin - 30) {
           doc.addPage();
@@ -1071,11 +1068,7 @@ export default function DashboardOverview({
         doc.setFont("helvetica", "normal");
         doc.setFontSize(8);
         const tagText = `${rows.length} item${rows.length === 1 ? "" : "s"}`;
-        doc.text(
-          tagText,
-          valueColRight - doc.getTextWidth(tagText),
-          y + 17,
-        );
+        doc.text(tagText, valueColRight - doc.getTextWidth(tagText), y + 17);
         y += headerRowH;
 
         // Body rows
@@ -1102,10 +1095,7 @@ export default function DashboardOverview({
           setText([20, 20, 20]);
           doc.setFont("helvetica", "bold");
           doc.setFontSize(10);
-          const wrapped = doc.splitTextToSize(
-            String(value),
-            innerW / 2,
-          );
+          const wrapped = doc.splitTextToSize(String(value), innerW / 2);
           const valueText = wrapped[0]; // single line in body rows
           doc.text(
             valueText,
@@ -1145,9 +1135,7 @@ export default function DashboardOverview({
         ],
         [
           "End Date",
-          event.endDate
-            ? new Date(event.endDate).toLocaleDateString()
-            : "—",
+          event.endDate ? new Date(event.endDate).toLocaleDateString() : "—",
         ],
       ]);
 
@@ -1177,11 +1165,7 @@ export default function DashboardOverview({
         setText(C.gray);
         doc.setFont("helvetica", "normal");
         doc.setFontSize(8);
-        doc.text(
-          `EventSH • ${event.title || "Report"}`,
-          margin,
-          pageH - 16,
-        );
+        doc.text(`EventSH • ${event.title || "Report"}`, margin, pageH - 16);
         doc.text(
           `Page ${i} of ${pageCount}`,
           pageW - margin - doc.getTextWidth(`Page ${i} of ${pageCount}`),

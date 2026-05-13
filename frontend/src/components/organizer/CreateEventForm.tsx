@@ -40,6 +40,16 @@ import {
   Maximize2,
   Minimize2,
 } from "lucide-react";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { jwtDecode } from "jwt-decode";
 import BlurOverlay from "../ui/blurOverlay";
 import { AIVenueDesignerDialog } from "./AIVenueDesignerDialog";
@@ -114,6 +124,29 @@ function getOrganizerFromToken(token: string): OrganizerTokenPayload | null {
   }
 }
 
+/**
+ * Curated 15-swatch palette used by the AddOn color picker (and reusable for
+ * other small markers). Module scope so child components like TableManagement
+ * can reference it without prop-drilling.
+ */
+const ADDON_COLORS = [
+  "#ef4444",
+  "#f97316",
+  "#f59e0b",
+  "#eab308",
+  "#84cc16",
+  "#22c55e",
+  "#10b981",
+  "#06b6d4",
+  "#3b82f6",
+  "#6366f1",
+  "#8b5cf6",
+  "#a855f7",
+  "#d946ef",
+  "#ec4899",
+  "#6b7280",
+];
+
 interface CreateEventFormProps {
   onClose: () => void;
   onSave: (data: FormData) => Promise<void>;
@@ -162,6 +195,9 @@ interface AddOnItem {
   preview?: string; // Add this for the local UI preview
   rawFile?: File; // Add this for the actual file upload
   hasNewImage?: boolean; // Add this flag for the backend
+  /** Hex color used to identify this add-on on the venue layout (one dot per
+   *  purchased add-on on each booked stall). */
+  color?: string;
 }
 
 interface RoundTableTemplate {
@@ -753,6 +789,38 @@ const VenueConfiguration = ({
                 />
                 <Label className="text-sm">Show Grid</Label>
               </div>
+              {selectedConfig.showGrid && (
+                <div className="flex items-center gap-2 ml-6">
+                  <Label
+                    htmlFor="grid-size-input"
+                    className="text-xs text-muted-foreground whitespace-nowrap"
+                  >
+                    Box size (m)
+                  </Label>
+                  <Input
+                    id="grid-size-input"
+                    type="number"
+                    min={0.5}
+                    max={50}
+                    step={0.5}
+                    // 1 m = 10 px convention, matching the Width/Height inputs
+                    // above. User types meters, we store px.
+                    value={(selectedConfig.gridSize / 10).toFixed(1)}
+                    onChange={(e) => {
+                      const meters = Number(e.target.value);
+                      if (!Number.isFinite(meters) || meters <= 0) return;
+                      updateSelectedConfig({
+                        gridSize: Math.max(
+                          5,
+                          Math.min(500, Math.round(meters * 10)),
+                        ),
+                      });
+                    }}
+                    className="h-7 w-20 text-xs"
+                  />
+                  <span className="text-[10px] text-muted-foreground">m</span>
+                </div>
+              )}
               <div className="flex items-center space-x-2">
                 <Checkbox
                   checked={selectedConfig.hasMainStage}
@@ -1229,6 +1297,7 @@ const TableManagement = ({
       description: currentAddOn.description,
       rawFile: currentAddOn.rawFile || undefined,
       preview: currentAddOn.preview || undefined,
+      color: currentAddOn.color || "#6b7280",
     };
 
     setAddOnItems([...addOnItems, newAddOn]);
@@ -1238,6 +1307,7 @@ const TableManagement = ({
       description: "",
       rawFile: null,
       preview: "",
+      color: "#6b7280",
     });
 
     toast({ title: "Add-on created successfully!" });
@@ -1733,6 +1803,60 @@ const TableManagement = ({
                 />
               </div>
               <div className="md:col-span-2">
+                <Label>Color</Label>
+                <div className="flex items-center flex-wrap gap-2 mt-1">
+                  {/* Native color input — opens the browser's full picker
+                      so you can pick any hex, not just the presets. */}
+                  <input
+                    type="color"
+                    aria-label="Pick add-on color"
+                    value={currentAddOn.color || "#6b7280"}
+                    onChange={(e) =>
+                      setCurrentAddOn((prev) => ({
+                        ...prev,
+                        color: e.target.value,
+                      }))
+                    }
+                    className="h-8 w-10 cursor-pointer rounded border border-gray-300 bg-white p-0.5"
+                  />
+                  <Input
+                    type="text"
+                    value={currentAddOn.color || "#6b7280"}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (/^#[0-9a-fA-F]{0,6}$/.test(v)) {
+                        setCurrentAddOn((prev) => ({ ...prev, color: v }));
+                      }
+                    }}
+                    placeholder="#6b7280"
+                    className="h-8 w-24 font-mono text-xs"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    or pick a preset:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ADDON_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        title={c}
+                        aria-label={`Pick color ${c}`}
+                        onClick={() =>
+                          setCurrentAddOn((prev) => ({ ...prev, color: c }))
+                        }
+                        className={`w-6 h-6 rounded-full border-2 transition-transform ${
+                          (currentAddOn.color || "").toLowerCase() ===
+                          c.toLowerCase()
+                            ? "border-gray-800 scale-110"
+                            : "border-gray-200 hover:border-gray-400"
+                        }`}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="md:col-span-2">
                 <Label>Description</Label>
                 <div className="flex gap-2">
                   <Input
@@ -1767,6 +1891,84 @@ const TableManagement = ({
                     className="flex items-center justify-between p-3 bg-gray-50 rounded border"
                   >
                     <div className="flex items-center gap-3">
+                      {/* Click the dot to change this add-on's color — same
+                          15-swatch palette as the create-form picker. */}
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="w-4 h-4 rounded-full border border-gray-300 shrink-0 hover:scale-110 transition-transform"
+                            style={{
+                              backgroundColor: addOn.color || "#6b7280",
+                            }}
+                            title="Change color"
+                          />
+                        </PopoverTrigger>
+                        <PopoverContent
+                          className="w-auto p-3 space-y-2"
+                          align="start"
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              aria-label="Pick add-on color"
+                              value={addOn.color || "#6b7280"}
+                              onChange={(e) =>
+                                setAddOnItems(
+                                  addOnItems.map((it) =>
+                                    it.id === addOn.id
+                                      ? { ...it, color: e.target.value }
+                                      : it,
+                                  ),
+                                )
+                              }
+                              className="h-8 w-10 cursor-pointer rounded border border-gray-300 bg-white p-0.5"
+                            />
+                            <Input
+                              type="text"
+                              value={addOn.color || "#6b7280"}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (/^#[0-9a-fA-F]{0,6}$/.test(v)) {
+                                  setAddOnItems(
+                                    addOnItems.map((it) =>
+                                      it.id === addOn.id
+                                        ? { ...it, color: v }
+                                        : it,
+                                    ),
+                                  );
+                                }
+                              }}
+                              className="h-8 w-24 font-mono text-xs"
+                            />
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 max-w-[180px]">
+                            {ADDON_COLORS.map((c) => (
+                              <button
+                                key={c}
+                                type="button"
+                                title={c}
+                                onClick={() =>
+                                  setAddOnItems(
+                                    addOnItems.map((it) =>
+                                      it.id === addOn.id
+                                        ? { ...it, color: c }
+                                        : it,
+                                    ),
+                                  )
+                                }
+                                className={`w-6 h-6 rounded-full border-2 transition-transform ${
+                                  (addOn.color || "#6b7280").toLowerCase() ===
+                                  c.toLowerCase()
+                                    ? "border-gray-800 scale-110"
+                                    : "border-gray-200 hover:border-gray-400"
+                                }`}
+                                style={{ backgroundColor: c }}
+                              />
+                            ))}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                       {addOn.preview || addOn.image ? (
                         <img
                           src={addOn.preview || `${__API_URL__}${addOn.image}`}
@@ -1840,6 +2042,19 @@ interface VenueDesignerProps {
   setVenueRoundTables: (tables: Record<string, PositionedRoundTable[]>) => void;
   venueDoors: Record<string, PositionedDoor[]>;
   setVenueDoors: (doors: Record<string, PositionedDoor[]>) => void;
+  /** Booked-stall lookup (positionId → vendor + add-ons). Used to render
+   *  small colored dots on each booked stall and a hover popover that lists
+   *  the add-ons the vendor purchased. Empty in create mode. */
+  stallBookings?: Record<
+    string,
+    {
+      vendorName: string;
+      vendorEmail?: string;
+      addOns: { id: string; name: string; quantity: number }[];
+    }
+  >;
+  /** Event-level add-ons (id → color/name). Used to color the dots. */
+  addOnItems?: AddOnItem[];
 }
 
 const VenueDesigner = ({
@@ -1860,6 +2075,8 @@ const VenueDesigner = ({
   setVenueRoundTables,
   venueDoors,
   setVenueDoors,
+  stallBookings,
+  addOnItems,
 }: VenueDesignerProps) => {
   const { toast } = useToast();
   const [isDragging, setIsDragging] = useState(false);
@@ -2634,10 +2851,42 @@ const VenueDesigner = ({
       {/* Full Width Canvas */}
       <Card className="border-2">
         <CardContent className="p-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Canvas
-            </span>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Canvas
+              </span>
+              {/* Grid reference — sits in the toolbar, OUTSIDE the design
+                  surface, so it never obstructs items placed near the edges
+                  of the canvas. Width/Height inputs in Venue Setup use a
+                  1 m = 10 px convention; we show the same scale here so
+                  values match what the organizer typed. */}
+              {venueConfig.showGrid && (
+                <div className="flex items-center gap-2 border rounded-md bg-slate-50 px-2 py-1 text-[10px] leading-tight">
+                  <div>
+                    <div className="font-semibold text-slate-700">
+                      Grid: {(venueConfig.gridSize / 10).toFixed(1)} m
+                    </div>
+                    <div className="text-slate-500">
+                      Venue: {(venueConfig.width / 10).toFixed(0)} ×{" "}
+                      {(venueConfig.height / 10).toFixed(0)} m
+                    </div>
+                  </div>
+                  <div
+                    className="border-2 border-slate-400 bg-slate-200/50 flex items-center justify-center text-[8px] font-bold text-slate-600"
+                    style={{
+                      width: venueConfig.gridSize * venueConfig.scale,
+                      height: venueConfig.gridSize * venueConfig.scale,
+                      minWidth: 14,
+                      minHeight: 14,
+                    }}
+                    title="One grid box at the current zoom"
+                  >
+                    1×
+                  </div>
+                </div>
+              )}
+            </div>
             <Button
               type="button"
               size="sm"
@@ -2775,7 +3024,24 @@ const VenueDesigner = ({
               })}
 
               {/* Placed Tables */}
-              {currentTables.map((table) => (
+              {currentTables.map((table) => {
+                // Booking lookup — only populated in edit mode where the
+                // event has a Stalls collection. Drives both the hover popover
+                // and the colored add-on dots on the stall.
+                const booking = stallBookings?.[table.positionId];
+                const addOnColorMap = new Map(
+                  (addOnItems || []).map((a) => [
+                    a.id,
+                    { color: a.color || "#6b7280", name: a.name },
+                  ]),
+                );
+                const dots = (booking?.addOns || []).map((a) => ({
+                  id: a.id,
+                  name: addOnColorMap.get(a.id)?.name || a.name,
+                  color: addOnColorMap.get(a.id)?.color || "#6b7280",
+                  quantity: a.quantity,
+                }));
+                const tableNode = (
                 <div
                   key={table.positionId}
                   style={getTableStyle(table)}
@@ -2791,6 +3057,31 @@ const VenueDesigner = ({
                       <div className="text-[8px] mt-0.5">BOOKED</div>
                     )}
                   </div>
+                  {/* Add-on color dots — one per purchased add-on, stacked
+                      along the bottom edge of the booked stall. */}
+                  {dots.length > 0 && (
+                    <div
+                      className="absolute left-1/2 -translate-x-1/2 flex gap-0.5 pointer-events-none"
+                      style={{ bottom: 2 }}
+                    >
+                      {dots.slice(0, 8).map((d, i) => (
+                        <span
+                          key={i}
+                          className="rounded-full border border-white/80 shadow"
+                          style={{
+                            width: 6,
+                            height: 6,
+                            backgroundColor: d.color,
+                          }}
+                        />
+                      ))}
+                      {dots.length > 8 && (
+                        <span className="text-[7px] font-bold text-white/90 ml-0.5">
+                          +{dots.length - 8}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {selectedTable === table.positionId && (
                     <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-1 bg-white border p-1 rounded-md shadow-xl z-50">
                       <Button
@@ -2812,7 +3103,75 @@ const VenueDesigner = ({
                     </div>
                   )}
                 </div>
-              ))}
+                );
+                // Wrap booked stalls in a HoverCard so the organizer gets a
+                // quick popover with the vendor name and the add-ons they
+                // bought (colored circle + name). Unbooked stalls render as-is
+                // to avoid the popover firing while empty stalls are dragged.
+                if (booking) {
+                  return (
+                    <HoverCard key={table.positionId} openDelay={120}>
+                      <HoverCardTrigger asChild>
+                        {tableNode}
+                      </HoverCardTrigger>
+                      <HoverCardContent
+                        side="top"
+                        align="center"
+                        className="w-72 p-3"
+                      >
+                        <div className="space-y-2">
+                          <div>
+                            <div className="font-semibold text-sm">
+                              {booking.vendorName}
+                            </div>
+                            {booking.vendorEmail && (
+                              <div className="text-xs text-muted-foreground">
+                                {booking.vendorEmail}
+                              </div>
+                            )}
+                          </div>
+                          {dots.length === 0 ? (
+                            <div className="text-xs italic text-muted-foreground">
+                              No add-ons purchased.
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                Add-ons ({dots.length})
+                              </div>
+                              <ul className="space-y-1">
+                                {dots.map((d, i) => (
+                                  <li
+                                    key={`${d.id}-${i}`}
+                                    className="flex items-center gap-2 text-xs"
+                                  >
+                                    <span
+                                      className="w-3 h-3 rounded-full border border-gray-300 shrink-0"
+                                      style={{ backgroundColor: d.color }}
+                                    />
+                                    <span className="flex-1 truncate">
+                                      {d.name}
+                                    </span>
+                                    {d.quantity > 1 && (
+                                      <span className="text-muted-foreground">
+                                        × {d.quantity}
+                                      </span>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          <div className="text-[10px] text-muted-foreground border-t pt-1">
+                            Full vendor details in the Participants tab.
+                          </div>
+                        </div>
+                      </HoverCardContent>
+                    </HoverCard>
+                  );
+                }
+                return tableNode;
+              })}
 
               {/* Placed Speaker Zones */}
               {currentSpeakerZones.map((zone) => {
@@ -3224,7 +3583,8 @@ export function CreateEventForm({
     description: string;
     rawFile?: File | null;
     preview?: string;
-  }>({ name: "", price: "", description: "" });
+    color?: string;
+  }>({ name: "", price: "", description: "", color: "#6b7280" });
 
   const { country, setCountry } = useCountry();
   const { formatPrice, getSymbol } = useCurrency(country);
@@ -3423,6 +3783,64 @@ export function CreateEventForm({
         : initialData.venueSpeakerZones
       : {},
   );
+
+  // Stall bookings keyed by positionId. Each entry holds vendor info + the
+  // add-ons that vendor purchased — surfaced by the venue designer to colour
+  // the booked stalls and power the on-hover popover. Only fetched in edit
+  // mode (a brand-new event has no Stalls collection rows yet).
+  const [stallBookings, setStallBookings] = useState<
+    Record<
+      string,
+      {
+        vendorName: string;
+        vendorEmail?: string;
+        addOns: { id: string; name: string; quantity: number }[];
+      }
+    >
+  >({});
+  useEffect(() => {
+    if (!editMode || !initialData?._id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = sessionStorage.getItem("token");
+        const res = await fetch(
+          `${__API_URL__}/stalls/event/${initialData._id}`,
+          { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        const stalls: any[] = json?.data || json || [];
+        const map: Record<string, any> = {};
+        for (const stall of stalls) {
+          const positions: any[] = stall?.selectedTables || [];
+          const addOns = (stall?.selectedAddOns || []).map((a: any) => ({
+            id: a.addOnId,
+            name: a.name,
+            quantity: a.quantity ?? 1,
+          }));
+          const vendorName =
+            stall?.shopkeeper?.name ||
+            stall?.shopkeeperName ||
+            stall?.vendorName ||
+            "Vendor";
+          const vendorEmail =
+            stall?.shopkeeper?.email || stall?.shopkeeperEmail;
+          for (const p of positions) {
+            const positionId = p?.positionId || p?._id;
+            if (!positionId) continue;
+            map[positionId] = { vendorName, vendorEmail, addOns };
+          }
+        }
+        if (!cancelled) setStallBookings(map);
+      } catch {
+        // Non-fatal — designer just won't show booking dots/popovers.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [editMode, initialData?._id]);
 
   // Placed entrance / exit markers per venue config. Empty array = none placed.
   const [venueDoors, setVenueDoors] = useState<
@@ -6091,6 +6509,8 @@ export function CreateEventForm({
                 setVenueRoundTables={setVenueRoundTables}
                 venueDoors={venueDoors}
                 setVenueDoors={setVenueDoors}
+                stallBookings={stallBookings}
+                addOnItems={addOnItems}
               />
             </BlurOverlay>
           </TabsContent>

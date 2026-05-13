@@ -1619,7 +1619,12 @@ Thank you for choosing Eventsh! 🎊`;
         .populate([
           {
             path: "shopkeeperId",
-            select: "name email whatsAppNumber shopName",
+            // Operator-venue view + organizer billing both read these fields.
+            // Both shopName + businessName exist on the schema as separate
+            // properties; data lives in whichever the vendor filled in, so
+            // we ship both and let the frontend fall back.
+            select:
+              "name email phoneNumber whatsAppNumber shopName businessName businessType",
           },
           {
             path: "eventId",

@@ -343,6 +343,9 @@ export class Event {
     price: number;
     description: string;
     addOnImage?: string;
+    /** Hex color used to mark the add-on on the venue layout (one dot per
+     *  purchased add-on on each booked stall). Defaults to a neutral grey. */
+    color?: string;
   }[];
 
   @Prop({

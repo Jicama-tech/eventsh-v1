@@ -3740,24 +3740,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between p-4 rounded-xl border border-gray-200 bg-gray-50">
-                <div>
-                  <p className="text-gray-800 font-medium text-sm">
-                    Event Organizer Actions
-                  </p>
-                  <p className="text-gray-400 text-xs mt-0.5">
-                    Scan ticket QR codes to mark attendance
-                  </p>
-                </div>
-                <button
-                  onClick={() => navigate(`/events/${id}/scan-tickets`)}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium transition-all hover:opacity-90"
-                  style={{ backgroundColor: design?.primaryColor || "#f97316" }}
-                >
-                  <QrCodeIcon className="h-4 w-4" />
-                  Scan QR
-                </button>
-              </div>
+              {/* QR scanner / operator entry moved to a small link near the
+                  page bottom — keeps this Organizer tab focused on the
+                  organizer's profile, not on operator-only actions. */}
 
               {socialMedia &&
                 (socialMedia.facebook ||
@@ -5413,6 +5398,20 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             )}
           </TabsContent>
         </Tabs>
+
+        {/* Small operator-only entry point. Replaces the QR button that used
+            to live in the Organizer tab. Sends the operator to the existing
+            scan-tickets route, which gates with OTP — so it also doubles as
+            an operator login. */}
+        <div className="mt-8 mb-4 flex justify-center">
+          <button
+            type="button"
+            onClick={() => navigate(`/events/${id}/scan-tickets`)}
+            className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+          >
+            Operator login &middot; Scan tickets &amp; view venue setup
+          </button>
+        </div>
       </div>
 
       {/* WhatsApp Verification Dialog */}
