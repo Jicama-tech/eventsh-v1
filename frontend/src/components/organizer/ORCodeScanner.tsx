@@ -14,6 +14,13 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Html5QrcodeScanner, Html5Qrcode } from "html5-qrcode";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import { OperatorVenueView } from "./OperatorVenueView";
 
 const apiURL = __API_URL__;
 
@@ -1124,7 +1131,7 @@ export default function QRTicketScanner() {
   // ─── MAIN RENDER ─────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-lg mx-auto">
+      <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center mb-6">
           <Button
@@ -1160,8 +1167,18 @@ export default function QRTicketScanner() {
           </div>
         </div>
 
-        {/* Main Content */}
+        {/* Main Content. OTP verification happens before the tabs — once the
+            operator has authenticated, we expose Scanner | Venue so they can
+            either scan tickets or look at the venue layout (with vendor +
+            add-on details on hover) while setting up the physical space. */}
         {step === "otp-verification" && renderOTPVerification()}
+        {step !== "otp-verification" && (
+          <Tabs defaultValue="scanner" className="mt-2">
+            <TabsList>
+              <TabsTrigger value="scanner">Scanner</TabsTrigger>
+              <TabsTrigger value="venue">Venue</TabsTrigger>
+            </TabsList>
+            <TabsContent value="scanner" className="mt-4 space-y-4">
         {step === "mode-selection" && renderModeSelection()}
         {step === "scanning" && renderScanner()}
         {step === "checkin-checkout-selection" && renderCheckInOutSelection()}
@@ -1307,6 +1324,18 @@ export default function QRTicketScanner() {
               </CardContent>
             </Card>
           </div>
+        )}
+            </TabsContent>
+            <TabsContent value="venue" className="mt-4">
+              {eventId ? (
+                <OperatorVenueView eventId={eventId} />
+              ) : (
+                <div className="text-sm text-slate-500 italic text-center py-8">
+                  No event id in URL.
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         )}
       </div>
     </div>
