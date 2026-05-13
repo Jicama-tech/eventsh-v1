@@ -49,6 +49,7 @@ import {
   AlertTriangle,
   RefreshCw,
   Copy,
+  Share2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { jwtDecode } from "jwt-decode";
@@ -530,6 +531,69 @@ const MyEvents: React.FC = () => {
     setDuplicatingFrom(null);
   };
 
+  /**
+   * Build the public-facing URL for an event matching the App.tsx route
+   * `/:organizationName/events/:id`. The organization slug is vanity (the
+   * page reads only :id from params), so we slugify whatever name we can
+   * find on the JWT and fall back to a placeholder when nothing's there.
+   */
+  const buildEventShareUrl = (eventId: string) => {
+    let org = "event";
+    try {
+      const token = sessionStorage.getItem("token");
+      if (token) {
+        const decoded: any = jwtDecode(token);
+        const candidate =
+          decoded?.organizationName ||
+          decoded?.organization?.name ||
+          decoded?.name ||
+          "event";
+        org = String(candidate)
+          .toLowerCase()
+          .trim()
+          .replace(/\s+/g, "-")
+          .replace(/[^a-z0-9-]/g, "")
+          || "event";
+      }
+    } catch {
+      // Non-fatal — placeholder slug still produces a working URL.
+    }
+    return `${window.location.origin}/${encodeURIComponent(org)}/events/${eventId}`;
+  };
+
+  /**
+   * Try the Web Share API first (native dialog on mobile, OS share sheet on
+   * supported desktops) and fall back to writing the URL to the clipboard.
+   * Toast either way so the user gets confirmation.
+   */
+  const handleShareEvent = async (event: Event) => {
+    const url = buildEventShareUrl(event._id);
+    const shareData = {
+      title: event.title,
+      text: `Check out "${event.title}"`,
+      url,
+    };
+    try {
+      if (typeof navigator !== "undefined" && (navigator as any).share) {
+        await (navigator as any).share(shareData);
+        return;
+      }
+    } catch (e: any) {
+      // User cancelled native sheet — silent.
+      if (e?.name === "AbortError") return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({
+        title: "Link copied",
+        description: url,
+      });
+    } catch {
+      // Final fallback: surface the URL in a prompt so they can copy manually.
+      window.prompt("Copy the link to share:", url);
+    }
+  };
+
   const handleSaveEvent = async (eventData: FormData) => {
     try {
       const token = sessionStorage.getItem("token");
@@ -959,6 +1023,16 @@ const MyEvents: React.FC = () => {
                             Edit
                           </Button>
                         )}
+                        <Button
+                          variant="buttonOutline"
+                          size="sm"
+                          onClick={() => handleShareEvent(event)}
+                          className="flex-1 lg:flex-none"
+                          title="Copy or share the public event link"
+                        >
+                          <Share2 size={16} className="mr-1" />
+                          Share
+                        </Button>
                         <Button
                           variant="buttonOutline"
                           size="sm"
