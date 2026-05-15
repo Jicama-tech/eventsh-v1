@@ -4,31 +4,10 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Loader2,
-  Store,
-  Mail,
-  Phone,
-  MessageCircle,
-  Package,
-  CreditCard,
-  Info,
-} from "lucide-react";
+import { Loader2, Info } from "lucide-react";
+import { ExhibitorDetailDialog } from "./ExhibitorDetailDialog";
+import type { StallRequest } from "./shopKeeper";
 
 const apiURL = __API_URL__;
 
@@ -135,11 +114,18 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [event, setEvent] = useState<any | null>(null);
   const [bookings, setBookings] = useState<Record<string, BookingInfo>>({});
+  // positionId -> stallId, so the "View details" click can fetch the full
+  // stall record from /stalls/:id (the per-event list only ships a trimmed
+  // shopkeeper projection).
+  const [positionToStallId, setPositionToStallId] = useState<
+    Record<string, string>
+  >({});
   const [selectedConfigId, setSelectedConfigId] = useState<string>("");
-  // Stall the operator drilled into via the HoverCard's "View details" button.
-  const [detailsFor, setDetailsFor] = useState<
-    { booking: BookingInfo; table: PositionedTable } | null
-  >(null);
+  // Full stall record loaded when the operator drills in. Null while closed
+  // or loading; ExhibitorDetailDialog accepts null and renders an empty body.
+  const [selectedStall, setSelectedStall] = useState<StallRequest | null>(null);
+  const [stallDialogOpen, setStallDialogOpen] = useState(false);
+  const [loadingStall, setLoadingStall] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -162,6 +148,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
         const eventData = eventJson?.data || eventJson;
 
         const map: Record<string, BookingInfo> = {};
+        const stallIdMap: Record<string, string> = {};
         if (stallsRes.ok) {
           const stallsJson = await stallsRes.json();
           const stalls: any[] = stallsJson?.data || stallsJson || [];
@@ -218,6 +205,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
                 paymentStatus,
                 addOns,
               };
+              if (stall?._id) stallIdMap[positionId] = stall._id;
             }
           }
         }
@@ -225,6 +213,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
         if (!cancelled) {
           setEvent(eventData);
           setBookings(map);
+          setPositionToStallId(stallIdMap);
           const configs: VenueConfig[] = eventData?.venueConfig || [];
           if (configs.length > 0) setSelectedConfigId(configs[0].id);
         }
@@ -238,6 +227,30 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
       cancelled = true;
     };
   }, [eventId]);
+
+  // Drill into a stall: pulls the full StallRequest from /stalls/:id so the
+  // shared dialog has the same level of detail organizers see. We open the
+  // dialog immediately so the operator sees feedback (header + spinner)
+  // rather than waiting on the network.
+  const openStallDetails = async (positionId: string) => {
+    const stallId = positionToStallId[positionId];
+    if (!stallId) return;
+    setSelectedStall(null);
+    setStallDialogOpen(true);
+    setLoadingStall(true);
+    try {
+      const token = sessionStorage.getItem("token");
+      const headers: Record<string, string> = token
+        ? { Authorization: `Bearer ${token}` }
+        : {};
+      const res = await fetch(`${apiURL}/stalls/${stallId}`, { headers });
+      if (!res.ok) return;
+      const json = await res.json();
+      setSelectedStall(json?.data || json);
+    } finally {
+      setLoadingStall(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -617,9 +630,15 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
                       variant="outline"
                       size="sm"
                       className="w-full mt-1"
-                      onClick={() => setDetailsFor({ booking, table })}
+                      disabled={!positionToStallId[table.positionId]}
+                      onClick={() => openStallDetails(table.positionId)}
                     >
-                      <Info className="h-3.5 w-3.5 mr-1" /> View details
+                      {loadingStall ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                      ) : (
+                        <Info className="h-3.5 w-3.5 mr-1" />
+                      )}
+                      View details
                     </Button>
                   </div>
                 </HoverCardContent>
@@ -629,12 +648,16 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
         </div>
       </div>
 
-      <StallDetailsDialog
-        open={!!detailsFor}
-        onOpenChange={(open) => !open && setDetailsFor(null)}
-        booking={detailsFor?.booking}
-        table={detailsFor?.table}
-        eventTitle={event?.title}
+      {/* Volunteer/operator dialog. Same component the organizer's Exhibitors
+          tab uses — minus the admin callbacks (Confirm Payment, Return
+          Deposit), so operators can read every detail but can't take action. */}
+      <ExhibitorDetailDialog
+        open={stallDialogOpen}
+        onOpenChange={(open) => {
+          setStallDialogOpen(open);
+          if (!open) setSelectedStall(null);
+        }}
+        stallRequest={selectedStall}
       />
 
       <div className="text-[11px] text-muted-foreground">
@@ -645,233 +668,3 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
   );
 }
 
-// Operator-facing booking details. Mirrors the look of the organizer's
-// shopkeeper dialog (Cards + section headers) but trimmed to the fields
-// useful at scan-time: who's at this stall, how to reach them, what they
-// paid, and which add-ons they bought.
-function StallDetailsDialog({
-  open,
-  onOpenChange,
-  booking,
-  table,
-  eventTitle,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  booking?: BookingInfo;
-  table?: PositionedTable;
-  eventTitle?: string;
-}) {
-  if (!booking || !table) return null;
-
-  const fmtCurrency = (n: number) =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0,
-    }).format(n);
-
-  const stallName = table.tableName || table.name || "Stall";
-  const phoneDigits = (booking.vendorPhone || "").replace(/\D/g, "");
-  const totalAddOnValue = (booking.addOns || []).reduce(
-    (sum, a) => sum + (a.price ?? 0) * (a.quantity ?? 1),
-    0,
-  );
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="pb-2">
-          <div className="flex justify-between items-start gap-3">
-            <div>
-              <DialogTitle className="text-2xl flex items-center gap-2">
-                <Store className="h-6 w-6 text-primary" />
-                {stallName}
-              </DialogTitle>
-              <DialogDescription>
-                {eventTitle ? `${eventTitle} · ` : ""}Booked by{" "}
-                {booking.vendorName}
-              </DialogDescription>
-            </div>
-            <div className="flex gap-2 flex-wrap justify-end">
-              {booking.paymentStatus && (
-                <Badge
-                  variant={
-                    /paid|completed|success/i.test(booking.paymentStatus)
-                      ? "default"
-                      : "destructive"
-                  }
-                >
-                  {booking.paymentStatus}
-                </Badge>
-              )}
-              {booking.businessType && (
-                <Badge variant="outline" className="bg-primary/5">
-                  {booking.businessType}
-                </Badge>
-              )}
-            </div>
-          </div>
-        </DialogHeader>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Vendor contact */}
-          <Card className="border-t-4 border-t-blue-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Vendor & Contact
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <div className="text-xs text-muted-foreground">Name</div>
-                <div className="font-medium">{booking.vendorName}</div>
-              </div>
-              {booking.businessName && (
-                <div>
-                  <div className="text-xs text-muted-foreground">Business</div>
-                  <div className="font-medium">{booking.businessName}</div>
-                </div>
-              )}
-              {booking.vendorEmail && (
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-blue-500" />
-                  <a
-                    href={`mailto:${booking.vendorEmail}`}
-                    className="text-sm hover:underline"
-                  >
-                    {booking.vendorEmail}
-                  </a>
-                </div>
-              )}
-              {booking.vendorPhone && (
-                <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-green-600" />
-                  <span className="text-sm">{booking.vendorPhone}</span>
-                </div>
-              )}
-              {phoneDigits.length >= 8 && (
-                <a
-                  href={`https://wa.me/${phoneDigits}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm text-green-600 hover:underline"
-                >
-                  <MessageCircle className="h-4 w-4" /> Open WhatsApp
-                </a>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Stall position */}
-          <Card className="border-t-4 border-t-amber-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Stall Position
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Position ID</span>
-                <span className="font-mono text-xs">{table.positionId}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Coordinates</span>
-                <span className="font-mono text-xs">
-                  ({Math.round(table.x)}, {Math.round(table.y)})
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Dimensions</span>
-                <span className="font-mono text-xs">
-                  {Math.round(table.width)} × {Math.round(table.height)}
-                </span>
-              </div>
-              {table.rotation ? (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Rotation</span>
-                  <span className="font-mono text-xs">
-                    {Math.round(table.rotation)}°
-                  </span>
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-
-          {/* Payment */}
-          <Card className="md:col-span-2 border-t-4 border-t-emerald-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                <CreditCard className="h-4 w-4" /> Payment
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4 text-center">
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">
-                    Total Paid
-                  </div>
-                  <div className="text-2xl font-bold">
-                    {booking.totalPaid != null
-                      ? fmtCurrency(Number(booking.totalPaid))
-                      : "—"}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">
-                    Add-On Value
-                  </div>
-                  <div className="text-2xl font-bold">
-                    {totalAddOnValue > 0 ? fmtCurrency(totalAddOnValue) : "—"}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Add-ons */}
-          <Card className="md:col-span-2">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Package className="h-4 w-4" /> Add-Ons (
-                {booking.addOns?.length ?? 0})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {!booking.addOns?.length ? (
-                <p className="text-sm italic text-muted-foreground">
-                  No add-ons purchased.
-                </p>
-              ) : (
-                <ul className="divide-y">
-                  {booking.addOns.map((a, i) => (
-                    <li
-                      key={`${a.id}-${i}`}
-                      className="flex items-center gap-3 py-2 text-sm"
-                    >
-                      <span
-                        className="w-4 h-4 rounded-full border border-gray-300 shrink-0"
-                        style={{ backgroundColor: a.color }}
-                      />
-                      <span className="flex-1">{a.name}</span>
-                      {a.quantity > 1 && (
-                        <Badge variant="outline" className="font-mono">
-                          × {a.quantity}
-                        </Badge>
-                      )}
-                      {a.price != null && (
-                        <span className="font-medium tabular-nums">
-                          {fmtCurrency(a.price * (a.quantity ?? 1))}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
