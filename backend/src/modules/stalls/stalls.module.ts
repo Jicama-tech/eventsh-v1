@@ -9,6 +9,7 @@ import { CouponModule } from "../coupon/coupon.module";
 import { EventSchema } from "../events/schemas/event.schema";
 import { OrganizerSchema } from "../organizers/schemas/organizer.schema";
 import { StallPaymentSchedulerService } from "./stall-payment-scheduler.service";
+import { FeedbackModule } from "../feedback/feedback.module";
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { StallPaymentSchedulerService } from "./stall-payment-scheduler.service"
     ]),
     OtpModule,
     CouponModule,
+    FeedbackModule,
   ],
   controllers: [StallsController],
   providers: [StallsService, StallPaymentSchedulerService],

@@ -26,6 +26,10 @@ export class UsersController {
     private readonly jwtService: JwtService,
   ) {}
 
+  private get frontendBase() {
+    return process.env.FRONTEND_BASE_URL || "https://eventsh.com";
+  }
+
   @Get("google")
   @UseGuards(AuthGuard("google"))
   async googleAuth(@Req() req: Request) {
@@ -35,10 +39,11 @@ export class UsersController {
   @Get("google/callback")
   @UseGuards(AuthGuard("google"))
   async googleAuthRedirect(@Req() req: Request, @Res() res: Response) {
+    const fe = this.frontendBase;
     try {
       const userFromGoogle = req.user as any;
       if (!userFromGoogle) {
-        return res.redirect("https://eventsh.com/login?error=auth_failed");
+        return res.redirect(`${fe}/login?error=auth_failed`);
       }
 
       let user = await this.usersService.findByProviderId(
@@ -59,9 +64,9 @@ export class UsersController {
 
       const payload = { email: user.email, sub: user._id, roles: user.roles };
       const token = this.jwtService.sign(payload);
-      return res.redirect(`https://eventsh.com/user-dashboard?token=${token}`);
+      return res.redirect(`${fe}/user-dashboard?token=${token}`);
     } catch (error) {
-      return res.redirect("https://eventsh.com/login?error=auth_failed");
+      return res.redirect(`${fe}/login?error=auth_failed`);
     }
   }
 

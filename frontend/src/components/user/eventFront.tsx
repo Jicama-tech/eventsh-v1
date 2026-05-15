@@ -75,6 +75,11 @@ interface Country {
 }
 import { Input } from "../ui/input";
 import {
+  EventFeedbackTokenHandler,
+  VisitorFeedbackCard,
+} from "./EventFeedback";
+import { EventStatistics } from "./EventStatistics";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -3551,6 +3556,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         </div>
         <Separator className="mt-5 mb-5" />
         {/* Tabs */}
+        <EventStatistics
+          eventId={id || eventData?._id || ""}
+          eventEndDate={eventData?.endDate}
+        />
+
         <Tabs defaultValue="details" className="w-full">
           <TabsList className="bg-gray-100 border border-gray-200 rounded-2xl p-1 h-auto flex flex-wrap w-full mt-5 gap-1">
             <TabsTrigger
@@ -3589,6 +3599,17 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 Round Tables
               </TabsTrigger>
             )}
+            {eventData?.endDate &&
+              new Date(eventData.endDate) <= new Date() &&
+              !!eventData?.totalTickets &&
+              eventData.totalTickets > 0 && (
+                <TabsTrigger
+                  value="feedback"
+                  className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
+                >
+                  Feedback
+                </TabsTrigger>
+              )}
           </TabsList>
 
           <TabsContent value="details" className="mt-4 space-y-4">
@@ -5397,21 +5418,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               </div>
             )}
           </TabsContent>
+
+          <TabsContent value="feedback" className="mt-4">
+            <VisitorFeedbackCard eventId={id || eventData?._id || ""} />
+          </TabsContent>
         </Tabs>
 
-        {/* Small operator-only entry point. Replaces the QR button that used
-            to live in the Organizer tab. Sends the operator to the existing
-            scan-tickets route, which gates with OTP — so it also doubles as
-            an operator login. */}
-        <div className="mt-8 mb-4 flex justify-center">
-          <button
-            type="button"
-            onClick={() => navigate(`/events/${id}/scan-tickets`)}
-            className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
-          >
-            Operator login &middot; Scan tickets &amp; view venue setup
-          </button>
-        </div>
+        <EventFeedbackTokenHandler
+          eventId={id || eventData?._id || ""}
+        />
       </div>
 
       {/* WhatsApp Verification Dialog */}

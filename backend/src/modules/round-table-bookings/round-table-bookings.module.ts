@@ -9,6 +9,7 @@ import {
 import { EventSchema } from "../events/schemas/event.schema";
 import { OrganizerSchema } from "../organizers/schemas/organizer.schema";
 import { OtpModule } from "../otp/otp.module";
+import { FeedbackModule } from "../feedback/feedback.module";
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { OtpModule } from "../otp/otp.module";
       { name: "Organizer", schema: OrganizerSchema },
     ]),
     OtpModule,
+    FeedbackModule,
   ],
   controllers: [RoundTableBookingsController],
   providers: [RoundTableBookingsService],

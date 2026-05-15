@@ -32,6 +32,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { CreateEventForm } from "./CreateEventForm";
 import { CouponsManager } from "./CouponsManager";
+import { EventFeedbackDialog } from "./EventFeedbackDialog";
 import {
   Plus,
   Edit,
@@ -50,6 +51,8 @@ import {
   RefreshCw,
   Copy,
   Share2,
+  QrCode,
+  MessageSquare,
 } from "lucide-react";
 import { format } from "date-fns";
 import { jwtDecode } from "jwt-decode";
@@ -151,6 +154,7 @@ export interface Event {
 const MyEvents: React.FC = () => {
   const apiURL = __API_URL__;
   const { toast } = useToast();
+  const [feedbackForEvent, setFeedbackForEvent] = useState<Event | null>(null);
 
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -591,6 +595,34 @@ const MyEvents: React.FC = () => {
     } catch {
       // Final fallback: surface the URL in a prompt so they can copy manually.
       window.prompt("Copy the link to share:", url);
+    }
+  };
+
+  // Operator-facing scanner URL. The page itself gates with OTP, so the link
+  // is safe to forward — the operator just opens it and authenticates.
+  const handleShareScannerLink = async (event: Event) => {
+    const url = `${window.location.origin}/events/${event._id}/scan-tickets`;
+    const shareData = {
+      title: `Scanner – ${event.title}`,
+      text: `Operator scanner link for "${event.title}"`,
+      url,
+    };
+    try {
+      if (typeof navigator !== "undefined" && (navigator as any).share) {
+        await (navigator as any).share(shareData);
+        return;
+      }
+    } catch (e: any) {
+      if (e?.name === "AbortError") return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({
+        title: "Scanner link copied",
+        description: url,
+      });
+    } catch {
+      window.prompt("Copy the scanner link to share:", url);
     }
   };
 
@@ -1036,6 +1068,26 @@ const MyEvents: React.FC = () => {
                         <Button
                           variant="buttonOutline"
                           size="sm"
+                          onClick={() => handleShareScannerLink(event)}
+                          className="flex-1 lg:flex-none"
+                          title="Copy the operator scanner link to share — operator opens it and signs in with OTP"
+                        >
+                          <QrCode size={16} className="mr-1" />
+                          Scanner
+                        </Button>
+                        <Button
+                          variant="buttonOutline"
+                          size="sm"
+                          onClick={() => setFeedbackForEvent(event)}
+                          className="flex-1 lg:flex-none"
+                          title="View ratings + comments and toggle deposit refund status"
+                        >
+                          <MessageSquare size={16} className="mr-1" />
+                          Feedback
+                        </Button>
+                        <Button
+                          variant="buttonOutline"
+                          size="sm"
                           onClick={() => handleDeleteEvent(event._id)}
                           className="text-red-600 hover:text-red-700 hover:border-red-300 flex-1 lg:flex-none"
                         >
@@ -1084,6 +1136,13 @@ const MyEvents: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <EventFeedbackDialog
+        eventId={feedbackForEvent?._id ?? null}
+        eventTitle={feedbackForEvent?.title}
+        open={!!feedbackForEvent}
+        onOpenChange={(o) => !o && setFeedbackForEvent(null)}
+      />
     </div>
   );
 };

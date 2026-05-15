@@ -121,9 +121,6 @@ export default function QRTicketScanner() {
   const [step, setStep] = useState<Step>("otp-verification");
   const [scanMode, setScanMode] = useState<ScanMode>(null);
   const [eventData, setEventData] = useState<EventData | null>(null);
-  const [otp, setOtp] = useState("");
-  const [isVerifyingOTP, setIsVerifyingOTP] = useState(false);
-  const [isSendingOTP, setIsSendingOTP] = useState(false);
   const [ticketData, setTicketData] = useState<TicketData | null>(null);
   const [stallData, setStallData] = useState<StallData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -131,7 +128,6 @@ export default function QRTicketScanner() {
     null,
   );
   const [errorMessage, setErrorMessage] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
   const [pendingStallQR, setPendingStallQR] = useState<string | null>(null);
   const [stallAction, setStallAction] = useState<
     "CHECK_IN" | "CHECK_OUT" | null
@@ -167,98 +163,103 @@ export default function QRTicketScanner() {
     }
   };
 
-  // Send OTP to organizer's WhatsApp
-  const sendOTP = async () => {
-    if (!eventData?.organizer.whatsAppNumber) {
+  // Volunteer email-OTP sign-in. Parallel to the existing organizer OTP
+  // path but gated on the event's volunteers allow-list rather than the
+  // organizer's WhatsApp number.
+  const [volunteerEmail, setVolunteerEmail] = useState("");
+  const [volunteerOtp, setVolunteerOtp] = useState("");
+  const [volunteerOtpSent, setVolunteerOtpSent] = useState(false);
+  const [isSendingVolunteerOtp, setIsSendingVolunteerOtp] = useState(false);
+  const [isVerifyingVolunteerOtp, setIsVerifyingVolunteerOtp] = useState(false);
+
+  const sendVolunteerOtp = async () => {
+    if (!volunteerEmail.trim()) {
       toast({
-        duration: 5000,
-        title: "Error",
-        description: "Organizer WhatsApp number not found",
+        duration: 4000,
+        title: "Email required",
+        description: "Enter your email to receive the OTP.",
         variant: "destructive",
       });
       return;
     }
-
-    setIsSendingOTP(true);
+    setIsSendingVolunteerOtp(true);
     try {
-      const response = await fetch(`${apiURL}/otp/send-whatsapp-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          whatsappNumber: eventData.organizer.whatsAppNumber,
-          role: "organizer",
-        }),
-      });
-
-      if (!response.ok) throw new Error("Failed to send OTP");
-
-      setOtpSent(true);
-      toast({
-        duration: 5000,
-        title: "OTP Sent",
-        description: `OTP sent to Organizer`,
-      });
-    } catch (error) {
-      console.error("Error sending OTP:", error);
-      toast({
-        duration: 5000,
-        title: "Error",
-        description: "Failed to send OTP. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSendingOTP(false);
-    }
-  };
-
-  // Verify OTP
-  const verifyOTP = async () => {
-    if (!otp.trim()) {
-      toast({
-        duration: 5000,
-        title: "Error",
-        description: "Please enter the OTP",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsVerifyingOTP(true);
-    try {
-      const response = await fetch(`${apiURL}/otp/verify-chat-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          whatsappNumber: eventData?.organizer.whatsAppNumber,
-          otp: otp,
-          role: "organizer",
-        }),
-      });
-
+      const response = await fetch(
+        `${apiURL}/events/${eventId}/send-volunteer-otp`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: volunteerEmail.trim() }),
+        },
+      );
+      const data = await response.json();
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Invalid OTP");
+        throw new Error(data?.message || "Failed to send OTP");
       }
-
+      setVolunteerOtpSent(true);
       toast({
         duration: 5000,
-        title: "Success",
-        description: "OTP verified successfully",
+        title: "OTP sent",
+        description: `Check ${volunteerEmail.trim()} for the code.`,
       });
-      setStep("mode-selection");
     } catch (error) {
-      console.error("Error verifying OTP:", error);
       toast({
-        duration: 5000,
-        title: "Error",
+        duration: 6000,
+        title: "Couldn't send OTP",
         description:
           error instanceof Error
             ? error.message
-            : "Invalid OTP. Please try again.",
+            : "This email isn't on the volunteer list for this event.",
         variant: "destructive",
       });
     } finally {
-      setIsVerifyingOTP(false);
+      setIsSendingVolunteerOtp(false);
+    }
+  };
+
+  const verifyVolunteerOtp = async () => {
+    if (!volunteerOtp.trim()) {
+      toast({
+        duration: 4000,
+        title: "OTP required",
+        description: "Enter the code you received.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsVerifyingVolunteerOtp(true);
+    try {
+      const response = await fetch(
+        `${apiURL}/events/${eventId}/verify-volunteer-otp`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: volunteerEmail.trim(),
+            otp: volunteerOtp.trim(),
+          }),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || "Invalid or expired OTP");
+      }
+      toast({
+        duration: 5000,
+        title: "Welcome",
+        description: `Signed in as ${data?.volunteer?.name || data?.volunteer?.email || "volunteer"}.`,
+      });
+      setStep("mode-selection");
+    } catch (error) {
+      toast({
+        duration: 6000,
+        title: "Verification failed",
+        description:
+          error instanceof Error ? error.message : "Invalid or expired OTP.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsVerifyingVolunteerOtp(false);
     }
   };
 
@@ -753,9 +754,10 @@ export default function QRTicketScanner() {
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
         <Shield className="mx-auto h-12 w-12 text-blue-600 mb-4" />
-        <CardTitle>Organizer Verification Required</CardTitle>
+        <CardTitle>Volunteer Sign-In</CardTitle>
         <p className="text-sm text-gray-600">
-          For security, we need to verify you're the event organizer
+          Enter the email the organizer added to this event's volunteer list.
+          We'll mail you a one-time code.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -768,59 +770,77 @@ export default function QRTicketScanner() {
           </div>
         )}
 
-        {!otpSent ? (
-          <Button onClick={sendOTP} disabled={isSendingOTP} className="w-full">
-            {isSendingOTP ? (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                Sending OTP...
-              </>
-            ) : (
-              "Send OTP to WhatsApp"
-            )}
-          </Button>
-        ) : (
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Enter OTP sent to your WhatsApp
-              </label>
+        {/* Volunteer email-OTP path. */}
+        <div className="space-y-3">
+          {!volunteerOtpSent ? (
+            <>
+              <Input
+                type="email"
+                placeholder="your-email@example.com"
+                value={volunteerEmail}
+                onChange={(e) => setVolunteerEmail(e.target.value)}
+                autoComplete="email"
+              />
+              <Button
+                onClick={sendVolunteerOtp}
+                disabled={isSendingVolunteerOtp || !volunteerEmail.trim()}
+                className="w-full"
+              >
+                {isSendingVolunteerOtp ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Sending OTP…
+                  </>
+                ) : (
+                  "Send OTP to Email"
+                )}
+              </Button>
+              <p className="text-xs text-gray-500">
+                Your email must be on this event's volunteer list.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-gray-600">
+                Code sent to <strong>{volunteerEmail}</strong>
+              </p>
               <Input
                 type="text"
                 placeholder="Enter 6-digit OTP"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
+                value={volunteerOtp}
+                onChange={(e) => setVolunteerOtp(e.target.value)}
                 maxLength={6}
                 className="text-center text-lg tracking-widest"
               />
-            </div>
-            <div className="flex gap-2">
-              <Button
-                onClick={verifyOTP}
-                disabled={isVerifyingOTP || !otp.trim()}
-                className="flex-1"
-              >
-                {isVerifyingOTP ? (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Verifying...
-                  </>
-                ) : (
-                  "Verify OTP"
-                )}
-              </Button>
-              <Button
-                onClick={() => {
-                  setOtpSent(false);
-                  setOtp("");
-                }}
-                variant="buttonOutline"
-              >
-                Resend
-              </Button>
-            </div>
-          </div>
-        )}
+              <div className="flex gap-2">
+                <Button
+                  onClick={verifyVolunteerOtp}
+                  disabled={isVerifyingVolunteerOtp || !volunteerOtp.trim()}
+                  className="flex-1"
+                >
+                  {isVerifyingVolunteerOtp ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      Verifying…
+                    </>
+                  ) : (
+                    "Verify OTP"
+                  )}
+                </Button>
+                <Button
+                  onClick={() => {
+                    setVolunteerOtpSent(false);
+                    setVolunteerOtp("");
+                  }}
+                  variant="buttonOutline"
+                >
+                  Change email
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+
       </CardContent>
     </Card>
   );

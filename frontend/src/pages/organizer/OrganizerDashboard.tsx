@@ -29,6 +29,7 @@ import {
   Bot,
   PanelLeftClose,
   PanelLeftOpen,
+  MessageSquare,
 } from "lucide-react";
 import {
   Tooltip,
@@ -99,6 +100,9 @@ const OrganizerSettings = lazy(() =>
   })),
 );
 const MyEvents = lazy(() => import("@/components/organizer/MyEvents"));
+const OrganizerFeedbackList = lazy(
+  () => import("@/components/organizer/OrganizerFeedbackList"),
+);
 const MyEventUsers = lazy(() => import("@/components/organizer/MyUsers"));
 const VendorRequests = lazy(() => import("@/components/organizer/shopKeeper"));
 const SpeakerRequests = lazy(() =>
@@ -778,6 +782,12 @@ export function OrganizerDashboard({
       moduleKey: "events",
     },
     {
+      id: "feedback",
+      label: "Feedback",
+      icon: MessageSquare,
+      moduleKey: "events",
+    },
+    {
       id: "storefront",
       label: "Eventfront",
       icon: Globe,
@@ -1085,6 +1095,14 @@ export function OrganizerDashboard({
                     <div className="space-y-4">
                       <MyEvents />
                     </div>
+                  </Suspense>
+                </ModuleGate>
+              </TabsContent>
+
+              <TabsContent value="feedback" className="mt-0">
+                <ModuleGate moduleKey="events" hideWhenLocked>
+                  <Suspense fallback={<TabLoader />}>
+                    <OrganizerFeedbackList />
                   </Suspense>
                 </ModuleGate>
               </TabsContent>

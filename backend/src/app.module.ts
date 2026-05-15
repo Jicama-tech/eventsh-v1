@@ -29,6 +29,8 @@ import { ShopkeepersModule } from "./modules/shopkeepers/shopkeepers.module";
 import { BulkImportModule } from "./modules/bulk-import/bulk-import.module";
 import { TemplatesModule } from "./modules/templates/templates.module";
 import { WebsiteContentModule } from "./modules/website-content/website-content.module";
+import { FeedbackModule } from "./modules/feedback/feedback.module";
+import { AppFeedbackModule } from "./modules/app-feedback/app-feedback.module";
 
 @Module({
   imports: [
@@ -70,6 +72,8 @@ import { WebsiteContentModule } from "./modules/website-content/website-content.
     BulkImportModule,
     TemplatesModule,
     WebsiteContentModule,
+    FeedbackModule,
+    AppFeedbackModule,
   ],
 })
 export class AppModule {}

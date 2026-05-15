@@ -42,6 +42,7 @@ import {
   LayoutDashboard,
   Settings as SettingsIcon,
   Receipt,
+  MessageSquare,
 } from "lucide-react";
 import { useFetchWithLoading } from "@/hooks/useFetchWithLoading";
 import { useToast } from "@/hooks/use-toast";
@@ -58,6 +59,11 @@ const UsersPage = lazy(() =>
 );
 const BillingRatesPage = lazy(() =>
   import("./BillingRatesPage").then((m) => ({ default: m.BillingRatesPage })),
+);
+const AppFeedbackCuration = lazy(() =>
+  import("./AppFeedbackCuration").then((m) => ({
+    default: m.AppFeedbackCuration,
+  })),
 );
 const PricingPage = lazy(() =>
   import("./PricingPage").then((m) => ({ default: m.PricingPage })),
@@ -337,6 +343,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     { id: "users", label: "Users", icon: Users },
     { id: "pricing", label: "Plans & Pricing", icon: Package },
     { id: "billing-rates", label: "Billing Rates", icon: Receipt },
+    { id: "app-feedback", label: "App Feedback", icon: MessageSquare },
     { id: "settings", label: "Settings", icon: SettingsIcon },
   ];
 
@@ -831,6 +838,12 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
               <TabsContent value="billing-rates" className="mt-0">
                 <Suspense fallback={<TabLoader />}>
                   <BillingRatesPage />
+                </Suspense>
+              </TabsContent>
+
+              <TabsContent value="app-feedback" className="mt-0">
+                <Suspense fallback={<TabLoader />}>
+                  <AppFeedbackCuration />
                 </Suspense>
               </TabsContent>
 
