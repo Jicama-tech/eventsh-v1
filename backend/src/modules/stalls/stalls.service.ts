@@ -462,6 +462,39 @@ export class StallsService {
     }
   }
 
+  /**
+   * Append a free-form note to a stall's statusHistory without changing the
+   * status. Used by exhibitor / organizer / operator / volunteer to leave
+   * timeline entries at any time from the Stall Dialog.
+   */
+  async addNote(
+    stallId: string,
+    note: string,
+    addedBy?: string,
+  ) {
+    if (!Types.ObjectId.isValid(stallId)) {
+      throw new BadRequestException("Invalid stall ID format");
+    }
+    const trimmed = (note || "").trim();
+    if (!trimmed) {
+      throw new BadRequestException("Note text is required");
+    }
+
+    const stall = await this.stallModel.findById(stallId);
+    if (!stall) throw new NotFoundException("Stall not found");
+
+    stall.statusHistory.push({
+      status: stall.status as any,
+      note: trimmed,
+      changedAt: new Date(),
+      changedBy: (addedBy || "").trim() || "Unknown user",
+    });
+    stall.updatedAt = new Date();
+    await stall.save();
+
+    return { success: true, data: stall };
+  }
+
   // ============ PHASE 3: PAYMENT & QR CODE - SAME AS TICKETS.SERVICE.TS ============
 
   /**

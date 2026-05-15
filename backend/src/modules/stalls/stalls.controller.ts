@@ -21,6 +21,7 @@ import { SelectTablesAndAddOnsDto } from "./dto/tableSelect.dto";
 import { UpdatePaymentStatusDto } from "./dto/paymentStatus.dto";
 import { UpdateStatusDto } from "./dto/updateStatus.dto";
 import { ConfirmPaymentDto } from "./dto/confirm-Payment.dto";
+import { AddStallNoteDto } from "./dto/add-stall-note.dto";
 import { ScanQRDto } from "./dto/scan-qr.dto";
 import { SendBulkInvitationDto } from "./dto/sendBulkInvitation.dto";
 import { diskStorage } from "multer";
@@ -246,6 +247,21 @@ export class StallsController {
     @Body() updateDto: UpdateStatusDto,
   ) {
     return await this.stallsService.updateStatus(id, updateDto);
+  }
+
+  /**
+   * Append a free-form note to the stall timeline. Open to any authenticated
+   * caller — exhibitor / organizer / operator / volunteer — since the
+   * Stall Dialog is the same view for all of them.
+   * POST /stalls/:id/notes
+   */
+  @Post(":id/notes")
+  @HttpCode(HttpStatus.OK)
+  async addNote(
+    @Param("id") id: string,
+    @Body() dto: AddStallNoteDto,
+  ) {
+    return await this.stallsService.addNote(id, dto.note, dto.addedBy);
   }
 
   /**
