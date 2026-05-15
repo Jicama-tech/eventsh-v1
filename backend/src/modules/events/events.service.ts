@@ -1,17 +1,79 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import { Event, EventDocument } from "./schemas/event.schema";
 import { CreateEventDto } from "./dto/createEvent.dto";
 import { UpdateEventDto } from "./dto/updateEvent.dto";
 import { TemplatesService } from "../templates/templates.service";
+import { OtpService } from "../otp/otp.service";
 
 @Injectable()
 export class EventsService {
   constructor(
     @InjectModel(Event.name) private eventModel: Model<EventDocument>,
     private readonly templatesService: TemplatesService,
+    private readonly otpService: OtpService,
   ) {}
+
+  // Email-OTP gate for volunteer sign-in on the scanner page. Two steps:
+  //   1) sendVolunteerOtp: refuse early if the email isn't on the event's
+  //      volunteer list, so we don't email random people OTP codes.
+  //   2) verifyVolunteerOtp: confirm the OTP, then re-check the allow-list
+  //      (the list could have changed between send and verify).
+  // Uses the existing OtpService email channel under role="volunteer" to
+  // namespace away from other email-OTP flows.
+  async sendVolunteerOtp(eventId: string, email: string) {
+    if (!email) {
+      throw new BadRequestException("Email is required");
+    }
+    const event: any = await this.eventModel.findById(eventId).lean();
+    if (!event) {
+      throw new NotFoundException("Event not found");
+    }
+    const normalized = email.trim().toLowerCase();
+    const isVolunteer = (event.volunteers || []).some(
+      (v: any) => (v.email || "").toLowerCase() === normalized,
+    );
+    if (!isVolunteer) {
+      throw new ForbiddenException(
+        "This email isn't on the volunteer list for this event.",
+      );
+    }
+    await this.otpService.sendOtp(normalized, "volunteer");
+    return { message: "OTP sent to your email" };
+  }
+
+  async verifyVolunteerOtp(eventId: string, email: string, otp: string) {
+    if (!email || !otp) {
+      throw new BadRequestException("Email and OTP are required");
+    }
+    const normalized = email.trim().toLowerCase();
+    await this.otpService.verifyOtp(normalized, "volunteer", otp);
+    const event: any = await this.eventModel.findById(eventId).lean();
+    if (!event) {
+      throw new NotFoundException("Event not found");
+    }
+    const volunteer = (event.volunteers || []).find(
+      (v: any) => (v.email || "").toLowerCase() === normalized,
+    );
+    if (!volunteer) {
+      throw new ForbiddenException(
+        "This email isn't on the volunteer list for this event.",
+      );
+    }
+    return {
+      volunteer: {
+        name: volunteer.name,
+        email: volunteer.email,
+        phoneNumber: volunteer.phoneNumber,
+      },
+    };
+  }
 
   async create(createEventDto: CreateEventDto): Promise<Event> {
     try {
@@ -89,6 +151,11 @@ export class EventsService {
 
         roundTableTemplates: createEventDto.roundTableTemplates || [],
         venueRoundTables: createEventDto.venueRoundTables || [],
+        volunteers: (createEventDto.volunteers || []).map((v) => ({
+          name: v.name,
+          email: (v.email || "").toLowerCase(),
+          phoneNumber: v.phoneNumber,
+        })),
 
         status: createEventDto.status || "draft",
         featured: createEventDto.featured || false,
@@ -180,6 +247,15 @@ export class EventsService {
         updateEventDto.endDate = new Date(updateEventDto.endDate) as any;
       } else if (updateEventDto.startDate) {
         updateEventDto.endDate = new Date(updateEventDto.startDate) as any;
+      }
+
+      // Normalize volunteer emails so the verifyVolunteer lookup matches.
+      if (Array.isArray(updateEventDto.volunteers)) {
+        updateEventDto.volunteers = updateEventDto.volunteers.map((v) => ({
+          name: v.name,
+          email: (v.email || "").toLowerCase(),
+          phoneNumber: v.phoneNumber,
+        }));
       }
 
       const updatedEvent = await this.eventModel

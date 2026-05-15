@@ -3739,6 +3739,28 @@ export function CreateEventForm({
   });
 
   const [speakers, setSpeakers] = useState<any[]>(initialData?.speakers ?? []);
+  // Volunteers allow-listed to sign in to the scanner page via Google.
+  const [volunteers, setVolunteers] = useState<
+    { name: string; email: string; phoneNumber: string }[]
+  >(
+    (initialData?.volunteers ?? []).map((v: any) => ({
+      name: v?.name ?? "",
+      email: v?.email ?? "",
+      phoneNumber: v?.phoneNumber ?? "",
+    })),
+  );
+  const addVolunteer = () =>
+    setVolunteers((prev) => [...prev, { name: "", email: "", phoneNumber: "" }]);
+  const removeVolunteer = (idx: number) =>
+    setVolunteers((prev) => prev.filter((_, i) => i !== idx));
+  const updateVolunteer = (
+    idx: number,
+    field: "name" | "email" | "phoneNumber",
+    value: string,
+  ) =>
+    setVolunteers((prev) =>
+      prev.map((v, i) => (i === idx ? { ...v, [field]: value } : v)),
+    );
   const [visitorTypes, setVisitorTypes] = useState<VisitorType[]>(
     initialData?.visitorTypes?.map((v: any) => ({ ...v })) ?? [],
   );
@@ -4597,6 +4619,17 @@ export function CreateEventForm({
       // Add visitor types
       data.append("visitorTypes", JSON.stringify(visitorTypes));
 
+      // Volunteers — emails trimmed; rows with no email are dropped so they
+      // don't pollute the allow-list with empty strings.
+      const cleanedVolunteers = volunteers
+        .map((v) => ({
+          name: (v.name || "").trim(),
+          email: (v.email || "").trim().toLowerCase(),
+          phoneNumber: (v.phoneNumber || "").trim(),
+        }))
+        .filter((v) => v.email);
+      data.append("volunteers", JSON.stringify(cleanedVolunteers));
+
       await onSave(data);
       toast({
         duration: 5000,
@@ -4661,9 +4694,9 @@ export function CreateEventForm({
         );
         const showLayout =
           showStalls || showRoundTables || showSpeakers || anyDoorsEnabled;
-        // Always-on tabs: basic, media, venue, visitors (4)
+        // Always-on tabs: basic, media, venue, visitors, volunteers (5)
         const visibleCount =
-          4 +
+          5 +
           (showStalls ? 1 : 0) +
           (showSpeakers ? 1 : 0) +
           (showRoundTables ? 1 : 0) +
@@ -4671,13 +4704,13 @@ export function CreateEventForm({
         const colsClass =
           (
             {
-              4: "grid-cols-4",
               5: "grid-cols-5",
               6: "grid-cols-6",
               7: "grid-cols-7",
               8: "grid-cols-8",
+              9: "grid-cols-9",
             } as Record<number, string>
-          )[visibleCount] || "grid-cols-8";
+          )[visibleCount] || "grid-cols-9";
         return (
           <div className="sticky top-[73px] z-40 bg-white border-b">
             <Tabs value={currentTab} onValueChange={setCurrentTab}>
@@ -4690,6 +4723,9 @@ export function CreateEventForm({
                 </TabsTrigger>
                 <TabsTrigger value="visitors" className="text-sm">
                   Visitors
+                </TabsTrigger>
+                <TabsTrigger value="volunteers" className="text-sm">
+                  Volunteers
                 </TabsTrigger>
                 <TabsTrigger value="venue" className="text-sm">
                   Venue Setup
@@ -5110,6 +5146,90 @@ export function CreateEventForm({
                     </div>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* VOLUNTEERS TAB — allow-listed Google accounts that can sign in to
+              the scanner page for this event. Operators (OTP) and the
+              organizer keep working unchanged. */}
+          <TabsContent value="volunteers" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="w-5 h-5" /> Volunteers
+                </CardTitle>
+                <p className="text-sm text-gray-600">
+                  Add team members who should be able to scan tickets. They
+                  sign in on the scanner page with Google using the email you
+                  enter here.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {volunteers.length === 0 && (
+                  <p className="text-sm text-gray-500 italic">
+                    No volunteers added yet. Click "Add Volunteer" below.
+                  </p>
+                )}
+                {volunteers.map((v, idx) => (
+                  <div
+                    key={idx}
+                    className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end p-3 border rounded-lg bg-gray-50"
+                  >
+                    <div className="md:col-span-3">
+                      <Label className="text-xs">Name</Label>
+                      <Input
+                        value={v.name}
+                        onChange={(e) =>
+                          updateVolunteer(idx, "name", e.target.value)
+                        }
+                        placeholder="Jane Doe"
+                      />
+                    </div>
+                    <div className="md:col-span-5">
+                      <Label className="text-xs">
+                        Email (Google sign-in address)
+                      </Label>
+                      <Input
+                        type="email"
+                        value={v.email}
+                        onChange={(e) =>
+                          updateVolunteer(idx, "email", e.target.value)
+                        }
+                        placeholder="jane@example.com"
+                      />
+                    </div>
+                    <div className="md:col-span-3">
+                      <Label className="text-xs">Phone</Label>
+                      <Input
+                        value={v.phoneNumber}
+                        onChange={(e) =>
+                          updateVolunteer(idx, "phoneNumber", e.target.value)
+                        }
+                        placeholder="+1 555 123 4567"
+                      />
+                    </div>
+                    <div className="md:col-span-1 flex md:justify-end">
+                      <Button
+                        type="button"
+                        variant="buttonOutline"
+                        size="icon"
+                        onClick={() => removeVolunteer(idx)}
+                        title="Remove volunteer"
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="buttonOutline"
+                  onClick={addVolunteer}
+                >
+                  <Plus className="w-4 h-4 mr-2" /> Add Volunteer
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>

@@ -123,6 +123,8 @@ export class EventsController {
         body.roundTableTemplates = JSON.parse(body.roundTableTemplates);
       if (typeof body.venueRoundTables === "string")
         body.venueRoundTables = JSON.parse(body.venueRoundTables);
+      if (typeof body.volunteers === "string")
+        body.volunteers = JSON.parse(body.volunteers);
 
       // Handle banner image
       if (files.banner && files.banner[0]) {
@@ -250,6 +252,27 @@ export class EventsController {
     }
   }
 
+  // Volunteer email-OTP sign-in for the scanner page. Two endpoints:
+  // send-volunteer-otp gates on the event's allow-list before mailing the
+  // code; verify-volunteer-otp confirms the code and returns the matched
+  // volunteer record. Both are public — gating is on the email being in
+  // event.volunteers, not on any session.
+  @Post(":id/send-volunteer-otp")
+  async sendVolunteerOtp(
+    @Param("id") id: string,
+    @Body() body: { email: string },
+  ) {
+    return this.eventsService.sendVolunteerOtp(id, body?.email);
+  }
+
+  @Post(":id/verify-volunteer-otp")
+  async verifyVolunteerOtp(
+    @Param("id") id: string,
+    @Body() body: { email: string; otp: string },
+  ) {
+    return this.eventsService.verifyVolunteerOtp(id, body?.email, body?.otp);
+  }
+
   @Put(":id")
   @UseGuards(AuthGuard("jwt"))
   @UseInterceptors(
@@ -314,6 +337,8 @@ export class EventsController {
         body.roundTableTemplates = JSON.parse(body.roundTableTemplates);
       if (typeof body.venueRoundTables === "string")
         body.venueRoundTables = JSON.parse(body.venueRoundTables);
+      if (typeof body.volunteers === "string")
+        body.volunteers = JSON.parse(body.volunteers);
 
       // Handle new banner image
       if (files.banner && files.banner[0]) {

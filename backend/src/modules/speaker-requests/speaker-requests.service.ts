@@ -22,6 +22,7 @@ import {
   ConfirmSessionTimesDto,
 } from "./dto/create-speaker-request.dto";
 import { OtpService } from "../otp/otp.service";
+import { FeedbackService } from "../feedback/feedback.service";
 
 @Injectable()
 export class SpeakerRequestsService {
@@ -33,6 +34,7 @@ export class SpeakerRequestsService {
     @InjectModel("Event") private eventModel: Model<any>,
     @InjectModel("Organizer") private organizerModel: Model<any>,
     private otpService: OtpService,
+    private feedbackService: FeedbackService,
   ) {
     const ticketsDir = path.join(process.cwd(), "uploads", "speakerTickets");
     if (!fs.existsSync(ticketsDir))
@@ -425,6 +427,15 @@ export class SpeakerRequestsService {
           `Duration: ${duration} minutes\n\n` +
           `Thank you for your amazing session! 🙏`,
         );
+
+        // Speaker feedback link follow-up.
+        await this.feedbackService.notifyAfterCheckout({
+          audience: "speaker",
+          subjectId: String(request._id),
+          eventId: String((request as any).eventId),
+          whatsAppNumber: request.phone,
+          hasDeposit: !!(request as any).depositAmount,
+        });
 
         return {
           success: true,

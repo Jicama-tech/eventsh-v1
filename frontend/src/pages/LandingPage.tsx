@@ -33,6 +33,7 @@ import {
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Autoplay } from "swiper/modules";
 import "swiper/css";
+import { TestimonialsCarousel } from "@/components/landing/TestimonialsCarousel";
 import { cn } from "@/lib/utils";
 import { useState, useRef, ReactNode, useEffect } from "react";
 import { Menu, X } from "lucide-react";
@@ -620,6 +621,8 @@ const LandingPage = () => {
           </div>
         </div>
       </section>
+
+      <TestimonialsCarousel />
 
       {/* CTA Section */}
       <section className="py-24 relative overflow-hidden">

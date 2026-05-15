@@ -19,6 +19,7 @@ import { Stall, StallDocument } from "./entities/stall.entity";
 import { OtpService } from "../otp/otp.service";
 import { CouponService } from "../coupon/coupon.service";
 import { CreateCouponDto } from "../coupon/dto/create-coupon.dto";
+import { FeedbackService } from "../feedback/feedback.service";
 
 function formatCurrency(amount: number, country?: string): string {
   if (country === "IN") {
@@ -46,6 +47,7 @@ export class StallsService {
     @InjectModel("Organizer") private organizerModel: Model<any>,
     private otpService: OtpService,
     private couponService: CouponService,
+    private feedbackService: FeedbackService,
   ) {
     // Ensure upload directory exists
     const qrDir = path.join(process.cwd(), "uploads", "stallQRs");
@@ -1095,6 +1097,18 @@ Thank you for choosing Eventsh! 🎊`;
           (vendor.whatsAppNumber || vendor.whatsappNumber),
           message,
         );
+
+        // Fire the feedback link as a follow-up WhatsApp message. Hosts the
+        // refund: vendor must submit feedback before the deposit is released.
+        await this.feedbackService.notifyAfterCheckout({
+          audience: "exhibitor",
+          subjectId: String(stall._id),
+          eventId: String(stall.eventId),
+          whatsAppNumber: vendor.whatsAppNumber || vendor.whatsappNumber,
+          hasDeposit:
+            !!(stall as any).depositAmount ||
+            (stall as any).remainingAmount === 0,
+        });
 
         return {
           success: true,

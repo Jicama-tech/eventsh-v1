@@ -366,6 +366,18 @@ export class PositionedRoundTableDto {
   @IsBoolean() @IsOptional() isFullyBooked?: boolean;
 }
 
+export class VolunteerDto {
+  @IsString()
+  name: string;
+
+  @IsString()
+  email: string;
+
+  @IsString()
+  @IsOptional()
+  phoneNumber?: string;
+}
+
 export class CreateEventDto {
   @IsString()
   title: string;
@@ -528,6 +540,11 @@ export class CreateEventDto {
   @IsOptional()
   @Type(() => PositionedRoundTableDto)
   venueRoundTables?: PositionedRoundTableDto[];
+
+  @ValidateNested({ each: true })
+  @IsOptional()
+  @Type(() => VolunteerDto)
+  volunteers?: VolunteerDto[];
 
   @IsEnum(EventStatus)
   @IsOptional()

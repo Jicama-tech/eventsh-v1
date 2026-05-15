@@ -179,6 +179,12 @@ class termsAndConditionsforStalls {
   isMandatory: boolean;
 }
 
+class Volunteer {
+  @Prop() name: string;
+  @Prop() email: string;
+  @Prop() phoneNumber?: string;
+}
+
 @Schema({ timestamps: true })
 export class Event {
   @Prop({ required: true })
@@ -392,6 +398,12 @@ export class Event {
 
   @Prop({ type: Array, default: [] })
   venueRoundTables: PositionedRoundTable[];
+
+  // Volunteers allow-listed to sign in to the operator scanner via Google.
+  // Match is on `email` (lowercased) — name and phoneNumber are for the
+  // organizer's records.
+  @Prop({ type: [Object], default: [] })
+  volunteers: Volunteer[];
 
   @Prop()
   createdAt: Date;

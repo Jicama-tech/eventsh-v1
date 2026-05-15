@@ -18,6 +18,7 @@ import {
 } from "./entities/round-table-booking.entity";
 import { CreateRoundTableBookingDto } from "./dto/create-round-table-booking.dto";
 import { OtpService } from "../otp/otp.service";
+import { FeedbackService } from "../feedback/feedback.service";
 
 function escapeHtml(str: string): string {
   return String(str)
@@ -55,6 +56,7 @@ export class RoundTableBookingsService {
     @InjectModel("Event") private readonly eventModel: Model<any>,
     @InjectModel("Organizer") private readonly organizerModel: Model<any>,
     private readonly otpService: OtpService,
+    private readonly feedbackService: FeedbackService,
   ) {}
 
   /**
@@ -519,6 +521,17 @@ export class RoundTableBookingsService {
           // Non-critical
         }
       }
+
+      // Round-table feedback link follow-up.
+      await this.feedbackService.notifyAfterCheckout({
+        audience: "round_table",
+        subjectId: String(booking._id),
+        eventId: String(
+          (booking.eventId as any)?._id || booking.eventId,
+        ),
+        whatsAppNumber: booking.visitorPhone,
+        hasDeposit: !!(booking as any).depositAmount,
+      });
 
       return {
         success: true,

@@ -71,17 +71,15 @@ export class AuthController {
   @Get("google/redirect")
   @UseGuards(AuthGuard("google"))
   async googleAuthRedirect(@Req() req: Request, @Res() res: Response) {
+    const fe = this.frontendBase;
     try {
       const userFromGoogle = req.user as any;
       if (!userFromGoogle) {
-        return res.redirect("https://eventsh.com/login?error=auth_failed");
-        // return res.redirect("http://localhost:8080/login?error=auth_failed");
+        return res.redirect(`${fe}/login?error=auth_failed`);
       }
 
-      // 1. Check if the user already exists in your database
       let user = await this.usersService.findByEmail(userFromGoogle.email);
 
-      // 2. If the user doesn't exist, create a new one
       if (!user) {
         const createUserDto: CreateUserDto = {
           name: userFromGoogle.name,
@@ -93,7 +91,6 @@ export class AuthController {
         user = await this.usersService.create(createUserDto);
       }
 
-      // 3. Generate a JWT token
       const payload = {
         name: user.name,
         email: user.email,
@@ -105,18 +102,9 @@ export class AuthController {
         expiresIn: "1h",
       });
 
-      // 4. Redirect to the frontend with the token
-      // This is the correct line to use!
-      return res.redirect(`https://eventsh.com/user-dashboard?token=${token}`);
-
-      // return res.redirect(
-      //   `http://localhost:8080/user-dashboard?token=${token}`
-      // );
-      // Remove the res.json line
-      // res.json({ message: "User logged in successfully", token });
+      return res.redirect(`${fe}/user-dashboard?token=${token}`);
     } catch (error) {
-      return res.redirect("https://eventsh.com/login?error=auth_failed");
-      // return res.redirect("http://localhost:8080/login?error=auth_failed");
+      return res.redirect(`${fe}/login?error=auth_failed`);
     }
   }
 
@@ -130,15 +118,13 @@ export class AuthController {
   @Get("google-buyer/redirect")
   @UseGuards(AuthGuard("google-buyer"))
   async googleBuyerRedirect(@Req() req: Request, @Res() res: Response) {
+    const fe = this.frontendBase;
     try {
       const userFromGoogle = req.user as any;
       if (!userFromGoogle) {
-        return res.redirect(
-          "http://localhost:8080/ticket-cart?error=auth_failed",
-        );
+        return res.redirect(`${fe}/ticket-cart?error=auth_failed`);
       }
 
-      // Find or create user
       let user = await this.usersService.findByEmail(userFromGoogle.email);
       const isExisting = !!user;
 
@@ -163,12 +149,10 @@ export class AuthController {
       });
 
       const returnUrl = (req.query?.state as string) || "";
-      const baseUrl = returnUrl || "http://localhost:8080/ticket-cart";
+      const baseUrl = returnUrl || `${fe}/ticket-cart`;
       return res.redirect(`${baseUrl}?${params.toString()}`);
     } catch (error) {
-      return res.redirect(
-        "http://localhost:8080/ticket-cart?error=auth_failed",
-      );
+      return res.redirect(`${fe}/ticket-cart?error=auth_failed`);
     }
   }
 
@@ -397,7 +381,7 @@ export class AuthController {
   async instagramRedirect(@Req() req: Request, @Res() res: Response) {
     const user = req.user as any;
     if (!user) {
-      return res.redirect("http://localhost:8080/login?error=auth_failed");
+      return res.redirect(`${this.frontendBase}/login?error=auth_failed`);
     }
 
     // Check if the user exists based on provider ID, and if not, create them.

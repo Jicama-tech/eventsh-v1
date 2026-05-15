@@ -1,8 +1,11 @@
 import { Link } from "react-router-dom";
+import { useState } from "react";
 import { Globe, Phone, Mail, MapPin } from "lucide-react";
 import { FaWhatsapp } from "react-icons/fa";
+import { AppFeedbackModal } from "@/components/landing/AppFeedbackModal";
 
 const Footer = () => {
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   return (
     <footer className="gradient-primary text-primary-foreground py-16">
       <div className="container mx-auto px-4">
@@ -96,6 +99,15 @@ const Footer = () => {
                 </a>
               </li>
               <li>
+                <button
+                  type="button"
+                  onClick={() => setFeedbackOpen(true)}
+                  className="hover:text-primary-foreground transition-colors text-left"
+                >
+                  Share feedback
+                </button>
+              </li>
+              <li>
                 <a
                   href="/admin-login"
                   className="hover:text-primary-foreground transition-colors"
@@ -187,6 +199,7 @@ const Footer = () => {
           </div>
         </div>
       </div>
+      <AppFeedbackModal open={feedbackOpen} onOpenChange={setFeedbackOpen} />
     </footer>
   );
 };
