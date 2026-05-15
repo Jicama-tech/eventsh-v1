@@ -6,7 +6,7 @@
 // their corresponding callback prop is supplied — that's how the volunteer
 // view stays read-only without forking the markup.
 
-import React from "react";
+import React, { useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@radix-ui/react-separator";
 import {
   AlertCircle,
@@ -35,6 +36,8 @@ import {
   MapPin,
   Package,
   ParkingCircle,
+  Plus,
+  Send,
   ShieldCheck,
   Wifi,
   XCircle,
@@ -43,6 +46,8 @@ import { FaUtensilSpoon } from "react-icons/fa";
 import { StallRequest } from "./shopKeeper";
 import { useCountry } from "@/hooks/useCountry";
 import { useCurrency } from "@/hooks/useCurrencyhook";
+import { toast } from "@/hooks/use-toast";
+import { jwtDecode } from "jwt-decode";
 
 interface StatusHistoryEntry {
   status: string;
@@ -134,6 +139,12 @@ export interface ExhibitorDetailDialogProps {
   onSharePDF?: () => void;
   /** Drives the loading state of the PDF button. */
   isGeneratingPDF?: boolean;
+  /** Called after a note is successfully appended so the caller can refresh
+   * the stall and the new entry shows up in the timeline. */
+  onNoteAdded?: () => void | Promise<void>;
+  /** Display string the caller wants attached to notes ("Jane (organizer)").
+   * If omitted, the dialog derives one from the JWT in sessionStorage. */
+  currentUserDisplay?: string;
 }
 
 export function ExhibitorDetailDialog({
@@ -145,9 +156,79 @@ export function ExhibitorDetailDialog({
   onReturnDeposit,
   onSharePDF,
   isGeneratingPDF,
+  onNoteAdded,
+  currentUserDisplay,
 }: ExhibitorDetailDialogProps) {
   const { country } = useCountry();
   const { formatPrice } = useCurrency(country);
+
+  // Note-form state: lives in the Status History card.
+  const [noteFormOpen, setNoteFormOpen] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [isAddingNote, setIsAddingNote] = useState(false);
+
+  // Fallback "addedBy" derived from JWT (email + first role). Callers can
+  // override via `currentUserDisplay` when they have richer info.
+  const derivedUserDisplay = useMemo(() => {
+    if (currentUserDisplay) return currentUserDisplay;
+    try {
+      const token = sessionStorage.getItem("token");
+      if (!token) return "";
+      const decoded: any = jwtDecode(token);
+      const email: string = decoded?.email || "";
+      const roles: string[] = Array.isArray(decoded?.roles) ? decoded.roles : [];
+      const role = roles[0] || "user";
+      if (!email) return role;
+      return `${email} (${role})`;
+    } catch {
+      return "";
+    }
+  }, [currentUserDisplay, open]);
+
+  const resetNoteForm = () => {
+    setNoteFormOpen(false);
+    setNoteText("");
+  };
+
+  const handleSubmitNote = async () => {
+    const trimmed = noteText.trim();
+    if (!trimmed || !stallRequest?._id) return;
+    setIsAddingNote(true);
+    try {
+      const token = sessionStorage.getItem("token");
+      const res = await fetch(`${apiURL}/stalls/${stallRequest._id}/notes`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          note: trimmed,
+          addedBy: derivedUserDisplay || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message || `Add note failed (${res.status})`);
+      }
+      resetNoteForm();
+      await onNoteAdded?.();
+      toast({
+        duration: 4000,
+        title: "Note added",
+        description: "Your note has been added to the stall timeline.",
+      });
+    } catch (err: any) {
+      toast({
+        duration: 5000,
+        title: "Could not add note",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAddingNote(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1000,18 +1081,89 @@ export function ExhibitorDetailDialog({
             </Card>
 
             {/* Status History Timeline with Notes */}
-            {stallRequest.statusHistory &&
-              stallRequest.statusHistory.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <FileText className="h-5 w-5" />
-                      Status History & Notes
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="relative space-y-0">
-                      <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" />
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    Status History & Notes
+                  </CardTitle>
+                  {!noteFormOpen && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setNoteFormOpen(true)}
+                      className="gap-1"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Note
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  {noteFormOpen && (
+                    <div className="mb-4 rounded-md border bg-muted/30 p-3 space-y-2">
+                      <Label
+                        htmlFor="add-stall-note"
+                        className="text-sm font-medium"
+                      >
+                        Add a note
+                      </Label>
+                      <Textarea
+                        id="add-stall-note"
+                        placeholder="What happened? (Visible to organizer, operator, volunteer and exhibitor on the timeline.)"
+                        value={noteText}
+                        onChange={(e) => setNoteText(e.target.value)}
+                        rows={3}
+                        disabled={isAddingNote}
+                      />
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-[11px] text-muted-foreground">
+                          {derivedUserDisplay
+                            ? `Posting as ${derivedUserDisplay}`
+                            : "You'll be recorded as the author."}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={resetNoteForm}
+                            disabled={isAddingNote}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={handleSubmitNote}
+                            disabled={isAddingNote || !noteText.trim()}
+                            className="gap-1"
+                          >
+                            {isAddingNote ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Send className="h-4 w-4" />
+                            )}
+                            Save Note
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {(!stallRequest.statusHistory ||
+                    stallRequest.statusHistory.length === 0) && (
+                    <p className="text-sm text-muted-foreground italic">
+                      No timeline entries yet. Use "Add Note" to start the
+                      history.
+                    </p>
+                  )}
+
+                  {stallRequest.statusHistory &&
+                    stallRequest.statusHistory.length > 0 && (
+                      <div className="relative space-y-0">
+                        <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" />
 
                       {stallRequest.statusHistory.map(
                         (entry: StatusHistoryEntry, index: number) => {
@@ -1115,9 +1267,9 @@ export function ExhibitorDetailDialog({
                         },
                       )}
                     </div>
-                  </CardContent>
-                </Card>
-              )}
+                  )}
+                </CardContent>
+              </Card>
 
             {/* Cancellation Reason */}
             {stallRequest.cancellationReason && (

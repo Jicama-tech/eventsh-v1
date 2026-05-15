@@ -228,6 +228,19 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
     };
   }, [eventId]);
 
+  // Re-fetch a single stall by id (used by the dialog after a note is added,
+  // and as the underlying load in openStallDetails).
+  const fetchStallById = async (stallId: string) => {
+    const token = sessionStorage.getItem("token");
+    const headers: Record<string, string> = token
+      ? { Authorization: `Bearer ${token}` }
+      : {};
+    const res = await fetch(`${apiURL}/stalls/${stallId}`, { headers });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.data || json;
+  };
+
   // Drill into a stall: pulls the full StallRequest from /stalls/:id so the
   // shared dialog has the same level of detail organizers see. We open the
   // dialog immediately so the operator sees feedback (header + spinner)
@@ -239,14 +252,8 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
     setStallDialogOpen(true);
     setLoadingStall(true);
     try {
-      const token = sessionStorage.getItem("token");
-      const headers: Record<string, string> = token
-        ? { Authorization: `Bearer ${token}` }
-        : {};
-      const res = await fetch(`${apiURL}/stalls/${stallId}`, { headers });
-      if (!res.ok) return;
-      const json = await res.json();
-      setSelectedStall(json?.data || json);
+      const data = await fetchStallById(stallId);
+      if (data) setSelectedStall(data);
     } finally {
       setLoadingStall(false);
     }
@@ -658,6 +665,12 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
           if (!open) setSelectedStall(null);
         }}
         stallRequest={selectedStall}
+        onNoteAdded={async () => {
+          const id = selectedStall?._id;
+          if (!id) return;
+          const data = await fetchStallById(id);
+          if (data) setSelectedStall(data);
+        }}
       />
 
       <div className="text-[11px] text-muted-foreground">

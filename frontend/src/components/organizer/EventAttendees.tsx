@@ -3327,6 +3327,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           setReturnDepositStallId(stall._id);
           setShowReturnDepositDialog(true);
         }}
+        onNoteAdded={async () => {
+          if (stallRequest?._id) await fetchStall(stallRequest._id);
+        }}
       />
 
       {/* Confirm Dialog */}
