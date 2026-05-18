@@ -352,6 +352,22 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [dynamicScale, setDynamicScale] = useState(1);
   const venueDisplayContainerRef = useRef<HTMLDivElement>(null);
   const [venueDisplayScale, setVenueDisplayScale] = useState(1);
+
+  // Dev-only escape hatch used by the build-guide screenshot script. Lets
+  // Puppeteer skip the WhatsApp OTP gate by setting window.__guideBypass
+  // before navigation; gated on import.meta.env.DEV so it's a no-op in any
+  // built artifact. Safe to leave in tree.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const bypass = (window as any).__guideBypass;
+    if (!bypass) return;
+    if (bypass.whatsapp) {
+      setWhatsappNumber(bypass.whatsapp);
+      setWhatsappVerified(true);
+    }
+    if (bypass.openForm) setShowRentForm(true);
+    if (bypass.openTableSelection) setShowTableSelection(true);
+  }, []);
   const [country, setCountry] = useState("");
   const { formatPrice, getSymbol } = useCurrency(country);
 

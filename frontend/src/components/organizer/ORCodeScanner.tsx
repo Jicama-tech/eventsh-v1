@@ -120,6 +120,17 @@ export default function QRTicketScanner() {
   // States
   const [step, setStep] = useState<Step>("otp-verification");
   const [scanMode, setScanMode] = useState<ScanMode>(null);
+
+  // Dev-only escape hatch used by the build-guide screenshot script. Lets
+  // Puppeteer skip the volunteer email-OTP gate by setting
+  // window.__guideBypass.skipVolunteerOtp before navigation. Gated on
+  // import.meta.env.DEV so it's a no-op in any production build.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const bypass = (window as any).__guideBypass;
+    if (!bypass) return;
+    if (bypass.skipVolunteerOtp) setStep("mode-selection");
+  }, []);
   const [eventData, setEventData] = useState<EventData | null>(null);
   const [ticketData, setTicketData] = useState<TicketData | null>(null);
   const [stallData, setStallData] = useState<StallData | null>(null);
