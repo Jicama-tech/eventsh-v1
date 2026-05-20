@@ -476,11 +476,13 @@ export class UsersService {
     organizerId: string,
   ) {
     try {
-      // 1. Check if user exists and belongs to this shopkeeper
+      // 1. Check if user exists and belongs to this organizer. Match both
+      // legacy "Shopkeeper" and new "Organizer" provider values so the row
+      // list and the edit dialog stay in sync with fetchUsersByOrganizerId.
       const existingUser = await this.userModel.findOne({
         _id: userId,
-        provider: "Organizer",
         providerId: organizerId,
+        provider: { $in: ["Organizer", "Shopkeeper"] },
       });
 
       if (!existingUser) {
@@ -519,9 +521,13 @@ export class UsersService {
 
   async fetchUsersByOrganizerId(organizerId: string) {
     try {
+      // Accept both provider values for the same providerId. Legacy rows
+      // created via the older shopkeeper-flow are tagged provider:"Shopkeeper"
+      // but belong to the same organizer; new rows use provider:"Organizer".
+      // This keeps the organizer's customer list complete without a backfill.
       const user = await this.userModel.find({
-        provider: "Organizer",
         providerId: organizerId,
+        provider: { $in: ["Organizer", "Shopkeeper"] },
       });
 
       if (!user) {

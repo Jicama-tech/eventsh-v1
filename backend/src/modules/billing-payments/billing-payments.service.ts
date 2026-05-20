@@ -703,6 +703,7 @@ export class BillingPaymentsService {
         organizer.whatsAppNumber,
         pdfPath,
         caption,
+        `eventsh-event-receipt-${doc.ref}.pdf`,
       );
       return { sent: true };
     } catch (e: any) {

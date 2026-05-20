@@ -528,13 +528,20 @@ export function OrganizerDashboard({
             }
           }
 
-          // Still not found — might be an operator, fetch operator to get parent organizerId
+          // Still not found — might be an operator, fetch operator to get
+          // parent organizerId. The backend exposes this as `/operators/fetch/:id`
+          // (there's no bare `/operators/:id` route), so the URL has to use
+          // that literal "fetch" segment or the request 404s and the parent
+          // organization name never loads on the dashboard heading.
           if (!orgData) {
             try {
-              const opRes = await fetch(`${apiURL}/operators/${decoded.sub}`, {
-                method: "GET",
-                headers: { Authorization: `Bearer ${token}` },
-              });
+              const opRes = await fetch(
+                `${apiURL}/operators/fetch/${decoded.sub}`,
+                {
+                  method: "GET",
+                  headers: { Authorization: `Bearer ${token}` },
+                },
+              );
               if (opRes.ok) {
                 const opResult = await opRes.json();
                 const parentOrgId = opResult.data?.organizerId;

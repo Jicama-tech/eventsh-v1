@@ -1149,10 +1149,16 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
       const decoded = jwtDecode<{ sub: string }>(token);
       const organizerId = decoded.sub;
 
-      const res = await fetch(`${apiURL}/operators/${operatorId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // Backend exposes this as `/operators/delete-operator/:id` — there's
+      // no bare `/operators/:id` DELETE route, so the literal segment is
+      // required or the request 404s.
+      const res = await fetch(
+        `${apiURL}/operators/delete-operator/${operatorId}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
 
       if (!res.ok) {
         const err = await res.json();

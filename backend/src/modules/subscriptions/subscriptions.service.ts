@@ -636,6 +636,7 @@ export class SubscriptionsService {
         organizer.whatsAppNumber,
         pdfPath,
         caption,
+        `eventsh-receipt-${doc.ref}.pdf`,
       );
       return { sent: true };
     } catch (e: any) {

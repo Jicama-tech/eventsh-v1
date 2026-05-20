@@ -4065,6 +4065,88 @@ export function CreateEventForm({
     fetchData();
   }, []);
 
+  // ─── Venue-name autocomplete (Geoapify Places via /users/places-autocomplete)
+  type VenueSuggestion = {
+    placeId: string;
+    name: string;
+    formattedAddress: string;
+    lat?: number;
+    lon?: number;
+  };
+  const [venueSuggestions, setVenueSuggestions] = useState<VenueSuggestion[]>(
+    [],
+  );
+  const [venueLoading, setVenueLoading] = useState(false);
+  const [venueDropdownOpen, setVenueDropdownOpen] = useState(false);
+  // Skip the next debounced fetch after a click — otherwise the moment we
+  // setFormData(location = picked.name), the effect refires and queries
+  // Geoapify with the venue name we just chose, briefly reopening the
+  // dropdown with that same suggestion at the top.
+  const venueSkipNextFetchRef = useRef(false);
+  const venueAutocompleteRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (venueSkipNextFetchRef.current) {
+      venueSkipNextFetchRef.current = false;
+      return;
+    }
+    const q = (formData.location || "").trim();
+    if (q.length < 2) {
+      setVenueSuggestions([]);
+      setVenueLoading(false);
+      return;
+    }
+    const ctl = new AbortController();
+    setVenueLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `${__API_URL__}/users/places-autocomplete?q=${encodeURIComponent(q)}`,
+          { signal: ctl.signal },
+        );
+        if (!res.ok) {
+          setVenueSuggestions([]);
+          return;
+        }
+        const json = await res.json();
+        setVenueSuggestions(Array.isArray(json.results) ? json.results : []);
+      } catch (err: any) {
+        if (err?.name !== "AbortError") setVenueSuggestions([]);
+      } finally {
+        setVenueLoading(false);
+      }
+    }, 250);
+    return () => {
+      ctl.abort();
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.location]);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (
+        venueAutocompleteRef.current &&
+        !venueAutocompleteRef.current.contains(e.target as Node)
+      ) {
+        setVenueDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  const pickVenueSuggestion = (s: VenueSuggestion) => {
+    venueSkipNextFetchRef.current = true;
+    setFormData((old) => ({
+      ...old,
+      location: s.name || old.location,
+      address: s.formattedAddress || old.address,
+    }));
+    setVenueDropdownOpen(false);
+    setVenueSuggestions([]);
+  };
+
   const handleInputChange = (field: string, value: any) => {
     setFormData((old) => {
       const next: any = { ...old, [field]: value };
@@ -4867,16 +4949,52 @@ export function CreateEventForm({
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
+                  <div className="relative" ref={venueAutocompleteRef}>
                     <Label>Venue Name *</Label>
                     <Input
                       value={formData.location}
-                      onChange={(e) =>
-                        handleInputChange("location", e.target.value)
-                      }
-                      placeholder="e.g., Mumbai Exhibition Center"
+                      onChange={(e) => {
+                        handleInputChange("location", e.target.value);
+                        setVenueDropdownOpen(true);
+                      }}
+                      onFocus={() => {
+                        if (venueSuggestions.length > 0)
+                          setVenueDropdownOpen(true);
+                      }}
+                      placeholder="Start typing a venue or landmark…"
                       required
+                      autoComplete="off"
                     />
+                    {venueDropdownOpen &&
+                      (venueLoading || venueSuggestions.length > 0) && (
+                        <div className="absolute z-30 left-0 right-0 mt-1 max-h-64 overflow-auto rounded-md border bg-white shadow-lg">
+                          {venueLoading && venueSuggestions.length === 0 && (
+                            <div className="px-3 py-2 text-xs text-slate-500">
+                              Searching…
+                            </div>
+                          )}
+                          {venueSuggestions.map((s) => (
+                            <button
+                              type="button"
+                              key={s.placeId}
+                              onClick={() => pickVenueSuggestion(s)}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 border-b last:border-b-0"
+                            >
+                              <div className="font-medium text-slate-900 truncate">
+                                {s.name}
+                              </div>
+                              {s.formattedAddress && (
+                                <div className="text-xs text-slate-500 truncate">
+                                  {s.formattedAddress}
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                          <div className="px-3 py-1.5 text-[10px] text-slate-400 text-right bg-slate-50/60">
+                            Suggestions by Geoapify · address auto-fills below
+                          </div>
+                        </div>
+                      )}
                   </div>
                   <div>
                     <Label>Visibility</Label>

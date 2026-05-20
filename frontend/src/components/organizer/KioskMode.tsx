@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCountry } from "@/hooks/useCountry";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountryCodes } from "@/hooks/useCountryCodes";
+import { buildPayNowQrUrl } from "@/lib/paynowQr";
 import {
   Monitor,
   CalendarDays,
@@ -227,13 +228,21 @@ export function KioskMode() {
     )}`;
 
   const buildPayNowUrl = (amount: number, refId: string) => {
-    const phone = organizerInfo?.whatsAppNumber || "";
-    const cleaned = phone.startsWith("+65") ? phone.substring(3) : phone;
-    const expiry = new Date(Date.now() + 30 * 60 * 1000);
-    const formatted = `${expiry.getFullYear()}/${String(expiry.getMonth() + 1).padStart(2, "0")}/${String(expiry.getDate()).padStart(2, "0")} ${String(expiry.getHours()).padStart(2, "0")}:${String(expiry.getMinutes()).padStart(2, "0")}`;
-    return `https://www.sgqrcode.com/paynow?mobile=${cleaned}&uen=&editable=0&amount=${amount.toFixed(2)}&expiry=${encodeURIComponent(
-      formatted,
-    )}&ref_id=${encodeURIComponent(refId)}&company=`;
+    // UEN-first; fall back to PayNow mobile / WhatsApp number. Kiosk QRs
+    // expire after 30 minutes (in-person sessions, not 90h like the
+    // remote-checkout flows).
+    return (
+      buildPayNowQrUrl({
+        organizer: {
+          UENNumber: organizerInfo?.UENNumber,
+          payNowId:
+            organizerInfo?.payNowId || organizerInfo?.whatsAppNumber || "",
+        },
+        amount: Number(amount.toFixed(2)),
+        refId,
+        expiry: new Date(Date.now() + 30 * 60 * 1000),
+      }) || ""
+    );
   };
 
   const prepareQRPayload = async (amount: number, refId: string) => {

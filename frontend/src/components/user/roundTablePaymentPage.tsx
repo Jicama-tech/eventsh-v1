@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import QRCode from "react-qr-code";
 import jsQR from "jsqr";
+import { buildPayNowQrUrl } from "@/lib/paynowQr";
 
 const RoundTablePaymentPage = () => {
   const location = useLocation();
@@ -145,14 +146,18 @@ const RoundTablePaymentPage = () => {
     )}`;
   }
 
-  // Generate PayNow QR for SG
+  // Generate PayNow QR for SG (UEN-first; mobile proxy fallback)
   async function generateDynamicPayNowQR(): Promise<string> {
-    if (!mobileId || !totalAmount) return "";
-    const cleanedMobileId = mobileId.startsWith("+65") ? mobileId.substring(3) : mobileId;
-    const now = new Date();
-    const expiryTime = new Date(now.getTime() + 90 * 60 * 60 * 1000);
-    const formattedExpiry = `${expiryTime.getFullYear()}/${String(expiryTime.getMonth() + 1).padStart(2, "0")}/${String(expiryTime.getDate()).padStart(2, "0")} ${String(expiryTime.getHours()).padStart(2, "0")}:${String(expiryTime.getMinutes()).padStart(2, "0")}`;
-    return `https://www.sgqrcode.com/paynow?mobile=${cleanedMobileId}&uen=&editable=0&amount=${totalAmount}&expiry=${encodeURIComponent(formattedExpiry)}&ref_id=&company=`;
+    if (!totalAmount) return "";
+    return (
+      buildPayNowQrUrl({
+        organizer: {
+          UENNumber: organizer?.UENNumber,
+          payNowId: organizer?.payNowId || organizer?.phone || mobileId,
+        },
+        amount: totalAmount,
+      }) || ""
+    );
   }
 
   // Auto-generate QR when showQR or dependencies change
