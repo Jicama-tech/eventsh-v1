@@ -20,6 +20,8 @@ type Tab =
   | "speakers"
   | "storefront"
   | "settings"
+  | "platformFees"
+  | "feedback"
   | "general";
 
 // Country → currency lookup. Add new countries here as eventsh expands.
@@ -970,6 +972,21 @@ export class ChatbotService {
       "get_organization_settings",
       "navigate_to",
     ],
+    // Platform Fees: no dedicated tools yet — the bot describes the tab,
+    // routes the user there, and can surface event counts via existing
+    // analytics tools when asked "how much do I owe per event?".
+    platformFees: [
+      "get_events_breakdown",
+      "get_stalls_analytics",
+      "get_speakers_analytics",
+      "get_round_tables_analytics",
+      "list_events",
+      "navigate_to",
+    ],
+    // Feedback: same pattern — explain + navigate. List events so the bot
+    // can answer "show feedback for event X" by sending the user to the
+    // right place.
+    feedback: ["list_events", "navigate_to"],
     general: [
       "get_dashboard_stats",
       "get_organizer_info",
@@ -1028,7 +1045,7 @@ export class ChatbotService {
 
 5. NEVER PASTE RAW TOOL OUTPUT (no JSON in replies, no curly braces, no array brackets).
 
-6. NAVIGATION INTENT — ONLY call navigate_to when the user explicitly says "open the X tab", "go to X", "switch to X", "take me to X", or "open X customizer". Do NOT call navigate_to for prompts that say "list", "show me", "show all", "give me", "what are my", "how many" — those are LIST intents and must use the matching list_* / get_* tool instead. Map for navigation only: "events"→events, "settings"→settings, "storefront"→storefront, "attendees"→eventAttendees, "speakers"→speakerRequests, "users"→users, "stalls"→users, "round tables"→roundTableBookings. Examples: "list my exhibitors" → list_exhibitors (NOT navigate_to). "open users tab" → navigate_to({tab:"users"}).
+6. NAVIGATION INTENT — ONLY call navigate_to when the user explicitly says "open the X tab", "go to X", "switch to X", "take me to X", or "open X customizer". Do NOT call navigate_to for prompts that say "list", "show me", "show all", "give me", "what are my", "how many" — those are LIST intents and must use the matching list_* / get_* tool instead. Map for navigation only: "events"→events, "settings"→settings, "storefront"→storefront, "attendees"→eventAttendees, "participants"→eventAttendees, "speakers"→speakerRequests, "users"→users, "exhibitors"→users, "visitors"→users, "stalls"→users, "round tables"→roundTableBookings, "kiosk"→kiosk, "in-person booking"→kiosk, "walk-in"→kiosk, "platform fees"→platformFees, "fees"→platformFees, "billing"→platformFees, "what I owe"→platformFees, "feedback"→feedback, "ratings"→feedback, "reviews"→feedback, "chatbot"→chatbot. Examples: "list my exhibitors" → list_exhibitors (NOT navigate_to). "open users tab" → navigate_to({tab:"users"}). "open platform fees" → navigate_to({tab:"platformFees"}). "show me feedback" → navigate_to({tab:"feedback"}).
 
 7. AFTER TOOLS RUN — when you receive tool results, your job is to FORMAT them as the rendered reply (table or bold key-values). DO NOT request more tools, DO NOT emit any <tool_call>, <function_call>, JSON object, or function name in the response text. Just produce the final markdown reply.
 
@@ -1170,12 +1187,35 @@ Focus: subscription plan, operators, profile, organization configuration.
 - "Show all my settings" / "organization details" / "my org configuration" / "organization settings" → get_organization_settings. Render as a 2-column key-value table with sections: Profile (Name / Org Name / Email / Country / WhatsApp), Plan (Plan Name / Price / Expiry / Subscribed), Payment Methods (UPI / Bank / PayNow / QR — show ✓ or ✗), Other (Operators count / Slug / Commission %). Use **bold** for section headers between rows or render as 4 separate small tables.
 - To CHANGE plan / add operator / edit profile, call navigate_to(settings).`,
 
+    platformFees: `You are the Platform Fees specialist for "{ORG}" on EventSH.
+The Platform Fees tab shows what the organizer owes EventSH **per event** for their bookings (stalls, round-table seats, chairs, and confirmed speakers). The organizer pays via a dynamic QR (UPI for India, PayNow for Singapore) generated from the platform's PaymentConfig. After paying externally, the organizer clicks "I have paid" and an admin confirms the payment, after which a PDF receipt is sent to their WhatsApp + email.
+
+Common questions:
+- "What are platform fees?" / "How much do I owe?" / "Explain platform fees" → Answer in 2–3 sentences (what they are, how they're calculated, how to pay), then call navigate_to({tab:"platformFees"}) so they can see the per-event breakdown.
+- "Open platform fees" / "Take me to billing" / "Go to fees" → call navigate_to({tab:"platformFees"}). No tool data needed.
+- "How many stalls / speakers / round tables across all my events?" → call get_stalls_analytics / get_speakers_analytics / get_round_tables_analytics for the totals (these drive the fee calc).
+- "Per-event breakdown of bookings" → call get_events_breakdown.
+- "How do I pay?" → Explain: open Platform Fees tab → click Pay on the event row → scan the QR (UPI or PayNow based on your country) → click "I have paid" → admin verifies and a PDF receipt is sent via WhatsApp + email. Then navigate_to({tab:"platformFees"}).
+- Never quote a specific owed amount — that's a live calculation shown only in the tab. Direct the user there.`,
+
+    feedback: `You are the Feedback specialist for "{ORG}" on EventSH.
+The Feedback tab shows ratings + comments collected from event participants. Audiences supported: **Visitors, Exhibitors, Speakers, Round Tables**. Which audiences a plan can collect feedback from is controlled by the subscription's Feedback module (admin sets per-audience flags on each plan).
+
+Common questions:
+- "What is feedback?" / "Show me feedback" / "View feedback" → Brief 2-line explanation, then call navigate_to({tab:"feedback"}).
+- "Feedback for event X" / "Ratings for event X" → call list_events to confirm the event exists, then call navigate_to({tab:"feedback"}) — the tab opens the per-event feedback dialog.
+- "Open feedback" / "Go to feedback" → call navigate_to({tab:"feedback"}).
+- "Why can't I see Visitors feedback?" / "Why is the X audience missing?" → Explain: the plan's Feedback module controls per-audience access (Visitors / Exhibitors / Speakers / Round Tables). If an audience is missing, the active plan didn't include it — direct the user to Settings → Subscription to upgrade. Then optionally navigate_to({tab:"settings"}).
+- Never invent ratings or counts — feedback data isn't exposed via tools yet; always send the user to the tab to view it.`,
+
     general: `You are the EventSH AI assistant for "{ORG}".
-You help organizers with events, tickets, attendees, vendors, speakers, plans, settings.
+You help organizers with events, tickets, attendees, vendors, speakers, plans, settings, platform fees, and feedback.
 - Always use a tool for factual questions. Never invent values.
-- For UI changes, use navigate_to.
+- For UI changes, use navigate_to. Tab IDs include: dashboard, events, kiosk, eventAttendees, platformFees, users, feedback, speakerRequests, roundTableBookings, storefront, settings.
 - For lists, always use a markdown table.
-- For single record, use bold key-value pairs.`,
+- For single record, use bold key-value pairs.
+- Platform Fees: per-event amounts owed to EventSH (stalls/chairs/tables/speakers × platform rate); paid via country-aware QR; admin confirms; PDF receipt to WhatsApp+email. Direct users to the platformFees tab.
+- Feedback: ratings + comments collected per event from visitors, exhibitors, speakers, and round-table guests. Which audiences are visible depends on the active plan's Feedback module. Direct users to the feedback tab.`,
   };
 
   // ============================================================
@@ -1334,6 +1374,22 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     )
       return "events";
 
+    // Platform fees + Feedback come BEFORE the generic event/settings rules
+    // so prompts like "platform fees" don't get swallowed by "settings" or
+    // "events".
+    if (
+      /\b(platform\s*fees?|owed|outstanding|billing|how\s+much\s+do\s+i\s+owe|what\s+do\s+i\s+owe|pay\s+(?:my\s+)?fees?|event\s+fees?|fees\s+to\s+(?:pay|eventsh))\b/.test(
+        m,
+      )
+    )
+      return "platformFees";
+    if (
+      /\b(feedback|rating|ratings|reviews?|comments\s+from|how\s+(?:was|did)\s+(?:my\s+)?event)\b/.test(
+        m,
+      )
+    )
+      return "feedback";
+
     // Specific subjects — read/query verbs win over the generic "event" word
     if (/\b(attendee|attendees|who came|visitors|guest list)\b/.test(m))
       return "attendees";
@@ -1357,7 +1413,7 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
           {
             role: "system",
             content:
-              'Classify the user message into ONE tab and reply with ONLY that word. Tabs: dashboard, events, tickets, attendees, stalls, speakers, storefront, settings, general. Reply only the word.',
+              'Classify the user message into ONE tab and reply with ONLY that word. Tabs: dashboard, events, tickets, attendees, stalls, speakers, storefront, settings, platformFees, feedback, general. platformFees covers fees owed to eventsh / billing / how much do i owe. feedback covers ratings / reviews / comments from attendees. Reply only the word.',
           },
           { role: "user", content: message },
         ],
@@ -1366,8 +1422,13 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
       });
       const tab = (res.choices?.[0]?.message?.content || "general")
         .trim()
-        .toLowerCase()
-        .replace(/[^a-z]/g, "") as Tab;
+        // keep camelCase for platformFees — strip everything except letters
+        .replace(/[^a-zA-Z]/g, "") as Tab;
+      // Normalize common variants from the LLM
+      const normalized =
+        tab.toLowerCase() === "platformfees"
+          ? ("platformFees" as Tab)
+          : (tab.toLowerCase() as Tab);
       const valid: Tab[] = [
         "dashboard",
         "events",
@@ -1377,9 +1438,11 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
         "speakers",
         "storefront",
         "settings",
+        "platformFees",
+        "feedback",
         "general",
       ];
-      return valid.includes(tab) ? tab : "general";
+      return valid.includes(normalized) ? normalized : "general";
     } catch {
       return "general";
     }

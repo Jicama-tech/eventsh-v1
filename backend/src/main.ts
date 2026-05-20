@@ -3,6 +3,7 @@ import { NestFactory } from "@nestjs/core";
 import * as dotenv from "dotenv";
 import { AppModule } from "./app.module";
 import * as path from "path";
+import * as fs from "fs";
 import * as express from "express";
 import helmet from "helmet";
 import * as compression from "compression";
@@ -55,10 +56,24 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Static file serving with cache headers (images cached 7 days)
+  // Static file serving with cache headers (images cached 7 days).
+  // Resolve the uploads directory defensively so the same code works
+  // whether the compiled main.js lives at dist/main.js or dist/src/main.js
+  // (the latter happens when tsconfig has no `rootDir`). We prefer the
+  // CWD-relative path because that's also what multer's diskStorage uses
+  // ("./uploads/events"). If CWD has no uploads/ folder yet, fall back to
+  // an __dirname-relative path so first-run / unusual launches still find
+  // the right place.
+  const uploadsAtCwd = path.join(process.cwd(), "uploads");
+  const uploadsNearMain = path.join(__dirname, "..", "uploads");
+  const uploadsDir = fs.existsSync(uploadsAtCwd)
+    ? uploadsAtCwd
+    : fs.existsSync(uploadsNearMain)
+      ? uploadsNearMain
+      : uploadsAtCwd; // both missing — multer will create one at CWD on first upload
   app.use(
     "/uploads",
-    express.static(path.join(__dirname, "..", "uploads"), {
+    express.static(uploadsDir, {
       maxAge: "7d",
       etag: true,
       lastModified: true,

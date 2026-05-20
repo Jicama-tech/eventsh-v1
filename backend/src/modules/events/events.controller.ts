@@ -37,7 +37,10 @@ function generateFileName(req: any, file: any, cb: any) {
 }
 
 const imageFilter = (req: any, file: any, cb: any) => {
-  if (!file.mimetype.match(/\/(jpg|jpeg|png|gif)$/)) {
+  // Accept the formats the cropper / browsers commonly emit. Webp is what
+  // the rest of the pipeline already converts to (see WebpValidationPipe);
+  // accepting it on intake avoids re-crop loops that produce webp blobs.
+  if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp|avif)$/)) {
     cb(new Error("Only image files are allowed!"), false);
   } else {
     cb(null, true);
