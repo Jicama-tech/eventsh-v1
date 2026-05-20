@@ -31,6 +31,7 @@ import { OrganizerToken } from "./ticketCart";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import jsQR from "jsqr";
 import QRCode from "react-qr-code";
+import { buildPayNowQrUrl } from "@/lib/paynowQr";
 
 interface TicketDetails {
   ticketId: string;
@@ -302,39 +303,29 @@ export default function TicketPaymentPage() {
   }
 
   async function generateDynamicPayNowQR(): Promise<string> {
-    if (!mobileId || !state?.total) return "";
+    if (!state?.total) return "";
+    // UEN wins when the organizer set it on their profile; mobile proxy is
+    // the fallback. The helper returns null when neither is configured.
+    const url = buildPayNowQrUrl({
+      organizer: {
+        UENNumber: (organizerInfo as any)?.UENNumber,
+        // Existing flow used the organizer's phone (`shopData.data.phone`) as
+        // the PayNow mobile proxy — preserve that semantic by falling back
+        // to it when payNowId isn't set on the profile.
+        payNowId:
+          (organizerInfo as any)?.payNowId ||
+          (organizerInfo as any)?.phone ||
+          mobileId,
+      },
+      amount: state.total,
+      refId: state.ticketId,
+    });
+    if (!url) return "";
 
     try {
       setLoading(true);
-      const cleanedMobileId = mobileId.startsWith("+65")
-        ? mobileId.substring(3)
-        : mobileId;
-
-      // Execution time
-      const now = new Date();
-
-      // Expiry = now + 90 hours
-      const expiryTime = new Date(now.getTime() + 90 * 60 * 60 * 1000);
-
-      // Format: YYYY/MM/DD HH:mm (sgqrcode requirement)
-      const formattedExpiry =
-        expiryTime.getFullYear() +
-        "/" +
-        String(expiryTime.getMonth() + 1).padStart(2, "0") +
-        "/" +
-        String(expiryTime.getDate()).padStart(2, "0") +
-        " " +
-        String(expiryTime.getHours()).padStart(2, "0") +
-        ":" +
-        String(expiryTime.getMinutes()).padStart(2, "0");
-
-      const encodedExpiry = encodeURIComponent(formattedExpiry);
-
-      const payNowString = `https://www.sgqrcode.com/paynow?mobile=${cleanedMobileId}&uen=&editable=0&amount=${state.total}&expiry=${encodedExpiry}&ref_id=&company=`;
-
-
       setLoading(false);
-      return payNowString;
+      return url;
     } catch (error) {
       throw error;
     }

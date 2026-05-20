@@ -1646,6 +1646,8 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
       organizationName: string;
       country: string;
       whatsAppNumber?: string;
+      UENNumber?: string;
+      payNowId?: string;
       paymentURL?: string;
       events: {
         id: string;
@@ -1675,7 +1677,9 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     const [org, events] = await Promise.all([
       this.organizerModel
         .findById(orgObjId)
-        .select("organizationName country whatsAppNumber paymentURL")
+        .select(
+          "organizationName country whatsAppNumber paymentURL UENNumber payNowId",
+        )
         .lean(),
       this.eventModel
         .find({
@@ -1697,6 +1701,8 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
           organizationName: (org as any)?.organizationName || "",
           country: (org as any)?.country || "",
           whatsAppNumber: (org as any)?.whatsAppNumber,
+          UENNumber: (org as any)?.UENNumber,
+          payNowId: (org as any)?.payNowId,
           paymentURL: (org as any)?.paymentURL,
           events: [],
         },
@@ -1709,6 +1715,8 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
         organizationName: (org as any)?.organizationName || "",
         country: (org as any)?.country || "",
         whatsAppNumber: (org as any)?.whatsAppNumber,
+        UENNumber: (org as any)?.UENNumber,
+        payNowId: (org as any)?.payNowId,
         paymentURL: (org as any)?.paymentURL,
         events: events.map((e: any) => ({
           id: String(e._id),

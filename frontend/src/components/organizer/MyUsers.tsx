@@ -471,7 +471,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
         }),
         // Fetch users manually created by this organizer
         // Same org id; users were saved with provider="Shopkeeper", providerId=<organizerId>.
-        fetch(`${apiURL}/users/fetch-users-by-shopkeeper/${organizerId}`, {
+        fetch(`${apiURL}/users/fetch-users-by-organizer/${organizerId}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
@@ -2741,12 +2741,12 @@ export function AddCustomerDialog({
       let url: string;
       let method: string = "POST";
 
-      // EDIT MODE → UPDATE USER
+      // EDIT MODE → UPDATE USER (organizer route — provider:"Organizer")
       if (mode === "edit" && customerToEdit?.id) {
-        url = `${__API_URL__}/users/update-user-by-shopkeeper/${currentShopkeeperId}/${customerToEdit.id}`;
+        url = `${__API_URL__}/users/update-user-by-organizer/${currentShopkeeperId}/${customerToEdit.id}`;
         method = "PATCH";
       }
-      // ADD MODE → CREATE USER
+      // ADD MODE → CREATE USER (organizer route — provider:"Organizer")
       else {
         url = `${__API_URL__}/users/create-user-by-organizer/${currentShopkeeperId}`;
       }

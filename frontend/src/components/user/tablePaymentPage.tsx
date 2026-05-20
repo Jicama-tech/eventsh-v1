@@ -27,6 +27,7 @@ import { useCurrency } from "@/hooks/useCurrencyhook";
 import QRCode from "react-qr-code";
 import jsQR from "jsqr";
 import { Input } from "../ui/input";
+import { buildPayNowQrUrl } from "@/lib/paynowQr";
 
 const TablePaymentPage = () => {
   const location = useLocation();
@@ -555,42 +556,18 @@ const TablePaymentPage = () => {
   }
 
   async function generateDynamicPayNowQR(): Promise<string> {
-    if (!mobileId || AmountToBePaid === undefined || AmountToBePaid === null)
-      return "";
-
-    try {
-      setLoading(true);
-      const cleanedMobileId = mobileId.startsWith("+65")
-        ? mobileId.substring(3)
-        : mobileId;
-
-      // Execution time
-      const now = new Date();
-
-      // Expiry = now + 90 hours
-      const expiryTime = new Date(now.getTime() + 90 * 60 * 60 * 1000);
-
-      // Format: YYYY/MM/DD HH:mm (sgqrcode requirement)
-      const formattedExpiry =
-        expiryTime.getFullYear() +
-        "/" +
-        String(expiryTime.getMonth() + 1).padStart(2, "0") +
-        "/" +
-        String(expiryTime.getDate()).padStart(2, "0") +
-        " " +
-        String(expiryTime.getHours()).padStart(2, "0") +
-        ":" +
-        String(expiryTime.getMinutes()).padStart(2, "0");
-
-      const encodedExpiry = encodeURIComponent(formattedExpiry);
-
-      const payNowString = `https://www.sgqrcode.com/paynow?mobile=${cleanedMobileId}&uen=&editable=0&amount=${AmountToBePaid}&expiry=${encodedExpiry}&ref_id=&company=`;
-
-      setLoading(false);
-      return payNowString;
-    } catch (error) {
-      throw error;
-    }
+    if (AmountToBePaid === undefined || AmountToBePaid === null) return "";
+    const url = buildPayNowQrUrl({
+      organizer: {
+        UENNumber: (organizer as any)?.UENNumber,
+        payNowId:
+          (organizer as any)?.payNowId ||
+          (organizer as any)?.phone ||
+          mobileId,
+      },
+      amount: AmountToBePaid,
+    });
+    return url || "";
     // Remove +65
   }
 

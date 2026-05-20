@@ -417,10 +417,13 @@ export class OtpService implements OnModuleInit {
     whatsappNumber: string,
     filePath: string,
     caption?: string,
+    /** Filename the recipient sees on WhatsApp. Defaults to `ticket.pdf`
+     *  for back-compat with the original ticket-send flow; receipts pass
+     *  something descriptive like `eventsh-receipt-<ref>.pdf`. */
+    fileName?: string,
   ) {
     if (!this.sock) throw new Error("WhatsApp not connected");
     const jid = this.toJid(whatsappNumber);
-
 
     // Read the file
     const fileBuffer = await fs.promises.readFile(filePath);
@@ -428,7 +431,7 @@ export class OtpService implements OnModuleInit {
     await this.sock.sendMessage(jid, {
       document: fileBuffer,
       mimetype: "application/pdf",
-      fileName: "ticket.pdf",
+      fileName: fileName || "ticket.pdf",
       caption: caption || "",
     });
   }

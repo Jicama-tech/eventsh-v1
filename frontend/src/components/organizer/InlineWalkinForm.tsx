@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo } from "react";
 import QRCode from "react-qr-code";
 import jsQR from "jsqr";
+import { buildPayNowQrUrl } from "@/lib/paynowQr";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +37,11 @@ export interface WalkinFormPayload {
   organizationName: string;
   country: string;
   whatsAppNumber?: string;
+  // PayNow proxies — UEN wins when set; payNowId is the mobile fallback.
+  // Both are optional; if neither is set the helper falls back to
+  // whatsAppNumber as a last-resort mobile proxy.
+  UENNumber?: string;
+  payNowId?: string;
   paymentURL?: string;
   events: {
     id: string;
@@ -157,11 +163,18 @@ export function InlineWalkinForm({
     )}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Ticket - ${refId}`)}`;
 
   const buildPayNow = (amount: number, refId: string) => {
-    const phone = payload.whatsAppNumber || "";
-    const cleaned = phone.startsWith("+65") ? phone.substring(3) : phone;
-    const expiry = new Date(Date.now() + 30 * 60 * 1000);
-    const f = `${expiry.getFullYear()}/${String(expiry.getMonth() + 1).padStart(2, "0")}/${String(expiry.getDate()).padStart(2, "0")} ${String(expiry.getHours()).padStart(2, "0")}:${String(expiry.getMinutes()).padStart(2, "0")}`;
-    return `https://www.sgqrcode.com/paynow?mobile=${cleaned}&uen=&editable=0&amount=${amount.toFixed(2)}&expiry=${encodeURIComponent(f)}&ref_id=${encodeURIComponent(refId)}&company=`;
+    // UEN-first; falls back to payNowId, then whatsAppNumber as last resort.
+    return (
+      buildPayNowQrUrl({
+        organizer: {
+          UENNumber: payload.UENNumber,
+          payNowId: payload.payNowId || payload.whatsAppNumber || "",
+        },
+        amount: Number(amount.toFixed(2)),
+        refId,
+        expiry: new Date(Date.now() + 30 * 60 * 1000),
+      }) || ""
+    );
   };
 
   const prepareQR = async (amount: number, refId: string) => {

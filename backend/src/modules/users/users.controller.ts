@@ -195,6 +195,66 @@ export class UsersController {
     };
   }
 
+  // Place autocomplete — proxies Geoapify so the API key stays on the server.
+  // Returns a flattened shape the venue-name input can render directly.
+  @Get("places-autocomplete")
+  async placesAutocomplete(
+    @Query("q") query: string,
+    @Query("countryCode") countryCode?: string,
+  ) {
+    if (!query || query.trim().length < 2) {
+      return { results: [] };
+    }
+    const apiKey = process.env.GEOAPIFY_KEY;
+    if (!apiKey) {
+      return { results: [], error: "GEOAPIFY_KEY not configured" };
+    }
+    const params = new URLSearchParams({
+      text: query,
+      limit: "8",
+      format: "geojson",
+      apiKey,
+    });
+    // Bias to the organizer's country when supplied (ISO-2 like "IN", "SG").
+    if (countryCode && /^[a-z]{2}$/i.test(countryCode)) {
+      params.set("filter", `countrycode:${countryCode.toLowerCase()}`);
+    }
+    const url = `https://api.geoapify.com/v1/geocode/autocomplete?${params}`;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        return { results: [], error: `Geoapify ${res.status}` };
+      }
+      const json = await res.json();
+      const features: any[] = Array.isArray(json?.features)
+        ? json.features
+        : [];
+      const results = features.map((f: any) => {
+        const p = f?.properties || {};
+        return {
+          placeId: p.place_id,
+          name:
+            p.name ||
+            p.address_line1 ||
+            p.street ||
+            p.city ||
+            p.formatted ||
+            "",
+          formattedAddress: p.formatted || "",
+          city: p.city || p.town || p.village || "",
+          state: p.state || p.state_code || "",
+          country: p.country || "",
+          postcode: p.postcode || "",
+          lat: p.lat,
+          lon: p.lon,
+        };
+      });
+      return { results };
+    } catch (err: any) {
+      return { results: [], error: err?.message || "lookup failed" };
+    }
+  }
+
   /**
    * NEW: Check WhatsApp verification status
    */
@@ -285,5 +345,34 @@ export class UsersController {
     } catch (error) {
       throw error;
     }
+  }
+
+  // Organizer-side CRUD — mirrors the shopkeeper trio but tags users with
+  // provider:"Organizer" so an organizer's customer list stays separate
+  // from anything created via the shopkeeper flow.
+  @Post("create-user-by-organizer/:organizerId")
+  async createUserByOrganizer(
+    @Body() createUserDto: CreateUserDto,
+    @Param("organizerId") organizerId: string,
+  ) {
+    return this.usersService.createUserByOrganizer(createUserDto, organizerId);
+  }
+
+  @Patch("update-user-by-organizer/:organizerId/:userId")
+  async updateUserByOrganizer(
+    @Param("organizerId") organizerId: string,
+    @Param("userId") userId: string,
+    @Body() updateUserDto: CreateUserDto,
+  ) {
+    return this.usersService.updateUserByOrganizer(
+      userId,
+      updateUserDto,
+      organizerId,
+    );
+  }
+
+  @Get("fetch-users-by-organizer/:organizerId")
+  async fetchUsersByOrganizerId(@Param("organizerId") organizerId: string) {
+    return this.usersService.fetchUsersByOrganizerId(organizerId);
   }
 }
