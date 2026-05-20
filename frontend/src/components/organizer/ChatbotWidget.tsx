@@ -48,6 +48,8 @@ import {
   CalendarCheck,
   Zap,
   AlertTriangle,
+  Receipt,
+  MessageSquare,
 } from "lucide-react";
 
 const apiURL = __API_URL__;
@@ -552,6 +554,42 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
     prompt: "Show all my organization settings",
   },
 
+  // ========== PLATFORM FEES ==========
+  {
+    category: "Platform Fees",
+    Icon: Receipt,
+    tint: "text-amber-700 bg-amber-50",
+    title: "What I owe EventSH",
+    sub: "Per-event platform fees + QR checkout",
+    prompt: "How much do I owe EventSH for my events?",
+  },
+  {
+    category: "Platform Fees",
+    Icon: Receipt,
+    tint: "text-orange-600 bg-orange-50",
+    title: "Explain platform fees",
+    sub: "How fees are calculated and paid",
+    prompt: "What are platform fees and how do I pay them?",
+  },
+
+  // ========== FEEDBACK ==========
+  {
+    category: "Feedback",
+    Icon: MessageSquare,
+    tint: "text-violet-600 bg-violet-50",
+    title: "View event feedback",
+    sub: "Visitors, exhibitors, speakers, round tables",
+    prompt: "Show me feedback",
+  },
+  {
+    category: "Feedback",
+    Icon: MessageSquare,
+    tint: "text-fuchsia-600 bg-fuchsia-50",
+    title: "Why is an audience missing?",
+    sub: "Feedback access depends on your plan",
+    prompt: "Why can't I see Visitors feedback?",
+  },
+
   // ========== NAVIGATION ==========
   {
     category: "Jump to",
@@ -560,6 +598,22 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
     title: "Open Events",
     sub: "Switch to events tab",
     prompt: "Open the events tab",
+  },
+  {
+    category: "Jump to",
+    Icon: Receipt,
+    tint: "text-amber-700 bg-amber-50",
+    title: "Open Platform Fees",
+    sub: "Per-event fees + QR payment",
+    prompt: "Open the platform fees tab",
+  },
+  {
+    category: "Jump to",
+    Icon: MessageSquare,
+    tint: "text-violet-600 bg-violet-50",
+    title: "Open Feedback",
+    sub: "Ratings and comments",
+    prompt: "Open the feedback tab",
   },
   {
     category: "Jump to",
@@ -774,9 +828,12 @@ function formatInline(s: string) {
 const DEFAULT_NAV_ITEMS: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: TrendingUp },
   { id: "events", label: "Events", icon: Calendar },
+  { id: "kiosk", label: "In-Person Booking", icon: Ticket },
   { id: "eventAttendees", label: "Participants", icon: Users },
+  { id: "platformFees", label: "Platform Fees", icon: Receipt },
   { id: "speakerRequests", label: "Speakers", icon: Mic2 },
   { id: "users", label: "Exhibitors/Visitors", icon: Building2 },
+  { id: "feedback", label: "Feedback", icon: MessageSquare },
   { id: "storefront", label: "Eventfront", icon: Globe },
   { id: "settings", label: "Settings", icon: SettingsIcon },
 ];
