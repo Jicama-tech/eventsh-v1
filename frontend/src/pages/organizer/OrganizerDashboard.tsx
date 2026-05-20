@@ -30,6 +30,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   MessageSquare,
+  Receipt,
 } from "lucide-react";
 import {
   Tooltip,
@@ -117,6 +118,11 @@ const HelpFAQ = lazy(() =>
 );
 const EventAttendees = lazy(
   () => import("@/components/organizer/EventAttendees"),
+);
+const PlatformFeesPanel = lazy(() =>
+  import("@/components/organizer/PlatformFeesPanel").then((m) => ({
+    default: m.PlatformFeesPanel,
+  })),
 );
 const OrganizerStorefrontCustomizer = lazy(() =>
   import("@/components/organizer/organizerStorefrontCustomizer").then((m) => ({
@@ -770,6 +776,12 @@ export function OrganizerDashboard({
       moduleKey: "events",
     },
     {
+      id: "platformFees",
+      label: "Platform Fees",
+      icon: Receipt,
+      moduleKey: null,
+    },
+    {
       id: "users",
       label: "Exhibitors/Visitors",
       icon: Users,
@@ -1128,6 +1140,12 @@ export function OrganizerDashboard({
                   <div className="space-y-4">
                     <EventAttendees />
                   </div>
+                </Suspense>
+              </TabsContent>
+
+              <TabsContent value="platformFees" className="mt-0">
+                <Suspense fallback={<TabLoader />}>
+                  <PlatformFeesPanel />
                 </Suspense>
               </TabsContent>
 

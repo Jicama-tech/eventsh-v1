@@ -10,12 +10,26 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Star, RefreshCcw } from "lucide-react";
+import { Loader2, Star, RefreshCcw, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useSubscription } from "@/hooks/useSubscription";
 
 const apiURL = __API_URL__;
 
 type Audience = "visitor" | "exhibitor" | "speaker" | "round_table";
+
+// The Feedback collection uses snake_case audience values to match the
+// FeedbackAudience enum on the backend; the subscription module flags use
+// camelCase. Map between the two before gating.
+const AUDIENCE_TO_PLAN_KEY: Record<
+  Audience,
+  "visitor" | "exhibitor" | "speaker" | "roundTable"
+> = {
+  visitor: "visitor",
+  exhibitor: "exhibitor",
+  speaker: "speaker",
+  round_table: "roundTable",
+};
 
 interface FeedbackItem {
   _id: string;
@@ -77,9 +91,17 @@ export function EventFeedbackDialog({
   onOpenChange: (o: boolean) => void;
 }) {
   const { toast } = useToast();
+  const { isFeedbackAudienceEnabled } = useSubscription();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ListResponse | null>(null);
   const [tab, setTab] = useState<Audience>("visitor");
+
+  // Audiences the active plan actually allows. If the plan has Feedback
+  // enabled with no audiences ticked, this is empty — we render an
+  // upgrade-prompt empty state in place of the tabs.
+  const allowedAudiences = (Object.keys(AUDIENCE_LABEL) as Audience[]).filter(
+    (a) => isFeedbackAudienceEnabled(AUDIENCE_TO_PLAN_KEY[a]),
+  );
 
   const load = async () => {
     if (!eventId) return;
@@ -108,21 +130,17 @@ export function EventFeedbackDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, eventId]);
 
-  // Pick the first audience that has feedback for default tab. Visitor first
-  // so the most common case is preselected.
+  // Pick the first plan-allowed audience that has feedback for default tab.
+  // Falls back to the first allowed audience (even if empty) so the active
+  // tab is always a tab the plan permits.
   useEffect(() => {
-    if (!data) return;
-    const order: Audience[] = [
-      "visitor",
-      "exhibitor",
-      "speaker",
-      "round_table",
-    ];
-    const firstWithItems = order.find(
+    if (!data || allowedAudiences.length === 0) return;
+    const firstWithItems = allowedAudiences.find(
       (a) => data.byAudience[a]?.items?.length > 0,
     );
-    if (firstWithItems) setTab(firstWithItems);
-  }, [data]);
+    setTab(firstWithItems || allowedAudiences[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, allowedAudiences.join("|")]);
 
   const toggleRefund = async (item: FeedbackItem) => {
     const next: FeedbackItem["refundStatus"] =
@@ -188,10 +206,28 @@ export function EventFeedbackDialog({
           <div className="py-10 text-center text-muted-foreground">
             No data yet.
           </div>
+        ) : allowedAudiences.length === 0 ? (
+          <div className="py-10 text-center text-muted-foreground space-y-3">
+            <Lock className="h-8 w-8 mx-auto text-slate-400" />
+            <div>
+              <p className="font-medium text-slate-700">
+                Feedback isn't included in your current plan
+              </p>
+              <p className="text-xs mt-1">
+                Upgrade your subscription to collect feedback from visitors,
+                exhibitors, speakers, or round-table guests.
+              </p>
+            </div>
+          </div>
         ) : (
           <Tabs value={tab} onValueChange={(v) => setTab(v as Audience)}>
-            <TabsList className="grid grid-cols-4 w-full">
-              {(Object.keys(AUDIENCE_LABEL) as Audience[]).map((a) => {
+            <TabsList
+              className="grid w-full"
+              style={{
+                gridTemplateColumns: `repeat(${allowedAudiences.length}, minmax(0, 1fr))`,
+              }}
+            >
+              {allowedAudiences.map((a) => {
                 const b = data.byAudience[a];
                 const enabled = b.available > 0;
                 return (
@@ -211,7 +247,7 @@ export function EventFeedbackDialog({
               })}
             </TabsList>
 
-            {(Object.keys(AUDIENCE_LABEL) as Audience[]).map((a) => {
+            {allowedAudiences.map((a) => {
               const b = data.byAudience[a];
               return (
                 <TabsContent key={a} value={a} className="space-y-3 mt-4">

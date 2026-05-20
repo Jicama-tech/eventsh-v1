@@ -9,9 +9,12 @@ import {
 import { jwtDecode } from "jwt-decode";
 import { useAuth } from "./useAuth";
 
+type FeedbackAudienceKey = "visitor" | "exhibitor" | "speaker" | "roundTable";
+
 interface ModuleConfig {
   enabled: boolean;
   limit?: number;
+  audiences?: Partial<Record<FeedbackAudienceKey, boolean>>;
 }
 
 export interface SubscriptionState {
@@ -46,6 +49,12 @@ interface SubscriptionContextValue {
    */
   isModuleEnabled: (key: string) => boolean;
   getModuleLimit: (key: string) => number | null;
+  /**
+   * Fine-grained gate for the Feedback module — returns true if the active
+   * plan can collect feedback from the requested audience. False during
+   * fully-lapsed state, or if the audience flag isn't set on the plan.
+   */
+  isFeedbackAudienceEnabled: (audience: FeedbackAudienceKey) => boolean;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextValue | undefined>(
@@ -116,7 +125,36 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         return true;
       }
       const cfg = subscription.modules?.[key];
-      return !!cfg?.enabled;
+      if (!cfg?.enabled) return false;
+      // For the feedback module, "enabled but no audiences picked" means
+      // the plan effectively can't collect any feedback. Treat as off so
+      // generic gates (e.g. show/hide the tab) hide instead of dangling.
+      if (key === "feedback" && cfg.audiences) {
+        return Object.values(cfg.audiences).some(Boolean);
+      }
+      return true;
+    },
+    [subscription],
+  );
+
+  const isFeedbackAudienceEnabled = useCallback(
+    (audience: FeedbackAudienceKey) => {
+      if (!subscription || subscription.fullyLapsed) return false;
+      if (!subscription.subscribed) return false;
+      // Unrestricted-plan permissive fallback — matches isModuleEnabled.
+      if (
+        !subscription.modules ||
+        Object.keys(subscription.modules).length === 0
+      ) {
+        return true;
+      }
+      const cfg = subscription.modules?.feedback;
+      if (!cfg?.enabled) return false;
+      // If the plan ships feedback enabled but with no audiences object at
+      // all (e.g. legacy rows), let everything through. Only restrict when
+      // the audiences object exists.
+      if (!cfg.audiences) return true;
+      return !!cfg.audiences[audience];
     },
     [subscription],
   );
@@ -139,6 +177,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         refresh: fetchSubscription,
         isModuleEnabled,
         getModuleLimit,
+        isFeedbackAudienceEnabled,
       }}
     >
       {children}

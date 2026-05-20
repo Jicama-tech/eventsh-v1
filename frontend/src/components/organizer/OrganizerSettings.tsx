@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { SubscriptionCheckoutDialog } from "./SubscriptionCheckoutDialog";
 import {
   Card,
   CardContent,
@@ -144,6 +145,12 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
   const [subscription, setSubscription] = useState<any>(null);
   const [loadingSubscription, setLoadingSubscription] = useState(true);
   const [changePlanOpen, setChangePlanOpen] = useState(false);
+  // Paid-plan checkout state: holds the plan the organizer wants to subscribe
+  // to. When set (and price > 0), the SubscriptionCheckoutDialog opens.
+  const [checkoutPlan, setCheckoutPlan] = useState<{
+    _id: string;
+    planName: string;
+  } | null>(null);
   const [availablePlans, setAvailablePlans] = useState<any[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(false);
   const [switchingPlanId, setSwitchingPlanId] = useState<string | null>(null);
@@ -242,15 +249,35 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     }
   };
 
-  const switchToPlan = async (planId: string) => {
+  /**
+   * Pick the relevant price for the organizer's region. Mirrors the price
+   * the plan-picker shows. Returns 0 if not set — that's the signal to skip
+   * checkout and switch directly.
+   */
+  const effectivePrice = (plan: any): number => {
+    const inINR =
+      selectedCountry === "IN" || selectedCountry === "India";
+    return Number(
+      (inINR && plan?.priceINR) || plan?.price || 0,
+    );
+  };
+
+  const switchToPlan = async (plan: any) => {
+    // Paid plan → route through the new checkout dialog so admin can
+    // verify payment before the plan activates.
+    if (effectivePrice(plan) > 0) {
+      setCheckoutPlan({ _id: plan._id, planName: plan.planName });
+      return;
+    }
+    // Free plan — keep the existing direct-switch behavior.
     try {
-      setSwitchingPlanId(planId);
+      setSwitchingPlanId(plan._id);
       const token = sessionStorage.getItem("token");
       if (!token) return;
       const decoded: any = jwtDecode(token);
       const id = decoded.sub;
       const res = await fetch(
-        `${apiURL}/organizers/add-subscription-plan-for-organizer/${id}/plan/${planId}`,
+        `${apiURL}/organizers/add-subscription-plan-for-organizer/${id}/plan/${plan._id}`,
         {
           method: "PATCH",
           headers: { Authorization: `Bearer ${token}` },
@@ -2300,7 +2327,9 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                         {subscription.planName || "—"}
                       </h3>
                       <p className="text-sm text-muted-foreground mt-1">
-                        ${subscription.pricePaid || 0}
+                        {selectedCountry === "IN" || selectedCountry === "India"
+                          ? `₹${subscription.pricePaid || 0}`
+                          : `$${subscription.pricePaid || 0}`}
                         {subscription.validityInDays
                           ? ` / ${subscription.validityInDays} days`
                           : ""}
@@ -2525,12 +2554,35 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                             </CardDescription>
                           )}
                           <div className="text-2xl font-bold pt-1">
-                            ${plan.price}
+                            {selectedCountry === "IN" && plan.priceINR
+                              ? `₹${plan.priceINR}`
+                              : `$${plan.price}`}
                             <span className="text-sm font-normal text-muted-foreground">
                               {" "}
                               / {plan.validityInDays}d
                             </span>
                           </div>
+                          {(() => {
+                            const cfg = plan.modules?.feedback;
+                            if (!cfg?.enabled) return null;
+                            const labels = [
+                              ["visitor", "Visitors"],
+                              ["exhibitor", "Exhibitors"],
+                              ["speaker", "Speakers"],
+                              ["roundTable", "Round Tables"],
+                            ]
+                              .filter(
+                                ([k]) =>
+                                  !!cfg.audiences?.[k as keyof typeof cfg.audiences],
+                              )
+                              .map(([, l]) => l);
+                            return labels.length > 0 ? (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                <span className="font-medium">Feedback:</span>{" "}
+                                {labels.join(", ")}
+                              </div>
+                            ) : null;
+                          })()}
                         </CardHeader>
                         <CardContent className="space-y-3">
                           {plan.features?.length > 0 && (
@@ -2553,13 +2605,15 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                           <Button
                             className="w-full"
                             disabled={isCurrent || switchingPlanId === plan._id}
-                            onClick={() => switchToPlan(plan._id)}
+                            onClick={() => switchToPlan(plan)}
                           >
                             {isCurrent
                               ? "Current Plan"
                               : switchingPlanId === plan._id
                                 ? "Switching..."
-                                : "Switch to this Plan"}
+                                : effectivePrice(plan) > 0
+                                  ? "Subscribe & Pay"
+                                  : "Switch to this Plan"}
                           </Button>
                         </CardContent>
                       </Card>
@@ -4222,6 +4276,20 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           </Card>
         </TabsContent> */}
       </Tabs>
+
+      <SubscriptionCheckoutDialog
+        open={!!checkoutPlan}
+        onClose={() => setCheckoutPlan(null)}
+        planId={checkoutPlan?._id || null}
+        planName={checkoutPlan?.planName || ""}
+        onSubmitted={() => {
+          // After organizer clicks "I have paid", close the change-plan
+          // picker and refresh the subscription banner so they see the
+          // "awaiting confirmation" state on next admin review.
+          setChangePlanOpen(false);
+          loadSubscription();
+        }}
+      />
     </div>
   );
 }

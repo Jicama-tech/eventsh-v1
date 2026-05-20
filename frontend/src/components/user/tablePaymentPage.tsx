@@ -35,8 +35,13 @@ const TablePaymentPage = () => {
 
   const apiURL = __API_URL__;
 
-  // Get data from navigation state
-  const orderData = location.state;
+  // Get data from navigation state. Dev-only fallback: if the build-guide
+  // screenshot script set window.__guideOrderData, render from that so the
+  // page can be captured without walking the full booking flow. No-op in
+  // any production build.
+  const orderData =
+    location.state ||
+    (import.meta.env.DEV ? (window as any).__guideOrderData : null);
 
   // State
   const [selectedPaymentOption, setSelectedPaymentOption] = useState<

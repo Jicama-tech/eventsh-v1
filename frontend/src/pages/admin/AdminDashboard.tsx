@@ -68,6 +68,11 @@ const AppFeedbackCuration = lazy(() =>
 const PricingPage = lazy(() =>
   import("./PricingPage").then((m) => ({ default: m.PricingPage })),
 );
+const PendingSubscriptionsPage = lazy(() =>
+  import("./PendingSubscriptionsPage").then((m) => ({
+    default: m.PendingSubscriptionsPage,
+  })),
+);
 const SettingsPage = lazy(() =>
   import("./SettingsPage").then((m) => ({ default: m.SettingsPage })),
 );
@@ -342,6 +347,11 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     { id: "agents", label: "Agents", icon: Briefcase },
     { id: "users", label: "Users", icon: Users },
     { id: "pricing", label: "Plans & Pricing", icon: Package },
+    {
+      id: "pending-subscriptions",
+      label: "Pending Payments",
+      icon: Receipt,
+    },
     { id: "billing-rates", label: "Billing Rates", icon: Receipt },
     { id: "app-feedback", label: "App Feedback", icon: MessageSquare },
     { id: "settings", label: "Settings", icon: SettingsIcon },
@@ -832,6 +842,12 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
               <TabsContent value="pricing" className="mt-0">
                 <Suspense fallback={<TabLoader />}>
                   <PricingPage />
+                </Suspense>
+              </TabsContent>
+
+              <TabsContent value="pending-subscriptions" className="mt-0">
+                <Suspense fallback={<TabLoader />}>
+                  <PendingSubscriptionsPage />
                 </Suspense>
               </TabsContent>
 

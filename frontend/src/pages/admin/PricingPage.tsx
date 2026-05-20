@@ -34,15 +34,42 @@ import {
   Store,
   Users,
   Zap,
+  MessageSquare,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 
 const apiURL = __API_URL__;
+
+type AudienceKey = "visitor" | "exhibitor" | "speaker" | "roundTable";
+
+const FEEDBACK_AUDIENCES: { key: AudienceKey; label: string }[] = [
+  { key: "visitor", label: "Visitors" },
+  { key: "exhibitor", label: "Exhibitors" },
+  { key: "speaker", label: "Speakers" },
+  { key: "roundTable", label: "Round Tables" },
+];
+
+/**
+ * Render-helper: turn a plan's feedback config into "Visitors, Speakers".
+ * Returns null when feedback isn't enabled or no audiences are ticked, so
+ * the card omits the line entirely instead of showing an empty label.
+ */
+function feedbackSummary(plan: any): string | null {
+  const cfg = plan?.modules?.feedback;
+  if (!cfg?.enabled) return null;
+  const aud = cfg.audiences || {};
+  const labels = FEEDBACK_AUDIENCES.filter((a) => !!aud[a.key]).map(
+    (a) => a.label,
+  );
+  return labels.length > 0 ? labels.join(", ") : null;
+}
 
 const ORGANIZER_FEATURE_MODULES: {
   key: string;
   label: string;
   hasLimit?: boolean;
+  hasAudiences?: boolean;
   icon: any;
 }[] = [
   { key: "events", label: "Events", hasLimit: true, icon: Calendar },
@@ -50,6 +77,7 @@ const ORGANIZER_FEATURE_MODULES: {
   { key: "stalls", label: "Stalls", hasLimit: true, icon: Store },
   { key: "speakerRequests", label: "Speaker Requests", icon: Users },
   { key: "roundTableBookings", label: "Round Table Bookings", icon: Calendar },
+  { key: "feedback", label: "Feedback", hasAudiences: true, icon: MessageSquare },
   { key: "razorpay", label: "Razorpay", icon: DollarSign },
   { key: "coupons", label: "Coupons", icon: Star },
   { key: "storefront", label: "Storefront", icon: Store },
@@ -64,12 +92,15 @@ const ORGANIZER_FEATURE_MODULES: {
 interface ModuleConfig {
   enabled: boolean;
   limit?: number;
+  // Per-audience toggles for modules that fan out (today: feedback).
+  audiences?: Partial<Record<AudienceKey, boolean>>;
 }
 
 interface Plan {
   _id: string;
   planName: string;
   price: number;
+  priceINR?: number;
   features: string[];
   moduleType: string;
   validityInDays: number;
@@ -84,6 +115,7 @@ interface Plan {
 interface PlanFormState {
   planName: string;
   price: number;
+  priceINR: number;
   validityInDays: number;
   description: string;
   features: string[];
@@ -92,9 +124,27 @@ interface PlanFormState {
   modules: Record<string, ModuleConfig>;
 }
 
+function defaultConfigFor(m: {
+  hasLimit?: boolean;
+  hasAudiences?: boolean;
+}): ModuleConfig {
+  if (m.hasLimit) return { enabled: false, limit: 0 };
+  if (m.hasAudiences) {
+    return {
+      enabled: false,
+      audiences: FEEDBACK_AUDIENCES.reduce(
+        (a, x) => ({ ...a, [x.key]: false }),
+        {} as Record<AudienceKey, boolean>,
+      ),
+    };
+  }
+  return { enabled: false };
+}
+
 const emptyForm: PlanFormState = {
   planName: "",
   price: 0,
+  priceINR: 0,
   validityInDays: 30,
   description: "",
   features: [],
@@ -102,9 +152,7 @@ const emptyForm: PlanFormState = {
   isDefault: false,
   modules: ORGANIZER_FEATURE_MODULES.reduce(
     (acc, m) => {
-      acc[m.key] = m.hasLimit
-        ? { enabled: false, limit: 0 }
-        : { enabled: false };
+      acc[m.key] = defaultConfigFor(m);
       return acc;
     },
     {} as Record<string, ModuleConfig>,
@@ -152,9 +200,7 @@ export function PricingPage() {
       ...emptyForm,
       modules: ORGANIZER_FEATURE_MODULES.reduce(
         (acc, m) => {
-          acc[m.key] = m.hasLimit
-            ? { enabled: false, limit: 0 }
-            : { enabled: false };
+          acc[m.key] = defaultConfigFor(m);
           return acc;
         },
         {} as Record<string, ModuleConfig>,
@@ -173,6 +219,7 @@ export function PricingPage() {
     setForm({
       planName: plan.planName,
       price: plan.price,
+      priceINR: plan.priceINR || 0,
       validityInDays: plan.validityInDays,
       description: plan.description || "",
       features: Array.isArray(plan.features) ? [...plan.features] : [],
@@ -181,12 +228,25 @@ export function PricingPage() {
       modules: ORGANIZER_FEATURE_MODULES.reduce(
         (acc, m) => {
           const existing = plan.modules?.[m.key];
-          acc[m.key] = m.hasLimit
-            ? {
-                enabled: existing?.enabled ?? false,
-                limit: existing?.limit ?? 0,
-              }
-            : { enabled: existing?.enabled ?? false };
+          if (m.hasLimit) {
+            acc[m.key] = {
+              enabled: existing?.enabled ?? false,
+              limit: existing?.limit ?? 0,
+            };
+          } else if (m.hasAudiences) {
+            acc[m.key] = {
+              enabled: existing?.enabled ?? false,
+              audiences: FEEDBACK_AUDIENCES.reduce(
+                (a, x) => ({
+                  ...a,
+                  [x.key]: !!existing?.audiences?.[x.key],
+                }),
+                {} as Record<AudienceKey, boolean>,
+              ),
+            };
+          } else {
+            acc[m.key] = { enabled: existing?.enabled ?? false };
+          }
           return acc;
         },
         {} as Record<string, ModuleConfig>,
@@ -207,6 +267,7 @@ export function PricingPage() {
     const body = {
       planName: form.planName,
       price: form.price,
+      priceINR: form.priceINR,
       validityInDays: form.validityInDays,
       description: form.description || undefined,
       features: form.features.filter((f) => f.trim()),
@@ -356,6 +417,22 @@ export function PricingPage() {
     });
   }
 
+  function toggleAudience(key: string, audience: AudienceKey, value: boolean) {
+    setForm({
+      ...form,
+      modules: {
+        ...form.modules,
+        [key]: {
+          ...form.modules[key],
+          audiences: {
+            ...(form.modules[key]?.audiences || {}),
+            [audience]: value,
+          },
+        },
+      },
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -463,6 +540,17 @@ export function PricingPage() {
                         / {plan.validityInDays}d
                       </span>
                     </div>
+                    {plan.priceINR ? (
+                      <div className="text-sm text-muted-foreground">
+                        ₹{plan.priceINR} for Indian organizers
+                      </div>
+                    ) : null}
+                    {feedbackSummary(plan) && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        <span className="font-medium">Feedback:</span>{" "}
+                        {feedbackSummary(plan)}
+                      </div>
+                    )}
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {plan.features?.length > 0 && (
@@ -576,16 +664,40 @@ export function PricingPage() {
               />
             </div>
 
-            <div>
-              <Label>Price</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={form.price}
-                onChange={(e) =>
-                  setForm({ ...form, price: parseFloat(e.target.value) || 0 })
-                }
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Price (USD)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={form.price}
+                  onChange={(e) =>
+                    setForm({ ...form, price: parseFloat(e.target.value) || 0 })
+                  }
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Shown to organizers in SG and other regions.
+                </p>
+              </div>
+              <div>
+                <Label>Price (INR)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={form.priceINR}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      priceINR: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Shown to Indian organizers (₹). Leave 0 to disable INR.
+                </p>
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-6">
@@ -680,6 +792,29 @@ export function PricingPage() {
                               )
                             }
                           />
+                        </div>
+                      )}
+                      {m.hasAudiences && cfg?.enabled && (
+                        <div className="pt-1 border-t">
+                          <Label className="text-xs text-muted-foreground">
+                            Audiences this plan can collect feedback from:
+                          </Label>
+                          <div className="grid grid-cols-2 gap-1.5 mt-2">
+                            {FEEDBACK_AUDIENCES.map((a) => (
+                              <label
+                                key={a.key}
+                                className="flex items-center gap-2 text-xs cursor-pointer select-none"
+                              >
+                                <Checkbox
+                                  checked={!!cfg.audiences?.[a.key]}
+                                  onCheckedChange={(v) =>
+                                    toggleAudience(m.key, a.key, !!v)
+                                  }
+                                />
+                                {a.label}
+                              </label>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>

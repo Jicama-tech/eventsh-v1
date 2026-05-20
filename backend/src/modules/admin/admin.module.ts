@@ -15,11 +15,14 @@ import { VendorSchema } from "../stalls/schemas/vendor.schema";
 import { SpeakerRequestSchema } from "../speaker-requests/entities/speaker-request.entity";
 import { OrganizerPaymentSchema } from "./entities/organizer-payment.entity";
 import { PlatformBillingRatesSchema } from "./entities/platform-billing-rates.entity";
+import { PaymentConfigSchema } from "./entities/payment-config.entity";
 import { MailModule } from "../roles/mail.module";
 import { MailService } from "../roles/mail.service";
+import { PaymentsModule } from "../payments/payments.module";
 
 @Module({
   imports: [
+    PaymentsModule,
     MongooseModule.forFeature([
       { name: "Admin", schema: AdminSchema },
       { name: "Organizer", schema: OrganizerSchema },
@@ -33,6 +36,7 @@ import { MailService } from "../roles/mail.service";
       { name: "SpeakerRequest", schema: SpeakerRequestSchema },
       { name: "OrganizerPayment", schema: OrganizerPaymentSchema },
       { name: "PlatformBillingRates", schema: PlatformBillingRatesSchema },
+      { name: "PaymentConfig", schema: PaymentConfigSchema },
     ]),
     MailModule,
     JwtModule.register({
