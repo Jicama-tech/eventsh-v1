@@ -18,11 +18,6 @@ export class Plan {
   @Prop({ required: true })
   price: number;
 
-  /**
-   * INR-denominated price for Indian organizers. Indian-country organizers
-   * see this in the plan picker; everyone else sees `price` (USD). Defaults
-   * to 0 so existing plans keep their USD-only behavior until admin sets it.
-   */
   @Prop({ type: Number, default: 0 })
   priceINR: number;
 
