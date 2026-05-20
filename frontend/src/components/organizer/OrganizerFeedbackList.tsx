@@ -10,9 +10,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, Eye, MessageSquare, Calendar } from "lucide-react";
+import {
+  Loader2,
+  Search,
+  Eye,
+  MessageSquare,
+  Calendar,
+  Lock,
+} from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { useSubscription } from "@/hooks/useSubscription";
 import { EventFeedbackDialog } from "./EventFeedbackDialog";
 
 const apiURL = __API_URL__;
@@ -27,6 +35,8 @@ interface EventRow {
 
 export function OrganizerFeedbackList() {
   const { toast } = useToast();
+  const { isModuleEnabled } = useSubscription();
+  const canCollectFeedback = isModuleEnabled("feedback");
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -109,7 +119,22 @@ export function OrganizerFeedbackList() {
         </div>
       </div>
 
-      {loading ? (
+      {!canCollectFeedback ? (
+        <Card>
+          <CardContent className="py-12 text-center space-y-3">
+            <Lock className="h-8 w-8 mx-auto text-slate-400" />
+            <div>
+              <p className="font-medium text-slate-700">
+                Feedback isn't included in your current plan
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Upgrade your subscription to collect ratings and comments
+                from visitors, exhibitors, speakers, or round-table guests.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : loading ? (
         <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
           <Loader2 className="h-5 w-5 animate-spin" /> Loading events…
         </div>

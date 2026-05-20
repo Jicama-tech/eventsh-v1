@@ -31,6 +31,8 @@ import { TemplatesModule } from "./modules/templates/templates.module";
 import { WebsiteContentModule } from "./modules/website-content/website-content.module";
 import { FeedbackModule } from "./modules/feedback/feedback.module";
 import { AppFeedbackModule } from "./modules/app-feedback/app-feedback.module";
+import { SubscriptionsModule } from "./modules/subscriptions/subscriptions.module";
+import { BillingPaymentsModule } from "./modules/billing-payments/billing-payments.module";
 
 @Module({
   imports: [
@@ -58,6 +60,8 @@ import { AppFeedbackModule } from "./modules/app-feedback/app-feedback.module";
     TicketsModule,
     StallsModule,
     PlansModule,
+    SubscriptionsModule,
+    BillingPaymentsModule,
     EnquiryModule,
     OrganizerStoresModule,
     CouponModule,

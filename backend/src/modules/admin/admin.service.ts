@@ -3,7 +3,9 @@ import {
   NotFoundException,
   UnauthorizedException,
   ConflictException,
+  BadRequestException,
 } from "@nestjs/common";
+import { PaymentsService } from "../payments/payments.service";
 import { CreateAdminDto } from "./dto/create-admin.dto";
 import { InjectModel } from "@nestjs/mongoose/dist";
 import { Admin } from "./entities/admin.entity";
@@ -35,8 +37,11 @@ export class AdminService {
     @InjectModel("OrganizerPayment") private organizerPaymentModel: Model<any>,
     @InjectModel("PlatformBillingRates")
     private platformBillingRatesModel: Model<any>,
+    @InjectModel("PaymentConfig")
+    private paymentConfigModel: Model<any>,
     private readonly jwtService: JwtService,
-    private readonly mailService: MailService
+    private readonly mailService: MailService,
+    private readonly paymentsService: PaymentsService
   ) {}
 
   // ===========================================================================
@@ -342,6 +347,98 @@ export class AdminService {
       recordedBy: recordedBy || undefined,
     });
     return { ok: true, paymentId: String(doc._id) };
+  }
+
+  // ===========================================================================
+  //  Platform payment configuration — singleton doc the super-admin edits from
+  //  the Settings → Payment Settings tab. Drives Singapore corporate-PayNow QR
+  //  generation (company UEN + merchant name baked into the EMVCo payload).
+  // ===========================================================================
+  async getPaymentConfig() {
+    const doc: any = await this.paymentConfigModel.findOne({}).lean();
+    if (!doc) {
+      return {
+        companyName: "",
+        companyUEN: "",
+        platformUPIId: "",
+        upiQrImagePath: "",
+        persisted: false,
+      };
+    }
+    return {
+      companyName: doc.companyName || "",
+      companyUEN: doc.companyUEN || "",
+      platformUPIId: doc.platformUPIId || "",
+      upiQrImagePath: doc.upiQrImagePath || "",
+      updatedAt: doc.updatedAt,
+      updatedBy: doc.updatedBy ? String(doc.updatedBy) : null,
+      persisted: true,
+    };
+  }
+
+  /**
+   * Upload the static UPI QR image, decode it to pull out the VPA, then
+   * persist both onto the singleton PaymentConfig. Multer has already saved
+   * the file to disk by the time this runs — we just decode + persist.
+   */
+  async uploadPlatformUPIQr(file: Express.Multer.File, adminId?: string) {
+    if (!file) throw new BadRequestException("No file uploaded");
+    let decoded: { raw: string; params?: Record<string, string> };
+    try {
+      decoded = await this.paymentsService.decodeQrFromFile(file.path);
+    } catch (e: any) {
+      throw new BadRequestException(
+        "Could not read the QR image. Upload a clear UPI QR.",
+      );
+    }
+    const vpa = decoded?.params?.pa;
+    if (!vpa || !decoded?.raw?.startsWith("upi://")) {
+      throw new BadRequestException(
+        "This QR isn't a UPI QR (expected upi://… with a `pa` parameter).",
+      );
+    }
+    // Convert "uploads/paymentConfig/foo.png" to a /uploads-prefixed public
+    // path. file.path on Windows uses backslashes; normalize to forward.
+    const publicPath =
+      "/" + file.path.replace(/\\/g, "/").replace(/^\.?\//, "");
+    await this.paymentConfigModel.updateOne(
+      {},
+      {
+        $set: {
+          platformUPIId: vpa,
+          upiQrImagePath: publicPath,
+          ...(adminId ? { updatedBy: adminId } : {}),
+        },
+      },
+      { upsert: true },
+    );
+    return this.getPaymentConfig();
+  }
+
+  async updatePaymentConfig(
+    body: { companyName?: string; companyUEN?: string },
+    adminId?: string,
+  ) {
+    const update: any = { $set: {} };
+    if (typeof body.companyName === "string") {
+      update.$set.companyName = body.companyName.trim().slice(0, 25);
+    }
+    if (typeof body.companyUEN === "string") {
+      const uen = body.companyUEN.trim().toUpperCase();
+      // Allow empty to clear; otherwise enforce Singapore PayNow corporate
+      // proxy format (9 digits + 1 uppercase letter), the same shape the QR
+      // generator branches on in payments.service.ts.
+      if (uen && !/^\d{9}[A-Z]$/.test(uen)) {
+        throw new ConflictException(
+          "Company UEN must be 9 digits followed by 1 uppercase letter (e.g. 200012345A)",
+        );
+      }
+      update.$set.companyUEN = uen;
+    }
+    if (adminId) update.$set.updatedBy = adminId;
+
+    await this.paymentConfigModel.updateOne({}, update, { upsert: true });
+    return this.getPaymentConfig();
   }
 
   async create(createAdminDto: CreateAdminDto) {

@@ -735,7 +735,14 @@ export function OrganizersPage() {
                   </div>
                   <div>
                     <span className="text-muted-foreground">Price paid: </span>
-                    {selected.pricePaid || "—"}
+                    {selected.pricePaid
+                      ? `${
+                          selected.country === "IN" ||
+                          selected.country === "India"
+                            ? "₹"
+                            : "$"
+                        }${selected.pricePaid}`
+                      : "—"}
                   </div>
                   {selected.planStartDate && (
                     <div>

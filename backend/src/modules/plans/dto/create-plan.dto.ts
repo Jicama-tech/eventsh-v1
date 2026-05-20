@@ -18,6 +18,11 @@ export class CreatePlanDto {
   @Min(0)
   price: number;
 
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  priceINR?: number;
+
   @IsArray()
   @IsString({ each: true })
   features: string[];

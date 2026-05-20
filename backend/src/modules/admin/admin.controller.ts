@@ -8,12 +8,28 @@ import {
   Delete,
   UseGuards,
   Req,
+  UseInterceptors,
+  UploadedFile,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { diskStorage } from "multer";
+import { extname } from "path";
 import { AdminService } from "./admin.service";
 import { CreateAdminDto } from "./dto/create-admin.dto";
 import { LocalDto } from "../auth/dto/local.dto";
 import { LoginDto } from "./dto/login.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+
+function paymentConfigQrStorage() {
+  return diskStorage({
+    destination: "./uploads/paymentConfig",
+    filename: (_req, file, cb) => {
+      const ts = Date.now();
+      const ext = extname(file.originalname || "") || ".png";
+      cb(null, `platform-upi-${ts}${ext}`);
+    },
+  });
+}
 // import { UpdateAdminDto } from './dto/update-admin.dto';
 
 @Controller("admin")
@@ -82,6 +98,43 @@ export class AdminController {
   ) {
     return this.adminService.updateBillingRates(
       body,
+      req?.user?.userId || req?.user?.sub,
+    );
+  }
+
+  @Get("payment-config")
+  @UseGuards(JwtAuthGuard)
+  getPaymentConfig() {
+    return this.adminService.getPaymentConfig();
+  }
+
+  @Patch("payment-config")
+  @UseGuards(JwtAuthGuard)
+  updatePaymentConfig(
+    @Body()
+    body: {
+      companyName?: string;
+      companyUEN?: string;
+    },
+    @Req() req: any,
+  ) {
+    return this.adminService.updatePaymentConfig(
+      body,
+      req?.user?.userId || req?.user?.sub,
+    );
+  }
+
+  @Post("payment-config/upi-qr")
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FileInterceptor("file", { storage: paymentConfigQrStorage() }),
+  )
+  uploadPlatformUPIQr(
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: any,
+  ) {
+    return this.adminService.uploadPlatformUPIQr(
+      file,
       req?.user?.userId || req?.user?.sub,
     );
   }

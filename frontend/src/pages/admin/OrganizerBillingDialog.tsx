@@ -18,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Receipt, Plus, X } from "lucide-react";
+import { Loader2, Receipt, Plus, X, QrCode, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { adminFetch } from "@/lib/adminFetch";
 
@@ -85,6 +85,33 @@ const fmtUsd = (v: number) =>
     v || 0,
   );
 
+interface PaymentConfig {
+  companyName: string;
+  companyUEN: string;
+  platformUPIId: string;
+}
+
+/**
+ * Map the organizer's stored country to a QR scheme + currency. Registration
+ * writes 2-letter ISO codes ("IN" / "SG", see organizerRegister.tsx:28), but
+ * older rows occasionally hold the full name — accept both.
+ */
+type Region =
+  | { scheme: "UPI"; currency: "INR"; label: "UPI · India" }
+  | { scheme: "PAYNOW"; currency: "SGD"; label: "PayNow · Singapore" }
+  | null;
+
+function regionFromCountry(country?: string): Region {
+  const c = (country || "").trim().toLowerCase();
+  if (c === "in" || c === "india") {
+    return { scheme: "UPI", currency: "INR", label: "UPI · India" };
+  }
+  if (c === "sg" || c === "singapore" || c === "sgp") {
+    return { scheme: "PAYNOW", currency: "SGD", label: "PayNow · Singapore" };
+  }
+  return null;
+}
+
 export function OrganizerBillingDialog({
   organizerId,
   onClose,
@@ -106,6 +133,17 @@ export function OrganizerBillingDialog({
   );
   const [payNote, setPayNote] = useState("");
   const [posting, setPosting] = useState(false);
+
+  // Pay-by-QR state. Scheme is auto-derived from organizer.country, proxy is
+  // pulled from the singleton platform PaymentConfig (set by super-admin in
+  // Settings → Payment Settings). Amount defaults to totals.owed but is
+  // editable in case partial payment is being collected.
+  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
+  const [qrAmount, setQrAmount] = useState("");
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrImage, setQrImage] = useState<string | null>(null);
+  const [qrIntent, setQrIntent] = useState<string | null>(null);
+  const [qrError, setQrError] = useState<string | null>(null);
 
   const fetchBilling = async () => {
     if (!organizerId) return;
@@ -129,15 +167,41 @@ export function OrganizerBillingDialog({
     }
   };
 
+  const fetchPaymentConfig = async () => {
+    try {
+      const res = await adminFetch(`${apiURL}/admin/payment-config`);
+      if (!res.ok) return;
+      const json = (await res.json()) as PaymentConfig;
+      setPaymentConfig(json);
+    } catch {
+      // Non-fatal — QR panel will surface a clear "not configured" message.
+    }
+  };
+
   useEffect(() => {
     if (open) {
       setData(null);
       setBreakdown(null);
       setShowPay(false);
+      setPaymentConfig(null);
+      setQrImage(null);
+      setQrIntent(null);
+      setQrError(null);
+      setQrAmount("");
       fetchBilling();
+      fetchPaymentConfig();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizerId]);
+
+  // Keep the QR amount in sync with the live "owed" value the first time it
+  // loads — but let the operator override it for partial payments.
+  useEffect(() => {
+    if (data && !qrAmount) {
+      setQrAmount(String(data.totals.owed || 0));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   const openBreakdown = async (eventId: string) => {
     if (!organizerId) return;
@@ -196,6 +260,72 @@ export function OrganizerBillingDialog({
       });
     } finally {
       setPosting(false);
+    }
+  };
+
+  const region = useMemo(
+    () => regionFromCountry(data?.organizer.country),
+    [data?.organizer.country],
+  );
+
+  // The payee proxy (UPI VPA for India, corporate UEN for Singapore) comes
+  // from the singleton PaymentConfig the super-admin maintains. If the
+  // matching field isn't set, surface a pointer to Settings rather than
+  // silently letting the QR endpoint reject the request.
+  const proxy = useMemo(() => {
+    if (!region || !paymentConfig) return "";
+    return region.scheme === "UPI"
+      ? paymentConfig.platformUPIId
+      : paymentConfig.companyUEN;
+  }, [region, paymentConfig]);
+
+  const generateQr = async () => {
+    if (!region) return;
+    const amt = Number(qrAmount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      setQrError("Enter a positive amount");
+      return;
+    }
+    if (!proxy) {
+      setQrError(
+        region.scheme === "UPI"
+          ? "Platform UPI ID isn't set. Configure it in Settings → Payment Settings."
+          : "Company UEN isn't set. Configure it in Settings → Payment Settings.",
+      );
+      return;
+    }
+    if (!paymentConfig?.companyName) {
+      setQrError(
+        "Company Name isn't set. Configure it in Settings → Payment Settings.",
+      );
+      return;
+    }
+    setQrLoading(true);
+    setQrError(null);
+    setQrImage(null);
+    setQrIntent(null);
+    try {
+      const params = new URLSearchParams({
+        scheme: region.scheme,
+        payeeId: proxy,
+        payeeName: paymentConfig.companyName,
+        amount: amt.toFixed(2),
+        billNumber: `ORG-${organizerId?.slice(-6) || "BILL"}`,
+        currency: region.currency,
+      });
+      // /payments/generate-qr is public (no JWT guard) — fetch directly.
+      const res = await fetch(`${apiURL}/payments/generate-qr?${params}`);
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+      const json = (await res.json()) as { qr: string; intent: string };
+      setQrImage(json.qr);
+      setQrIntent(json.intent);
+    } catch (e: any) {
+      setQrError(e?.message || "Failed to generate QR");
+    } finally {
+      setQrLoading(false);
     }
   };
 
@@ -311,6 +441,132 @@ export function OrganizerBillingDialog({
                         ))}
                       </TableBody>
                     </Table>
+                  </div>
+                )}
+              </div>
+
+              {/* Pay-by-QR panel — scheme auto-picked from organizer.country */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600 flex items-center gap-2">
+                    <QrCode className="h-4 w-4" />
+                    Pay by QR
+                  </h3>
+                  {region ? (
+                    <span className="text-xs font-medium rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5">
+                      {region.label}
+                    </span>
+                  ) : (
+                    <span className="text-xs font-medium rounded-full bg-slate-100 text-slate-600 border px-2 py-0.5">
+                      {data.organizer.country || "No country set"}
+                    </span>
+                  )}
+                </div>
+
+                {!region ? (
+                  <div className="rounded-md border bg-slate-50 p-3 text-sm text-slate-600">
+                    QR payment isn't available for this organizer's region (
+                    {data.organizer.country || "country not set"}). Use{" "}
+                    <em>Record payment</em> below to log a manual settlement.
+                  </div>
+                ) : (
+                  <div className="rounded-md border bg-slate-50 p-3 space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
+                      <div className="sm:col-span-2">
+                        <Label className="text-xs">
+                          Amount ({region.currency})
+                        </Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={qrAmount}
+                          onChange={(e) => setQrAmount(e.target.value)}
+                          placeholder="0.00"
+                          disabled={qrLoading}
+                        />
+                      </div>
+                      <div className="sm:col-span-2 flex justify-end">
+                        <Button onClick={generateQr} disabled={qrLoading}>
+                          {qrLoading ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              Generating…
+                            </>
+                          ) : (
+                            <>
+                              <QrCode className="h-4 w-4 mr-2" />
+                              {qrImage ? "Regenerate" : "Generate QR"}
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="text-xs text-slate-500">
+                      Payee:{" "}
+                      <span className="font-mono text-slate-700">
+                        {proxy || "— not configured —"}
+                      </span>
+                      {paymentConfig?.companyName && (
+                        <>
+                          {" · "}
+                          <span>{paymentConfig.companyName}</span>
+                        </>
+                      )}
+                    </div>
+
+                    {qrError && (
+                      <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded px-3 py-2">
+                        {qrError}
+                      </div>
+                    )}
+
+                    {qrImage && (
+                      <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start">
+                        <img
+                          src={qrImage}
+                          alt={`${region.label} payment QR`}
+                          className="w-48 h-48 rounded-md border bg-white p-2"
+                        />
+                        <div className="flex-1 space-y-2 text-sm">
+                          <div>
+                            Scan this QR with any{" "}
+                            <strong>
+                              {region.scheme === "UPI"
+                                ? "UPI app (GPay, PhonePe, Paytm…)"
+                                : "PayNow-enabled bank app"}
+                            </strong>{" "}
+                            to pay{" "}
+                            <strong>
+                              {Number(qrAmount).toFixed(2)} {region.currency}
+                            </strong>
+                            .
+                          </div>
+                          {qrIntent && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              asChild
+                            >
+                              <a
+                                href={qrIntent}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                Open in payment app
+                              </a>
+                            </Button>
+                          )}
+                          <div className="text-xs text-slate-500">
+                            Once the transfer completes, click{" "}
+                            <em>Record payment</em> below to log it against
+                            this bill.
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

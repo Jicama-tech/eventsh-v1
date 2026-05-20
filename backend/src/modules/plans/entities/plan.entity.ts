@@ -18,6 +18,14 @@ export class Plan {
   @Prop({ required: true })
   price: number;
 
+  /**
+   * INR-denominated price for Indian organizers. Indian-country organizers
+   * see this in the plan picker; everyone else sees `price` (USD). Defaults
+   * to 0 so existing plans keep their USD-only behavior until admin sets it.
+   */
+  @Prop({ type: Number, default: 0 })
+  priceINR: number;
+
   @Prop({ required: true, type: [String] })
   features: string[];
 
@@ -63,6 +71,21 @@ export class Plan {
     instagram?: { enabled: boolean };
     // Operators
     operators?: { enabled: boolean; limit: number };
+    /**
+     * Per-audience feedback collection. `enabled` is the master toggle;
+     * `audiences` controls which audience types this plan can collect
+     * feedback from. Backed by the existing FeedbackAudience enum in
+     * feedback.schema.ts ("visitor" | "exhibitor" | "speaker" | "round_table").
+     */
+    feedback?: {
+      enabled: boolean;
+      audiences?: {
+        visitor?: boolean;
+        exhibitor?: boolean;
+        speaker?: boolean;
+        roundTable?: boolean;
+      };
+    };
   };
 
   @Prop()

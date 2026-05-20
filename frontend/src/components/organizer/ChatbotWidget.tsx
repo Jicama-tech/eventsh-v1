@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { jwtDecode } from "jwt-decode";
 import { useCountry } from "@/hooks/useCountry";
+import { useSubscription } from "@/hooks/useSubscription";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InlineWalkinForm } from "./InlineWalkinForm";
@@ -42,6 +43,11 @@ import {
   UserPlus,
   Store,
   Grid3x3,
+  Crown,
+  Clock,
+  CalendarCheck,
+  Zap,
+  AlertTriangle,
 } from "lucide-react";
 
 const apiURL = __API_URL__;
@@ -831,6 +837,7 @@ export function ChatbotWidget({
   //   2. useCountry() context (set by OrganizerDashboard from /organizers/profile)
   //   3. fallback to "US"
   const { country: ctxCountry } = useCountry();
+  const { subscription } = useSubscription();
   const effectiveCountry = (
     orgInfo?.country ||
     ctxCountry ||
@@ -1224,6 +1231,35 @@ export function ChatbotWidget({
             </div>
           </div>
 
+          {/* SUBSCRIPTION MARQUEE — quiet scrolling status bar. White
+              background so it stays out of the way; blue text + faint pill
+              fills so the info is legible without competing with chat. */}
+          {subscription && subscription.subscribed && (
+            <div
+              className="relative overflow-hidden border-b border-slate-200 bg-white text-blue-700 px-2 py-2 flex-shrink-0"
+              role="status"
+              aria-label={`Subscription: ${subscription.planName}, ${
+                subscription.fullyLapsed
+                  ? "expired"
+                  : `${subscription.daysLeft} days left`
+              }`}
+            >
+              <div className="flex w-max animate-marquee whitespace-nowrap hover:[animation-play-state:paused]">
+                <SubscriptionMarqueeRow
+                  subscription={subscription}
+                  country={ctxCountry}
+                />
+                {/* second copy — required by the -50% keyframe so the loop
+                    feels seamless instead of snapping back */}
+                <SubscriptionMarqueeRow
+                  subscription={subscription}
+                  country={ctxCountry}
+                  ariaHidden
+                />
+              </div>
+            </div>
+          )}
+
           {/* ANALYTICS STRIP */}
           {analytics && showAnalytics && (
             <div
@@ -1281,15 +1317,15 @@ export function ChatbotWidget({
               <div
                 className={
                   isPage
-                    ? "max-w-[900px] mx-auto pt-4 sm:pt-6 pb-6 sm:pb-10"
-                    : "pt-2 pb-4"
+                    ? "min-h-full flex items-center justify-center px-2"
+                    : "min-h-full flex items-center justify-center px-2"
                 }
               >
                 <div
                   className={
                     isPage
-                      ? "flex flex-col items-center text-center gap-3 sm:gap-4"
-                      : "flex flex-col items-center text-center gap-2"
+                      ? "max-w-[900px] w-full flex flex-col items-center text-center gap-3 sm:gap-4"
+                      : "w-full flex flex-col items-center text-center gap-2"
                   }
                 >
                   <div
@@ -1765,6 +1801,101 @@ function EventPickerForm({
           {submitted ? "…" : "Show"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * One pass of the scrolling subscription banner. We render two copies inside
+ * the marquee container so the -50% translateX loop feels seamless.
+ */
+function SubscriptionMarqueeRow({
+  subscription,
+  country,
+  ariaHidden,
+}: {
+  subscription: {
+    planName: string | null;
+    pricePaid: string | null;
+    planExpiryDate: string | null;
+    daysLeft: number;
+    fullyLapsed: boolean;
+    inGracePeriod: boolean;
+    graceDaysLeft: number;
+  };
+  country?: string;
+  ariaHidden?: boolean;
+}) {
+  const symbol = country === "IN" ? "₹" : country === "SG" ? "S$" : "$";
+  const validTill = subscription.planExpiryDate
+    ? new Date(subscription.planExpiryDate).toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    : "—";
+
+  // Status pill — color + label vary with the lifecycle stage so a renewal
+  // nudge is loud when the plan is expiring.
+  let statusIcon = <Clock className="h-3.5 w-3.5" />;
+  let statusLabel = `${subscription.daysLeft} day${
+    subscription.daysLeft === 1 ? "" : "s"
+  } left`;
+  let statusTint = "bg-blue-50 text-blue-700";
+  if (subscription.fullyLapsed) {
+    statusIcon = <AlertTriangle className="h-3.5 w-3.5" />;
+    statusLabel = "Plan expired — renew now";
+    statusTint = "bg-rose-50 text-rose-700";
+  } else if (subscription.inGracePeriod) {
+    statusIcon = <AlertTriangle className="h-3.5 w-3.5" />;
+    statusLabel = `Grace period — ${subscription.graceDaysLeft} day${
+      subscription.graceDaysLeft === 1 ? "" : "s"
+    } to renew`;
+    statusTint = "bg-amber-50 text-amber-700";
+  } else if (subscription.daysLeft <= 7) {
+    statusTint = "bg-amber-50 text-amber-700";
+  }
+
+  const Item = ({
+    icon,
+    children,
+    tint,
+  }: {
+    icon: React.ReactNode;
+    children: React.ReactNode;
+    tint?: string;
+  }) => (
+    <span
+      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+        tint || "bg-blue-50 text-blue-700"
+      }`}
+    >
+      {icon}
+      <span>{children}</span>
+    </span>
+  );
+
+  return (
+    <div
+      className="flex items-center gap-3 pr-8 shrink-0"
+      aria-hidden={ariaHidden}
+    >
+      <Item icon={<Crown className="h-3.5 w-3.5" />}>
+        {subscription.planName || "—"}
+      </Item>
+      {subscription.pricePaid ? (
+        <Item icon={<Zap className="h-3.5 w-3.5" />}>
+          {symbol}
+          {subscription.pricePaid} paid
+        </Item>
+      ) : null}
+      <Item icon={statusIcon} tint={statusTint}>
+        {statusLabel}
+      </Item>
+      <Item icon={<CalendarCheck className="h-3.5 w-3.5" />}>
+        Valid till {validTill}
+      </Item>
+      <span className="text-slate-300">•</span>
     </div>
   );
 }

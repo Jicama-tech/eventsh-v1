@@ -58,6 +58,7 @@ import { format } from "date-fns";
 import { jwtDecode } from "jwt-decode";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";
+import { useSubscription as useEventshSubscription } from "@/hooks/useSubscription";
 
 export interface Event {
   _id: string;
@@ -152,6 +153,8 @@ export interface Event {
 }
 
 const MyEvents: React.FC = () => {
+  const { isModuleEnabled: isPlanModuleEnabled } = useEventshSubscription();
+  const canCollectFeedback = isPlanModuleEnabled("feedback");
   const apiURL = __API_URL__;
   const { toast } = useToast();
   const [feedbackForEvent, setFeedbackForEvent] = useState<Event | null>(null);
@@ -1075,16 +1078,18 @@ const MyEvents: React.FC = () => {
                           <QrCode size={16} className="mr-1" />
                           Scanner
                         </Button>
-                        <Button
-                          variant="buttonOutline"
-                          size="sm"
-                          onClick={() => setFeedbackForEvent(event)}
-                          className="flex-1 lg:flex-none"
-                          title="View ratings + comments and toggle deposit refund status"
-                        >
-                          <MessageSquare size={16} className="mr-1" />
-                          Feedback
-                        </Button>
+                        {canCollectFeedback && (
+                          <Button
+                            variant="buttonOutline"
+                            size="sm"
+                            onClick={() => setFeedbackForEvent(event)}
+                            className="flex-1 lg:flex-none"
+                            title="View ratings + comments and toggle deposit refund status"
+                          >
+                            <MessageSquare size={16} className="mr-1" />
+                            Feedback
+                          </Button>
+                        )}
                         <Button
                           variant="buttonOutline"
                           size="sm"

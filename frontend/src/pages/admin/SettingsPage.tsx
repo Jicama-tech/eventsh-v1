@@ -49,6 +49,8 @@ import {
   CreditCard,
   Lock,
   ExternalLink,
+  Building2,
+  Upload,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -144,6 +146,20 @@ export function SettingsPage() {
   });
 
   const [isStripeLoading, setIsStripeLoading] = useState(false);
+
+  // Platform payment config (single super-admin doc). The QR generator in
+  // payments.service.ts already auto-detects a 9-digit + 1-letter PayNow proxy
+  // as a corporate UEN, so persisting it here is enough to drive corporate-
+  // PayNow QR payloads with the merchant name baked in.
+  const [paymentConfig, setPaymentConfig] = useState({
+    companyName: "",
+    companyUEN: "",
+    platformUPIId: "",
+    upiQrImagePath: "",
+  });
+  const [isPaymentLoading, setIsPaymentLoading] = useState(false);
+  const [isQrUploading, setIsQrUploading] = useState(false);
+
   const { toast } = useToast();
 
   useEffect(() => {
@@ -573,6 +589,118 @@ export function SettingsPage() {
     loadStripeSettings();
   }, []);
 
+  const loadPaymentConfig = async () => {
+    try {
+      const res = await adminFetch(`${__API_URL__}/admin/payment-config`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setPaymentConfig({
+        companyName: data?.companyName || "",
+        companyUEN: data?.companyUEN || "",
+        platformUPIId: data?.platformUPIId || "",
+        upiQrImagePath: data?.upiQrImagePath || "",
+      });
+    } catch (error) {
+      console.error("Error loading payment config:", error);
+    }
+  };
+
+  const handleSavePaymentConfig = async () => {
+    const uen = paymentConfig.companyUEN.trim().toUpperCase();
+    if (uen && !/^\d{9}[A-Z]$/.test(uen)) {
+      toast({
+        duration: 5000,
+        title: "Invalid UEN",
+        description:
+          "Company UEN must be 9 digits followed by 1 uppercase letter (e.g. 200012345A).",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsPaymentLoading(true);
+    try {
+      const res = await adminFetch(`${__API_URL__}/admin/payment-config`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyName: paymentConfig.companyName,
+          companyUEN: uen,
+        }),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setPaymentConfig({
+        companyName: data?.companyName || "",
+        companyUEN: data?.companyUEN || "",
+        platformUPIId: data?.platformUPIId || "",
+        upiQrImagePath: data?.upiQrImagePath || "",
+      });
+      toast({
+        duration: 5000,
+        title: "Payment Settings Saved",
+        description: "Platform payment configuration has been updated.",
+      });
+    } catch (error: any) {
+      console.error("Error saving payment config:", error);
+      toast({
+        duration: 5000,
+        title: "Error",
+        description:
+          error?.message || "Failed to save payment settings. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPaymentLoading(false);
+    }
+  };
+
+  const handleUploadUPIQr = async (file: File | null | undefined) => {
+    if (!file) return;
+    setIsQrUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await adminFetch(
+        `${__API_URL__}/admin/payment-config/upi-qr`,
+        { method: "POST", body: fd },
+      );
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(
+          (data && (data.message || data.error)) || `HTTP ${res.status}`,
+        );
+      }
+      setPaymentConfig({
+        companyName: data?.companyName || "",
+        companyUEN: data?.companyUEN || "",
+        platformUPIId: data?.platformUPIId || "",
+        upiQrImagePath: data?.upiQrImagePath || "",
+      });
+      toast({
+        duration: 5000,
+        title: "UPI QR uploaded",
+        description: `Decoded VPA: ${data?.platformUPIId || "(unknown)"}`,
+      });
+    } catch (error: any) {
+      console.error("Error uploading UPI QR:", error);
+      toast({
+        duration: 5000,
+        title: "Upload failed",
+        description: error?.message || "Could not read the QR image.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsQrUploading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPaymentConfig();
+  }, []);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -598,6 +726,7 @@ export function SettingsPage() {
         <TabsList>
           <TabsTrigger value="content">Website Content</TabsTrigger>
           <TabsTrigger value="stripe">Stripe Config</TabsTrigger>
+          <TabsTrigger value="payment">Payment Settings</TabsTrigger>
           <TabsTrigger value="seo">SEO Settings</TabsTrigger>
           <TabsTrigger value="system">System Settings</TabsTrigger>
         </TabsList>
@@ -875,6 +1004,178 @@ export function SettingsPage() {
                     <>
                       <CreditCard className="h-4 w-4 mr-2" />
                       Save Admin Stripe
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="payment">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                Platform Payment Settings
+              </CardTitle>
+              <CardDescription>
+                Configure the platform's payment proxies. Singapore organizers
+                pay the platform via PayNow (corporate UEN); Indian organizers
+                pay via UPI (VPA). The QR generator picks the right scheme
+                automatically from the organizer's country.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="p-4 border border-blue-200 bg-blue-50 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <Shield className="h-5 w-5 text-blue-600 mt-0.5" />
+                  <div>
+                    <h4 className="font-medium text-blue-800">
+                      Two QR rails — one config
+                    </h4>
+                    <p className="text-sm text-blue-700">
+                      <strong>Singapore (PayNow):</strong> Company UEN drives a
+                      corporate PayNow QR with the Company Name shown to the
+                      payer.
+                      <br />
+                      <strong>India (UPI):</strong> Upload your static UPI
+                      QR — the VPA is decoded and used to generate dynamic
+                      UPI QRs (with amount baked in) at checkout.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="paymentCompanyName">Company Name</Label>
+                  <Input
+                    id="paymentCompanyName"
+                    value={paymentConfig.companyName}
+                    onChange={(e) =>
+                      setPaymentConfig((prev) => ({
+                        ...prev,
+                        companyName: e.target.value,
+                      }))
+                    }
+                    placeholder="Eventsh Pte Ltd"
+                    maxLength={25}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Shown to the payer. EMVCo merchant-name field — max 25
+                    characters.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="paymentCompanyUEN">
+                    Company UEN (Singapore — PayNow)
+                  </Label>
+                  <Input
+                    id="paymentCompanyUEN"
+                    value={paymentConfig.companyUEN}
+                    onChange={(e) =>
+                      setPaymentConfig((prev) => ({
+                        ...prev,
+                        companyUEN: e.target.value.toUpperCase(),
+                      }))
+                    }
+                    placeholder="200012345A"
+                    maxLength={10}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    9 digits followed by 1 uppercase letter (e.g. 200012345A).
+                    Used as the PayNow corporate proxy. Leave blank to clear.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="paymentPlatformUPIQr">
+                    Platform UPI QR (India — UPI)
+                  </Label>
+                  <div className="flex flex-col sm:flex-row gap-4 items-start">
+                    {paymentConfig.upiQrImagePath ? (
+                      <div className="relative">
+                        <img
+                          src={`${__API_URL__}${paymentConfig.upiQrImagePath}`}
+                          alt="Platform UPI QR"
+                          className="w-32 h-32 rounded-md border bg-white p-1 object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-32 h-32 rounded-md border border-dashed bg-slate-50 flex items-center justify-center text-xs text-slate-400 text-center px-2">
+                        No QR uploaded
+                      </div>
+                    )}
+                    <div className="flex-1 space-y-2">
+                      <input
+                        id="paymentPlatformUPIQr"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={isQrUploading}
+                        onChange={(e) => {
+                          handleUploadUPIQr(e.target.files?.[0]);
+                          e.target.value = "";
+                        }}
+                      />
+                      <Button
+                        variant="outline"
+                        disabled={isQrUploading}
+                        onClick={() =>
+                          document
+                            .getElementById("paymentPlatformUPIQr")
+                            ?.click()
+                        }
+                      >
+                        {isQrUploading ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                            Decoding…
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="h-4 w-4 mr-2" />
+                            {paymentConfig.upiQrImagePath
+                              ? "Replace QR"
+                              : "Upload UPI QR"}
+                          </>
+                        )}
+                      </Button>
+                      {paymentConfig.platformUPIId && (
+                        <div className="text-xs text-muted-foreground">
+                          Decoded VPA:{" "}
+                          <code className="text-slate-700">
+                            {paymentConfig.platformUPIId}
+                          </code>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Upload your bank-provided static UPI QR. The VPA is
+                        extracted automatically and used to generate dynamic
+                        QRs (with amount baked in) at checkout — same flow
+                        as the rest of Eventsh.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleSavePaymentConfig}
+                  disabled={isPaymentLoading}
+                >
+                  {isPaymentLoading ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Payment Settings
                     </>
                   )}
                 </Button>
