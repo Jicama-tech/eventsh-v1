@@ -16,6 +16,7 @@ import {
   Hourglass,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { buildPayNowQrUrl } from "@/lib/paynowQr";
 
 const apiURL = __API_URL__;
 
@@ -135,6 +136,24 @@ export function SubscriptionCheckoutDialog({
       if (!cfg.companyName) {
         throw new Error("Company name isn't configured yet.");
       }
+
+      // PayNow: route through the same sgqrcode.com renderer the working
+      // ticket/table payment pages use, with the super-admin's companyUEN as
+      // the proxy. The backend's EMVCo TLV builder produced QRs banks
+      // wouldn't honor.
+      if (row.scheme === "PAYNOW") {
+        const url = buildPayNowQrUrl({
+          organizer: { UENNumber: cfg.companyUEN },
+          amount: row.amount.toFixed(2),
+          refId: row.ref,
+          company: cfg.companyName,
+        });
+        if (!url) throw new Error("Company UEN isn't configured yet.");
+        setQrImage(url);
+        setQrIntent(null);
+        return;
+      }
+
       const params = new URLSearchParams({
         scheme: row.scheme,
         payeeId: proxy,
