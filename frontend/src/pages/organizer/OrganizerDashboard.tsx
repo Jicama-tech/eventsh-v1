@@ -235,6 +235,8 @@ interface OrganizerDashboardProps {
 export interface organizerToken {
   sub: string;
   email: string;
+  organizationName?: string;
+  operatorId?: string;
 }
 
 export function OrganizerDashboard({
@@ -284,9 +286,16 @@ export function OrganizerDashboard({
     localStorage.setItem("organizerSidebarCollapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed]);
   const [loading, setLoading] = useState(false);
-  const [OrganizationName, setOrganizationName] = useState(
-    "EventFlow Organizer",
-  );
+  const [OrganizationName, setOrganizationName] = useState(() => {
+    try {
+      const token = sessionStorage.getItem("token");
+      if (!token) return "EventFlow Organizer";
+      const decoded = jwtDecode<organizerToken>(token);
+      return decoded.organizationName || "EventFlow Organizer";
+    } catch {
+      return "EventFlow Organizer";
+    }
+  });
   const [whatsAppNumber, setWhatsAppNumber] = useState("");
 
   // Organizer Specific Modal States
@@ -493,73 +502,60 @@ export function OrganizerDashboard({
     async function fetchDashboardName() {
       const token = sessionStorage.getItem("token");
       if (!token) return;
-      let orgEmail;
 
       try {
         const decoded = jwtDecode<organizerToken>(token);
-        orgEmail = decoded.email;
         if (decoded.sub) setOrganizerId(decoded.sub);
 
-        // Try fetching organizer by email first
         let orgData: any = null;
-        const res = await fetch(`${apiURL}/organizers/${orgEmail}`, {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const result = await res.json();
-          if (result.data?.organizationName) {
-            orgData = result.data;
-          }
-        }
 
-        // If not found (operator login), try fetching by ID, then check if operator
-        if (!orgData && decoded.sub) {
-          const idRes = await fetch(
-            `${apiURL}/organizers/profile-get/${decoded.sub}`,
-            {
+        // Operator session: JWT.sub is already the parent organizer's id, so
+        // fetch by id directly. Skipping the email-based lookup is critical —
+        // if the operator's gmail is ALSO registered as a separate organizer,
+        // looking up by email would return that unrelated organizer instead.
+        if (decoded.operatorId) {
+          if (decoded.sub) {
+            const idRes = await fetch(
+              `${apiURL}/organizers/profile-get/${decoded.sub}`,
+            );
+            if (idRes.ok) {
+              try {
+                const idResult = await idRes.json();
+                if (idResult.data?.organizationName) orgData = idResult.data;
+              } catch {
+                // empty body — fall through
+              }
+            }
+          }
+        } else {
+          // Organizer session: look up by email first, then by id as fallback.
+          const orgEmail = decoded.email;
+          if (orgEmail) {
+            const res = await fetch(`${apiURL}/organizers/${orgEmail}`, {
               method: "GET",
-            },
-          );
-          if (idRes.ok) {
-            const idResult = await idRes.json();
-            if (idResult.data?.organizationName) {
-              orgData = idResult.data;
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+              try {
+                const result = await res.json();
+                if (result.data?.organizationName) orgData = result.data;
+              } catch {
+                // empty body — fall through
+              }
             }
           }
 
-          // Still not found — might be an operator, fetch operator to get
-          // parent organizerId. The backend exposes this as `/operators/fetch/:id`
-          // (there's no bare `/operators/:id` route), so the URL has to use
-          // that literal "fetch" segment or the request 404s and the parent
-          // organization name never loads on the dashboard heading.
-          if (!orgData) {
-            try {
-              const opRes = await fetch(
-                `${apiURL}/operators/fetch/${decoded.sub}`,
-                {
-                  method: "GET",
-                  headers: { Authorization: `Bearer ${token}` },
-                },
-              );
-              if (opRes.ok) {
-                const opResult = await opRes.json();
-                const parentOrgId = opResult.data?.organizerId;
-                if (parentOrgId) {
-                  setOrganizerId(parentOrgId);
-                  const parentRes = await fetch(
-                    `${apiURL}/organizers/profile-get/${parentOrgId}`,
-                  );
-                  if (parentRes.ok) {
-                    const parentResult = await parentRes.json();
-                    if (parentResult.data?.organizationName) {
-                      orgData = parentResult.data;
-                    }
-                  }
-                }
+          if (!orgData && decoded.sub) {
+            const idRes = await fetch(
+              `${apiURL}/organizers/profile-get/${decoded.sub}`,
+            );
+            if (idRes.ok) {
+              try {
+                const idResult = await idRes.json();
+                if (idResult.data?.organizationName) orgData = idResult.data;
+              } catch {
+                // empty body — fall through
               }
-            } catch {
-              // Operator fetch failed, continue with defaults
             }
           }
         }
