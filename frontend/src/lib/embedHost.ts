@@ -40,3 +40,20 @@ export function getEventBasePath(orgSlug: string | undefined): string {
   if (embedSlug && embedSlug === orgSlug) return "/events";
   return `/${orgSlug}/events`;
 }
+
+/** Canonical eventsh.com origin used when escaping a partner-embed domain. */
+export const CANONICAL_ORIGIN = "https://eventsh.com";
+
+/**
+ * Returns the correct URL for links that point at pages only available on
+ * the canonical eventsh.com app — auth, dashboards, admin tools, etc. On
+ * eventsh.com the returned path is relative (so React Router handles it).
+ * On a partner-embed host, it's an absolute eventsh.com URL so the browser
+ * leaves the partner domain (Nginx only proxies `/events*` on embeds, and
+ * React Router on the embed only knows about `/events*` routes).
+ */
+export function getCanonicalAppUrl(path: string): string {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  if (getEmbedOrgSlug()) return `${CANONICAL_ORIGIN}${normalized}`;
+  return normalized;
+}
