@@ -23,6 +23,7 @@
     "@nestjs/platform-express": "^10.4.20",
     "@nestjs/schedule": "^6.1.1",
     "@nestjs/throttler": "^6.5.0",
+    "@types/uuid": "^10.0.0",
     "@zxing/library": "^0.21.3",
     "axios": "^1.12.2",
     "baileys": "^6.7.19",
@@ -62,6 +63,7 @@
     "sharp": "^0.34.5",
     "slugify": "^1.6.6",
     "upiqrcode": "^1.0.5",
+    "uuid": "^14.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
