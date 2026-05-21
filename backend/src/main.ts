@@ -30,6 +30,8 @@ async function bootstrap() {
       "https://eventsh.com",
       "https://thefoxsg.com",
       "https://xcionasia.com",
+      "https://jicama.tech",
+      "https://www.jicama.tech",
       "http://localhost:8080",
       "http://192.168.137.1:8080",
       "http://localhost:8081",
