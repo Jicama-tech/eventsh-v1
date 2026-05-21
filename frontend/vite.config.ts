@@ -6,7 +6,16 @@ import { componentTagger } from "lovable-tagger";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
+  // Partner domains (jicama.tech/events, etc.) reverse-proxy HTML from
+  // eventsh.com but cannot serve our hashed asset bundles. Setting an
+  // absolute base in production makes the HTML reference
+  // https://eventsh.com/assets/*, so browsers load JS/CSS directly from
+  // the canonical origin regardless of which domain rendered the page.
+  // Override via VITE_PUBLIC_BASE in .env if you ever rehost the bundle.
+  const productionBase = env.VITE_PUBLIC_BASE || "https://eventsh.com/";
+
   return {
+    base: mode === "production" ? productionBase : "/",
     server: {
       host: "::",
       port: 8080,

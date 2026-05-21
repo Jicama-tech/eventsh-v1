@@ -55,6 +55,7 @@ import {
 import { Helmet } from "react-helmet-async";
 import AnnouncementBar from "../ui/adBar";
 import { useCurrency } from "@/hooks/useCurrencyhook";
+import { getEventBasePath } from "@/lib/embedHost";
 
 interface Organizer {
   _id: string;
@@ -204,13 +205,23 @@ interface FetchedEvent {
   venueRoundTables?: any[];
 }
 
-export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
+export function OrganizerStorefront({
+  onBack,
+  organizationName: organizationNameProp,
+}: {
+  onBack: () => void;
+  /** When set, overrides the `:organizationName` URL param. Used by partner
+   *  embeds (e.g. jicama.tech/events) that mount this storefront under a
+   *  path that doesn't carry the slug. */
+  organizationName?: string;
+}) {
   const apiURL = __API_URL__;
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [settings, setsettings] = useState<OrganizerStore | null>(null);
   const [sortBy, setSortBy] = useState("featured");
-  const { organizationName } = useParams();
+  const { organizationName: organizationNameParam } = useParams();
+  const organizationName = organizationNameProp ?? organizationNameParam;
   const [searchParams] = useSearchParams();
   const isPreview = searchParams.get("preview") === "true";
   const [events, setEvents] = useState<Event[]>([]);
@@ -533,7 +544,7 @@ export function OrganizerStorefront({ onBack }: { onBack: () => void }) {
   const handleEventClick = (eventSlug: string) => {
     // setSelectedEvent(eventId);
     // setShowEventDetail(true);
-    navigate(`/${organizationName}/events/${eventSlug}`);
+    navigate(`${getEventBasePath(organizationName)}/${eventSlug}`);
   };
 
   const handleGetTickets = (event: string) => {
