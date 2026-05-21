@@ -958,11 +958,12 @@ export default function TicketCart() {
     }
 
     if (orderFor === "customer") {
-      if (!email || !emailVerified || !whatsapp || !whatsappVerified) {
+      if (!email || !emailVerified || !whatsapp) {
         toast({
           duration: 5000,
-          title: "Verification required",
-          description: "Please verify both email and WhatsApp number.",
+          title: "Missing details",
+          description:
+            "Please verify your email and enter your WhatsApp number.",
           variant: "destructive",
         });
         return;
@@ -1273,18 +1274,10 @@ export default function TicketCart() {
                         </div>
                       )}
 
-                      {/* WhatsApp Number */}
+                      {/* WhatsApp Number — mandatory, no OTP verification */}
                       <div className="mb-6">
-                        <Label
-                          htmlFor="whatsapp"
-                          className="flex items-center justify-between mb-2"
-                        >
+                        <Label htmlFor="whatsapp" className="mb-2 block">
                           <span>WhatsApp Number *</span>
-                          {whatsappVerified && (
-                            <Badge variant="default" className="ml-2">
-                              Verified
-                            </Badge>
-                          )}
                         </Label>
                         <div className="flex items-center space-x-2">
                           <div className="w-28">
@@ -1315,44 +1308,10 @@ export default function TicketCart() {
                             onChange={(e) =>
                               setWhatsapp(e.target.value.replace(/\D/g, ""))
                             }
-                            disabled={whatsappVerified}
+                            required
                             className="flex-grow"
                           />
-                          {!whatsappVerified && (
-                            <Button
-                              onClick={() =>
-                                handleSendOtp(countryCode, whatsapp)
-                              }
-                              disabled={whatsapp === "" || whatsappVerifying}
-                              size="sm"
-                              variant="buttonOutline"
-                            >
-                              {whatsappVerifying ? "Sending..." : "Send OTP"}
-                            </Button>
-                          )}
                         </div>
-                        {otpSent && !whatsappVerified && (
-                          <div className="flex items-center mt-2 space-x-2">
-                            <Input
-                              id="otp"
-                              placeholder="Enter OTP"
-                              maxLength={6}
-                              value={otp}
-                              onChange={(e) => setOtp(e.target.value)}
-                              className="flex-grow"
-                            />
-                            <Button
-                              onClick={() =>
-                                handleVerifyOtp(countryCode, whatsapp)
-                              }
-                              disabled={otp.length !== 6 || whatsappVerifying}
-                              size="sm"
-                              variant="buttonOutline"
-                            >
-                              {whatsappVerifying ? "Verifying..." : "Verify"}
-                            </Button>
-                          </div>
-                        )}
                       </div>
                       {/* Email Address */}
                       <div className="mb-6">
@@ -1735,18 +1694,10 @@ export default function TicketCart() {
                       </div>
                     )}
 
-                    {/* WhatsApp Number */}
+                    {/* WhatsApp Number — mandatory, no OTP verification */}
                     <div className="mb-6">
-                      <Label
-                        htmlFor="whatsapp"
-                        className="flex items-center justify-between mb-2"
-                      >
+                      <Label htmlFor="whatsapp" className="mb-2 block">
                         <span>WhatsApp Number *</span>
-                        {whatsappVerified && (
-                          <Badge variant="default" className="ml-2">
-                            Verified
-                          </Badge>
-                        )}
                       </Label>
                       <div className="flex items-center space-x-2">
                         <div className="w-28">
@@ -1777,42 +1728,10 @@ export default function TicketCart() {
                           onChange={(e) =>
                             setWhatsapp(e.target.value.replace(/\D/g, ""))
                           }
-                          disabled={whatsappVerified}
+                          required
                           className="flex-grow"
                         />
-                        {!whatsappVerified && (
-                          <Button
-                            onClick={() => handleSendOtp(countryCode, whatsapp)}
-                            disabled={whatsapp === "" || whatsappVerifying}
-                            size="sm"
-                            variant="buttonOutline"
-                          >
-                            {whatsappVerifying ? "Sending..." : "Send OTP"}
-                          </Button>
-                        )}
                       </div>
-                      {otpSent && !whatsappVerified && (
-                        <div className="flex items-center mt-2 space-x-2">
-                          <Input
-                            id="otp"
-                            placeholder="Enter OTP"
-                            maxLength={6}
-                            value={otp}
-                            onChange={(e) => setOtp(e.target.value)}
-                            className="flex-grow"
-                          />
-                          <Button
-                            onClick={() =>
-                              handleVerifyOtp(countryCode, whatsapp)
-                            }
-                            disabled={otp.length !== 6 || whatsappVerifying}
-                            size="sm"
-                            variant="buttonOutline"
-                          >
-                            {whatsappVerifying ? "Verifying..." : "Verify"}
-                          </Button>
-                        </div>
-                      )}
                     </div>
                     {/* Email Address */}
                     <div className="mb-6">
