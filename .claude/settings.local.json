@@ -11,7 +11,8 @@
       "Bash(echo \"BE_EXIT: $?\")",
       "Bash(curl -s -o /dev/null -w \"BE 3000  → %{http_code}\\\\n\" http://localhost:3000/plans/get-plans)",
       "Bash(curl -s -o /dev/null -w \"FE 8081  → %{http_code}\\\\n\" http://localhost:8081/)",
-      "Bash(curl -s -o /dev/null -w \"FE 8080  → %{http_code}\\\\n\" http://localhost:8080/)"
+      "Bash(curl -s -o /dev/null -w \"FE 8080  → %{http_code}\\\\n\" http://localhost:8080/)",
+      "WebFetch(domain:jicama.tech)"
     ]
   }
 }
