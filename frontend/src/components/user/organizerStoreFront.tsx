@@ -55,7 +55,7 @@ import {
 import { Helmet } from "react-helmet-async";
 import AnnouncementBar from "../ui/adBar";
 import { useCurrency } from "@/hooks/useCurrencyhook";
-import { getEventBasePath } from "@/lib/embedHost";
+import { getCanonicalAppUrl, getEventBasePath } from "@/lib/embedHost";
 
 interface Organizer {
   _id: string;
@@ -2978,7 +2978,7 @@ export function OrganizerStorefront({
                   </span>
                 </p>
                 <a
-                  href="/organizer/login"
+                  href={getCanonicalAppUrl("/login")}
                   className="text-black font-semibold hover:underline mt-2 md:mt-0"
                 >
                   Organizer Login
@@ -3224,7 +3224,7 @@ export function OrganizerStorefront({
 
                 <div className="flex justify-center">
                   <a
-                    href="/login"
+                    href={getCanonicalAppUrl("/login")}
                     className="font-semibold text-xs mt-2 text-gray-600 text-center hover:underline"
                   >
                     Organizer Login
@@ -3585,7 +3585,10 @@ export function OrganizerStorefront({
                   © 2025 {general.storeName}. All rights reserved. Powered by{" "}
                   <span style={{ color: design.primaryColor }}>EventSH</span>
                 </p>
-                <a href="/login" className="font-semibold hover:underline">
+                <a
+                  href={getCanonicalAppUrl("/login")}
+                  className="font-semibold hover:underline"
+                >
                   Organizer login
                 </a>
               </div>
