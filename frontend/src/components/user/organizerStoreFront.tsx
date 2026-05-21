@@ -320,7 +320,10 @@ export function OrganizerStorefront({
     if (!isPreview) return;
     const onMsg = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
-      if (event.data?.type === "EVENTFRONT_PREVIEW_UPDATE" && event.data.settings) {
+      if (
+        event.data?.type === "EVENTFRONT_PREVIEW_UPDATE" &&
+        event.data.settings
+      ) {
         setsettings(event.data.settings);
       }
     };
@@ -460,21 +463,34 @@ export function OrganizerStorefront({
             date: new Date(event.startDate).toLocaleDateString(),
             time: event.time,
             location: event.address,
-            price: event.visitorTypes?.length > 0
-              ? Math.min(...event.visitorTypes.map((v: any) => v.price || 0))
-              : (event.ticketPrice ? parseFloat(event.ticketPrice) : null),
+            price:
+              event.visitorTypes?.length > 0
+                ? Math.min(...event.visitorTypes.map((v: any) => v.price || 0))
+                : event.ticketPrice
+                  ? parseFloat(event.ticketPrice)
+                  : null,
             rating: 4.5,
             attendees: 0,
-            maxAttendees: event.visitorTypes?.length > 0
-              ? event.visitorTypes.reduce((sum: number, v: any) => sum + (v.maxCount || 0), 0)
-              : (parseInt(event.totalTickets) || 0),
-            image: event.image?.startsWith("/") ? `${apiURL?.replace("/api", "")}${event.image}` : (event.image || ""),
+            maxAttendees:
+              event.visitorTypes?.length > 0
+                ? event.visitorTypes.reduce(
+                    (sum: number, v: any) => sum + (v.maxCount || 0),
+                    0,
+                  )
+                : parseInt(event.totalTickets) || 0,
+            image: event.image?.startsWith("/")
+              ? `${apiURL?.replace("/api", "")}${event.image}`
+              : event.image || "",
             category: event.category,
             featured: false,
             sale: false,
             badge: "",
             hasTickets: event.visitorTypes?.length > 0,
-            hasStalls: event.venueTables && (Array.isArray(event.venueTables) ? event.venueTables.length > 0 : Object.keys(event.venueTables).length > 0),
+            hasStalls:
+              event.venueTables &&
+              (Array.isArray(event.venueTables)
+                ? event.venueTables.length > 0
+                : Object.keys(event.venueTables).length > 0),
             hasSpeakers: event.speakerSlotTemplates?.length > 0,
             hasRoundTables: event.venueRoundTables?.length > 0,
           }));
@@ -1272,7 +1288,11 @@ export function OrganizerStorefront({
                             className="text-xl font-extrabold"
                             style={{ color: design.primaryColor }}
                           >
-                            {featuredEvent.price != null ? (featuredEvent.price === 0 ? "Free" : formatPrice(featuredEvent.price)) : ""}
+                            {featuredEvent.price != null
+                              ? featuredEvent.price === 0
+                                ? "Free"
+                                : formatPrice(featuredEvent.price)
+                              : ""}
                           </span>
                           <span className="text-white/50 text-sm">
                             {featuredEvent.maxAttendees > 0
@@ -1528,7 +1548,11 @@ export function OrganizerStorefront({
                             className="text-2xl sm:text-3xl font-bold"
                             style={{ color: design.secondaryColor }}
                           >
-                            {featuredEvent.price != null ? (featuredEvent.price === 0 ? "Free" : formatPrice(featuredEvent.price)) : ""}
+                            {featuredEvent.price != null
+                              ? featuredEvent.price === 0
+                                ? "Free"
+                                : formatPrice(featuredEvent.price)
+                              : ""}
                           </span>
                         </div>
                         <button
@@ -1583,7 +1607,11 @@ export function OrganizerStorefront({
                                 className="text-sm font-bold"
                                 style={{ color: design.secondaryColor }}
                               >
-                                {event.price != null ? (event.price === 0 ? "Free" : formatPrice(event.price)) : ""}
+                                {event.price != null
+                                  ? event.price === 0
+                                    ? "Free"
+                                    : formatPrice(event.price)
+                                  : ""}
                               </span>
                             </div>
                           </div>
@@ -1727,7 +1755,11 @@ export function OrganizerStorefront({
                                         className="text-xl font-bold"
                                         style={{ color: design.secondaryColor }}
                                       >
-                                        {event.price != null ? (event.price === 0 ? "Free" : formatPrice(event.price)) : ""}
+                                        {event.price != null
+                                          ? event.price === 0
+                                            ? "Free"
+                                            : formatPrice(event.price)
+                                          : ""}
                                       </span>
                                       <Button
                                         className="rounded-xl px-4 py-2 text-xs font-light border-0 transition-all hover:scale-105"
@@ -1911,7 +1943,11 @@ export function OrganizerStorefront({
                                 className="text-2xl font-bold"
                                 style={{ color: design.secondaryColor }}
                               >
-                                {bigEvent.price != null ? (bigEvent.price === 0 ? "Free" : formatPrice(bigEvent.price)) : ""}
+                                {bigEvent.price != null
+                                  ? bigEvent.price === 0
+                                    ? "Free"
+                                    : formatPrice(bigEvent.price)
+                                  : ""}
                               </span>
                               <div className="flex gap-2">
                                 <Button
@@ -1927,7 +1963,11 @@ export function OrganizerStorefront({
                                   }}
                                 >
                                   <Ticket className="h-3.5 w-3.5 mr-1.5" />
-                                  {bigEvent.hasTickets ? "Get Tickets" : bigEvent.hasRoundTables ? "Book Seats" : "View Event"}
+                                  {bigEvent.hasTickets
+                                    ? "Get Tickets"
+                                    : bigEvent.hasRoundTables
+                                      ? "Book Seats"
+                                      : "View Event"}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -1986,7 +2026,11 @@ export function OrganizerStorefront({
                                       className="text-sm font-bold"
                                       style={{ color: design.secondaryColor }}
                                     >
-                                      {event.price != null ? (event.price === 0 ? "Free" : formatPrice(event.price)) : ""}
+                                      {event.price != null
+                                        ? event.price === 0
+                                          ? "Free"
+                                          : formatPrice(event.price)
+                                        : ""}
                                     </span>
                                     <span className="text-white/60 text-xs">
                                       {event.date}
@@ -2127,7 +2171,11 @@ export function OrganizerStorefront({
                               className="text-lg font-bold"
                               style={{ color: design.secondaryColor }}
                             >
-                              {event.price != null ? (event.price === 0 ? "Free" : formatPrice(event.price)) : ""}
+                              {event.price != null
+                                ? event.price === 0
+                                  ? "Free"
+                                  : formatPrice(event.price)
+                                : ""}
                             </span>
                             <Button
                               className="rounded-xl px-4 py-2 text-xs font-medium border-0 transition-all hover:scale-105"
@@ -2272,7 +2320,11 @@ export function OrganizerStorefront({
                             className="text-lg font-bold"
                             style={{ color: design.secondaryColor }}
                           >
-                            {event.price != null ? (event.price === 0 ? "Free" : formatPrice(event.price)) : ""}
+                            {event.price != null
+                              ? event.price === 0
+                                ? "Free"
+                                : formatPrice(event.price)
+                              : ""}
                           </span>
                           <Button
                             className="rounded-xl px-4 py-2 text-xs font-medium border-0 transition-all hover:scale-105"
@@ -2926,7 +2978,7 @@ export function OrganizerStorefront({
                   </span>
                 </p>
                 <a
-                  href="/login"
+                  href="/organizer/login"
                   className="text-black font-semibold hover:underline mt-2 md:mt-0"
                 >
                   Organizer Login
