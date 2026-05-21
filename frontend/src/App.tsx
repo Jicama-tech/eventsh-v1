@@ -16,6 +16,7 @@ import { CountryProvider } from "./hooks/useCountry";
 import { SubscriptionProvider } from "./hooks/useSubscription";
 import { lazy, Suspense, useEffect } from "react";
 import { useLocation } from "react-router-dom";
+import { getEmbedOrgSlug } from "./lib/embedHost";
 
 // Lazy load all route components for code splitting
 const LandingPage = lazy(() => import("./pages/LandingPage"));
@@ -189,6 +190,12 @@ function AppContent() {
     return <LoadingScreen />;
   }
 
+  // Partner-domain embed: when the React app is reverse-proxied under
+  // jicama.tech/events/* (and similar), `/events` should render the mapped
+  // organizer's storefront instead of the eventsh.com events listing. On
+  // eventsh.com itself, embedOrgSlug is null and routing is unchanged.
+  const embedOrgSlug = getEmbedOrgSlug();
+
   return (
     <Suspense fallback={<LoadingScreen />}>
       <CleanStorefrontUrl />
@@ -196,7 +203,25 @@ function AppContent() {
       {!user ? (
         <Routes>
           <Route path="/" element={<LandingPage />} />
-          <Route path="/events" element={<Events />} />
+          <Route
+            path="/events"
+            element={
+              embedOrgSlug ? (
+                <OrganizerStorefront
+                  onBack={() => navigate(-1)}
+                  organizationName={embedOrgSlug}
+                />
+              ) : (
+                <Events />
+              )
+            }
+          />
+          {embedOrgSlug && (
+            <Route
+              path="/events/:id"
+              element={<EventFront eventId={""} onBack={() => {}} />}
+            />
+          )}
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/blog" element={<Blog />} />
           <Route path="/faq" element={<FAQ />} />
@@ -329,6 +354,23 @@ function AppContent() {
               return (
                 <Routes>
                   <Route path="/" element={<LandingPage />} />
+                  {embedOrgSlug && (
+                    <Route
+                      path="/events"
+                      element={
+                        <OrganizerStorefront
+                          onBack={() => navigate(-1)}
+                          organizationName={embedOrgSlug}
+                        />
+                      }
+                    />
+                  )}
+                  {embedOrgSlug && (
+                    <Route
+                      path="/events/:id"
+                      element={<EventFront eventId={""} onBack={() => {}} />}
+                    />
+                  )}
                   <Route
                     path="/organizer/login"
                     element={<OrganizerEShopLogin />}
