@@ -10,8 +10,29 @@ export type AppFeedbackRole =
   | "speaker"
   | "general";
 
+export type AppFeedbackKind = "testimonial" | "support";
+
+export type SupportCategory =
+  | "bug"
+  | "feature_request"
+  | "general"
+  | "billing"
+  | "other";
+
+export type SupportStatus = "open" | "in_progress" | "resolved";
+
 @Schema({ timestamps: true })
 export class AppFeedback {
+  // Distinguishes landing-page testimonials (default) from organizer dashboard
+  // support tickets. Public/curation queries filter on this so support tickets
+  // never appear in the marketing carousel.
+  @Prop({
+    enum: ["testimonial", "support"],
+    default: "testimonial",
+    index: true,
+  })
+  kind: AppFeedbackKind;
+
   @Prop({ required: true, trim: true })
   name: string;
 
@@ -24,7 +45,9 @@ export class AppFeedback {
   @Prop({ trim: true, lowercase: true, index: true })
   email?: string;
 
-  @Prop({ required: true, min: 1, max: 5 })
+  // Rating is required for testimonials; support tickets set it to 0 since
+  // there's nothing to rate. Min: 0 to accommodate that.
+  @Prop({ required: true, min: 0, max: 5 })
   rating: number;
 
   // The (possibly super-admin-edited) text shown to the public. Edits never
@@ -41,6 +64,27 @@ export class AppFeedback {
 
   @Prop({ type: Types.ObjectId, ref: "User" })
   submittedByUserId?: Types.ObjectId;
+
+  // ── Support-ticket fields (only populated when kind === "support") ──
+
+  @Prop({ trim: true })
+  subject?: string;
+
+  @Prop({
+    enum: ["bug", "feature_request", "general", "billing", "other"],
+  })
+  category?: SupportCategory;
+
+  @Prop({
+    enum: ["open", "in_progress", "resolved"],
+    default: "open",
+    index: true,
+  })
+  status?: SupportStatus;
+
+  // Public URLs (e.g. "/uploads/support/<uuid>.png") for attached screenshots.
+  @Prop({ type: [String], default: [] })
+  attachments: string[];
 
   // Curation flags. featured + !hidden ⇒ shown in the public carousel.
   @Prop({ default: false, index: true })

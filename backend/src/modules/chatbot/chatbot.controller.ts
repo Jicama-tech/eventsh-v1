@@ -21,9 +21,17 @@ export class ChatbotController {
   ) {
     const organizerId = req.user?.userId || req.user?.sub;
     const organizerName: string = req.user?.name || "there";
+    // Operators have `accessTabs` on their JWT (see auth.controller.ts
+    // mintOrganizerToken). Organizers don't — they get full access.
+    const operatorAccessTabs: string[] | null = Array.isArray(
+      req.user?.accessTabs,
+    )
+      ? (req.user.accessTabs as string[])
+      : null;
     return this.chatbot.handleMessage({
       organizerId,
       organizerName,
+      operatorAccessTabs,
       message: String(body.message || "").slice(0, 4000),
     });
   }

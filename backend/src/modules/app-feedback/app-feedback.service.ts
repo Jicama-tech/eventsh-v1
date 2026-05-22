@@ -11,6 +11,7 @@ import {
 } from "./schemas/app-feedback.schema";
 import {
   SubmitAppFeedbackDto,
+  SubmitSupportDto,
   UpdateAppFeedbackDto,
 } from "./dto/app-feedback.dto";
 import { OtpService } from "../otp/otp.service";
@@ -51,6 +52,7 @@ export class AppFeedbackService {
     await this.otpService.verifyOtp(email, "app_feedback", dto.otp);
 
     const doc = await this.model.create({
+      kind: "testimonial",
       name: dto.name.trim(),
       role: dto.role || "general",
       email,
@@ -66,9 +68,10 @@ export class AppFeedbackService {
   }
 
   // Public — the carousel content. Excludes hidden + non-featured rows.
+  // $ne filter on kind treats pre-existing rows (no kind field) as testimonials.
   async getFeatured() {
     const rows = await this.model
-      .find({ featured: true, hidden: false })
+      .find({ featured: true, hidden: false, kind: { $ne: "support" } })
       .sort({ featuredOrder: 1, createdAt: -1 })
       .select("name role rating comment city createdAt")
       .lean();
@@ -79,7 +82,7 @@ export class AppFeedbackService {
   // (not only featured) so the aggregate reflects real volume.
   async getStats() {
     const rows = await this.model
-      .find({ hidden: false })
+      .find({ hidden: false, kind: { $ne: "support" } })
       .select("rating")
       .lean();
     const count = rows.length;
@@ -94,7 +97,7 @@ export class AppFeedbackService {
 
   // Super-admin — full list with filter chips driving the curation tab.
   async listAll(filter: "all" | "pending" | "featured" | "hidden" = "pending") {
-    const q: any = {};
+    const q: any = { kind: { $ne: "support" } };
     if (filter === "pending") {
       q.featured = false;
       q.hidden = false;
@@ -105,6 +108,49 @@ export class AppFeedbackService {
       q.hidden = true;
     }
     const rows = await this.model.find(q).sort({ createdAt: -1 }).lean();
+    return { items: rows };
+  }
+
+  // ── Support tickets ────────────────────────────────────────────────────
+
+  // Organizer submits a support ticket from the dashboard. JWT already
+  // authenticated them, so no OTP. We stamp identity from the token rather
+  // than trusting any client-supplied name/email.
+  async submitSupport(args: {
+    userId?: string;
+    email?: string;
+    name?: string;
+    dto: SubmitSupportDto;
+    attachmentUrls: string[];
+  }) {
+    const { userId, email, name, dto, attachmentUrls } = args;
+    const doc = await this.model.create({
+      kind: "support",
+      // Body is required on the schema; description carries the support detail.
+      name: (name || email || "Organizer").trim(),
+      role: "organizer",
+      email: email?.trim().toLowerCase(),
+      rating: 0,
+      comment: dto.description.trim(),
+      originalComment: dto.description.trim(),
+      subject: dto.subject.trim(),
+      category: dto.category,
+      status: "open",
+      attachments: attachmentUrls,
+      submittedByUserId: userId as any,
+      featured: false,
+      hidden: false,
+    });
+    return { ok: true, id: doc._id };
+  }
+
+  // Lists the support tickets the calling organizer submitted, newest first.
+  async listMySupport(userId: string) {
+    const rows = await this.model
+      .find({ kind: "support", submittedByUserId: userId as any })
+      .sort({ createdAt: -1 })
+      .select("subject category status attachments comment createdAt updatedAt")
+      .lean();
     return { items: rows };
   }
 

@@ -71,7 +71,7 @@ const PayNowQRGenerator: React.FC<PayNowQRProps> = ({
           </div>
 
           <p className="mt-2 text-sm font-medium">
-            Scan to pay S${total.toFixed(2)} (Fixed amount)
+            Scan to pay SG${total.toFixed(2)} (Fixed amount)
           </p>
 
           <button

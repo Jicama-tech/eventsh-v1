@@ -24,13 +24,181 @@ type Tab =
   | "feedback"
   | "general";
 
+/**
+ * Operator access tabs — must mirror OPERATOR_TABS in
+ * backend/src/modules/operators/entities/operator.entity.ts. Keep in sync
+ * when adding/removing tabs in either place.
+ */
+type OperatorTab =
+  | "chatbot"
+  | "dashboard"
+  | "kiosk"
+  | "eventAttendees"
+  | "users"
+  | "events"
+  | "storefront"
+  | "settings";
+
+/**
+ * Each chatbot tab is gated by exactly one operator tab. `general` is the
+ * fallback / catch-all tab and stays universally available — but the
+ * individual tools the LLM can invoke within `general` are filtered
+ * separately via TOOL_GUARDED_BY, so this isn't a leak.
+ */
+const CHATBOT_TAB_GUARDED_BY: Record<Tab, OperatorTab | null> = {
+  dashboard: "dashboard",
+  events: "events",
+  tickets: "events",
+  attendees: "eventAttendees",
+  stalls: "events",
+  speakers: "events",
+  storefront: "storefront",
+  settings: "settings",
+  platformFees: "settings",
+  feedback: "settings",
+  general: null,
+};
+
+/**
+ * Each named tool (per OpenAI function definition) is gated by exactly one
+ * operator tab. When an operator's session has a restricted accessTabs list,
+ * tools whose required tab is not in that list are stripped from the LLM's
+ * toolbox before the request is sent — the model can't invoke what it
+ * doesn't see, and the response can't leak data the operator shouldn't read.
+ * Tools missing from this map are treated as universally allowed.
+ */
+const TOOL_GUARDED_BY: Record<string, OperatorTab> = {
+  // Dashboard / analytics
+  get_dashboard_stats: "dashboard",
+  get_revenue_trend: "dashboard",
+  get_top_events: "dashboard",
+  get_pending_approvals: "dashboard",
+  get_events_breakdown: "dashboard",
+  get_stalls_analytics: "dashboard",
+  get_speakers_analytics: "dashboard",
+  get_round_tables_analytics: "dashboard",
+  get_event_full_analytics: "dashboard",
+  get_ticket_type_breakdown: "dashboard",
+  get_attendance_analytics: "dashboard",
+  get_event_participants: "dashboard",
+  // Events
+  list_events: "events",
+  get_event_detail: "events",
+  create_event: "events",
+  create_full_event: "events",
+  request_edit_event: "events",
+  add_ticket_type: "events",
+  add_round_tables: "events",
+  add_stalls: "events",
+  add_speakers: "events",
+  set_venue_config: "events",
+  publish_event: "events",
+  list_space_templates: "events",
+  list_stalls: "events",
+  list_speakers: "events",
+  // Attendees / tickets
+  list_tickets: "eventAttendees",
+  get_ticket_detail: "eventAttendees",
+  mark_ticket_used: "eventAttendees",
+  list_attendees: "eventAttendees",
+  search_attendee: "eventAttendees",
+  list_visitors: "users",
+  list_exhibitors: "users",
+  // Settings / billing
+  get_subscription: "settings",
+  list_plans: "settings",
+  list_operators: "settings",
+  get_organizer_info: "settings",
+  get_organization_settings: "settings",
+  // Storefront
+  // (no dedicated tools today; navigate_to handles it)
+  // Universal — navigation is allowed everywhere; the destination tab
+  // is enforced by the frontend route guard.
+  // navigate_to: intentionally absent from this map → unrestricted
+};
+
+/** Friendly module names shown to operators in refusal messages. */
+const FRIENDLY_TAB_NAME: Record<OperatorTab, string> = {
+  chatbot: "Chatbot",
+  dashboard: "Dashboard",
+  kiosk: "Kiosk",
+  eventAttendees: "Event Attendees",
+  users: "Users",
+  events: "Events",
+  storefront: "Storefront",
+  settings: "Settings",
+};
+
+/**
+ * Per-tab quick-action pills attached to each chatbot reply. The pill text
+ * is sent as a follow-up message when clicked, so labels and `action`
+ * strings should read naturally as user prompts. Each pill carries the
+ * operator tab that gates it — pills whose tab the operator doesn't have
+ * are filtered out entirely (hidden, not refused).
+ */
+type QuickActionSpec = {
+  label: string;
+  action: string;
+  requires: OperatorTab | null;
+};
+const QUICK_ACTIONS_BY_TAB: Record<Tab, QuickActionSpec[]> = {
+  dashboard: [
+    { label: "Top events", action: "Show me my top events", requires: "dashboard" },
+    { label: "Revenue this month", action: "What's my revenue this month?", requires: "dashboard" },
+    { label: "Pending approvals", action: "Any pending approvals?", requires: "dashboard" },
+  ],
+  events: [
+    { label: "Create event", action: "Create a new event", requires: "events" },
+    { label: "List my events", action: "List all my events", requires: "events" },
+    { label: "Upcoming events", action: "Show my upcoming events", requires: "events" },
+  ],
+  tickets: [
+    { label: "List tickets", action: "List tickets for my latest event", requires: "events" },
+    { label: "Mark ticket used", action: "I want to mark a ticket as used", requires: "eventAttendees" },
+  ],
+  attendees: [
+    { label: "List attendees", action: "Show me all attendees", requires: "eventAttendees" },
+    { label: "Find attendee", action: "Find an attendee by name", requires: "eventAttendees" },
+    { label: "Visitors", action: "List my visitors", requires: "users" },
+    { label: "Exhibitors", action: "List my exhibitors", requires: "users" },
+  ],
+  stalls: [
+    { label: "Stall analytics", action: "Show stall analytics", requires: "events" },
+    { label: "List exhibitors", action: "List my exhibitors", requires: "users" },
+  ],
+  speakers: [
+    { label: "List speakers", action: "List my speakers", requires: "events" },
+    { label: "Speaker analytics", action: "Show speaker analytics", requires: "events" },
+  ],
+  storefront: [
+    { label: "Open storefront", action: "Take me to storefront customization", requires: "storefront" },
+  ],
+  settings: [
+    { label: "My subscription", action: "Show my subscription", requires: "settings" },
+    { label: "Operators", action: "List my operators", requires: "settings" },
+    { label: "My profile", action: "Show my organization profile", requires: "settings" },
+  ],
+  platformFees: [
+    { label: "What do I owe?", action: "How much do I owe in platform fees?", requires: "settings" },
+    { label: "Open platform fees", action: "Take me to platform fees", requires: "settings" },
+  ],
+  feedback: [
+    { label: "Open feedback", action: "Take me to feedback", requires: "settings" },
+  ],
+  general: [
+    { label: "My events", action: "List my events", requires: "events" },
+    { label: "Dashboard summary", action: "Give me a dashboard summary", requires: "dashboard" },
+    { label: "Help", action: "What can you help me with?", requires: null },
+  ],
+};
+
 // Country → currency lookup. Add new countries here as eventsh expands.
 const COUNTRY_CURRENCY: Record<
   string,
   { symbol: string; code: string; locale: string }
 > = {
   IN: { symbol: "₹", code: "INR", locale: "en-IN" },
-  SG: { symbol: "S$", code: "SGD", locale: "en-SG" },
+  SG: { symbol: "SG$", code: "SGD", locale: "en-SG" },
   US: { symbol: "$", code: "USD", locale: "en-US" },
   GB: { symbol: "£", code: "GBP", locale: "en-GB" },
   AE: { symbol: "AED ", code: "AED", locale: "en-AE" },
@@ -1221,13 +1389,42 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
   // ============================================================
   // MAIN ENTRY
   // ============================================================
+  /**
+   * Returns true when the operator's access list allows the given operator
+   * tab. A null/empty operatorAccessTabs means the caller is an organizer
+   * (or admin) with full access — always returns true.
+   */
+  private isOperatorAllowed(
+    operatorAccessTabs: string[] | null | undefined,
+    required: OperatorTab | null,
+  ): boolean {
+    if (!required) return true;
+    if (!operatorAccessTabs || operatorAccessTabs.length === 0) return true;
+    return operatorAccessTabs.includes(required);
+  }
+
+  /** Friendly refusal text shown when an operator hits a gated module. */
+  private accessRefusal(required: OperatorTab): {
+    text: string;
+    quickActions?: Array<{ label: string; action: string }>;
+  } {
+    const label = FRIENDLY_TAB_NAME[required] || "that module";
+    return {
+      text:
+        `That's part of the **${label}** module, which isn't enabled on your operator profile. ` +
+        `Ask your organizer admin to grant access if you need it — happy to help with anything else in the meantime!`,
+    };
+  }
+
   async handleMessage({
     organizerId,
     organizerName,
+    operatorAccessTabs,
     message,
   }: {
     organizerId: string;
     organizerName: string;
+    operatorAccessTabs?: string[] | null;
     message: string;
   }) {
     if (!this.hasApiKey()) {
@@ -1255,6 +1452,24 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
       history.push({ role: "assistant", content: walkin.text, ts: Date.now() });
       this.trimHistory(organizerId);
       return walkin;
+    }
+
+    // Deterministic short-circuit: pay platform fees — render an inline
+    // payment widget in the chat bubble. Gated by the same `settings`
+    // operator tab that protects the rest of the platform-fees module, so
+    // operators without settings access get a friendly refusal instead.
+    const feeForm = await this.maybePlatformFeeForm(message, organizerId, {
+      orgName,
+      operatorAccessTabs,
+    });
+    if (feeForm) {
+      history.push({
+        role: "assistant",
+        content: feeForm.text,
+        ts: Date.now(),
+      });
+      this.trimHistory(organizerId);
+      return feeForm;
     }
 
     // Deterministic short-circuit: create / edit event form requests.
@@ -1323,6 +1538,24 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
       const tab = await this.route(message, history);
       this.logger.debug(`Routed to ${tab}`);
 
+      // 1a. Operator access gate. If the routed tab is gated by an operator
+      // tab the caller doesn't have, return a friendly refusal without
+      // calling the specialist (and without leaking data via tool calls).
+      const requiredOperatorTab = CHATBOT_TAB_GUARDED_BY[tab];
+      if (
+        requiredOperatorTab &&
+        !this.isOperatorAllowed(operatorAccessTabs, requiredOperatorTab)
+      ) {
+        const refusal = this.accessRefusal(requiredOperatorTab);
+        history.push({
+          role: "assistant",
+          content: refusal.text,
+          ts: Date.now(),
+        });
+        this.trimHistory(organizerId);
+        return refusal;
+      }
+
       // 2. Run specialist
       const result = await this.runSpecialist({
         tab,
@@ -1333,6 +1566,7 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
         currency,
         history,
         userMessage: message,
+        operatorAccessTabs,
       });
 
       // 3. Save assistant message
@@ -1458,6 +1692,7 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     currency,
     history,
     userMessage,
+    operatorAccessTabs,
   }: {
     tab: Tab;
     organizerId: string;
@@ -1467,7 +1702,12 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     currency: { symbol: string; code: string; locale: string };
     history: ConvEntry[];
     userMessage: string;
-  }): Promise<{ text: string; botAction?: any }> {
+    operatorAccessTabs?: string[] | null;
+  }): Promise<{
+    text: string;
+    botAction?: any;
+    quickActions?: Array<{ label: string; action: string }>;
+  }> {
     const tabPrompt = (
       ChatbotService.SPECIALIST_PROMPTS[tab] ||
       ChatbotService.SPECIALIST_PROMPTS.general
@@ -1485,9 +1725,14 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     const specialistPrompt = globalWithCurrency + "\n" + tabPrompt;
 
     const allowedToolNames = ChatbotService.TAB_TOOLS[tab] || [];
-    const tools = this.tools.filter((t) =>
-      allowedToolNames.includes((t as any).function.name),
-    );
+    // Filter the toolbox by both the tab AND the operator's accessTabs.
+    // Tools missing from TOOL_GUARDED_BY are universally allowed.
+    const tools = this.tools.filter((t) => {
+      const name = (t as any).function.name as string;
+      if (!allowedToolNames.includes(name)) return false;
+      const required = TOOL_GUARDED_BY[name];
+      return this.isOperatorAllowed(operatorAccessTabs, required ?? null);
+    });
 
     const systemMsg: OpenAI.Chat.ChatCompletionMessageParam = {
       role: "system",
@@ -1630,7 +1875,16 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     this.logger.log(
       `Final assistant text: ${text.slice(0, 500).replace(/\n/g, " | ")}`,
     );
-    return { text, botAction };
+    // Tab-scoped follow-up pills, filtered by the caller's operator access.
+    // Pills for modules the operator can't see are hidden entirely.
+    const quickActions = (QUICK_ACTIONS_BY_TAB[tab] || [])
+      .filter((qa) => this.isOperatorAllowed(operatorAccessTabs, qa.requires))
+      .map(({ label, action }) => ({ label, action }));
+    return {
+      text,
+      botAction,
+      ...(quickActions.length ? { quickActions } : {}),
+    };
   }
 
   /** Detect walk-in / kiosk booking intent and return an inline
@@ -1732,6 +1986,58 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
             maxCount: v.maxCount,
           })),
         })),
+      },
+    };
+  }
+
+  /** Detect "pay platform fees" intent and return an inline payment-widget
+   *  payload that ChatbotWidget renders as <InlinePlatformFeeForm/> inside
+   *  the bubble. The widget then calls the existing organizer-facing billing
+   *  endpoints (/billing-payments/me, /billing-payments/initiate,
+   *  /billing-payments/:id/mark-paid) — no new routes required.
+   *
+   *  Gated by the `settings` operator tab: an operator without that access
+   *  hits the same friendly refusal used by the rest of Phase A. Organizers
+   *  (no operator profile) always pass. */
+  private async maybePlatformFeeForm(
+    message: string,
+    organizerId: string,
+    opts: {
+      orgName: string;
+      operatorAccessTabs?: string[] | null;
+    },
+  ): Promise<{
+    text: string;
+    platformFeeForm?: {
+      organizerName: string;
+    };
+  } | null> {
+    const m = message.toLowerCase();
+    const intent =
+      /\bpay\s+(?:my\s+|the\s+)?(?:platform\s+)?(?:fee|fees|dues?|charges?|bills?|invoices?)\b/.test(
+        m,
+      ) ||
+      /\bsettle\s+(?:my\s+|the\s+)?(?:platform\s+)?(?:fee|fees|dues?|charges?|bills?|invoices?)\b/.test(
+        m,
+      ) ||
+      /\bpay\s+(?:my\s+)?event\s+fee/.test(m) ||
+      /\bpay\s+(?:my\s+)?eventsh\s+fee/.test(m) ||
+      /\bpay\s+(?:my\s+)?(?:platform|admin)\s+(?:charge|charges)/.test(m);
+    if (!intent) return null;
+
+    // Operator access gate — same friendly refusal Phase A uses for any
+    // settings-module request. Keeps the "platform fees lives under
+    // settings" decision consistent across chat and dashboard.
+    if (!this.isOperatorAllowed(opts.operatorAccessTabs, "settings")) {
+      return this.accessRefusal("settings");
+    }
+
+    return {
+      text:
+        "Sure — pick the event below to pay its platform fee. " +
+        "I'll generate a QR code; scan it from your bank app, then tap **I have paid** so the admin can verify and confirm.",
+      platformFeeForm: {
+        organizerName: opts.orgName,
       },
     };
   }

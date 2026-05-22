@@ -73,7 +73,7 @@ interface BillingResponse {
 
 function symbolFor(currency?: string) {
   if (currency === "INR") return "₹";
-  if (currency === "SGD") return "S$";
+  if (currency === "SGD") return "SG$";
   return "$";
 }
 

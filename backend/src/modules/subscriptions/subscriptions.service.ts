@@ -228,7 +228,7 @@ export class SubscriptionsService {
 
   private currencySymbol(currency: string) {
     if (currency === "INR") return "Rs.";
-    if (currency === "SGD") return "S$";
+    if (currency === "SGD") return "SG$";
     return "$";
   }
 
@@ -716,7 +716,7 @@ export class SubscriptionsService {
       Array.isArray(plan.features) && plan.features.length
         ? plan.features.map((f: string) => `  • ${f}`).join("\n")
         : "  • (no features listed)";
-    const symbol = doc.currency === "INR" ? "₹" : doc.currency === "SGD" ? "S$" : "$";
+    const symbol = doc.currency === "INR" ? "₹" : doc.currency === "SGD" ? "SG$" : "$";
     const validTill = organizer.planExpiryDate
       ? new Date(organizer.planExpiryDate).toLocaleDateString()
       : "—";

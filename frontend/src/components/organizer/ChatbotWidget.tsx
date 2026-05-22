@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InlineWalkinForm } from "./InlineWalkinForm";
 import {
+  InlinePlatformFeeForm,
+  type PlatformFeeFormPayload,
+} from "./InlinePlatformFeeForm";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -56,7 +60,7 @@ const apiURL = __API_URL__;
 
 const COUNTRY_CURRENCY: Record<string, { symbol: string; locale: string }> = {
   IN: { symbol: "₹", locale: "en-IN" },
-  SG: { symbol: "S$", locale: "en-SG" },
+  SG: { symbol: "SG$", locale: "en-SG" },
   US: { symbol: "$", locale: "en-US" },
   GB: { symbol: "£", locale: "en-GB" },
   AE: { symbol: "AED ", locale: "en-AE" },
@@ -114,6 +118,7 @@ interface Message {
   quickActions?: QuickAction[];
   eventPicker?: EventPicker;
   walkinForm?: WalkinFormPayload;
+  platformFeeForm?: PlatformFeeFormPayload;
   botAction?: BotAction;
   ts: number;
 }
@@ -1082,6 +1087,7 @@ export function ChatbotWidget({
           quickActions: data.quickActions,
           eventPicker: data.eventPicker,
           walkinForm: data.walkinForm,
+          platformFeeForm: data.platformFeeForm,
           botAction: data.botAction,
           ts: Date.now(),
         };
@@ -1609,6 +1615,12 @@ export function ChatbotWidget({
                     />
                   </div>
                 )}
+                {/* Pay platform-fees inline form */}
+                {m.role === "assistant" && m.platformFeeForm && (
+                  <div className="ml-9">
+                    <InlinePlatformFeeForm payload={m.platformFeeForm} />
+                  </div>
+                )}
               </div>
             ))}
 
@@ -1883,7 +1895,7 @@ function SubscriptionMarqueeRow({
   country?: string;
   ariaHidden?: boolean;
 }) {
-  const symbol = country === "IN" ? "₹" : country === "SG" ? "S$" : "$";
+  const symbol = country === "IN" ? "₹" : country === "SG" ? "SG$" : "$";
   const validTill = subscription.planExpiryDate
     ? new Date(subscription.planExpiryDate).toLocaleDateString(undefined, {
         year: "numeric",
