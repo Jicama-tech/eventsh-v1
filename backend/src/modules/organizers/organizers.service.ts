@@ -1024,7 +1024,7 @@ export class OrganizersService {
       { symbol: string; code: string; locale: string }
     > = {
       IN: { symbol: "₹", code: "INR", locale: "en-IN" },
-      SG: { symbol: "S$", code: "SGD", locale: "en-SG" },
+      SG: { symbol: "SG$", code: "SGD", locale: "en-SG" },
       US: { symbol: "$", code: "USD", locale: "en-US" },
       GB: { symbol: "£", code: "GBP", locale: "en-GB" },
       AE: { symbol: "AED ", code: "AED", locale: "en-AE" },

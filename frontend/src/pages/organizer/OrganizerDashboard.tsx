@@ -31,6 +31,7 @@ import {
   PanelLeftOpen,
   MessageSquare,
   Receipt,
+  LifeBuoy,
 } from "lucide-react";
 import {
   Tooltip,
@@ -131,6 +132,9 @@ const OrganizerStorefrontCustomizer = lazy(() =>
 );
 const RoundTableBookings = lazy(
   () => import("@/components/organizer/RoundTableBookings"),
+);
+const SupportPanel = lazy(
+  () => import("@/components/organizer/SupportPanel"),
 );
 
 function RoundTableBookingsTab({ apiURL }: { apiURL: string }) {
@@ -803,6 +807,12 @@ export function OrganizerDashboard({
       moduleKey: "events",
     },
     {
+      id: "support",
+      label: "Support",
+      icon: LifeBuoy,
+      moduleKey: null,
+    },
+    {
       id: "storefront",
       label: "Eventfront",
       icon: Globe,
@@ -1223,6 +1233,12 @@ export function OrganizerDashboard({
                   <div>
                     <OrganizerSettings onSave={handleSaveSettings} />
                   </div>
+                </Suspense>
+              </TabsContent>
+
+              <TabsContent value="support" className="mt-0">
+                <Suspense fallback={<TabLoader />}>
+                  <SupportPanel />
                 </Suspense>
               </TabsContent>
 

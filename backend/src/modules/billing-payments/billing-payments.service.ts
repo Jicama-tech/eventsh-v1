@@ -395,7 +395,7 @@ export class BillingPaymentsService {
   // ---------------------------------------------------------------------------
   private currencySymbol(currency: string) {
     if (currency === "INR") return "Rs.";
-    if (currency === "SGD") return "S$";
+    if (currency === "SGD") return "SG$";
     return "$";
   }
 
