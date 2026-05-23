@@ -14,6 +14,7 @@ import {
   Req,
   ParseIntPipe,
   ValidationPipe,
+  ForbiddenException,
 } from "@nestjs/common";
 import {
   FileInterceptor,
@@ -29,6 +30,8 @@ import { UpdateEventDto } from "./dto/updateEvent.dto";
 import { v4 as uuidv4 } from "uuid";
 import * as path from "path";
 import { WebpValidationPipe } from "../../seed/parse-webp.pipe";
+import { InjectModel } from "@nestjs/mongoose";
+import { Model } from "mongoose";
 
 function generateFileName(req: any, file: any, cb: any) {
   const ext = path.extname(file.originalname);
@@ -52,7 +55,61 @@ export class EventsController {
   constructor(
     private readonly eventsService: EventsService,
     private readonly eventImportService: EventImportService,
+    @InjectModel("Organizer") private readonly organizerModel: Model<any>,
+    @InjectModel("Plan") private readonly planModel: Model<any>,
   ) {}
+
+  // Individual users (Google-signed-in, never registered as an organizer)
+  // don't yet have an Organizer document. On their first event publish we
+  // lazy-create one with accountType:"Individual" and auto-assign the
+  // default Individual plan so the rest of the events/attendees pipeline
+  // — which all keys off organizerId — has a valid record to attach to.
+  private async ensureIndividualOrganizer(user: {
+    email?: string;
+    name?: string;
+    sub?: string;
+  }): Promise<any> {
+    const email = (user?.email || "").toLowerCase();
+    if (!email) {
+      throw new ForbiddenException("Token missing email — please sign in again.");
+    }
+    const existing = await this.organizerModel.findOne({ email });
+    if (existing) return existing;
+
+    const defaultPlan = await this.planModel.findOne({
+      moduleType: "Individual",
+      isDefault: true,
+      isActive: true,
+    });
+    const validity = Number(defaultPlan?.validityInDays);
+    const subFields =
+      defaultPlan && Number.isFinite(validity) && validity > 0
+        ? {
+            subscribed: true,
+            planId: defaultPlan._id,
+            planStartDate: new Date(),
+            planExpiryDate: new Date(
+              Date.now() + validity * 24 * 60 * 60 * 1000,
+            ),
+            pricePaid: defaultPlan.price?.toString?.() ?? "0",
+          }
+        : {};
+    const displayName = user?.name || email.split("@")[0];
+    // whatsAppNumber + businessEmail have unique indexes — use synthetic
+    // placeholders keyed on email so each Individual gets a distinct value.
+    return await new this.organizerModel({
+      name: displayName,
+      email,
+      organizationName: displayName,
+      businessEmail: email,
+      whatsAppNumber: `individual:${email}`,
+      accountType: "Individual",
+      approved: true,
+      rejected: false,
+      provider: "google",
+      ...subFields,
+    }).save();
+  }
 
   @Post("import-from-url")
   @UseGuards(AuthGuard("jwt"))
@@ -92,8 +149,31 @@ export class EventsController {
     @Req() req: any,
   ) {
     try {
-      // Extract organizer ID from JWT token
-      body.organizerId = req.user.userId || req.user.sub || body.organizerId;
+      const roles: string[] = req.user?.roles || [];
+      const isOrganizer = roles.includes("organizer") || roles.includes("admin");
+      const isIndividual = roles.includes("individual");
+      if (!isOrganizer && !isIndividual) {
+        throw new ForbiddenException({
+          message: "Sign in to create events.",
+          redirectTo: "/",
+        });
+      }
+
+      if (isIndividual && !isOrganizer) {
+        // Lazy-create the Organizer row backing this Individual user. The
+        // first publish becomes a one-shot upgrade: the JWT still says
+        // roles:["individual"] (frontend keeps chatbot-only UI), but
+        // events/attendees/tickets now key off a real organizerId.
+        const org = await this.ensureIndividualOrganizer({
+          email: req.user?.email,
+          name: req.user?.name,
+          sub: req.user?.sub,
+        });
+        body.organizerId = String(org._id);
+      } else {
+        // Extract organizer ID from JWT token
+        body.organizerId = req.user.userId || req.user.sub || body.organizerId;
+      }
 
       // Parse JSON strings from FormData
       if (typeof body.tags === "string") body.tags = JSON.parse(body.tags);

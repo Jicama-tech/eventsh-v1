@@ -34,6 +34,7 @@ import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Autoplay } from "swiper/modules";
 import "swiper/css";
 import { TestimonialsCarousel } from "@/components/landing/TestimonialsCarousel";
+import { PublicChatbot } from "@/components/landing/PublicChatbot";
 import { cn } from "@/lib/utils";
 import { useState, useRef, ReactNode, useEffect } from "react";
 import { Menu, X } from "lucide-react";
@@ -415,6 +416,9 @@ const LandingPage = () => {
           </div>
         </div>
       </section>
+
+      {/* Public AI chatbot — FAQ + first-event onboarding (inline Google auth) */}
+      <PublicChatbot />
 
       {/* Why Choose Us */}
       <section className="py-24 bg-[#1a1a1a]">

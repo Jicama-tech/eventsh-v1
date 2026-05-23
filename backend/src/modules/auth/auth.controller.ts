@@ -25,6 +25,7 @@ import { RoleService } from "../roles/roles.service";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
+import { OAuth2Client } from "google-auth-library";
 
 @Controller("auth")
 export class AuthController {
@@ -233,10 +234,43 @@ export class AuthController {
         });
       }
 
-      // 0 → registration
+      // 0 organizer / operator records → "Individual" onboarding. We still
+      // sign the user in (so the dashboard chatbot can talk to them) but
+      // mark them as `roles:["individual"]`. The frontend gates the sidebar
+      // off in this mode and only lets them chat or open the registration
+      // form via the chatbot.
       if (accounts.length === 0) {
-        const params = new URLSearchParams({ email, name });
-        return res.redirect(`${fe}/register?${params.toString()}`);
+        let user = await this.usersService.findByEmail(email);
+        if (!user) {
+          user = await this.usersService.create({
+            name,
+            email,
+            password: null,
+            provider: "google",
+            providerId: userFromGoogle.oauthId || userFromGoogle.providerId,
+          } as any);
+        }
+        // Promote to "individual" without clobbering higher roles if the
+        // user somehow already has them (defensive — admin/agent should
+        // never reach this branch, but if they do, we don't downgrade them).
+        const elevated = ["admin", "organizer", "agent"];
+        const currentRoles: string[] = (user as any).roles || [];
+        if (!currentRoles.some((r) => elevated.includes(r))) {
+          (user as any).roles = ["individual"];
+          await (user as any).save?.();
+        }
+        const token = this.jwtService.sign(
+          {
+            name: (user as any).name || name,
+            email: (user as any).email || email,
+            sub: (user as any)._id?.toString(),
+            roles: (user as any).roles || ["individual"],
+          },
+          { secret: process.env.JWT_ACCESS_SECRET, expiresIn: "24h" } as any,
+        );
+        return res.redirect(
+          `${fe}/organizer-dashboard?token=${encodeURIComponent(token)}`,
+        );
       }
 
       // 1 → direct login (or pending block)
@@ -265,6 +299,195 @@ export class AuthController {
     } catch (error) {
       return res.redirect(`${fe}/organizer/login?error=auth_failed`);
     }
+  }
+
+  // Inline Google sign-in from the landing-page chatbot. Frontend uses
+  // @react-oauth/google's useGoogleLogin (auth-code flow) which opens a
+  // popup and returns a one-time authorization code. We exchange that
+  // code server-side using client_secret for tokens, verify the id_token
+  // signature with google-auth-library, then route by what we find:
+  //   - 1+ organizer/operator records on the email → organizer JWT
+  //   - none → create/reuse an Individual user, return individual JWT
+  // The frontend stores the token and navigates to `routeTo`.
+  //
+  // We also accept `{ credential }` (an id_token from One Tap / GIS
+  // credential flow) for forward compatibility.
+  @Post("google-token-exchange")
+  async googleTokenExchange(
+    @Body() body: { code?: string; credential?: string; redirectUri?: string },
+  ) {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    if (!clientId) {
+      throw new InternalServerErrorException(
+        "GOOGLE_CLIENT_ID not configured on the server",
+      );
+    }
+
+    let payload: {
+      email?: string;
+      name?: string;
+      sub?: string;
+      email_verified?: boolean;
+    } = {};
+
+    if (body?.code) {
+      if (!clientSecret) {
+        throw new InternalServerErrorException(
+          "GOOGLE_CLIENT_SECRET not configured — needed for auth-code exchange",
+        );
+      }
+      // `postmessage` is the redirect_uri the GIS popup uses. The OAuth
+      // client must allow it (web app type does by default). We also
+      // accept an explicit redirectUri override for non-popup callers.
+      const redirectUri = body.redirectUri || "postmessage";
+      const oauth2 = new OAuth2Client(clientId, clientSecret, redirectUri);
+      try {
+        const { tokens } = await oauth2.getToken(body.code);
+        if (!tokens?.id_token) {
+          throw new Error("Google response had no id_token");
+        }
+        const ticket = await oauth2.verifyIdToken({
+          idToken: tokens.id_token,
+          audience: clientId,
+        });
+        const p: any = ticket.getPayload() || {};
+        payload = {
+          email: p.email,
+          name: p.name,
+          sub: p.sub,
+          email_verified: p.email_verified,
+        };
+      } catch (err: any) {
+        console.error(
+          "[google-token-exchange] code exchange failed:",
+          err?.message || err,
+        );
+        throw new UnauthorizedException(
+          err?.message
+            ? `Google rejected the auth code: ${err.message}`
+            : "Google rejected the auth code",
+        );
+      }
+    } else if (body?.credential) {
+      const oauth2 = new OAuth2Client(clientId);
+      try {
+        const ticket = await oauth2.verifyIdToken({
+          idToken: body.credential,
+          audience: clientId,
+        });
+        const p: any = ticket.getPayload() || {};
+        payload = {
+          email: p.email,
+          name: p.name,
+          sub: p.sub,
+          email_verified: p.email_verified,
+        };
+      } catch (err: any) {
+        console.error(
+          "[google-token-exchange] id_token verify failed:",
+          err?.message || err,
+        );
+        throw new UnauthorizedException(
+          err?.message
+            ? `Google id_token verification failed: ${err.message}`
+            : "Google id_token verification failed",
+        );
+      }
+    } else {
+      throw new UnauthorizedException(
+        "Missing 'code' or 'credential' in request body",
+      );
+    }
+
+    if (!payload?.email) {
+      console.error(
+        "[google-token-exchange] verified payload missing email:",
+        Object.keys(payload || {}),
+      );
+      throw new UnauthorizedException(
+        "Google response didn't include an email — make sure the OAuth scopes include 'email'.",
+      );
+    }
+
+    let name = payload.name || (payload.email as string).split("@")[0];
+    const email = (payload.email as string).toLowerCase();
+    const profile = { email, name, sub: payload.sub as string };
+
+    // Case-insensitive match — operator records aren't normalized to
+    // lowercase, so a plain equality check would silently miss them.
+    const escaped = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const emailRegex = new RegExp(`^${escaped}$`, "i");
+
+    const [organizers, operators] = await Promise.all([
+      this.organizerModel.find({ email: emailRegex }).lean(),
+      this.operatorModel.find({ email: emailRegex }).lean(),
+    ]);
+
+    // For an inline flow we don't ask the user to pick — if multiple
+    // accounts exist, pick the first approved organizer. Multi-account
+    // disambiguation stays on the /organizer/login redirect flow.
+    const approvedOrg = (organizers as any[]).find(
+      (o) => o.approved && !o.rejected,
+    );
+    if (approvedOrg) {
+      const token = await this.mintOrganizerToken(
+        String(approvedOrg._id),
+        "organizer",
+      );
+      return {
+        token,
+        routeTo: "/organizer-dashboard",
+        accountType: "organizer" as const,
+      };
+    }
+    const approvedOp = (operators as any[]).find((o) => o.organizerId);
+    if (approvedOp) {
+      const token = await this.mintOrganizerToken(
+        String(approvedOp._id),
+        "operator",
+      );
+      return {
+        token,
+        routeTo: "/organizer-dashboard",
+        accountType: "organizer" as const,
+      };
+    }
+
+    // No organizer/operator → Individual onboarding. Same code path as
+    // googleOrganizerRedirect's individual branch, returned as JSON.
+    let user = await this.usersService.findByEmail(email);
+    const isNew = !user;
+    if (!user) {
+      user = await this.usersService.create({
+        name,
+        email,
+        password: null,
+        provider: "google",
+        providerId: profile.sub,
+      } as any);
+    }
+    const elevated = ["admin", "organizer", "agent"];
+    const currentRoles: string[] = (user as any).roles || [];
+    if (!currentRoles.some((r) => elevated.includes(r))) {
+      (user as any).roles = ["individual"];
+      await (user as any).save?.();
+    }
+    const token = this.jwtService.sign(
+      {
+        name: (user as any).name || name,
+        email: (user as any).email || email,
+        sub: (user as any)._id?.toString(),
+        roles: (user as any).roles || ["individual"],
+      },
+      { secret: process.env.JWT_ACCESS_SECRET, expiresIn: "24h" } as any,
+    );
+    return {
+      token,
+      routeTo: "/organizer-dashboard",
+      accountType: "individual" as const,
+      isNew,
+    };
   }
 
   // Exchange a selection token + chosen account for the real organizer JWT.

@@ -110,7 +110,27 @@ type BotAction =
   | { type: "openCreateEvent" }
   | { type: "openEditEvent"; eventId: string; eventTitle?: string }
   | { type: "openAddVisitor" }
-  | { type: "openAddExhibitor" };
+  | { type: "openAddExhibitor" }
+  | { type: "openOrganizerRegister" };
+
+interface IndividualEventCard {
+  id: string;
+  title: string;
+  date?: string;
+  status?: string;
+  ticketCount?: number;
+  revenue?: number;
+  currency?: string;
+  publicUrl?: string;
+}
+
+interface IndividualParticipant {
+  id: string;
+  name: string;
+  email?: string;
+  ticketType?: string;
+  used?: boolean;
+}
 
 interface Message {
   role: "user" | "assistant";
@@ -120,6 +140,10 @@ interface Message {
   walkinForm?: WalkinFormPayload;
   platformFeeForm?: PlatformFeeFormPayload;
   botAction?: BotAction;
+  // Individual-mode rich cards. Rendered inline as part of the chat
+  // thread when the bot returns event/participant data.
+  events?: IndividualEventCard[];
+  participants?: IndividualParticipant[];
   ts: number;
 }
 
@@ -141,6 +165,13 @@ interface ChatbotWidgetProps {
   onOpenAddVisitor?: () => void;
   /** Open the Add Exhibitor (shopkeeper) form in the Users tab. */
   onOpenAddExhibitor?: () => void;
+  /** Navigate to the organizer registration form. Triggered for Individuals
+   *  who ask the chatbot to register them as an organizer. */
+  onOpenOrganizerRegister?: () => void;
+  /** When true, the widget renders in "Individual onboarding" mode — the
+   *  starter prompt and quick-action chips only offer "Create event" and
+   *  "Become an organizer". */
+  isIndividual?: boolean;
   greeting?: string;
   mode?: "floating" | "page";
   /** Sidebar nav items rendered as "jump to" pills. If omitted, a default
@@ -848,6 +879,8 @@ export function ChatbotWidget({
   onOpenEventForm,
   onOpenAddVisitor,
   onOpenAddExhibitor,
+  onOpenOrganizerRegister,
+  isIndividual = false,
   greeting = "Hi! I am **EventSH AI** for **{ORG}**. Ask me about events, tickets, attendees, vendors, speakers — or just say hi.",
   mode = "floating",
   navItems = DEFAULT_NAV_ITEMS,
@@ -1089,6 +1122,8 @@ export function ChatbotWidget({
           walkinForm: data.walkinForm,
           platformFeeForm: data.platformFeeForm,
           botAction: data.botAction,
+          events: data.events,
+          participants: data.participants,
           ts: Date.now(),
         };
         setMessages((prev) => [...prev, botMsg]);
@@ -1132,6 +1167,15 @@ export function ChatbotWidget({
           if (onOpenAddExhibitor) {
             setTimeout(() => onOpenAddExhibitor(), 800);
           }
+        } else if (ba?.type === "openOrganizerRegister") {
+          if (onOpenOrganizerRegister) {
+            setTimeout(() => onOpenOrganizerRegister(), 800);
+          } else {
+            // eslint-disable-next-line no-console
+            console.warn(
+              "[chatbot] openOrganizerRegister received but onOpenOrganizerRegister prop is missing",
+            );
+          }
         }
       } catch (err: any) {
         setMessages((prev) => [
@@ -1146,7 +1190,14 @@ export function ChatbotWidget({
         setLoading(false);
       }
     },
-    [loading, onNavigate, onOpenEventForm, onOpenAddVisitor, onOpenAddExhibitor],
+    [
+      loading,
+      onNavigate,
+      onOpenEventForm,
+      onOpenAddVisitor,
+      onOpenAddExhibitor,
+      onOpenOrganizerRegister,
+    ],
   );
 
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
@@ -1431,10 +1482,12 @@ export function ChatbotWidget({
                       }
                     >
                       {renderMarkdown(
-                        greeting.replace(
-                          /\{ORG\}/g,
-                          orgInfo?.organizationName || "your organization",
-                        ),
+                        isIndividual
+                          ? "Welcome to **EventSH**! I can help you **create an event**, **show your events & participants**, or **register as a full organizer**. What would you like to do?"
+                          : greeting.replace(
+                              /\{ORG\}/g,
+                              orgInfo?.organizationName || "your organization",
+                            ),
                       )}
                     </div>
                   </div>
@@ -1621,6 +1674,119 @@ export function ChatbotWidget({
                     <InlinePlatformFeeForm payload={m.platformFeeForm} />
                   </div>
                 )}
+                {/* Individual: event cards (My Events flow) */}
+                {m.role === "assistant" && m.events && m.events.length > 0 && (
+                  <div className="ml-9 mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {m.events.map((ev) => (
+                      <div
+                        key={ev.id}
+                        className="border border-slate-200 rounded-lg p-3 bg-white shadow-sm"
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <div className="font-semibold text-sm text-slate-900 truncate">
+                            {ev.title}
+                          </div>
+                          {ev.status && (
+                            <span
+                              className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full font-medium ${
+                                ev.status === "published"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-amber-100 text-amber-700"
+                              }`}
+                            >
+                              {ev.status}
+                            </span>
+                          )}
+                        </div>
+                        {ev.date && (
+                          <div className="text-xs text-slate-500 flex items-center gap-1 mb-2">
+                            <Calendar className="h-3 w-3" />
+                            {new Date(ev.date).toLocaleDateString()}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-3 text-xs text-slate-700">
+                          <div className="flex items-center gap-1">
+                            <Ticket className="h-3 w-3 text-blue-500" />
+                            <span className="font-medium">
+                              {ev.ticketCount ?? 0}
+                            </span>
+                            <span className="text-slate-400">tickets</span>
+                          </div>
+                          {typeof ev.revenue === "number" && (
+                            <div className="flex items-center gap-1">
+                              <TrendingUp className="h-3 w-3 text-emerald-500" />
+                              <span className="font-medium">
+                                {(ev.currency || "$")}
+                                {ev.revenue.toLocaleString()}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-1.5 mt-2.5">
+                          <button
+                            onClick={() =>
+                              sendMessage(`Show me participants for ${ev.title}`)
+                            }
+                            disabled={loading}
+                            className="text-[11px] px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium disabled:opacity-50"
+                          >
+                            Participants
+                          </button>
+                          {ev.publicUrl && (
+                            <a
+                              href={ev.publicUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[11px] px-2 py-1 rounded border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 font-medium"
+                            >
+                              Public page
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Individual: participants list */}
+                {m.role === "assistant" &&
+                  m.participants &&
+                  m.participants.length > 0 && (
+                    <div className="ml-9 mt-2 border border-slate-200 rounded-lg bg-white shadow-sm divide-y divide-slate-100">
+                      {m.participants.map((p) => (
+                        <div
+                          key={p.id}
+                          className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium text-slate-900 truncate">
+                              {p.name}
+                            </div>
+                            {p.email && (
+                              <div className="text-xs text-slate-500 truncate">
+                                {p.email}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {p.ticketType && (
+                              <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
+                                {p.ticketType}
+                              </span>
+                            )}
+                            <span
+                              className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded font-medium ${
+                                p.used
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-slate-100 text-slate-500"
+                              }`}
+                            >
+                              {p.used ? "Checked in" : "Pending"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
               </div>
             ))}
 
@@ -1691,7 +1857,43 @@ export function ChatbotWidget({
                 </button>
               </div>
               <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
-                {SUGGESTION_CARDS.map((s, i) => (
+                {(isIndividual
+                  ? ([
+                      {
+                        category: "Onboarding",
+                        Icon: Plus,
+                        tint: "text-emerald-600 bg-emerald-50",
+                        title: "Create an event",
+                        sub: "Open the event creation form",
+                        prompt: "I want to create an event",
+                      },
+                      {
+                        category: "My Events",
+                        Icon: Calendar,
+                        tint: "text-blue-600 bg-blue-50",
+                        title: "My events",
+                        sub: "See published events, tickets, revenue",
+                        prompt: "Show my events",
+                      },
+                      {
+                        category: "My Events",
+                        Icon: Users,
+                        tint: "text-violet-600 bg-violet-50",
+                        title: "Participants",
+                        sub: "Who's coming to your event",
+                        prompt: "Show me the participants",
+                      },
+                      {
+                        category: "Onboarding",
+                        Icon: Building2,
+                        tint: "text-amber-600 bg-amber-50",
+                        title: "Become an organizer",
+                        sub: "Upgrade to a full organizer account",
+                        prompt: "I want to register as an organizer",
+                      },
+                    ] as SuggestionCard[])
+                  : SUGGESTION_CARDS
+                ).map((s, i) => (
                   <button
                     key={i}
                     type="button"

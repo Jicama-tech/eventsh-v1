@@ -1416,6 +1416,342 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     };
   }
 
+  /**
+   * Lightweight chat handler for Google-signed-in users who haven't completed
+   * organizer registration yet. The main pipeline assumes an Organizer doc
+   * exists; here we only support two intents — open the Create Event form
+   * or open the organizer registration form — plus a friendly fallback.
+   *
+   * Returned shape matches what ChatbotWidget expects (text + quickActions +
+   * botAction), so the same renderer handles both flows.
+   */
+  /**
+   * Unauthenticated chatbot for the public landing page. Matches against a
+   * small curated FAQ corpus and recognizes a "create event" intent that
+   * the frontend turns into an inline Google sign-in prompt.
+   *
+   * Intentionally NOT routed through the LLM — every visit would be a
+   * billed API call. If a question doesn't match any FAQ keyword, the
+   * bot points them at the docs / contact page instead.
+   */
+  async handlePublicMessage({ message }: { message: string }): Promise<{
+    text: string;
+    quickActions?: Array<{ label: string; action: string }>;
+    publicAction?: { type: "trigger_google_auth" };
+  }> {
+    const m = (message || "").toLowerCase().trim();
+    const has = (...words: string[]) =>
+      words.some((w) => new RegExp(`\\b${w}\\b`, "i").test(m));
+
+    const wantsCreateEvent =
+      has("create", "start", "new", "make", "host", "plan", "publish") &&
+      has("event", "events", "wedding", "birthday", "conference", "meetup");
+
+    if (wantsCreateEvent || /^(create|host)\s+(my\s+)?(first\s+)?event/i.test(m)) {
+      return {
+        text:
+          "Awesome — let's get you set up. I'll sign you in with Google in a sec and take you straight to your dashboard. If you already run an organization with us, you'll land on your full Organizer dashboard; otherwise you'll start as an Individual and publish your event from there.",
+        publicAction: { type: "trigger_google_auth" },
+      };
+    }
+
+    // Curated FAQ matcher. Order matters — more specific intents first.
+    const faqs: { test: () => boolean; reply: string }[] = [
+      {
+        test: () => has("price", "pricing", "cost", "fee", "free", "plan", "plans"),
+        reply:
+          "EventSH has a free starter plan for one-off organizers and paid tiers for full multi-event accounts. Visit **/pricing** for the full breakdown — or just create your first event and pick a plan later.",
+      },
+      {
+        test: () => has("ticket", "tickets", "selling", "sell"),
+        reply:
+          "You can sell tickets online (Razorpay/Stripe) and at the door via walk-in / QR scan. Refunds, multi-tier pricing, and coupons are all built in.",
+      },
+      {
+        test: () => has("individual", "wedding", "birthday", "one-off", "single"),
+        reply:
+          "Yes — individuals running a single event (wedding, birthday, one-off conference) can publish without registering a full organization. Click **Create my first event** and you're going.",
+      },
+      {
+        test: () => has("organizer", "organization", "business", "company"),
+        reply:
+          "Organizers get the full multi-event dashboard: stalls, vendor requests, custom storefront, CRM, analytics, custom domain. Sign in with Google — if we find your organization, you'll land directly on the Organizer dashboard.",
+      },
+      {
+        test: () => has("login", "sign in", "signin", "log in"),
+        reply:
+          "Click **Create my first event** below — it triggers Google sign-in. If you already have an organizer account on your email, you'll be sent to your dashboard. Otherwise we'll set you up as an Individual.",
+      },
+      {
+        test: () => has("storefront", "store", "shop", "domain"),
+        reply:
+          "Organizer accounts get a multi-event storefront at a custom URL (and optionally a custom domain). Individual accounts get a per-event **EventFront** page — perfect for a single wedding/conference.",
+      },
+      {
+        test: () => has("attendee", "attendees", "participant", "participants", "guest"),
+        reply:
+          "Attendees register on the public event page, get a QR-coded ticket, and check in by scan at the door. The Participants tab in the dashboard shows the full list, with export to CSV.",
+      },
+      {
+        test: () => has("scanner", "scan", "qr", "check-in", "checkin"),
+        reply:
+          "Every ticket carries a QR code. Use the in-browser scanner (Operators can have scoped scan-only access) — works on phones with no app install.",
+      },
+      {
+        test: () => has("support", "help", "contact"),
+        reply:
+          "Hit **/contact** for support, or just describe the problem here and I'll point you to the right place.",
+      },
+      {
+        test: () => has("hi", "hello", "hey", "yo"),
+        reply:
+          "Hey! I'm EventSH's assistant. I can answer FAQs about pricing, tickets, attendees, or get you started — click **Create my first event** below to begin.",
+      },
+    ];
+
+    const hit = faqs.find((f) => f.test());
+    const text = hit
+      ? hit.reply
+      : "I can answer questions about pricing, tickets, attendees, the storefront, individual vs organizer accounts — or kick off your first event right now. What would you like to do?";
+
+    return {
+      text,
+      quickActions: [
+        { label: "Create my first event", action: "I want to create my first event" },
+        { label: "Pricing", action: "How much does it cost?" },
+        { label: "How tickets work", action: "How do tickets work?" },
+        { label: "Individual vs Organizer", action: "What's the difference between individual and organizer?" },
+      ],
+    };
+  }
+
+  async handleIndividualMessage({
+    userName,
+    userEmail,
+    message,
+  }: {
+    userName: string;
+    userEmail?: string;
+    message: string;
+  }): Promise<{
+    text: string;
+    quickActions?: Array<{ label: string; action: string }>;
+    botAction?:
+      | { type: "openCreateEvent" }
+      | { type: "openOrganizerRegister" }
+      | { type: "viewEvent"; eventId: string };
+    events?: Array<{
+      id: string;
+      title: string;
+      date?: string;
+      status?: string;
+      ticketCount?: number;
+      revenue?: number;
+      currency?: string;
+      publicUrl?: string;
+    }>;
+    participants?: Array<{
+      id: string;
+      name: string;
+      email?: string;
+      ticketType?: string;
+      used?: boolean;
+    }>;
+  }> {
+    const m = (message || "").toLowerCase();
+    const wantsRegister =
+      /\b(register|sign\s*up|become\s+(?:an\s+)?organizer|organi[sz]er|host\s+events?|create\s+(?:my\s+)?account|join)\b/.test(
+        m,
+      );
+    const wantsCreateEvent =
+      /\b(create|new|add|make|start|host|plan)\b/.test(m) &&
+      /\b(event|meetup|conference|workshop|show|expo|exhibition|gathering)\b/.test(
+        m,
+      );
+    const wantsMyEvents =
+      /\b(my events|list (my )?events|show (my )?events|see (my )?events)\b/.test(
+        m,
+      ) ||
+      /\bmy events\b/.test(m);
+    const wantsParticipants =
+      /\b(participant|participants|attendee|attendees|guests?|who.{0,15}coming|who.{0,15}registered)\b/.test(
+        m,
+      );
+
+    // Resolve the backing Organizer record (lazy-created on first event
+    // publish — see events.controller.ensureIndividualOrganizer). If
+    // none exists yet, "my events" intents fall through to onboarding.
+    const email = (userEmail || "").toLowerCase();
+    const backingOrg: any = email
+      ? await this.organizerModel.findOne({ email }).lean()
+      : null;
+
+    if (wantsMyEvents && backingOrg) {
+      const events = await this.eventModel
+        .find({ organizerId: backingOrg._id })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean();
+      if (events.length === 0) {
+        return {
+          text:
+            "You haven't published an event yet. Tap **Create an event** below and I'll open the form.",
+          quickActions: [
+            { label: "Create an event", action: "I want to create an event" },
+          ],
+        };
+      }
+      const eventsWithStats = await Promise.all(
+        events.map(async (ev: any) => {
+          const ticketStats = await this.ticketModel
+            .aggregate([
+              { $match: { eventId: ev._id } },
+              {
+                $group: {
+                  _id: null,
+                  count: { $sum: 1 },
+                  revenue: { $sum: { $ifNull: ["$amount", 0] } },
+                },
+              },
+            ])
+            .catch(() => []);
+          const stats = (ticketStats[0] || {}) as {
+            count?: number;
+            revenue?: number;
+          };
+          return {
+            id: String(ev._id),
+            title: ev.title || ev.name || "Untitled event",
+            date: ev.startDate || ev.date,
+            status: ev.published ? "published" : "draft",
+            ticketCount: stats.count || 0,
+            revenue: stats.revenue || 0,
+            currency: backingOrg.country
+              ? COUNTRY_CURRENCY[backingOrg.country]?.symbol || "$"
+              : "$",
+            publicUrl: `/events/${ev._id}`,
+          };
+        }),
+      );
+      return {
+        text: `Here ${eventsWithStats.length === 1 ? "is your event" : `are your ${eventsWithStats.length} events`}:`,
+        events: eventsWithStats,
+        quickActions: [
+          { label: "See participants", action: "Show me the participants" },
+          { label: "Create another event", action: "I want to create an event" },
+        ],
+      };
+    }
+
+    if (wantsParticipants && backingOrg) {
+      // Default to the most recent event when no event is specified.
+      const latestEvent: any = await this.eventModel
+        .findOne({ organizerId: backingOrg._id })
+        .sort({ createdAt: -1 })
+        .lean();
+      if (!latestEvent) {
+        return {
+          text:
+            "You don't have any events yet, so there are no participants to show. Create one first?",
+          quickActions: [
+            { label: "Create an event", action: "I want to create an event" },
+          ],
+        };
+      }
+      const tickets = await this.ticketModel
+        .find({ eventId: latestEvent._id })
+        .limit(25)
+        .lean();
+      const participants = tickets.map((t: any) => ({
+        id: String(t._id),
+        name: t.buyerName || t.attendeeName || t.name || "Guest",
+        email: t.buyerEmail || t.email,
+        ticketType: t.ticketType || t.type,
+        used: !!t.used,
+      }));
+      return {
+        text:
+          participants.length === 0
+            ? `No participants yet for **${(latestEvent as any).title || "your event"}**. Share the event link to start selling tickets.`
+            : `Here are the ${participants.length === 25 ? "first 25 " : ""}participants for **${(latestEvent as any).title || "your event"}**:`,
+        participants,
+        quickActions: [
+          { label: "My events", action: "Show my events" },
+        ],
+      };
+    }
+
+    if (wantsRegister) {
+      return {
+        text:
+          "Great — let's set you up as a full organizer (custom domain, storefront, multi-event analytics). I'm opening the registration form now; it'll have your name and email pre-filled.",
+        botAction: { type: "openOrganizerRegister" },
+        quickActions: [
+          { label: "Create an event", action: "I want to create an event" },
+        ],
+      };
+    }
+    if (wantsCreateEvent) {
+      return {
+        text:
+          "Opening the Create Event form. As an Individual you can publish one event — share the public link with your guests once it's live.",
+        botAction: { type: "openCreateEvent" },
+        quickActions: backingOrg
+          ? [
+              { label: "My events", action: "Show my events" },
+              {
+                label: "Become an organizer",
+                action: "I want to register as an organizer",
+              },
+            ]
+          : [
+              {
+                label: "Become an organizer",
+                action: "I want to register as an organizer",
+              },
+            ],
+      };
+    }
+
+    // Default greeting. If they already have at least one event, surface
+    // "My events" as the primary pill alongside the onboarding ones.
+    const hasEvents =
+      !!backingOrg &&
+      (await this.eventModel.countDocuments({ organizerId: backingOrg._id })) >
+        0;
+    return {
+      text:
+        `Welcome${userName && userName !== "there" ? `, ${userName}` : ""}! ` +
+        `I can help you ${
+          hasEvents
+            ? "manage your event, check participants, or publish another."
+            : "publish your first event or set up a full organizer account."
+        }\n\n` +
+        `• **Create an event** — I'll open the form.\n` +
+        (hasEvents
+          ? `• **My events** — see what you've published, participants, and revenue.\n`
+          : "") +
+        `• **Become an organizer** — unlock the full multi-event dashboard with storefront and analytics.`,
+      quickActions: hasEvents
+        ? [
+            { label: "My events", action: "Show my events" },
+            { label: "See participants", action: "Show me the participants" },
+            { label: "Create an event", action: "I want to create an event" },
+            {
+              label: "Become an organizer",
+              action: "I want to register as an organizer",
+            },
+          ]
+        : [
+            { label: "Create an event", action: "I want to create an event" },
+            {
+              label: "Become an organizer",
+              action: "I want to register as an organizer",
+            },
+          ],
+    };
+  }
+
   async handleMessage({
     organizerId,
     organizerName,
