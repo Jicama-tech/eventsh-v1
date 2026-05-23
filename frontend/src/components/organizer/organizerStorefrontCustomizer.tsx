@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { jwtDecode } from "jwt-decode";
+import { ModuleGate } from "@/components/ui/ModuleGate";
 import { useEffect } from "react";
 import ImageCropModal from "../ui/imageCropModal";
 
@@ -806,6 +807,7 @@ export function OrganizerStorefrontCustomizer({
 
             {/* General Tab */}
             <TabsContent value="general" className="space-y-6">
+              <ModuleGate moduleKey="storefront" sectionKey="general">
               <Card>
                 <CardHeader>
                   <CardTitle>Organization Store Information</CardTitle>
@@ -1174,10 +1176,12 @@ export function OrganizerStorefrontCustomizer({
                   </div>
                 </CardContent>
               </Card>
+              </ModuleGate>
             </TabsContent>
 
             {/* Design Tab */}
             <TabsContent value="design" className="space-y-6">
+              <ModuleGate moduleKey="storefront" sectionKey="design">
               <Card>
                 <CardHeader>
                   <CardTitle>Theme & Colors</CardTitle>
@@ -2177,10 +2181,12 @@ export function OrganizerStorefrontCustomizer({
                   {/* HERO DESIGN */}
                 </CardContent>
               </Card>
+              </ModuleGate>
             </TabsContent>
 
             {/* Features Tab */}
             <TabsContent value="features" className="space-y-6">
+              <ModuleGate moduleKey="storefront" sectionKey="features">
               <div className="filter select-none pointer-events-none">
                 <Card>
                   <CardHeader>
@@ -2218,6 +2224,7 @@ export function OrganizerStorefrontCustomizer({
                   </CardContent>
                 </Card>
               </div>
+              </ModuleGate>
             </TabsContent>
 
             {/* SEO Tab */}
@@ -2459,3 +2466,4 @@ function getFeatureDescription(key: string): string {
   };
   return descriptions[key] || "Toggle this feature on or off";
 }
+

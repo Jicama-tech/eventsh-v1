@@ -196,16 +196,19 @@ export class OrganizersService {
       }
     }
 
-    // 2. Find default Organizer plan and auto-assign with expiry.
+    // 2. Find default plan for the chosen accountType (defaults to Organizer
+    //    when not specified, preserving legacy behavior for clients that
+    //    pre-date the accountType selector).
+    const accountType = dto.accountType || "Organizer";
     const defaultPlan =
       (await this.planModel.findOne({
-        moduleType: "Organizer",
+        moduleType: accountType,
         isDefault: true,
         isActive: true,
       })) ||
       (await this.planModel.findOne({
-        moduleType: "Organizer",
-        planName: { $regex: /^starter/i },
+        moduleType: accountType,
+        planName: { $regex: /^starter|^individual/i },
         isActive: true,
       }));
 
@@ -229,6 +232,7 @@ export class OrganizersService {
     try {
       organizer = await new this.organizerModel({
         ...rest,
+        accountType,
         email: normalizedEmail,
         businessEmail: normalizedBusinessEmail,
         whatsAppNumber: normalizedWhatsApp,

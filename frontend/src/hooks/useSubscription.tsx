@@ -15,6 +15,7 @@ interface ModuleConfig {
   enabled: boolean;
   limit?: number;
   audiences?: Partial<Record<FeedbackAudienceKey, boolean>>;
+  sections?: Record<string, boolean>;
 }
 
 export interface SubscriptionState {
@@ -55,6 +56,13 @@ interface SubscriptionContextValue {
    * fully-lapsed state, or if the audience flag isn't set on the plan.
    */
   isFeedbackAudienceEnabled: (audience: FeedbackAudienceKey) => boolean;
+  /**
+   * Check if a specific sub-section inside a module (e.g. the "venue" tab
+   * inside the "events" module) is enabled in the active plan. Missing
+   * sections default to enabled so legacy plans without section data keep
+   * working.
+   */
+  isModuleSectionEnabled: (moduleKey: string, sectionKey: string) => boolean;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextValue | undefined>(
@@ -168,6 +176,27 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     [subscription],
   );
 
+  const isModuleSectionEnabled = useCallback(
+    (moduleKey: string, sectionKey: string) => {
+      if (!subscription) return false;
+      if (subscription.fullyLapsed) return false;
+      if (!subscription.subscribed) return false;
+      // Plan with no module config at all → unrestricted (legacy plans).
+      if (
+        !subscription.modules ||
+        Object.keys(subscription.modules).length === 0
+      ) {
+        return true;
+      }
+      const cfg = subscription.modules?.[moduleKey];
+      if (!cfg?.enabled) return false;
+      // Module enabled but no per-section overrides recorded → all sections on.
+      if (!cfg.sections || Object.keys(cfg.sections).length === 0) return true;
+      return !!cfg.sections[sectionKey];
+    },
+    [subscription],
+  );
+
   return (
     <SubscriptionContext.Provider
       value={{
@@ -178,6 +207,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         isModuleEnabled,
         getModuleLimit,
         isFeedbackAudienceEnabled,
+        isModuleSectionEnabled,
       }}
     >
       {children}

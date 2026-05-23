@@ -3,9 +3,14 @@ import { Document } from "mongoose";
 
 export type PlanDocument = Plan & Document;
 
-// Eventsh is organizer-only — plans cannot belong to any other module type.
+// Plans target one of two account types. Individual plans are designed for
+// single-event organizers (weddings, birthdays, one-off conferences) and
+// surface a constrained feature set. Organizer plans are the full multi-event
+// product. New organizers are auto-assigned the default plan matching their
+// chosen accountType at registration.
 export enum ModuleType {
   ORGANIZER = "Organizer",
+  INDIVIDUAL = "Individual",
 }
 
 // Use a dedicated collection so eventsh plans stay isolated from kioscart's

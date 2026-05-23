@@ -7,6 +7,14 @@ export enum ReceiptType {
   A4 = "A4",
 }
 
+// Account tier chosen at registration. Determines which subset of plans the
+// organizer can browse/purchase. An Individual account can later upgrade by
+// switching to an Organizer plan.
+export enum AccountType {
+  ORGANIZER = "Organizer",
+  INDIVIDUAL = "Individual",
+}
+
 export type OrganizerDocument = Organizer & Document;
 
 // ✅ NEW: Razorpay linked account sub-schema (From Shopkeeper)
@@ -81,6 +89,13 @@ export class Organizer {
 
   @Prop({ required: true })
   organizationName: string; // Kept specific to Organizer (equivalent to ShopName)
+
+  @Prop({
+    type: String,
+    enum: AccountType,
+    default: AccountType.ORGANIZER,
+  })
+  accountType: AccountType;
 
   @Prop({ required: false })
   phone: string;

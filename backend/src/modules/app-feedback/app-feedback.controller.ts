@@ -109,7 +109,12 @@ export class AppFeedbackController {
   @UseGuards(JwtAuthGuard)
   async list(
     @Query("filter")
-    filter: "all" | "pending" | "featured" | "hidden" = "pending",
+    filter:
+      | "all"
+      | "pending"
+      | "featured"
+      | "hidden"
+      | "support" = "pending",
   ) {
     return this.service.listAll(filter);
   }

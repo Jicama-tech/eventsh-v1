@@ -10,6 +10,13 @@ interface ModuleGateProps {
    * children are blurred and a "Upgrade" overlay is shown.
    */
   moduleKey: string;
+  /**
+   * Optional sub-section key inside the module (e.g. moduleKey="events" +
+   * sectionKey="venue" gates the Venue tab inside the event creation form).
+   * When provided, gating uses isModuleSectionEnabled instead of the parent
+   * module check.
+   */
+  sectionKey?: string;
   /** Children rendered when the module is enabled (or as the locked layer). */
   children: ReactNode;
   /** Optional override for the upgrade message. */
@@ -22,13 +29,17 @@ interface ModuleGateProps {
 
 export function ModuleGate({
   moduleKey,
+  sectionKey,
   children,
   fallbackText,
   onUpgradeClick,
   hideWhenLocked = false,
 }: ModuleGateProps) {
-  const { isModuleEnabled, subscription } = useSubscription();
-  const enabled = isModuleEnabled(moduleKey);
+  const { isModuleEnabled, isModuleSectionEnabled, subscription } =
+    useSubscription();
+  const enabled = sectionKey
+    ? isModuleSectionEnabled(moduleKey, sectionKey)
+    : isModuleEnabled(moduleKey);
 
   if (enabled) return <>{children}</>;
 
@@ -41,13 +52,14 @@ export function ModuleGate({
       window.dispatchEvent(evt);
     });
 
+  const lockedLabel = sectionKey ? `${moduleKey} → ${sectionKey}` : moduleKey;
   const message =
     fallbackText ||
     (subscription?.fullyLapsed
       ? "Your subscription has expired. Renew to access this feature."
       : !subscription?.subscribed
         ? "This feature requires an active plan."
-        : `Upgrade your plan to unlock ${moduleKey}.`);
+        : `Upgrade your plan to unlock ${lockedLabel}.`);
 
   if (hideWhenLocked) {
     return (

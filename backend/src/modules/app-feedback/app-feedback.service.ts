@@ -96,8 +96,14 @@ export class AppFeedbackService {
   }
 
   // Super-admin — full list with filter chips driving the curation tab.
-  async listAll(filter: "all" | "pending" | "featured" | "hidden" = "pending") {
-    const q: any = { kind: { $ne: "support" } };
+  // The "support" filter surfaces organizer-submitted support tickets (a
+  // separate `kind` in the same collection); all other filters operate on
+  // testimonials only.
+  async listAll(
+    filter: "all" | "pending" | "featured" | "hidden" | "support" = "pending",
+  ) {
+    const q: any =
+      filter === "support" ? { kind: "support" } : { kind: { $ne: "support" } };
     if (filter === "pending") {
       q.featured = false;
       q.hidden = false;

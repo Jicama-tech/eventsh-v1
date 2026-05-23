@@ -284,6 +284,33 @@ function AppContent() {
                   />
                 </Routes>
               );
+            case "individual":
+              // Google-signed-in users who haven't completed organizer
+              // registration yet. They get a stripped-down OrganizerDashboard
+              // (sidebar hidden, locked to chatbot) and access to /register
+              // so the chatbot can route them through registration.
+              return (
+                <Routes>
+                  <Route
+                    path="/"
+                    element={<Navigate to="/organizer-dashboard" replace />}
+                  />
+                  <Route
+                    path="/organizer-dashboard"
+                    element={
+                      <OrganizerDashboard
+                        onLogout={logout}
+                        onViewEvent={() => {}}
+                      />
+                    }
+                  />
+                  <Route path="/register" element={<OrganizerRegister />} />
+                  <Route
+                    path="*"
+                    element={<Navigate to="/organizer-dashboard" replace />}
+                  />
+                </Routes>
+              );
             case "organizer":
               return (
                 <Routes>

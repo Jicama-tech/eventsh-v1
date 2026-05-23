@@ -14,7 +14,7 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, Globe, Mail, MessageCircle } from "lucide-react";
+import { CheckCircle, Globe, Mail, MessageCircle, User, Building2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -54,9 +54,12 @@ export function OrganizerRegister() {
   const stateInitial = (location.state || {}) as {
     name?: string;
     email?: string;
+    whatsAppNumber?: string;
   };
   const initialName = stateInitial.name || queryParams.get("name") || "";
   const initialEmail = stateInitial.email || queryParams.get("email") || "";
+  const initialWhatsApp =
+    stateInitial.whatsAppNumber || queryParams.get("whatsAppNumber") || "";
   const { toast } = useToast();
 
   // Capture agent referral code from ?ref=CODE in URL
@@ -64,20 +67,29 @@ export function OrganizerRegister() {
   const [agentReferralCode, setAgentReferralCode] =
     useState(initialReferralCode);
 
+  // Account type — controls which default plan gets auto-assigned and which
+  // plans the user can browse later. Individual = single-event (wedding,
+  // birthday, etc.); Organizer = full multi-event product.
+  type AccountType = "Individual" | "Organizer";
+  const [accountType, setAccountType] = useState<AccountType>("Organizer");
+
   // Country selection
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const currentCountry = selectedCountry
     ? COUNTRIES.find((c) => c.code === selectedCountry)
     : null;
 
-  // Profile state
+  // Profile state — initial values are pre-filled from the URL params that
+  // the Google → Individual onboarding flow attaches (?name=…&email=…). The
+  // business email is seeded to the same Google address as a convenience;
+  // the user can change it before they hit "Send OTP".
   const [profile, setProfile] = useState({
     name: initialName,
     organizationName: "",
     email: initialEmail,
-    businessEmail: "",
+    businessEmail: initialEmail,
     phone: "",
-    whatsAppNumber: "",
+    whatsAppNumber: initialWhatsApp,
     address: "",
     bio: "",
     country: "",
@@ -355,6 +367,7 @@ export function OrganizerRegister() {
         bio: profile.bio,
         country: profile.country,
         role: "organizer",
+        accountType,
       };
 
       if (agentReferralCode) {
@@ -378,7 +391,13 @@ export function OrganizerRegister() {
         description:
           "Your account is active and the starter plan is assigned. Please log in via WhatsApp OTP.",
       });
-      navigate("/login");
+      // The user may still be holding an "individual"-role JWT (Google
+      // onboarding flow). Drop it so the authenticated route table swaps
+      // back to the unauthenticated one and /organizer/login renders. A
+      // hard reload guarantees the auth context re-initializes from the
+      // (now empty) sessionStorage instead of holding the stale user.
+      sessionStorage.removeItem("token");
+      window.location.href = "/organizer/login";
     } catch (error: any) {
       toast({
         title: "Error",
@@ -405,6 +424,53 @@ export function OrganizerRegister() {
         </CardHeader>
 
         <CardContent>
+          {/* Account type — selected first so the rest of the form (and the
+              plan auto-assigned at submit) reflects the right tier. */}
+          <div className="grid gap-2 mb-6">
+            <Label className="flex items-center gap-2">
+              <User className="w-4 h-4" />
+              Account Type <span className="text-red-600">*</span>
+            </Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setAccountType("Individual")}
+                className={`text-left rounded-lg border p-4 transition ${
+                  accountType === "Individual"
+                    ? "border-primary ring-2 ring-primary/30 bg-primary/5"
+                    : "border-slate-200 hover:border-slate-300"
+                }`}
+              >
+                <div className="flex items-center gap-2 font-medium">
+                  <User className="w-4 h-4" />
+                  Individual
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Running a single event (wedding, birthday, one-off
+                  conference). Starts with the Individual plan.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAccountType("Organizer")}
+                className={`text-left rounded-lg border p-4 transition ${
+                  accountType === "Organizer"
+                    ? "border-primary ring-2 ring-primary/30 bg-primary/5"
+                    : "border-slate-200 hover:border-slate-300"
+                }`}
+              >
+                <div className="flex items-center gap-2 font-medium">
+                  <Building2 className="w-4 h-4" />
+                  Organizer
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Running multiple events. Full feature set with paid plan
+                  tiers and upgrades.
+                </p>
+              </button>
+            </div>
+          </div>
+
           <div className="grid gap-2 mb-6">
             <Label htmlFor="country" className="flex items-center gap-2">
               <Globe className="w-4 h-4" />
@@ -708,3 +774,4 @@ export function OrganizerRegister() {
     </div>
   );
 }
+

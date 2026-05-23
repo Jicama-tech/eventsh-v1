@@ -35,6 +35,8 @@ import {
   Users,
   Zap,
   MessageSquare,
+  Ticket,
+  User,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
@@ -65,28 +67,186 @@ function feedbackSummary(plan: any): string | null {
   return labels.length > 0 ? labels.join(", ") : null;
 }
 
+// Sub-toggles per module. When a section is disabled, the matching tab/page
+// in the organizer dashboard stays visible but its content is blurred behind
+// an "Upgrade plan" CTA via <ModuleGate moduleKey=... sectionKey=...>.
+//
+// Each `key` must match the `sectionKey` used in the corresponding component.
+const EVENT_TAB_SECTIONS: { key: string; label: string }[] = [
+  { key: "basic", label: "Basic Info" },
+  { key: "media", label: "Images" },
+  { key: "visitors", label: "Visitors" },
+  { key: "volunteers", label: "Volunteers" },
+  { key: "venue", label: "Venue Setup" },
+  { key: "tables", label: "Space / AddOns" },
+  { key: "speakers", label: "Speakers" },
+  { key: "roundtables", label: "Round Tables" },
+  { key: "layout", label: "Space Layout" },
+];
+
+const STOREFRONT_SECTIONS = [
+  { key: "general", label: "General" },
+  { key: "design", label: "Design" },
+  { key: "features", label: "Features" },
+];
+
+const STALLS_SECTIONS = [
+  { key: "exhibitors", label: "Exhibitors / Visitors" },
+  { key: "vendorRequests", label: "Vendor Requests" },
+  { key: "payments", label: "Stall Payments" },
+  { key: "addons", label: "Add-ons" },
+];
+
+const TICKETS_SECTIONS = [
+  { key: "online", label: "Online Sales" },
+  { key: "walkin", label: "Walk-in / Kiosk" },
+  { key: "qr", label: "QR Check-in" },
+  { key: "refunds", label: "Refunds" },
+];
+
+const PARTICIPANTS_SECTIONS = [
+  { key: "list", label: "Attendee List" },
+  { key: "scanner", label: "Scanner" },
+  { key: "exports", label: "Exports" },
+];
+
+const KIOSK_SECTIONS = [
+  { key: "walkin", label: "Walk-in Booking" },
+  { key: "qr", label: "QR Scan" },
+  { key: "payment", label: "Payment Capture" },
+];
+
+const ANALYTICS_SECTIONS = [
+  { key: "overview", label: "Overview" },
+  { key: "revenue", label: "Revenue Charts" },
+  { key: "attendees", label: "Attendee Charts" },
+  { key: "exports", label: "Exports" },
+];
+
+const COUPONS_SECTIONS = [
+  { key: "create", label: "Create Coupons" },
+  { key: "redeem", label: "Redemption" },
+  { key: "exhibitor", label: "Exhibitor Coupons" },
+];
+
+const SPEAKER_SECTIONS = [
+  { key: "applications", label: "Applications" },
+  { key: "approval", label: "Approve / Reject" },
+  { key: "slots", label: "Slot Assignment" },
+];
+
+const ROUND_TABLE_SECTIONS = [
+  { key: "list", label: "Bookings List" },
+  { key: "byEvent", label: "View by Event" },
+];
+
+const CRM_SECTIONS = [
+  { key: "customers", label: "Customer List" },
+  { key: "segments", label: "Segments" },
+  { key: "exports", label: "Exports" },
+];
+
+const FEEDBACK_SECTIONS = [
+  { key: "list", label: "Feedback List" },
+  { key: "featured", label: "Featured Reviews" },
+  { key: "stats", label: "Stats" },
+];
+
+const OPERATOR_SECTIONS = [
+  { key: "list", label: "Operator List" },
+  { key: "create", label: "Create Operator" },
+  { key: "scanner", label: "Scanner Permissions" },
+];
+
 const ORGANIZER_FEATURE_MODULES: {
   key: string;
   label: string;
   hasLimit?: boolean;
   hasAudiences?: boolean;
   icon: any;
+  sections?: { key: string; label: string }[];
 }[] = [
-  { key: "events", label: "Events", hasLimit: true, icon: Calendar },
-  { key: "tickets", label: "Tickets", icon: DollarSign },
-  { key: "stalls", label: "Stalls", hasLimit: true, icon: Store },
-  { key: "speakerRequests", label: "Speaker Requests", icon: Users },
-  { key: "roundTableBookings", label: "Round Table Bookings", icon: Calendar },
-  { key: "feedback", label: "Feedback", hasAudiences: true, icon: MessageSquare },
+  {
+    key: "events",
+    label: "Events",
+    hasLimit: true,
+    icon: Calendar,
+    sections: EVENT_TAB_SECTIONS,
+  },
+  {
+    key: "tickets",
+    label: "Tickets",
+    icon: DollarSign,
+    sections: TICKETS_SECTIONS,
+  },
+  {
+    key: "stalls",
+    label: "Stalls",
+    hasLimit: true,
+    icon: Store,
+    sections: STALLS_SECTIONS,
+  },
+  {
+    key: "participants",
+    label: "Participants",
+    icon: Users,
+    sections: PARTICIPANTS_SECTIONS,
+  },
+  {
+    key: "kiosk",
+    label: "In-Person Booking",
+    icon: Ticket,
+    sections: KIOSK_SECTIONS,
+  },
+  {
+    key: "speakerRequests",
+    label: "Speaker Requests",
+    icon: Users,
+    sections: SPEAKER_SECTIONS,
+  },
+  {
+    key: "roundTableBookings",
+    label: "Round Table Bookings",
+    icon: Calendar,
+    sections: ROUND_TABLE_SECTIONS,
+  },
   { key: "razorpay", label: "Razorpay", icon: DollarSign },
-  { key: "coupons", label: "Coupons", icon: Star },
-  { key: "storefront", label: "Storefront", icon: Store },
+  {
+    key: "coupons",
+    label: "Coupons",
+    icon: Star,
+    sections: COUPONS_SECTIONS,
+  },
+  {
+    key: "storefront",
+    label: "Storefront",
+    icon: Store,
+    sections: STOREFRONT_SECTIONS,
+  },
   { key: "customDomain", label: "Custom Domain", icon: Settings },
-  { key: "analytics", label: "Analytics", icon: BarChart3 },
-  { key: "crm", label: "CRM", icon: Users },
+  {
+    key: "analytics",
+    label: "Analytics",
+    icon: BarChart3,
+    sections: ANALYTICS_SECTIONS,
+  },
+  { key: "crm", label: "CRM", icon: Users, sections: CRM_SECTIONS },
+  {
+    key: "feedback",
+    label: "Feedback",
+    hasAudiences: true,
+    icon: MessageSquare,
+    sections: FEEDBACK_SECTIONS,
+  },
   { key: "whatsappQR", label: "WhatsApp QR", icon: Zap },
   { key: "instagram", label: "Instagram QR", icon: Zap },
-  { key: "operators", label: "Operators", hasLimit: true, icon: Users },
+  {
+    key: "operators",
+    label: "Operators",
+    hasLimit: true,
+    icon: Users,
+    sections: OPERATOR_SECTIONS,
+  },
 ];
 
 interface ModuleConfig {
@@ -94,6 +254,41 @@ interface ModuleConfig {
   limit?: number;
   // Per-audience toggles for modules that fan out (today: feedback).
   audiences?: Partial<Record<AudienceKey, boolean>>;
+  sections?: Record<string, boolean>;
+}
+
+function buildDefaultSections(
+  sections?: { key: string; label: string }[],
+  existing?: Record<string, boolean>,
+): Record<string, boolean> | undefined {
+  if (!sections || sections.length === 0) return undefined;
+  return sections.reduce(
+    (acc, s) => {
+      // Default unset sections to true so newly-introduced sub-toggles do not
+      // silently lock existing plans.
+      acc[s.key] = existing?.[s.key] ?? true;
+      return acc;
+    },
+    {} as Record<string, boolean>,
+  );
+}
+
+function buildEmptyModule(m: {
+  hasLimit?: boolean;
+  hasAudiences?: boolean;
+  sections?: { key: string; label: string }[];
+}): ModuleConfig {
+  const cfg: ModuleConfig = { enabled: false };
+  if (m.hasLimit) cfg.limit = 0;
+  if (m.hasAudiences) {
+    cfg.audiences = FEEDBACK_AUDIENCES.reduce(
+      (a, x) => ({ ...a, [x.key]: false }),
+      {} as Record<AudienceKey, boolean>,
+    );
+  }
+  const sections = buildDefaultSections(m.sections);
+  if (sections) cfg.sections = sections;
+  return cfg;
 }
 
 interface Plan {
@@ -112,6 +307,9 @@ interface Plan {
   updatedAt?: string;
 }
 
+type AccountType = "Individual" | "Organizer";
+const ACCOUNT_TYPES: AccountType[] = ["Individual", "Organizer"];
+
 interface PlanFormState {
   planName: string;
   price: number;
@@ -121,24 +319,8 @@ interface PlanFormState {
   features: string[];
   isActive: boolean;
   isDefault: boolean;
+  moduleType: AccountType;
   modules: Record<string, ModuleConfig>;
-}
-
-function defaultConfigFor(m: {
-  hasLimit?: boolean;
-  hasAudiences?: boolean;
-}): ModuleConfig {
-  if (m.hasLimit) return { enabled: false, limit: 0 };
-  if (m.hasAudiences) {
-    return {
-      enabled: false,
-      audiences: FEEDBACK_AUDIENCES.reduce(
-        (a, x) => ({ ...a, [x.key]: false }),
-        {} as Record<AudienceKey, boolean>,
-      ),
-    };
-  }
-  return { enabled: false };
 }
 
 const emptyForm: PlanFormState = {
@@ -150,13 +332,61 @@ const emptyForm: PlanFormState = {
   features: [],
   isActive: true,
   isDefault: false,
+  moduleType: "Organizer",
   modules: ORGANIZER_FEATURE_MODULES.reduce(
     (acc, m) => {
-      acc[m.key] = defaultConfigFor(m);
+      acc[m.key] = buildEmptyModule(m);
       return acc;
     },
     {} as Record<string, ModuleConfig>,
   ),
+};
+
+// Modules enabled on the starter "Individual" plan — suitable for users
+// running a single event (wedding, birthday, one-off conference, etc.).
+// Advanced modules (CRM, custom domain, analytics depth) stay off so the
+// upgrade-plan CTA surfaces inside locked tabs.
+const INDIVIDUAL_PLAN_MODULES: Record<string, ModuleConfig> = (() => {
+  const enabledKeys = new Set([
+    "events",
+    "tickets",
+    "participants",
+    "kiosk",
+    "feedback",
+  ]);
+  return ORGANIZER_FEATURE_MODULES.reduce(
+    (acc, m) => {
+      const cfg = buildEmptyModule(m);
+      if (enabledKeys.has(m.key)) {
+        cfg.enabled = true;
+        if (m.key === "events") cfg.limit = 1;
+        // Sections default to all-on inside buildEmptyModule, which matches
+        // what we want for a single-event Individual plan.
+      }
+      acc[m.key] = cfg;
+      return acc;
+    },
+    {} as Record<string, ModuleConfig>,
+  );
+})();
+
+const INDIVIDUAL_PLAN_TEMPLATE: PlanFormState = {
+  planName: "Individual",
+  price: 0,
+  priceINR: 0,
+  validityInDays: 365,
+  description:
+    "For one-off organizers (weddings, birthdays, single conferences). One event with the essentials. Upgrade to unlock more.",
+  features: [
+    "1 event",
+    "Walk-in & online tickets",
+    "Participant management",
+    "Feedback collection",
+  ],
+  isActive: true,
+  isDefault: true,
+  moduleType: "Individual",
+  modules: INDIVIDUAL_PLAN_MODULES,
 };
 
 export function PricingPage() {
@@ -165,6 +395,11 @@ export function PricingPage() {
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<PlanFormState>(emptyForm);
+  // Top-of-page segment filter: "all" shows both tiers; otherwise scope to one
+  // accountType. Lets admins manage Individual and Organizer plans separately.
+  const [planTypeFilter, setPlanTypeFilter] = useState<"all" | AccountType>(
+    "all",
+  );
   const { toast } = useToast();
 
   const token = sessionStorage.getItem("token");
@@ -200,7 +435,7 @@ export function PricingPage() {
       ...emptyForm,
       modules: ORGANIZER_FEATURE_MODULES.reduce(
         (acc, m) => {
-          acc[m.key] = defaultConfigFor(m);
+          acc[m.key] = buildEmptyModule(m);
           return acc;
         },
         {} as Record<string, ModuleConfig>,
@@ -225,28 +460,25 @@ export function PricingPage() {
       features: Array.isArray(plan.features) ? [...plan.features] : [],
       isActive: plan.isActive,
       isDefault: plan.isDefault,
+      moduleType:
+        plan.moduleType === "Individual" ? "Individual" : "Organizer",
       modules: ORGANIZER_FEATURE_MODULES.reduce(
         (acc, m) => {
           const existing = plan.modules?.[m.key];
-          if (m.hasLimit) {
-            acc[m.key] = {
-              enabled: existing?.enabled ?? false,
-              limit: existing?.limit ?? 0,
-            };
-          } else if (m.hasAudiences) {
-            acc[m.key] = {
-              enabled: existing?.enabled ?? false,
-              audiences: FEEDBACK_AUDIENCES.reduce(
-                (a, x) => ({
-                  ...a,
-                  [x.key]: !!existing?.audiences?.[x.key],
-                }),
-                {} as Record<AudienceKey, boolean>,
-              ),
-            };
-          } else {
-            acc[m.key] = { enabled: existing?.enabled ?? false };
+          const cfg: ModuleConfig = { enabled: existing?.enabled ?? false };
+          if (m.hasLimit) cfg.limit = existing?.limit ?? 0;
+          if (m.hasAudiences) {
+            cfg.audiences = FEEDBACK_AUDIENCES.reduce(
+              (a, x) => ({
+                ...a,
+                [x.key]: !!existing?.audiences?.[x.key],
+              }),
+              {} as Record<AudienceKey, boolean>,
+            );
           }
+          const sections = buildDefaultSections(m.sections, existing?.sections);
+          if (sections) cfg.sections = sections;
+          acc[m.key] = cfg;
           return acc;
         },
         {} as Record<string, ModuleConfig>,
@@ -273,6 +505,7 @@ export function PricingPage() {
       features: form.features.filter((f) => f.trim()),
       isActive: form.isActive,
       isDefault: form.isDefault,
+      moduleType: form.moduleType,
       modules: form.modules,
     };
 
@@ -368,7 +601,8 @@ export function PricingPage() {
       if (!res.ok) throw new Error("Failed to set default plan");
       toast({
         title: "Default plan updated",
-        description: "New organizers will be auto-assigned this plan.",
+        description:
+          "New signups with this account type will be auto-assigned this plan.",
       });
       fetchPlans();
     } catch (err: any) {
@@ -433,6 +667,22 @@ export function PricingPage() {
     });
   }
 
+  function toggleSection(moduleKey: string, sectionKey: string, value: boolean) {
+    setForm({
+      ...form,
+      modules: {
+        ...form.modules,
+        [moduleKey]: {
+          ...form.modules[moduleKey],
+          sections: {
+            ...(form.modules[moduleKey]?.sections || {}),
+            [sectionKey]: value,
+          },
+        },
+      },
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -477,15 +727,30 @@ export function PricingPage() {
         </Card>
         <Card>
           <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">
-                Default Plan
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-muted-foreground mb-1">
+                Default Plans
               </p>
-              <p className="text-base font-semibold truncate">
-                {plans.find((p) => p.isDefault)?.planName || "Not set"}
-              </p>
+              <div className="space-y-0.5 text-sm">
+                <p className="truncate">
+                  <span className="text-muted-foreground">Individual: </span>
+                  <span className="font-semibold">
+                    {plans.find(
+                      (p) => p.isDefault && p.moduleType === "Individual",
+                    )?.planName || "Not set"}
+                  </span>
+                </p>
+                <p className="truncate">
+                  <span className="text-muted-foreground">Organizer: </span>
+                  <span className="font-semibold">
+                    {plans.find(
+                      (p) => p.isDefault && p.moduleType === "Organizer",
+                    )?.planName || "Not set"}
+                  </span>
+                </p>
+              </div>
             </div>
-            <Star className="h-8 w-8 text-amber-500" />
+            <Star className="h-8 w-8 text-amber-500 flex-shrink-0" />
           </CardContent>
         </Card>
       </div>
@@ -493,10 +758,32 @@ export function PricingPage() {
       {/* Plans grid */}
       <Card>
         <CardHeader>
-          <CardTitle>Plans</CardTitle>
-          <CardDescription>
-            Toggle active/default and edit features per plan.
-          </CardDescription>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <CardTitle>Plans</CardTitle>
+              <CardDescription>
+                Toggle active/default and edit features per plan. Filter by
+                account type to manage Individual and Organizer tiers
+                separately.
+              </CardDescription>
+            </div>
+            <div className="inline-flex rounded-md border bg-muted/30 p-1 self-start md:self-center">
+              {(["all", "Individual", "Organizer"] as const).map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setPlanTypeFilter(opt)}
+                  className={`px-3 py-1 text-xs font-medium rounded-sm transition ${
+                    planTypeFilter === opt
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {opt === "all" ? "All" : opt}
+                </button>
+              ))}
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -510,7 +797,13 @@ export function PricingPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {plans.map((plan) => (
+              {plans
+                .filter(
+                  (plan) =>
+                    planTypeFilter === "all" ||
+                    plan.moduleType === planTypeFilter,
+                )
+                .map((plan) => (
                 <Card
                   key={plan._id}
                   className={`relative ${plan.isDefault ? "ring-2 ring-amber-400" : ""}`}
@@ -524,8 +817,20 @@ export function PricingPage() {
                     </div>
                   )}
                   <CardHeader className="pb-2">
-                    <div className="flex justify-between items-start">
-                      <CardTitle className="text-lg">{plan.planName}</CardTitle>
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="min-w-0">
+                        <CardTitle className="text-lg truncate">
+                          {plan.planName}
+                        </CardTitle>
+                        <Badge
+                          variant="outline"
+                          className="mt-1 text-[10px] font-normal"
+                        >
+                          {plan.moduleType === "Individual"
+                            ? "Individual"
+                            : "Organizer"}
+                        </Badge>
+                      </div>
                       <Badge variant={plan.isActive ? "default" : "secondary"}>
                         {plan.isActive ? "Active" : "Inactive"}
                       </Badge>
@@ -624,6 +929,23 @@ export function PricingPage() {
             <DialogDescription>
               Configure features and module access for this plan.
             </DialogDescription>
+            {!editingPlan && (
+              <div className="pt-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setForm(INDIVIDUAL_PLAN_TEMPLATE)}
+                >
+                  <User className="h-4 w-4 mr-1" />
+                  Use Individual Template
+                </Button>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Pre-fills a starter plan (1 event, essentials only) for
+                  single-event organizers like weddings.
+                </p>
+              </div>
+            )}
           </DialogHeader>
 
           <div className="space-y-6">
@@ -651,6 +973,30 @@ export function PricingPage() {
                   }
                 />
               </div>
+            </div>
+
+            <div>
+              <Label>Account Type *</Label>
+              <div className="inline-flex rounded-md border bg-muted/30 p-1 mt-1">
+                {ACCOUNT_TYPES.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setForm({ ...form, moduleType: t })}
+                    className={`px-3 py-1 text-xs font-medium rounded-sm transition ${
+                      form.moduleType === t
+                        ? "bg-background shadow-sm text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Plans show only to accounts of this type. Individual = one-off
+                organizers; Organizer = full multi-event accounts.
+              </p>
             </div>
 
             <div>
@@ -813,6 +1159,29 @@ export function PricingPage() {
                                 />
                                 {a.label}
                               </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {m.sections && cfg?.enabled && (
+                        <div className="pt-2 border-t space-y-2">
+                          <Label className="text-xs text-muted-foreground">
+                            Sections (unlock specific tabs)
+                          </Label>
+                          <div className="grid grid-cols-1 gap-1.5">
+                            {m.sections.map((s) => (
+                              <div
+                                key={s.key}
+                                className="flex items-center justify-between text-xs pl-1"
+                              >
+                                <span>{s.label}</span>
+                                <Switch
+                                  checked={cfg.sections?.[s.key] ?? true}
+                                  onCheckedChange={(v) =>
+                                    toggleSection(m.key, s.key, v)
+                                  }
+                                />
+                              </div>
                             ))}
                           </div>
                         </div>
