@@ -54,7 +54,10 @@ import {
   AlertTriangle,
   Receipt,
   MessageSquare,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 const apiURL = __API_URL__;
 
@@ -121,7 +124,13 @@ interface IndividualEventCard {
   ticketCount?: number;
   revenue?: number;
   currency?: string;
+  ticketTypeCount?: number;
+  ticketTypeNames?: string[];
+  minPrice?: number | null;
+  maxPrice?: number | null;
+  capacityTotal?: number;
   publicUrl?: string;
+  storeUrl?: string;
 }
 
 interface IndividualParticipant {
@@ -886,6 +895,7 @@ export function ChatbotWidget({
   navItems = DEFAULT_NAV_ITEMS,
 }: ChatbotWidgetProps) {
   const isPage = mode === "page";
+  const { toast } = useToast();
   const [open, setOpen] = useState(isPage);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>(() => {
@@ -1704,15 +1714,52 @@ export function ChatbotWidget({
                             {new Date(ev.date).toLocaleDateString()}
                           </div>
                         )}
-                        <div className="flex items-center gap-3 text-xs text-slate-700">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-700">
                           <div className="flex items-center gap-1">
                             <Ticket className="h-3 w-3 text-blue-500" />
                             <span className="font-medium">
                               {ev.ticketCount ?? 0}
                             </span>
-                            <span className="text-slate-400">tickets</span>
+                            <span className="text-slate-400">sold</span>
                           </div>
-                          {typeof ev.revenue === "number" && (
+                          {(ev.ticketTypeCount ?? 0) > 0 && (
+                            <div
+                              className="flex items-center gap-1"
+                              title={ev.ticketTypeNames?.join(", ")}
+                            >
+                              <Crown className="h-3 w-3 text-amber-500" />
+                              <span className="font-medium">
+                                {ev.ticketTypeCount}
+                              </span>
+                              <span className="text-slate-400">
+                                {ev.ticketTypeCount === 1
+                                  ? "ticket type"
+                                  : "ticket types"}
+                              </span>
+                            </div>
+                          )}
+                          {typeof ev.minPrice === "number" &&
+                            typeof ev.maxPrice === "number" && (
+                              <div className="flex items-center gap-1">
+                                <span className="text-slate-400">
+                                  {ev.minPrice === ev.maxPrice
+                                    ? ev.minPrice === 0
+                                      ? "Free"
+                                      : `${ev.currency || "$"}${ev.minPrice.toLocaleString()}`
+                                    : `${ev.currency || "$"}${ev.minPrice}–${ev.maxPrice}`}
+                                </span>
+                              </div>
+                            )}
+                          {(ev.capacityTotal ?? 0) > 0 && (
+                            <div className="flex items-center gap-1">
+                              <Users className="h-3 w-3 text-violet-500" />
+                              <span className="font-medium">
+                                {ev.capacityTotal}
+                              </span>
+                              <span className="text-slate-400">capacity</span>
+                            </div>
+                          )}
+                          {typeof ev.revenue === "number" && ev.revenue > 0 && (
                             <div className="flex items-center gap-1">
                               <TrendingUp className="h-3 w-3 text-emerald-500" />
                               <span className="font-medium">
@@ -1722,7 +1769,21 @@ export function ChatbotWidget({
                             </div>
                           )}
                         </div>
-                        <div className="flex gap-1.5 mt-2.5">
+                        <div className="flex flex-wrap gap-1.5 mt-2.5">
+                          <button
+                            onClick={() =>
+                              onOpenEventForm?.("edit", {
+                                eventId: ev.id,
+                                eventTitle: ev.title,
+                              })
+                            }
+                            disabled={loading || !onOpenEventForm}
+                            className="text-[11px] px-2 py-1 rounded border border-emerald-200 hover:bg-emerald-100 text-emerald-700 bg-emerald-50 font-medium disabled:opacity-50 flex items-center gap-1"
+                            title="Edit event"
+                          >
+                            <Pencil className="h-3 w-3" />
+                            Edit
+                          </button>
                           <button
                             onClick={() =>
                               sendMessage(`Show me participants for ${ev.title}`)
@@ -1733,14 +1794,55 @@ export function ChatbotWidget({
                             Participants
                           </button>
                           {ev.publicUrl && (
-                            <a
-                              href={ev.publicUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-[11px] px-2 py-1 rounded border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 font-medium"
-                            >
-                              Public page
-                            </a>
+                            <>
+                              <a
+                                href={ev.publicUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[11px] px-2 py-1 rounded border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 font-medium flex items-center gap-1"
+                                title="Open public event page"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                Open
+                              </a>
+                              {ev.storeUrl && (
+                                <a
+                                  href={ev.storeUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[11px] px-2 py-1 rounded border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 font-medium flex items-center gap-1"
+                                  title="Open your storefront page"
+                                >
+                                  <Store className="h-3 w-3" />
+                                  Store
+                                </a>
+                              )}
+                              <button
+                                onClick={async () => {
+                                  // Absolute URL so the link works when
+                                  // pasted into WhatsApp / email / etc.
+                                  const url = `${window.location.origin}${ev.publicUrl}`;
+                                  try {
+                                    await navigator.clipboard.writeText(url);
+                                    toast({
+                                      title: "Link copied",
+                                      description: url,
+                                    });
+                                  } catch {
+                                    // Clipboard API blocked (insecure
+                                    // context, etc.) — fall back to a
+                                    // selectable prompt.
+                                    window.prompt("Copy this link:", url);
+                                  }
+                                }}
+                                disabled={loading}
+                                className="text-[11px] px-2 py-1 rounded border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 font-medium disabled:opacity-50 flex items-center gap-1"
+                                title="Copy shareable link"
+                              >
+                                <Copy className="h-3 w-3" />
+                                Copy link
+                              </button>
+                            </>
                           )}
                         </div>
                       </div>

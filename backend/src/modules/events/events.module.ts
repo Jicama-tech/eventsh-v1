@@ -7,10 +7,21 @@ import { Event, EventSchema } from "./schemas/event.schema";
 import { TemplatesModule } from "../templates/templates.module";
 import { OtpModule } from "../otp/otp.module";
 import { OrganizersModule } from "../organizers/organizers.module";
+import {
+  OrganizerStore,
+  OrganizerStoreSchema,
+} from "../organizer-stores/entities/organizer-store.entity";
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Event.name, schema: EventSchema }]),
+    MongooseModule.forFeature([
+      { name: Event.name, schema: EventSchema },
+      // Lazy-create a storefront row alongside the Organizer record when
+      // an Individual publishes their first event, so they get a complete
+      // shareable URL (/{slug}/events/{id}) instead of just the bare
+      // /events/{id} link.
+      { name: OrganizerStore.name, schema: OrganizerStoreSchema },
+    ]),
     TemplatesModule,
     OtpModule,
     // OrganizersModule exports the Organizer + Plan models so the events

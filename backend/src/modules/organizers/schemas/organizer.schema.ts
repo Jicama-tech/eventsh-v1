@@ -97,6 +97,24 @@ export class Organizer {
   })
   accountType: AccountType;
 
+  // Audit-trail / insight field separate from accountType. Records the
+  // ORIGIN of the row, not the current tier — useful for analytics like
+  // "how many organizers started as Individuals and upgraded?".
+  //   - "individual": lazy-created on first event publish (Google-only
+  //     sign-in flow). Stays "individual" even if they later upgrade
+  //     so the lineage is preserved.
+  //   - "organizer":  registered directly via the full Organizer signup
+  //     form (no prior Individual row).
+  //   - "upgraded":   started as Individual then completed full Organizer
+  //     registration. accountType flips to "Organizer", organizerType
+  //     becomes "upgraded" so reporting can distinguish them.
+  @Prop({
+    type: String,
+    enum: ["individual", "organizer", "upgraded"],
+    default: "organizer",
+  })
+  organizerType: "individual" | "organizer" | "upgraded";
+
   @Prop({ required: false })
   phone: string;
 

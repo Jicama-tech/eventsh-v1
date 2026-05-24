@@ -32,6 +32,7 @@ import * as path from "path";
 import { WebpValidationPipe } from "../../seed/parse-webp.pipe";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
+import { buildDefaultStorefrontSettings } from "../organizer-stores/default-settings";
 
 function generateFileName(req: any, file: any, cb: any) {
   const ext = path.extname(file.originalname);
@@ -57,7 +58,23 @@ export class EventsController {
     private readonly eventImportService: EventImportService,
     @InjectModel("Organizer") private readonly organizerModel: Model<any>,
     @InjectModel("Plan") private readonly planModel: Model<any>,
+    @InjectModel("OrganizerStore")
+    private readonly organizerStoreModel: Model<any>,
   ) {}
+
+  // Build a slug from organizationName that mirrors what the public
+  // storefront route expects (lowercase, alphanum + dashes only). Falls
+  // back to a stable token derived from the org's _id so the URL always
+  // works even if the name is empty / non-Latin.
+  private slugifyName(name: string, fallback: string): string {
+    const cleaned = (name || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-");
+    return cleaned || `org-${fallback.slice(-6)}`;
+  }
 
   // Individual users (Google-signed-in, never registered as an organizer)
   // don't yet have an Organizer document. On their first event publish we
@@ -97,18 +114,73 @@ export class EventsController {
     const displayName = user?.name || email.split("@")[0];
     // whatsAppNumber + businessEmail have unique indexes — use synthetic
     // placeholders keyed on email so each Individual gets a distinct value.
-    return await new this.organizerModel({
+    const newOrg = await new this.organizerModel({
       name: displayName,
       email,
       organizationName: displayName,
       businessEmail: email,
       whatsAppNumber: `individual:${email}`,
       accountType: "Individual",
+      // Insight field: mark this row as having ORIGINATED from the
+      // Individual lazy-create path. If the user later finishes full
+      // Organizer registration, registerOrganizer will flip this to
+      // "upgraded" so we can report on the conversion funnel.
+      organizerType: "individual",
       approved: true,
       rejected: false,
       provider: "google",
       ...subFields,
     }).save();
+
+    // Lazy-create a default storefront so the public event link has a
+    // complete branded URL (/{slug}/events/{id}) instead of the bare
+    // /events/{id} fallback. Idempotent — if a row already exists for
+    // this organizer (unique organizerId index), we just leave it alone.
+    try {
+      const alreadyHasStore = await this.organizerStoreModel
+        .exists({ organizerId: newOrg._id })
+        .catch(() => null);
+      if (!alreadyHasStore) {
+        const slug = await this.findFreeStoreSlug(
+          this.slugifyName(displayName, String(newOrg._id)),
+        );
+        // Pass the FULL settings shape — passing a partial would override
+        // Mongoose's schema default for `settings` and leave design /
+        // features / seo missing entirely.
+        await new this.organizerStoreModel({
+          organizerId: newOrg._id,
+          slug,
+          settings: buildDefaultStorefrontSettings({
+            storeName: displayName,
+            email,
+          }),
+        }).save();
+      }
+    } catch (err) {
+      // Non-fatal — the bare /events/:id link still works without a
+      // storefront row. Just log and continue.
+      console.error(
+        "[ensureIndividualOrganizer] storefront create failed:",
+        (err as any)?.message,
+      );
+    }
+
+    return newOrg;
+  }
+
+  // Find a slug that doesn't already exist in organizer_stores. Appends a
+  // short suffix if the base is taken (a different Individual may have
+  // the same display name).
+  private async findFreeStoreSlug(base: string): Promise<string> {
+    const clean = base || "store";
+    const taken = await this.organizerStoreModel.exists({ slug: clean });
+    if (!taken) return clean;
+    for (let i = 0; i < 8; i++) {
+      const candidate = `${clean}-${Math.random().toString(36).slice(2, 6)}`;
+      const exists = await this.organizerStoreModel.exists({ slug: candidate });
+      if (!exists) return candidate;
+    }
+    return `${clean}-${Date.now().toString(36)}`;
   }
 
   @Post("import-from-url")
@@ -196,6 +268,19 @@ export class EventsController {
         );
       if (typeof body.visitorTypes === "string")
         body.visitorTypes = JSON.parse(body.visitorTypes);
+
+      // Individuals can't accept payment (no Razorpay / Stripe account,
+      // no bank details). Force every visitor-type price to 0 so tickets
+      // are free regardless of what the form sent — defense-in-depth
+      // against any client-side bypass.
+      if (isIndividual && Array.isArray(body.visitorTypes)) {
+        body.visitorTypes = body.visitorTypes.map((v: any) => ({
+          ...v,
+          price: 0,
+        }));
+        body.ticketPrice = "0";
+      }
+
       if (typeof body.speakers === "string")
         body.speakers = JSON.parse(body.speakers);
       if (typeof body.speakerSlotTemplates === "string")
@@ -323,16 +408,43 @@ export class EventsController {
   @Get(":id")
   async getEventById(@Param("id") id: string) {
     try {
-      const event = await this.eventsService.findById(id);
+      const event: any = await this.eventsService.findById(id);
+      // Many event rows in this DB have `organizer` stored as a plain
+      // string instead of an ObjectId (schema says ObjectId but writes
+      // landed as String). Mongoose's `populate("organizer")` returns
+      // null in that case and EventFront crashes on
+      // `data.organizer._id`. Fall back to a manual lookup so the page
+      // renders for both legacy AND newly-created (Individual) events.
+      const dataObj =
+        event && typeof event.toObject === "function" ? event.toObject() : event;
+      if (dataObj && !dataObj.organizer) {
+        const raw: any = await this.eventModelDirect()
+          .findById(id)
+          .lean();
+        const orgIdStr = raw?.organizer ? String(raw.organizer) : null;
+        if (orgIdStr) {
+          const org = await this.organizerModel.findById(orgIdStr).lean();
+          if (org) dataObj.organizer = org;
+        }
+      }
       return {
         success: true,
         message: "Event retrieved successfully",
-        data: event,
+        data: dataObj,
       };
     } catch (error) {
       console.error("Error in getEventById:", error);
       throw error;
     }
+  }
+
+  // Direct event-model accessor for the populate-fallback path. We don't
+  // want to bloat events.service with a manual-lookup variant just for
+  // this controller, so reach for the underlying model via the Mongoose
+  // factory we already use elsewhere in this file. (eventsService owns
+  // the canonical findById; this is purely a recovery hatch.)
+  private eventModelDirect() {
+    return (this.eventsService as any).eventModel as Model<any>;
   }
 
   // Volunteer email-OTP sign-in for the scanner page. Two endpoints:
@@ -389,6 +501,8 @@ export class EventsController {
     @Req() req: any,
   ) {
     try {
+      const updateRoles: string[] = req.user?.roles || [];
+      const updateIsIndividual = updateRoles.includes("individual");
       // Parse JSON strings from FormData
       if (typeof body.tags === "string") body.tags = JSON.parse(body.tags);
       if (typeof body.features === "string")
@@ -410,6 +524,18 @@ export class EventsController {
         );
       if (typeof body.visitorTypes === "string")
         body.visitorTypes = JSON.parse(body.visitorTypes);
+
+      // Mirror the create-event policy: Individuals can't accept payment
+      // (no Razorpay / Stripe / bank). Force every visitor-type price to
+      // 0 on update too — server-side guard against any client bypass.
+      if (updateIsIndividual && Array.isArray(body.visitorTypes)) {
+        body.visitorTypes = body.visitorTypes.map((v: any) => ({
+          ...v,
+          price: 0,
+        }));
+        body.ticketPrice = "0";
+      }
+
       if (typeof body.speakers === "string")
         body.speakers = JSON.parse(body.speakers);
       if (typeof body.speakerSlotTemplates === "string")

@@ -14,7 +14,7 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, Globe, Mail, MessageCircle, User, Building2 } from "lucide-react";
+import { CheckCircle, Globe, Mail, MessageCircle } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -66,12 +66,6 @@ export function OrganizerRegister() {
   const initialReferralCode = queryParams.get("ref") || "";
   const [agentReferralCode, setAgentReferralCode] =
     useState(initialReferralCode);
-
-  // Account type — controls which default plan gets auto-assigned and which
-  // plans the user can browse later. Individual = single-event (wedding,
-  // birthday, etc.); Organizer = full multi-event product.
-  type AccountType = "Individual" | "Organizer";
-  const [accountType, setAccountType] = useState<AccountType>("Organizer");
 
   // Country selection
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
@@ -367,7 +361,10 @@ export function OrganizerRegister() {
         bio: profile.bio,
         country: profile.country,
         role: "organizer",
-        accountType,
+        // This form is the full Organizer signup. Individuals never reach
+        // it (Google sign-in -> chatbot-only dashboard -> lazy-create
+        // Individual organizer on first event publish handles them).
+        accountType: "Organizer",
       };
 
       if (agentReferralCode) {
@@ -424,52 +421,12 @@ export function OrganizerRegister() {
         </CardHeader>
 
         <CardContent>
-          {/* Account type — selected first so the rest of the form (and the
-              plan auto-assigned at submit) reflects the right tier. */}
-          <div className="grid gap-2 mb-6">
-            <Label className="flex items-center gap-2">
-              <User className="w-4 h-4" />
-              Account Type <span className="text-red-600">*</span>
-            </Label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setAccountType("Individual")}
-                className={`text-left rounded-lg border p-4 transition ${
-                  accountType === "Individual"
-                    ? "border-primary ring-2 ring-primary/30 bg-primary/5"
-                    : "border-slate-200 hover:border-slate-300"
-                }`}
-              >
-                <div className="flex items-center gap-2 font-medium">
-                  <User className="w-4 h-4" />
-                  Individual
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Running a single event (wedding, birthday, one-off
-                  conference). Starts with the Individual plan.
-                </p>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAccountType("Organizer")}
-                className={`text-left rounded-lg border p-4 transition ${
-                  accountType === "Organizer"
-                    ? "border-primary ring-2 ring-primary/30 bg-primary/5"
-                    : "border-slate-200 hover:border-slate-300"
-                }`}
-              >
-                <div className="flex items-center gap-2 font-medium">
-                  <Building2 className="w-4 h-4" />
-                  Organizer
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Running multiple events. Full feature set with paid plan
-                  tiers and upgrades.
-                </p>
-              </button>
-            </div>
-          </div>
+          {/* Account-type selector removed: this form IS the organizer
+              registration path. Individuals don't reach it — they sign in
+              with Google and get a lazy-created Individual organizer on
+              first event publish. Anyone filling out this multi-field
+              form is signing up as a full Organizer (accountType is
+              hardcoded to "Organizer" in the payload below). */}
 
           <div className="grid gap-2 mb-6">
             <Label htmlFor="country" className="flex items-center gap-2">

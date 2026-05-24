@@ -696,7 +696,39 @@ export function OrganizerDashboard({
     setShowCreateEvent(true);
   };
 
-  const handleUpdateEvent = (eventData: any) => {
+  const handleUpdateEvent = async (eventData: FormData) => {
+    // CreateEventForm delegates the actual PUT to this callback when in
+    // edit mode. Same pattern as handleCreateEvent above — the form
+    // assembles the FormData; we own the network call.
+    if (!editingEvent?._id) {
+      setShowCreateEvent(false);
+      return;
+    }
+    const token = sessionStorage.getItem("token");
+    if (!token) {
+      toast({
+        duration: 5000,
+        title: "Not signed in",
+        description: "Sign in and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const res = await fetch(`${apiURL}/events/${editingEvent._id}`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+      body: eventData,
+    });
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`;
+      try {
+        const j = await res.json();
+        detail = j?.message || detail;
+      } catch {
+        // ignore — fall back to HTTP status
+      }
+      throw new Error(detail);
+    }
     setEditingEvent(null);
     setShowCreateEvent(false);
   };

@@ -208,11 +208,16 @@ export class AuthController {
       // Build a unified list. Pending organizers stay in but flagged
       // approved=false so the UI can grey them out and block selection.
       // Operator entries inherit the parent organization's approval state.
+      // `accountTier` carries the organizer doc's own accountType field
+      // ("Individual" | "Organizer") so the login branch downstream can
+      // distinguish a lazy-created Individual record (chatbot-only mode)
+      // from a fully registered Organizer (full dashboard).
       const accounts: Array<{
         accountId: string;
         accountType: "organizer" | "operator";
         organizationName: string;
         approved: boolean;
+        accountTier: "Individual" | "Organizer";
       }> = [];
       for (const org of organizers as any[]) {
         accounts.push({
@@ -220,6 +225,8 @@ export class AuthController {
           accountType: "organizer",
           organizationName: org.organizationName,
           approved: !!org.approved && !org.rejected,
+          accountTier:
+            org.accountType === "Individual" ? "Individual" : "Organizer",
         });
       }
       for (const op of operators as any[]) {
@@ -231,6 +238,10 @@ export class AuthController {
           accountType: "operator",
           organizationName: `${parent.organizationName} (Operator: ${op.name})`,
           approved: !!parent.approved,
+          // Operators of an Individual parent inherit Individual tier so
+          // they too land on the chatbot-only mode.
+          accountTier:
+            parent.accountType === "Individual" ? "Individual" : "Organizer",
         });
       }
 
@@ -273,11 +284,27 @@ export class AuthController {
         );
       }
 
-      // 1 → direct login (or pending block)
+      // 1 → direct login (or pending block).
+      // Special case: the lone account is a lazy-created Individual-tier
+      // organizer (we made it on first event publish). They never
+      // registered through the full organizer form, so we sign them in
+      // as roles:["individual"] — the dashboard then renders the
+      // chatbot-only mode, NOT the full organizer surface.
       if (accounts.length === 1) {
         const only = accounts[0];
         if (!only.approved) {
           return res.redirect(`${fe}/organizer/login?error=pending_approval`);
+        }
+        if (only.accountTier === "Individual") {
+          const token = await this.mintIndividualToken({
+            email,
+            name,
+            providerId:
+              userFromGoogle.oauthId || userFromGoogle.providerId || "",
+          });
+          return res.redirect(
+            `${fe}/organizer-dashboard?token=${encodeURIComponent(token)}`,
+          );
         }
         const token = await this.mintOrganizerToken(
           only.accountId,
@@ -427,12 +454,17 @@ export class AuthController {
     // For an inline flow we don't ask the user to pick — if multiple
     // accounts exist, pick the first approved organizer. Multi-account
     // disambiguation stays on the /organizer/login redirect flow.
-    const approvedOrg = (organizers as any[]).find(
-      (o) => o.approved && !o.rejected,
+    //
+    // Important: a lazy-created Individual-tier organizer record (made
+    // on first event publish) must NOT promote the user to the full
+    // organizer dashboard on re-login. They never registered.
+    const approvedFullOrg = (organizers as any[]).find(
+      (o) =>
+        o.approved && !o.rejected && o.accountType !== "Individual",
     );
-    if (approvedOrg) {
+    if (approvedFullOrg) {
       const token = await this.mintOrganizerToken(
-        String(approvedOrg._id),
+        String(approvedFullOrg._id),
         "organizer",
       );
       return {
@@ -534,6 +566,46 @@ export class AuthController {
       body.accountType,
     );
     return { token };
+  }
+
+  // Mint an Individual JWT (roles: ["individual"]). Used when the user
+  // signing in has only a lazy-created Individual-tier organizer record —
+  // they haven't registered through the full /register form, so they
+  // should keep landing in the chatbot-only dashboard mode.
+  private async mintIndividualToken({
+    email,
+    name,
+    providerId,
+  }: {
+    email: string;
+    name: string;
+    providerId: string;
+  }): Promise<string> {
+    let user = await this.usersService.findByEmail(email);
+    if (!user) {
+      user = await this.usersService.create({
+        name,
+        email,
+        password: null,
+        provider: "google",
+        providerId,
+      } as any);
+    }
+    const elevated = ["admin", "organizer", "agent"];
+    const currentRoles: string[] = (user as any).roles || [];
+    if (!currentRoles.some((r) => elevated.includes(r))) {
+      (user as any).roles = ["individual"];
+      await (user as any).save?.();
+    }
+    return this.jwtService.sign(
+      {
+        name: (user as any).name || name,
+        email: (user as any).email || email,
+        sub: (user as any)._id?.toString(),
+        roles: (user as any).roles || ["individual"],
+      },
+      { secret: process.env.JWT_ACCESS_SECRET, expiresIn: "24h" } as any,
+    );
   }
 
   // Mint the organizer dashboard JWT for either an organizer record or an

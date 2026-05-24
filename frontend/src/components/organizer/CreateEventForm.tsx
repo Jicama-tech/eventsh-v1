@@ -3509,6 +3509,22 @@ export function CreateEventForm({
   const { toast } = useToast();
   const venueRef = useRef<HTMLDivElement>(null);
 
+  // Individual accounts have no payment integration (no Razorpay /
+  // Stripe / bank). Force every visitor-type price to 0 in the UI so
+  // they can't even type a non-zero price. The backend mirrors this
+  // guard in events.controller.createEvent / updateEvent.
+  const isIndividualAccount = (() => {
+    try {
+      const token = sessionStorage.getItem("token");
+      if (!token) return false;
+      const decoded: any = jwtDecode(token);
+      const roles: string[] = Array.isArray(decoded?.roles) ? decoded.roles : [];
+      return roles.includes("individual") && !roles.includes("organizer");
+    } catch {
+      return false;
+    }
+  })();
+
   const [loading, setLoading] = useState(false);
   const [currentTab, setCurrentTab] = useState("basic");
   const [currentTag, setCurrentTag] = useState("");
@@ -4516,7 +4532,12 @@ export function CreateEventForm({
     const newVisitor: VisitorType = {
       id: Math.random().toString(36).slice(2, 10),
       name: currentVisitor.name.trim(),
-      price: parseFloat(currentVisitor.price) || 0,
+      // Belt-and-suspenders: even if isIndividualAccount toggles after
+      // a stale price was typed, force 0 here too. Server enforces the
+      // same rule in events.controller.
+      price: isIndividualAccount
+        ? 0
+        : parseFloat(currentVisitor.price) || 0,
       maxCount: currentVisitor.maxCount
         ? parseInt(currentVisitor.maxCount)
         : undefined,
@@ -5418,15 +5439,24 @@ export function CreateEventForm({
                       <Input
                         type="number"
                         min="0"
-                        value={currentVisitor.price}
-                        onChange={(e) =>
+                        value={isIndividualAccount ? "0" : currentVisitor.price}
+                        onChange={(e) => {
+                          if (isIndividualAccount) return;
                           setCurrentVisitor((p) => ({
                             ...p,
                             price: e.target.value,
-                          }))
-                        }
+                          }));
+                        }}
+                        disabled={isIndividualAccount}
                         placeholder="0 = Free"
                       />
+                      {isIndividualAccount && (
+                        <p className="text-[11px] text-amber-600 mt-1">
+                          Individual accounts can only publish free events
+                          (no payment processor configured). Upgrade to an
+                          Organizer account to charge for tickets.
+                        </p>
+                      )}
                     </div>
                     <div>
                       <Label>

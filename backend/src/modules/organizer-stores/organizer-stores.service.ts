@@ -242,8 +242,22 @@ export class OrganizerStoresService {
 
   async findOneByorganizerId(organizerId: string) {
     try {
+      // Match both string and ObjectId stored shapes — some rows in this
+      // DB store organizerId as a plain string instead of an ObjectId,
+      // and Mongoose's auto-cast on `.findOne({ organizerId: stringVal })`
+      // can miss the ObjectId-typed rows depending on the field's actual
+      // BSON type at write time.
+      let candidates: any[] = [organizerId];
+      try {
+        const Types = require("mongoose").Types;
+        if (Types.ObjectId.isValid(organizerId)) {
+          candidates.push(new Types.ObjectId(organizerId));
+        }
+      } catch {
+        /* mongoose missing — fall back to string-only */
+      }
       const shopfrontStore = await this.organizerStoreModel
-        .findOne({ organizerId })
+        .findOne({ organizerId: { $in: candidates } })
         .exec();
       if (!shopfrontStore) {
         return { message: "Shopfront store not found", data: null };

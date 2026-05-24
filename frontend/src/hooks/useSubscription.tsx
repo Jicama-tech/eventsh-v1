@@ -90,8 +90,38 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         return;
       }
       const decoded: any = jwtDecode(token);
-      // Only organizers have subscriptions; bail for other roles.
-      if (!decoded?.roles?.includes("organizer")) {
+      const roles: string[] = Array.isArray(decoded?.roles) ? decoded.roles : [];
+      // Individuals (Google-signed-in, no Organizer record yet) get a
+      // permissive synthetic subscription so ModuleGate doesn't lock the
+      // create-event tabs behind an Upgrade overlay during onboarding.
+      // Empty `modules` triggers the existing permissive fallback in
+      // isModuleEnabled / isModuleSectionEnabled — everything reads as
+      // enabled. Real plan-based gating kicks in once they publish their
+      // first event (lazy-creates the Organizer row + Individual plan).
+      if (roles.includes("individual") && !roles.includes("organizer")) {
+        setSubscription({
+          subscribed: true,
+          planId: null,
+          planName: "Individual (onboarding)",
+          pricePaid: null,
+          validityInDays: null,
+          planStartDate: null,
+          planExpiryDate: null,
+          isExpired: false,
+          daysLeft: 0,
+          gracePeriodDays: 0,
+          inGracePeriod: false,
+          graceDaysLeft: 0,
+          fullyLapsed: false,
+          planActive: true,
+          features: [],
+          modules: {},
+          description: null,
+        });
+        return;
+      }
+      // Only organizers have real subscription docs; bail for other roles.
+      if (!roles.includes("organizer")) {
         setSubscription(null);
         return;
       }
