@@ -284,6 +284,58 @@ function AppContent() {
                   />
                 </Routes>
               );
+            case "individual":
+              // Google-signed-in users who haven't completed organizer
+              // registration yet. They get a stripped-down OrganizerDashboard
+              // (sidebar hidden, locked to chatbot) and access to /register
+              // so the chatbot can route them through registration.
+              return (
+                <Routes>
+                  <Route
+                    path="/"
+                    element={<Navigate to="/organizer-dashboard" replace />}
+                  />
+                  <Route
+                    path="/organizer-dashboard"
+                    element={
+                      <OrganizerDashboard
+                        onLogout={logout}
+                        onViewEvent={() => {}}
+                      />
+                    }
+                  />
+                  <Route path="/register" element={<OrganizerRegister />} />
+                  {/* Individuals get a storefront the moment they publish
+                      their first event (auto-lazy-created by the events
+                      controller). Mount the public-facing routes here so
+                      the "Open" / "Store" / "Copy link" buttons in the
+                      chatbot work for the signed-in author too — without
+                      this, any /:slug/events/:id URL falls through to *
+                      and bounces back to the dashboard. */}
+                  <Route
+                    path="/:organizationName/events/:id"
+                    element={<EventFront eventId={""} onBack={() => {}} />}
+                  />
+                  <Route
+                    path="/events/:id"
+                    element={<EventFront eventId={""} onBack={() => {}} />}
+                  />
+                  <Route
+                    path="/:organizationName"
+                    element={<OrganizerStorefront onBack={() => navigate(-1)} />}
+                  />
+                  <Route path="/ticket-cart" element={<TicketCart />} />
+                  <Route
+                    path="/ticket-cart/:organizerId"
+                    element={<TicketCart />}
+                  />
+                  <Route path="/ticket-payment" element={<TicketPaymentPage />} />
+                  <Route
+                    path="*"
+                    element={<Navigate to="/organizer-dashboard" replace />}
+                  />
+                </Routes>
+              );
             case "organizer":
               return (
                 <Routes>

@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import OpenAI from "openai";
+import { buildDefaultStorefrontSettings } from "../organizer-stores/default-settings";
 
 type ConvEntry = {
   role: "user" | "assistant" | "tool" | "system";
@@ -332,6 +333,7 @@ export class ChatbotService {
     private roundTableBookingModel: Model<any>,
     @InjectModel("Template") private templateModel: Model<any>,
     @InjectModel("User") private userModel: Model<any>,
+    @InjectModel("OrganizerStore") private organizerStoreModel: Model<any>,
   ) {
     const useQwen = !!process.env.QWEN_API_KEY;
     const apiKey = useQwen
@@ -1413,6 +1415,779 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
       text:
         `That's part of the **${label}** module, which isn't enabled on your operator profile. ` +
         `Ask your organizer admin to grant access if you need it — happy to help with anything else in the meantime!`,
+    };
+  }
+
+  /**
+   * Lightweight chat handler for Google-signed-in users who haven't completed
+   * organizer registration yet. The main pipeline assumes an Organizer doc
+   * exists; here we only support two intents — open the Create Event form
+   * or open the organizer registration form — plus a friendly fallback.
+   *
+   * Returned shape matches what ChatbotWidget expects (text + quickActions +
+   * botAction), so the same renderer handles both flows.
+   */
+  // Slug helpers — kept here (rather than imported from events.controller)
+  // so the storefront-backfill path inside handleIndividualMessage is
+  // self-contained.
+  private slugifyForStore(name: string, fallback: string): string {
+    const cleaned = (name || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-");
+    return cleaned || `org-${fallback.slice(-6)}`;
+  }
+  private async findFreeStoreSlug(base: string): Promise<string> {
+    const clean = base || "store";
+    const taken = await this.organizerStoreModel.exists({ slug: clean });
+    if (!taken) return clean;
+    for (let i = 0; i < 8; i++) {
+      const candidate = `${clean}-${Math.random().toString(36).slice(2, 6)}`;
+      const exists = await this.organizerStoreModel.exists({ slug: candidate });
+      if (!exists) return candidate;
+    }
+    return `${clean}-${Date.now().toString(36)}`;
+  }
+
+  // TEMP backfill — populate `organizerType` (and `accountType` when
+  // missing) on every existing organizer row.
+  //   accountType "Individual" -> organizerType "individual"
+  //   accountType "Organizer"  -> organizerType "organizer"
+  // Legacy rows with neither field get accountType: "Organizer" (schema
+  // default) + organizerType: "organizer".
+  // Rows that already have an organizerType (including "upgraded") are
+  // left alone so we don't clobber an Individual->Organizer conversion.
+  async backfillOrganizerType() {
+    const rows: any[] = await this.organizerModel
+      .find({
+        $or: [
+          { organizerType: { $exists: false } },
+          { organizerType: null },
+          { organizerType: "" },
+          { accountType: { $exists: false } },
+          { accountType: null },
+          { accountType: "" },
+        ],
+      })
+      .lean();
+    let individuals = 0;
+    let organizers = 0;
+    let accountTypeFilled = 0;
+    for (const r of rows) {
+      const update: any = {};
+      if (!r.organizerType) {
+        update.organizerType =
+          r.accountType === "Individual" ? "individual" : "organizer";
+      }
+      if (!r.accountType) {
+        update.accountType = "Organizer";
+        accountTypeFilled++;
+      }
+      if (Object.keys(update).length === 0) continue;
+      await this.organizerModel.updateOne({ _id: r._id }, { $set: update });
+      if (update.organizerType === "individual") individuals++;
+      else if (update.organizerType === "organizer") organizers++;
+    }
+    return {
+      rowsScanned: rows.length,
+      organizerTypeSetToIndividual: individuals,
+      organizerTypeSetToOrganizer: organizers,
+      accountTypeFilled,
+    };
+  }
+
+  // TEMP heal: zero-out visitor-type prices on every event belonging to
+  // Individual-tier organizers (or just a specific email). Matches the
+  // new policy in events.controller: Individuals can't accept payment,
+  // so all their tickets are free.
+  async healIndividualTicketPrices({ email }: { email?: string }) {
+    const orgQuery: any = { accountType: "Individual" };
+    if (email) {
+      const e = email.toLowerCase();
+      const escaped = e.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      orgQuery.email = { $regex: `^${escaped}$`, $options: "i" };
+    }
+    const orgs: any[] = await this.organizerModel.find(orgQuery).lean();
+    const orgIds = orgs.map((o: any) => o._id);
+    if (orgIds.length === 0) return { eventsScanned: 0, eventsHealed: 0 };
+    const orgIdStrings = orgIds.map((id: any) => String(id));
+    const events: any[] = await this.eventModel
+      .find({
+        organizer: { $in: [...orgIds, ...orgIdStrings] },
+      })
+      .lean();
+    let healed = 0;
+    for (const ev of events) {
+      const vts: any[] = Array.isArray(ev.visitorTypes) ? ev.visitorTypes : [];
+      if (vts.some((v: any) => Number(v?.price) > 0)) {
+        const zeroed = vts.map((v: any) => ({ ...v, price: 0 }));
+        await this.eventModel.updateOne(
+          { _id: ev._id },
+          { $set: { visitorTypes: zeroed, ticketPrice: "0" } },
+        );
+        healed++;
+      }
+    }
+    return {
+      organizersMatched: orgs.length,
+      eventsScanned: events.length,
+      eventsHealed: healed,
+    };
+  }
+
+  // TEMP heal endpoint — for a given email, look up the canonical
+  // Organizer row and re-link any orphaned events / storefronts that
+  // point at deleted organizer IDs back to it. Handles the case where
+  // a prior buggy create-then-delete left rows pointing at a stale _id.
+  async healOrphansForEmail({ email }: { email: string }) {
+    if (!email) return { error: "missing ?email query param" };
+    const e = email.toLowerCase();
+    const escaped = e.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const canonical: any = await this.organizerModel
+      .findOne({ email: { $regex: `^${escaped}$`, $options: "i" } })
+      .lean();
+    if (!canonical) return { error: "no organizer for email", email: e };
+    const canonicalId = canonical._id;
+
+    // 1. Find events whose `organizer` field doesn't resolve to a real org.
+    const allOrgIds = (await this.organizerModel.find({}, { _id: 1 }).lean()).map(
+      (o: any) => String(o._id),
+    );
+    const allOrgSet = new Set(allOrgIds);
+    // Use a name-match heuristic: events whose `organizer` string-ID
+    // isn't in the live org set AND whose lookup-by-email would map
+    // back to this canonical row. We don't have a per-event email
+    // hint, so heal ALL orphan events to this canonical row — only
+    // safe if you know all orphans on this DB belong to this user.
+    const orphanEvents: any[] = (await this.eventModel.find({}).lean()).filter(
+      (ev: any) => ev.organizer && !allOrgSet.has(String(ev.organizer)),
+    );
+    let eventsLinked = 0;
+    for (const ev of orphanEvents) {
+      // Only heal events that were pointing at an org ID that started
+      // with the same 12 hex chars as the canonical creation timestamp
+      // OR whose pointer doesn't resolve. To be safer for the user's
+      // immediate case we just relink ALL orphans.
+      await this.eventModel.updateOne(
+        { _id: ev._id },
+        { $set: { organizer: canonicalId } },
+      );
+      eventsLinked++;
+    }
+
+    // 2. Find storefronts whose organizerId doesn't resolve.
+    const orphanStores: any[] = (
+      await this.organizerStoreModel.find({}).lean()
+    ).filter(
+      (s: any) => s.organizerId && !allOrgSet.has(String(s.organizerId)),
+    );
+    let storesLinked = 0;
+    for (const s of orphanStores) {
+      await this.organizerStoreModel.updateOne(
+        { _id: s._id },
+        { $set: { organizerId: canonicalId } },
+      );
+      storesLinked++;
+    }
+
+    return {
+      canonicalOrganizerId: String(canonicalId),
+      eventsLinked,
+      storesLinked,
+    };
+  }
+
+  // TEMP diagnostic — list ALL organizer rows for an email so we can
+  // detect duplicates caused by case-sensitive lookups, race conditions
+  // on lazy-create, or earlier buggy creation paths.
+  async debugOrganizersForEmail({ email }: { email: string }) {
+    if (!email) return { error: "missing ?email query param" };
+    const e = email.toLowerCase();
+    const escaped = e.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const rows: any[] = await this.organizerModel
+      .find({ email: { $regex: `^${escaped}$`, $options: "i" } })
+      .lean();
+    return {
+      lookupEmail: e,
+      count: rows.length,
+      rows: rows.map((r: any) => ({
+        id: String(r._id),
+        email: r.email,
+        organizationName: r.organizationName,
+        accountType: r.accountType,
+        approved: r.approved,
+        createdAt: r.createdAt,
+      })),
+    };
+  }
+
+  // TEMP diagnostic — list the 10 most recent events with their organizer
+  // refs so we can find a "lost" event from any user. Also reports the
+  // raw type of the organizer field (string vs ObjectId) which matters
+  // for downstream queries.
+  async debugRecentEvents() {
+    const events = await this.eventModel
+      .find({})
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+    return {
+      count: events.length,
+      events: events.map((ev: any) => ({
+        id: String(ev._id),
+        title: ev.title,
+        organizer: ev.organizer ? String(ev.organizer) : null,
+        organizerType: ev.organizer === null
+          ? "null"
+          : typeof ev.organizer === "object"
+            ? ev.organizer?.constructor?.name || "object"
+            : typeof ev.organizer,
+        createdAt: ev.createdAt,
+      })),
+    };
+  }
+
+  // TEMP diagnostic — pass either ?email=foo@bar.com OR ?organizerId=XXX.
+  // Returns the Organizer row + event count + a sample event so we can
+  // isolate whether "my events" returns nothing because of an org-lookup
+  // miss vs. an event-query miss.
+  async debugIndividualLookup({
+    email,
+    organizerId,
+  }: {
+    email?: string;
+    organizerId?: string;
+  }) {
+    let org: any = null;
+    if (organizerId) {
+      try {
+        org = await this.organizerModel.findById(organizerId).lean();
+      } catch {
+        // Invalid ObjectId — ignore, try email path
+      }
+    }
+    if (!org && email) {
+      const e = email.toLowerCase();
+      const escaped = e.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      org = await this.organizerModel
+        .findOne({ email: { $regex: `^${escaped}$`, $options: "i" } })
+        .lean();
+    }
+    if (!org) {
+      return {
+        error: "no organizer found",
+        triedEmail: email || null,
+        triedOrganizerId: organizerId || null,
+      };
+    }
+    // Backfill / heal storefront — same logic as handleIndividualMessage
+    // but exposed here so we can verify the slug + full default settings
+    // without going through the chatbot.
+    let store: any = await this.organizerStoreModel
+      .findOne({ organizerId: org._id })
+      .lean();
+    if (store && (!store.settings?.design || !store.settings?.features)) {
+      const merged = buildDefaultStorefrontSettings({
+        storeName:
+          store.settings?.general?.storeName ||
+          org.organizationName ||
+          org.name,
+        email:
+          store.settings?.general?.contactInfo?.email || org.email,
+      });
+      merged.general = { ...merged.general, ...(store.settings?.general || {}) };
+      await this.organizerStoreModel
+        .updateOne({ _id: store._id }, { $set: { settings: merged } })
+        .catch(() => null);
+      store = { ...store, settings: merged };
+    }
+    if (!store) {
+      const base = this.slugifyForStore(
+        org.organizationName || org.name || "",
+        String(org._id),
+      );
+      const safeSlug = await this.findFreeStoreSlug(base);
+      try {
+        store = await new this.organizerStoreModel({
+          organizerId: org._id,
+          slug: safeSlug,
+          settings: buildDefaultStorefrontSettings({
+            storeName: org.organizationName || org.name,
+            email: org.email,
+          }),
+        }).save();
+      } catch {
+        store = await this.organizerStoreModel
+          .findOne({ organizerId: org._id })
+          .lean();
+      }
+    }
+    const events = await this.eventModel
+      .find({ organizer: { $in: [org._id, String(org._id)] } })
+      .lean();
+    return {
+      organizer: {
+        id: String(org._id),
+        email: org.email,
+        organizationName: org.organizationName,
+        accountType: org.accountType,
+        organizerType: org.organizerType,
+      },
+      storefront: store
+        ? {
+            slug: (store as any).slug,
+            url: `/${(store as any).slug}`,
+          }
+        : null,
+      eventCount: events.length,
+      events: events.slice(0, 5).map((ev: any) => ({
+        id: String(ev._id),
+        title: ev.title,
+        organizer: String(ev.organizer),
+        publicUrl: store
+          ? `/${(store as any).slug}/events/${ev._id}`
+          : `/events/${ev._id}`,
+        createdAt: ev.createdAt,
+      })),
+    };
+  }
+
+  /**
+   * Unauthenticated chatbot for the public landing page. Matches against a
+   * small curated FAQ corpus and recognizes a "create event" intent that
+   * the frontend turns into an inline Google sign-in prompt.
+   *
+   * Intentionally NOT routed through the LLM — every visit would be a
+   * billed API call. If a question doesn't match any FAQ keyword, the
+   * bot points them at the docs / contact page instead.
+   */
+  async handlePublicMessage({ message }: { message: string }): Promise<{
+    text: string;
+    quickActions?: Array<{ label: string; action: string }>;
+    publicAction?: { type: "trigger_google_auth" };
+  }> {
+    const m = (message || "").toLowerCase().trim();
+    const has = (...words: string[]) =>
+      words.some((w) => new RegExp(`\\b${w}\\b`, "i").test(m));
+
+    const wantsCreateEvent =
+      has("create", "start", "new", "make", "host", "plan", "publish") &&
+      has("event", "events", "wedding", "birthday", "conference", "meetup");
+
+    if (wantsCreateEvent || /^(create|host)\s+(my\s+)?(first\s+)?event/i.test(m)) {
+      return {
+        text:
+          "Awesome — let's get you set up. I'll sign you in with Google in a sec and take you straight to your dashboard. If you already run an organization with us, you'll land on your full Organizer dashboard; otherwise you'll start as an Individual and publish your event from there.",
+        publicAction: { type: "trigger_google_auth" },
+      };
+    }
+
+    // Curated FAQ matcher. Order matters — more specific intents first.
+    const faqs: { test: () => boolean; reply: string }[] = [
+      {
+        test: () => has("price", "pricing", "cost", "fee", "free", "plan", "plans"),
+        reply:
+          "EventSH has a free starter plan for one-off organizers and paid tiers for full multi-event accounts. Visit **/pricing** for the full breakdown — or just create your first event and pick a plan later.",
+      },
+      {
+        test: () => has("ticket", "tickets", "selling", "sell"),
+        reply:
+          "You can sell tickets online (Razorpay/Stripe) and at the door via walk-in / QR scan. Refunds, multi-tier pricing, and coupons are all built in.",
+      },
+      {
+        test: () => has("individual", "wedding", "birthday", "one-off", "single"),
+        reply:
+          "Yes — individuals running a single event (wedding, birthday, one-off conference) can publish without registering a full organization. Click **Create my first event** and you're going.",
+      },
+      {
+        test: () => has("organizer", "organization", "business", "company"),
+        reply:
+          "Organizers get the full multi-event dashboard: stalls, vendor requests, custom storefront, CRM, analytics, custom domain. Sign in with Google — if we find your organization, you'll land directly on the Organizer dashboard.",
+      },
+      {
+        test: () => has("login", "sign in", "signin", "log in"),
+        reply:
+          "Click **Create my first event** below — it triggers Google sign-in. If you already have an organizer account on your email, you'll be sent to your dashboard. Otherwise we'll set you up as an Individual.",
+      },
+      {
+        test: () => has("storefront", "store", "shop", "domain"),
+        reply:
+          "Organizer accounts get a multi-event storefront at a custom URL (and optionally a custom domain). Individual accounts get a per-event **EventFront** page — perfect for a single wedding/conference.",
+      },
+      {
+        test: () => has("attendee", "attendees", "participant", "participants", "guest"),
+        reply:
+          "Attendees register on the public event page, get a QR-coded ticket, and check in by scan at the door. The Participants tab in the dashboard shows the full list, with export to CSV.",
+      },
+      {
+        test: () => has("scanner", "scan", "qr", "check-in", "checkin"),
+        reply:
+          "Every ticket carries a QR code. Use the in-browser scanner (Operators can have scoped scan-only access) — works on phones with no app install.",
+      },
+      {
+        test: () => has("support", "help", "contact"),
+        reply:
+          "Hit **/contact** for support, or just describe the problem here and I'll point you to the right place.",
+      },
+      {
+        test: () => has("hi", "hello", "hey", "yo"),
+        reply:
+          "Hey! I'm EventSH's assistant. I can answer FAQs about pricing, tickets, attendees, or get you started — click **Create my first event** below to begin.",
+      },
+    ];
+
+    const hit = faqs.find((f) => f.test());
+    const text = hit
+      ? hit.reply
+      : "I can answer questions about pricing, tickets, attendees, the storefront, individual vs organizer accounts — or kick off your first event right now. What would you like to do?";
+
+    return {
+      text,
+      quickActions: [
+        { label: "Create my first event", action: "I want to create my first event" },
+        { label: "Pricing", action: "How much does it cost?" },
+        { label: "How tickets work", action: "How do tickets work?" },
+        { label: "Individual vs Organizer", action: "What's the difference between individual and organizer?" },
+      ],
+    };
+  }
+
+  async handleIndividualMessage({
+    userName,
+    userEmail,
+    message,
+  }: {
+    userName: string;
+    userEmail?: string;
+    message: string;
+  }): Promise<{
+    text: string;
+    quickActions?: Array<{ label: string; action: string }>;
+    botAction?:
+      | { type: "openCreateEvent" }
+      | { type: "openOrganizerRegister" }
+      | { type: "viewEvent"; eventId: string };
+    events?: Array<{
+      id: string;
+      title: string;
+      date?: string;
+      status?: string;
+      ticketCount?: number;
+      revenue?: number;
+      currency?: string;
+      // Visitor-type summary surfaced on the chat card so the user can
+      // confirm at-a-glance what tickets are on sale.
+      ticketTypeCount?: number;
+      ticketTypeNames?: string[];
+      minPrice?: number | null;
+      maxPrice?: number | null;
+      capacityTotal?: number;
+      // Store-scoped: /{slug}/events/{id} when a storefront exists,
+      // otherwise the bare /events/{id}.
+      publicUrl?: string;
+      // The bare storefront URL (/{slug}) so the user can share their
+      // whole event store in one link.
+      storeUrl?: string;
+    }>;
+    participants?: Array<{
+      id: string;
+      name: string;
+      email?: string;
+      ticketType?: string;
+      used?: boolean;
+    }>;
+  }> {
+    const m = (message || "").toLowerCase();
+    const wantsRegister =
+      /\b(register|sign\s*up|become\s+(?:an\s+)?organizer|organi[sz]er|host\s+events?|create\s+(?:my\s+)?account|join)\b/.test(
+        m,
+      );
+    const wantsCreateEvent =
+      /\b(create|new|add|make|start|host|plan)\b/.test(m) &&
+      /\b(event|meetup|conference|workshop|show|expo|exhibition|gathering)\b/.test(
+        m,
+      );
+    const wantsMyEvents =
+      /\b(my events|list (my )?events|show (my )?events|see (my )?events)\b/.test(
+        m,
+      ) ||
+      /\bmy events\b/.test(m);
+    const wantsParticipants =
+      /\b(participant|participants|attendee|attendees|guests?|who.{0,15}coming|who.{0,15}registered)\b/.test(
+        m,
+      );
+
+    // Resolve the backing Organizer record (lazy-created on first event
+    // publish — see events.controller.ensureIndividualOrganizer). If
+    // none exists yet, "my events" intents fall through to onboarding.
+    const email = (userEmail || "").toLowerCase();
+    // Case-insensitive lookup — older Organizer docs may have a mixed-case
+    // email that won't match a lowercased equality check.
+    const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const backingOrg: any = email
+      ? await this.organizerModel
+          .findOne({ email: { $regex: `^${escapedEmail}$`, $options: "i" } })
+          .lean()
+      : null;
+
+    // Legacy events (and writes that slipped past Mongoose's cast) store
+    // `organizer` as a String even though the schema declares ObjectId.
+    // Query both shapes so we don't miss either set.
+    const orgMatch = backingOrg
+      ? { $in: [backingOrg._id, String(backingOrg._id)] }
+      : undefined;
+
+    if (wantsMyEvents && backingOrg) {
+      const events = await this.eventModel
+        .find({ organizer: orgMatch })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean();
+      if (events.length === 0) {
+        return {
+          text:
+            "You haven't published an event yet. Tap **Create an event** below and I'll open the form.",
+          quickActions: [
+            { label: "Create an event", action: "I want to create an event" },
+          ],
+        };
+      }
+      // Look up (or backfill / heal) the storefront slug — used to build
+      // branded URLs for every event in the list. Existing Individuals
+      // who were created before the storefront-on-publish wiring went in
+      // get one here on first "my events" lookup. Also auto-heals rows
+      // that were created with an incomplete settings shape (missing
+      // design / features / seo) — common for records created during
+      // early-iteration backfills.
+      let store: any = await this.organizerStoreModel
+        .findOne({ organizerId: backingOrg._id })
+        .lean();
+      if (store && (!store.settings?.design || !store.settings?.features)) {
+        const merged = buildDefaultStorefrontSettings({
+          storeName:
+            store.settings?.general?.storeName ||
+            backingOrg.organizationName ||
+            backingOrg.name,
+          email:
+            store.settings?.general?.contactInfo?.email || backingOrg.email,
+        });
+        // Preserve anything the user may have already customized in
+        // `general` — merge only the missing top-level branches.
+        merged.general = { ...merged.general, ...(store.settings?.general || {}) };
+        try {
+          await this.organizerStoreModel.updateOne(
+            { _id: store._id },
+            { $set: { settings: merged } },
+          );
+          store = { ...store, settings: merged };
+        } catch (err) {
+          console.error(
+            "[handleIndividualMessage] storefront heal failed:",
+            (err as any)?.message,
+          );
+        }
+      }
+      if (!store) {
+        const base = this.slugifyForStore(
+          backingOrg.organizationName || backingOrg.name || "",
+          String(backingOrg._id),
+        );
+        const safeSlug = await this.findFreeStoreSlug(base);
+        try {
+          store = await new this.organizerStoreModel({
+            organizerId: backingOrg._id,
+            slug: safeSlug,
+            settings: buildDefaultStorefrontSettings({
+              storeName: backingOrg.organizationName || backingOrg.name,
+              email: backingOrg.email,
+            }),
+          }).save();
+        } catch (err) {
+          // Race / duplicate — re-read whatever landed.
+          store = await this.organizerStoreModel
+            .findOne({ organizerId: backingOrg._id })
+            .lean();
+        }
+      }
+      const slug = store?.slug || null;
+      const storeUrl = slug ? `/${slug}` : undefined;
+      const eventsWithStats = await Promise.all(
+        events.map(async (ev: any) => {
+          const ticketStats = await this.ticketModel
+            .aggregate([
+              { $match: { eventId: ev._id } },
+              {
+                $group: {
+                  _id: null,
+                  count: { $sum: 1 },
+                  revenue: { $sum: { $ifNull: ["$amount", 0] } },
+                },
+              },
+            ])
+            .catch(() => []);
+          const stats = (ticketStats[0] || {}) as {
+            count?: number;
+            revenue?: number;
+          };
+          const visitorTypes: any[] = Array.isArray(ev.visitorTypes)
+            ? ev.visitorTypes
+            : [];
+          const prices = visitorTypes
+            .map((v: any) => Number(v?.price ?? 0))
+            .filter((n: number) => Number.isFinite(n));
+          const minPrice = prices.length ? Math.min(...prices) : null;
+          const maxPrice = prices.length ? Math.max(...prices) : null;
+          const capacityTotal = visitorTypes.reduce(
+            (sum: number, v: any) =>
+              sum + (Number.isFinite(Number(v?.maxCount)) ? Number(v.maxCount) : 0),
+            0,
+          );
+          return {
+            id: String(ev._id),
+            title: ev.title || ev.name || "Untitled event",
+            date: ev.startDate || ev.date,
+            // The schema field is `status` (e.g. "published" | "draft");
+            // `ev.published` is unset, so the old `ev.published ?` check
+            // always tagged events as "draft" even after publish.
+            status: ev.status || (ev.published ? "published" : "draft"),
+            ticketCount: stats.count || 0,
+            revenue: stats.revenue || 0,
+            currency: backingOrg.country
+              ? COUNTRY_CURRENCY[backingOrg.country]?.symbol || "$"
+              : "$",
+            ticketTypeCount: visitorTypes.length,
+            ticketTypeNames: visitorTypes
+              .map((v: any) => String(v?.name || "").trim())
+              .filter(Boolean)
+              .slice(0, 3),
+            minPrice,
+            maxPrice,
+            capacityTotal,
+            publicUrl: slug
+              ? `/${slug}/events/${ev._id}`
+              : `/events/${ev._id}`,
+            storeUrl,
+          };
+        }),
+      );
+      return {
+        text: `Here ${eventsWithStats.length === 1 ? "is your event" : `are your ${eventsWithStats.length} events`}:`,
+        events: eventsWithStats,
+        quickActions: [
+          { label: "See participants", action: "Show me the participants" },
+          { label: "Create another event", action: "I want to create an event" },
+        ],
+      };
+    }
+
+    if (wantsParticipants && backingOrg) {
+      // Default to the most recent event when no event is specified.
+      const latestEvent: any = await this.eventModel
+        .findOne({ organizer: orgMatch })
+        .sort({ createdAt: -1 })
+        .lean();
+      if (!latestEvent) {
+        return {
+          text:
+            "You don't have any events yet, so there are no participants to show. Create one first?",
+          quickActions: [
+            { label: "Create an event", action: "I want to create an event" },
+          ],
+        };
+      }
+      const tickets = await this.ticketModel
+        .find({ eventId: latestEvent._id })
+        .limit(25)
+        .lean();
+      const participants = tickets.map((t: any) => ({
+        id: String(t._id),
+        name: t.buyerName || t.attendeeName || t.name || "Guest",
+        email: t.buyerEmail || t.email,
+        ticketType: t.ticketType || t.type,
+        used: !!t.used,
+      }));
+      return {
+        text:
+          participants.length === 0
+            ? `No participants yet for **${(latestEvent as any).title || "your event"}**. Share the event link to start selling tickets.`
+            : `Here are the ${participants.length === 25 ? "first 25 " : ""}participants for **${(latestEvent as any).title || "your event"}**:`,
+        participants,
+        quickActions: [
+          { label: "My events", action: "Show my events" },
+        ],
+      };
+    }
+
+    if (wantsRegister) {
+      return {
+        text:
+          "Great — let's set you up as a full organizer (custom domain, storefront, multi-event analytics). I'm opening the registration form now; it'll have your name and email pre-filled.",
+        botAction: { type: "openOrganizerRegister" },
+        quickActions: [
+          { label: "Create an event", action: "I want to create an event" },
+        ],
+      };
+    }
+    if (wantsCreateEvent) {
+      return {
+        text:
+          "Opening the Create Event form. As an Individual you can publish one event — share the public link with your guests once it's live.",
+        botAction: { type: "openCreateEvent" },
+        quickActions: backingOrg
+          ? [
+              { label: "My events", action: "Show my events" },
+              {
+                label: "Become an organizer",
+                action: "I want to register as an organizer",
+              },
+            ]
+          : [
+              {
+                label: "Become an organizer",
+                action: "I want to register as an organizer",
+              },
+            ],
+      };
+    }
+
+    // Default greeting. If they already have at least one event, surface
+    // "My events" as the primary pill alongside the onboarding ones.
+    const hasEvents =
+      !!backingOrg &&
+      (await this.eventModel.countDocuments({ organizer: orgMatch })) >
+        0;
+    return {
+      text:
+        `Welcome${userName && userName !== "there" ? `, ${userName}` : ""}! ` +
+        `I can help you ${
+          hasEvents
+            ? "manage your event, check participants, or publish another."
+            : "publish your first event or set up a full organizer account."
+        }\n\n` +
+        `• **Create an event** — I'll open the form.\n` +
+        (hasEvents
+          ? `• **My events** — see what you've published, participants, and revenue.\n`
+          : "") +
+        `• **Become an organizer** — unlock the full multi-event dashboard with storefront and analytics.`,
+      quickActions: hasEvents
+        ? [
+            { label: "My events", action: "Show my events" },
+            { label: "See participants", action: "Show me the participants" },
+            { label: "Create an event", action: "I want to create an event" },
+            {
+              label: "Become an organizer",
+              action: "I want to register as an organizer",
+            },
+          ]
+        : [
+            { label: "Create an event", action: "I want to create an event" },
+            {
+              label: "Become an organizer",
+              action: "I want to register as an organizer",
+            },
+          ],
     };
   }
 
