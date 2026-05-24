@@ -43,6 +43,17 @@ export class AuthController {
     return process.env.FRONTEND_BASE_URL || "https://eventsh.com";
   }
 
+  // Map a Google `locale` (e.g. "en-IN", "en_US", "en") to a 2-letter
+  // ISO country code. Used for the Individual onboarding flow so the
+  // chatbot's currency picker (COUNTRY_CURRENCY in chatbot.service)
+  // shows ₹ for India accounts, $ for US accounts, etc. Returns ""
+  // when no region info is present — caller can fall back to a default.
+  private countryFromLocale(locale?: string): string {
+    if (!locale) return "";
+    const m = String(locale).match(/[-_]([A-Za-z]{2})$/);
+    return m ? m[1].toUpperCase() : "";
+  }
+
   @Post("login")
   async login(@Body() dto: LocalDto) {
     const user = await this.authService.validateUser(dto.email, dto.password);
@@ -149,8 +160,22 @@ export class AuthController {
         existing: isExisting ? "true" : "false",
       });
 
-      const returnUrl = (req.query?.state as string) || "";
-      const baseUrl = returnUrl || `${fe}/ticket-cart`;
+      // `state` from the frontend is a relative path (e.g.
+      // "/ticket-cart/<organizerId>" via window.location.pathname).
+      // res.redirect would resolve a relative path against THIS handler's
+      // origin (backend, :3000), so the browser would end up on the
+      // backend port — the cart never mounts, no organizer fetch
+      // happens, and useCurrency("") falls through to ₹. Always
+      // prepend the frontend base URL so the redirect lands on :8080
+      // with the organizerId intact and the SGD/USD/etc. currency
+      // resolves correctly.
+      const state = (req.query?.state as string) || "";
+      const isAbsolute = /^https?:\/\//i.test(state);
+      const baseUrl = state
+        ? isAbsolute
+          ? state
+          : `${fe}${state.startsWith("/") ? "" : "/"}${state}`
+        : `${fe}/ticket-cart`;
       return res.redirect(`${baseUrl}?${params.toString()}`);
     } catch (error) {
       return res.redirect(`${fe}/ticket-cart?error=auth_failed`);
@@ -270,12 +295,19 @@ export class AuthController {
           (user as any).roles = ["individual"];
           await (user as any).save?.();
         }
+        const country = this.countryFromLocale(userFromGoogle.locale);
         const token = this.jwtService.sign(
           {
             name: (user as any).name || name,
             email: (user as any).email || email,
             sub: (user as any)._id?.toString(),
             roles: (user as any).roles || ["individual"],
+            // Country derived from Google `locale` (e.g. en-IN -> IN).
+            // Lets the chatbot pick ₹/$ for the Individual account
+            // without ever showing a country picker. Empty string
+            // when Google didn't supply locale — chatbot then falls
+            // back to US/$.
+            country,
           },
           { secret: process.env.JWT_ACCESS_SECRET, expiresIn: "24h" } as any,
         );
@@ -301,6 +333,7 @@ export class AuthController {
             name,
             providerId:
               userFromGoogle.oauthId || userFromGoogle.providerId || "",
+            country: this.countryFromLocale(userFromGoogle.locale),
           });
           return res.redirect(
             `${fe}/organizer-dashboard?token=${encodeURIComponent(token)}`,
@@ -576,10 +609,12 @@ export class AuthController {
     email,
     name,
     providerId,
+    country,
   }: {
     email: string;
     name: string;
     providerId: string;
+    country?: string;
   }): Promise<string> {
     let user = await this.usersService.findByEmail(email);
     if (!user) {
@@ -597,12 +632,25 @@ export class AuthController {
       (user as any).roles = ["individual"];
       await (user as any).save?.();
     }
+    // Resolve country: prefer the value Google supplied this sign-in,
+    // fall back to whatever is already stored on the Organizer row for
+    // this email (so repeat sign-ins keep the same currency even if
+    // Google ever drops the `locale` field). Empty -> chatbot defaults
+    // to USD.
+    let resolvedCountry = (country || "").toUpperCase();
+    if (!resolvedCountry) {
+      const existingOrg: any = await this.organizerModel
+        .findOne({ email: email.toLowerCase() })
+        .lean();
+      resolvedCountry = (existingOrg?.country || "").toUpperCase();
+    }
     return this.jwtService.sign(
       {
         name: (user as any).name || name,
         email: (user as any).email || email,
         sub: (user as any)._id?.toString(),
         roles: (user as any).roles || ["individual"],
+        country: resolvedCountry,
       },
       { secret: process.env.JWT_ACCESS_SECRET, expiresIn: "24h" } as any,
     );

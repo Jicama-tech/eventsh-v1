@@ -49,6 +49,28 @@ export class ChatbotController {
       });
     }
 
+    // Card-based intents (My events / Participants) — route through the
+    // structured handler EVEN for full Organizers so they keep getting
+    // the rich event cards with edit/open/store/copy-link buttons +
+    // ticket-type stats. Users who upgraded from Individual to Organizer
+    // would otherwise lose this UX on first re-login. The LLM pipeline
+    // doesn't render cards (just text), so we intercept the narrow set
+    // of intents that have richer structured output.
+    const isCardIntent =
+      /\b(my events|list (my )?events|show (my )?events|see (my )?events)\b/i.test(
+        message,
+      ) ||
+      /\b(participants?|attendees?|guests?|who.{0,15}coming|who.{0,15}registered)\b/i.test(
+        message,
+      );
+    if (isCardIntent && req.user?.email) {
+      return this.chatbot.handleIndividualMessage({
+        userName: organizerName,
+        userEmail: req.user.email,
+        message,
+      });
+    }
+
     // Operators have `accessTabs` on their JWT (see auth.controller.ts
     // mintOrganizerToken). Organizers don't — they get full access.
     const operatorAccessTabs: string[] | null = Array.isArray(
@@ -131,5 +153,17 @@ export class ChatbotController {
   @Get("debug/backfill-organizer-type")
   async debugBackfillOrganizerType() {
     return this.chatbot.backfillOrganizerType();
+  }
+
+  // TEMP one-shot: set the `country` field on an Individual organizer
+  // row so the chatbot picks the right currency without waiting for the
+  // user to sign out and back in. Usage:
+  //   /chatbot/debug/set-org-country?email=foo@bar.com&country=IN
+  @Get("debug/set-org-country")
+  async debugSetOrgCountry(@Req() req: any) {
+    return this.chatbot.setOrganizerCountry({
+      email: String(req.query?.email || ""),
+      country: String(req.query?.country || ""),
+    });
   }
 }

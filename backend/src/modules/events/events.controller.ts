@@ -85,13 +85,24 @@ export class EventsController {
     email?: string;
     name?: string;
     sub?: string;
+    country?: string;
   }): Promise<any> {
     const email = (user?.email || "").toLowerCase();
     if (!email) {
       throw new ForbiddenException("Token missing email — please sign in again.");
     }
     const existing = await this.organizerModel.findOne({ email });
-    if (existing) return existing;
+    if (existing) {
+      // Backfill country once if the existing Individual row never got
+      // one (created before the locale-aware sign-in flow). Lets the
+      // chatbot pick ₹/$ on the very next "my events" call without
+      // re-signing in.
+      if (!existing.country && user?.country) {
+        existing.country = user.country.toUpperCase();
+        await existing.save?.();
+      }
+      return existing;
+    }
 
     const defaultPlan = await this.planModel.findOne({
       moduleType: "Individual",
@@ -126,6 +137,10 @@ export class EventsController {
       // Organizer registration, registerOrganizer will flip this to
       // "upgraded" so we can report on the conversion funnel.
       organizerType: "individual",
+      // Country from the JWT (parsed at sign-in from Google's locale).
+      // Drives the chatbot currency picker ₹/$ etc. without ever
+      // surfacing a country selector. Empty -> defaults to US later.
+      country: (user?.country || "").toUpperCase() || undefined,
       approved: true,
       rejected: false,
       provider: "google",
@@ -240,6 +255,7 @@ export class EventsController {
           email: req.user?.email,
           name: req.user?.name,
           sub: req.user?.sub,
+          country: req.user?.country,
         });
         body.organizerId = String(org._id);
       } else {
