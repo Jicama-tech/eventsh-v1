@@ -141,7 +141,20 @@ export default function TicketCart() {
   const [isOrganizerVerifying, setIsOrganizerVerifying] = useState(false);
   const [countdown, setCountdown] = useState(60);
   const [completeWhatsAppNumber, setCompleteWhatsAppNumber] = useState("");
-  const [country, setCountry] = useState("");
+  // Persist the cart's country across the Google-buyer redirect so the
+  // cart re-mounts with the correct currency on the very first render —
+  // no brief flash to the fallback ($) before the organizer fetch
+  // re-resolves. Single global key (NOT per-organizer) so the redirect
+  // works even if the URL temporarily drops the :organizerId param.
+  // A user can only hold one cart at a time anyway, so there's no
+  // cross-organizer confusion.
+  const CART_COUNTRY_KEY = "cart:country";
+  const [country, setCountry] = useState<string>(
+    () => sessionStorage.getItem(CART_COUNTRY_KEY) || "",
+  );
+  useEffect(() => {
+    if (country) sessionStorage.setItem(CART_COUNTRY_KEY, country);
+  }, [country]);
   const { formatPrice, getSymbol } = useCurrency(country);
 
   // Google Auth state

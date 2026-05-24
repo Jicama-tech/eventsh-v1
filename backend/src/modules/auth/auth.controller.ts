@@ -160,8 +160,22 @@ export class AuthController {
         existing: isExisting ? "true" : "false",
       });
 
-      const returnUrl = (req.query?.state as string) || "";
-      const baseUrl = returnUrl || `${fe}/ticket-cart`;
+      // `state` from the frontend is a relative path (e.g.
+      // "/ticket-cart/<organizerId>" via window.location.pathname).
+      // res.redirect would resolve a relative path against THIS handler's
+      // origin (backend, :3000), so the browser would end up on the
+      // backend port — the cart never mounts, no organizer fetch
+      // happens, and useCurrency("") falls through to ₹. Always
+      // prepend the frontend base URL so the redirect lands on :8080
+      // with the organizerId intact and the SGD/USD/etc. currency
+      // resolves correctly.
+      const state = (req.query?.state as string) || "";
+      const isAbsolute = /^https?:\/\//i.test(state);
+      const baseUrl = state
+        ? isAbsolute
+          ? state
+          : `${fe}${state.startsWith("/") ? "" : "/"}${state}`
+        : `${fe}/ticket-cart`;
       return res.redirect(`${baseUrl}?${params.toString()}`);
     } catch (error) {
       return res.redirect(`${fe}/ticket-cart?error=auth_failed`);

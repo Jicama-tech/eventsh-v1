@@ -33,11 +33,44 @@ const normalizeCountry = (country: string | undefined | null): string => {
   return COUNTRY_ALIASES[String(country).trim().toUpperCase()] || "";
 };
 
+// Fallback used ONLY when an unknown / unrecognized country is supplied.
+// Previously this was hard-coded to IN (₹), which surfaced as the wrong
+// currency for Singapore organizers (and any non-aliased country) the
+// moment the local `country` state was momentarily empty — e.g. during
+// the brief window after the buyer's Google sign-in redirect before the
+// organizer fetch resolves. USD is a more neutral default; the cart
+// flips to the organizer's real currency as soon as setCountry fires.
+const FALLBACK_CURRENCY: CurrencyConfig = {
+  symbol: "$",
+  code: "USD",
+  locale: "en-US",
+};
+
+// Cart-side cache key. Mirrors what ticketCart.tsx writes whenever it
+// resolves an organizer's country. When `country` arrives empty (e.g.
+// briefly after the buyer's Google sign-in redirect, before the
+// organizer fetch resolves on the remounted cart), fall back to this
+// cache so we keep the previous currency instead of flashing to USD.
+const CART_COUNTRY_CACHE_KEY = "cart:country";
+
 export const useCurrency = (country: string) => {
-  const config = useMemo(
-    () => CURRENCY_CONFIG[normalizeCountry(country)] || CURRENCY_CONFIG["IN"],
-    [country]
-  );
+  const config = useMemo(() => {
+    const direct = normalizeCountry(country);
+    if (direct) return CURRENCY_CONFIG[direct];
+    // No usable country was passed in. Peek at the cart cache before
+    // falling through to USD so the post-Google-redirect render keeps
+    // the organizer's currency (SG$, etc.) seamlessly.
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem(CART_COUNTRY_CACHE_KEY);
+        const cachedNorm = normalizeCountry(cached || "");
+        if (cachedNorm) return CURRENCY_CONFIG[cachedNorm];
+      } catch {
+        // sessionStorage blocked (rare) — fall through.
+      }
+    }
+    return FALLBACK_CURRENCY;
+  }, [country]);
 
   const formatPrice = (amount: number): string => {
     // Format just the number with the locale's grouping/decimal rules, then
