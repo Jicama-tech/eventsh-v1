@@ -24,11 +24,20 @@ export class GoogleOrganizerStrategy extends PassportStrategy(
     profile: any,
     done: VerifyCallback
   ): Promise<any> {
+    // Google's profile gives us `_json.locale` (e.g. "en-IN", "en-US").
+    // We pass it through so the auth controller can derive the country
+    // code (IN, US) and the chatbot's currency lookup can pick ₹/$
+    // automatically for Individual accounts that never see a country
+    // picker.
+    const locale =
+      (profile?._json?.locale as string | undefined) ||
+      (profile?.locale as string | undefined);
     const user = {
       oauthProvider: "google",
       oauthId: profile.id,
       email: profile.emails?.[0]?.value,
       name: profile.displayName,
+      locale,
       password: "oauth-" + profile.id,
     };
     done(null, user);

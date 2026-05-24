@@ -1451,6 +1451,34 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     return `${clean}-${Date.now().toString(36)}`;
   }
 
+  // TEMP one-shot: set the `country` field on an Organizer row by
+  // email. Used to seed an Individual's currency without waiting for
+  // them to re-sign-in through the locale-aware Google flow.
+  async setOrganizerCountry({
+    email,
+    country,
+  }: {
+    email: string;
+    country: string;
+  }) {
+    if (!email || !country) {
+      return { error: "missing ?email and/or ?country query param" };
+    }
+    const e = email.toLowerCase();
+    const c = country.toUpperCase();
+    const escaped = e.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const res = await this.organizerModel.updateMany(
+      { email: { $regex: `^${escaped}$`, $options: "i" } },
+      { $set: { country: c } },
+    );
+    return {
+      email: e,
+      country: c,
+      matched: (res as any).matchedCount ?? (res as any).n,
+      modified: (res as any).modifiedCount ?? (res as any).nModified,
+    };
+  }
+
   // TEMP backfill — populate `organizerType` (and `accountType` when
   // missing) on every existing organizer row.
   //   accountType "Individual" -> organizerType "individual"
