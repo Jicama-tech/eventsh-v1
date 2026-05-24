@@ -7,6 +7,14 @@ export enum ReceiptType {
   A4 = "A4",
 }
 
+// Account tier chosen at registration. Determines which subset of plans the
+// organizer can browse/purchase. An Individual account can later upgrade by
+// switching to an Organizer plan.
+export enum AccountType {
+  ORGANIZER = "Organizer",
+  INDIVIDUAL = "Individual",
+}
+
 export type OrganizerDocument = Organizer & Document;
 
 // ✅ NEW: Razorpay linked account sub-schema (From Shopkeeper)
@@ -81,6 +89,31 @@ export class Organizer {
 
   @Prop({ required: true })
   organizationName: string; // Kept specific to Organizer (equivalent to ShopName)
+
+  @Prop({
+    type: String,
+    enum: AccountType,
+    default: AccountType.ORGANIZER,
+  })
+  accountType: AccountType;
+
+  // Audit-trail / insight field separate from accountType. Records the
+  // ORIGIN of the row, not the current tier — useful for analytics like
+  // "how many organizers started as Individuals and upgraded?".
+  //   - "individual": lazy-created on first event publish (Google-only
+  //     sign-in flow). Stays "individual" even if they later upgrade
+  //     so the lineage is preserved.
+  //   - "organizer":  registered directly via the full Organizer signup
+  //     form (no prior Individual row).
+  //   - "upgraded":   started as Individual then completed full Organizer
+  //     registration. accountType flips to "Organizer", organizerType
+  //     becomes "upgraded" so reporting can distinguish them.
+  @Prop({
+    type: String,
+    enum: ["individual", "organizer", "upgraded"],
+    default: "organizer",
+  })
+  organizerType: "individual" | "organizer" | "upgraded";
 
   @Prop({ required: false })
   phone: string;

@@ -2328,6 +2328,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   };
 
   const handleBack = () => {
+    // Always defer to browser history. No invented fallback destinations
+    // — if there's no previous page, the browser handles it (typically
+    // no-op or close-tab depending on context).
     navigate(-1);
   };
 
@@ -2601,14 +2604,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         {/* Subtle dark scrim for text legibility */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/40" />
 
-        {/* Back link */}
-        <button
-          onClick={handleBack}
-          className="absolute top-4 left-4 sm:top-6 sm:left-6 flex items-center gap-2 text-white text-sm font-medium hover:opacity-80 transition-opacity"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Events
-        </button>
+        {/* "Back to Events" link removed at user request — the small
+            arrow button in the sticky top nav (handleBack → navigate(-1))
+            still lets visitors return to whatever page they came from. */}
 
         {/* Hero bottom content */}
         <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 lg:p-8">

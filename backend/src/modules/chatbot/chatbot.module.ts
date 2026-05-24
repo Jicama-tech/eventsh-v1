@@ -13,6 +13,10 @@ import { SpeakerRequestSchema } from "../speaker-requests/entities/speaker-reque
 import { RoundTableBookingSchema } from "../round-table-bookings/entities/round-table-booking.entity";
 import { TemplateSchema } from "../templates/schemas/template.schema";
 import { UserSchema } from "../users/schemas/user.schema";
+import {
+  OrganizerStore,
+  OrganizerStoreSchema,
+} from "../organizer-stores/entities/organizer-store.entity";
 
 @Module({
   imports: [
@@ -28,6 +32,9 @@ import { UserSchema } from "../users/schemas/user.schema";
       { name: "RoundTableBooking", schema: RoundTableBookingSchema },
       { name: "Template", schema: TemplateSchema },
       { name: "User", schema: UserSchema },
+      // For producing store-scoped public URLs (/{slug}/events/{id}) in
+      // the Individual "My events" chatbot responses.
+      { name: OrganizerStore.name, schema: OrganizerStoreSchema },
     ]),
   ],
   controllers: [ChatbotController],

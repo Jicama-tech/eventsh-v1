@@ -31,6 +31,7 @@ import {
   PanelLeftOpen,
   MessageSquare,
   Receipt,
+  LifeBuoy,
 } from "lucide-react";
 import {
   Tooltip,
@@ -131,6 +132,9 @@ const OrganizerStorefrontCustomizer = lazy(() =>
 );
 const RoundTableBookings = lazy(
   () => import("@/components/organizer/RoundTableBookings"),
+);
+const SupportPanel = lazy(
+  () => import("@/components/organizer/SupportPanel"),
 );
 
 function RoundTableBookingsTab({ apiURL }: { apiURL: string }) {
@@ -265,6 +269,50 @@ export function OrganizerDashboard({
   const isOperator = operatorAccessTabs.length > 0;
   const isTabAllowedForOperator = (tabId: string) =>
     !isOperator || operatorAccessTabs.includes(tabId);
+
+  // Individual onboarding mode — user signed in via Google but hasn't
+  // completed organizer registration. Sidebar is fully hidden; they can
+  // only interact via the chatbot which is restricted to two actions:
+  // open Create Event or open the organizer registration form.
+  const userRoles: string[] = (() => {
+    try {
+      const token = sessionStorage.getItem("token");
+      if (!token) return [];
+      const decoded: any = jwtDecode(token);
+      return Array.isArray(decoded.roles) ? (decoded.roles as string[]) : [];
+    } catch {
+      return [];
+    }
+  })();
+  const isIndividual =
+    userRoles.includes("individual") && !userRoles.includes("organizer");
+  const individualName: string = (() => {
+    try {
+      const token = sessionStorage.getItem("token");
+      if (!token) return "";
+      const decoded: any = jwtDecode(token);
+      return decoded.name || "";
+    } catch {
+      return "";
+    }
+  })();
+  const individualEmail: string = (() => {
+    try {
+      const token = sessionStorage.getItem("token");
+      if (!token) return "";
+      const decoded: any = jwtDecode(token);
+      return decoded.email || "";
+    } catch {
+      return "";
+    }
+  })();
+  const handleOpenOrganizerRegister = () => {
+    const params = new URLSearchParams();
+    if (individualName) params.set("name", individualName);
+    if (individualEmail) params.set("email", individualEmail);
+    const qs = params.toString();
+    navigate(`/register${qs ? `?${qs}` : ""}`);
+  };
 
   // UI State
   const [organizerId, setOrganizerId] = useState("");
@@ -428,18 +476,15 @@ export function OrganizerDashboard({
     }
   };
 
+  // Logout flows through the AuthContext (passed in as onLogout). The old
+  // local implementation cleared the token + navigated, but never called
+  // setUser(null) on the context — so the in-memory user stayed put and the
+  // role-based route table immediately bounced the user back to the
+  // dashboard. Delegating to onLogout fixes that and also clears the
+  // chatbot history keys for free.
   async function logout() {
-    // Clear per-organizer scratch state (chatbot history, etc.)
-    Object.keys(sessionStorage)
-      .filter((k) => k.startsWith("chatbot:msgs:"))
-      .forEach((k) => sessionStorage.removeItem(k));
-    sessionStorage.removeItem("token");
     setCountry("IN");
-    if (storeSlug) {
-      navigate(`/${storeSlug}`);
-    } else {
-      navigate(`/`);
-    }
+    onLogout();
   }
 
   const handleViewStorefront = async () => {
@@ -612,8 +657,37 @@ export function OrganizerDashboard({
     category: event.category,
   }));
 
-  const handleCreateEvent = async (eventData: any) => {
-    // Implement API call logic here
+  const handleCreateEvent = async (eventData: FormData) => {
+    // CreateEventForm assembles the FormData and delegates the POST to
+    // this callback. (When the form is opened from the Events tab,
+    // MyEvents.tsx supplies its own onSave; here in the chatbot-launched
+    // path we do it ourselves.) The backend lazy-creates the Organizer
+    // record for Individuals on first publish.
+    const token = sessionStorage.getItem("token");
+    if (!token) {
+      toast({
+        duration: 5000,
+        title: "Not signed in",
+        description: "Sign in and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const res = await fetch(`${apiURL}/events/create-event`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: eventData,
+    });
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`;
+      try {
+        const j = await res.json();
+        detail = j?.message || detail;
+      } catch {
+        // ignore — fall back to HTTP status
+      }
+      throw new Error(detail);
+    }
     setShowCreateEvent(false);
   };
 
@@ -622,7 +696,39 @@ export function OrganizerDashboard({
     setShowCreateEvent(true);
   };
 
-  const handleUpdateEvent = (eventData: any) => {
+  const handleUpdateEvent = async (eventData: FormData) => {
+    // CreateEventForm delegates the actual PUT to this callback when in
+    // edit mode. Same pattern as handleCreateEvent above — the form
+    // assembles the FormData; we own the network call.
+    if (!editingEvent?._id) {
+      setShowCreateEvent(false);
+      return;
+    }
+    const token = sessionStorage.getItem("token");
+    if (!token) {
+      toast({
+        duration: 5000,
+        title: "Not signed in",
+        description: "Sign in and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const res = await fetch(`${apiURL}/events/${editingEvent._id}`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+      body: eventData,
+    });
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`;
+      try {
+        const j = await res.json();
+        detail = j?.message || detail;
+      } catch {
+        // ignore — fall back to HTTP status
+      }
+      throw new Error(detail);
+    }
     setEditingEvent(null);
     setShowCreateEvent(false);
   };
@@ -660,7 +766,14 @@ export function OrganizerDashboard({
     console.log("[dashboard] handleOpenEventForm called:", mode, payload);
     if (mode === "create") {
       setEditingEvent(null);
-      handleTabChange("events");
+      // Individuals have no events-module access — switching to the Events
+      // tab would surface the ModuleGate's "Upgrade Plan" lock card behind
+      // the modal, and they'd be stranded there after closing (no sidebar
+      // to navigate back). Keep them on the chatbot tab; the Dialog renders
+      // into a portal so it appears on top regardless of the active tab.
+      if (!isIndividual) {
+        handleTabChange("events");
+      }
       setShowCreateEvent(true);
       // eslint-disable-next-line no-console
       console.log("[dashboard] setShowCreateEvent(true) for create");
@@ -673,7 +786,9 @@ export function OrganizerDashboard({
         const json = await res.json();
         const ev = json?.data || json;
         setEditingEvent(ev);
-        handleTabChange("events");
+        if (!isIndividual) {
+          handleTabChange("events");
+        }
         setShowCreateEvent(true);
       } catch (e: any) {
         toast({
@@ -753,30 +868,18 @@ export function OrganizerDashboard({
 
   const navigationItems = [
     { id: "chatbot", label: "Chatbot", icon: Bot, moduleKey: null },
-    { id: "dashboard", label: "Analytics", icon: Store, moduleKey: null },
-    // {
-    //   id: "speakerRequests",
-    //   label: "Speaker Requests",
-    //   icon: Mic2,
-    //   moduleKey: "speakerRequests",
-    // },
-    // {
-    //   id: "roundTableBookings",
-    //   label: "Round Tables",
-    //   icon: Circle,
-    //   moduleKey: "roundTableBookings",
-    // },
+    { id: "dashboard", label: "Analytics", icon: Store, moduleKey: "analytics" },
     {
       id: "kiosk",
       label: "In-Person Booking",
       icon: Ticket,
-      moduleKey: "events",
+      moduleKey: "kiosk",
     },
     {
       id: "eventAttendees",
       label: "Participants",
       icon: Users,
-      moduleKey: "events",
+      moduleKey: "participants",
     },
     {
       id: "platformFees",
@@ -800,7 +903,13 @@ export function OrganizerDashboard({
       id: "feedback",
       label: "Feedback",
       icon: MessageSquare,
-      moduleKey: "events",
+      moduleKey: "feedback",
+    },
+    {
+      id: "support",
+      label: "Support",
+      icon: LifeBuoy,
+      moduleKey: null,
     },
     {
       id: "storefront",
@@ -826,39 +935,43 @@ export function OrganizerDashboard({
       <header className="border-b bg-card sticky top-0 z-50 flex-shrink-0">
         <div className="flex h-14 sm:h-16 items-center justify-between px-4 sm:px-6">
           <div className="flex items-center space-x-2">
-            {/* Mobile menu button */}
-            <Button
-              variant="buttonOutline"
-              size="sm"
-              className="lg:hidden"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-            >
-              {sidebarOpen ? (
-                <X className="h-5 w-5" />
-              ) : (
-                <Menu className="h-5 w-5" />
-              )}
-            </Button>
+            {/* Mobile menu button — hidden for Individuals (no sidebar) */}
+            {!isIndividual && (
+              <Button
+                variant="buttonOutline"
+                size="sm"
+                className="lg:hidden"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+              >
+                {sidebarOpen ? (
+                  <X className="h-5 w-5" />
+                ) : (
+                  <Menu className="h-5 w-5" />
+                )}
+              </Button>
+            )}
 
             <CalendarDays className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
             <h1 className="text-lg sm:text-xl font-bold hidden sm:block">
-              {OrganizationName}
+              {isIndividual ? "Welcome to EventSH" : OrganizationName}
             </h1>
             <h1 className="text-base font-bold sm:hidden truncate max-w-[150px]">
-              {OrganizationName}
+              {isIndividual ? "EventSH" : OrganizationName}
             </h1>
           </div>
 
           <div className="flex items-center space-x-2 sm:space-x-4">
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs sm:text-sm text-muted-foreground hidden sm:flex items-center gap-1 hover:text-primary"
-              onClick={() => setActiveTab("help")}
-            >
-              <HelpCircle className="h-4 w-4" />
-              Need Help?
-            </Button>
+            {!isIndividual && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs sm:text-sm text-muted-foreground hidden sm:flex items-center gap-1 hover:text-primary"
+                onClick={() => setActiveTab("help")}
+              >
+                <HelpCircle className="h-4 w-4" />
+                Need Help?
+              </Button>
+            )}
             <Button variant="buttonOutline" size="sm" onClick={logout}>
               <LogOut className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">Logout</span>
@@ -870,14 +983,15 @@ export function OrganizerDashboard({
       {/* Main container with fixed sidebar and scrollable content */}
       <div className="flex flex-1 overflow-hidden z-40">
         {/* Mobile Sidebar Overlay */}
-        {sidebarOpen && (
+        {sidebarOpen && !isIndividual && (
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300"
             onClick={() => setSidebarOpen(false)}
           />
         )}
 
-        {/* Sidebar */}
+        {/* Sidebar — fully hidden for Individuals (chatbot-only onboarding) */}
+        {!isIndividual && (
         <aside
           className={`
             fixed lg:static lg:translate-x-0
@@ -982,6 +1096,7 @@ export function OrganizerDashboard({
             </div>
           </div>
         </aside>
+        )}
 
         {/* Main Content - Scrollable */}
         <main className="flex-1 overflow-hidden flex flex-col">
@@ -1004,15 +1119,22 @@ export function OrganizerDashboard({
               >
                 <ChatbotWidget
                   mode="page"
-                  navItems={navigationItems
-                    .filter((n) => n.id !== "chatbot")
-                    .filter((n) => isTabAllowedForOperator(n.id))
-                    .map((n) => ({
-                      id: n.id,
-                      label: n.label,
-                      icon: n.icon,
-                    }))}
+                  isIndividual={isIndividual}
+                  onOpenOrganizerRegister={handleOpenOrganizerRegister}
+                  navItems={
+                    isIndividual
+                      ? []
+                      : navigationItems
+                          .filter((n) => n.id !== "chatbot")
+                          .filter((n) => isTabAllowedForOperator(n.id))
+                          .map((n) => ({
+                            id: n.id,
+                            label: n.label,
+                            icon: n.icon,
+                          }))
+                  }
                   onNavigate={(tab) => {
+                    if (isIndividual) return; // locked to chatbot
                     if (tab === "storefront") handleViewStorefront();
                     else handleTabChange(tab);
                   }}
@@ -1023,6 +1145,7 @@ export function OrganizerDashboard({
               </TabsContent>
 
               <TabsContent value="dashboard" className="mt-0">
+                <ModuleGate moduleKey="analytics" hideWhenLocked>
                 <div className="space-y-4 sm:space-y-6">
                   {/* Quick Actions */}
                   {/* <Card>
@@ -1102,6 +1225,7 @@ export function OrganizerDashboard({
                   {/* Analytics charts (Recharts) */}
                   {/* <OrganizerAnalyticsCharts /> */}
                 </div>
+                </ModuleGate>
               </TabsContent>
 
               <TabsContent value="events" className="mt-0">
@@ -1115,7 +1239,7 @@ export function OrganizerDashboard({
               </TabsContent>
 
               <TabsContent value="feedback" className="mt-0">
-                <ModuleGate moduleKey="events" hideWhenLocked>
+                <ModuleGate moduleKey="feedback" hideWhenLocked>
                   <Suspense fallback={<TabLoader />}>
                     <OrganizerFeedbackList />
                   </Suspense>
@@ -1123,7 +1247,7 @@ export function OrganizerDashboard({
               </TabsContent>
 
               <TabsContent value="kiosk" className="mt-0">
-                <ModuleGate moduleKey="events" hideWhenLocked>
+                <ModuleGate moduleKey="kiosk" hideWhenLocked>
                   <Suspense fallback={<TabLoader />}>
                     <KioskMode />
                   </Suspense>
@@ -1131,19 +1255,23 @@ export function OrganizerDashboard({
               </TabsContent>
 
               <TabsContent value="users" className="mt-0">
-                <Suspense fallback={<TabLoader />}>
-                  <div className="space-y-4">
-                    <MyEventUsers setShowAddUser={setShowAddUser} />
-                  </div>
-                </Suspense>
+                <ModuleGate moduleKey="stalls" hideWhenLocked>
+                  <Suspense fallback={<TabLoader />}>
+                    <div className="space-y-4">
+                      <MyEventUsers setShowAddUser={setShowAddUser} />
+                    </div>
+                  </Suspense>
+                </ModuleGate>
               </TabsContent>
 
               <TabsContent value="eventAttendees" className="mt-0">
-                <Suspense fallback={<TabLoader />}>
-                  <div className="space-y-4">
-                    <EventAttendees />
-                  </div>
-                </Suspense>
+                <ModuleGate moduleKey="participants" hideWhenLocked>
+                  <Suspense fallback={<TabLoader />}>
+                    <div className="space-y-4">
+                      <EventAttendees />
+                    </div>
+                  </Suspense>
+                </ModuleGate>
               </TabsContent>
 
               <TabsContent value="platformFees" className="mt-0">
@@ -1172,42 +1300,46 @@ export function OrganizerDashboard({
               </TabsContent>
 
               <TabsContent value="shopkeepers" className="mt-0">
-                <Suspense fallback={<TabLoader />}>
-                  <div className="space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                      <h2 className="text-2xl sm:text-3xl font-bold">
-                        Shopkeeper & Vendor Requests
-                      </h2>
-                    </div>
+                <ModuleGate moduleKey="stalls" hideWhenLocked>
+                  <Suspense fallback={<TabLoader />}>
+                    <div className="space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <h2 className="text-2xl sm:text-3xl font-bold">
+                          Shopkeeper & Vendor Requests
+                        </h2>
+                      </div>
 
-                    <VendorRequests
-                      setShowAddShopkeeper={setShowAddShopkeeper}
-                      setShowShopkeeperForm={setShowShopkeeperForm}
-                      handleViewShopkeeper={(shopkeeper: any) =>
-                        setShowShopkeeperDetail(shopkeeper)
-                      }
-                      handleEditShopkeeper={(shopkeeper: any) => {
-                        setEditingShopkeeper(shopkeeper);
-                        setShowAddShopkeeper(true);
-                      }}
-                    />
-                  </div>
-                </Suspense>
+                      <VendorRequests
+                        setShowAddShopkeeper={setShowAddShopkeeper}
+                        setShowShopkeeperForm={setShowShopkeeperForm}
+                        handleViewShopkeeper={(shopkeeper: any) =>
+                          setShowShopkeeperDetail(shopkeeper)
+                        }
+                        handleEditShopkeeper={(shopkeeper: any) => {
+                          setEditingShopkeeper(shopkeeper);
+                          setShowAddShopkeeper(true);
+                        }}
+                      />
+                    </div>
+                  </Suspense>
+                </ModuleGate>
               </TabsContent>
 
               <TabsContent value="tickets" className="mt-0">
-                <Suspense fallback={<TabLoader />}>
-                  <div className="space-y-4">
-                    <TicketSalesManagement
-                      events={[
-                        ...currentEvents,
-                        ...upcomingEvents,
-                        ...pastEvents,
-                      ]}
-                      onUpdateTicket={handleUpdateTicket}
-                    />
-                  </div>
-                </Suspense>
+                <ModuleGate moduleKey="tickets" hideWhenLocked>
+                  <Suspense fallback={<TabLoader />}>
+                    <div className="space-y-4">
+                      <TicketSalesManagement
+                        events={[
+                          ...currentEvents,
+                          ...upcomingEvents,
+                          ...pastEvents,
+                        ]}
+                        onUpdateTicket={handleUpdateTicket}
+                      />
+                    </div>
+                  </Suspense>
+                </ModuleGate>
               </TabsContent>
 
               <TabsContent value="roundTableBookings" className="mt-0">
@@ -1223,6 +1355,12 @@ export function OrganizerDashboard({
                   <div>
                     <OrganizerSettings onSave={handleSaveSettings} />
                   </div>
+                </Suspense>
+              </TabsContent>
+
+              <TabsContent value="support" className="mt-0">
+                <Suspense fallback={<TabLoader />}>
+                  <SupportPanel />
                 </Suspense>
               </TabsContent>
 
@@ -1362,3 +1500,4 @@ export function OrganizerDashboard({
     </div>
   );
 }
+

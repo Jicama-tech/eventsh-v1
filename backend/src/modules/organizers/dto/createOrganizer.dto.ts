@@ -4,7 +4,9 @@ import {
   IsOptional,
   IsEmail,
   IsBoolean,
+  IsEnum,
 } from "class-validator";
+import { AccountType } from "../schemas/organizer.schema";
 
 export class CreateOrganizerDto {
   @IsString()
@@ -66,4 +68,10 @@ export class CreateOrganizerDto {
   @IsString()
   @IsOptional()
   agentReferralCode?: string;
+
+  // Defaults to Organizer when omitted. Controls which default plan is
+  // assigned at registration and which plan listings the user sees later.
+  @IsEnum(AccountType)
+  @IsOptional()
+  accountType?: AccountType;
 }

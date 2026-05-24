@@ -24,15 +24,39 @@ import {
   Pencil,
   Trash2,
   ArrowUpDown,
+  LifeBuoy,
+  Bug,
+  Lightbulb,
+  HelpCircle,
+  Receipt,
+  HelpingHand,
+  CheckCircle2,
+  Clock,
+  CircleDot,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
 const apiURL = __API_URL__;
 
-type Filter = "pending" | "featured" | "hidden" | "all";
+type Filter = "pending" | "featured" | "hidden" | "all" | "support";
+type SupportCategory =
+  | "bug"
+  | "feature_request"
+  | "general"
+  | "billing"
+  | "other";
+type SupportStatus = "open" | "in_progress" | "resolved";
 
 interface Row {
   _id: string;
+  kind?: "testimonial" | "support";
   name: string;
   role: string;
   email?: string;
@@ -43,7 +67,51 @@ interface Row {
   featured: boolean;
   featuredOrder?: number;
   hidden: boolean;
+  // Support-ticket fields (only when kind === "support")
+  subject?: string;
+  category?: SupportCategory;
+  status?: SupportStatus;
+  attachments?: string[];
   createdAt: string;
+  updatedAt?: string;
+}
+
+const CATEGORY_META: Record<
+  SupportCategory,
+  { label: string; icon: any }
+> = {
+  bug: { label: "Bug", icon: Bug },
+  feature_request: { label: "Feature request", icon: Lightbulb },
+  general: { label: "General", icon: HelpCircle },
+  billing: { label: "Billing", icon: Receipt },
+  other: { label: "Other", icon: HelpingHand },
+};
+
+const STATUS_META: Record<
+  SupportStatus,
+  { label: string; cls: string; icon: any }
+> = {
+  open: {
+    label: "Open",
+    cls: "bg-amber-100 text-amber-800 border-amber-200",
+    icon: CircleDot,
+  },
+  in_progress: {
+    label: "In progress",
+    cls: "bg-blue-100 text-blue-800 border-blue-200",
+    icon: Clock,
+  },
+  resolved: {
+    label: "Resolved",
+    cls: "bg-emerald-100 text-emerald-800 border-emerald-200",
+    icon: CheckCircle2,
+  },
+};
+
+function absUrl(p: string) {
+  if (!p) return p;
+  if (/^https?:\/\//i.test(p)) return p;
+  return `${apiURL}${p}`;
 }
 
 function Stars({ value }: { value: number }) {
@@ -191,21 +259,26 @@ export function AppFeedbackCuration() {
         <div>
           <h2 className="text-2xl sm:text-3xl font-bold">App Feedback</h2>
           <p className="text-muted-foreground text-sm">
-            Curate which user testimonials appear in the landing page carousel.
+            {filter === "support"
+              ? "Organizer support tickets — bug reports, feature requests, and help asks from the dashboard."
+              : "Curate which user testimonials appear in the landing page carousel."}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {(["pending", "featured", "hidden", "all"] as Filter[]).map((f) => (
-            <Button
-              key={f}
-              size="sm"
-              variant={filter === f ? "default" : "outline"}
-              onClick={() => setFilter(f)}
-              className="capitalize"
-            >
-              {f}
-            </Button>
-          ))}
+          {(["pending", "featured", "hidden", "all", "support"] as Filter[]).map(
+            (f) => (
+              <Button
+                key={f}
+                size="sm"
+                variant={filter === f ? "default" : "outline"}
+                onClick={() => setFilter(f)}
+                className="capitalize flex items-center gap-1"
+              >
+                {f === "support" && <LifeBuoy className="h-3.5 w-3.5" />}
+                {f}
+              </Button>
+            ),
+          )}
         </div>
       </div>
 
@@ -221,7 +294,114 @@ export function AppFeedbackCuration() {
         </Card>
       ) : (
         <div className="grid gap-3">
-          {rows.map((r) => (
+          {rows.map((r) => {
+            // Support ticket layout: subject, category, status dropdown,
+            // attachments. The action row drops Feature/Hide (they don't
+            // apply to tickets) and adds a status selector.
+            if (r.kind === "support") {
+              const cat = r.category
+                ? CATEGORY_META[r.category]
+                : CATEGORY_META.other;
+              const st = r.status
+                ? STATUS_META[r.status]
+                : STATUS_META.open;
+              const CatIcon = cat.icon;
+              const StIcon = st.icon;
+              return (
+                <Card key={r._id}>
+                  <CardContent className="py-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <CatIcon className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-semibold">
+                            {r.subject || "(no subject)"}
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] font-normal"
+                          >
+                            {cat.label}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className={`text-xs flex items-center gap-1 ${st.cls}`}
+                          >
+                            <StIcon className="h-3 w-3" />
+                            {st.label}
+                          </Badge>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground mt-1">
+                          {r.name}
+                          {r.email ? ` · ${r.email}` : ""} ·{" "}
+                          {new Date(r.createdAt).toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-sm whitespace-pre-wrap">{r.comment}</p>
+                    {r.attachments && r.attachments.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {r.attachments.map((a, i) => (
+                          <a
+                            key={i}
+                            href={absUrl(a)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="h-20 w-20 rounded border overflow-hidden bg-muted flex items-center justify-center"
+                            title="Open attachment"
+                          >
+                            <img
+                              src={absUrl(a)}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              onError={(e) => {
+                                (
+                                  e.target as HTMLImageElement
+                                ).style.display = "none";
+                              }}
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 flex-wrap pt-2 border-t">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          Status:
+                        </span>
+                        <Select
+                          value={r.status || "open"}
+                          onValueChange={(v) =>
+                            patch(r._id, { status: v })
+                          }
+                        >
+                          <SelectTrigger className="h-8 w-[140px] text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="open">Open</SelectItem>
+                            <SelectItem value="in_progress">
+                              In progress
+                            </SelectItem>
+                            <SelectItem value="resolved">Resolved</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => remove(r)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            }
+            // Testimonial layout (unchanged).
+            return (
             <Card key={r._id}>
               <CardContent className="py-4 space-y-3">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -303,7 +483,8 @@ export function AppFeedbackCuration() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 

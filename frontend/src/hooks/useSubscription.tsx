@@ -15,6 +15,7 @@ interface ModuleConfig {
   enabled: boolean;
   limit?: number;
   audiences?: Partial<Record<FeedbackAudienceKey, boolean>>;
+  sections?: Record<string, boolean>;
 }
 
 export interface SubscriptionState {
@@ -55,6 +56,13 @@ interface SubscriptionContextValue {
    * fully-lapsed state, or if the audience flag isn't set on the plan.
    */
   isFeedbackAudienceEnabled: (audience: FeedbackAudienceKey) => boolean;
+  /**
+   * Check if a specific sub-section inside a module (e.g. the "venue" tab
+   * inside the "events" module) is enabled in the active plan. Missing
+   * sections default to enabled so legacy plans without section data keep
+   * working.
+   */
+  isModuleSectionEnabled: (moduleKey: string, sectionKey: string) => boolean;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextValue | undefined>(
@@ -82,8 +90,38 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         return;
       }
       const decoded: any = jwtDecode(token);
-      // Only organizers have subscriptions; bail for other roles.
-      if (!decoded?.roles?.includes("organizer")) {
+      const roles: string[] = Array.isArray(decoded?.roles) ? decoded.roles : [];
+      // Individuals (Google-signed-in, no Organizer record yet) get a
+      // permissive synthetic subscription so ModuleGate doesn't lock the
+      // create-event tabs behind an Upgrade overlay during onboarding.
+      // Empty `modules` triggers the existing permissive fallback in
+      // isModuleEnabled / isModuleSectionEnabled — everything reads as
+      // enabled. Real plan-based gating kicks in once they publish their
+      // first event (lazy-creates the Organizer row + Individual plan).
+      if (roles.includes("individual") && !roles.includes("organizer")) {
+        setSubscription({
+          subscribed: true,
+          planId: null,
+          planName: "Individual (onboarding)",
+          pricePaid: null,
+          validityInDays: null,
+          planStartDate: null,
+          planExpiryDate: null,
+          isExpired: false,
+          daysLeft: 0,
+          gracePeriodDays: 0,
+          inGracePeriod: false,
+          graceDaysLeft: 0,
+          fullyLapsed: false,
+          planActive: true,
+          features: [],
+          modules: {},
+          description: null,
+        });
+        return;
+      }
+      // Only organizers have real subscription docs; bail for other roles.
+      if (!roles.includes("organizer")) {
         setSubscription(null);
         return;
       }
@@ -168,6 +206,27 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     [subscription],
   );
 
+  const isModuleSectionEnabled = useCallback(
+    (moduleKey: string, sectionKey: string) => {
+      if (!subscription) return false;
+      if (subscription.fullyLapsed) return false;
+      if (!subscription.subscribed) return false;
+      // Plan with no module config at all → unrestricted (legacy plans).
+      if (
+        !subscription.modules ||
+        Object.keys(subscription.modules).length === 0
+      ) {
+        return true;
+      }
+      const cfg = subscription.modules?.[moduleKey];
+      if (!cfg?.enabled) return false;
+      // Module enabled but no per-section overrides recorded → all sections on.
+      if (!cfg.sections || Object.keys(cfg.sections).length === 0) return true;
+      return !!cfg.sections[sectionKey];
+    },
+    [subscription],
+  );
+
   return (
     <SubscriptionContext.Provider
       value={{
@@ -178,6 +237,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         isModuleEnabled,
         getModuleLimit,
         isFeedbackAudienceEnabled,
+        isModuleSectionEnabled,
       }}
     >
       {children}

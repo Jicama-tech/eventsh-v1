@@ -54,9 +54,12 @@ export function OrganizerRegister() {
   const stateInitial = (location.state || {}) as {
     name?: string;
     email?: string;
+    whatsAppNumber?: string;
   };
   const initialName = stateInitial.name || queryParams.get("name") || "";
   const initialEmail = stateInitial.email || queryParams.get("email") || "";
+  const initialWhatsApp =
+    stateInitial.whatsAppNumber || queryParams.get("whatsAppNumber") || "";
   const { toast } = useToast();
 
   // Capture agent referral code from ?ref=CODE in URL
@@ -70,14 +73,17 @@ export function OrganizerRegister() {
     ? COUNTRIES.find((c) => c.code === selectedCountry)
     : null;
 
-  // Profile state
+  // Profile state — initial values are pre-filled from the URL params that
+  // the Google → Individual onboarding flow attaches (?name=…&email=…). The
+  // business email is seeded to the same Google address as a convenience;
+  // the user can change it before they hit "Send OTP".
   const [profile, setProfile] = useState({
     name: initialName,
     organizationName: "",
     email: initialEmail,
-    businessEmail: "",
+    businessEmail: initialEmail,
     phone: "",
-    whatsAppNumber: "",
+    whatsAppNumber: initialWhatsApp,
     address: "",
     bio: "",
     country: "",
@@ -355,6 +361,10 @@ export function OrganizerRegister() {
         bio: profile.bio,
         country: profile.country,
         role: "organizer",
+        // This form is the full Organizer signup. Individuals never reach
+        // it (Google sign-in -> chatbot-only dashboard -> lazy-create
+        // Individual organizer on first event publish handles them).
+        accountType: "Organizer",
       };
 
       if (agentReferralCode) {
@@ -378,7 +388,13 @@ export function OrganizerRegister() {
         description:
           "Your account is active and the starter plan is assigned. Please log in via WhatsApp OTP.",
       });
-      navigate("/login");
+      // The user may still be holding an "individual"-role JWT (Google
+      // onboarding flow). Drop it so the authenticated route table swaps
+      // back to the unauthenticated one and /organizer/login renders. A
+      // hard reload guarantees the auth context re-initializes from the
+      // (now empty) sessionStorage instead of holding the stale user.
+      sessionStorage.removeItem("token");
+      window.location.href = "/organizer/login";
     } catch (error: any) {
       toast({
         title: "Error",
@@ -405,6 +421,13 @@ export function OrganizerRegister() {
         </CardHeader>
 
         <CardContent>
+          {/* Account-type selector removed: this form IS the organizer
+              registration path. Individuals don't reach it — they sign in
+              with Google and get a lazy-created Individual organizer on
+              first event publish. Anyone filling out this multi-field
+              form is signing up as a full Organizer (accountType is
+              hardcoded to "Organizer" in the payload below). */}
+
           <div className="grid gap-2 mb-6">
             <Label htmlFor="country" className="flex items-center gap-2">
               <Globe className="w-4 h-4" />
@@ -708,3 +731,4 @@ export function OrganizerRegister() {
     </div>
   );
 }
+

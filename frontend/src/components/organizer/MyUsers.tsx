@@ -3109,6 +3109,7 @@ export function AddExhibitorDialog({
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!formData.firstName.trim())
       newErrors.firstName = "First name is required";
     if (!formData.lastName.trim()) newErrors.lastName = "Last name is required";
@@ -3120,6 +3121,16 @@ export function AddExhibitorDialog({
     if (!formData.address.trim()) newErrors.address = "Address is required";
     if (!formData.businessCategory)
       newErrors.businessCategory = "Category required";
+    if (!formData.email.trim()) {
+      newErrors.email = "Personal email is required";
+    } else if (!emailRe.test(formData.email.trim())) {
+      newErrors.email = "Enter a valid email";
+    }
+    if (!formData.businessEmail.trim()) {
+      newErrors.businessEmail = "Business email is required";
+    } else if (!emailRe.test(formData.businessEmail.trim())) {
+      newErrors.businessEmail = "Enter a valid email";
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -3325,24 +3336,36 @@ export function AddExhibitorDialog({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Personal Email</Label>
+              <Label>
+                Personal Email <span className="text-red-500">*</span>
+              </Label>
               <Input
                 type="email"
                 value={formData.email}
                 onChange={(e) =>
                   setFormData({ ...formData, email: e.target.value })
                 }
+                className={errors.email ? "border-red-500" : ""}
               />
+              {errors.email && (
+                <p className="text-red-500 text-xs">{errors.email}</p>
+              )}
             </div>
             <div className="space-y-2">
-              <Label>Business Email</Label>
+              <Label>
+                Business Email <span className="text-red-500">*</span>
+              </Label>
               <Input
                 type="email"
                 value={formData.businessEmail}
                 onChange={(e) =>
                   setFormData({ ...formData, businessEmail: e.target.value })
                 }
+                className={errors.businessEmail ? "border-red-500" : ""}
               />
+              {errors.businessEmail && (
+                <p className="text-red-500 text-xs">{errors.businessEmail}</p>
+              )}
             </div>
           </div>
 

@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/popover";
 import { jwtDecode } from "jwt-decode";
 import BlurOverlay from "../ui/blurOverlay";
+import { ModuleGate } from "../ui/ModuleGate";
 import { AIVenueDesignerDialog } from "./AIVenueDesignerDialog";
 import {
   EventUrlImporter,
@@ -3508,6 +3509,22 @@ export function CreateEventForm({
   const { toast } = useToast();
   const venueRef = useRef<HTMLDivElement>(null);
 
+  // Individual accounts have no payment integration (no Razorpay /
+  // Stripe / bank). Force every visitor-type price to 0 in the UI so
+  // they can't even type a non-zero price. The backend mirrors this
+  // guard in events.controller.createEvent / updateEvent.
+  const isIndividualAccount = (() => {
+    try {
+      const token = sessionStorage.getItem("token");
+      if (!token) return false;
+      const decoded: any = jwtDecode(token);
+      const roles: string[] = Array.isArray(decoded?.roles) ? decoded.roles : [];
+      return roles.includes("individual") && !roles.includes("organizer");
+    } catch {
+      return false;
+    }
+  })();
+
   const [loading, setLoading] = useState(false);
   const [currentTab, setCurrentTab] = useState("basic");
   const [currentTag, setCurrentTag] = useState("");
@@ -4515,7 +4532,12 @@ export function CreateEventForm({
     const newVisitor: VisitorType = {
       id: Math.random().toString(36).slice(2, 10),
       name: currentVisitor.name.trim(),
-      price: parseFloat(currentVisitor.price) || 0,
+      // Belt-and-suspenders: even if isIndividualAccount toggles after
+      // a stale price was typed, force 0 here too. Server enforces the
+      // same rule in events.controller.
+      price: isIndividualAccount
+        ? 0
+        : parseFloat(currentVisitor.price) || 0,
       maxCount: currentVisitor.maxCount
         ? parseInt(currentVisitor.maxCount)
         : undefined,
@@ -4843,6 +4865,7 @@ export function CreateEventForm({
         <Tabs value={currentTab} onValueChange={setCurrentTab}>
           {/* BASIC INFO TAB */}
           <TabsContent value="basic" className="space-y-6">
+            <ModuleGate moduleKey="events" sectionKey="basic">
             <EventUrlImporter
               currentValues={formData as Record<string, any>}
               onApply={applyImportedFields}
@@ -5266,12 +5289,14 @@ export function CreateEventForm({
                 </div>
               </CardContent>
             </Card>
+            </ModuleGate>
           </TabsContent>
 
           {/* VOLUNTEERS TAB — allow-listed Google accounts that can sign in to
               the scanner page for this event. Operators (OTP) and the
               organizer keep working unchanged. */}
           <TabsContent value="volunteers" className="space-y-6">
+            <ModuleGate moduleKey="events" sectionKey="volunteers">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -5350,10 +5375,12 @@ export function CreateEventForm({
                 </Button>
               </CardContent>
             </Card>
+            </ModuleGate>
           </TabsContent>
 
           {/* MEDIA TAB */}
           <TabsContent value="media">
+            <ModuleGate moduleKey="events" sectionKey="media">
             <Card>
               <CardHeader>
                 <CardTitle>Event Media</CardTitle>
@@ -5371,9 +5398,11 @@ export function CreateEventForm({
                 />
               </CardContent>
             </Card>
+            </ModuleGate>
           </TabsContent>
 
           <TabsContent value="visitors" className="space-y-6">
+            <ModuleGate moduleKey="events" sectionKey="visitors">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -5410,15 +5439,24 @@ export function CreateEventForm({
                       <Input
                         type="number"
                         min="0"
-                        value={currentVisitor.price}
-                        onChange={(e) =>
+                        value={isIndividualAccount ? "0" : currentVisitor.price}
+                        onChange={(e) => {
+                          if (isIndividualAccount) return;
                           setCurrentVisitor((p) => ({
                             ...p,
                             price: e.target.value,
-                          }))
-                        }
+                          }));
+                        }}
+                        disabled={isIndividualAccount}
                         placeholder="0 = Free"
                       />
+                      {isIndividualAccount && (
+                        <p className="text-[11px] text-amber-600 mt-1">
+                          Individual accounts can only publish free events
+                          (no payment processor configured). Upgrade to an
+                          Organizer account to charge for tickets.
+                        </p>
+                      )}
                     </div>
                     <div>
                       <Label>
@@ -5646,9 +5684,11 @@ export function CreateEventForm({
                 </div>
               </CardContent>
             </Card>
+            </ModuleGate>
           </TabsContent>
 
           <TabsContent value="speakers" className="space-y-6">
+            <ModuleGate moduleKey="events" sectionKey="speakers">
             {/* SECTION 1: Speaker Space (Physical Zone) */}
             <Card>
               <CardHeader>
@@ -6287,10 +6327,12 @@ export function CreateEventForm({
                 </CardContent>
               </Card>
             ))}
+            </ModuleGate>
           </TabsContent>
 
           {/* VENUE SETUP TAB */}
           <TabsContent value="venue" className="space-y-6">
+            <ModuleGate moduleKey="events" sectionKey="venue">
             {/* Event Sections — controls which tabs appear in this form */}
 
             <BlurOverlay visible={!blurActive}>
@@ -6357,10 +6399,12 @@ export function CreateEventForm({
                 </CardContent>
               </Card>
             </BlurOverlay>
+            </ModuleGate>
           </TabsContent>
 
           {/* TABLES TAB */}
           <TabsContent value="tables">
+            <ModuleGate moduleKey="events" sectionKey="tables">
             <BlurOverlay visible={!blurActive}>
               <TableManagement
                 tableTemplates={tableTemplates}
@@ -6375,10 +6419,12 @@ export function CreateEventForm({
                 selectedVenueConfigId={selectedVenueConfigId}
               />
             </BlurOverlay>
+            </ModuleGate>
           </TabsContent>
 
           {/* ROUND TABLES TAB */}
           <TabsContent value="roundtables">
+            <ModuleGate moduleKey="events" sectionKey="roundtables">
             <BlurOverlay visible={!blurActive}>
               <Card>
                 <CardHeader>
@@ -6724,10 +6770,12 @@ export function CreateEventForm({
                 </CardContent>
               </Card>
             </BlurOverlay>
+            </ModuleGate>
           </TabsContent>
 
           {/* LAYOUT DESIGN TAB */}
           <TabsContent value="layout">
+            <ModuleGate moduleKey="events" sectionKey="layout">
             <BlurOverlay visible={!blurActive}>
               <VenueDesigner
                 tableTemplates={tableTemplates}
@@ -6751,6 +6799,7 @@ export function CreateEventForm({
                 addOnItems={addOnItems}
               />
             </BlurOverlay>
+            </ModuleGate>
           </TabsContent>
         </Tabs>
       </div>

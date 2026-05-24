@@ -156,13 +156,135 @@ export class OrganizersService {
     };
   }
 
+  /**
+   * Promote an existing Individual-tier (lazy-created) Organizer row to
+   * a full Organizer using the data the user just submitted on the
+   * registration form. Preserves the original _id (and therefore every
+   * existing event, storefront, ticket, etc. that references it).
+   *
+   * Sets `organizerType: "upgraded"` so analytics can distinguish users
+   * who started Individual then converted, from users who registered
+   * Organizer directly.
+   */
+  private async upgradeIndividualToOrganizer(
+    existing: any,
+    dto: CreateOrganizerDto,
+    normalized: {
+      normalizedEmail: string;
+      normalizedBusinessEmail: string;
+      normalizedWhatsApp: string;
+    },
+  ) {
+    // Pick the right default plan for the chosen tier — same logic as
+    // the create path.
+    const accountType = dto.accountType || "Organizer";
+    const defaultPlan =
+      (await this.planModel.findOne({
+        moduleType: accountType,
+        isDefault: true,
+        isActive: true,
+      })) ||
+      (await this.planModel.findOne({
+        moduleType: accountType,
+        planName: { $regex: /^starter|^individual/i },
+        isActive: true,
+      }));
+    const validity = Number(defaultPlan?.validityInDays);
+    const subscriptionFields =
+      defaultPlan && Number.isFinite(validity) && validity > 0
+        ? {
+            subscribed: true,
+            planId: defaultPlan._id,
+            planStartDate: new Date(),
+            planExpiryDate: new Date(
+              Date.now() + validity * 24 * 60 * 60 * 1000,
+            ),
+            pricePaid: defaultPlan.price?.toString?.() ?? "0",
+          }
+        : {};
+
+    const { agentReferralCode, ...rest } = dto;
+    // Drop accountType from `rest` so we control it explicitly below.
+    delete (rest as any).accountType;
+
+    // Optional referral attribution — same as the create path.
+    let provider = (existing as any).provider || "self";
+    let providerId = (existing as any).providerId || null;
+    if (agentReferralCode) {
+      try {
+        const agent = await this.organizerModel.db
+          .collection("eventsh_agents")
+          .findOne({ referralCode: agentReferralCode, isActive: true });
+        if (agent) {
+          provider = "Agent";
+          providerId = agent._id.toString();
+        }
+      } catch (err) {
+        this.logger.warn(`Referral lookup failed: ${err}`);
+      }
+    }
+
+    try {
+      const updated = await this.organizerModel
+        .findByIdAndUpdate(
+          existing._id,
+          {
+            $set: {
+              ...rest,
+              accountType,
+              organizerType: "upgraded",
+              email: normalized.normalizedEmail,
+              businessEmail: normalized.normalizedBusinessEmail,
+              whatsAppNumber: normalized.normalizedWhatsApp,
+              approved: true,
+              rejected: false,
+              provider,
+              providerId,
+              ...subscriptionFields,
+            },
+          },
+          { new: true, runValidators: true },
+        )
+        .exec();
+      this.logger.log(
+        `Upgraded Individual organizer ${existing._id} -> Organizer (${normalized.normalizedEmail})`,
+      );
+      try {
+        await this.mailService.sendOrganizerWelcome({
+          name: dto.name,
+          email: normalized.normalizedEmail,
+          organizationName: dto.organizationName,
+          planName: defaultPlan?.planName || null,
+          validityInDays: defaultPlan?.validityInDays || null,
+        });
+      } catch (err) {
+        this.logger.warn(`Welcome mail failed on upgrade: ${err}`);
+      }
+      return updated;
+    } catch (err: any) {
+      if (err?.code === 11000) {
+        const dupField =
+          Object.keys(err.keyPattern || err.keyValue || {})[0] || "field";
+        throw new ConflictException(
+          `Cannot upgrade: another organizer already uses this ${dupField}`,
+        );
+      }
+      throw err;
+    }
+  }
+
   async registerOrganizer(dto: CreateOrganizerDto) {
     const normalizedEmail = this.normalizeEmail(dto.email);
     const normalizedBusinessEmail = this.normalizeEmail(dto.businessEmail);
     const normalizedWhatsApp = (dto.whatsAppNumber || "").trim();
 
-    // Pre-check all three unique fields so we can return a clean 409 instead
-    // of letting MongoDB E11000 bubble up as a 500.
+    // Check all three unique fields up-front so we can either:
+    //   (a) UPGRADE in place when the matched row is an Individual-tier
+    //       lazy-create (let the user upgrade by completing full
+    //       Organizer registration — keeps their existing events +
+    //       storefront intact), OR
+    //   (b) Return a clean 409 when it's a real conflict (some other
+    //       organizer already owns this email / business email / WhatsApp).
     const existing = await this.organizerModel.findOne({
       $or: [
         { email: normalizedEmail },
@@ -171,6 +293,24 @@ export class OrganizersService {
       ],
     });
     if (existing) {
+      const matchByOwnEmail = existing.email === normalizedEmail;
+      const isIndividualRow =
+        (existing as any).accountType === "Individual" &&
+        ((existing as any).organizerType === "individual" ||
+          !(existing as any).organizerType);
+      // Upgrade path: the matched row is the Individual lazy-create
+      // belonging to the same user (same primary email). Replace its
+      // form-supplied fields with what the user just submitted and
+      // flip the tier + lineage. Any pre-existing whatsAppNumber /
+      // businessEmail collision in this case is the placeholder we
+      // wrote during lazy-create — safe to overwrite.
+      if (matchByOwnEmail && isIndividualRow) {
+        return this.upgradeIndividualToOrganizer(existing, dto, {
+          normalizedEmail,
+          normalizedBusinessEmail,
+          normalizedWhatsApp,
+        });
+      }
       let field = "email";
       if (existing.businessEmail === normalizedBusinessEmail) field = "business email";
       else if (existing.whatsAppNumber === normalizedWhatsApp) field = "WhatsApp number";
@@ -196,16 +336,19 @@ export class OrganizersService {
       }
     }
 
-    // 2. Find default Organizer plan and auto-assign with expiry.
+    // 2. Find default plan for the chosen accountType (defaults to Organizer
+    //    when not specified, preserving legacy behavior for clients that
+    //    pre-date the accountType selector).
+    const accountType = dto.accountType || "Organizer";
     const defaultPlan =
       (await this.planModel.findOne({
-        moduleType: "Organizer",
+        moduleType: accountType,
         isDefault: true,
         isActive: true,
       })) ||
       (await this.planModel.findOne({
-        moduleType: "Organizer",
-        planName: { $regex: /^starter/i },
+        moduleType: accountType,
+        planName: { $regex: /^starter|^individual/i },
         isActive: true,
       }));
 
@@ -229,6 +372,11 @@ export class OrganizersService {
     try {
       organizer = await new this.organizerModel({
         ...rest,
+        accountType,
+        // Direct full-form registration — no prior Individual row. If
+        // there had been one, the upgrade branch above would have run
+        // instead and set organizerType to "upgraded".
+        organizerType: "organizer",
         email: normalizedEmail,
         businessEmail: normalizedBusinessEmail,
         whatsAppNumber: normalizedWhatsApp,
@@ -1024,7 +1172,7 @@ export class OrganizersService {
       { symbol: string; code: string; locale: string }
     > = {
       IN: { symbol: "₹", code: "INR", locale: "en-IN" },
-      SG: { symbol: "S$", code: "SGD", locale: "en-SG" },
+      SG: { symbol: "SG$", code: "SGD", locale: "en-SG" },
       US: { symbol: "$", code: "USD", locale: "en-US" },
       GB: { symbol: "£", code: "GBP", locale: "en-GB" },
       AE: { symbol: "AED ", code: "AED", locale: "en-AE" },

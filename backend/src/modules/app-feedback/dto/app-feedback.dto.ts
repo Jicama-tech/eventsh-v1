@@ -71,4 +71,27 @@ export class UpdateAppFeedbackDto {
   @IsOptional()
   @MaxLength(80)
   name?: string;
+
+  // Lets super admin move a support ticket through its lifecycle.
+  @IsEnum(["open", "in_progress", "resolved"])
+  @IsOptional()
+  status?: "open" | "in_progress" | "resolved";
+}
+
+// Submitted by an authenticated organizer from the dashboard Support tab.
+// No OTP — JWT covers identity. Attachments are uploaded via multipart, so
+// only the text fields are validated here.
+export class SubmitSupportDto {
+  @IsString()
+  @MinLength(3)
+  @MaxLength(120)
+  subject: string;
+
+  @IsEnum(["bug", "feature_request", "general", "billing", "other"])
+  category: "bug" | "feature_request" | "general" | "billing" | "other";
+
+  @IsString()
+  @MinLength(5)
+  @MaxLength(2000)
+  description: string;
 }

@@ -68,7 +68,7 @@ interface UnifiedRow {
 
 function symbol(c: string) {
   if (c === "INR") return "₹";
-  if (c === "SGD") return "S$";
+  if (c === "SGD") return "SG$";
   return "$";
 }
 

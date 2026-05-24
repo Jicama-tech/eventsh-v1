@@ -70,7 +70,7 @@ function shortRand(len = 6) {
 }
 
 function formatPrice(country: string, n: number) {
-  const sym = country === "SG" ? "S$" : country === "US" ? "$" : "₹";
+  const sym = country === "SG" ? "SG$" : country === "US" ? "$" : "₹";
   return `${sym}${n}`;
 }
 
@@ -82,7 +82,7 @@ export function InlineWalkinForm({
   organizerId: string;
 }) {
   const country = (payload.country || "").toUpperCase();
-  const sym = country === "SG" ? "S$" : country === "US" ? "$" : "₹";
+  const sym = country === "SG" ? "SG$" : country === "US" ? "$" : "₹";
   const defaultDial = country === "SG" ? "+65" : "+91";
 
   const [step, setStep] = useState<Step>("pick_event");

@@ -87,8 +87,14 @@ export class PlansService {
   }
 
   async setDefault(id: string): Promise<Plan> {
+    // Scope the default-clear operation to the target plan's own moduleType so
+    // Individual and Organizer tiers each maintain their own default. New
+    // users get auto-assigned the default matching the accountType they chose
+    // at registration.
+    const target = await this.planModel.findById(id).exec();
+    if (!target) throw new NotFoundException(`Plan with ID ${id} not found`);
     await this.planModel.updateMany(
-      { moduleType: ModuleType.ORGANIZER },
+      { moduleType: target.moduleType, _id: { $ne: target._id } },
       { isDefault: false },
     );
     const plan = await this.planModel
