@@ -50,21 +50,40 @@ export function EventQRCode({ event, apiURL, onClose }: EventQRCodeProps) {
 
   useEffect(() => {
     async function fetchData() {
+      const token = sessionStorage.getItem("token");
+
+      // Primary source: the slug the organizer set in their STOREFRONT
+      // settings (organizer-stores). That's where the live slug lives now —
+      // not on the organizer profile — so the QR/link always matches it.
+      if (token) {
+        try {
+          const res = await fetch(
+            `${apiURL}/organizer-stores/organizer-store-detail`,
+            { method: "GET", headers: { Authorization: `Bearer ${token}` } },
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.data?.slug) {
+              setSlug(data.data.slug);
+              return;
+            }
+          }
+        } catch {
+          /* fall through to the profile-based lookup below */
+        }
+      }
+
+      // Fallback: the organizer-profile slug, resolved by the logged-in
+      // organizer's token id (or the event's organizer id as a last resort).
       try {
-        // Resolve the organizer id the same way the storefront/My Events do —
-        // from the logged-in organizer's token (decoded.sub). That's the exact
-        // record the slug is saved under, so the QR/link always reflects the
-        // current slug. Fall back to the event's organizer id if the token is
-        // unavailable for some reason.
         let organizerId = "";
         try {
-          const token = sessionStorage.getItem("token");
           if (token) {
             const decoded: any = jwtDecode(token);
             organizerId = decoded?.sub || decoded?.organizerId || "";
           }
         } catch {
-          /* ignore — fall back to event.organizationName below */
+          /* ignore */
         }
         if (!organizerId) organizerId = String(event.organizationName || "");
         if (!organizerId) return;
@@ -73,12 +92,7 @@ export function EventQRCode({ event, apiURL, onClose }: EventQRCodeProps) {
           `${apiURL}/organizers/profile-get/${organizerId}`,
           { method: "GET" },
         );
-
-        if (!response.ok) {
-          console.error("Failed to fetch organizer slug:", response.status);
-          return;
-        }
-
+        if (!response.ok) return;
         const data = await response.json();
         if (data?.data?.slug) setSlug(data.data.slug);
       } catch (error) {
