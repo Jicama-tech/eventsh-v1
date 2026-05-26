@@ -163,6 +163,9 @@ const MyEvents: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [organizerId, setOrganizerId] = useState<string | null>(null);
+  // The organizer's current public slug, fetched fresh so share/QR links always
+  // match the latest slug even after it's changed in storefront settings.
+  const [organizerSlug, setOrganizerSlug] = useState<string>("");
   const [showDialog, setShowDialog] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   // When set, the dialog opens in "duplicate" mode: form pre-fills with this
@@ -205,6 +208,8 @@ const MyEvents: React.FC = () => {
       );
 
       const data = await response.json();
+      // Capture the current slug so share/QR links use the latest value.
+      if (data?.data?.slug) setOrganizerSlug(data.data.slug);
       // country is managed by useCountry context
     } catch (error) {
       console.error("Error fetching organizer profile", error);
@@ -227,6 +232,13 @@ const MyEvents: React.FC = () => {
 
     fetchOrganizer();
   }, [token]); // ✅ only runs once
+
+  // organizerId is set asynchronously above, so fetch the profile (and its
+  // slug) once it's actually available.
+  useEffect(() => {
+    if (organizerId) fetchOrganizer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organizerId]);
 
   // ✅ Memoized fetchTicketsInfo (does not reinitialize)
   const fetchTicketsInfo = useCallback(
@@ -545,27 +557,32 @@ const MyEvents: React.FC = () => {
    * find on the JWT and fall back to a placeholder when nothing's there.
    */
   const buildEventShareUrl = (eventId: string) => {
-    let org = "event";
-    try {
-      const token = sessionStorage.getItem("token");
-      if (token) {
-        const decoded: any = jwtDecode(token);
-        const candidate =
-          decoded?.organizationName ||
-          decoded?.organization?.name ||
-          decoded?.name ||
-          "event";
-        org = String(candidate)
-          .toLowerCase()
-          .trim()
-          .replace(/\s+/g, "-")
-          .replace(/[^a-z0-9-]/g, "")
-          || "event";
+    // Prefer the organizer's real, current slug so the link always matches the
+    // latest storefront slug. Fall back to a token-derived slug only until the
+    // profile (and its slug) has loaded.
+    let org = organizerSlug?.trim() || "";
+    if (!org) {
+      try {
+        const token = sessionStorage.getItem("token");
+        if (token) {
+          const decoded: any = jwtDecode(token);
+          const candidate =
+            decoded?.organizationName ||
+            decoded?.organization?.name ||
+            decoded?.name ||
+            "event";
+          org =
+            String(candidate)
+              .toLowerCase()
+              .trim()
+              .replace(/\s+/g, "-")
+              .replace(/[^a-z0-9-]/g, "") || "event";
+        }
+      } catch {
+        // Non-fatal — placeholder slug still produces a working URL.
       }
-    } catch {
-      // Non-fatal — placeholder slug still produces a working URL.
     }
-    return `${window.location.origin}/${encodeURIComponent(org)}/events/${eventId}`;
+    return `${window.location.origin}/${encodeURIComponent(org || "event")}/events/${eventId}`;
   };
 
   /**
