@@ -82,6 +82,19 @@ export class EventsService {
         ? new Date(createEventDto.endDate)
         : new Date(createEventDto.startDate);
 
+      // Initial ticket capacity = sum of visitor-type caps when present,
+      // otherwise the flat totalTickets. Stored in originalTotalTickets so the
+      // front end can always show "available / original" — purchases later
+      // decrement the live counts but never this baseline.
+      const initialCapacity =
+        Array.isArray(createEventDto.visitorTypes) &&
+        createEventDto.visitorTypes.length > 0
+          ? createEventDto.visitorTypes.reduce(
+              (sum: number, v: any) => sum + (Number(v.maxCount) || 0),
+              0,
+            )
+          : Number(createEventDto.totalTickets) || undefined;
+
       const event = new this.eventModel({
         title: createEventDto.title,
         description: createEventDto.description,
@@ -94,8 +107,8 @@ export class EventsService {
         location: createEventDto.location,
         address: createEventDto.address,
         ticketPrice: createEventDto.ticketPrice,
-        totalTickets: createEventDto.totalTickets,
-        originalTotalTickets: createEventDto.totalTickets,
+        totalTickets: initialCapacity,
+        originalTotalTickets: initialCapacity,
         visibility: createEventDto.visibility || "public",
         inviteLink: createEventDto.inviteLink,
         tags: createEventDto.tags || [],

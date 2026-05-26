@@ -373,10 +373,41 @@ Thank you for choosing Eventsh! 🎊`;
     // Coerce existing values to numbers — older events may have missing/NaN.
     const currentTotal = Number(event.totalTickets);
     const hasCap = Number.isFinite(currentTotal);
+    const hasVisitorTypes =
+      Array.isArray(event.visitorTypes) && event.visitorTypes.length > 0;
 
-    // Backfill originalTotalTickets only when we have a real cap to track.
+    // Backfill originalTotalTickets (the baseline capacity) when it's missing
+    // — e.g. legacy events created before this field was tracked.
     if (!Number.isFinite(Number(event.originalTotalTickets))) {
-      if (hasCap) {
+      if (hasVisitorTypes) {
+        // Recover the true original = current remaining (this sale not yet
+        // deducted) + everything already sold. This ticket is already saved,
+        // so subtract this purchase's quantity to avoid double-counting it.
+        const vtSumNow = event.visitorTypes.reduce(
+          (s: number, v: any) => s + (Number(v.maxCount) || 0),
+          0,
+        );
+        let soldSoFar = 0;
+        try {
+          const sold = await this.ticketModel.find({
+            eventId: new Types.ObjectId(eventId),
+            status: { $ne: TicketStatus.CANCELLED },
+          });
+          soldSoFar = sold.reduce(
+            (s, t) =>
+              s +
+              (t.ticketDetails || []).reduce(
+                (q: number, d: any) => q + (Number(d.quantity) || 0),
+                0,
+              ),
+            0,
+          );
+        } catch {
+          /* If the lookup fails, fall back to the current remaining below. */
+        }
+        event.originalTotalTickets =
+          vtSumNow + Math.max(0, soldSoFar - quantity);
+      } else if (hasCap) {
         event.originalTotalTickets = currentTotal + quantity;
       }
     }

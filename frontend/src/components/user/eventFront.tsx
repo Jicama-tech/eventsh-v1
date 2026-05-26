@@ -135,6 +135,12 @@ interface TableTemplate {
   tablePrice: number;
   bookingPrice: number;
   depositPrice: number;
+  // When true, the deposit is part of Option 1 (minimum payment); otherwise
+  // Option 1 is the booking amount only. Defaults to false when absent.
+  depositInOption1?: boolean;
+  // Exhibitor business category this space is reserved for. "Other"/empty =
+  // open to all categories. Set by the organizer in the venue designer.
+  exhibitorCategory?: string;
   customDimensions: boolean;
   isBooked?: boolean;
   bookedBy?: string;
@@ -240,6 +246,19 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [venueMaximized, setVenueMaximized] = useState(false);
   const navigate = useNavigate();
+
+  // Auto-advance the Event Gallery on a timer. The interval restarts
+  // whenever the active image changes (including manual nav), so a manual
+  // click always gets a full interval before the next auto-slide. Only
+  // runs when there's more than one image; cleaned up on unmount.
+  useEffect(() => {
+    const total = eventData?.gallery?.length ?? 0;
+    if (total <= 1) return;
+    const timer = setInterval(() => {
+      setCurrentImageIndex((prev) => (prev === total - 1 ? 0 : prev + 1));
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [eventData?.gallery?.length, currentImageIndex]);
 
   // WhatsApp Verification Dialog States
   const [showWhatsAppDialog, setShowWhatsAppDialog] = useState(false);
@@ -1564,6 +1583,25 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }
   };
 
+  // The exhibitor's business category (from their approved stall request, or
+  // the value they picked on the rent form). Empty when unknown.
+  const getMyExhibitorCategory = (): string =>
+    existingStallRequest?.shopkeeperId?.businessCategory ||
+    shopkeeperDetails?.businessCategory ||
+    "";
+
+  // A space is selectable by this vendor when it's open to all ("Other" or
+  // no category set), when we don't know the vendor's category, or when the
+  // space's category matches the vendor's. Non-matching spaces stay visible
+  // but cannot be chosen.
+  const isCategoryAllowed = (table: any): boolean => {
+    const spaceCat = table?.exhibitorCategory;
+    if (!spaceCat || spaceCat === "Other") return true;
+    const myCat = getMyExhibitorCategory();
+    if (!myCat) return true;
+    return spaceCat === myCat;
+  };
+
   // NEW: Handle table click for selection
   const handleTableClick = (table: any) => {
     if (table.isBooked) {
@@ -1571,6 +1609,17 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         duration: 5000,
         title: "Table Unavailable",
         description: "This table is already booked",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Block spaces reserved for a different exhibitor category.
+    if (!isCategoryAllowed(table)) {
+      toast({
+        duration: 5000,
+        title: "Not Available for Your Category",
+        description: `This space is reserved for "${table.exhibitorCategory}" exhibitors. You can book spaces in your category or ones marked "Other".`,
         variant: "destructive",
       });
       return;
@@ -1617,6 +1666,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         tablePrice: table.tablePrice,
         bookingPrice: table.bookingPrice,
         depositPrice: table.depositPrice,
+        depositInOption1: table.depositInOption1 === true,
         x: table.x,
         y: table.y,
         rotation: table.rotation,
@@ -1666,15 +1716,23 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       0,
     );
 
-    const minimumPayment = tablesTotal.bookingPrice;
+    // Deposit is only part of the minimum payment for tables the organizer
+    // flagged with depositInOption1; otherwise Option 1 is booking only.
+    const depositInOption1Total = selectedTables.reduce(
+      (sum, t) => sum + (t.depositInOption1 ? t.depositPrice || 0 : 0),
+      0,
+    );
+
+    const minimumPayment = tablesTotal.bookingPrice + depositInOption1Total;
     const fullPayment =
       tablesTotal.depositPrice + tablesTotal.tablePrice + addOnsTotal;
-    const remainingAfterBooking = fullPayment - tablesTotal.bookingPrice;
+    const remainingAfterBooking = fullPayment - minimumPayment;
 
     return {
       tablesTotal,
       addOnsTotal,
       minimumPayment,
+      depositInOption1Total,
       fullPayment,
       remainingAfterBooking,
     };
@@ -1727,6 +1785,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         (sum, table) => sum + (table.depositAmount || 0),
         0,
       );
+      // Portion of the deposit that belongs to the minimum payment (Option 1)
+      // — only for tables the organizer flagged with depositInOption1.
+      const depositInOption1Total = selectedTables.reduce(
+        (sum, table) =>
+          sum + (table.depositInOption1 ? table.depositAmount || 0 : 0),
+        0,
+      );
       const addOnsTotal = selectedAddOns.reduce(
         (sum, addon) => sum + (addon.price || 0),
         0,
@@ -1777,7 +1842,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           description: addon.description,
           price: addon.price,
         })),
-        minimumPayment: bookingPrice,
+        minimumPayment: bookingPrice + depositInOption1Total,
         priceSummary: {
           tablesTotal,
           depositTotal,
@@ -2464,9 +2529,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       : Number(rawTicketPrice) || 0;
   const availableTickets =
     visitorTypes?.length > 0
-      ? visitorTypes.reduce((sum: number, v: any) => sum + (v.maxCount || 0), 0)
+      ? visitorTypes.reduce(
+          // Only positive caps count toward availability; unlimited types
+          // (no/zero/negative maxCount) contribute nothing rather than
+          // dragging the total negative.
+          (sum: number, v: any) => sum + (v.maxCount > 0 ? v.maxCount : 0),
+          0,
+        )
       : Number(rawTotalTickets) || 0;
-  const totalTickets = Number(rawOriginalTotal) || availableTickets;
+  // Denominator = original capacity. Never let it fall below what's currently
+  // available, so a missing/stale original can't show e.g. "97 / 97" — once
+  // tickets sell, available drops but the total stays the original (e.g. 100).
+  const totalTickets = Math.max(Number(rawOriginalTotal) || 0, availableTickets);
 
   // Extract layout IDs from venueConfig
   const layoutIds = venueConfig?.map((config) => config.id) || [];
@@ -2530,6 +2604,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           to   { opacity: 1; transform: translateY(0); }
         }
         .anim-fade-up { animation: fadeSlideUp 0.55s ease-out both; }
+        @keyframes gallerySlideIn {
+          from { opacity: 0; transform: translateX(40px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+        .anim-gallery-slide { animation: gallerySlideIn 0.5s ease-out both; }
         .ticket-btn-gradient {
           background: linear-gradient(135deg, var(--primary-color, #f97316) 0%, var(--secondary-color, #ef4444) 100%);
         }
@@ -2796,9 +2875,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 </h2>
                 <div className="relative rounded-2xl overflow-hidden bg-gray-100 shadow-sm">
                   <img
+                    key={currentImageIndex}
                     src={apiURL + gallery[currentImageIndex]}
                     alt={`Gallery image ${currentImageIndex + 1}`}
-                    className="w-full object-cover"
+                    className="w-full object-cover anim-gallery-slide"
                     style={{ height: "clamp(200px, 45vw, 480px)" }}
                   />
                   {gallery.length > 1 && (
@@ -2973,7 +3053,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       )}
                       <div className="flex items-center justify-between text-xs text-gray-400">
                         <span>
-                          {vt.maxCount ? `${vt.maxCount} spots` : "Unlimited"}
+                          {vt.maxCount > 0
+                            ? `${vt.maxCount} spots`
+                            : "Unlimited"}
                         </span>
                         {vt.featureAccess && (
                           <div className="flex gap-1 flex-wrap justify-end">
@@ -3187,7 +3269,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     )}
                                     <div className="flex items-center justify-between">
                                       <span className="text-xs text-gray-400">
-                                        {vt.maxCount
+                                        {vt.maxCount > 0
                                           ? `${vt.maxCount} spots`
                                           : "Unlimited"}
                                       </span>
@@ -6804,6 +6886,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               const isBooked = table.isBooked;
                               const preferredId = existingStallRequest?.preferredTemplateId;
                               const isWrongTemplate = preferredId && table.id !== preferredId;
+                              const isWrongCategory = !isCategoryAllowed(table);
                               const isNotForSale = table.forSale === false;
 
                               let bgColor = "bg-green-200/80";
@@ -6819,7 +6902,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 bgColor = "bg-gray-400/80";
                                 borderColor = "border-gray-500";
                                 cursor = "cursor-not-allowed opacity-70";
-                              } else if (isWrongTemplate) {
+                              } else if (isWrongTemplate || isWrongCategory) {
                                 bgColor = "bg-gray-200/60";
                                 borderColor = "border-gray-300";
                                 cursor = "cursor-not-allowed opacity-40";
@@ -7223,7 +7306,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           {formatPrice(calculateTotals().minimumPayment)}
                         </p>
                         <p className="text-[10px] text-green-600">
-                          Deposit + Booking + Add-ons
+                          {calculateTotals().depositInOption1Total > 0
+                            ? "Booking + Deposit"
+                            : "Booking only"}
                         </p>
                         <p className="text-[10px] text-green-500 mt-0.5">
                           Remaining:{" "}
@@ -7374,6 +7459,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   (t) => t.positionId === table.positionId,
                 );
                 const isBooked = table.isBooked;
+                const isWrongCategory = !isCategoryAllowed(table);
 
                 let bg = "bg-green-200/80";
                 let border = "border-green-600";
@@ -7383,6 +7469,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   bg = "bg-gray-400/80";
                   border = "border-gray-500";
                   cur = "cursor-not-allowed opacity-70";
+                } else if (isWrongCategory) {
+                  bg = "bg-gray-200/60";
+                  border = "border-gray-300";
+                  cur = "cursor-not-allowed opacity-40";
                 } else if (isSelected) {
                   bg = "bg-blue-300";
                   border = "border-blue-600";

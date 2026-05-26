@@ -73,25 +73,27 @@ export function EventQRCode({ event, apiURL, onClose }: EventQRCodeProps) {
     fetchData();
   }, [event.organizationName, apiURL]);
 
-  // Construct the event URL in the required format
-  const eventURL = `https://eventsh.com/organizers/${slug}/events/${event.id}`;
+  // Public event page URL. Must match the app route
+  // `/:organizationName/events/:id` (the storefront). The first path segment
+  // is the organizer's slug — NOT an `/organizers/` API prefix, which is what
+  // made the old link 404 and the QR open nothing useful.
+  const linkReady = !!slug;
+  const eventURL = `https://eventsh.com/${slug}/events/${event.id}`;
 
-  const eventData = {
-    eventId: event.id,
-    eventName: event.name,
-    date: event.date,
-    time: event.time,
-    location: event.location,
-    category: event.category,
-    url: eventURL,
-    joinType: "qr_scan",
-  };
-
-  const qrData = JSON.stringify(eventData);
+  // Encode the plain URL so any phone camera or QR app opens the event page
+  // directly. Previously this encoded a JSON blob, which scanners surfaced as
+  // unreadable text instead of opening the link.
+  const qrData = eventURL;
 
   useEffect(() => {
+    // Wait for the real slug before encoding, otherwise the QR would point at
+    // an invalid URL with an empty organizer segment.
+    if (!linkReady) {
+      setQrCodeDataURL("");
+      return;
+    }
     generateQRCode();
-  }, [qrSize, qrData]);
+  }, [qrSize, qrData, linkReady]);
 
   const generateQRCode = async () => {
     try {
@@ -283,13 +285,20 @@ export function EventQRCode({ event, apiURL, onClose }: EventQRCodeProps) {
           {/* QR Code Display */}
           <div className="flex flex-col items-center space-y-4">
             <div className="bg-white p-4 rounded-lg border-2 border-dashed border-border">
-              {qrCodeDataURL && (
+              {qrCodeDataURL ? (
                 <img
                   src={qrCodeDataURL}
                   alt="Event QR Code"
                   className="mx-auto"
                   style={{ width: qrSize, height: qrSize }}
                 />
+              ) : (
+                <div
+                  className="mx-auto flex items-center justify-center text-sm text-muted-foreground"
+                  style={{ width: qrSize, height: qrSize }}
+                >
+                  Generating QR…
+                </div>
               )}
             </div>
 
@@ -312,12 +321,13 @@ export function EventQRCode({ event, apiURL, onClose }: EventQRCodeProps) {
             <div className="w-full">
               <div className="flex items-center space-x-2">
                 <div className="flex-1 p-2 bg-muted rounded text-sm font-mono break-all">
-                  {eventURL}
+                  {linkReady ? eventURL : "Generating link…"}
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={copyEventURL}
+                  disabled={!linkReady}
                   className="shrink-0"
                 >
                   {copied ? "Copied!" : <Copy className="h-4 w-4" />}
@@ -330,6 +340,7 @@ export function EventQRCode({ event, apiURL, onClose }: EventQRCodeProps) {
           <div className="flex flex-wrap gap-2 justify-center">
             <Button
               onClick={downloadQRCode}
+              disabled={!qrCodeDataURL}
               className="flex items-center space-x-2"
               variant="default"
             >
@@ -339,6 +350,7 @@ export function EventQRCode({ event, apiURL, onClose }: EventQRCodeProps) {
             <Button
               variant="outline"
               onClick={shareEvent}
+              disabled={!linkReady}
               className="flex items-center space-x-2"
             >
               <Share2 className="h-4 w-4" />
@@ -347,6 +359,7 @@ export function EventQRCode({ event, apiURL, onClose }: EventQRCodeProps) {
             <Button
               variant="outline"
               onClick={printQRCode}
+              disabled={!qrCodeDataURL}
               className="flex items-center space-x-2"
             >
               <span>🖨️</span>
@@ -355,6 +368,7 @@ export function EventQRCode({ event, apiURL, onClose }: EventQRCodeProps) {
             <Button
               variant="outline"
               onClick={() => window.open(eventURL, "_blank")}
+              disabled={!linkReady}
               className="flex items-center space-x-2"
             >
               <Eye className="h-4 w-4" />
