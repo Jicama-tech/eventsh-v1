@@ -202,15 +202,33 @@ const MyEvents: React.FC = () => {
 
   const fetchOrganizer = async () => {
     try {
+      // Primary: the slug from the organizer's STOREFRONT settings — that's
+      // where the live slug is maintained, so share links always match it.
+      if (token) {
+        try {
+          const storeRes = await fetch(
+            `${apiURL}/organizer-stores/organizer-store-detail`,
+            { method: "GET", headers: { Authorization: `Bearer ${token}` } },
+          );
+          if (storeRes.ok) {
+            const storeData = await storeRes.json();
+            if (storeData?.data?.slug) {
+              setOrganizerSlug(storeData.data.slug);
+              return;
+            }
+          }
+        } catch {
+          /* fall through to the profile-based lookup below */
+        }
+      }
+
+      // Fallback: organizer-profile slug.
       if (!organizerId) return;
       const response = await fetch(
         `${apiURL}/organizers/profile-get/${organizerId}`,
       );
-
       const data = await response.json();
-      // Capture the current slug so share/QR links use the latest value.
       if (data?.data?.slug) setOrganizerSlug(data.data.slug);
-      // country is managed by useCountry context
     } catch (error) {
       console.error("Error fetching organizer profile", error);
     }
