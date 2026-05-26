@@ -4245,9 +4245,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                         : "rounded-sm"
                                   } ${notForSale
                                     ? "cursor-default"
-                                    : isBooked
-                                      ? "border-gray-500 bg-gray-400/80 cursor-not-allowed"
-                                      : "cursor-pointer hover:shadow-xl hover:ring-2 hover:ring-offset-1 hover:ring-blue-400 shadow-sm"
+                                    : "cursor-pointer hover:shadow-xl hover:ring-2 hover:ring-offset-1 hover:ring-blue-400 shadow-sm"
                                   }`}
                                   style={{
                                     left: `${table.x}px`,
@@ -4261,10 +4259,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                       backgroundColor: ((table as any).color || "#f59e0b") + "20",
                                       borderColor: ((table as any).color || "#f59e0b") + "55",
                                       backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.03) 3px, rgba(0,0,0,0.03) 6px)",
-                                    } : !isBooked ? {
+                                    } : {
+                                      // Uniform styling — don't reveal which spaces are booked vs available.
                                       backgroundColor: ((table as any).color || "#22c55e") + "33",
                                       borderColor: (table as any).color || "#22c55e",
-                                    } : {}),
+                                    }),
                                   }}
                                 >
                                   <div className="relative group hover:z-50">
@@ -4295,19 +4294,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                             {table.rowNumber}
                                           </p>
                                           <p className="text-gray-400 text-[10px] mt-0.5">
-                                            Size: {table.width}x{table.height}
+                                            Size: {table.width * 10}×
+                                            {table.height * 10}cm
                                           </p>
 
-                                          {!isBooked ? (
-                                            <p className="text-green-400 font-semibold mt-1">
-                                              Price:{" "}
-                                              {formatPrice(table.tablePrice)}
-                                            </p>
-                                          ) : (
-                                            <p className="text-red-400 font-bold mt-1">
-                                              Status: BOOKED
-                                            </p>
-                                          )}
+                                          <p className="text-green-400 font-semibold mt-1">
+                                            Price: {formatPrice(table.tablePrice)}
+                                          </p>
                                         </div>
 
                                         {/* 3. The Arrow (Tail) - Fixed Position */}
@@ -4342,18 +4335,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       <div className="mt-4 space-y-3">
                         <div className="flex flex-wrap gap-4">
                           <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 bg-green-200 border-2 border-green-500 rounded"></div>
-                            <span className="text-gray-500 text-xs">
-                              Available
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 bg-gray-400 border-2 border-gray-500 rounded"></div>
-                            <span className="text-gray-500 text-xs">
-                              Booked
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
                             <div className="w-4 h-4 bg-green-200 border-2 border-green-500 rounded-full"></div>
                             <span className="text-gray-500 text-xs">Round</span>
                           </div>
@@ -4384,97 +4365,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               {venueTables[currentLayoutId]?.length || 0}
                             </p>
                           </div>
-                          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-                            <p className="text-gray-400 mb-0.5">Available</p>
-                            <p
-                              className="font-semibold"
-                              style={{ color: design?.secondaryColor }}
-                            >
-                              {venueTables[currentLayoutId]?.filter(
-                                (t) => !t.isBooked,
-                              ).length || 0}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-                            <p className="text-gray-400 mb-0.5">Booked</p>
-                            <p className="font-semibold text-red-500">
-                              {venueTables[currentLayoutId]?.filter(
-                                (t) => t.isBooked,
-                              ).length || 0}
-                            </p>
-                          </div>
                         </div>
                       </div>
 
-                      {/* Table Details */}
-                      <div className="space-y-3">
-                        <p
-                          className="text-xs font-semibold tracking-[0.2em] uppercase"
-                          style={{ color: design?.primaryColor }}
-                        >
-                          Available Tables
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {tableTemplates?.map((template) => {
-                            const count =
-                              venueTables[currentLayoutId]?.filter(
-                                (t) => !t.isBooked && t.id === template.id,
-                              ).length || 0;
-                            if (count === 0) return null;
-                            return (
-                              <div
-                                key={template.id}
-                                className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
-                              >
-                                <div className="flex items-start justify-between mb-2">
-                                  <div>
-                                    <h5 className="font-semibold text-gray-800">
-                                      {template.name}
-                                    </h5>
-                                    <p className="text-xs text-gray-400">
-                                      {template.type} Table
-                                    </p>
-                                  </div>
-                                  <span className="text-xs font-medium px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-500">
-                                    {count} available
-                                  </span>
-                                </div>
-                                <div className="space-y-1 text-xs">
-                                  <p className="text-gray-500">
-                                    <span className="text-gray-700 font-medium">
-                                      Dimensions:
-                                    </span>{" "}
-                                    {template.width} x {template.height}
-                                  </p>
-                                  <p className="text-gray-500">
-                                    <span className="text-gray-700 font-medium">
-                                      Price:
-                                    </span>{" "}
-                                    <span
-                                      className="font-semibold"
-                                      style={{ color: design?.secondaryColor }}
-                                    >
-                                      {template.tablePrice}
-                                    </span>
-                                  </p>
-                                  <p className="text-gray-500">
-                                    <span className="text-gray-700 font-medium">
-                                      Booking:
-                                    </span>
-                                    {template.bookingPrice}
-                                  </p>
-                                  <p className="text-gray-500">
-                                    <span className="text-gray-700 font-medium">
-                                      Deposit:
-                                    </span>{" "}
-                                    {template.depositPrice}
-                                  </p>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
+                      {/* Available-tables list intentionally removed — space
+                          availability is hidden on the public venue preview. */}
                     </div>
                   </div>
                 )}
@@ -6971,7 +6866,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                         {table.rowNumber}
                                       </p>
                                       <p className="text-gray-400 text-[10px] mt-0.5">
-                                        Size: {table.width}×{table.height}
+                                        Size: {table.width * 10}×
+                                        {table.height * 10}cm
                                       </p>
                                       {!isBooked && (
                                         <p className="text-green-400 font-semibold mt-1">
@@ -7191,7 +7087,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               Row {table.rowNumber} • {table.tableType}
                             </p>
                             <p className="text-gray-400">
-                              {table.width}cm × {table.height}cm
+                              {table.width * 10}cm × {table.height * 10}cm
                             </p>
                           </div>
                           <div className="text-right">
@@ -7503,7 +7399,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       <div className="rounded bg-gray-900 px-2 py-1 text-[10px] text-white shadow border border-gray-700">
                         <p className="font-bold">{table.name}</p>
                         <p className="text-gray-300">
-                          Row {table.rowNumber} • {table.width}×{table.height}
+                          Row {table.rowNumber} • {table.width * 10}×
+                          {table.height * 10}cm
                         </p>
                         <p
                           className={

@@ -21,6 +21,7 @@ import {
   Ticket,
 } from "lucide-react";
 import QRCodeLib from "qrcode";
+import { jwtDecode } from "jwt-decode";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";
 
@@ -50,22 +51,36 @@ export function EventQRCode({ event, apiURL, onClose }: EventQRCodeProps) {
   useEffect(() => {
     async function fetchData() {
       try {
-        if (event.organizationName) {
-          const response = await fetch(
-            `${apiURL}/organizers/profile-get/${event.organizationName}`,
-            {
-              method: "GET",
-            }
-          );
-
-          if (!response.ok) {
-            console.error("Failed to fetch organizer slug:", response.status);
-            return;
+        // Resolve the organizer id the same way the storefront/My Events do —
+        // from the logged-in organizer's token (decoded.sub). That's the exact
+        // record the slug is saved under, so the QR/link always reflects the
+        // current slug. Fall back to the event's organizer id if the token is
+        // unavailable for some reason.
+        let organizerId = "";
+        try {
+          const token = sessionStorage.getItem("token");
+          if (token) {
+            const decoded: any = jwtDecode(token);
+            organizerId = decoded?.sub || decoded?.organizerId || "";
           }
-
-          const data = await response.json();
-          setSlug(data.data.slug);
+        } catch {
+          /* ignore — fall back to event.organizationName below */
         }
+        if (!organizerId) organizerId = String(event.organizationName || "");
+        if (!organizerId) return;
+
+        const response = await fetch(
+          `${apiURL}/organizers/profile-get/${organizerId}`,
+          { method: "GET" },
+        );
+
+        if (!response.ok) {
+          console.error("Failed to fetch organizer slug:", response.status);
+          return;
+        }
+
+        const data = await response.json();
+        if (data?.data?.slug) setSlug(data.data.slug);
       } catch (error) {
         console.error("Error fetching organizer slug:", error);
       }
