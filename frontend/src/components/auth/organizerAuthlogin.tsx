@@ -25,10 +25,7 @@ import {
   Trophy,
   MapPin,
   Star,
-  Zap,
-  Crown,
   Loader2,
-  Building2,
   Ticket,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -199,7 +196,7 @@ export function OrganizerEShopLogin() {
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-indigo-600" />
           <p className="text-slate-900 font-medium">
-            Verifying your organizer profile...
+            Verifying your profile...
           </p>
         </div>
       </div>
@@ -246,21 +243,22 @@ export function OrganizerEShopLogin() {
       <div className="relative min-h-screen flex items-center justify-center px-4">
         <div className="w-full max-w-4xl align-center gap-12 items-center">
           <div className="flex justify-center items-center">
-            <Card className="w-full max-w-md bg-white/95 backdrop-blur-lg border-slate-200 shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-105 animate-fade-in-up">
+            <Card className="w-full max-w-md bg-white/95 backdrop-blur-lg border-slate-200 shadow-2xl">
               <CardHeader className="text-center pb-6">
                 <div className="flex justify-center mb-4">
                   <div className="relative">
-                    <Crown className="h-12 w-12 text-indigo-600 animate-pulse" />
+                    <CalendarDays className="h-12 w-12 text-indigo-600 animate-pulse" />
                     <div className="absolute -top-2 -right-2 h-6 w-6 bg-gradient-to-r from-amber-400 to-amber-600 rounded-full flex items-center justify-center animate-bounce">
                       <Sparkles className="h-3 w-3 text-white" />
                     </div>
                   </div>
                 </div>
                 <CardTitle className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-indigo-700 bg-clip-text text-transparent">
-                  Organizer Portal
+                  Welcome to EventSH
                 </CardTitle>
                 <CardDescription className="text-lg text-slate-600 mt-2 leading-relaxed">
-                  Manage your events, venues, and team seamlessly.
+                  Sign in to create and manage your events — whether you're
+                  going solo or running an organization.
                 </CardDescription>
               </CardHeader>
 
@@ -348,25 +346,29 @@ export function OrganizerEShopLogin() {
                       ) : (
                         <>
                           <FaGoogle className="mr-3 h-5 w-5 text-slate-700 group-hover:scale-110 transition-transform" />
-                          Continue as Organizer
+                          Continue with Google
                         </>
                       )}
                     </Button>
+                    <p className="text-center text-sm text-slate-500">
+                      New here? Start as an individual and upgrade to a full
+                      organizer account anytime.
+                    </p>
                   </div>
                 )}
 
                 {/* Trust Indicators */}
                 <div className="flex items-center justify-center space-x-6 pt-4 border-t border-slate-200">
                   <div className="flex items-center space-x-2">
-                    <Building2 className="h-4 w-4 text-indigo-500" />
+                    <Users className="h-4 w-4 text-indigo-500" />
                     <span className="text-sm text-slate-500">
-                      Business Access
+                      Individuals &amp; Organizers
                     </span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <Zap className="h-4 w-4 text-amber-500" />
+                    <Ticket className="h-4 w-4 text-amber-500" />
                     <span className="text-sm text-slate-500">
-                      Real-time Analytics
+                      Create &amp; Sell Tickets
                     </span>
                   </div>
                 </div>

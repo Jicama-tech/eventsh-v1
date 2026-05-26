@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useCountry } from "@/hooks/useCountry";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +40,8 @@ import {
   Sparkles,
   Maximize2,
   Minimize2,
+  GripVertical,
+  Pencil,
 } from "lucide-react";
 import {
   HoverCard,
@@ -171,6 +174,11 @@ interface TableTemplate {
   tablePrice: number;
   bookingPrice: number;
   depositPrice: number;
+  // Whether the security deposit is part of Option 1 (minimum payment). When
+  // false (default), Option 1 is the booking amount only and the deposit is
+  // collected with the remaining balance — matching the long-standing booking
+  // behavior. Turn on to make Option 1 = Booking + Deposit.
+  depositInOption1?: boolean;
   color?: string;
   forSale?: boolean;
   isBooked?: boolean;
@@ -184,7 +192,25 @@ interface PositionedTable extends TableTemplate {
   y: number;
   rotation: number;
   isPlaced: boolean;
+  // Exhibitor business category this placed space is reserved for. "Other"
+  // (or empty) means open to every category. Used on the exhibitor side to
+  // decide which spaces a vendor of a given category may select.
+  exhibitorCategory?: string;
 }
+
+// Exhibitor business categories a space can be allotted to — kept in sync with
+// the stall form's BUSINESS_CATEGORIES. "Other" means the space is open to
+// every category.
+const SPACE_CATEGORIES = [
+  "Technology",
+  "Music",
+  "Food",
+  "Sports",
+  "Arts",
+  "Fashion",
+  "Electronics",
+  "Other",
+];
 
 // Find this (around line 52):
 interface AddOnItem {
@@ -399,11 +425,32 @@ const EventGallery = ({
 }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
+  // Index currently being dragged in the thumbnail strip (for reordering).
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+
   // Cropping States
   const [cropQueue, setCropQueue] = useState<File[]>([]);
   const [cropImage, setCropImage] = useState<string | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
+
+  // Move a gallery image from one position to another and keep the moved
+  // image selected so the big preview follows it.
+  const moveImage = (from: number, to: number) => {
+    if (
+      from === to ||
+      from < 0 ||
+      to < 0 ||
+      from >= galleryImages.length ||
+      to >= galleryImages.length
+    )
+      return;
+    const updated = [...galleryImages];
+    const [moved] = updated.splice(from, 1);
+    updated.splice(to, 0, moved);
+    setGalleryImages(updated);
+    setCurrentImageIndex(to);
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -546,17 +593,61 @@ const EventGallery = ({
             </Button>
           </div>
 
-          <Input
-            placeholder="Image description"
-            value={galleryImages[currentImageIndex]?.description || ""}
-            onChange={(e) => {
-              const updated = [...galleryImages];
-              updated[currentImageIndex].description = e.target.value;
-              setGalleryImages(updated);
-            }}
-          />
-
-          {/* Thumbnails list remains the same... */}
+          {/* Thumbnail strip — preview every image, click to view, drag to
+              reorder, and delete individually. The order here is the order
+              attendees see in the gallery. */}
+          <div className="space-y-2">
+            <p className="text-xs text-gray-500">
+              Drag thumbnails to reorder. Click one to preview it above.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {galleryImages.map((img, idx) => (
+                <div
+                  key={img.id}
+                  draggable
+                  onDragStart={() => setDragIndex(idx)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (dragIndex !== null) moveImage(dragIndex, idx);
+                    setDragIndex(null);
+                  }}
+                  onDragEnd={() => setDragIndex(null)}
+                  onClick={() => setCurrentImageIndex(idx)}
+                  className={`relative h-20 w-20 flex-shrink-0 cursor-pointer overflow-hidden rounded-md border-2 transition ${
+                    idx === currentImageIndex
+                      ? "border-primary ring-2 ring-primary/30"
+                      : "border-transparent hover:border-gray-300"
+                  } ${dragIndex === idx ? "opacity-40" : ""}`}
+                >
+                  <img
+                    src={getImageUrl(img.preview)}
+                    alt={`Gallery image ${idx + 1}`}
+                    className="pointer-events-none h-full w-full object-cover"
+                  />
+                  {/* Sequence number */}
+                  <span className="absolute left-0.5 top-0.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] leading-none text-white">
+                    {idx + 1}
+                  </span>
+                  {/* Drag affordance */}
+                  <span className="absolute bottom-0.5 left-0.5 text-white/80 drop-shadow">
+                    <GripVertical size={12} />
+                  </span>
+                  {/* Delete */}
+                  <button
+                    type="button"
+                    aria-label="Remove image"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeImage(img.id);
+                    }}
+                    className="absolute right-0.5 top-0.5 rounded-full bg-red-600 p-0.5 text-white hover:bg-red-700"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -592,6 +683,25 @@ const VenueConfiguration = ({
   const selectedConfig =
     venueConfigurations.find((config) => config.id === selectedVenueConfigId) ||
     venueConfigurations[0];
+
+  // Local text state for the dimension inputs so the organizer can clear them
+  // completely (leave the field empty) and retype, instead of the value
+  // snapping back to a default the moment it's emptied. Stored in meters to
+  // match what's shown; pushed to the config (×10) only when it's a valid
+  // number. Re-synced when switching between venue configs.
+  const [widthInput, setWidthInput] = useState<string>(
+    selectedConfig ? String(selectedConfig.width / 10) : "",
+  );
+  const [lengthInput, setLengthInput] = useState<string>(
+    selectedConfig ? String(selectedConfig.height / 10) : "",
+  );
+  useEffect(() => {
+    if (!selectedConfig) return;
+    setWidthInput(String(selectedConfig.width / 10));
+    setLengthInput(String(selectedConfig.height / 10));
+    // Only re-sync on config switch, not on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVenueConfigId]);
 
   const updateSelectedConfig = (updates: Partial<VenueConfig>) => {
     setVenueConfigurations(
@@ -718,27 +828,37 @@ const VenueConfiguration = ({
               <Label>Width (meters)</Label>
               <Input
                 type="number"
-                value={selectedConfig.width / 10}
-                onChange={(e) =>
-                  updateSelectedConfig({
-                    width: parseInt(e.target.value) * 10 || 800,
-                  })
-                }
+                value={widthInput}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setWidthInput(raw);
+                  const n = parseInt(raw, 10);
+                  // Only commit a real positive number; an empty field stays
+                  // empty so it can be cleared and retyped.
+                  if (raw !== "" && !isNaN(n) && n > 0) {
+                    updateSelectedConfig({ width: n * 10 });
+                  }
+                }}
+                placeholder="e.g. 80"
                 min="0"
                 max="200"
                 className="mt-1"
               />
             </div>
             <div>
-              <Label>Height (meters)</Label>
+              <Label>Length (meters)</Label>
               <Input
                 type="number"
-                value={selectedConfig.height / 10}
-                onChange={(e) =>
-                  updateSelectedConfig({
-                    height: parseInt(e.target.value) * 10 || 500,
-                  })
-                }
+                value={lengthInput}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setLengthInput(raw);
+                  const n = parseInt(raw, 10);
+                  if (raw !== "" && !isNaN(n) && n > 0) {
+                    updateSelectedConfig({ height: n * 10 });
+                  }
+                }}
+                placeholder="e.g. 50"
                 min="0"
                 max="200"
                 className="mt-1"
@@ -918,6 +1038,7 @@ const SavedSpaceTemplatePicker: React.FC<{
         p.bookingPrice != null ? String(p.bookingPrice) : prev.bookingPrice,
       depositPrice:
         p.depositPrice != null ? String(p.depositPrice) : prev.depositPrice,
+      depositInOption1: p.depositInOption1 === true,
       color: p.color ?? prev.color,
       forSale: prev.forSale,
     }));
@@ -1047,6 +1168,7 @@ const TableManagement = ({
     tablePrice: string;
     bookingPrice: string;
     depositPrice: string;
+    depositInOption1: boolean;
     color: string;
     forSale: boolean;
   };
@@ -1060,6 +1182,7 @@ const TableManagement = ({
       tablePrice: string;
       bookingPrice: string;
       depositPrice: string;
+      depositInOption1: boolean;
       color: string;
       forSale: boolean;
     }>
@@ -1071,6 +1194,7 @@ const TableManagement = ({
     description: string;
     rawFile?: File | null;
     preview?: string;
+    color?: string;
   };
   setCurrentAddOn: React.Dispatch<
     React.SetStateAction<{
@@ -1079,6 +1203,7 @@ const TableManagement = ({
       description: string;
       rawFile?: File | null;
       preview?: string;
+      color?: string;
     }>
   >;
   venueConfigurations: VenueConfig[];
@@ -1090,6 +1215,9 @@ const TableManagement = ({
   const { formatPrice, getSymbol } = useCurrency(country);
   const [cropOpen, setCropOpen] = useState(false);
   const [cropImage, setCropImage] = useState<string | null>(null);
+  // Ids of the template/add-on being edited in place (null = adding new).
+  const [editingTableId, setEditingTableId] = useState<string | null>(null);
+  const [editingAddOnId, setEditingAddOnId] = useState<string | null>(null);
 
   const handleAddOnImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1243,8 +1371,7 @@ const TableManagement = ({
           }
         : getDefaultDimensions(currentTable.type);
 
-    const newTable: TableTemplate = {
-      id: Math.random().toString(36).slice(2, 15),
+    const tableData = {
       name: currentTable.name,
       type: currentTable.type,
       width: dimensions.width,
@@ -1253,15 +1380,42 @@ const TableManagement = ({
       tablePrice: tablePrice,
       bookingPrice: bookingPrice,
       depositPrice: depositPrice,
+      depositInOption1: currentTable.depositInOption1,
       color: currentTable.color || "#6b7280",
       forSale: currentTable.forSale,
       customDimensions: currentTable.type === "Straight",
-      isBooked: false,
     };
 
-    setTableTemplates([...tableTemplates, newTable]);
+    if (editingTableId) {
+      // Update the existing template in place, keeping id / booking state.
+      setTableTemplates(
+        tableTemplates.map((t) =>
+          t.id === editingTableId ? { ...t, ...tableData } : t,
+        ),
+      );
+      toast({
+        duration: 5000,
+        title: "Space template updated",
+        description: `${tableData.name} saved`,
+      });
+    } else {
+      const newTable: TableTemplate = {
+        id: Math.random().toString(36).slice(2, 15),
+        ...tableData,
+        isBooked: false,
+      };
+      setTableTemplates([...tableTemplates, newTable]);
+      toast({
+        duration: 5000,
+        title: "Space template created",
+        description: `${newTable.name} added to templates`,
+      });
+    }
 
-    // Reset form
+    resetTableForm();
+  };
+
+  const resetTableForm = () => {
     setCurrentTable({
       name: "",
       type: "Straight",
@@ -1271,15 +1425,31 @@ const TableManagement = ({
       tablePrice: "",
       bookingPrice: "",
       depositPrice: "",
+      depositInOption1: false,
       color: "#6b7280",
       forSale: true,
     });
+    setEditingTableId(null);
+  };
 
-    toast({
-      duration: 5000,
-      title: "Table template created",
-      description: `${newTable.name} added to templates`,
+  // Load an existing space template back into the form for editing.
+  const editTable = (id: string) => {
+    const t = tableTemplates.find((x) => x.id === id);
+    if (!t) return;
+    setCurrentTable({
+      name: t.name,
+      type: t.type,
+      width: t.width != null ? String(t.width) : "",
+      height: t.height != null ? String(t.height) : "",
+      rowNumber: t.rowNumber != null ? String(t.rowNumber) : "1",
+      tablePrice: t.tablePrice != null ? String(t.tablePrice) : "",
+      bookingPrice: t.bookingPrice != null ? String(t.bookingPrice) : "",
+      depositPrice: t.depositPrice != null ? String(t.depositPrice) : "",
+      depositInOption1: t.depositInOption1 === true,
+      color: t.color || "#6b7280",
+      forSale: t.forSale !== false,
     });
+    setEditingTableId(id);
   };
 
   const addAddOn = () => {
@@ -1291,17 +1461,49 @@ const TableManagement = ({
       return;
     }
 
-    const newAddOn: AddOnItem = {
-      id: Math.random().toString(36).slice(2, 15),
-      name: currentAddOn.name,
-      price: parseFloat(currentAddOn.price),
-      description: currentAddOn.description,
-      rawFile: currentAddOn.rawFile || undefined,
-      preview: currentAddOn.preview || undefined,
-      color: currentAddOn.color || "#6b7280",
-    };
+    if (editingAddOnId) {
+      // Update in place. Only touch image fields if a new file was picked,
+      // otherwise keep the add-on's existing image untouched.
+      const changedImage = !!currentAddOn.rawFile;
+      setAddOnItems(
+        addOnItems.map((it) =>
+          it.id === editingAddOnId
+            ? {
+                ...it,
+                name: currentAddOn.name,
+                price: parseFloat(currentAddOn.price),
+                description: currentAddOn.description,
+                color: currentAddOn.color || "#6b7280",
+                ...(changedImage
+                  ? {
+                      rawFile: currentAddOn.rawFile || undefined,
+                      preview: currentAddOn.preview || undefined,
+                      hasNewImage: true,
+                    }
+                  : {}),
+              }
+            : it,
+        ),
+      );
+      toast({ title: "Add-on updated successfully!" });
+    } else {
+      const newAddOn: AddOnItem = {
+        id: Math.random().toString(36).slice(2, 15),
+        name: currentAddOn.name,
+        price: parseFloat(currentAddOn.price),
+        description: currentAddOn.description,
+        rawFile: currentAddOn.rawFile || undefined,
+        preview: currentAddOn.preview || undefined,
+        color: currentAddOn.color || "#6b7280",
+      };
+      setAddOnItems([...addOnItems, newAddOn]);
+      toast({ title: "Add-on created successfully!" });
+    }
 
-    setAddOnItems([...addOnItems, newAddOn]);
+    resetAddOnForm();
+  };
+
+  const resetAddOnForm = () => {
     setCurrentAddOn({
       name: "",
       price: "",
@@ -1310,8 +1512,23 @@ const TableManagement = ({
       preview: "",
       color: "#6b7280",
     });
+    setEditingAddOnId(null);
+  };
 
-    toast({ title: "Add-on created successfully!" });
+  // Load an existing add-on back into the form for editing. The existing
+  // image is shown via preview; leaving the uploader untouched preserves it.
+  const editAddOn = (id: string) => {
+    const a = addOnItems.find((x) => x.id === id);
+    if (!a) return;
+    setCurrentAddOn({
+      name: a.name,
+      price: a.price != null ? String(a.price) : "",
+      description: a.description || "",
+      rawFile: null,
+      preview: a.preview || (a.image ? `${__API_URL__}${a.image}` : ""),
+      color: a.color || "#6b7280",
+    });
+    setEditingAddOnId(id);
   };
 
   return (
@@ -1512,6 +1729,33 @@ const TableManagement = ({
               </div>
             )}
 
+            {/* Include-deposit-in-Option-1 toggle. Controls whether the
+                minimum-payment option (Option 1) is Booking + Deposit (on) or
+                Booking only (off, deposit collected with the balance). */}
+            {currentTable.forSale && (
+              <div className="flex items-center justify-between gap-3 rounded-lg border bg-slate-50 p-3">
+                <div>
+                  <Label className="text-sm">
+                    Include deposit in Option 1 (minimum payment)
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {currentTable.depositInOption1
+                      ? "Option 1 = Booking + Deposit"
+                      : "Option 1 = Booking only (deposit paid with the balance)"}
+                  </p>
+                </div>
+                <Switch
+                  checked={currentTable.depositInOption1}
+                  onCheckedChange={(checked) =>
+                    setCurrentTable((prev) => ({
+                      ...prev,
+                      depositInOption1: checked,
+                    }))
+                  }
+                />
+              </div>
+            )}
+
             {/* For Sale Toggle */}
             <div>
               <Label className="flex items-center gap-1 mb-2">Space Type</Label>
@@ -1606,17 +1850,24 @@ const TableManagement = ({
                         Option 1: Minimum Payment
                       </p>
                       <p className="text-green-700">
-                        Deposit + Booking =
+                        {currentTable.depositInOption1
+                          ? "Booking + Deposit = "
+                          : "Booking only = "}
                         {formatPrice(
-                          parseFloat(currentTable.depositPrice) +
-                            parseFloat(currentTable.bookingPrice),
+                          parseFloat(currentTable.bookingPrice) +
+                            (currentTable.depositInOption1
+                              ? parseFloat(currentTable.depositPrice)
+                              : 0),
                         )}
                       </p>
                       <p className="text-xs text-green-600">
                         Remaining:
                         {formatPrice(
                           parseFloat(currentTable.tablePrice) -
-                            parseFloat(currentTable.bookingPrice),
+                            parseFloat(currentTable.bookingPrice) +
+                            (currentTable.depositInOption1
+                              ? 0
+                              : parseFloat(currentTable.depositPrice)),
                         )}
                       </p>
                     </div>
@@ -1640,10 +1891,24 @@ const TableManagement = ({
               )}
           </div>
 
-          <Button type="button" onClick={addTable} className="w-full">
-            <Plus size={16} className="mr-2" />
-            Create Space Template
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" onClick={addTable} className="flex-1">
+              {editingTableId ? (
+                <>
+                  <Pencil size={16} className="mr-2" /> Update Space Template
+                </>
+              ) : (
+                <>
+                  <Plus size={16} className="mr-2" /> Create Space Template
+                </>
+              )}
+            </Button>
+            {editingTableId && (
+              <Button type="button" variant="outline" onClick={resetTableForm}>
+                Cancel
+              </Button>
+            )}
+          </div>
 
           {tableTemplates.length > 0 && (
             <div className="space-y-2">
@@ -1654,7 +1919,9 @@ const TableManagement = ({
                 {tableTemplates.map((table) => (
                   <div
                     key={table.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded border-l-4"
+                    className={`flex items-center justify-between p-3 bg-gray-50 rounded border-l-4 ${
+                      editingTableId === table.id ? "ring-2 ring-primary" : ""
+                    }`}
                     style={{ borderLeftColor: table.color || "#6b7280" }}
                   >
                     <div className="space-y-1">
@@ -1693,18 +1960,29 @@ const TableManagement = ({
                         </div>
                       )}
                     </div>
-                    <Button
-                      type="button"
-                      variant="buttonOutline"
-                      size="sm"
-                      onClick={() =>
-                        setTableTemplates(
-                          tableTemplates.filter((t) => t.id !== table.id),
-                        )
-                      }
-                    >
-                      <Trash2 size={14} />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="buttonOutline"
+                        size="sm"
+                        onClick={() => editTable(table.id)}
+                      >
+                        <Pencil size={14} />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="buttonOutline"
+                        size="sm"
+                        onClick={() => {
+                          setTableTemplates(
+                            tableTemplates.filter((t) => t.id !== table.id),
+                          );
+                          if (editingTableId === table.id) resetTableForm();
+                        }}
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1872,8 +2150,25 @@ const TableManagement = ({
                     className="flex-1"
                   />
                   <Button type="button" onClick={addAddOn}>
-                    <Plus size={16} className="mr-2" /> Add
+                    {editingAddOnId ? (
+                      <>
+                        <Pencil size={16} className="mr-2" /> Update
+                      </>
+                    ) : (
+                      <>
+                        <Plus size={16} className="mr-2" /> Add
+                      </>
+                    )}
                   </Button>
+                  {editingAddOnId && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={resetAddOnForm}
+                    >
+                      Cancel
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1889,7 +2184,9 @@ const TableManagement = ({
                 {addOnItems.map((addOn) => (
                   <div
                     key={addOn.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded border"
+                    className={`flex items-center justify-between p-3 bg-gray-50 rounded border ${
+                      editingAddOnId === addOn.id ? "ring-2 ring-primary" : ""
+                    }`}
                   >
                     <div className="flex items-center gap-3">
                       {/* Click the dot to change this add-on's color — same
@@ -1988,18 +2285,29 @@ const TableManagement = ({
                         </div>
                       </div>
                     </div>
-                    <Button
-                      type="button"
-                      variant="buttonOutline"
-                      size="sm"
-                      onClick={() =>
-                        setAddOnItems(
-                          addOnItems.filter((item) => item.id !== addOn.id),
-                        )
-                      }
-                    >
-                      <Trash2 size={14} />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="buttonOutline"
+                        size="sm"
+                        onClick={() => editAddOn(addOn.id)}
+                      >
+                        <Pencil size={14} />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="buttonOutline"
+                        size="sm"
+                        onClick={() => {
+                          setAddOnItems(
+                            addOnItems.filter((item) => item.id !== addOn.id),
+                          );
+                          if (editingAddOnId === addOn.id) resetAddOnForm();
+                        }}
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -2058,6 +2366,161 @@ interface VenueDesignerProps {
   addOnItems?: AddOnItem[];
 }
 
+// Wraps the venue design surface. When `active`, it renders full-screen
+// through a portal to <body> so the overlay escapes the Create-Event
+// dialog's transform/overflow-hidden context (a `position: fixed` element
+// is otherwise trapped inside the dialog box and never fills the viewport).
+// When inactive it renders inline exactly as before.
+const MaximizableSurface = ({
+  active,
+  children,
+}: {
+  active: boolean;
+  children: ReactNode;
+}) => {
+  if (active) {
+    return createPortal(
+      // pointer-events-auto: a modal Radix dialog sets `pointer-events: none`
+      // on <body>; without this the portaled overlay would inherit it and be
+      // unclickable.
+      <div className="fixed inset-0 z-[100] bg-white overflow-auto p-4 space-y-4 pointer-events-auto">
+        {children}
+      </div>,
+      document.body,
+    );
+  }
+  return <div className="space-y-4">{children}</div>;
+};
+
+// Floating action button the organizer can reposition by pressing and
+// dragging, so it never blocks part of the grid. A plain click (no drag)
+// fires onClick. Used in the maximized venue designer to open the template
+// list. Rendered inside the (portaled) full-screen surface, so `fixed`
+// positioning is relative to the viewport.
+const DraggableFab = ({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) => {
+  const [pos, setPos] = useState(() => ({
+    x: typeof window !== "undefined" ? window.innerWidth - 184 : 24,
+    y: typeof window !== "undefined" ? window.innerHeight - 88 : 24,
+  }));
+  const drag = useRef({
+    active: false,
+    moved: false,
+    offX: 0,
+    offY: 0,
+    startX: 0,
+    startY: 0,
+  });
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!drag.current.active) return;
+      // Only treat it as a move (vs a click) once it passes a small threshold.
+      if (
+        Math.abs(e.clientX - drag.current.startX) +
+          Math.abs(e.clientY - drag.current.startY) >
+        4
+      ) {
+        drag.current.moved = true;
+      }
+      const x = Math.max(
+        8,
+        Math.min(e.clientX - drag.current.offX, window.innerWidth - 64),
+      );
+      const y = Math.max(
+        8,
+        Math.min(e.clientY - drag.current.offY, window.innerHeight - 56),
+      );
+      setPos({ x, y });
+    };
+    const onUp = () => {
+      drag.current.active = false;
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
+
+  return (
+    <button
+      type="button"
+      onMouseDown={(e) => {
+        e.preventDefault();
+        drag.current = {
+          active: true,
+          moved: false,
+          offX: e.clientX - pos.x,
+          offY: e.clientY - pos.y,
+          startX: e.clientX,
+          startY: e.clientY,
+        };
+      }}
+      onClick={() => {
+        // Suppress the click that ends a drag — only a genuine tap opens it.
+        if (!drag.current.moved) onClick();
+      }}
+      style={{ position: "fixed", left: pos.x, top: pos.y, zIndex: 112 }}
+      className="flex cursor-grab select-none items-center gap-2 rounded-full bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-2xl hover:bg-indigo-700 active:cursor-grabbing"
+      title="Click to add spaces · press and drag to move this button"
+    >
+      <Plus className="h-4 w-4" />
+      {label}
+    </button>
+  );
+};
+
+// Hosts the venue template list. Inline (its normal bar) when the designer is
+// in standard mode; inside a lightweight centered modal when the canvas is
+// maximized — so full-screen mode shows only the grid until the organizer taps
+// the floating button. The modal lives inside the full-screen surface, so its
+// z-index sits above the grid without fighting the dialog stack.
+const TemplatesHost = ({
+  maximized,
+  open,
+  onClose,
+  children,
+}: {
+  maximized: boolean;
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) => {
+  if (!maximized) return <>{children}</>;
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[115] flex items-start justify-center overflow-y-auto bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="mt-10 w-full max-w-3xl rounded-xl bg-white p-4 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-base font-bold">Add to venue</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded p-1 text-slate-500 hover:bg-slate-100"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+};
+
 const VenueDesigner = ({
   tableTemplates,
   venueTables,
@@ -2083,18 +2546,30 @@ const VenueDesigner = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  // Live position of the item being dragged. Updated every frame during a drag
+  // so only THIS component re-renders — the final position is committed to the
+  // parent's venue state once on drop. This keeps dragging smooth instead of
+  // re-rendering the whole (very large) event form on every mouse move.
+  const [dragPreview, setDragPreview] = useState<{
+    key: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const dragPreviewRef = useRef<typeof dragPreview>(null);
+  dragPreviewRef.current = dragPreview;
   const [aiOpen, setAiOpen] = useState(false);
   const [isCanvasMaximized, setIsCanvasMaximized] = useState(false);
+  // Whether the floating "Add to venue" template modal is open (maximized mode).
+  const [templatesDialogOpen, setTemplatesDialogOpen] = useState(false);
 
-  // Coalesce mousemove updates into one frame so dragging stays smooth even
-  // with many positioned items on the canvas.
-  const rafIdRef = useRef<number | null>(null);
-  const pendingMoveRef = useRef<React.MouseEvent | null>(null);
-  useEffect(() => {
-    return () => {
-      if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
-    };
-  }, []);
+  // Always points at the latest processDragMove closure, so the window-level
+  // drag listener (attached once when a drag starts) reads fresh state without
+  // having to re-subscribe on every position change.
+  const processDragMoveRef = useRef<(clientX: number, clientY: number) => void>(
+    () => {},
+  );
+  // Latest commit-on-drop closure, called once when a drag ends.
+  const commitDragRef = useRef<() => void>(() => {});
 
   // Lock body scroll while the canvas is maximized so background doesn't slide.
   // Also let Escape exit full-screen, matching common dialog conventions.
@@ -2360,128 +2835,146 @@ const VenueDesigner = ({
     setIsDragging(true);
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging || !selectedTable || !venueConfig) return;
-    // Throttle to one update per animation frame. The mouse fires move events
-    // far faster than React can render hundreds of positioned items; without
-    // this, large layouts feel laggy mid-drag. We persist the latest event in
-    // a ref and process it inside rAF, dropping intermediate ones.
-    e.persist?.();
-    pendingMoveRef.current = e;
-    if (rafIdRef.current != null) return;
-    rafIdRef.current = requestAnimationFrame(() => {
-      rafIdRef.current = null;
-      const ev = pendingMoveRef.current;
-      if (!ev) return;
-      pendingMoveRef.current = null;
-      processDragMove(ev);
-    });
-  };
-
-  const processDragMove = (e: React.MouseEvent) => {
+  // Compute the clamped logical position for the item currently being dragged
+  // and stash it in local `dragPreview` state. This does NOT touch the parent
+  // venue collections — that happens once on drop (commitDrag) — so dragging
+  // re-renders only the designer, keeping it smooth.
+  const processDragMove = (clientX: number, clientY: number) => {
     if (!selectedTable || !venueConfig) return;
     const rect = venueRef.current?.getBoundingClientRect();
     if (!rect) return;
 
+    // The item's footprint, used to clamp it inside the venue bounds.
+    let w = 0;
+    let h = 0;
     if (selectedTable.startsWith("door-")) {
-      const doorId = selectedTable.replace("door-", "");
-      const door = currentDoors.find((d) => d.id === doorId);
-      if (!door) return;
-      const doorSize = 50; // matches the circular marker diameter (logical units)
-      const newX = Math.max(
-        0,
-        Math.min(
-          (e.clientX - rect.left - dragOffset.x) / venueConfig.scale,
-          venueConfig.width - doorSize,
-        ),
-      );
-      const newY = Math.max(
-        0,
-        Math.min(
-          (e.clientY - rect.top - dragOffset.y) / venueConfig.scale,
-          venueConfig.height - doorSize,
-        ),
-      );
-      const updatedDoors = currentDoors.map((d) =>
-        d.id === doorId ? { ...d, x: newX, y: newY } : d,
-      );
-      setVenueDoors({
-        ...venueDoors,
-        [selectedVenueConfigId]: updatedDoors,
-      });
+      w = h = 50;
     } else if (selectedTable.startsWith("rt-")) {
-      const rtId = selectedTable.replace("rt-", "");
-      const rt = currentRoundTables.find((r) => r.positionId === rtId);
+      const rt = currentRoundTables.find(
+        (r) => r.positionId === selectedTable.replace("rt-", ""),
+      );
       if (!rt) return;
-      const diameter = rt.tableDiameter || 120;
-      const newX = Math.max(
-        0,
-        Math.min(
-          (e.clientX - rect.left - dragOffset.x) / venueConfig.scale,
-          venueConfig.width - diameter,
-        ),
-      );
-      const newY = Math.max(
-        0,
-        Math.min(
-          (e.clientY - rect.top - dragOffset.y) / venueConfig.scale,
-          venueConfig.height - diameter,
-        ),
-      );
-      const updatedRTs = currentRoundTables.map((r) =>
-        r.positionId === rtId ? { ...r, x: newX, y: newY } : r,
-      );
-      setVenueRoundTables({
-        ...venueRoundTables,
-        [selectedVenueConfigId]: updatedRTs,
-      });
+      w = h = rt.tableDiameter || 120;
     } else if (selectedTable.startsWith("sz-")) {
-      const zoneId = selectedTable.replace("sz-", "");
-      const zone = currentSpeakerZones.find((z) => z.positionId === zoneId);
+      const zone = currentSpeakerZones.find(
+        (z) => z.positionId === selectedTable.replace("sz-", ""),
+      );
       if (!zone) return;
-      const newX = Math.max(
-        0,
-        Math.min(
-          (e.clientX - rect.left - dragOffset.x) / venueConfig.scale,
-          venueConfig.width - zone.width,
-        ),
-      );
-      const newY = Math.max(
-        0,
-        Math.min(
-          (e.clientY - rect.top - dragOffset.y) / venueConfig.scale,
-          venueConfig.height - zone.height,
-        ),
-      );
-      const updatedZones = currentSpeakerZones.map((z) =>
-        z.positionId === zoneId ? { ...z, x: newX, y: newY } : z,
-      );
-      setVenueSpeakerZones({
-        ...venueSpeakerZones,
-        [selectedVenueConfigId]: updatedZones,
-      });
+      w = zone.width;
+      h = zone.height;
     } else {
       const table = currentTables.find((t) => t.positionId === selectedTable);
       if (!table) return;
-      const newX = Math.max(
-        0,
-        Math.min(
-          (e.clientX - rect.left - dragOffset.x) / venueConfig.scale,
-          venueConfig.width - table.width,
-        ),
-      );
-      const newY = Math.max(
-        0,
-        Math.min(
-          (e.clientY - rect.top - dragOffset.y) / venueConfig.scale,
-          venueConfig.height - table.height,
-        ),
-      );
-      handleUpdateTable(selectedTable, { x: newX, y: newY });
+      w = table.width;
+      h = table.height;
     }
+
+    const newX = Math.max(
+      0,
+      Math.min(
+        (clientX - rect.left - dragOffset.x) / venueConfig.scale,
+        venueConfig.width - w,
+      ),
+    );
+    const newY = Math.max(
+      0,
+      Math.min(
+        (clientY - rect.top - dragOffset.y) / venueConfig.scale,
+        venueConfig.height - h,
+      ),
+    );
+    setDragPreview({ key: selectedTable, x: newX, y: newY });
   };
 
-  const handleMouseUp = () => setIsDragging(false);
+  // Commit the final dragged position to the appropriate parent collection.
+  // Called once on mouse-up so the canonical venue state stays in sync without
+  // paying a full re-render on every frame.
+  const commitDrag = () => {
+    const preview = dragPreviewRef.current;
+    if (!preview) return;
+    const { key, x, y } = preview;
+    if (key.startsWith("door-")) {
+      const doorId = key.replace("door-", "");
+      setVenueDoors({
+        ...venueDoors,
+        [selectedVenueConfigId]: currentDoors.map((d) =>
+          d.id === doorId ? { ...d, x, y } : d,
+        ),
+      });
+    } else if (key.startsWith("rt-")) {
+      const rtId = key.replace("rt-", "");
+      setVenueRoundTables({
+        ...venueRoundTables,
+        [selectedVenueConfigId]: currentRoundTables.map((r) =>
+          r.positionId === rtId ? { ...r, x, y } : r,
+        ),
+      });
+    } else if (key.startsWith("sz-")) {
+      const zoneId = key.replace("sz-", "");
+      setVenueSpeakerZones({
+        ...venueSpeakerZones,
+        [selectedVenueConfigId]: currentSpeakerZones.map((z) =>
+          z.positionId === zoneId ? { ...z, x, y } : z,
+        ),
+      });
+    } else {
+      handleUpdateTable(key, { x, y });
+    }
+    setDragPreview(null);
+  };
+
+  // Keep the refs pointing at the freshest closures every render.
+  processDragMoveRef.current = processDragMove;
+  commitDragRef.current = commitDrag;
+
+  // Returns the position to render an item at: the live drag preview while it's
+  // the one being dragged, otherwise its committed position.
+  const livePos = (key: string, x: number, y: number) =>
+    dragPreview && dragPreview.key === key
+      ? { x: dragPreview.x, y: dragPreview.y }
+      : { x, y };
+
+  // While a drag is active, listen on the window (not the canvas) so the item
+  // keeps following the cursor even when it strays outside the canvas — and
+  // the drop is always caught, no matter where the mouse is released. Moves
+  // are coalesced into one update per animation frame for smoothness with many
+  // items. Subscribes only when a drag begins, unsubscribes when it ends.
+  useEffect(() => {
+    if (!isDragging) return;
+    let rafId: number | null = null;
+    let pending: { x: number; y: number } | null = null;
+
+    const onMove = (ev: MouseEvent) => {
+      pending = { x: ev.clientX, y: ev.clientY };
+      if (rafId != null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (pending) {
+          processDragMoveRef.current(pending.x, pending.y);
+          pending = null;
+        }
+      });
+    };
+    const onUp = () => {
+      // Flush the final position to the parent venue state once, then stop.
+      commitDragRef.current();
+      setIsDragging(false);
+    };
+
+    // Suppress text/element selection while dragging so the cursor doesn't
+    // highlight the canvas — a common cause of jerky-feeling drags.
+    const prevUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = prevUserSelect;
+      if (rafId != null) cancelAnimationFrame(rafId);
+    };
+  }, [isDragging]);
 
   // --- Export Logic ---
 
@@ -2537,11 +3030,12 @@ const VenueDesigner = ({
     if (table.type === "Corner") borderRadius = "4px 4px 4px 50%";
 
     const isSelected = selectedTable === table.positionId;
+    const pos = livePos(table.positionId, table.x, table.y);
 
     return {
       position: "absolute" as const,
-      left: table.x * venueConfig.scale,
-      top: table.y * venueConfig.scale,
+      left: pos.x * venueConfig.scale,
+      top: pos.y * venueConfig.scale,
       width: table.width * venueConfig.scale,
       height: table.height * venueConfig.scale,
       borderRadius,
@@ -2653,42 +3147,45 @@ const VenueDesigner = ({
       )}
 
       {/* Maximize-aware design surface. When `isCanvasMaximized` is true the
-          templates panel + canvas render inside a fixed-position overlay that
-          fills the viewport. Same JSX in both modes — only the wrapping
-          container's classes differ — so drag/click handlers don't change. */}
-      <div
-        className={
-          isCanvasMaximized
-            ? "fixed inset-0 z-50 bg-white overflow-auto p-4 space-y-4"
-            : "space-y-4"
-        }
-      >
+          templates panel + canvas render full-screen via a portal to <body>
+          (see MaximizableSurface) so the overlay covers the whole viewport
+          instead of being clipped inside the Create-Event dialog. Same JSX in
+          both modes — drag/click handlers don't change. */}
+      <MaximizableSurface active={isCanvasMaximized}>
       {isCanvasMaximized && (
-        <div className="flex items-center justify-between sticky top-0 bg-white border-b pb-3 z-10">
-          <div>
-            <h3 className="text-lg font-bold">Venue Designer · Full screen</h3>
-            <p className="text-xs text-muted-foreground">
-              Drag templates from the panel below onto the canvas. Press Esc or
-              click Exit to return.
-            </p>
-          </div>
-          <Button
+        <>
+          {/* Only the grid shows in full screen. These two controls float on
+              top: a fixed Exit button (top-right) and a draggable "Add Spaces"
+              button that opens the template modal and can be moved out of the
+              way so every part of the grid is reachable. */}
+          <button
             type="button"
-            size="sm"
-            variant="outline"
             onClick={() => setIsCanvasMaximized(false)}
+            style={{ position: "fixed", top: 16, right: 16, zIndex: 112 }}
+            className="flex items-center gap-1 rounded-full border bg-white px-4 py-2 text-sm font-medium shadow-lg hover:bg-slate-50"
+            title="Exit full screen (Esc)"
           >
-            <Minimize2 className="h-4 w-4 mr-1" />
-            Exit fullscreen
-          </Button>
-        </div>
+            <Minimize2 className="h-4 w-4" /> Exit
+          </button>
+          <DraggableFab
+            label="Add Spaces"
+            onClick={() => setTemplatesDialogOpen(true)}
+          />
+        </>
       )}
-      {/* Templates Row - Full Width Horizontal */}
+      {/* Templates Row — an inline bar in normal mode; in maximized mode it
+          moves into the draggable FAB's "Add to venue" modal so only the grid
+          is visible until the organizer opens it. */}
+      <TemplatesHost
+        maximized={isCanvasMaximized}
+        open={templatesDialogOpen}
+        onClose={() => setTemplatesDialogOpen(false)}
+      >
       <div className="border rounded-xl bg-slate-50 p-4">
         <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
           Click to add to venue
         </p>
-        <div className="flex gap-3 overflow-x-auto pb-2">
+        <div className="flex flex-wrap gap-3 overflow-x-auto pb-2">
           {/* Space Templates */}
           {tableTemplates.map((template) => (
             <div
@@ -2848,10 +3345,12 @@ const VenueDesigner = ({
             )}
         </div>
       </div>
+      </TemplatesHost>
 
       {/* Full Width Canvas */}
       <Card className="border-2">
         <CardContent className="p-3 space-y-2">
+          {!isCanvasMaximized && (
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-3 flex-wrap">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -2910,14 +3409,12 @@ const VenueDesigner = ({
               )}
             </Button>
           </div>
+          )}
           <div
             className="relative border-2 border-dashed border-gray-300 rounded-xl bg-slate-50 overflow-auto flex justify-center items-start p-6"
             style={{
-              minHeight: isCanvasMaximized ? "calc(100vh - 280px)" : "700px",
+              minHeight: isCanvasMaximized ? "calc(100vh - 48px)" : "700px",
             }}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
           >
             <div
               ref={venueRef}
@@ -2974,8 +3471,12 @@ const VenueDesigner = ({
                         : "bg-red-600 border-2 border-red-700"
                     } ${isSelected ? "ring-2 ring-offset-1 ring-blue-400" : ""}`}
                     style={{
-                      left: door.x * venueConfig.scale,
-                      top: door.y * venueConfig.scale,
+                      left:
+                        livePos("door-" + door.id, door.x, door.y).x *
+                        venueConfig.scale,
+                      top:
+                        livePos("door-" + door.id, door.x, door.y).y *
+                        venueConfig.scale,
                       width: diameter * venueConfig.scale,
                       height: diameter * venueConfig.scale,
                       transform: `rotate(${door.rotation || 0}deg)`,
@@ -3182,8 +3683,12 @@ const VenueDesigner = ({
                     key={`sz-${zone.positionId}`}
                     style={{
                       position: "absolute",
-                      left: zone.x * venueConfig.scale,
-                      top: zone.y * venueConfig.scale,
+                      left:
+                        livePos(`sz-${zone.positionId}`, zone.x, zone.y).x *
+                        venueConfig.scale,
+                      top:
+                        livePos(`sz-${zone.positionId}`, zone.x, zone.y).y *
+                        venueConfig.scale,
                       width: zone.width * venueConfig.scale,
                       height: zone.height * venueConfig.scale,
                       background: isSelected
@@ -3277,8 +3782,12 @@ const VenueDesigner = ({
                     key={`rt-${rt.positionId}`}
                     style={{
                       position: "absolute",
-                      left: rt.x * venueConfig.scale,
-                      top: rt.y * venueConfig.scale,
+                      left:
+                        livePos(`rt-${rt.positionId}`, rt.x, rt.y).x *
+                        venueConfig.scale,
+                      top:
+                        livePos(`rt-${rt.positionId}`, rt.x, rt.y).y *
+                        venueConfig.scale,
                       width: diameter + chairSize + 4,
                       height: diameter + chairSize + 4,
                       cursor: isDragging ? "grabbing" : "grab",
@@ -3397,7 +3906,7 @@ const VenueDesigner = ({
           </div>
         </CardContent>
       </Card>
-      </div>
+      </MaximizableSurface>
       {/* /maximize-aware design surface */}
 
       {/* Inventory Summary - Full Width */}
@@ -3445,6 +3954,33 @@ const VenueDesigner = ({
                     >
                       {table.isBooked ? "Booked" : "Open"}
                     </span>
+                  </div>
+                  {/* Exhibitor category this space is allotted to. "Other"
+                      makes it selectable by every category. */}
+                  <div onClick={(e) => e.stopPropagation()} className="mt-2">
+                    <Select
+                      value={table.exhibitorCategory || "Other"}
+                      onValueChange={(val) =>
+                        handleUpdateTable(table.positionId, {
+                          exhibitorCategory: val,
+                        })
+                      }
+                    >
+                      <SelectTrigger className="h-7 text-[10px]">
+                        <SelectValue placeholder="Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SPACE_CATEGORIES.map((cat) => (
+                          <SelectItem
+                            key={cat}
+                            value={cat}
+                            className="text-xs"
+                          >
+                            {cat === "Other" ? "Other (all categories)" : cat}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               ))}
@@ -3589,6 +4125,7 @@ export function CreateEventForm({
     tablePrice: "",
     bookingPrice: "",
     depositPrice: "",
+    depositInOption1: false,
     color: "#6b7280",
     forSale: true,
   });
@@ -3788,6 +4325,9 @@ export function CreateEventForm({
     description: "",
     featureAccess: { ...DEFAULT_VISITOR_FEATURES },
   });
+  // When set, the visitor-type form is editing this existing type in place
+  // (Update) instead of creating a new one (Add).
+  const [editingVisitorId, setEditingVisitorId] = useState<string | null>(null);
 
   // Speaker Slot Templates (like table templates but for speaker zones)
   const [speakerSlotTemplates, setSpeakerSlotTemplates] = useState<any[]>(
@@ -3806,6 +4346,8 @@ export function CreateEventForm({
     description: "",
     openForApplications: true,
   });
+  // When set, the speaker-space form edits this existing space in place.
+  const [editingSpeakerId, setEditingSpeakerId] = useState<string | null>(null);
 
   // Positioned speaker zones on venue canvas
   const [venueSpeakerZones, setVenueSpeakerZones] = useState<
@@ -3926,6 +4468,10 @@ export function CreateEventForm({
     color: "#8B5CF6",
     tableDiameter: "120",
   });
+  // When set, the round-table form edits this existing template in place.
+  const [editingRoundTableId, setEditingRoundTableId] = useState<
+    string | null
+  >(null);
 
   // Load initial data for editing or duplicating. Same field-by-field copy
   // either way; the difference is the submit URL/method (handled in parent).
@@ -4482,13 +5028,29 @@ export function CreateEventForm({
     }));
   };
 
+  const resetSpeakerForm = () => {
+    setCurrentSpeakerSlot({
+      name: "",
+      startTime: "",
+      endTime: "",
+      isMainStage: false,
+      maxVisitors: "0",
+      width: "200",
+      height: "100",
+      slotPrice: "0",
+      maxSpeakers: "1",
+      description: "",
+      openForApplications: true,
+    });
+    setEditingSpeakerId(null);
+  };
+
   const addSpeakerSlot = () => {
     if (!currentSpeakerSlot.name.trim()) {
       toast({ title: "Space name is required", variant: "destructive" });
       return;
     }
-    const newSlot = {
-      id: Math.random().toString(36).slice(2, 10),
+    const slotData = {
       name: currentSpeakerSlot.name.trim(),
       isMainStage: currentSpeakerSlot.isMainStage,
       width: currentSpeakerSlot.isMainStage
@@ -4502,50 +5064,136 @@ export function CreateEventForm({
       maxVisitors: parseInt(currentSpeakerSlot.maxVisitors) || 0,
       description: currentSpeakerSlot.description,
       openForApplications: currentSpeakerSlot.openForApplications,
-      sessions: [],
     };
-    setSpeakerSlotTemplates((prev) => [...prev, newSlot]);
+
+    if (editingSpeakerId) {
+      // Update in place, preserving the space's id and its session slots.
+      setSpeakerSlotTemplates((prev) =>
+        prev.map((s) =>
+          s.id === editingSpeakerId ? { ...s, ...slotData } : s,
+        ),
+      );
+      toast({ title: "Speaker space updated" });
+    } else {
+      const newSlot = {
+        id: Math.random().toString(36).slice(2, 10),
+        ...slotData,
+        sessions: [],
+      };
+      setSpeakerSlotTemplates((prev) => [...prev, newSlot]);
+    }
+    resetSpeakerForm();
+  };
+
+  // Load an existing speaker space back into the form for editing.
+  const editSpeakerSlot = (id: string) => {
+    const s = speakerSlotTemplates.find((x) => x.id === id);
+    if (!s) return;
     setCurrentSpeakerSlot({
-      name: "",
+      name: s.name ?? "",
       startTime: "",
       endTime: "",
-      isMainStage: false,
-      width: "200",
-      height: "100",
-      slotPrice: "0",
-      maxSpeakers: "1",
-      maxVisitors: "",
-      description: "",
-      openForApplications: true,
+      isMainStage: !!s.isMainStage,
+      maxVisitors: s.maxVisitors != null ? String(s.maxVisitors) : "0",
+      width: s.width != null ? String(s.width) : "200",
+      height: s.height != null ? String(s.height) : "100",
+      slotPrice: s.slotPrice != null ? String(s.slotPrice) : "0",
+      maxSpeakers: s.maxSpeakers != null ? String(s.maxSpeakers) : "1",
+      description: s.description ?? "",
+      openForApplications: s.openForApplications !== false,
     });
+    setEditingSpeakerId(id);
   };
 
   const removeSpeakerSlot = (id: string) => {
     setSpeakerSlotTemplates((prev) => prev.filter((s) => s.id !== id));
+    if (editingSpeakerId === id) resetSpeakerForm();
   };
 
-  const addVisitorType = () => {
-    if (!currentVisitor.name.trim()) {
-      toast({ title: "Visitor type name is required", variant: "destructive" });
+  const resetRoundTableForm = () => {
+    setCurrentRoundTable({
+      name: "",
+      numberOfChairs: "8",
+      sellingMode: "chair",
+      tablePrice: "",
+      chairPrice: "",
+      category: "Standard",
+      color: "#8B5CF6",
+      tableDiameter: "120",
+    });
+    setEditingRoundTableId(null);
+  };
+
+  // Add a new round-table template, or update the one being edited in place.
+  const addRoundTableTemplate = () => {
+    if (!currentRoundTable.name) {
+      toast({ title: "Table name is required", variant: "destructive" });
       return;
     }
-    const newVisitor: VisitorType = {
-      id: Math.random().toString(36).slice(2, 10),
-      name: currentVisitor.name.trim(),
-      // Belt-and-suspenders: even if isIndividualAccount toggles after
-      // a stale price was typed, force 0 here too. Server enforces the
-      // same rule in events.controller.
-      price: isIndividualAccount
-        ? 0
-        : parseFloat(currentVisitor.price) || 0,
-      maxCount: currentVisitor.maxCount
-        ? parseInt(currentVisitor.maxCount)
-        : undefined,
-      description: currentVisitor.description,
-      featureAccess: { ...currentVisitor.featureAccess },
-      isActive: true,
+    const chairs = parseInt(currentRoundTable.numberOfChairs) || 8;
+    if (chairs < 2 || chairs > 20) {
+      toast({
+        title: "Chairs must be between 2 and 20",
+        variant: "destructive",
+      });
+      return;
+    }
+    const price =
+      currentRoundTable.sellingMode === "chair"
+        ? parseFloat(currentRoundTable.chairPrice) || 0
+        : parseFloat(currentRoundTable.tablePrice) || 0;
+    if (price <= 0) {
+      toast({ title: "Price must be greater than 0", variant: "destructive" });
+      return;
+    }
+    const templateData = {
+      name: currentRoundTable.name,
+      numberOfChairs: chairs,
+      sellingMode: currentRoundTable.sellingMode,
+      tablePrice: parseFloat(currentRoundTable.tablePrice) || 0,
+      chairPrice: parseFloat(currentRoundTable.chairPrice) || 0,
+      category: currentRoundTable.category,
+      color: currentRoundTable.color,
+      tableDiameter: parseInt(currentRoundTable.tableDiameter) || 120,
     };
-    setVisitorTypes((prev) => [...prev, newVisitor]);
+
+    if (editingRoundTableId) {
+      setRoundTableTemplates((prev) =>
+        prev.map((t) =>
+          t.id === editingRoundTableId ? { ...t, ...templateData } : t,
+        ),
+      );
+      toast({ title: "Round table template updated" });
+    } else {
+      const newTemplate: RoundTableTemplate = {
+        id: Math.random().toString(36).slice(2, 15),
+        ...templateData,
+      };
+      setRoundTableTemplates([...roundTableTemplates, newTemplate]);
+      toast({ title: "Round table template added" });
+    }
+    resetRoundTableForm();
+  };
+
+  // Load an existing round-table template back into the form for editing.
+  const editRoundTableTemplate = (id: string) => {
+    const t = roundTableTemplates.find((x) => x.id === id);
+    if (!t) return;
+    setCurrentRoundTable({
+      name: t.name ?? "",
+      numberOfChairs: t.numberOfChairs != null ? String(t.numberOfChairs) : "8",
+      sellingMode: t.sellingMode || "chair",
+      tablePrice: t.tablePrice != null ? String(t.tablePrice) : "",
+      chairPrice: t.chairPrice != null ? String(t.chairPrice) : "",
+      category: t.category || "Standard",
+      color: t.color || "#8B5CF6",
+      tableDiameter: t.tableDiameter != null ? String(t.tableDiameter) : "120",
+    });
+    setEditingRoundTableId(id);
+  };
+
+  // Clear the visitor-type form and drop out of edit mode.
+  const resetVisitorForm = () => {
     setCurrentVisitor({
       name: "",
       price: "0",
@@ -4553,10 +5201,76 @@ export function CreateEventForm({
       description: "",
       featureAccess: { ...DEFAULT_VISITOR_FEATURES },
     });
+    setEditingVisitorId(null);
+  };
+
+  // Add a brand-new visitor type, or — when editingVisitorId is set —
+  // update that existing type in place (keeping its id and isActive flag).
+  const addVisitorType = () => {
+    if (!currentVisitor.name.trim()) {
+      toast({ title: "Visitor type name is required", variant: "destructive" });
+      return;
+    }
+    // Belt-and-suspenders: even if isIndividualAccount toggles after
+    // a stale price was typed, force 0 here too. Server enforces the
+    // same rule in events.controller.
+    const price = isIndividualAccount
+      ? 0
+      : parseFloat(currentVisitor.price) || 0;
+    const maxCount = currentVisitor.maxCount
+      ? parseInt(currentVisitor.maxCount)
+      : undefined;
+
+    if (editingVisitorId) {
+      setVisitorTypes((prev) =>
+        prev.map((v) =>
+          v.id === editingVisitorId
+            ? {
+                ...v,
+                name: currentVisitor.name.trim(),
+                price,
+                maxCount,
+                description: currentVisitor.description,
+                featureAccess: { ...currentVisitor.featureAccess },
+              }
+            : v,
+        ),
+      );
+    } else {
+      const newVisitor: VisitorType = {
+        id: Math.random().toString(36).slice(2, 10),
+        name: currentVisitor.name.trim(),
+        price,
+        maxCount,
+        description: currentVisitor.description,
+        featureAccess: { ...currentVisitor.featureAccess },
+        isActive: true,
+      };
+      setVisitorTypes((prev) => [...prev, newVisitor]);
+    }
+    resetVisitorForm();
+  };
+
+  // Load an existing visitor type back into the form for editing.
+  const editVisitorType = (id: string) => {
+    const v = visitorTypes.find((vt) => vt.id === id);
+    if (!v) return;
+    setCurrentVisitor({
+      name: v.name,
+      price: String(v.price ?? 0),
+      maxCount: v.maxCount != null ? String(v.maxCount) : "",
+      description: v.description ?? "",
+      // Merge over defaults so any custom features the type carries are
+      // preserved while every default key still exists.
+      featureAccess: { ...DEFAULT_VISITOR_FEATURES, ...v.featureAccess },
+    });
+    setEditingVisitorId(id);
   };
 
   const removeVisitorType = (id: string) => {
     setVisitorTypes((prev) => prev.filter((v) => v.id !== id));
+    // If the type being edited was deleted, exit edit mode cleanly.
+    if (editingVisitorId === id) resetVisitorForm();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -5602,13 +6316,34 @@ export function CreateEventForm({
                       Press Enter or click Add to create a custom feature
                     </p>
                   </div>
-                  <Button
-                    type="button"
-                    onClick={addVisitorType}
-                    className="w-full md:w-auto"
-                  >
-                    <Plus size={16} className="mr-2" /> Add Visitor Type
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      onClick={addVisitorType}
+                      className="w-full md:w-auto"
+                    >
+                      {editingVisitorId ? (
+                        <>
+                          <Pencil size={16} className="mr-2" /> Update Visitor
+                          Type
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={16} className="mr-2" /> Add Visitor Type
+                        </>
+                      )}
+                    </Button>
+                    {editingVisitorId && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={resetVisitorForm}
+                        className="w-full md:w-auto"
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 {visitorTypes.length === 0 && (
                   <div className="text-sm text-gray-400 border border-dashed rounded-lg p-6 text-center">
@@ -5619,7 +6354,11 @@ export function CreateEventForm({
                   {visitorTypes.map((visitor, index) => (
                     <div
                       key={visitor.id}
-                      className="border rounded-lg p-4 bg-white space-y-3"
+                      className={`border rounded-lg p-4 bg-white space-y-3 ${
+                        editingVisitorId === visitor.id
+                          ? "ring-2 ring-primary border-primary"
+                          : ""
+                      }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -5639,15 +6378,26 @@ export function CreateEventForm({
                             </div>
                           </div>
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-500 hover:text-red-600"
-                          onClick={() => removeVisitorType(visitor.id)}
-                        >
-                          <Trash2 size={14} />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-primary hover:text-primary/80"
+                            onClick={() => editVisitorType(visitor.id)}
+                          >
+                            <Pencil size={14} />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-500 hover:text-red-600"
+                            onClick={() => removeVisitorType(visitor.id)}
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        </div>
                       </div>
                       {visitor.description && (
                         <p className="text-sm text-gray-600 bg-gray-50 rounded px-3 py-2">
@@ -5861,13 +6611,34 @@ export function CreateEventForm({
                     />
                   </div>
 
-                  <Button
-                    type="button"
-                    onClick={addSpeakerSlot}
-                    className="w-full md:w-auto"
-                  >
-                    <Plus size={16} className="mr-2" /> Add Speaker Space
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      onClick={addSpeakerSlot}
+                      className="w-full md:w-auto"
+                    >
+                      {editingSpeakerId ? (
+                        <>
+                          <Pencil size={16} className="mr-2" /> Update Speaker
+                          Space
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={16} className="mr-2" /> Add Speaker Space
+                        </>
+                      )}
+                    </Button>
+                    {editingSpeakerId && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full md:w-auto"
+                        onClick={resetSpeakerForm}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Speaker Spaces List */}
@@ -5887,7 +6658,12 @@ export function CreateEventForm({
 
             {/* SECTION 2: Session Slots within each Speaker Space */}
             {speakerSlotTemplates.map((space, spaceIdx) => (
-              <Card key={space.id} className="border-2 border-purple-200">
+              <Card
+                key={space.id}
+                className={`border-2 border-purple-200 ${
+                  editingSpeakerId === space.id ? "ring-2 ring-primary" : ""
+                }`}
+              >
                 <CardHeader className="bg-purple-50/50">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -5928,15 +6704,26 @@ export function CreateEventForm({
                         </p>
                       </div>
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-500 hover:text-red-600"
-                      onClick={() => removeSpeakerSlot(space.id)}
-                    >
-                      <Trash2 size={14} className="mr-1" /> Remove Space
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-primary hover:text-primary/80"
+                        onClick={() => editSpeakerSlot(space.id)}
+                      >
+                        <Pencil size={14} className="mr-1" /> Edit
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-600"
+                        onClick={() => removeSpeakerSlot(space.id)}
+                      >
+                        <Trash2 size={14} className="mr-1" /> Remove Space
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-4 space-y-4">
@@ -6585,71 +7372,31 @@ export function CreateEventForm({
                         ))}
                       </div>
                     </div>
-                    <div className="flex items-end">
+                    <div className="flex items-end gap-2">
                       <Button
                         type="button"
-                        onClick={() => {
-                          if (!currentRoundTable.name) {
-                            toast({
-                              title: "Table name is required",
-                              variant: "destructive",
-                            });
-                            return;
-                          }
-                          const chairs =
-                            parseInt(currentRoundTable.numberOfChairs) || 8;
-                          if (chairs < 2 || chairs > 20) {
-                            toast({
-                              title: "Chairs must be between 2 and 20",
-                              variant: "destructive",
-                            });
-                            return;
-                          }
-                          const price =
-                            currentRoundTable.sellingMode === "chair"
-                              ? parseFloat(currentRoundTable.chairPrice) || 0
-                              : parseFloat(currentRoundTable.tablePrice) || 0;
-                          if (price <= 0) {
-                            toast({
-                              title: "Price must be greater than 0",
-                              variant: "destructive",
-                            });
-                            return;
-                          }
-                          const newTemplate: RoundTableTemplate = {
-                            id: Math.random().toString(36).slice(2, 15),
-                            name: currentRoundTable.name,
-                            numberOfChairs: chairs,
-                            sellingMode: currentRoundTable.sellingMode,
-                            tablePrice:
-                              parseFloat(currentRoundTable.tablePrice) || 0,
-                            chairPrice:
-                              parseFloat(currentRoundTable.chairPrice) || 0,
-                            category: currentRoundTable.category,
-                            color: currentRoundTable.color,
-                            tableDiameter:
-                              parseInt(currentRoundTable.tableDiameter) || 120,
-                          };
-                          setRoundTableTemplates([
-                            ...roundTableTemplates,
-                            newTemplate,
-                          ]);
-                          setCurrentRoundTable({
-                            name: "",
-                            numberOfChairs: "8",
-                            sellingMode: "chair",
-                            tablePrice: "",
-                            chairPrice: "",
-                            category: "Standard",
-                            color: "#8B5CF6",
-                            tableDiameter: "120",
-                          });
-                          toast({ title: "Round table template added" });
-                        }}
-                        className="w-full"
+                        onClick={addRoundTableTemplate}
+                        className="flex-1"
                       >
-                        <Plus size={16} className="mr-2" /> Add Template
+                        {editingRoundTableId ? (
+                          <>
+                            <Pencil size={16} className="mr-2" /> Update Template
+                          </>
+                        ) : (
+                          <>
+                            <Plus size={16} className="mr-2" /> Add Template
+                          </>
+                        )}
                       </Button>
+                      {editingRoundTableId && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={resetRoundTableForm}
+                        >
+                          Cancel
+                        </Button>
+                      )}
                     </div>
                   </div>
 
@@ -6659,7 +7406,11 @@ export function CreateEventForm({
                       {roundTableTemplates.map((template) => (
                         <div
                           key={template.id}
-                          className="p-4 border-2 rounded-xl bg-white"
+                          className={`p-4 border-2 rounded-xl bg-white ${
+                            editingRoundTableId === template.id
+                              ? "ring-2 ring-primary"
+                              : ""
+                          }`}
                           style={{ borderColor: template.color + "66" }}
                         >
                           <div className="flex items-center justify-between mb-3">
@@ -6716,21 +7467,36 @@ export function CreateEventForm({
                                 </span>
                               </div>
                             </div>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7 text-red-500"
-                              onClick={() =>
-                                setRoundTableTemplates(
-                                  roundTableTemplates.filter(
-                                    (t) => t.id !== template.id,
-                                  ),
-                                )
-                              }
-                            >
-                              <Trash2 size={14} />
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-primary"
+                                onClick={() =>
+                                  editRoundTableTemplate(template.id)
+                                }
+                              >
+                                <Pencil size={14} />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-red-500"
+                                onClick={() => {
+                                  setRoundTableTemplates(
+                                    roundTableTemplates.filter(
+                                      (t) => t.id !== template.id,
+                                    ),
+                                  );
+                                  if (editingRoundTableId === template.id)
+                                    resetRoundTableForm();
+                                }}
+                              >
+                                <Trash2 size={14} />
+                              </Button>
+                            </div>
                           </div>
                           <div className="text-xs text-muted-foreground space-y-1">
                             <div className="flex justify-between">
