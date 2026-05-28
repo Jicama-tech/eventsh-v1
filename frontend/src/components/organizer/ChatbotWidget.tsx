@@ -1942,6 +1942,34 @@ export function ChatbotWidget({
             </div>
           )}
 
+          {/* INDIVIDUAL PILLS — Individuals have no sidebar (navItems is
+              empty), so surface their 4 starter prompts as pills in the same
+              slot. Keeps the chatbot from feeling empty under the greeting. */}
+          {isPage &&
+            messages.length === 0 &&
+            isIndividual &&
+            navItems.length === 0 && (
+              <div className="border-t border-slate-200 bg-white/60 px-4 sm:px-6 py-2 flex flex-nowrap items-center gap-1.5 flex-shrink-0 overflow-x-auto">
+                {[
+                  { Icon: Plus, label: "Create an event", prompt: "I want to create an event" },
+                  { Icon: Calendar, label: "My events", prompt: "Show my events" },
+                  { Icon: Users, label: "Participants", prompt: "Show me the participants" },
+                  { Icon: Building2, label: "Become an organizer", prompt: "I want to register as an organizer" },
+                ].map((p) => (
+                  <button
+                    key={p.label}
+                    onClick={() => sendMessage(p.prompt)}
+                    disabled={loading}
+                    className="shrink-0 text-xs px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1 disabled:opacity-50"
+                    title={p.prompt}
+                  >
+                    <p.Icon className="h-3 w-3" />
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
           {/* PROMPT PANEL — toggled by the lightbulb button below */}
           {showPromptPanel && (
             <div className="border-t border-slate-200 bg-amber-50/40 px-3 sm:px-4 py-3 flex-shrink-0">

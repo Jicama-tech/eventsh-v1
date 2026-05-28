@@ -1159,13 +1159,41 @@ export class OrganizersService {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException("Invalid organizer id");
     }
-    const orgObjId = new Types.ObjectId(id);
+    let orgObjId = new Types.ObjectId(id);
     // Look up the organizer's country to attach currency context — frontend
     // (and chatbot) can use this for proper money formatting.
-    const orgForCurrency = await this.organizerModel
+    let orgForCurrency: any = await this.organizerModel
       .findById(orgObjId)
       .select("country")
       .lean();
+
+    // Individual fallback: the JWT.sub for an Individual user is the User's
+    // _id, but events/tickets are keyed on the lazy-created Organizer's _id.
+    // Resolve user → email → organizer so the stats reflect their data.
+    if (!orgForCurrency) {
+      const user: any = await this.userModel
+        .findById(id)
+        .select("email")
+        .lean()
+        .catch(() => null);
+      if (user?.email) {
+        const escapedEmail = String(user.email).replace(
+          /[.*+?^${}()|[\]\\]/g,
+          "\\$&",
+        );
+        const orgByEmail: any = await this.organizerModel
+          .findOne({
+            email: { $regex: `^${escapedEmail}$`, $options: "i" },
+          })
+          .select("_id country")
+          .lean();
+        if (orgByEmail?._id) {
+          orgObjId = new Types.ObjectId(String(orgByEmail._id));
+          orgForCurrency = orgByEmail;
+        }
+      }
+    }
+
     const country = (orgForCurrency as any)?.country || "US";
     const CURRENCY_MAP: Record<
       string,
@@ -1281,7 +1309,7 @@ export class OrganizersService {
 
     // Match both ObjectId and string forms — older docs may store either.
     const totalEvents = await this.eventModel.countDocuments({
-      organizer: { $in: [orgObjId, String(id)] as any[] },
+      organizer: { $in: [orgObjId, String(orgObjId)] as any[] },
     });
 
     // Aggregate paid revenue from round-table bookings and stall registrations
