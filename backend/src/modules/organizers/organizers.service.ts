@@ -907,6 +907,7 @@ export class OrganizersService {
       businessEmail?: string;
       whatsappNumber?: string;
       phone?: string;
+      contactPhones?: string[] | string;
       address?: string;
       description?: string;
       GSTNumber?: string;
@@ -957,6 +958,29 @@ export class OrganizersService {
       if (body.whatsappNumber !== undefined)
         update.whatsappNumber = body.whatsappNumber;
       if (body.phone !== undefined) update.phone = body.phone;
+      // Multipart can't natively carry arrays — the frontend
+      // JSON-stringifies the contactPhones list so the field survives
+      // the FormData boundary. Accept both shapes (array if a JSON
+      // client called us directly, string if it came through FormData)
+      // and persist a normalised string[]. Empty arrays clear the
+      // existing list.
+      if (body.contactPhones !== undefined) {
+        let phones: string[] = [];
+        if (Array.isArray(body.contactPhones)) {
+          phones = body.contactPhones as string[];
+        } else if (typeof body.contactPhones === "string") {
+          try {
+            const parsed = JSON.parse(body.contactPhones);
+            if (Array.isArray(parsed)) phones = parsed as string[];
+          } catch {
+            // Single string fallback — treat it as one entry.
+            phones = [body.contactPhones];
+          }
+        }
+        update.contactPhones = phones
+          .map((p) => String(p || "").trim())
+          .filter((p) => p.length > 0);
+      }
       if (body.address !== undefined) update.address = body.address;
       if (body.description !== undefined) update.description = body.description;
 

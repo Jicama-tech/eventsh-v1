@@ -137,7 +137,8 @@ export function FollowedEventsSection({
                   alt={event.title}
                   className="w-full h-48 object-cover rounded-t-md"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = "/placeholder.jpg";
+                    (e.target as HTMLImageElement).src = "/placeholder.svg";
+                    (e.target as HTMLImageElement).onerror = null;
                   }}
                 />
               )}

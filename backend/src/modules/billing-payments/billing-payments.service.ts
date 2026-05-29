@@ -18,6 +18,7 @@ export interface BillingRates {
   roundTableRate: number;
   chairRate: number;
   speakerRate: number;
+  membershipRate: number;
   currency: string;
 }
 
@@ -26,6 +27,7 @@ const DEFAULT_RATES: BillingRates = {
   roundTableRate: 20,
   chairRate: 5,
   speakerRate: 20,
+  membershipRate: 5,
   currency: "USD",
 };
 
@@ -40,6 +42,13 @@ export class BillingPaymentsService {
     @InjectModel("SpeakerRequest") private speakerRequestModel: Model<any>,
     @InjectModel("OrganizerPayment") private organizerPaymentModel: Model<any>,
     @InjectModel("PlatformBillingRates") private ratesModel: Model<any>,
+    // Active memberships drive the new Memberships tab on the
+    // organizer-facing PlatformFeesPanel. Injected by class-name so we
+    // don't pull MembershipsModule into a cycle here.
+    @InjectModel("ExhibitorMembership")
+    private exhibitorMembershipModel: Model<any>,
+    @InjectModel("MembershipPlan")
+    private membershipPlanModel: Model<any>,
     private readonly otpService: OtpService,
     private readonly mailService: MailService,
   ) {}
@@ -63,6 +72,11 @@ export class BillingPaymentsService {
         Number(doc.roundTableRate) || DEFAULT_RATES.roundTableRate,
       chairRate: Number(doc.chairRate) || DEFAULT_RATES.chairRate,
       speakerRate: Number(doc.speakerRate) || DEFAULT_RATES.speakerRate,
+      // `?? default` so admins can set to 0 to disable.
+      membershipRate:
+        doc.membershipRate != null
+          ? Number(doc.membershipRate)
+          : DEFAULT_RATES.membershipRate,
       currency: doc.currency || DEFAULT_RATES.currency,
     };
   }
@@ -175,6 +189,49 @@ export class BillingPaymentsService {
       };
     });
 
+    // ── Memberships block — organizer-scoped, separate tab on the UI ──
+    // Lists each ExhibitorMembership currently active for this
+    // organizer, with the plan name resolved so the table reads cleanly.
+    // The per-membership platform-fee rate is flat (rates.membershipRate),
+    // and the total is surfaced alongside so the panel can render a
+    // single "Pay membership fees" CTA.
+    const activeMemberships = (await this.exhibitorMembershipModel
+      .find({
+        organizerId: new Types.ObjectId(organizerId),
+        status: "active",
+      })
+      .populate("planId", "name")
+      .sort({ startDate: -1 })
+      .lean()) as any[];
+    const membershipRate = Number((rates as any).membershipRate) || 0;
+    const membershipRows = activeMemberships.map((m: any) => ({
+      _id: String(m._id),
+      exhibitorName: m.exhibitorName || "",
+      exhibitorEmail: m.exhibitorEmail || "",
+      exhibitorWhatsapp: m.exhibitorWhatsapp || "",
+      planName:
+        typeof m.planId === "object" && m.planId
+          ? m.planId.name
+          : "—",
+      startDate: m.startDate,
+      endDate: m.endDate,
+      amountPaid: m.amountPaid || 0,
+      currency: m.currency || rates.currency,
+      // Flat per-membership fee owed to the platform for this row.
+      platformFee: membershipRate,
+    }));
+    const membershipsTotal = membershipRows.length * membershipRate;
+    // Resolve any in-flight or paid platform-fee claim covering the
+    // memberships batch (encoded with `eventId: "memberships"`).
+    const membershipClaim = (await this.pendingModel
+      .findOne({
+        organizerId,
+        eventId: "memberships",
+        status: { $in: ["awaiting_payment", "submitted", "confirmed"] },
+      })
+      .sort({ createdAt: -1 })
+      .lean()) as any;
+
     const region = this.regionFromCountry(organizer.country);
     return {
       organizer: {
@@ -185,6 +242,22 @@ export class BillingPaymentsService {
       },
       rates,
       events: rows,
+      memberships: {
+        rows: membershipRows,
+        rate: membershipRate,
+        total: membershipsTotal,
+        claim: membershipClaim
+          ? {
+              _id: String(membershipClaim._id),
+              status: membershipClaim.status,
+              amount: membershipClaim.amount,
+              currency: membershipClaim.currency,
+              ref: membershipClaim.ref,
+              submittedAt: membershipClaim.submittedAt || null,
+              confirmedAt: membershipClaim.confirmedAt || null,
+            }
+          : null,
+      },
       region: region
         ? { scheme: region.scheme, currency: region.currency }
         : null,
@@ -265,6 +338,70 @@ export class BillingPaymentsService {
       ...counts,
     });
     return this.toClient(doc.toObject(), event);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  POST /billing-payments/initiate-memberships  — start a single claim
+  //  covering every currently-active membership for this organizer.
+  // ---------------------------------------------------------------------------
+  async initiateMemberships(organizerId: string) {
+    const organizer = (await this.organizerModel
+      .findById(organizerId)
+      .lean()) as any;
+    if (!organizer) throw new NotFoundException("Organizer not found");
+    const region = this.regionFromCountry(organizer.country);
+    if (!region) {
+      throw new BadRequestException(
+        "Your country has no QR payment scheme configured. Contact admin to settle off-band.",
+      );
+    }
+
+    const rates = await this.loadRates();
+    const count = await this.exhibitorMembershipModel.countDocuments({
+      organizerId: new Types.ObjectId(organizerId),
+      status: "active",
+    });
+    const amount = count * (Number((rates as any).membershipRate) || 0);
+    if (amount <= 0) {
+      throw new BadRequestException(
+        "No active memberships to charge platform fees for.",
+      );
+    }
+
+    // Idempotency: in-flight or confirmed memberships claim is returned
+    // as-is. Encoded with `eventId: "memberships"` so the existing
+    // (organizer, eventId) lookup path keeps working without a schema
+    // change.
+    const existing = (await this.pendingModel
+      .findOne({
+        organizerId,
+        eventId: "memberships",
+        status: { $in: ["awaiting_payment", "submitted", "confirmed"] },
+      })
+      .sort({ createdAt: -1 })
+      .lean()) as any;
+    if (existing) {
+      if (existing.status === "confirmed") {
+        throw new ConflictException(
+          "Membership fees have already been paid.",
+        );
+      }
+      return this.toClient(existing, null);
+    }
+
+    const ref = `MEM-${String(organizerId).slice(-4)}-${Date.now()
+      .toString(36)
+      .toUpperCase()}`;
+    const doc = await this.pendingModel.create({
+      organizerId,
+      eventId: "memberships",
+      amount,
+      currency: region.currency,
+      scheme: region.scheme,
+      ref,
+      status: "awaiting_payment",
+    });
+    return this.toClient(doc.toObject(), null);
   }
 
   async markSubmitted(organizerId: string, id: string) {

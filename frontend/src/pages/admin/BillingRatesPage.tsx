@@ -20,6 +20,7 @@ interface Rates {
   roundTableRate: number;
   chairRate: number;
   speakerRate: number;
+  membershipRate: number;
   currency: string;
   persisted?: boolean;
   updatedAt?: string;
@@ -30,6 +31,7 @@ const DEFAULTS: Rates = {
   roundTableRate: 20,
   chairRate: 5,
   speakerRate: 20,
+  membershipRate: 5,
   currency: "USD",
 };
 
@@ -71,6 +73,7 @@ export function BillingRatesPage() {
     rates.roundTableRate !== original.roundTableRate ||
     rates.chairRate !== original.chairRate ||
     rates.speakerRate !== original.speakerRate ||
+    rates.membershipRate !== original.membershipRate ||
     rates.currency !== original.currency;
 
   const update = (k: keyof Rates) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -96,6 +99,7 @@ export function BillingRatesPage() {
           roundTableRate: Number(rates.roundTableRate),
           chairRate: Number(rates.chairRate),
           speakerRate: Number(rates.speakerRate),
+          membershipRate: Number(rates.membershipRate),
           currency: rates.currency,
         }),
       });
@@ -146,7 +150,7 @@ export function BillingRatesPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                 <RateField
                   label="Per booked stall"
                   hint="Each exhibitor booth that gets booked"
@@ -174,6 +178,13 @@ export function BillingRatesPage() {
                   currency={rates.currency}
                   value={rates.speakerRate}
                   onChange={update("speakerRate")}
+                />
+                <RateField
+                  label="Per active membership"
+                  hint="Each ExhibitorMembership currently in 'active' status"
+                  currency={rates.currency}
+                  value={rates.membershipRate}
+                  onChange={update("membershipRate")}
                 />
               </div>
 

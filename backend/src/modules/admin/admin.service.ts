@@ -39,6 +39,11 @@ export class AdminService {
     private platformBillingRatesModel: Model<any>,
     @InjectModel("PaymentConfig")
     private paymentConfigModel: Model<any>,
+    // Active-membership count drives the per-organizer membership fee
+    // shown on the billing dialog. Injected by name to avoid pulling the
+    // memberships module's typed schema into the admin module.
+    @InjectModel("ExhibitorMembership")
+    private exhibitorMembershipModel: Model<any>,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
     private readonly paymentsService: PaymentsService
@@ -56,6 +61,9 @@ export class AdminService {
     roundTableRate: 20,
     chairRate: 5,
     speakerRate: 20,
+    // Flat fee charged per ExhibitorMembership currently active for the
+    // organizer. Set to 0 here to stop billing memberships.
+    membershipRate: 5,
     currency: "USD",
   };
 
@@ -77,6 +85,13 @@ export class AdminService {
       chairRate: Number(doc.chairRate) || AdminService.DEFAULT_RATES.chairRate,
       speakerRate:
         Number(doc.speakerRate) || AdminService.DEFAULT_RATES.speakerRate,
+      // `?? default` (not `|| default`) so an admin can drop the rate
+      // to 0 to stop billing memberships without it being silently
+      // overridden by the default.
+      membershipRate:
+        doc.membershipRate != null
+          ? Number(doc.membershipRate)
+          : AdminService.DEFAULT_RATES.membershipRate,
       currency: doc.currency || AdminService.DEFAULT_RATES.currency,
       updatedAt: doc.updatedAt,
       updatedBy: doc.updatedBy ? String(doc.updatedBy) : null,
@@ -94,6 +109,7 @@ export class AdminService {
       roundTableRate?: number;
       chairRate?: number;
       speakerRate?: number;
+      membershipRate?: number;
       currency?: string;
     },
     adminId?: string,
@@ -113,10 +129,12 @@ export class AdminService {
     const r = validNumber(body.roundTableRate);
     const c = validNumber(body.chairRate);
     const sp = validNumber(body.speakerRate);
+    const m = validNumber(body.membershipRate);
     if (s !== undefined) update.$set.stallRate = s;
     if (r !== undefined) update.$set.roundTableRate = r;
     if (c !== undefined) update.$set.chairRate = c;
     if (sp !== undefined) update.$set.speakerRate = sp;
+    if (m !== undefined) update.$set.membershipRate = m;
     if (body.currency && typeof body.currency === "string") {
       update.$set.currency = body.currency.slice(0, 6).toUpperCase();
     }
@@ -214,7 +232,20 @@ export class AdminService {
       };
     });
 
-    const totalBillable = eventRows.reduce((s, r) => s + r.amount, 0);
+    const eventsBillable = eventRows.reduce((s, r) => s + r.amount, 0);
+
+    // Memberships are organizer-scoped (not per-event) — counted once
+    // per active ExhibitorMembership row and billed at the flat
+    // membershipRate. We surface the count separately so the dialog can
+    // line-item it.
+    const activeMembershipCount =
+      await this.exhibitorMembershipModel.countDocuments({
+        organizerId: new (require("mongoose").Types.ObjectId)(organizerId),
+        status: "active",
+      });
+    const membershipsAmount =
+      activeMembershipCount * (Number(rates.membershipRate) || 0);
+    const totalBillable = eventsBillable + membershipsAmount;
 
     const payments = await this.organizerPaymentModel
       .find({ organizerId })
@@ -239,10 +270,17 @@ export class AdminService {
         roundTable: rates.roundTableRate,
         chair: rates.chairRate,
         speaker: rates.speakerRate,
+        membership: rates.membershipRate,
         currency: rates.currency,
       },
       events: eventRows,
+      memberships: {
+        active: activeMembershipCount,
+        amount: membershipsAmount,
+      },
       totals: {
+        eventsBillable,
+        membershipsBillable: membershipsAmount,
         billable: totalBillable,
         paid: totalPaid,
         owed: Math.max(0, totalBillable - totalPaid),

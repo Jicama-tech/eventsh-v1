@@ -36,6 +36,15 @@ export class Vendor {
   @Prop({ default: false })
   rejected: boolean;
 
+  // Denormalised "this vendor has at least one active exhibitor
+  // membership" flag. Source of truth lives in ExhibitorMembership;
+  // MembershipsService writes this whenever an active membership starts,
+  // is rejected, or expires. The eventfront/CRM read it directly so
+  // member pricing kicks in the instant the vendor logs in — no extra
+  // round-trip to the memberships endpoint needed.
+  @Prop({ default: false })
+  isMember: boolean;
+
   @Prop()
   whatsAppNumber: string;
 

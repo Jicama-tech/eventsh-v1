@@ -39,6 +39,10 @@ import {
   Share2,
 } from "lucide-react";
 import { EventFront } from "./eventFront";
+// Storefront Memberships section removed — entry point moved to the
+// eventfront's Rent-a-Stall card. Import preserved as a comment so the
+// component file stays linked from search.
+// import { StorefrontMembershipSection } from "./StorefrontMembershipSection";
 import {
   Navigate,
   useNavigate,
@@ -1256,7 +1260,7 @@ export function OrganizerStorefront({
                         alt={featuredEvent.name}
                         className="w-full h-48 sm:h-56 object-cover"
                         onError={(e) => {
-                          e.currentTarget.src = "/placeholder-event.jpg";
+                          e.currentTarget.src = "/placeholder.svg";
                           e.currentTarget.onerror = null;
                         }}
                       />
@@ -1510,7 +1514,7 @@ export function OrganizerStorefront({
                       alt={featuredEvent.name}
                       className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                       onError={(e) => {
-                        e.currentTarget.src = "/placeholder-event.jpg";
+                        e.currentTarget.src = "/placeholder.svg";
                         e.currentTarget.onerror = null;
                       }}
                     />
@@ -1592,7 +1596,7 @@ export function OrganizerStorefront({
                               alt={event.name}
                               className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                               onError={(e) => {
-                                e.currentTarget.src = "/placeholder-event.jpg";
+                                e.currentTarget.src = "/placeholder.svg";
                                 e.currentTarget.onerror = null;
                               }}
                             />
@@ -1706,7 +1710,7 @@ export function OrganizerStorefront({
                                     className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                                     onError={(e) => {
                                       e.currentTarget.src =
-                                        "/placeholder-event.jpg";
+                                        "/placeholder.svg";
                                       e.currentTarget.onerror = null;
                                     }}
                                     src={getImageUrl(event.image)}
@@ -1906,7 +1910,7 @@ export function OrganizerStorefront({
                             alt={bigEvent.name}
                             className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                             onError={(e) => {
-                              e.currentTarget.src = "/placeholder-event.jpg";
+                              e.currentTarget.src = "/placeholder.svg";
                               e.currentTarget.onerror = null;
                             }}
                           />
@@ -2001,7 +2005,7 @@ export function OrganizerStorefront({
                                   className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                                   onError={(e) => {
                                     e.currentTarget.src =
-                                      "/placeholder-event.jpg";
+                                      "/placeholder.svg";
                                     e.currentTarget.onerror = null;
                                   }}
                                 />
@@ -2126,7 +2130,7 @@ export function OrganizerStorefront({
                           alt={event.name}
                           className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                           onError={(e) => {
-                            e.currentTarget.src = "/placeholder-event.jpg";
+                            e.currentTarget.src = "/placeholder.svg";
                             e.currentTarget.onerror = null;
                           }}
                         />
@@ -2273,7 +2277,7 @@ export function OrganizerStorefront({
                           alt={event.name}
                           className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                           onError={(e) => {
-                            e.currentTarget.src = "/placeholder-event.jpg";
+                            e.currentTarget.src = "/placeholder.svg";
                             e.currentTarget.onerror = null;
                           }}
                         />
@@ -2514,6 +2518,12 @@ export function OrganizerStorefront({
             </div>
           </section>
         )}
+
+        {/* Memberships section disabled on the storefront — the entry
+            point moved into the eventfront's Rent-a-Stall card so it
+            sits next to the exhibitor sign-up funnel. The
+            StorefrontMembershipSection component is kept around for a
+            future re-enable. */}
 
         {/* Contact Us — Glassmorphism 3-Panel */}
         <section id="contact" className="py-10 sm:py-14 lg:py-20">

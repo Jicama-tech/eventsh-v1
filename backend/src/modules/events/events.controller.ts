@@ -265,6 +265,13 @@ export class EventsController {
 
       // Parse JSON strings from FormData
       if (typeof body.tags === "string") body.tags = JSON.parse(body.tags);
+      if (typeof body.categories === "string")
+        body.categories = JSON.parse(body.categories);
+      // Keep singular `category` in sync with the first entry so legacy
+      // read-sites that show `event.category` keep working.
+      if (Array.isArray(body.categories) && body.categories.length > 0) {
+        body.category = body.categories[0];
+      }
       if (typeof body.features === "string")
         body.features = JSON.parse(body.features);
       if (typeof body.socialMedia === "string")
@@ -521,6 +528,11 @@ export class EventsController {
       const updateIsIndividual = updateRoles.includes("individual");
       // Parse JSON strings from FormData
       if (typeof body.tags === "string") body.tags = JSON.parse(body.tags);
+      if (typeof body.categories === "string")
+        body.categories = JSON.parse(body.categories);
+      if (Array.isArray(body.categories) && body.categories.length > 0) {
+        body.category = body.categories[0];
+      }
       if (typeof body.features === "string")
         body.features = JSON.parse(body.features);
       if (typeof body.socialMedia === "string")

@@ -79,6 +79,8 @@ import {
   VisitorFeedbackCard,
 } from "./EventFeedback";
 import { EventStatistics } from "./EventStatistics";
+import { EventfrontMemberDialog } from "./EventfrontMemberDialog";
+import { ExhibitorCategoryPicker } from "@/components/ui/ExhibitorCategoryPicker";
 import {
   Select,
   SelectContent,
@@ -245,6 +247,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [selectedVisitorType, setSelectedVisitorType] = useState<number>(0);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [venueMaximized, setVenueMaximized] = useState(false);
+  // Live fit-to-screen scale for the maximized venue dialog. Recomputed
+  // by a ResizeObserver on the scrollable container so the entire
+  // layout fits the dialog viewport instead of forcing the user to
+  // scroll a canvas that may be several thousand pixels wide.
+  const [maximizedScale, setMaximizedScale] = useState(1);
+  const maximizedContainerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   // Auto-advance the Event Gallery on a timer. The interval restarts
@@ -352,6 +360,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [existingStallRequest, setExistingStallRequest] = useState<any>(null);
   const [showTableSelection, setShowTableSelection] = useState(false);
   const [shopkeeperId, setShopkeeperId] = useState<string | null>(null);
+  // Controls the new Google-verified Member dialog mounted under the
+  // Rent-a-Stall card. Replaces the old storefront-only entry point.
+  const [showMemberDialog, setShowMemberDialog] = useState(false);
+  // Membership status for the logged-in exhibitor, scoped to this
+  // event's organizer. Populated after OTP verify when shopkeeper email
+  // is known. When set + the space template has a memberPrice, the
+  // selection cards and totals quote the member-tier price.
+  const [activeMembership, setActiveMembership] = useState<{
+    planName?: string;
+    endDate?: string;
+  } | null>(null);
+  const isMember = !!activeMembership;
 
   // NEW: Table Selection States
   const [selectedTables, setSelectedTables] = useState<any[]>([]);
@@ -455,6 +475,194 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const stallDetailRef = React.useRef<HTMLDivElement>(null);
 
   const apiURL = __API_URL__;
+
+  // Resolve the exhibitor's active membership once their email is known
+  // (after WhatsApp OTP + vendor lookup or after the rent form is
+  // filled). Scoped to this event's organizer so being a member of one
+  // organizer doesn't carry over to another. Placed below all state
+  // declarations it touches so the deps array can't TDZ at render time.
+  useEffect(() => {
+    // Match by email OR WhatsApp — the vendor record's email may not
+    // exactly equal the exhibitorEmail captured at membership purchase
+    // (vendors created via stall flow vs membership flow can drift).
+    // Sending both axes lets the backend find the right row either
+    // way; an empty email is still a valid request as long as we
+    // have a phone number.
+    const email = (
+      shopkeeperDetails?.email ||
+      shopkeeperDetails?.businessEmail ||
+      ""
+    )
+      .toLowerCase()
+      .trim();
+    const whatsapp = String(shopkeeperDetails?.whatsappNumber || "").trim();
+    // `eventData.organizer` is sometimes a populated object and sometimes
+    // a raw id string depending on which endpoint loaded the event. Accept
+    // either shape so the membership lookup actually fires.
+    const organizerIdForLookup =
+      (eventData as any)?.organizer?._id ||
+      (typeof (eventData as any)?.organizer === "string"
+        ? (eventData as any).organizer
+        : undefined);
+    if ((!email && !whatsapp) || !organizerIdForLookup) {
+      // Don't wipe an isMember signal that came from the Vendor row.
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        // Email goes in the path (the endpoint expects something there
+        // for legacy compat); when only WhatsApp is known we send a
+        // single space as a placeholder so the query string fires.
+        const emailSegment = encodeURIComponent(email || " ");
+        const qs = new URLSearchParams({
+          organizerId: String(organizerIdForLookup),
+        });
+        if (whatsapp) qs.set("whatsapp", whatsapp);
+        const res = await fetch(
+          `${apiURL}/exhibitor-memberships/by-email/${emailSegment}?${qs.toString()}`,
+        );
+        if (!res.ok) {
+          // Don't downgrade an optimistic isMember set from the Vendor
+          // row when the lookup endpoint errors. The vendor flag is an
+          // independent source of truth.
+          return;
+        }
+        const raw = await res.text();
+        const data = raw ? JSON.parse(raw) : null;
+        if (cancelled) return;
+        if (data) {
+          setActiveMembership({
+            planName:
+              typeof data.planId === "object"
+                ? data.planId?.name
+                : undefined,
+            endDate: data.endDate,
+          });
+        }
+        // If data is null, leave activeMembership alone — vendor.isMember
+        // may have set it optimistically.
+      } catch {
+        // network error — keep whatever's already in state
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // `apiURL` is a Vite compile-time constant — intentionally omitted
+    // from deps so the array never references a hoisted local.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    shopkeeperDetails?.email,
+    shopkeeperDetails?.businessEmail,
+    shopkeeperDetails?.whatsappNumber,
+    (eventData as any)?.organizer?._id,
+    (eventData as any)?.organizer,
+  ]);
+
+  // Resolve the per-tier pricing for a placed space at the current
+  // viewer's membership status. Empty member fields fall through to the
+  // regular price so legacy templates keep working.
+  //
+  // Fallback chain for member fields:
+  //   1. value on the placed venueTables row (canonical when present)
+  //   2. value on the corresponding tableTemplates entry — covers
+  //      legacy events where the placed tables were saved before
+  //      member pricing existed, or where the organizer added member
+  //      pricing on the template but never re-placed the spaces.
+  // The lookup key is the template `id` carried on every placed row.
+  const resolveTablePricing = (table: any) => {
+    const useMember = isMember;
+    const templates: any[] = Array.isArray(
+      (eventData as any)?.tableTemplates,
+    )
+      ? (eventData as any).tableTemplates
+      : [];
+    const tpl =
+      table?.id != null
+        ? templates.find((t: any) => t?.id === table.id)
+        : null;
+
+    const pickMember = (placed: any, fromTpl: any) =>
+      placed != null ? placed : fromTpl != null ? fromTpl : null;
+
+    const memberPrice = pickMember(table?.memberPrice, tpl?.memberPrice);
+    const memberBookingPrice = pickMember(
+      table?.memberBookingPrice,
+      tpl?.memberBookingPrice,
+    );
+    const memberDepositPrice = pickMember(
+      table?.memberDepositPrice,
+      tpl?.memberDepositPrice,
+    );
+
+    const tablePrice =
+      useMember && memberPrice != null
+        ? memberPrice
+        : table?.tablePrice ?? 0;
+    const bookingPrice =
+      useMember && memberBookingPrice != null
+        ? memberBookingPrice
+        : table?.bookingPrice ?? 0;
+    const depositPrice =
+      useMember && memberDepositPrice != null
+        ? memberDepositPrice
+        : table?.depositPrice ?? 0;
+    const regularPrice = table?.tablePrice ?? 0;
+    const memberSaved =
+      useMember && memberPrice != null && regularPrice > memberPrice
+        ? regularPrice - memberPrice
+        : 0;
+    return { tablePrice, bookingPrice, depositPrice, memberSaved };
+  };
+
+  // When membership status changes after spaces are already selected,
+  // re-resolve the prices on the existing selection. Without this an
+  // exhibitor who clicked a space BEFORE the membership lookup finished
+  // would keep paying the regular price even after they're recognised.
+  // Works in both directions — if a membership lookup invalidates the
+  // status mid-session, regular prices come back too.
+  useEffect(() => {
+    if (selectedTables.length === 0) return;
+    setSelectedTables((prev) => {
+      let changed = false;
+      const next = prev.map((sel: any) => {
+        // Find the live template on the canvas so we have its full
+        // tier-pricing fields. Fall back to the selection's own
+        // snapshot when we can't find it (shouldn't happen, but
+        // defensive — a deleted template would still render).
+        const tpl: any =
+          (availableTables[currentLayoutId] || []).find(
+            (t: any) => t.positionId === sel.positionId,
+          ) || sel;
+        const p = resolveTablePricing(tpl);
+        if (
+          p.tablePrice === sel.tablePrice &&
+          p.bookingPrice === sel.bookingPrice &&
+          p.depositPrice === sel.depositPrice
+        ) {
+          return sel;
+        }
+        changed = true;
+        return {
+          ...sel,
+          price: p.tablePrice,
+          depositAmount: p.depositPrice,
+          tablePrice: p.tablePrice,
+          bookingPrice: p.bookingPrice,
+          depositPrice: p.depositPrice,
+          appliedTier:
+            isMember && p.memberSaved > 0 ? "member" : "regular",
+          memberSaved: p.memberSaved,
+        };
+      });
+      return changed ? next : prev;
+    });
+    // Re-run whenever isMember flips. `availableTables`, `selectedTables`,
+    // and `currentLayoutId` are read inside but intentionally not in
+    // deps — they update orthogonally and we don't want a refresh loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMember]);
 
   // Fetch countries for phone input
   useEffect(() => {
@@ -579,6 +787,48 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     fetchRoundTables();
   }, [hasRoundTables, eventId, id]);
 
+  // Compute the rendered canvas extents from currently-placed items.
+  // Inlined here (and inside the ResizeObservers) instead of using a
+  // shared variable because `eventData` may be null until the fetch
+  // resolves and the component-body version of this calc lives after
+  // the null-guard. Falls back to 800×500 so the fit-to-container math
+  // never divides by zero.
+  const computeCanvasExtents = () => {
+    const PADDING = 80;
+    const vw = eventData?.venueConfig?.[currentLayoutIndex]?.width || 800;
+    const vh = eventData?.venueConfig?.[currentLayoutIndex]?.height || 500;
+    const layoutIds = eventData?.venueConfig?.map((c: any) => c.id) || [];
+    const layoutId = layoutIds[currentLayoutIndex] || "default";
+    const tables =
+      (eventData?.venueTables?.[layoutId] as any[] | undefined) || [];
+    const round = Array.isArray((eventData as any)?.venueRoundTables)
+      ? ((eventData as any).venueRoundTables as any[])
+      : [];
+    const zones = Array.isArray((eventData as any)?.venueSpeakerZones)
+      ? ((eventData as any).venueSpeakerZones as any[])
+      : [];
+    let maxX = vw;
+    let maxY = vh;
+    for (const t of tables) {
+      // Match the canvas render: the visible footprint is the resize
+      // override when present, else the template size.
+      const w = t?.displayWidth ?? t?.width ?? 0;
+      const h = t?.displayHeight ?? t?.height ?? 0;
+      maxX = Math.max(maxX, (t?.x || 0) + w);
+      maxY = Math.max(maxY, (t?.y || 0) + h);
+    }
+    for (const r of round) {
+      const d = r?.tableDiameter || 120;
+      maxX = Math.max(maxX, (r?.x || 0) + d);
+      maxY = Math.max(maxY, (r?.y || 0) + d);
+    }
+    for (const z of zones) {
+      maxX = Math.max(maxX, (z?.x || 0) + (z?.width || 0));
+      maxY = Math.max(maxY, (z?.y || 0) + (z?.height || 0));
+    }
+    return { width: maxX + PADDING, height: maxY + PADDING };
+  };
+
   useEffect(() => {
     if (showTableSelection && venueContainerRef.current) {
       const container = venueContainerRef.current;
@@ -586,19 +836,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         if (!container) return;
         const containerWidth = container.offsetWidth;
         const containerHeight = container.offsetHeight;
-        const venueWidth =
-          eventData?.venueConfig?.[currentLayoutIndex]?.width || 800;
-        const venueHeight =
-          eventData?.venueConfig?.[currentLayoutIndex]?.height || 500;
+        const { width: canvasWidth, height: canvasHeight } =
+          computeCanvasExtents();
 
-        if (venueWidth > 0 && venueHeight > 0) {
-          const scaleX = containerWidth / venueWidth;
-          const scaleY = containerHeight / venueHeight;
+        if (canvasWidth > 0 && canvasHeight > 0) {
           const newScale =
             Math.min(
-              (containerWidth - 40) / venueWidth,
-              (containerHeight - 40) / venueHeight,
-            ) * 0.95; // Use 98% to leave some margin
+              (containerWidth - 40) / canvasWidth,
+              (containerHeight - 40) / canvasHeight,
+            ) * 0.95; // 5% margin
           setDynamicScale(newScale);
         }
       });
@@ -613,14 +859,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       const resizeObserver = new ResizeObserver(() => {
         if (!container) return;
         const containerWidth = container.offsetWidth;
-        const venueWidth =
-          eventData?.venueConfig?.[currentLayoutIndex]?.width || 800;
-        const venueHeight =
-          eventData?.venueConfig?.[currentLayoutIndex]?.height || 500;
+        const { width: canvasWidth } = computeCanvasExtents();
 
-        if (venueWidth > 0 && venueHeight > 0) {
+        if (canvasWidth > 0) {
           // Scale based on width only so the box never exceeds the container width
-          const newScale = Math.min((containerWidth / venueWidth) * 0.98, 1);
+          const newScale = Math.min((containerWidth / canvasWidth) * 0.98, 1);
           setVenueDisplayScale(newScale);
         }
       });
@@ -628,6 +871,28 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       return () => resizeObserver.disconnect();
     }
   }, [currentLayoutIndex, eventData?.venueConfig]);
+
+  // Fit the canvas inside the maximized dialog by scaling its width/height
+  // to whichever axis is the tighter fit. Caps at 1 so we never enlarge
+  // beyond the canvas's natural pixel size — the goal is "see everything"
+  // not "fill the dialog at any cost".
+  useEffect(() => {
+    if (!venueMaximized) return;
+    const container = maximizedContainerRef.current;
+    if (!container) return;
+    const fit = () => {
+      const { width: cw, height: ch } = computeCanvasExtents();
+      if (cw <= 0 || ch <= 0) return;
+      const availW = container.clientWidth - 32; // padding allowance
+      const availH = container.clientHeight - 32;
+      const s = Math.min(availW / cw, availH / ch, 1);
+      setMaximizedScale(s > 0 ? s : 1);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [venueMaximized, currentLayoutIndex, eventData?.venueConfig]);
 
   // Handle Rent a Stall Click - Show WhatsApp Dialog
   const handleRentStallClick = () => {
@@ -788,6 +1053,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           // Vendor exists - prefill form with saved details
           setShopkeeperExists(true);
           setShopkeeperId(shopData._id);
+          // Denormalised member flag — set by the memberships pipeline
+          // whenever an active enrollment exists for this vendor. Drives
+          // the eventfront's Member-price tier the instant the vendor
+          // logs in, before the per-organizer email lookup completes.
+          if (shopData.isMember) {
+            setActiveMembership((prev) => prev || { planName: undefined });
+          }
           setShopkeeperDetails({
             shopName: shopData.businessName || shopData.shopName || "",
             name: shopData.name || "",
@@ -1595,11 +1867,20 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // space's category matches the vendor's. Non-matching spaces stay visible
   // but cannot be chosen.
   const isCategoryAllowed = (table: any): boolean => {
-    const spaceCat = table?.exhibitorCategory;
-    if (!spaceCat || spaceCat === "Other") return true;
+    // Prefer the multi-category array; fall back to the legacy single
+    // value when older placed tables don't carry the new field.
+    const cats: string[] = Array.isArray(table?.exhibitorCategories)
+      ? table.exhibitorCategories
+      : table?.exhibitorCategory && table.exhibitorCategory !== "Other"
+        ? [table.exhibitorCategory]
+        : [];
+    if (cats.length === 0) return true; // open to all
     const myCat = getMyExhibitorCategory();
     if (!myCat) return true;
-    return spaceCat === myCat;
+    // Case-insensitive match because new categories added via the
+    // shared pool may differ in casing across sources.
+    const myLower = String(myCat).toLowerCase();
+    return cats.some((c) => String(c).toLowerCase() === myLower);
   };
 
   // NEW: Handle table click for selection
@@ -1619,7 +1900,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       toast({
         duration: 5000,
         title: "Not Available for Your Category",
-        description: `This space is reserved for "${table.exhibitorCategory}" exhibitors. You can book spaces in your category or ones marked "Other".`,
+        description: (() => {
+          const cats: string[] = Array.isArray(table?.exhibitorCategories)
+            ? table.exhibitorCategories
+            : table?.exhibitorCategory && table.exhibitorCategory !== "Other"
+              ? [table.exhibitorCategory]
+              : [];
+          const list =
+            cats.length > 1
+              ? `"${cats.slice(0, -1).join('", "')}" or "${cats.slice(-1)}"`
+              : `"${cats[0] || "specific"}"`;
+          return `This space is reserved for ${list} exhibitors. You can book spaces in your category or ones marked "Open to all".`;
+        })(),
         variant: "destructive",
       });
       return;
@@ -1650,22 +1942,31 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       );
     } else {
       const layoutName = venueConfig?.[currentLayoutIndex]?.name || "Default";
+      // Resolve member-vs-regular pricing once at selection time so the
+      // running totals, summary, and downstream payment payload all
+      // agree on what the exhibitor was quoted.
+      const pricing = resolveTablePricing(table);
       const newTable = {
         tableId: table.id,
         positionId: table.positionId,
         tableName: table.name,
         name: table.name,
         tableType: table.type,
-        price: table.tablePrice,
-        depositAmount: table.depositPrice,
+        price: pricing.tablePrice,
+        depositAmount: pricing.depositPrice,
         layoutName,
         // Keep these for display purposes
         width: table.width,
         height: table.height,
         rowNumber: table.rowNumber,
-        tablePrice: table.tablePrice,
-        bookingPrice: table.bookingPrice,
-        depositPrice: table.depositPrice,
+        tablePrice: pricing.tablePrice,
+        bookingPrice: pricing.bookingPrice,
+        depositPrice: pricing.depositPrice,
+        // Remember which tier was applied — drives the "Member price"
+        // badge in the selected-spaces summary.
+        appliedTier: isMember && pricing.memberSaved > 0 ? "member" : "regular",
+        regularPrice: table.tablePrice,
+        memberSaved: pricing.memberSaved,
         depositInOption1: table.depositInOption1 === true,
         x: table.x,
         y: table.y,
@@ -2546,6 +2847,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const layoutIds = venueConfig?.map((config) => config.id) || [];
   const currentLayoutId = layoutIds[currentLayoutIndex] || "default";
   const whatsAppNumber = organizer?.whatsAppNumber || "";
+
+  // Canvas size for the rendered venue map. Delegates to the helper
+  // defined above the ResizeObservers so the two callers stay in sync —
+  // the designer lets spaces be placed anywhere on a much larger grid,
+  // so the public/selection canvas grows to cover them.
+  const venueDisplayCanvas = computeCanvasExtents();
 
   const handleAddOnSelect = (addon: any) => {
     setSelectedAddOns((prev) => {
@@ -3514,6 +3821,22 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   >
                     Rent a Stall
                   </button>
+                  {/* Member entry point — small link under the main CTA.
+                      Clicking opens the Google-verified Member dialog
+                      which either shows the existing membership card or
+                      lets the exhibitor purchase a plan. */}
+                  <div className="mt-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowMemberDialog(true)}
+                      className="text-xs font-medium hover:underline inline-flex items-center gap-1"
+                      style={{
+                        color: design?.primaryColor || "#f97316",
+                      }}
+                    >
+                      ⭐ Become a member
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -3550,29 +3873,72 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 )}
 
               {/* ── Contact Organizer ── */}
-              {(organizer.phoneNumber ||
-                organizer.email ||
-                organizer.whatsAppNumber) && (
+              {(() => {
+                // Resolve the list of phones to render. Prefer the new
+                // contactPhones array; fall back to the legacy single
+                // phoneNumber/phone fields so older organizer records
+                // keep showing something. Dedupe so a legacy primary
+                // copied into the array doesn't render twice.
+                const rawPhones: string[] = Array.isArray(
+                  (organizer as any).contactPhones,
+                )
+                  ? (organizer as any).contactPhones
+                  : [];
+                const legacy =
+                  (organizer as any).phoneNumber ||
+                  (organizer as any).phone ||
+                  "";
+                const seen = new Set<string>();
+                const phones = [...(rawPhones || []), legacy]
+                  .map((p) => String(p || "").trim())
+                  .filter((p) => {
+                    if (!p) return false;
+                    const k = p.replace(/\s+/g, "");
+                    if (seen.has(k)) return false;
+                    seen.add(k);
+                    return true;
+                  });
+                const showCard =
+                  phones.length > 0 ||
+                  organizer.email ||
+                  organizer.whatsAppNumber;
+                if (!showCard) return null;
+                return (
                 <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
                   <div className="px-5 pt-5 pb-4">
                     <p className="text-gray-400 text-xs font-medium uppercase tracking-widest mb-4">
                       Contact Organizer
                     </p>
                     <div className="space-y-3">
-                      {organizer.phoneNumber && (
+                      {phones.length > 0 && (
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
                             <Phone className="h-3.5 w-3.5 text-gray-400" />
                           </div>
-                          <a
-                            href={`tel:${organizer.phoneNumber}`}
-                            className="text-sm font-medium hover:underline"
-                            style={{
-                              color: design?.secondaryColor || "#ef4444",
-                            }}
-                          >
-                            {organizer.phoneNumber}
-                          </a>
+                          <div className="text-sm font-medium flex flex-wrap gap-x-1 gap-y-0.5">
+                            {phones.map((phone, idx) => (
+                              <span
+                                key={`p-${idx}`}
+                                className="inline-flex items-center"
+                              >
+                                <a
+                                  href={`tel:${phone.replace(/\s+/g, "")}`}
+                                  className="hover:underline"
+                                  style={{
+                                    color:
+                                      design?.secondaryColor || "#ef4444",
+                                  }}
+                                >
+                                  {phone}
+                                </a>
+                                {idx < phones.length - 1 && (
+                                  <span className="text-gray-400 ml-1">
+                                    ,
+                                  </span>
+                                )}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       )}
                       {organizer.email && (
@@ -3646,7 +4012,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       </div>
                     )}
                 </div>
-              )}
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -4201,9 +4568,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         <div
                           className="relative mx-auto"
                           style={{
-                            width: `${venueConfig[currentLayoutIndex]?.width || 800}px`,
-                            height: `${venueConfig[currentLayoutIndex]?.height || 500}px`,
-                            minWidth: `${venueConfig[currentLayoutIndex]?.width || 800}px`,
+                            width: `${venueDisplayCanvas.width}px`,
+                            height: `${venueDisplayCanvas.height}px`,
+                            minWidth: `${venueDisplayCanvas.width}px`,
                           }}
                         >
                           <div
@@ -4250,8 +4617,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                   style={{
                                     left: `${table.x}px`,
                                     top: `${table.y}px`,
-                                    width: `${table.width}px`,
-                                    height: `${table.height}px`,
+                                    width: `${(table as any).displayWidth ?? table.width}px`,
+                                    height: `${(table as any).displayHeight ?? table.height}px`,
                                     transform: `rotate(${table.rotation || 0}deg)`,
                                     transformOrigin: "center center",
                                     zIndex: 5,
@@ -4285,25 +4652,22 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                       }}
                                     >
                                       <div className="relative">
-                                        <div className="rounded-md bg-gray-900 px-3 py-2 text-xs text-white shadow-2xl text-left border border-gray-700">
-                                          <p className="font-bold text-sm text-white mb-1 border-b border-gray-700 pb-1">
+                                        <div className="rounded-md bg-gray-900 px-3 py-2 text-xs text-white shadow-2xl border border-gray-700 flex flex-col gap-0.5">
+                                          <div className="font-bold text-sm whitespace-nowrap">
                                             {table.name}
-                                          </p>
-                                          <p className="text-gray-300">
-                                            Type: {table.type} | Row:{" "}
-                                            {table.rowNumber}
-                                          </p>
-                                          <p className="text-gray-400 text-[10px] mt-0.5">
-                                            Size: {table.width * 10}×
-                                            {table.height * 10}cm
-                                          </p>
-
-                                          <p className="text-green-400 font-semibold mt-1">
-                                            Price: {formatPrice(table.tablePrice)}
-                                          </p>
+                                          </div>
+                                          <div className="text-gray-300 whitespace-nowrap">
+                                            {table.type} · Row {table.rowNumber}
+                                          </div>
+                                          <div className="text-gray-300 whitespace-nowrap">
+                                            {table.width * 10}×{table.height * 10}cm
+                                          </div>
+                                          <div className="text-green-400 font-semibold whitespace-nowrap">
+                                            {formatPrice(table.tablePrice)}
+                                          </div>
                                         </div>
 
-                                        {/* 3. The Arrow (Tail) - Fixed Position */}
+                                        {/* Arrow tail */}
                                         <div className="absolute left-1/2 top-full -mt-1 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 border-b border-r border-gray-700"></div>
                                       </div>
                                     </div>
@@ -4311,22 +4675,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 </div>
                               );
                             })}
-                            <div
-                              className="absolute bg-gray-800 text-white flex items-center justify-center font-bold shadow-md"
-                              style={{
-                                bottom: "-30px",
-                                left: "50%",
-                                transform: "translateX(-50%)",
-                                width: "160px",
-                                height: "30px",
-                                borderTopLeftRadius: "8px",
-                                borderTopRightRadius: "8px",
-                                fontSize: "12px",
-                                letterSpacing: "2px",
-                              }}
-                            >
-                              ENTRANCE
-                            </div>
                           </div>
                         </div>
                       </div>
@@ -4662,26 +5010,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                   </div>
                                 )}
 
-                                {/* Entrance */}
-                                <div
-                                  className="absolute flex items-center justify-center font-bold"
-                                  style={{
-                                    bottom: 0,
-                                    left: "50%",
-                                    transform: "translateX(-50%)",
-                                    width: 140,
-                                    height: 28,
-                                    borderTopLeftRadius: 8,
-                                    borderTopRightRadius: 8,
-                                    fontSize: 10,
-                                    letterSpacing: 2,
-                                    background:
-                                      "linear-gradient(0deg, #374151, #4b5563)",
-                                    color: "#e5e7eb",
-                                  }}
-                                >
-                                  ENTRANCE
-                                </div>
                               </div>
 
                               {/* Round Tables — positioned relative to pad offset */}
@@ -6502,6 +6830,25 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         </div>
       )}
 
+      {/* Google-verified Member dialog — entry point lives on the
+          Rent-a-Stall card. Only mounted when an organizer id is
+          available so the lookup endpoints have something to scope to. */}
+      {(() => {
+        const orgId =
+          (eventData as any)?.organizer?._id ||
+          (typeof (eventData as any)?.organizer === "string"
+            ? (eventData as any).organizer
+            : "");
+        if (!orgId) return null;
+        return (
+          <EventfrontMemberDialog
+            open={showMemberDialog}
+            onClose={() => setShowMemberDialog(false)}
+            organizerId={String(orgId)}
+          />
+        );
+      })()}
+
       <Dialog open={showWhatsAppDialog} onOpenChange={setShowWhatsAppDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -6738,9 +7085,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         ref={venueContainerRef}
                         className="relative mx-auto"
                         style={{
-                          width: `${eventData?.venueConfig?.[currentLayoutIndex]?.width || 800}px`,
-                          height: `${eventData?.venueConfig?.[currentLayoutIndex]?.height || 500}px`,
-                          minWidth: `${eventData?.venueConfig?.[currentLayoutIndex]?.width || 800}px`,
+                          width: `${venueDisplayCanvas.width}px`,
+                          height: `${venueDisplayCanvas.height}px`,
+                          minWidth: `${venueDisplayCanvas.width}px`,
                         }}
                       >
                         <div
@@ -6821,8 +7168,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                   style={{
                                     left: `${table.x}px`,
                                     top: `${table.y}px`,
-                                    width: `${table.width}px`,
-                                    height: `${table.height}px`,
+                                    width: `${(table as any).displayWidth ?? table.width}px`,
+                                    height: `${(table as any).displayHeight ?? table.height}px`,
                                     transform: `rotate(${table.rotation || 0}deg)`,
                                     transformOrigin: "center center",
                                     zIndex: isSelected ? 10 : 5,
@@ -6849,7 +7196,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     </span>
                                   </div>
 
-                                  {/* Tooltip */}
+                                  {/* Tooltip — each row is its own horizontal line above the space */}
                                   <div
                                     className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 opacity-0 transition-opacity group-hover:opacity-100"
                                     style={{
@@ -6857,33 +7204,42 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                       left: "50%",
                                     }}
                                   >
-                                    <div className="rounded-md bg-gray-900 px-3 py-2 text-xs text-white shadow-xl border border-gray-700">
-                                      <p className="font-bold text-sm mb-1 border-b border-gray-700 pb-1">
+                                    <div className="rounded-md bg-gray-900 px-3 py-2 text-xs text-white shadow-xl border border-gray-700 flex flex-col gap-0.5">
+                                      <div className="font-bold text-sm whitespace-nowrap">
                                         {table.name}
-                                      </p>
-                                      <p className="text-gray-300">
-                                        Type: {table.type} | Row{" "}
-                                        {table.rowNumber}
-                                      </p>
-                                      <p className="text-gray-400 text-[10px] mt-0.5">
-                                        Size: {table.width * 10}×
-                                        {table.height * 10}cm
-                                      </p>
-                                      {!isBooked && (
-                                        <p className="text-green-400 font-semibold mt-1">
-                                          Click to select (
-                                          {formatPrice(table.tablePrice)})
-                                        </p>
-                                      )}
-                                      {isBooked && (
-                                        <p className="text-red-400 font-bold mt-1">
+                                      </div>
+                                      <div className="text-gray-300 whitespace-nowrap">
+                                        {table.type} · Row {table.rowNumber}
+                                      </div>
+                                      <div className="text-gray-300 whitespace-nowrap">
+                                        {table.width * 10}×{table.height * 10}cm
+                                      </div>
+                                      {isBooked ? (
+                                        <div className="text-red-400 font-bold whitespace-nowrap">
                                           Unavailable
-                                        </p>
-                                      )}
-                                      {isSelected && (
-                                        <p className="text-blue-400 font-bold mt-1">
+                                        </div>
+                                      ) : isSelected ? (
+                                        <div className="text-blue-400 font-bold whitespace-nowrap">
                                           ✓ Selected
-                                        </p>
+                                        </div>
+                                      ) : (
+                                        (() => {
+                                          const p = resolveTablePricing(table);
+                                          return p.memberSaved > 0 ? (
+                                            <>
+                                              <div className="text-emerald-400 font-semibold whitespace-nowrap">
+                                                Member {formatPrice(p.tablePrice)}
+                                              </div>
+                                              <div className="text-gray-500 line-through whitespace-nowrap text-[10px]">
+                                                {formatPrice(table.tablePrice)}
+                                              </div>
+                                            </>
+                                          ) : (
+                                            <div className="text-green-400 font-semibold whitespace-nowrap">
+                                              {formatPrice(p.tablePrice)}
+                                            </div>
+                                          );
+                                        })()
                                       )}
                                     </div>
                                     <div className="absolute left-1/2 top-full -mt-1 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 border-b border-r border-gray-700" />
@@ -6892,24 +7248,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               );
                             },
                           )}
-
-                          {/* Entrance */}
-                          <div
-                            className="absolute bg-gray-800 text-white flex items-center justify-center font-bold shadow-md"
-                            style={{
-                              bottom: -30,
-                              left: "50%",
-                              transform: "translateX(-50%)",
-                              width: 160,
-                              height: 30,
-                              borderTopLeftRadius: 8,
-                              borderTopRightRadius: 8,
-                              fontSize: 12,
-                              letterSpacing: 2,
-                            }}
-                          >
-                            ENTRANCE
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -7060,6 +7398,38 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
             {/* ── BOTTOM SUMMARY ROW ── */}
             <div className="w-full border-t bg-gray-50 px-6 py-5">
+              {/* Member banner — surfaces the active membership and how
+                  much the exhibitor's saved across selected spaces. */}
+              {isMember && (
+                <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <div className="flex items-center gap-2 text-emerald-800">
+                    <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                    <span>
+                      <strong>
+                        {activeMembership?.planName || "Member"}
+                      </strong>{" "}
+                      pricing applied
+                    </span>
+                    {activeMembership?.endDate && (
+                      <span className="text-xs text-emerald-700/80">
+                        · valid till{" "}
+                        {new Date(activeMembership.endDate).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                  {(() => {
+                    const saved = selectedTables.reduce(
+                      (acc, t: any) => acc + (t.memberSaved || 0),
+                      0,
+                    );
+                    return saved > 0 ? (
+                      <div className="text-xs font-semibold text-emerald-700">
+                        You're saving {formatPrice(saved)}
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
                 {/* Selected Tables */}
                 <Card>
@@ -7316,16 +7686,29 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             </div>
           </div>
 
-          {/* Scrollable canvas */}
+          {/* Scrollable canvas — wraps a scaled inner box so the whole
+              layout fits the dialog viewport regardless of how far the
+              spaces stretch beyond the venue rectangle. */}
           <div
-            className="overflow-auto w-full p-4"
-            style={{ maxHeight: "calc(98vh - 110px)" }}
+            ref={maximizedContainerRef}
+            className="overflow-auto w-full p-4 flex items-start justify-center"
+            style={{ height: "calc(98vh - 110px)" }}
           >
             <div
-              className="relative shadow border border-gray-300 mx-auto"
               style={{
-                width: `${eventData?.venueConfig?.[currentLayoutIndex]?.width || 800}px`,
-                height: `${eventData?.venueConfig?.[currentLayoutIndex]?.height || 500}px`,
+                width: venueDisplayCanvas.width * maximizedScale,
+                height: venueDisplayCanvas.height * maximizedScale,
+              }}
+            >
+            <div
+              className="relative shadow border border-gray-300 origin-top-left"
+              style={{
+                // Use the expanded canvas dims so spaces placed past the
+                // venue rectangle stay visible in the maximized view.
+                width: `${venueDisplayCanvas.width}px`,
+                height: `${venueDisplayCanvas.height}px`,
+                transform: `scale(${maximizedScale})`,
+                transformOrigin: "top left",
                 backgroundImage:
                   "linear-gradient(to right, #cbd5e1 1px, transparent 1px), linear-gradient(to bottom, #cbd5e1 1px, transparent 1px)",
                 backgroundSize: `${eventData?.venueConfig?.[currentLayoutIndex]?.gridSize || 40}px ${eventData?.venueConfig?.[currentLayoutIndex]?.gridSize || 40}px`,
@@ -7383,8 +7766,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     style={{
                       left: table.x,
                       top: table.y,
-                      width: table.width,
-                      height: table.height,
+                      width:
+                        (table as any).displayWidth ?? table.width,
+                      height:
+                        (table as any).displayHeight ?? table.height,
                       transform: `rotate(${table.rotation || 0}deg)`,
                       zIndex: isSelected ? 10 : 5,
                     }}
@@ -7394,51 +7779,48 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       {table.name}
                     </span>
 
-                    {/* Tooltip */}
-                    <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 w-max -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="rounded bg-gray-900 px-2 py-1 text-[10px] text-white shadow border border-gray-700">
-                        <p className="font-bold">{table.name}</p>
-                        <p className="text-gray-300">
-                          Row {table.rowNumber} • {table.width * 10}×
-                          {table.height * 10}cm
-                        </p>
-                        <p
-                          className={
-                            isBooked
-                              ? "text-red-400"
+                    {/* Tooltip — each row is its own horizontal line above the space */}
+                    <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="relative">
+                        <div className="rounded bg-gray-900 px-3 py-2 text-[10px] text-white shadow border border-gray-700 flex flex-col gap-0.5">
+                          <div className="font-bold whitespace-nowrap">
+                            {table.name}
+                          </div>
+                          <div className="text-gray-300 whitespace-nowrap">
+                            Row {table.rowNumber}
+                          </div>
+                          <div className="text-gray-300 whitespace-nowrap">
+                            {table.width * 10}×{table.height * 10}cm
+                          </div>
+                          <div
+                            className={`whitespace-nowrap ${
+                              isBooked
+                                ? "text-red-400"
+                                : isSelected
+                                  ? "text-blue-400"
+                                  : "text-green-400"
+                            }`}
+                          >
+                            {isBooked
+                              ? "Booked"
                               : isSelected
-                                ? "text-blue-400"
-                                : "text-green-400"
-                          }
-                        >
-                          {isBooked
-                            ? "Booked"
-                            : isSelected
-                              ? "✓ Selected"
-                              : formatPrice(table.tablePrice)}
-                        </p>
+                                ? "✓ Selected"
+                                : (() => {
+                                    const p = resolveTablePricing(table);
+                                    return p.memberSaved > 0
+                                      ? `Member ${formatPrice(p.tablePrice)}`
+                                      : formatPrice(p.tablePrice);
+                                  })()}
+                          </div>
+                        </div>
+                        {/* Arrow tail — points down at the hovered space */}
+                        <div className="absolute left-1/2 top-full -mt-1 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 border-b border-r border-gray-700" />
                       </div>
                     </div>
                   </div>
                 );
               })}
-
-              {/* Entrance */}
-              <div
-                className="absolute bg-gray-800 text-white flex items-center justify-center font-bold text-xs"
-                style={{
-                  bottom: -28,
-                  left: "50%",
-                  transform: "translateX(-50%)",
-                  width: 140,
-                  height: 28,
-                  borderTopLeftRadius: 6,
-                  borderTopRightRadius: 6,
-                  letterSpacing: 2,
-                }}
-              >
-                ENTRANCE
-              </div>
+            </div>
             </div>
           </div>
         </DialogContent>
@@ -8674,27 +9056,22 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   <Label>
                     Business Category <span className="text-red-500">*</span>
                   </Label>
-                  <Select
+                  {/* Shared dynamic picker — categories an exhibitor
+                      types here persist to /categories and surface next
+                      time in the organizer's Space Layout and Add
+                      Exhibitor form. Single-select shape preserves the
+                      old required-field semantics. */}
+                  <ExhibitorCategoryPicker
                     value={shopkeeperDetails.businessCategory}
-                    onValueChange={(val) =>
+                    onChange={(val) =>
                       setShopkeeperDetails({
                         ...shopkeeperDetails,
                         businessCategory: val,
                       })
                     }
-                    required
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {BUSINESS_CATEGORIES.map((c) => (
-                        <SelectItem key={c} value={c}>
-                          {c}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    baseline={BUSINESS_CATEGORIES}
+                    placeholder="Select"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>

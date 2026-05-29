@@ -182,6 +182,46 @@ export class AuthController {
     }
   }
 
+  // ===== Google Member Auth (eventfront "Become a member" popup) =====
+  // Backend-mediated OAuth so the Google Cloud client only needs
+  // localhost:3000 (or the prod backend) registered, not the frontend
+  // dev origin. Flow: frontend opens this URL in a popup → Google →
+  // /google-member/redirect → backend renders a 1-line HTML page that
+  // postMessages {email, name, picture} back to the opener and closes
+  // itself. The eventfront's EventfrontMemberDialog listens for the
+  // message and continues with the membership lookup.
+  @Get("google-member")
+  @UseGuards(AuthGuard("google-member"))
+  async googleMemberAuth() {
+    // Passport handles the Google consent redirect.
+  }
+
+  @Get("google-member/redirect")
+  @UseGuards(AuthGuard("google-member"))
+  async googleMemberRedirect(@Req() req: Request, @Res() res: Response) {
+    const user = (req.user as any) || {};
+    // Bounce to a frontend-hosted handler that lives on the SAME origin
+    // as the dialog. That makes `window.opener.postMessage` reliable
+    // even when the rest of the backend ships strict Cross-Origin-
+    // Opener-Policy (which severs `window.opener` on cross-origin
+    // navigations). The frontend handler is a tiny static-style route
+    // mounted at /eventsh-google-member-callback.
+    const fe = this.frontendBase;
+    const params = new URLSearchParams({
+      email: user.email || "",
+      name: user.name || "",
+      picture: user.picture || "",
+    });
+    // Override COOP/COEP on this single response so the navigation
+    // doesn't sever the opener handle even before we hand off to the
+    // frontend.
+    res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
+    res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
+    return res.redirect(
+      `${fe}/eventsh-google-member-callback?${params.toString()}`,
+    );
+  }
+
   @Get("google-organizer")
   @UseGuards(AuthGuard("google-organizer"))
   async googleOrganizerAuth() {

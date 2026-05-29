@@ -68,7 +68,9 @@ import {
   Edit3,
   UserPlus2,
   Plus,
+  Award,
 } from "lucide-react";
+import { MembershipPanel } from "./MembershipPanel";
 import { jwtDecode } from "jwt-decode";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { format } from "date-fns";
@@ -237,7 +239,23 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     setChangePlanOpen(true);
     setLoadingPlans(true);
     try {
-      const res = await fetch(`${apiURL}/plans/get-plans?active=true`);
+      // Route through the per-organizer endpoint so plans that admins
+      // restricted via `visibleToOrganizers` only surface to the right
+      // organizers. Falls back to the global active-plans list when
+      // the JWT can't be decoded (shouldn't happen — settings page is
+      // auth-gated — but defensive).
+      let url = `${apiURL}/plans/get-plans?active=true`;
+      try {
+        const token = sessionStorage.getItem("token");
+        if (token) {
+          const decoded: any = jwtDecode(token);
+          const id = decoded?.sub || decoded?.userId;
+          if (id) url = `${apiURL}/plans/for-organizer/${id}`;
+        }
+      } catch {
+        // ignore — keep the fallback URL
+      }
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setAvailablePlans(Array.isArray(data) ? data : []);
@@ -380,6 +398,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     businessEmail: "",
     whatsAppNumber: "",
     phone: "",
+    // Multiple contact numbers — surfaced on the eventfront's contact
+    // card. `phone` (singular) stays the primary for legacy reads
+    // (receipts, login flows); these are extras the organizer
+    // publishes for buyers/exhibitors to reach them.
+    contactPhones: [] as string[],
     address: "",
     description: "",
     businessCategory: "",
@@ -1274,6 +1297,16 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
       );
 
       fd.append("phone", shopProfile.phone || "");
+      // Multipart can carry arrays as JSON; the backend's ValidationPipe
+      // is set to strip unknown fields, so we encode as a JSON string
+      // under the same key the DTO declares and a small server-side
+      // hook on the organizers controller parses it back. Empty arrays
+      // serialize to "[]" so the field stays in sync when all entries
+      // are removed.
+      const filteredPhones = (shopProfile.contactPhones || [])
+        .map((p) => String(p || "").trim())
+        .filter((p) => p.length > 0);
+      fd.append("contactPhones", JSON.stringify(filteredPhones));
       fd.append("address", shopProfile.address || "");
       fd.append("description", shopProfile.description || "");
       fd.append("GSTNumber", shopProfile.GSTNumber || "");
@@ -1344,6 +1377,9 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
         whatsAppQRNumber: d?.whatsAppQRNumber ?? p.whatsAppQRNumber,
         instagramHandle: d?.instagramHandle ?? p.instagramHandle,
         phone: d?.phone ?? p.phone,
+        contactPhones: Array.isArray(d?.contactPhones)
+          ? d.contactPhones
+          : p.contactPhones,
         address: d?.address ?? p.address,
         description: d?.description ?? p.description,
         receiptType: d?.receiptType ?? p.receiptType,
@@ -1534,6 +1570,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           whatsAppQRNumber: d?.whatsAppQRNumber ?? "",
           instagramHandle: d?.instagramHandle ?? "",
           phone: d?.phone ?? "",
+          contactPhones: Array.isArray(d?.contactPhones) ? d.contactPhones : [],
           address: d?.address ?? "",
           GSTNumber: d?.GSTNumber ?? "",
           UENNumber: d?.UENNumber ?? "",
@@ -1609,7 +1646,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
       </div>
 
       <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="profile" className="flex items-center gap-2">
             <Store className="w-4 h-4" />
             Profile
@@ -1621,6 +1658,10 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           <TabsTrigger value="operator" className="flex items-center gap-2">
             <UserPlus2 className="w-4 h-4" />
             Operator
+          </TabsTrigger>
+          <TabsTrigger value="membership" className="flex items-center gap-2">
+            <Award className="w-4 h-4" />
+            Membership
           </TabsTrigger>
           {/* <TabsTrigger value="branding" className="flex items-center gap-2">
             <Palette className="w-4 h-4" />
@@ -2118,19 +2159,124 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 </div>
               </div>
 
-              {/* PHONE */}
+              {/* CONTACT PHONES — multi-entry. Each row has a country
+                  dropdown (dial code) + a number input + a remove button.
+                  Composed strings go into the contactPhones array; the
+                  first entry doubles as the legacy `phone` field for
+                  back-compat. The eventfront's contact card renders the
+                  whole array. */}
               <div>
-                <Label>Phone</Label>
-                <Input
-                  value={shopProfile.phone}
-                  onChange={(e) =>
-                    setOrganizerProfile((p) => ({
-                      ...p,
-                      phone: e.target.value,
-                    }))
-                  }
-                  placeholder="+91 98765 43210"
-                />
+                <Label>Phone numbers</Label>
+                <p className="text-[11px] text-muted-foreground mb-2">
+                  Add as many contact numbers as you want — they'll show up
+                  on your event pages.
+                </p>
+                <div className="space-y-2">
+                  {(shopProfile.contactPhones.length > 0
+                    ? shopProfile.contactPhones
+                    : [""]
+                  ).map((entry, idx) => {
+                    // Each stored string is `<dialCode> <digits>`. We
+                    // split on the first space when hydrating so the
+                    // dropdown / input stay in sync without needing a
+                    // separate side state.
+                    const sp = (entry || "").indexOf(" ");
+                    const dial =
+                      sp > 0 ? entry.slice(0, sp) : entry.startsWith("+")
+                        ? entry
+                        : "+91";
+                    const digits = sp > 0 ? entry.slice(sp + 1).trim() : "";
+                    const writeRow = (nextDial: string, nextDigits: string) => {
+                      const next = [...shopProfile.contactPhones];
+                      const composed = `${nextDial} ${nextDigits}`.trim();
+                      if (shopProfile.contactPhones.length === 0) {
+                        next.push(composed);
+                      } else {
+                        next[idx] = composed;
+                      }
+                      setOrganizerProfile((p) => ({
+                        ...p,
+                        contactPhones: next,
+                      }));
+                    };
+                    return (
+                      <div key={idx} className="flex items-center gap-2">
+                        <div className="w-32">
+                          <Select
+                            value={dial}
+                            onValueChange={(v) => writeRow(v, digits)}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Code" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {loadingCountries ? (
+                                <SelectItem value="loading" disabled>
+                                  Loading...
+                                </SelectItem>
+                              ) : (
+                                countries
+                                  .filter(
+                                    (c) =>
+                                      c.dialCode && c.dialCode.trim() !== "",
+                                  )
+                                  .map((c) => (
+                                    <SelectItem
+                                      key={`${c.code}-${c.dialCode}`}
+                                      value={c.dialCode}
+                                    >
+                                      {c.name} {c.dialCode}
+                                    </SelectItem>
+                                  ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Input
+                          type="tel"
+                          inputMode="numeric"
+                          placeholder="Enter number"
+                          value={digits}
+                          onChange={(e) =>
+                            writeRow(dial, e.target.value.replace(/\D/g, ""))
+                          }
+                          className="flex-grow"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="text-red-600 hover:text-red-700 shrink-0"
+                          onClick={() => {
+                            const next = shopProfile.contactPhones.filter(
+                              (_, i) => i !== idx,
+                            );
+                            setOrganizerProfile((p) => ({
+                              ...p,
+                              contactPhones: next,
+                            }));
+                          }}
+                          title="Remove this number"
+                        >
+                          <Trash className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setOrganizerProfile((p) => ({
+                        ...p,
+                        contactPhones: [...(p.contactPhones || []), ""],
+                      }))
+                    }
+                  >
+                    <Plus className="h-3 w-3 mr-1" /> Add phone
+                  </Button>
+                </div>
               </div>
 
               {/* ADDRESS */}
@@ -3002,6 +3148,12 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               </CardContent>
             </Card>
           </BlurWrapper>
+        </TabsContent>
+
+        <TabsContent value="membership" className="space-y-4">
+          {/* Plan-tier CRUD only — verification queue + active members
+              roster live in the top-level Membership sidebar tab. */}
+          <MembershipPanel view="settings" />
         </TabsContent>
 
         <TabsContent value="payments" className="space-y-4">

@@ -217,7 +217,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
 
   // Helper function to get full image URL
   const getImageUrl = (imagePath: string | undefined): string => {
-    if (!imagePath) return "/placeholder-event.jpg";
+    if (!imagePath) return "/placeholder.svg";
 
     if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
       return imagePath;
@@ -1078,7 +1078,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                         alt={featuredEvent.name}
                         className="w-full h-48 sm:h-56 object-cover"
                         onError={(e) => {
-                          e.currentTarget.src = "/placeholder-event.jpg";
+                          e.currentTarget.src = "/placeholder.svg";
                           e.currentTarget.onerror = null;
                         }}
                       />
@@ -1327,7 +1327,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                       alt={featuredEvent.name}
                       className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                       onError={(e) => {
-                        e.currentTarget.src = "/placeholder-event.jpg";
+                        e.currentTarget.src = "/placeholder.svg";
                         e.currentTarget.onerror = null;
                       }}
                     />
@@ -1405,7 +1405,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                               alt={event.name}
                               className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                               onError={(e) => {
-                                e.currentTarget.src = "/placeholder-event.jpg";
+                                e.currentTarget.src = "/placeholder.svg";
                                 e.currentTarget.onerror = null;
                               }}
                             />
@@ -1515,7 +1515,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                                     className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                                     onError={(e) => {
                                       e.currentTarget.src =
-                                        "/placeholder-event.jpg";
+                                        "/placeholder.svg";
                                       e.currentTarget.onerror = null;
                                     }}
                                     src={getImageUrl(event.image)}
@@ -1711,7 +1711,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                             alt={bigEvent.name}
                             className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                             onError={(e) => {
-                              e.currentTarget.src = "/placeholder-event.jpg";
+                              e.currentTarget.src = "/placeholder.svg";
                               e.currentTarget.onerror = null;
                             }}
                           />
@@ -1798,7 +1798,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                                   className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                                   onError={(e) => {
                                     e.currentTarget.src =
-                                      "/placeholder-event.jpg";
+                                      "/placeholder.svg";
                                     e.currentTarget.onerror = null;
                                   }}
                                 />
@@ -1919,7 +1919,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                           alt={event.name}
                           className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                           onError={(e) => {
-                            e.currentTarget.src = "/placeholder-event.jpg";
+                            e.currentTarget.src = "/placeholder.svg";
                             e.currentTarget.onerror = null;
                           }}
                         />
@@ -2062,7 +2062,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                           alt={event.name}
                           className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                           onError={(e) => {
-                            e.currentTarget.src = "/placeholder-event.jpg";
+                            e.currentTarget.src = "/placeholder.svg";
                             e.currentTarget.onerror = null;
                           }}
                         />

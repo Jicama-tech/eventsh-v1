@@ -27,6 +27,17 @@ export class BillingPaymentsController {
     return this.svc.initiate(req?.user?.userId || req?.user?.sub, body);
   }
 
+  // Membership-fee batch claim — covers every active ExhibitorMembership
+  // for this organizer in one go. Idempotent: returns the existing
+  // in-flight or confirmed claim when there is one.
+  @Post("initiate-memberships")
+  @UseGuards(JwtAuthGuard)
+  initiateMemberships(@Req() req: any) {
+    return this.svc.initiateMemberships(
+      req?.user?.userId || req?.user?.sub,
+    );
+  }
+
   @Post(":id/mark-paid")
   @UseGuards(JwtAuthGuard)
   markPaid(@Param("id") id: string, @Req() req: any) {

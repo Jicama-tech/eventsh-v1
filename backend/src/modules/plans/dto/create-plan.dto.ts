@@ -50,4 +50,11 @@ export class CreatePlanDto {
   @IsOptional()
   @IsObject()
   modules?: any;
+
+  // Restrict visibility to a subset of organizers (by id). Empty array
+  // or omitted = visible to everyone (default).
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  visibleToOrganizers?: string[];
 }

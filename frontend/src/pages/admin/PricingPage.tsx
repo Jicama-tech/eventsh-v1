@@ -37,8 +37,14 @@ import {
   MessageSquare,
   Ticket,
   User,
+  Award,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 
 const apiURL = __API_URL__;
@@ -247,6 +253,16 @@ const ORGANIZER_FEATURE_MODULES: {
     icon: Users,
     sections: OPERATOR_SECTIONS,
   },
+  {
+    // When enabled, organizers can author membership tiers in Settings,
+    // list them on the storefront, and verify purchases in a dashboard
+    // inbox. `limit` caps how many distinct tiers (Gold/Silver/Bronze)
+    // the organizer can author — leave 0 for unlimited.
+    key: "membership",
+    label: "Exhibitor Membership",
+    hasLimit: true,
+    icon: Award,
+  },
 ];
 
 interface ModuleConfig {
@@ -303,6 +319,9 @@ interface Plan {
   isDefault: boolean;
   description?: string;
   modules?: Record<string, ModuleConfig>;
+  // Empty array (or undefined) = visible to every organizer (default).
+  // Populated = only those organizers can see/buy this plan.
+  visibleToOrganizers?: string[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -321,6 +340,7 @@ interface PlanFormState {
   isDefault: boolean;
   moduleType: AccountType;
   modules: Record<string, ModuleConfig>;
+  visibleToOrganizers: string[]; // empty = visible to all
 }
 
 const emptyForm: PlanFormState = {
@@ -340,6 +360,7 @@ const emptyForm: PlanFormState = {
     },
     {} as Record<string, ModuleConfig>,
   ),
+  visibleToOrganizers: [],
 };
 
 // Modules enabled on the starter "Individual" plan — suitable for users
@@ -387,6 +408,7 @@ const INDIVIDUAL_PLAN_TEMPLATE: PlanFormState = {
   isDefault: true,
   moduleType: "Individual",
   modules: INDIVIDUAL_PLAN_MODULES,
+  visibleToOrganizers: [],
 };
 
 export function PricingPage() {
@@ -400,14 +422,42 @@ export function PricingPage() {
   const [planTypeFilter, setPlanTypeFilter] = useState<"all" | AccountType>(
     "all",
   );
+  // Organizer roster used by the "Visible to organizers" multi-select on
+  // the plan editor. Loaded once when the page mounts.
+  const [organizers, setOrganizers] = useState<
+    { _id: string; name?: string; organizationName?: string; email?: string }[]
+  >([]);
+  const [orgFilter, setOrgFilter] = useState("");
   const { toast } = useToast();
 
   const token = sessionStorage.getItem("token");
 
   useEffect(() => {
     fetchPlans();
+    fetchOrganizers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function fetchOrganizers() {
+    try {
+      const res = await fetch(`${apiURL}/admin/organizers-overview`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      const list = Array.isArray(json.organizers) ? json.organizers : [];
+      setOrganizers(
+        list.map((o: any) => ({
+          _id: String(o._id),
+          name: o.name,
+          organizationName: o.organizationName,
+          email: o.email,
+        })),
+      );
+    } catch {
+      // non-fatal — the visibility picker just shows "no organizers"
+    }
+  }
 
   async function fetchPlans() {
     try {
@@ -483,6 +533,9 @@ export function PricingPage() {
         },
         {} as Record<string, ModuleConfig>,
       ),
+      visibleToOrganizers: Array.isArray(plan.visibleToOrganizers)
+        ? plan.visibleToOrganizers.map(String)
+        : [],
     });
     setDialogOpen(true);
   }
@@ -507,6 +560,9 @@ export function PricingPage() {
       isDefault: form.isDefault,
       moduleType: form.moduleType,
       modules: form.modules,
+      // Empty list = visible to everyone (backend default). Populated
+      // list = restrict to those organizer ids.
+      visibleToOrganizers: form.visibleToOrganizers,
     };
 
     try {
@@ -1190,6 +1246,135 @@ export function PricingPage() {
                   );
                 })}
               </div>
+            </div>
+
+            {/* Visible-to-organizers picker — empty selection = visible
+                to every organizer (default). Pick one or more to scope
+                the plan to specific organizers (e.g. partner pilots,
+                grandfathered pricing). */}
+            <div className="space-y-2 border-t pt-4">
+              <Label className="text-sm font-semibold">
+                Visible to organizers
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Leave empty to expose this plan to <strong>every</strong>{" "}
+                organizer. Tick one or more boxes to restrict it.
+              </p>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-between font-normal"
+                  >
+                    <span className="truncate text-left">
+                      {form.visibleToOrganizers.length === 0
+                        ? "Visible to all organizers"
+                        : form.visibleToOrganizers.length === 1
+                          ? (() => {
+                              const o = organizers.find(
+                                (x) => x._id === form.visibleToOrganizers[0],
+                              );
+                              return (
+                                o?.organizationName ||
+                                o?.name ||
+                                o?.email ||
+                                "1 organizer"
+                              );
+                            })()
+                          : `${form.visibleToOrganizers.length} organizers selected`}
+                    </span>
+                    <span className="text-xs text-muted-foreground ml-2">
+                      ⌄
+                    </span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[var(--radix-popover-trigger-width)] p-0"
+                  align="start"
+                >
+                  <div className="border-b p-2">
+                    <Input
+                      placeholder="Search organizers…"
+                      value={orgFilter}
+                      onChange={(e) => setOrgFilter(e.target.value)}
+                      className="h-8"
+                    />
+                  </div>
+                  <div className="max-h-64 overflow-y-auto py-1">
+                    {organizers.length === 0 ? (
+                      <p className="px-3 py-2 text-xs text-muted-foreground">
+                        Loading organizers…
+                      </p>
+                    ) : (
+                      organizers
+                        .filter((o) => {
+                          if (!orgFilter.trim()) return true;
+                          const q = orgFilter.toLowerCase();
+                          return (
+                            (o.organizationName || "")
+                              .toLowerCase()
+                              .includes(q) ||
+                            (o.name || "").toLowerCase().includes(q) ||
+                            (o.email || "").toLowerCase().includes(q)
+                          );
+                        })
+                        .map((o) => {
+                          const checked = form.visibleToOrganizers.includes(
+                            o._id,
+                          );
+                          return (
+                            <label
+                              key={o._id}
+                              className="flex items-center gap-2 px-3 py-1.5 hover:bg-accent cursor-pointer text-sm"
+                            >
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(c) => {
+                                  setForm((f) => {
+                                    const set = new Set(f.visibleToOrganizers);
+                                    if (c) set.add(o._id);
+                                    else set.delete(o._id);
+                                    return {
+                                      ...f,
+                                      visibleToOrganizers: Array.from(set),
+                                    };
+                                  });
+                                }}
+                              />
+                              <div className="flex flex-col flex-1 min-w-0">
+                                <span className="font-medium truncate">
+                                  {o.organizationName || o.name || "—"}
+                                </span>
+                                {o.email && (
+                                  <span className="text-[10px] text-muted-foreground truncate">
+                                    {o.email}
+                                  </span>
+                                )}
+                              </div>
+                            </label>
+                          );
+                        })
+                    )}
+                  </div>
+                  {form.visibleToOrganizers.length > 0 && (
+                    <div className="border-t p-2 flex justify-between items-center text-xs">
+                      <span className="text-muted-foreground">
+                        {form.visibleToOrganizers.length} selected
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((f) => ({ ...f, visibleToOrganizers: [] }))
+                        }
+                        className="text-blue-600 hover:underline"
+                      >
+                        Clear (visible to all)
+                      </button>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
             </div>
 
             <div className="flex justify-end gap-2 pt-4">

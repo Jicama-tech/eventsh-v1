@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useCountry } from "@/hooks/useCountry";
+import { useSubscription } from "@/hooks/useSubscription";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -42,6 +43,9 @@ import {
   Minimize2,
   GripVertical,
   Pencil,
+  ChevronDown,
+  Facebook,
+  Instagram,
 } from "lucide-react";
 import {
   HoverCard,
@@ -174,6 +178,12 @@ interface TableTemplate {
   tablePrice: number;
   bookingPrice: number;
   depositPrice: number;
+  // Member-tier pricing. Optional everywhere — when unset, every
+  // exhibitor pays the regular tier. Only surfaced when the
+  // organizer's subscription has the membership module enabled.
+  memberPrice?: number;
+  memberBookingPrice?: number;
+  memberDepositPrice?: number;
   // Whether the security deposit is part of Option 1 (minimum payment). When
   // false (default), Option 1 is the booking amount only and the deposit is
   // collected with the remaining balance — matching the long-standing booking
@@ -192,10 +202,24 @@ interface PositionedTable extends TableTemplate {
   y: number;
   rotation: number;
   isPlaced: boolean;
-  // Exhibitor business category this placed space is reserved for. "Other"
-  // (or empty) means open to every category. Used on the exhibitor side to
-  // decide which spaces a vendor of a given category may select.
+  // Legacy single-category field — kept readable for older placed
+  // tables. Empty or "Other" meant open to every category. New writes
+  // use `exhibitorCategories` (plural, multi-select).
   exhibitorCategory?: string;
+  // Multi-select exhibitor business categories this placed space is
+  // reserved for. Empty array (or undefined) = open to every category.
+  // Used on the exhibitor side to filter which spaces a vendor of a
+  // given category may book.
+  exhibitorCategories?: string[];
+  // Layout-only overrides written by the canvas corner-resize handles.
+  // `width`/`height` (inherited from TableTemplate) stay locked to the
+  // template's authored size — they're what shows up on the receipt and
+  // anywhere a vendor reads the stall's actual dimensions. When these
+  // overrides are set, the designer / eventfront canvas renders the
+  // stall at the new visual size, but no money or contract amount keys
+  // off them.
+  displayWidth?: number;
+  displayHeight?: number;
 }
 
 // Exhibitor business categories a space can be allotted to — kept in sync with
@@ -1168,6 +1192,11 @@ const TableManagement = ({
     tablePrice: string;
     bookingPrice: string;
     depositPrice: string;
+    // Member-tier prices (strings while the form is active; converted on
+    // save). Optional — empty strings mean "same as regular price".
+    memberPrice?: string;
+    memberBookingPrice?: string;
+    memberDepositPrice?: string;
     depositInOption1: boolean;
     color: string;
     forSale: boolean;
@@ -1182,6 +1211,9 @@ const TableManagement = ({
       tablePrice: string;
       bookingPrice: string;
       depositPrice: string;
+      memberPrice?: string;
+      memberBookingPrice?: string;
+      memberDepositPrice?: string;
       depositInOption1: boolean;
       color: string;
       forSale: boolean;
@@ -1213,6 +1245,10 @@ const TableManagement = ({
 
   const { country } = useCountry();
   const { formatPrice, getSymbol } = useCurrency(country);
+  // Membership module gate — when off, the Member-price inputs are
+  // hidden so the form stays simple for plans without the feature.
+  const { isModuleEnabled } = useSubscription();
+  const isMembershipEnabled = isModuleEnabled("membership");
   const [cropOpen, setCropOpen] = useState(false);
   const [cropImage, setCropImage] = useState<string | null>(null);
   // Ids of the template/add-on being edited in place (null = adding new).
@@ -1371,6 +1407,21 @@ const TableManagement = ({
           }
         : getDefaultDimensions(currentTable.type);
 
+    // Member-tier prices: parsed only when the form supplied a value.
+    // Undefined → exhibitors with active memberships pay the regular
+    // tablePrice/bookingPrice/depositPrice. Membership-disabled plans
+    // never populate these fields.
+    const parseOptionalNum = (v?: string) => {
+      if (v == null) return undefined;
+      const s = String(v).trim();
+      if (!s) return undefined;
+      const n = parseFloat(s);
+      return Number.isFinite(n) && n >= 0 ? n : undefined;
+    };
+    const memberPrice = parseOptionalNum(currentTable.memberPrice);
+    const memberBookingPrice = parseOptionalNum(currentTable.memberBookingPrice);
+    const memberDepositPrice = parseOptionalNum(currentTable.memberDepositPrice);
+
     const tableData = {
       name: currentTable.name,
       type: currentTable.type,
@@ -1380,6 +1431,9 @@ const TableManagement = ({
       tablePrice: tablePrice,
       bookingPrice: bookingPrice,
       depositPrice: depositPrice,
+      memberPrice,
+      memberBookingPrice,
+      memberDepositPrice,
       depositInOption1: currentTable.depositInOption1,
       color: currentTable.color || "#6b7280",
       forSale: currentTable.forSale,
@@ -1425,6 +1479,9 @@ const TableManagement = ({
       tablePrice: "",
       bookingPrice: "",
       depositPrice: "",
+      memberPrice: "",
+      memberBookingPrice: "",
+      memberDepositPrice: "",
       depositInOption1: false,
       color: "#6b7280",
       forSale: true,
@@ -1445,6 +1502,11 @@ const TableManagement = ({
       tablePrice: t.tablePrice != null ? String(t.tablePrice) : "",
       bookingPrice: t.bookingPrice != null ? String(t.bookingPrice) : "",
       depositPrice: t.depositPrice != null ? String(t.depositPrice) : "",
+      memberPrice: t.memberPrice != null ? String(t.memberPrice) : "",
+      memberBookingPrice:
+        t.memberBookingPrice != null ? String(t.memberBookingPrice) : "",
+      memberDepositPrice:
+        t.memberDepositPrice != null ? String(t.memberDepositPrice) : "",
       depositInOption1: t.depositInOption1 === true,
       color: t.color || "#6b7280",
       forSale: t.forSale !== false,
@@ -1729,6 +1791,88 @@ const TableManagement = ({
               </div>
             )}
 
+            {/* Member-tier pricing — only surfaced when the organizer's
+                subscription has the membership module enabled. Empty
+                fields fall through to the regular price at booking
+                time, so existing templates don't need updating. */}
+            {currentTable.forSale && isMembershipEnabled && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50/30 p-3 space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-emerald-800">
+                  <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                  Member price (optional)
+                </div>
+                <p className="text-[11px] text-emerald-700/80">
+                  Exhibitors with an active membership at this event see
+                  these prices. Leave blank to charge the regular price.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label className="text-xs">
+                      Member Space Price ({getSymbol()})
+                    </Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={currentTable.memberPrice ?? ""}
+                      onChange={(e) =>
+                        setCurrentTable((prev) => ({
+                          ...prev,
+                          memberPrice: e.target.value,
+                        }))
+                      }
+                      placeholder={
+                        currentTable.tablePrice
+                          ? `Reg: ${currentTable.tablePrice}`
+                          : "—"
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">
+                      Member Booking Price ({getSymbol()})
+                    </Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={currentTable.memberBookingPrice ?? ""}
+                      onChange={(e) =>
+                        setCurrentTable((prev) => ({
+                          ...prev,
+                          memberBookingPrice: e.target.value,
+                        }))
+                      }
+                      placeholder={
+                        currentTable.bookingPrice
+                          ? `Reg: ${currentTable.bookingPrice}`
+                          : "—"
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">
+                      Member Deposit ({getSymbol()})
+                    </Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={currentTable.memberDepositPrice ?? ""}
+                      onChange={(e) =>
+                        setCurrentTable((prev) => ({
+                          ...prev,
+                          memberDepositPrice: e.target.value,
+                        }))
+                      }
+                      placeholder={
+                        currentTable.depositPrice
+                          ? `Reg: ${currentTable.depositPrice}`
+                          : "—"
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Include-deposit-in-Option-1 toggle. Controls whether the
                 minimum-payment option (Option 1) is Booking + Deposit (on) or
                 Booking only (off, deposit collected with the balance). */}
@@ -1887,6 +2031,86 @@ const TableManagement = ({
                       </p>
                     </div>
                   </div>
+                </div>
+              )}
+
+            {/* Member-tier payment options. Mirrors the regular summary
+                above but uses the member prices the organizer entered.
+                Empty member fields fall through to the corresponding
+                regular price — so a half-filled member tier still
+                produces a sensible breakdown. Hidden when the
+                membership module is off or no member space-price has
+                been set. */}
+            {currentTable.forSale &&
+              isMembershipEnabled &&
+              currentTable.tablePrice &&
+              currentTable.bookingPrice &&
+              currentTable.depositPrice &&
+              (currentTable.memberPrice ||
+                currentTable.memberBookingPrice ||
+                currentTable.memberDepositPrice) && (
+                <div className="bg-white p-3 rounded border border-emerald-200">
+                  <p className="text-sm font-semibold mb-2 flex items-center gap-2 text-emerald-800">
+                    <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                    Member Payment Options
+                  </p>
+                  {(() => {
+                    const memSpace =
+                      parseFloat(
+                        currentTable.memberPrice ||
+                          currentTable.tablePrice ||
+                          "0",
+                      ) || 0;
+                    const memBooking =
+                      parseFloat(
+                        currentTable.memberBookingPrice ||
+                          currentTable.bookingPrice ||
+                          "0",
+                      ) || 0;
+                    const memDeposit =
+                      parseFloat(
+                        currentTable.memberDepositPrice ||
+                          currentTable.depositPrice ||
+                          "0",
+                      ) || 0;
+                    const opt1 =
+                      memBooking +
+                      (currentTable.depositInOption1 ? memDeposit : 0);
+                    const opt1Remaining =
+                      memSpace -
+                      memBooking +
+                      (currentTable.depositInOption1 ? 0 : memDeposit);
+                    const opt2 = memSpace + memDeposit;
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                        <div className="bg-emerald-50 p-2 rounded">
+                          <p className="font-medium text-emerald-800">
+                            Option 1: Minimum Payment
+                          </p>
+                          <p className="text-emerald-700">
+                            {currentTable.depositInOption1
+                              ? "Booking + Deposit = "
+                              : "Booking only = "}
+                            {formatPrice(opt1)}
+                          </p>
+                          <p className="text-xs text-emerald-600">
+                            Remaining: {formatPrice(opt1Remaining)}
+                          </p>
+                        </div>
+                        <div className="bg-teal-50 p-2 rounded">
+                          <p className="font-medium text-teal-800">
+                            Option 2: Full Payment
+                          </p>
+                          <p className="text-teal-700">
+                            Deposit + Space Price = {formatPrice(opt2)}
+                          </p>
+                          <p className="text-xs text-teal-600">
+                            Remaining: {getSymbol()}0
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
           </div>
@@ -2557,6 +2781,28 @@ const VenueDesigner = ({
   } | null>(null);
   const dragPreviewRef = useRef<typeof dragPreview>(null);
   dragPreviewRef.current = dragPreview;
+  // Live resize state for placed Spaces. Mirrors the dragPreview model:
+  // we mutate this on every mouse-move frame for a smooth visual, then
+  // commit the final width/height/x/y to the parent collection on mouse-up.
+  const [resize, setResize] = useState<{
+    positionId: string;
+    // 8 handles — 4 corners + 4 mid-edges so the stall can be reshaped
+    // from any side.
+    handle: "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
+    startMouseX: number;
+    startMouseY: number;
+    origX: number;
+    origY: number;
+    origW: number;
+    origH: number;
+    // Live (in-progress) values shown until commit.
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  } | null>(null);
+  const resizeRef = useRef<typeof resize>(null);
+  resizeRef.current = resize;
   const [aiOpen, setAiOpen] = useState(false);
   const [isCanvasMaximized, setIsCanvasMaximized] = useState(false);
   // Whether the floating "Add to venue" template modal is open (maximized mode).
@@ -2570,6 +2816,88 @@ const VenueDesigner = ({
   );
   // Latest commit-on-drop closure, called once when a drag ends.
   const commitDragRef = useRef<() => void>(() => {});
+
+  // Dynamic exhibitor-category pool — same `/categories` collection the
+  // Event Category multi-select uses. Loaded once on mount and kept in
+  // sync as the organizer (or any exhibitor) adds new categories
+  // elsewhere in the app. Empty selection on a placed space means "open
+  // to every category".
+  const [exhibitorCategoryOptions, setExhibitorCategoryOptions] = useState<
+    string[]
+  >([
+    "Technology",
+    "Music",
+    "Food",
+    "Sports",
+    "Arts",
+    "Fashion",
+    "Electronics",
+  ]);
+  const [newExhibitorCategoryInput, setNewExhibitorCategoryInput] =
+    useState("");
+  const [addingExhibitorCategory, setAddingExhibitorCategory] =
+    useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${__API_URL__}/categories`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const names: string[] = Array.isArray(data)
+          ? data
+              .map((c: any) => c?.name)
+              .filter((n: any) => typeof n === "string")
+          : [];
+        if (cancelled || names.length === 0) return;
+        setExhibitorCategoryOptions((prev) => {
+          const seen = new Set(prev.map((c) => c.toLowerCase()));
+          const extras = names.filter((n) => !seen.has(n.toLowerCase()));
+          return extras.length ? [...prev, ...extras] : prev;
+        });
+      } catch {
+        // non-fatal — baseline options still usable offline
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleAddExhibitorCategory = async (
+    onAdded?: (name: string) => void,
+  ) => {
+    const name = newExhibitorCategoryInput.trim();
+    if (!name || addingExhibitorCategory) return;
+    const existing = exhibitorCategoryOptions.find(
+      (c) => c.toLowerCase() === name.toLowerCase(),
+    );
+    const canonical = existing || name;
+    setAddingExhibitorCategory(true);
+    try {
+      if (!existing) {
+        try {
+          const token = sessionStorage.getItem("token");
+          await fetch(`${__API_URL__}/categories`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ name }),
+          });
+        } catch {
+          // non-fatal — keep it local even if persist fails
+        }
+        setExhibitorCategoryOptions((prev) => [...prev, name]);
+      }
+      onAdded?.(canonical);
+      setNewExhibitorCategoryInput("");
+    } finally {
+      setAddingExhibitorCategory(false);
+    }
+  };
 
   // Lock body scroll while the canvas is maximized so background doesn't slide.
   // Also let Escape exit full-screen, matching common dialog conventions.
@@ -2598,6 +2926,20 @@ const VenueDesigner = ({
   const currentSpeakerZones = venueSpeakerZones[selectedVenueConfigId] || [];
   const currentRoundTables = venueRoundTables[selectedVenueConfigId] || [];
   const currentDoors = venueDoors[selectedVenueConfigId] || [];
+
+  // Designer canvas size — decoupled from the venue's actual size so the
+  // grid keeps going past the venue boundary. The venue is drawn as a
+  // dashed reference outline at (0,0); items can be placed anywhere up to
+  // the canvas extents. Minimum kept generous so even a tiny venue gets a
+  // workable grid surface to design on.
+  const CANVAS_MIN_W = 3000;
+  const CANVAS_MIN_H = 2000;
+  const canvasW = venueConfig
+    ? Math.max(venueConfig.width + 600, CANVAS_MIN_W)
+    : CANVAS_MIN_W;
+  const canvasH = venueConfig
+    ? Math.max(venueConfig.height + 600, CANVAS_MIN_H)
+    : CANVAS_MIN_H;
 
   const applyAILayout = (result: {
     positionedTables: PositionedTable[];
@@ -2865,22 +3207,25 @@ const VenueDesigner = ({
     } else {
       const table = currentTables.find((t) => t.positionId === selectedTable);
       if (!table) return;
-      w = table.width;
-      h = table.height;
+      // Use the resize override when present so a previously-resized
+      // stall is clamped to its current visual footprint, not the
+      // template's original dimensions.
+      w = table.displayWidth ?? table.width;
+      h = table.displayHeight ?? table.height;
     }
 
     const newX = Math.max(
       0,
       Math.min(
         (clientX - rect.left - dragOffset.x) / venueConfig.scale,
-        venueConfig.width - w,
+        canvasW - w,
       ),
     );
     const newY = Math.max(
       0,
       Math.min(
         (clientY - rect.top - dragOffset.y) / venueConfig.scale,
-        venueConfig.height - h,
+        canvasH - h,
       ),
     );
     setDragPreview({ key: selectedTable, x: newX, y: newY });
@@ -2934,6 +3279,136 @@ const VenueDesigner = ({
       ? { x: dragPreview.x, y: dragPreview.y }
       : { x, y };
 
+  // Resize-handle mousedown — captures the table's original geometry so the
+  // window-level mousemove can compute new dims without re-reading state.
+  // Stops propagation so the underlying drag handler doesn't also fire.
+  const beginResize = (
+    e: React.MouseEvent,
+    table: PositionedTable,
+    handle:
+      | "nw"
+      | "n"
+      | "ne"
+      | "e"
+      | "se"
+      | "s"
+      | "sw"
+      | "w",
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setSelectedTable(table.positionId);
+    // Resume from the current display override if there is one — so
+    // dragging a handle on a previously-resized stall starts from
+    // where it currently looks, not from the template's original size.
+    const curW = table.displayWidth ?? table.width;
+    const curH = table.displayHeight ?? table.height;
+    setResize({
+      positionId: table.positionId,
+      handle,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      origX: table.x,
+      origY: table.y,
+      origW: curW,
+      origH: curH,
+      x: table.x,
+      y: table.y,
+      w: curW,
+      h: curH,
+    });
+  };
+
+  // Per-frame resize update — translates mouse delta into logical-unit
+  // delta (1 / scale), applies it to the appropriate edge(s) for the
+  // dragged handle, and clamps to a 20-unit minimum so the stall can't
+  // be made unusably small. Edge handles (n/e/s/w) move ONE dimension;
+  // corner handles (nw/ne/sw/se) move BOTH.
+  const processResizeMove = (clientX: number, clientY: number) => {
+    const r = resizeRef.current;
+    if (!r || !venueConfig) return;
+    const dx = (clientX - r.startMouseX) / venueConfig.scale;
+    const dy = (clientY - r.startMouseY) / venueConfig.scale;
+    const MIN = 20;
+    let x = r.origX;
+    let y = r.origY;
+    let w = r.origW;
+    let h = r.origH;
+    const handle = r.handle;
+    // East edge — extend / pull width to the right.
+    if (handle === "ne" || handle === "e" || handle === "se") {
+      w = Math.max(MIN, r.origW + dx);
+    }
+    // West edge — extend / pull width on the left; x shifts to keep
+    // the right edge anchored.
+    if (handle === "nw" || handle === "w" || handle === "sw") {
+      w = Math.max(MIN, r.origW - dx);
+      x = r.origX + (r.origW - w);
+    }
+    // South edge — extend / pull height downward.
+    if (handle === "sw" || handle === "s" || handle === "se") {
+      h = Math.max(MIN, r.origH + dy);
+    }
+    // North edge — extend / pull height upward; y shifts to keep the
+    // bottom edge anchored.
+    if (handle === "nw" || handle === "n" || handle === "ne") {
+      h = Math.max(MIN, r.origH - dy);
+      y = r.origY + (r.origH - h);
+    }
+    // Keep the resized stall inside the canvas extents.
+    if (x < 0) {
+      w += x;
+      x = 0;
+    }
+    if (y < 0) {
+      h += y;
+      y = 0;
+    }
+    if (x + w > canvasW) w = canvasW - x;
+    if (y + h > canvasH) h = canvasH - y;
+    setResize({ ...r, x, y, w, h });
+  };
+
+  const commitResize = () => {
+    const r = resizeRef.current;
+    if (!r) return;
+    // Write to displayWidth/displayHeight only — keep `width`/`height`
+    // (the template-authored size) untouched so receipts and the
+    // exhibitor-facing size pill don't shift to the new canvas size.
+    handleUpdateTable(r.positionId, {
+      x: r.x,
+      y: r.y,
+      displayWidth: r.w,
+      displayHeight: r.h,
+    });
+    setResize(null);
+  };
+
+  // Snapshot of a table's currently-rendered geometry (drag preview OR
+  // resize preview OR committed values), so the JSX can read one source.
+  // Falls back to template `width`/`height` when no resize override exists.
+  const liveTableGeom = (t: PositionedTable) => {
+    const pos = livePos(t.positionId, t.x, t.y);
+    if (resize && resize.positionId === t.positionId) {
+      return { x: resize.x, y: resize.y, w: resize.w, h: resize.h };
+    }
+    return {
+      x: pos.x,
+      y: pos.y,
+      w: t.displayWidth ?? t.width,
+      h: t.displayHeight ?? t.height,
+    };
+  };
+
+  // Keep refs fresh so the window-level resize listener (attached once) reads
+  // the latest closures without resubscribing.
+  const processResizeMoveRef = useRef<
+    (clientX: number, clientY: number) => void
+  >(() => {});
+  const commitResizeRef = useRef<() => void>(() => {});
+  processResizeMoveRef.current = processResizeMove;
+  commitResizeRef.current = commitResize;
+
   // While a drag is active, listen on the window (not the canvas) so the item
   // keeps following the cursor even when it strays outside the canvas — and
   // the drop is always caught, no matter where the mouse is released. Moves
@@ -2975,6 +3450,42 @@ const VenueDesigner = ({
       if (rafId != null) cancelAnimationFrame(rafId);
     };
   }, [isDragging]);
+
+  // Mirror of the drag-window listener but for resize. Same rAF-coalesced
+  // mouse-move + window-level mouse-up so the resize keeps tracking even
+  // when the cursor strays outside the canvas.
+  useEffect(() => {
+    if (!resize) return;
+    let rafId: number | null = null;
+    let pending: { x: number; y: number } | null = null;
+
+    const onMove = (ev: MouseEvent) => {
+      pending = { x: ev.clientX, y: ev.clientY };
+      if (rafId != null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (pending) {
+          processResizeMoveRef.current(pending.x, pending.y);
+          pending = null;
+        }
+      });
+    };
+    const onUp = () => {
+      commitResizeRef.current();
+    };
+    const prevUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = prevUserSelect;
+      if (rafId != null) cancelAnimationFrame(rafId);
+    };
+    // Only re-subscribe when resize transitions between null and non-null.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!resize]);
 
   // --- Export Logic ---
 
@@ -3030,14 +3541,14 @@ const VenueDesigner = ({
     if (table.type === "Corner") borderRadius = "4px 4px 4px 50%";
 
     const isSelected = selectedTable === table.positionId;
-    const pos = livePos(table.positionId, table.x, table.y);
+    const geom = liveTableGeom(table);
 
     return {
       position: "absolute" as const,
-      left: pos.x * venueConfig.scale,
-      top: pos.y * venueConfig.scale,
-      width: table.width * venueConfig.scale,
-      height: table.height * venueConfig.scale,
+      left: geom.x * venueConfig.scale,
+      top: geom.y * venueConfig.scale,
+      width: geom.w * venueConfig.scale,
+      height: geom.h * venueConfig.scale,
       borderRadius,
       transform: `rotate(${table.rotation}deg)`,
       backgroundColor: table.isBooked
@@ -3420,8 +3931,8 @@ const VenueDesigner = ({
               ref={venueRef}
               className="relative bg-white border-2 border-gray-200 shadow-2xl rounded-lg"
               style={{
-                width: venueConfig.width * venueConfig.scale,
-                height: venueConfig.height * venueConfig.scale,
+                width: canvasW * venueConfig.scale,
+                height: canvasH * venueConfig.scale,
                 backgroundImage: venueConfig.showGrid
                   ? `linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px)`
                   : "none",
@@ -3583,6 +4094,59 @@ const VenueDesigner = ({
                         </span>
                       )}
                     </div>
+                  )}
+                  {/* 8 resize handles — 4 corners + 4 mid-edges so the
+                      stall can be reshaped from any side. Each handle
+                      stops propagation so the stall's drag handler
+                      doesn't also fire. Hidden for booked stalls so a
+                      paid vendor's slot can't be accidentally shrunk
+                      under them. */}
+                  {selectedTable === table.positionId && !table.isBooked && (
+                    <>
+                      {(
+                        [
+                          // [handle, cursor, inline style for absolute position]
+                          ["nw", "nwse-resize", { top: -5, left: -5 }],
+                          [
+                            "n",
+                            "ns-resize",
+                            { top: -5, left: "50%", marginLeft: -5 },
+                          ],
+                          ["ne", "nesw-resize", { top: -5, right: -5 }],
+                          [
+                            "e",
+                            "ew-resize",
+                            { top: "50%", right: -5, marginTop: -5 },
+                          ],
+                          ["se", "nwse-resize", { bottom: -5, right: -5 }],
+                          [
+                            "s",
+                            "ns-resize",
+                            { bottom: -5, left: "50%", marginLeft: -5 },
+                          ],
+                          ["sw", "nesw-resize", { bottom: -5, left: -5 }],
+                          [
+                            "w",
+                            "ew-resize",
+                            { top: "50%", left: -5, marginTop: -5 },
+                          ],
+                        ] as const
+                      ).map(([h, cur, posStyle]) => (
+                        <div
+                          key={h}
+                          onMouseDown={(e) => beginResize(e, table, h)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute rounded-sm bg-white border-2 border-blue-600 shadow z-40"
+                          style={{
+                            ...(posStyle as React.CSSProperties),
+                            width: 10,
+                            height: 10,
+                            cursor: cur,
+                          }}
+                          title="Drag to resize"
+                        />
+                      ))}
+                    </>
                   )}
                   {selectedTable === table.positionId && (
                     <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-1 bg-white border p-1 rounded-md shadow-xl z-50">
@@ -3955,32 +4519,142 @@ const VenueDesigner = ({
                       {table.isBooked ? "Booked" : "Open"}
                     </span>
                   </div>
-                  {/* Exhibitor category this space is allotted to. "Other"
-                      makes it selectable by every category. */}
+                  {/* Exhibitor categories this space is reserved for.
+                      Empty selection means open to every category.
+                      Dynamic + multi-select with checkboxes; new
+                      categories added here are persisted to the shared
+                      /categories pool so exhibitors see them too. */}
                   <div onClick={(e) => e.stopPropagation()} className="mt-2">
-                    <Select
-                      value={table.exhibitorCategory || "Other"}
-                      onValueChange={(val) =>
+                    {(() => {
+                      // Hydrate from the new array field, falling back to
+                      // the legacy single-value field on older placed
+                      // tables. "Other" was the legacy sentinel for
+                      // "any category" — treat it as an empty list.
+                      const selected: string[] = (() => {
+                        const arr = (table as any).exhibitorCategories;
+                        if (Array.isArray(arr)) return arr;
+                        const legacy = table.exhibitorCategory;
+                        if (!legacy || legacy === "Other") return [];
+                        return [legacy];
+                      })();
+                      const writeSelection = (next: string[]) => {
                         handleUpdateTable(table.positionId, {
-                          exhibitorCategory: val,
-                        })
-                      }
-                    >
-                      <SelectTrigger className="h-7 text-[10px]">
-                        <SelectValue placeholder="Category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {SPACE_CATEGORIES.map((cat) => (
-                          <SelectItem
-                            key={cat}
-                            value={cat}
-                            className="text-xs"
+                          exhibitorCategories: next,
+                          // Also write the legacy single field so older
+                          // consumers (e.g. server-rendered receipts)
+                          // still see a category label. Falls back to
+                          // "Other" when the list is empty.
+                          exhibitorCategory: next[0] ?? "Other",
+                        });
+                      };
+                      const label =
+                        selected.length === 0
+                          ? "Open to all"
+                          : selected.length === 1
+                            ? selected[0]
+                            : `${selected.length} categories`;
+                      return (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-7 w-full justify-between text-[10px] font-normal px-2"
+                            >
+                              <span className="truncate">{label}</span>
+                              <ChevronDown className="h-3 w-3 opacity-50 ml-1 flex-shrink-0" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            className="w-56 p-0"
+                            align="start"
                           >
-                            {cat === "Other" ? "Other (all categories)" : cat}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                            <div className="max-h-48 overflow-y-auto py-1">
+                              {exhibitorCategoryOptions.map((cat) => {
+                                const checked = selected.includes(cat);
+                                return (
+                                  <label
+                                    key={cat}
+                                    className="flex items-center gap-2 px-3 py-1 hover:bg-primary/10 hover:text-primary cursor-pointer text-xs"
+                                  >
+                                    <Checkbox
+                                      checked={checked}
+                                      className="rounded-none"
+                                      onCheckedChange={(c) => {
+                                        const set = new Set(selected);
+                                        if (c) set.add(cat);
+                                        else set.delete(cat);
+                                        writeSelection(Array.from(set));
+                                      }}
+                                    />
+                                    <span>{cat}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            <div className="border-t p-2 flex gap-2 bg-muted/30">
+                              <Input
+                                value={newExhibitorCategoryInput}
+                                onChange={(e) =>
+                                  setNewExhibitorCategoryInput(
+                                    e.target.value,
+                                  )
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    handleAddExhibitorCategory((name) =>
+                                      writeSelection(
+                                        Array.from(
+                                          new Set([...selected, name]),
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }}
+                                placeholder="Add new"
+                                className="h-7 text-xs"
+                                disabled={addingExhibitorCategory}
+                              />
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() =>
+                                  handleAddExhibitorCategory((name) =>
+                                    writeSelection(
+                                      Array.from(
+                                        new Set([...selected, name]),
+                                      ),
+                                    ),
+                                  )
+                                }
+                                disabled={
+                                  addingExhibitorCategory ||
+                                  !newExhibitorCategoryInput.trim()
+                                }
+                                className="h-7 px-2 shrink-0"
+                              >
+                                <Plus className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            {selected.length > 0 && (
+                              <div className="border-t p-2 flex items-center justify-between text-[10px] bg-muted/30">
+                                <span className="text-muted-foreground">
+                                  {selected.length} selected
+                                </span>
+                                <button
+                                  type="button"
+                                  className="text-blue-600 hover:underline"
+                                  onClick={() => writeSelection([])}
+                                >
+                                  Clear (open to all)
+                                </button>
+                              </div>
+                            )}
+                          </PopoverContent>
+                        </Popover>
+                      );
+                    })()}
                   </div>
                 </div>
               ))}
@@ -4125,6 +4799,9 @@ export function CreateEventForm({
     tablePrice: "",
     bookingPrice: "",
     depositPrice: "",
+    memberPrice: "",
+    memberBookingPrice: "",
+    memberDepositPrice: "",
     depositInOption1: false,
     color: "#6b7280",
     forSale: true,
@@ -4176,7 +4853,9 @@ export function CreateEventForm({
   }, []);
 
   // Enhanced Options. Held in state so URL-imported categories can be
-  // appended on the fly.
+  // appended on the fly. Seeded with a static baseline so the dropdown
+  // isn't empty before the /categories fetch resolves; saved categories
+  // from the API are merged in on mount.
   const [categoryOptions, setCategoryOptions] = useState<string[]>([
     "Technology",
     "Food & Beverage",
@@ -4200,6 +4879,78 @@ export function CreateEventForm({
     "Conference",
     "Networking",
   ]);
+  const [newCategoryInput, setNewCategoryInput] = useState("");
+  const [addingCategory, setAddingCategory] = useState(false);
+
+  // Merge any categories saved by other organizers into the local options
+  // (case-insensitive dedupe) so every organizer sees what's been added.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${__API_URL__}/categories`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const names: string[] = Array.isArray(data)
+          ? data.map((c: any) => c?.name).filter((n: any) => typeof n === "string")
+          : [];
+        if (cancelled || names.length === 0) return;
+        setCategoryOptions((prev) => {
+          const seen = new Set(prev.map((c) => c.toLowerCase()));
+          const extras = names.filter((n) => !seen.has(n.toLowerCase()));
+          return extras.length ? [...prev, ...extras] : prev;
+        });
+      } catch {
+        // non-fatal — baseline options still work offline
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Add a user-typed category from inside the dropdown. Persists to
+  // /categories so it's available to every organizer next time, then
+  // adds it locally and auto-selects it. Treats 409 (already exists) as
+  // success so a duplicate add still ends up selected.
+  const handleAddCustomCategory = async () => {
+    const name = newCategoryInput.trim();
+    if (!name || addingCategory) return;
+    const alreadyExists = categoryOptions.some(
+      (c) => c.toLowerCase() === name.toLowerCase(),
+    );
+    const canonical =
+      categoryOptions.find((c) => c.toLowerCase() === name.toLowerCase()) ||
+      name;
+    setAddingCategory(true);
+    try {
+      if (!alreadyExists) {
+        try {
+          const token = sessionStorage.getItem("token");
+          await fetch(`${__API_URL__}/categories`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ name }),
+          });
+        } catch {
+          // Non-fatal — keep it local for this session even if the
+          // persist fails (offline, auth, etc.).
+        }
+        setCategoryOptions((prev) => [...prev, name]);
+      }
+      setFormData((old) => {
+        if (old.categories.includes(canonical)) return old;
+        const next = [...old.categories, canonical];
+        return { ...old, categories: next, category: next[0] };
+      });
+      setNewCategoryInput("");
+    } finally {
+      setAddingCategory(false);
+    }
+  };
 
   const ageRestrictionOptions = [
     "All Ages",
@@ -4232,6 +4983,12 @@ export function CreateEventForm({
   const [formData, setFormData] = useState({
     title: initialData?.title ?? "",
     category: initialData?.category ?? "",
+    categories:
+      Array.isArray(initialData?.categories) && initialData.categories.length > 0
+        ? initialData.categories
+        : initialData?.category
+          ? [initialData.category]
+          : [],
     description: initialData?.description ?? "",
     startDate: initialData?.startDate
       ? new Date(initialData.startDate).toISOString().slice(0, 10)
@@ -4790,6 +5547,14 @@ export function CreateEventForm({
         if (!options.overwriteExisting && !isEmpty(next[k as string])) return;
         next[k as string] = v;
       });
+      // Mirror the imported singular category into the new `categories`
+      // array so the multi-select UI reflects what was imported.
+      if (
+        importedCategory &&
+        (options.overwriteExisting || isEmpty(next.categories))
+      ) {
+        next.categories = [importedCategory];
+      }
       return next as typeof old;
     });
 
@@ -5304,7 +6069,12 @@ export function CreateEventForm({
 
       // Add basic form data
       Object.entries(formData).forEach(([key, value]) => {
-        if (key === "features" || key === "tags" || key === "socialMedia") {
+        if (
+          key === "features" ||
+          key === "tags" ||
+          key === "socialMedia" ||
+          key === "categories"
+        ) {
           data.append(key, JSON.stringify(value));
         } else {
           data.append(key, value ?? "");
@@ -5606,22 +6376,128 @@ export function CreateEventForm({
                   </div>
                   <div>
                     <Label>Category *</Label>
-                    <Select
-                      value={formData.category}
-                      onValueChange={(v) => handleInputChange("category", v)}
-                      required
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categoryOptions.map((cat) => (
-                          <SelectItem key={cat} value={cat}>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full justify-between font-normal"
+                        >
+                          <span className="truncate text-left">
+                            {formData.categories.length === 0
+                              ? "Select categories"
+                              : formData.categories.length === 1
+                                ? formData.categories[0]
+                                : `${formData.categories.length} selected`}
+                          </span>
+                          <ChevronDown className="h-4 w-4 opacity-50 ml-2 flex-shrink-0" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="w-[var(--radix-popover-trigger-width)] p-0"
+                        align="start"
+                      >
+                        <div className="max-h-64 overflow-y-auto py-1">
+                          {categoryOptions.map((cat) => {
+                            const checked =
+                              formData.categories.includes(cat);
+                            return (
+                              <label
+                                key={cat}
+                                className="flex items-center gap-2 px-3 py-1.5 hover:bg-primary/10 hover:text-primary cursor-pointer text-sm"
+                              >
+                                <Checkbox
+                                  checked={checked}
+                                  className="rounded-none"
+                                  onCheckedChange={(c) => {
+                                    setFormData((old) => {
+                                      const set = new Set<string>(
+                                        old.categories,
+                                      );
+                                      if (c) set.add(cat);
+                                      else set.delete(cat);
+                                      const next = Array.from(set);
+                                      return {
+                                        ...old,
+                                        categories: next,
+                                        // Keep legacy `category` in sync with
+                                        // the first selection so existing
+                                        // read-sites still display something.
+                                        category: next[0] ?? "",
+                                      };
+                                    });
+                                  }}
+                                />
+                                <span>{cat}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                        {/* Add custom category — persisted to /categories so
+                            every organizer/exhibitor sees it next time. */}
+                        <div className="border-t p-2 flex gap-2 bg-muted/30">
+                          <Input
+                            value={newCategoryInput}
+                            onChange={(e) =>
+                              setNewCategoryInput(e.target.value)
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleAddCustomCategory();
+                              }
+                            }}
+                            placeholder="Add new category"
+                            className="h-8 text-sm"
+                            disabled={addingCategory}
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={handleAddCustomCategory}
+                            disabled={
+                              addingCategory || !newCategoryInput.trim()
+                            }
+                            className="h-8 px-3 shrink-0"
+                          >
+                            <Plus className="h-3 w-3 mr-1" />
+                            Add
+                          </Button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    {formData.categories.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {formData.categories.map((cat) => (
+                          <Badge
+                            key={cat}
+                            variant="secondary"
+                            className="text-xs gap-1"
+                          >
                             {cat}
-                          </SelectItem>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setFormData((old) => {
+                                  const next = old.categories.filter(
+                                    (c) => c !== cat,
+                                  );
+                                  return {
+                                    ...old,
+                                    categories: next,
+                                    category: next[0] ?? "",
+                                  };
+                                })
+                              }
+                              className="hover:text-destructive"
+                              aria-label={`Remove ${cat}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
                         ))}
-                      </SelectContent>
-                    </Select>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -5761,6 +6637,49 @@ export function CreateEventForm({
                     rows={2}
                     required
                   />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="flex items-center gap-1.5">
+                      <Facebook className="h-4 w-4 text-blue-600" />
+                      Facebook Link
+                    </Label>
+                    <Input
+                      type="url"
+                      value={formData.socialMedia?.facebook ?? ""}
+                      onChange={(e) =>
+                        setFormData((old) => ({
+                          ...old,
+                          socialMedia: {
+                            ...old.socialMedia,
+                            facebook: e.target.value,
+                          },
+                        }))
+                      }
+                      placeholder="https://facebook.com/your-event"
+                    />
+                  </div>
+                  <div>
+                    <Label className="flex items-center gap-1.5">
+                      <Instagram className="h-4 w-4 text-pink-600" />
+                      Instagram Link
+                    </Label>
+                    <Input
+                      type="url"
+                      value={formData.socialMedia?.instagram ?? ""}
+                      onChange={(e) =>
+                        setFormData((old) => ({
+                          ...old,
+                          socialMedia: {
+                            ...old.socialMedia,
+                            instagram: e.target.value,
+                          },
+                        }))
+                      }
+                      placeholder="https://instagram.com/your-event"
+                    />
+                  </div>
                 </div>
               </CardContent>
             </Card>

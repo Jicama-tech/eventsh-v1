@@ -33,6 +33,7 @@ import { FeedbackModule } from "./modules/feedback/feedback.module";
 import { AppFeedbackModule } from "./modules/app-feedback/app-feedback.module";
 import { SubscriptionsModule } from "./modules/subscriptions/subscriptions.module";
 import { BillingPaymentsModule } from "./modules/billing-payments/billing-payments.module";
+import { MembershipsModule } from "./modules/memberships/memberships.module";
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { BillingPaymentsModule } from "./modules/billing-payments/billing-paymen
     WebsiteContentModule,
     FeedbackModule,
     AppFeedbackModule,
+    MembershipsModule,
   ],
 })
 export class AppModule {}

@@ -16,6 +16,10 @@ import { SpeakerRequestSchema } from "../speaker-requests/entities/speaker-reque
 import { OrganizerPaymentSchema } from "./entities/organizer-payment.entity";
 import { PlatformBillingRatesSchema } from "./entities/platform-billing-rates.entity";
 import { PaymentConfigSchema } from "./entities/payment-config.entity";
+import {
+  ExhibitorMembership,
+  ExhibitorMembershipSchema,
+} from "../memberships/schemas/exhibitor-membership.schema";
 import { MailModule } from "../roles/mail.module";
 import { MailService } from "../roles/mail.service";
 import { PaymentsModule } from "../payments/payments.module";
@@ -37,6 +41,7 @@ import { PaymentsModule } from "../payments/payments.module";
       { name: "OrganizerPayment", schema: OrganizerPaymentSchema },
       { name: "PlatformBillingRates", schema: PlatformBillingRatesSchema },
       { name: "PaymentConfig", schema: PaymentConfigSchema },
+      { name: ExhibitorMembership.name, schema: ExhibitorMembershipSchema },
     ]),
     MailModule,
     JwtModule.register({

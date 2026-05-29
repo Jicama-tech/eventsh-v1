@@ -92,6 +92,7 @@ export class AdminController {
       roundTableRate?: number;
       chairRate?: number;
       speakerRate?: number;
+      membershipRate?: number;
       currency?: string;
     },
     @Req() req: any,

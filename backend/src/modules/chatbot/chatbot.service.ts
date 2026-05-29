@@ -3830,8 +3830,19 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
       }
 
       case "list_plans": {
+        // Match the per-organizer visibility filter used by
+        // /plans/for-organizer/:id — plans whose `visibleToOrganizers`
+        // is unset, empty, or contains this organizer's id.
         const plans = await this.planModel
-          .find({ moduleType: "Organizer", isActive: true })
+          .find({
+            moduleType: "Organizer",
+            isActive: true,
+            $or: [
+              { visibleToOrganizers: { $exists: false } },
+              { visibleToOrganizers: { $size: 0 } },
+              { visibleToOrganizers: String(organizerId) },
+            ],
+          })
           .lean();
         return plans.map((p: any) => ({
           name: p.planName,
