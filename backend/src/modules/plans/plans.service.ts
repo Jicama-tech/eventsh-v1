@@ -46,6 +46,28 @@ export class PlansService {
       .exec();
   }
 
+  // Visible-to-organizer filter:
+  //   - plans with `visibleToOrganizers` unset / empty array → shown to
+  //     every organizer (existing global behaviour).
+  //   - plans with a populated `visibleToOrganizers` list → shown only
+  //     to the organizers in the list.
+  // Used by the organizer-facing "available plans" endpoint so admins
+  // can author partner-exclusive or pilot tiers without exposing them
+  // to everyone.
+  async findVisibleForOrganizer(organizerId: string): Promise<Plan[]> {
+    return await this.planModel
+      .find({
+        moduleType: ModuleType.ORGANIZER,
+        isActive: true,
+        $or: [
+          { visibleToOrganizers: { $exists: false } },
+          { visibleToOrganizers: { $size: 0 } },
+          { visibleToOrganizers: organizerId },
+        ],
+      })
+      .exec();
+  }
+
   async findByModule(_moduleType: string): Promise<Plan[]> {
     // Eventsh only serves Organizer plans regardless of caller.
     return await this.planModel

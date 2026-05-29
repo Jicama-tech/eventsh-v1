@@ -25,6 +25,10 @@ interface Props {
   eventId: string | null;
   eventTitle: string;
   onSubmitted?: () => void;
+  // When "memberships", the dialog kicks off the all-active-memberships
+  // batch claim (POST /billing-payments/initiate-memberships) instead of
+  // the per-event /initiate. Default keeps the existing per-event UX.
+  mode?: "event" | "memberships";
 }
 
 interface PendingResponse {
@@ -57,6 +61,7 @@ export function BillingPaymentDialog({
   eventId,
   eventTitle,
   onSubmitted,
+  mode = "event",
 }: Props) {
   const { toast } = useToast();
   const token = sessionStorage.getItem("token");
@@ -71,7 +76,9 @@ export function BillingPaymentDialog({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!open || !eventId) return;
+    // Per-event mode needs an eventId; memberships mode doesn't.
+    if (!open) return;
+    if (mode === "event" && !eventId) return;
     let cancelled = false;
     (async () => {
       setInitiating(true);
@@ -80,10 +87,16 @@ export function BillingPaymentDialog({
       setQrIntent(null);
       setQrError(null);
       try {
-        const res = await fetch(`${apiURL}/billing-payments/initiate`, {
+        const url =
+          mode === "memberships"
+            ? `${apiURL}/billing-payments/initiate-memberships`
+            : `${apiURL}/billing-payments/initiate`;
+        const body =
+          mode === "memberships" ? "{}" : JSON.stringify({ eventId });
+        const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json", ...auth },
-          body: JSON.stringify({ eventId }),
+          body,
         });
         const data = await res.json();
         if (!res.ok) {
@@ -107,7 +120,7 @@ export function BillingPaymentDialog({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, eventId]);
+  }, [open, eventId, mode]);
 
   const generateQr = async (row: PendingResponse) => {
     setQrLoading(true);

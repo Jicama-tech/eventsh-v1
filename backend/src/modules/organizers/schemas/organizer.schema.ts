@@ -118,6 +118,15 @@ export class Organizer {
   @Prop({ required: false })
   phone: string;
 
+  // Multiple contact phone numbers an organizer can publish on the
+  // eventfront's contact card. `phone` (singular) above stays the
+  // canonical primary number used by legacy receipts and the auth
+  // flows; this array carries every additional number. Each entry is
+  // an already-formatted E.164-ish string ("+91 98765 43210") — the
+  // settings form composes dialCode + digits before save.
+  @Prop({ type: [String], default: [] })
+  contactPhones?: string[];
+
   @Prop({ required: true, unique: true })
   businessEmail: string;
 

@@ -10,6 +10,7 @@ import { InstagramStrategy } from "./strategies/instagram.strategy";
 import { RolesModule } from "../roles/roles.module";
 import { GoogleOrganizerStrategy } from "./strategies/organizer-google.strategy";
 import { GoogleBuyerStrategy } from "./strategies/google-buyer.strategy";
+import { GoogleMemberStrategy } from "./strategies/google-member.strategy";
 import { OrganizersModule } from "../organizers/organizers.module";
 
 @Module({
@@ -30,6 +31,7 @@ import { OrganizersModule } from "../organizers/organizers.module";
     InstagramStrategy,
     GoogleOrganizerStrategy,
     GoogleBuyerStrategy,
+    GoogleMemberStrategy,
   ],
   controllers: [AuthController],
   exports: [AuthService, JwtModule],

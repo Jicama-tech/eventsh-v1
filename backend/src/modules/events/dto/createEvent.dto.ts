@@ -390,6 +390,11 @@ export class CreateEventDto {
   @IsOptional()
   category?: string;
 
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  categories?: string[];
+
   @IsDateString()
   startDate: string;
 

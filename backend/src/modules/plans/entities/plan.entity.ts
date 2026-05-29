@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
-import { Document } from "mongoose";
+import { Document, Types } from "mongoose";
 
 export type PlanDocument = Plan & Document;
 
@@ -45,6 +45,14 @@ export class Plan {
   @Prop({ default: false })
   isDefault: boolean;
 
+  // Targeted visibility — when populated, ONLY organizers whose _id is
+  // in this list see/can buy this plan. Empty / undefined means the
+  // plan is shown to every organizer (existing behaviour). Useful for
+  // admins running pilot tiers, partner-exclusive plans, or grandfather
+  // pricing for specific organizers.
+  @Prop({ type: [{ type: Types.ObjectId, ref: "Organizer" }], default: [] })
+  visibleToOrganizers?: Types.ObjectId[];
+
   @Prop()
   description?: string;
 
@@ -71,6 +79,14 @@ export class Plan {
     instagram?: { enabled: boolean };
     // Operators
     operators?: { enabled: boolean; limit: number };
+    // Exhibitor membership programs. When enabled, the organizer can
+    // create membership tiers in Settings, list them on the storefront,
+    // verify purchases in the dashboard inbox, and offer Member pricing
+    // on Space templates. `limit` caps how many distinct tiers
+    // (e.g. Gold/Silver/Bronze) the organizer can author. Field name
+    // matches the rest of the module configs so the admin pricing form
+    // can render it generically.
+    membership?: { enabled: boolean; limit?: number };
     /**
      * Per-audience feedback collection. `enabled` is the master toggle;
      * `audiences` controls which audience types this plan can collect

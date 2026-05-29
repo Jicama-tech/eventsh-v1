@@ -37,7 +37,9 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { ExhibitorCategoryPicker } from "@/components/ui/ExhibitorCategoryPicker";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -180,6 +182,11 @@ interface ProcessedExhibitor {
   totalSpent: number;
   stallsBooked: number;
   requests: StallRequest[];
+  // Active membership info populated by the per-org exhibitor-memberships
+  // lookup. `member: true` drives the new Membership column's "Yes" badge.
+  member?: boolean;
+  membershipPlan?: string;
+  membershipExpiry?: string;
 }
 
 interface Country {
@@ -548,7 +555,11 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
       setVisitors(Array.from(visitorMap.values()));
 
       // --- B. Fetch Exhibitors (Stalls) ---
-      const [stallsRes, shopkeepersRes] = await Promise.all([
+      // Also pull the organizer's exhibitor memberships so we can flag
+      // each row in the table with a Yes/No badge. Non-fatal — if the
+      // module isn't enabled or the endpoint errors, every exhibitor
+      // just renders as "No".
+      const [stallsRes, shopkeepersRes, membershipsRes] = await Promise.all([
         fetch(`${apiURL}/stalls/organizer/${organizerId}`),
         fetch(
           `${apiURL}/shopkeepers/fetch-shopkeepers-by-organizer/${organizerId}`,
@@ -556,10 +567,18 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
             headers: { Authorization: `Bearer ${token}` },
           },
         ),
+        fetch(`${apiURL}/exhibitor-memberships?status=active`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => null),
       ]);
 
       let stallsList: StallRequest[] = [];
       let manualShopkeepers: any[] = [];
+      // Email → membership map, used after the exhibitor list is built.
+      const membershipByEmail = new Map<
+        string,
+        { planName: string; endDate?: string }
+      >();
 
       if (stallsRes.ok) {
         const sRes = await stallsRes.json();
@@ -568,6 +587,23 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
       if (shopkeepersRes.ok) {
         const shRes = await shopkeepersRes.json();
         manualShopkeepers = shRes.data || [];
+      }
+      if (membershipsRes && membershipsRes.ok) {
+        try {
+          const memList: any[] = await membershipsRes.json();
+          for (const m of memList) {
+            if (!m?.exhibitorEmail) continue;
+            membershipByEmail.set(String(m.exhibitorEmail).toLowerCase(), {
+              planName:
+                typeof m.planId === "object"
+                  ? m.planId?.name || "Plan"
+                  : "Plan",
+              endDate: m.endDate,
+            });
+          }
+        } catch {
+          // Body parse failed — leave the map empty; everyone is "No".
+        }
       }
 
       // --- Merge Logic for Exhibitors ---
@@ -638,7 +674,20 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
         }
       });
 
-      setExhibitors(Array.from(exhibitorMap.values()));
+      // Stamp each exhibitor with its active membership (if any) by email.
+      const exhibitorList = Array.from(exhibitorMap.values()).map((ex) => {
+        const key = (ex.email || "").toLowerCase();
+        const m = key ? membershipByEmail.get(key) : undefined;
+        return m
+          ? {
+              ...ex,
+              member: true,
+              membershipPlan: m.planName,
+              membershipExpiry: m.endDate,
+            }
+          : ex;
+      });
+      setExhibitors(exhibitorList);
     } catch (error) {
       console.error("Fetch Error:", error);
       toast({
@@ -1272,6 +1321,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                       <TableHead>Contact</TableHead>
                       <TableHead>Last Booking</TableHead>
                       <TableHead>Performance</TableHead>
+                      <TableHead>Membership</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1279,7 +1329,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                     {filteredExhibitors.length === 0 ? (
                       <TableRow>
                         <TableCell
-                          colSpan={5}
+                          colSpan={6}
                           className="text-center py-8 text-muted-foreground"
                         >
                           No exhibitors found.
@@ -1367,6 +1417,30 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                                 {exhibitor.stallsBooked} Stalls
                               </span>
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            {exhibitor.member ? (
+                              <div className="flex flex-col gap-0.5">
+                                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 w-fit">
+                                  Yes
+                                </Badge>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {exhibitor.membershipPlan}
+                                  {exhibitor.membershipExpiry
+                                    ? ` · exp ${new Date(
+                                        exhibitor.membershipExpiry,
+                                      ).toLocaleDateString()}`
+                                    : ""}
+                                </span>
+                              </div>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="text-muted-foreground"
+                              >
+                                No
+                              </Badge>
+                            )}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
@@ -2289,12 +2363,42 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                     <div className="flex items-center gap-2">
                       <User className="h-4 w-4" /> {selectedExhibitor.ownerName}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4" /> {selectedExhibitor.phone}
-                    </div>
+                    {selectedExhibitor.whatsapp && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-emerald-600" />
+                        <span>{selectedExhibitor.whatsapp}</span>
+                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          WhatsApp
+                        </span>
+                      </div>
+                    )}
+                    {selectedExhibitor.phone &&
+                      selectedExhibitor.phone !==
+                        selectedExhibitor.whatsapp && (
+                        <div className="flex items-center gap-2">
+                          <Phone className="h-4 w-4" />
+                          <span>{selectedExhibitor.phone}</span>
+                          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                            Phone
+                          </span>
+                        </div>
+                      )}
                     <div className="flex items-center gap-2">
                       <Mail className="h-4 w-4" /> {selectedExhibitor.email}
                     </div>
+                    {selectedExhibitor.member && (
+                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 w-fit">
+                        Member
+                        {selectedExhibitor.membershipPlan
+                          ? ` · ${selectedExhibitor.membershipPlan}`
+                          : ""}
+                        {selectedExhibitor.membershipExpiry
+                          ? ` · exp ${new Date(
+                              selectedExhibitor.membershipExpiry,
+                            ).toLocaleDateString()}`
+                          : ""}
+                      </Badge>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -3059,6 +3163,7 @@ export function AddExhibitorDialog({
     address: "",
     businessCategory: "",
     businessEmail: "",
+    isMember: false,
   });
 
   // Sync Dial Code when Country changes
@@ -3101,6 +3206,7 @@ export function AddExhibitorDialog({
         address: exhibitorToEdit.address || "",
         businessCategory: exhibitorToEdit.businessCategory || "",
         businessEmail: exhibitorToEdit.businessEmail || "",
+        isMember: !!exhibitorToEdit.isMember || !!exhibitorToEdit.member,
       });
     } else if (isOpen && mode === "add") {
       resetForm();
@@ -3150,6 +3256,7 @@ export function AddExhibitorDialog({
         email: formData.email,
         country: formData.country,
         whatsappNumber: `${formData.dialCode}${formData.whatsappNumber}`,
+        isMember: !!formData.isMember,
         phone: `${formData.dialCode}${formData.phone}`,
         address: formData.address,
         shopName: formData.shopName,
@@ -3203,6 +3310,7 @@ export function AddExhibitorDialog({
       shopName: "",
       businessCategory: "",
       businessEmail: "",
+      isMember: false,
     });
     setErrors({});
   };
@@ -3275,24 +3383,42 @@ export function AddExhibitorDialog({
             </div>
             <div className="space-y-2">
               <Label>Business Category*</Label>
-              <Select
+              {/* Shared dynamic picker — categories added here sync to
+                  the /categories pool used by Space Layout and the
+                  public stall form. Single-select shape mirrors the old
+                  dropdown. */}
+              <ExhibitorCategoryPicker
                 value={formData.businessCategory}
-                onValueChange={(val) =>
+                onChange={(val) =>
                   setFormData({ ...formData, businessCategory: val })
                 }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {BUSINESS_CATEGORIES.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                baseline={BUSINESS_CATEGORIES}
+                placeholder="Category"
+              />
             </div>
+          </div>
+
+          {/* Member toggle — manual override for legacy / comp'd
+              memberships that didn't come through the storefront
+              purchase flow. The membership lifecycle (confirm / reject /
+              expire) still drives this field automatically when an
+              ExhibitorMembership exists for this exhibitor, so manual
+              flips may be overwritten the next time a membership event
+              fires. */}
+          <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3">
+            <div>
+              <Label className="text-sm font-medium">Active member</Label>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Turn on to mark this exhibitor as a member. They'll see
+                Member pricing on Space templates that have it configured.
+              </p>
+            </div>
+            <Switch
+              checked={!!formData.isMember}
+              onCheckedChange={(c) =>
+                setFormData((p) => ({ ...p, isMember: !!c }))
+              }
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">

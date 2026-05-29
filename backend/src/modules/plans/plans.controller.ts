@@ -29,6 +29,13 @@ export class PlansController {
     return this.plansService.findAll();
   }
 
+  // Organizer-facing plan list — applies the `visibleToOrganizers`
+  // targeting filter. Admins still hit /get-plans to see every plan.
+  @Get("for-organizer/:organizerId")
+  findForOrganizer(@Param("organizerId") organizerId: string) {
+    return this.plansService.findVisibleForOrganizer(organizerId);
+  }
+
   @Get("module/:moduleType")
   findByModule(@Param("moduleType") moduleType: string) {
     return this.plansService.findByModule(moduleType);

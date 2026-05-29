@@ -22,6 +22,25 @@ async function bootstrap() {
     }),
   );
 
+  // Strip Cross-Origin-Opener-Policy on the eventfront Google-member
+  // OAuth popup path. The popup needs to keep its `window.opener`
+  // handle so it can postMessage the profile back to the dialog after
+  // Google → backend redirect → frontend callback. Helmet's default
+  // COOP (same-origin) severs that handle on cross-origin popup
+  // navigations. Scoped to this exact path so the rest of the API
+  // keeps the stricter default.
+  app.use(
+    ["/auth/google-member", "/auth/google-member/redirect"],
+    (_req: any, res: any, next: any) => {
+      res.removeHeader("Cross-Origin-Opener-Policy");
+      res.removeHeader("Cross-Origin-Embedder-Policy");
+      // Belt + suspenders: also set explicit unsafe-none so anything
+      // downstream that reads-back the header sees the relaxed value.
+      res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
+      next();
+    },
+  );
+
   // Gzip compression for faster responses
   app.use(compression());
 

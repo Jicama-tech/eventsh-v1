@@ -38,6 +38,7 @@ interface BillingResponse {
     roundTable: number;
     chair: number;
     speaker: number;
+    membership: number;
     currency: string;
   };
   events: Array<{
@@ -52,7 +53,17 @@ interface BillingResponse {
     speakersBooked: number;
     amount: number;
   }>;
-  totals: { billable: number; paid: number; owed: number };
+  // Active membership count + membership-tier amount for this organizer.
+  // Surfaced separately from the per-event rows because memberships are
+  // organizer-scoped, not event-scoped.
+  memberships?: { active: number; amount: number };
+  totals: {
+    eventsBillable?: number;
+    membershipsBillable?: number;
+    billable: number;
+    paid: number;
+    owed: number;
+  };
   payments: Array<{
     _id: string;
     amount: number;
@@ -353,6 +364,7 @@ export function OrganizerBillingDialog({
               Platform fee: ${data?.rates.stall ?? 20}/stall · $
               {data?.rates.roundTable ?? 20}/booked-table · $
               {data?.rates.chair ?? 5}/chair · ${data?.rates.speaker ?? 20}
+              /speaker · ${data?.rates.membership ?? 5}/active-membership
               /speaker
             </DialogDescription>
           </DialogHeader>
@@ -444,6 +456,56 @@ export function OrganizerBillingDialog({
                   </div>
                 )}
               </div>
+
+              {/* Memberships — organizer-scoped fee, separate from the
+                  per-event grid above. Only rendered when there's at
+                  least one active membership for this organizer. */}
+              {data.memberships && data.memberships.active > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
+                      Memberships
+                    </h3>
+                  </div>
+                  <div className="rounded-md border overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Tier</TableHead>
+                          <TableHead className="text-center">
+                            Active count
+                          </TableHead>
+                          <TableHead className="text-center">
+                            Rate
+                          </TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow>
+                          <TableCell>
+                            <div className="font-medium">
+                              Active exhibitor memberships
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              Flat per-active-membership fee
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {data.memberships.active}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {fmtUsd(data.rates.membership)}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {fmtUsd(data.memberships.amount)}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
 
               {/* Pay-by-QR panel — scheme auto-picked from organizer.country */}
               <div>

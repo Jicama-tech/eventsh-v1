@@ -46,6 +46,11 @@ const PrivacyPolicyPage = lazy(() => import("./pages/privacyPolicy").then(m => (
 // User-facing
 const OrganizerStorefront = lazy(() => import("./components/user/organizerStoreFront").then(m => ({ default: m.OrganizerStorefront })));
 const EventFront = lazy(() => import("./components/user/eventFront").then(m => ({ default: m.EventFront })));
+const EventfrontGoogleMemberCallback = lazy(() =>
+  import("./components/user/EventfrontGoogleMemberCallback").then((m) => ({
+    default: m.EventfrontGoogleMemberCallback,
+  })),
+);
 
 // Dashboards (heavy components)
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard").then(m => ({ default: m.AdminDashboard })));
@@ -186,6 +191,24 @@ function AppContent() {
 
   const { user, logout, loading } = useAuth();
 
+  // Short-circuit the Google-member popup callback BEFORE any auth /
+  // role gating runs. The popup needs to read its query params, post
+  // the profile to its opener, and close itself — auth state of the
+  // current browser session is irrelevant. Without this, a logged-in
+  // organizer (or any user) would route the popup through the role
+  // branch's catch-all redirect and the callback component would
+  // never mount.
+  if (
+    typeof window !== "undefined" &&
+    window.location.pathname === "/eventsh-google-member-callback"
+  ) {
+    return (
+      <Suspense fallback={<LoadingScreen />}>
+        <EventfrontGoogleMemberCallback />
+      </Suspense>
+    );
+  }
+
   if (loading) {
     return <LoadingScreen />;
   }
@@ -222,6 +245,13 @@ function AppContent() {
               element={<EventFront eventId={""} onBack={() => {}} />}
             />
           )}
+          {/* Google OAuth popup callback for the eventfront "Become a
+              member" flow. The popup lands here, posts the profile to
+              its opener, then closes itself. */}
+          <Route
+            path="/eventsh-google-member-callback"
+            element={<EventfrontGoogleMemberCallback />}
+          />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/blog" element={<Blog />} />
           <Route path="/faq" element={<FAQ />} />

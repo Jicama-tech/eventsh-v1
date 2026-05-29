@@ -16,7 +16,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
+  Award,
   CheckCircle2,
   Hourglass,
   Loader2,
@@ -53,6 +55,26 @@ interface EventRow {
   claim: Claim | null;
 }
 
+interface MembershipRow {
+  _id: string;
+  exhibitorName: string;
+  exhibitorEmail: string;
+  exhibitorWhatsapp: string;
+  planName: string;
+  startDate?: string;
+  endDate?: string;
+  amountPaid: number;
+  currency: string;
+  platformFee: number;
+}
+
+interface MembershipsBlock {
+  rows: MembershipRow[];
+  rate: number;
+  total: number;
+  claim: Claim | null;
+}
+
 interface BillingResponse {
   organizer: {
     _id: string;
@@ -65,9 +87,11 @@ interface BillingResponse {
     roundTableRate: number;
     chairRate: number;
     speakerRate: number;
+    membershipRate: number;
     currency: string;
   };
   events: EventRow[];
+  memberships?: MembershipsBlock;
   region: { scheme: "UPI" | "PAYNOW"; currency: string } | null;
 }
 
@@ -85,6 +109,10 @@ export function PlatformFeesPanel() {
     eventId: string;
     title: string;
   } | null>(null);
+  // Drives the memberships-batch checkout dialog. The BillingPaymentDialog
+  // is reused with mode="memberships" so QR rendering / status polling /
+  // mark-as-paid all share one code path with the per-event flow.
+  const [payingMemberships, setPayingMemberships] = useState(false);
 
   const fetchBilling = async () => {
     setLoading(true);
@@ -188,6 +216,22 @@ export function PlatformFeesPanel() {
         </Card>
       </div>
 
+      <Tabs defaultValue="events" className="space-y-3">
+        <TabsList>
+          <TabsTrigger value="events" className="flex items-center gap-1.5">
+            <Receipt className="h-3.5 w-3.5" />
+            Events ({events.length})
+          </TabsTrigger>
+          <TabsTrigger
+            value="memberships"
+            className="flex items-center gap-1.5"
+          >
+            <Award className="h-3.5 w-3.5" />
+            Memberships ({data?.memberships?.rows?.length || 0})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="events" className="mt-0">
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -331,6 +375,141 @@ export function PlatformFeesPanel() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="memberships" className="mt-0">
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-3">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Award className="h-4 w-4" /> Memberships
+                </CardTitle>
+                <CardDescription>
+                  Each active exhibitor membership owes a flat{" "}
+                  {currencySymbol}
+                  {data?.memberships?.rate ?? 5} platform fee. Pay the
+                  batch in one go.
+                </CardDescription>
+              </div>
+              {data?.memberships && data.memberships.total > 0 && (
+                <Button
+                  size="sm"
+                  disabled={
+                    !region ||
+                    data.memberships.claim?.status === "submitted" ||
+                    data.memberships.claim?.status === "confirmed"
+                  }
+                  onClick={() => setPayingMemberships(true)}
+                >
+                  {data.memberships.claim?.status === "confirmed"
+                    ? "Paid"
+                    : data.memberships.claim?.status === "submitted"
+                      ? "Submitted"
+                      : data.memberships.claim?.status === "awaiting_payment"
+                        ? "Resume"
+                        : `Pay ${currencySymbol}${data.memberships.total.toFixed(
+                            2,
+                          )}`}
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {loading && (!data?.memberships?.rows?.length) ? (
+                <div className="flex items-center justify-center py-10 text-slate-500 gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+                </div>
+              ) : !data?.memberships?.rows?.length ? (
+                <div className="py-10 text-center text-slate-500">
+                  No active exhibitor memberships yet — once one is
+                  confirmed, the platform fee row appears here.
+                </div>
+              ) : (
+                <div className="rounded-md border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Exhibitor</TableHead>
+                        <TableHead>Plan</TableHead>
+                        <TableHead>Valid till</TableHead>
+                        <TableHead className="text-right">
+                          Paid to you
+                        </TableHead>
+                        <TableHead className="text-right">
+                          Platform fee
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.memberships.rows.map((m) => (
+                        <TableRow key={m._id}>
+                          <TableCell>
+                            <div className="font-medium">
+                              {m.exhibitorName || m.exhibitorEmail || "—"}
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {m.exhibitorEmail}
+                              {m.exhibitorWhatsapp
+                                ? ` · ${m.exhibitorWhatsapp}`
+                                : ""}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{m.planName}</Badge>
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {m.endDate
+                              ? new Date(m.endDate).toLocaleDateString()
+                              : "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {m.currency} {m.amountPaid.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {currencySymbol}
+                            {m.platformFee.toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      <TableRow className="bg-muted/40">
+                        <TableCell colSpan={4} className="text-right">
+                          <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                            Total platform fee
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right font-bold">
+                          {currencySymbol}
+                          {data.memberships.total.toFixed(2)}
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {data?.memberships?.claim && (
+                <div className="mt-3 rounded-md border border-amber-200 bg-amber-50/50 px-3 py-2 text-xs text-amber-800 flex items-center gap-2">
+                  {data.memberships.claim.status === "confirmed" ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  ) : (
+                    <Hourglass className="h-3.5 w-3.5" />
+                  )}
+                  <span className="font-mono">
+                    {data.memberships.claim.ref}
+                  </span>
+                  <span>· {data.memberships.claim.status}</span>
+                </div>
+              )}
+
+              {!region && data && (
+                <p className="text-xs text-amber-600 mt-2">
+                  Your country doesn't have a QR scheme configured.
+                  Contact support to settle memberships fees off-band.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <BillingPaymentDialog
         open={!!payingEvent}
@@ -339,6 +518,18 @@ export function PlatformFeesPanel() {
         eventTitle={payingEvent?.title || ""}
         onSubmitted={() => {
           setPayingEvent(null);
+          fetchBilling();
+        }}
+      />
+
+      <BillingPaymentDialog
+        open={payingMemberships}
+        onClose={() => setPayingMemberships(false)}
+        eventId="memberships"
+        eventTitle="Membership platform fees"
+        mode="memberships"
+        onSubmitted={() => {
+          setPayingMemberships(false);
           fetchBilling();
         }}
       />

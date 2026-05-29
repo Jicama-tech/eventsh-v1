@@ -196,6 +196,12 @@ export class Event {
   @Prop()
   category?: string;
 
+  // Multi-select categories. `category` (singular) is kept in sync with the
+  // first entry so the many existing read-sites that display `event.category`
+  // continue to work without per-call migration.
+  @Prop({ type: [String], default: undefined })
+  categories?: string[];
+
   @Prop()
   startDate: Date;
 
@@ -311,6 +317,13 @@ export class Event {
     tablePrice: number; // NEW: Full table rental price
     bookingPrice: number; // NEW: Partial payment (must be <= tablePrice)
     depositPrice: number;
+    // Member-tier pricing — populated only when the organizer's
+    // subscription has the `membership` module enabled. Optional fall-
+    // through: when unset (legacy templates or members-disabled plans),
+    // every exhibitor pays the regular tablePrice/bookingPrice/deposit.
+    memberPrice?: number;
+    memberBookingPrice?: number;
+    memberDepositPrice?: number;
     color?: string;
     forSale?: boolean;
     isBooked: boolean;
@@ -328,6 +341,12 @@ export class Event {
     type: "Straight";
     width: number;
     height: number;
+    // Layout-only overrides written by the venue-designer corner
+    // resize handles. Receipts, the exhibitor size pill, and any
+    // billing read `width`/`height` (the template-authored size);
+    // only the rendered canvas footprint follows the overrides.
+    displayWidth?: number;
+    displayHeight?: number;
     x: number;
     y: number;
     rotation: number;
@@ -336,6 +355,18 @@ export class Event {
     tablePrice: number;
     bookingPrice: number;
     depositPrice: number;
+    // Same dual-tier pricing carried through to placed spaces so the
+    // booking flow can resolve member vs non-member at runtime without
+    // re-walking the template list.
+    memberPrice?: number;
+    memberBookingPrice?: number;
+    memberDepositPrice?: number;
+    // Exhibitor business categories this space is reserved for.
+    // Empty / unset = open to every category. Multiple values supported
+    // (multi-select picker on the designer side). `exhibitorCategory`
+    // (singular) stays for legacy reads.
+    exhibitorCategories?: string[];
+    exhibitorCategory?: string;
     color?: string;
     forSale?: boolean;
     isBooked: boolean;

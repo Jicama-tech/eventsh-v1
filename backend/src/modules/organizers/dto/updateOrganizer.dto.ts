@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsEmail,
   IsString,
   MinLength,
@@ -37,6 +38,13 @@ export class UpdateOrganizerDto {
   @IsString()
   @IsOptional()
   phone?: string;
+
+  // Multiple contact numbers — organizer can publish any number of
+  // these on the eventfront contact card.
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  contactPhones?: string[];
 
   @IsString()
   @IsOptional()

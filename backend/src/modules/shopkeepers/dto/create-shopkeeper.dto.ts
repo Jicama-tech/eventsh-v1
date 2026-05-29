@@ -91,4 +91,13 @@ export class CreateShopkeeperDto {
   @IsOptional()
   @IsBoolean()
   hasDocVerification?: boolean;
+
+  // Manual member flag — organizer can mark an exhibitor as a member
+  // straight from the Add Exhibitor form (e.g. for legacy or comp'd
+  // memberships that didn't go through the storefront purchase flow).
+  // The membership lifecycle (confirm / reject / expire) still drives
+  // this field automatically when an ExhibitorMembership exists.
+  @IsOptional()
+  @IsBoolean()
+  isMember?: boolean;
 }

@@ -32,6 +32,7 @@ import {
   MessageSquare,
   Receipt,
   LifeBuoy,
+  Award,
 } from "lucide-react";
 import {
   Tooltip,
@@ -135,6 +136,11 @@ const RoundTableBookings = lazy(
 );
 const SupportPanel = lazy(
   () => import("@/components/organizer/SupportPanel"),
+);
+const MembershipPanel = lazy(() =>
+  import("@/components/organizer/MembershipPanel").then((m) => ({
+    default: m.MembershipPanel,
+  })),
 );
 
 function RoundTableBookingsTab({ apiURL }: { apiURL: string }) {
@@ -906,6 +912,15 @@ export function OrganizerDashboard({
       moduleKey: "feedback",
     },
     {
+      // Top-level Membership tab — hidden by ModuleGate when the
+      // organizer's subscription doesn't include the membership module,
+      // so plans without it don't see an empty sidebar entry.
+      id: "membership",
+      label: "Membership",
+      icon: Award,
+      moduleKey: "membership",
+    },
+    {
       id: "support",
       label: "Support",
       icon: LifeBuoy,
@@ -1356,6 +1371,16 @@ export function OrganizerDashboard({
                     <OrganizerSettings onSave={handleSaveSettings} />
                   </div>
                 </Suspense>
+              </TabsContent>
+
+              <TabsContent value="membership" className="mt-0">
+                <ModuleGate moduleKey="membership" hideWhenLocked>
+                  <Suspense fallback={<TabLoader />}>
+                    {/* Verification queue + active members. Plan-tier CRUD
+                        stays in Organizer Settings → Membership tab. */}
+                    <MembershipPanel view="verification" />
+                  </Suspense>
+                </ModuleGate>
               </TabsContent>
 
               <TabsContent value="support" className="mt-0">

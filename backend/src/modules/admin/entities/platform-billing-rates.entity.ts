@@ -23,6 +23,13 @@ export class PlatformBillingRates {
   @Prop({ type: Number, required: true, min: 0, default: 20 })
   speakerRate: number;
 
+  // Flat per-active-membership fee. Counted once per ExhibitorMembership
+  // currently in `active` status for the organizer at billing-snapshot
+  // time. Default 5 keeps the rate sympathetic to small organizers
+  // while still surfacing the new revenue stream.
+  @Prop({ type: Number, required: true, min: 0, default: 5 })
+  membershipRate: number;
+
   @Prop({ type: String, required: true, default: "USD" })
   currency: string;
 
