@@ -489,6 +489,26 @@ export class CreateEventDto {
   @IsOptional()
   gallery?: string[];
 
+  // Instagram reel URLs — capped client-side at 10; surfaced as a
+  // reel carousel on the eventfront. Loose string validation here so
+  // organizers can paste any Instagram link format.
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  reelLinks?: string[];
+
+  // Announcement / Ad Bar — loose object validation since it's a
+  // small, stable shape. Carries the marquee message + colors that
+  // the eventfront's <AnnouncementBar/> renders at the top of the
+  // page.
+  @IsOptional()
+  adBar?: {
+    visible?: boolean;
+    message?: string;
+    bgColor?: string;
+    textColor?: string;
+  };
+
   @ValidateNested({ each: true })
   @IsOptional()
   @Type(() => TableTemplateDto)

@@ -289,6 +289,32 @@ export class Event {
   @Prop([String])
   gallery?: string[];
 
+  // Instagram reel URLs (e.g. https://www.instagram.com/reel/<id>/).
+  // Surfaced as a carousel on the eventfront; clicking a tile opens
+  // the official Instagram /embed iframe inside a dialog so the reel
+  // plays without leaving the page. Capped at 10 client-side; we keep
+  // it loose here so a legacy event with one stray entry isn't blocked.
+  @Prop([String])
+  reelLinks?: string[];
+
+  // Announcement / "Ad Bar" — same shape as the kioscart-v1
+  // storefront's adBar so the eventfront can render the matching
+  // marquee strip at the top of the page. Single object (not an
+  // array) — one bar per event. Toggle off by setting `visible` to
+  // false rather than deleting fields, so colors persist across
+  // edits. All fields optional so legacy events without an ad bar
+  // skip the render entirely.
+  @Prop({
+    type: Object,
+    default: { visible: false, message: "", bgColor: "", textColor: "" },
+  })
+  adBar?: {
+    visible?: boolean;
+    message?: string;
+    bgColor?: string;
+    textColor?: string;
+  };
+
   @Prop({
     type: Object,
     default: {
