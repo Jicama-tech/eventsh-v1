@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, useRef, Fragment, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useCountry } from "@/hooks/useCountry";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -46,6 +46,7 @@ import {
   ChevronDown,
   Facebook,
   Instagram,
+  CopyPlus as CopyPlusIcon,
 } from "lucide-react";
 import {
   HoverCard,
@@ -292,6 +293,12 @@ interface VenueConfig {
   hasMainStage: boolean;
   hasEntrance?: boolean;
   hasExit?: boolean;
+  // Default shape new entrance / exit markers spawn with. Each placed
+  // door also stores its own `shape`, so changing the default later
+  // doesn't retroactively reshape existing markers. Undefined = circle
+  // (preserves the pre-shape-picker behavior).
+  entranceShape?: "circle" | "square";
+  exitShape?: "circle" | "square";
   totalRows: number; // NEW: Total number of rows
 }
 
@@ -303,6 +310,13 @@ interface PositionedDoor {
   type: "entrance" | "exit";
   rotation: number; // degrees, multiples of 90
   label?: string;
+  // Shape and footprint. Square doors expose the same 8 resize handles
+  // as Spaces so the organizer can stretch them to match a real door
+  // span (e.g. a 4m wide entrance hall). Circular doors render at the
+  // legacy 50×50 footprint unless width/height are explicitly set.
+  shape?: "circle" | "square";
+  width?: number;
+  height?: number;
 }
 
 interface VenueLayout {
@@ -975,23 +989,86 @@ const VenueConfiguration = ({
                 />
                 <Label className="text-sm">Main Stage</Label>
               </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  checked={!!selectedConfig.hasEntrance}
-                  onCheckedChange={(checked) =>
-                    updateSelectedConfig({ hasEntrance: !!checked })
-                  }
-                />
-                <Label className="text-sm">Entrance</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  checked={!!selectedConfig.hasExit}
-                  onCheckedChange={(checked) =>
-                    updateSelectedConfig({ hasExit: !!checked })
-                  }
-                />
-                <Label className="text-sm">Exit</Label>
+              {/* Entrance + Exit shape pickers. Explicit grid so the
+                  checkbox column, label column, and shape picker column
+                  all line up regardless of which side(s) are enabled.
+                  Picker buttons share an h-8 / w-20 footprint and show
+                  an actual circle / square swatch alongside the label
+                  so the choice is readable at a glance instead of just
+                  reading as small text. */}
+              <div className="grid grid-cols-[auto_auto_1fr] items-center gap-x-3 gap-y-2">
+                {(
+                  [
+                    {
+                      key: "hasEntrance" as const,
+                      shapeKey: "entranceShape" as const,
+                      label: "Entrance",
+                    },
+                    {
+                      key: "hasExit" as const,
+                      shapeKey: "exitShape" as const,
+                      label: "Exit",
+                    },
+                  ]
+                ).map(({ key, shapeKey, label }) => {
+                  const enabled = !!(selectedConfig as any)[key];
+                  const currentShape =
+                    ((selectedConfig as any)[shapeKey] as
+                      | "circle"
+                      | "square"
+                      | undefined) || "circle";
+                  return (
+                    <Fragment key={key}>
+                      <Checkbox
+                        checked={enabled}
+                        onCheckedChange={(checked) =>
+                          updateSelectedConfig({ [key]: !!checked } as any)
+                        }
+                      />
+                      <Label className="text-sm">{label}</Label>
+                      <div className="justify-self-start">
+                        {enabled ? (
+                          <div className="inline-flex rounded-md border overflow-hidden h-8 bg-white">
+                            {(["circle", "square"] as const).map((s) => {
+                              const active = currentShape === s;
+                              return (
+                                <button
+                                  key={s}
+                                  type="button"
+                                  onClick={() =>
+                                    updateSelectedConfig({
+                                      [shapeKey]: s,
+                                    } as any)
+                                  }
+                                  className={`w-20 h-full inline-flex items-center justify-center gap-1.5 text-[11px] font-medium capitalize border-r last:border-r-0 transition-colors ${
+                                    active
+                                      ? "bg-primary text-primary-foreground"
+                                      : "text-muted-foreground hover:bg-muted"
+                                  }`}
+                                  title={`Default ${label.toLowerCase()} shape: ${s}`}
+                                >
+                                  <span
+                                    aria-hidden
+                                    className={`inline-block w-3 h-3 border ${
+                                      s === "circle"
+                                        ? "rounded-full"
+                                        : "rounded-[2px]"
+                                    } ${
+                                      active
+                                        ? "border-primary-foreground bg-primary-foreground/30"
+                                        : "border-current bg-current/20"
+                                    }`}
+                                  />
+                                  {s}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
+                    </Fragment>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -2973,12 +3050,25 @@ const VenueDesigner = ({
   // --- Actions ---
 
   // Add an entrance/exit door to the current venue. Multiple per type allowed.
+  // Shape defaults to whatever was picked in Venue Setup (circle if unset).
+  // Square doors spawn wider than tall so they look like a doorway, not a
+  // box; the organizer can then drag the 8 resize handles to match the
+  // real opening.
   const addDoorToVenue = (type: "entrance" | "exit") => {
     if (!venueConfig) return;
     const existing = currentDoors.filter((d) => d.type === type).length;
+    const shape: "circle" | "square" =
+      (type === "entrance"
+        ? venueConfig.entranceShape
+        : venueConfig.exitShape) || "circle";
+    const width = shape === "square" ? 80 : 50;
+    const height = shape === "square" ? 40 : 50;
     const newDoor: PositionedDoor = {
       id: Math.random().toString(36).slice(2, 15),
       type,
+      shape,
+      width,
+      height,
       rotation: 0,
       label: `${type === "entrance" ? "IN" : "OUT"}${
         existing > 0 ? " " + (existing + 1) : ""
@@ -2986,7 +3076,7 @@ const VenueDesigner = ({
       x:
         type === "entrance"
           ? 50 + existing * 30
-          : venueConfig.width - 90 - existing * 30,
+          : venueConfig.width - width - 40 - existing * 30,
       y: venueConfig.height / 2,
     };
     setVenueDoors({
@@ -3060,6 +3150,85 @@ const VenueDesigner = ({
     });
     setSelectedTable(null);
   };
+
+  // Clone the currently selected space (or a specific positionId) and
+  // drop the copy a few units down-right of the original. Carries every
+  // template + resize-override property so the duplicate is visually
+  // identical to the source — including any custom `displayWidth` /
+  // `displayHeight` the corner-resize handles wrote. Booking state is
+  // reset on the copy so a duplicate of a booked stall doesn't claim
+  // someone else's vendor.
+  const duplicateTable = (positionId?: string) => {
+    const targetId = positionId || selectedTable;
+    if (!targetId || !venueConfig) return;
+    const original = currentTables.find((t) => t.positionId === targetId);
+    if (!original) return;
+    const w = original.displayWidth ?? original.width;
+    const h = original.displayHeight ?? original.height;
+    const OFFSET = 24;
+    // Place the copy down-right of the original; clamp inside canvas
+    // bounds so it can't land off-screen on small layouts.
+    let nx = original.x + OFFSET;
+    let ny = original.y + OFFSET;
+    if (nx + w > canvasW) nx = Math.max(0, canvasW - w);
+    if (ny + h > canvasH) ny = Math.max(0, canvasH - h);
+    const newTable: PositionedTable = {
+      ...original,
+      positionId: Math.random().toString(36).slice(2, 15),
+      x: nx,
+      y: ny,
+      isBooked: false,
+      bookedBy: undefined,
+    };
+    setVenueTables({
+      ...venueTables,
+      [selectedVenueConfigId]: [...currentTables, newTable],
+    });
+    setSelectedTable(newTable.positionId);
+    toast({
+      title: "Space duplicated",
+      description: `Cloned "${original.name}" — drag to reposition.`,
+    });
+  };
+
+  // Keyboard shortcut: Ctrl/Cmd + D duplicates the selected space.
+  // We skip when focus is inside a text field so the shortcut doesn't
+  // hijack the browser's "Add Bookmark" behaviour AND doesn't fire
+  // while the organizer is editing a field name / price.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const isMod = e.ctrlKey || e.metaKey;
+      if (!isMod) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      if (e.key.toLowerCase() === "d") {
+        if (!selectedTable) return;
+        // Round tables, speaker zones, doors have separate placement
+        // collections; duplication for them isn't wired yet, so skip
+        // silently when the selected item isn't a Space.
+        if (
+          selectedTable.startsWith("rt-") ||
+          selectedTable.startsWith("sz-") ||
+          selectedTable.startsWith("door-")
+        ) {
+          return;
+        }
+        e.preventDefault();
+        duplicateTable();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTable, currentTables, canvasW, canvasH]);
 
   const rotateTable = (positionId: string) => {
     const table = currentTables.find((t) => t.positionId === positionId);
@@ -3190,7 +3359,13 @@ const VenueDesigner = ({
     let w = 0;
     let h = 0;
     if (selectedTable.startsWith("door-")) {
-      w = h = 50;
+      const door = currentDoors.find(
+        (d) => d.id === selectedTable.replace("door-", ""),
+      );
+      // Default 50×50 keeps legacy circles working when width/height are
+      // absent on older saved data. Square doors carry their own size.
+      w = door?.width ?? 50;
+      h = door?.height ?? 50;
     } else if (selectedTable.startsWith("rt-")) {
       const rt = currentRoundTables.find(
         (r) => r.positionId === selectedTable.replace("rt-", ""),
@@ -3369,9 +3544,56 @@ const VenueDesigner = ({
     setResize({ ...r, x, y, w, h });
   };
 
+  // Begin a resize on a placed door. Mirrors beginResize but seeds from
+  // door.width/height instead of the Space's displayWidth/displayHeight.
+  // The shared processResizeMove handles the drag math identically; the
+  // commit path branches in commitResize based on the positionId prefix.
+  const beginDoorResize = (
+    e: React.MouseEvent,
+    door: PositionedDoor,
+    handle: "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w",
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const positionId = "door-" + door.id;
+    setSelectedTable(positionId);
+    const curW = door.width ?? 50;
+    const curH = door.height ?? 50;
+    setResize({
+      positionId,
+      handle,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      origX: door.x,
+      origY: door.y,
+      origW: curW,
+      origH: curH,
+      x: door.x,
+      y: door.y,
+      w: curW,
+      h: curH,
+    });
+  };
+
   const commitResize = () => {
     const r = resizeRef.current;
     if (!r) return;
+    // Door resize commits straight to PositionedDoor.width/height (and
+    // x/y) — doors don't have a template/display split because they're
+    // canvas-only and never appear on a receipt.
+    if (r.positionId.startsWith("door-")) {
+      const doorId = r.positionId.replace("door-", "");
+      setVenueDoors({
+        ...venueDoors,
+        [selectedVenueConfigId]: currentDoors.map((d) =>
+          d.id === doorId
+            ? { ...d, x: r.x, y: r.y, width: r.w, height: r.h }
+            : d,
+        ),
+      });
+      setResize(null);
+      return;
+    }
     // Write to displayWidth/displayHeight only — keep `width`/`height`
     // (the template-authored size) untouched so receipts and the
     // exhibitor-facing size pill don't shift to the new canvas size.
@@ -3607,15 +3829,20 @@ const VenueDesigner = ({
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setAiOpen(true)}
-            className="border-amber-300 text-amber-700 hover:bg-amber-50"
-            title="Auto-arrange a layout from a brief"
-          >
-            <Sparkles size={14} className="mr-2" /> AI Layout
-          </Button>
+          {/* AI Layout button hidden pending UX polish — the action wiring,
+              dialog, and applyAILayout handler are kept so re-enabling
+              this is a one-line revert. */}
+          {false && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setAiOpen(true)}
+              className="border-amber-300 text-amber-700 hover:bg-amber-50"
+              title="Auto-arrange a layout from a brief"
+            >
+              <Sparkles size={14} className="mr-2" /> AI Layout
+            </Button>
+          )}
           <Button
             size="sm"
             variant="outline"
@@ -3895,6 +4122,14 @@ const VenueDesigner = ({
                   >
                     1×
                   </div>
+                  {/* Keyboard shortcut hint — discoverability for the
+                      Ctrl/Cmd+D duplicate. */}
+                  <div className="hidden sm:flex items-center gap-1 text-[10px] text-slate-500 border-l pl-2 ml-1">
+                    <kbd className="px-1 py-0.5 bg-white border rounded text-slate-700 font-mono">
+                      Ctrl+D
+                    </kbd>
+                    <span>to duplicate selected</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -3945,11 +4180,24 @@ const VenueDesigner = ({
                   MAIN STAGE
                 </div>
               )}
-              {/* Placed Entrance / Exit doors — circular, draggable, rotatable */}
+              {/* Placed Entrance / Exit doors — draggable, rotatable, and
+                  (for square doors) resizable via 8 corner/edge handles
+                  exactly like a Space. Circles render at their stored
+                  width/height (legacy doors fall back to 50×50). Live
+                  resize geometry from `resize` state takes precedence so
+                  the box visibly stretches with the mouse. */}
               {currentDoors.map((door) => {
-                const isSelected = selectedTable === "door-" + door.id;
+                const positionId = "door-" + door.id;
+                const isSelected = selectedTable === positionId;
                 const isEntrance = door.type === "entrance";
-                const diameter = 50; // logical diameter in venue units
+                const isSquare = door.shape === "square";
+                const liveResize =
+                  resize && resize.positionId === positionId ? resize : null;
+                const pos = liveResize
+                  ? { x: liveResize.x, y: liveResize.y }
+                  : livePos(positionId, door.x, door.y);
+                const w = liveResize ? liveResize.w : door.width ?? 50;
+                const h = liveResize ? liveResize.h : door.height ?? 50;
                 return (
                   <div
                     key={door.id}
@@ -3967,14 +4215,16 @@ const VenueDesigner = ({
                           containerRect.top -
                           door.y * venueConfig.scale,
                       });
-                      setSelectedTable("door-" + door.id);
+                      setSelectedTable(positionId);
                       setIsDragging(true);
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedTable("door-" + door.id);
+                      setSelectedTable(positionId);
                     }}
-                    className={`absolute flex items-center justify-center rounded-full text-[10px] font-bold text-white cursor-grab shadow-md select-none ${
+                    className={`absolute flex items-center justify-center text-[10px] font-bold text-white cursor-grab shadow-md select-none ${
+                      isSquare ? "rounded-md" : "rounded-full"
+                    } ${
                       isDragging && isSelected ? "cursor-grabbing" : ""
                     } ${
                       isEntrance
@@ -3982,14 +4232,10 @@ const VenueDesigner = ({
                         : "bg-red-600 border-2 border-red-700"
                     } ${isSelected ? "ring-2 ring-offset-1 ring-blue-400" : ""}`}
                     style={{
-                      left:
-                        livePos("door-" + door.id, door.x, door.y).x *
-                        venueConfig.scale,
-                      top:
-                        livePos("door-" + door.id, door.x, door.y).y *
-                        venueConfig.scale,
-                      width: diameter * venueConfig.scale,
-                      height: diameter * venueConfig.scale,
+                      left: pos.x * venueConfig.scale,
+                      top: pos.y * venueConfig.scale,
+                      width: w * venueConfig.scale,
+                      height: h * venueConfig.scale,
                       transform: `rotate(${door.rotation || 0}deg)`,
                       transformOrigin: "center center",
                     }}
@@ -3999,6 +4245,57 @@ const VenueDesigner = ({
                       ▲
                     </span>
                     <span>{door.label || (isEntrance ? "IN" : "OUT")}</span>
+                    {/* 8 resize handles for square doors only — circles
+                        keep their fixed 50×50 footprint to preserve the
+                        legacy round look. */}
+                    {isSelected && isSquare && (
+                      <>
+                        {(
+                          [
+                            ["nw", "nwse-resize", { top: -5, left: -5 }],
+                            [
+                              "n",
+                              "ns-resize",
+                              { top: -5, left: "50%", marginLeft: -5 },
+                            ],
+                            ["ne", "nesw-resize", { top: -5, right: -5 }],
+                            [
+                              "e",
+                              "ew-resize",
+                              { top: "50%", right: -5, marginTop: -5 },
+                            ],
+                            ["se", "nwse-resize", { bottom: -5, right: -5 }],
+                            [
+                              "s",
+                              "ns-resize",
+                              { bottom: -5, left: "50%", marginLeft: -5 },
+                            ],
+                            ["sw", "nesw-resize", { bottom: -5, left: -5 }],
+                            [
+                              "w",
+                              "ew-resize",
+                              { top: "50%", left: -5, marginTop: -5 },
+                            ],
+                          ] as const
+                        ).map(([handle, cur, posStyle]) => (
+                          <div
+                            key={handle}
+                            onMouseDown={(e) =>
+                              beginDoorResize(e, door, handle)
+                            }
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute rounded-sm bg-white border-2 border-blue-600 shadow z-40"
+                            style={{
+                              ...(posStyle as React.CSSProperties),
+                              width: 10,
+                              height: 10,
+                              cursor: cur,
+                            }}
+                            title="Drag to resize"
+                          />
+                        ))}
+                      </>
+                    )}
                     {isSelected && (
                       <div
                         className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-1 bg-white border p-1 rounded-md shadow-xl z-50"
@@ -4150,19 +4447,35 @@ const VenueDesigner = ({
                   )}
                   {selectedTable === table.positionId && (
                     <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-1 bg-white border p-1 rounded-md shadow-xl z-50">
+                      {/* Idle = primary (clearly visible on the white
+                          toolbar). Hover = darker primary fill with
+                          white icon so the action being targeted reads
+                          loud and clear. Delete keeps its red identity
+                          since red signals destructive everywhere. */}
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-7 w-7"
+                        className="h-7 w-7 text-primary hover:bg-primary hover:text-primary-foreground"
                         onClick={() => rotateTable(table.positionId)}
+                        title="Rotate 90°"
                       >
                         <RotateCw size={12} />
                       </Button>
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-7 w-7 text-red-500 hover:text-red-600"
+                        className="h-7 w-7 text-primary hover:bg-primary hover:text-primary-foreground"
+                        onClick={() => duplicateTable(table.positionId)}
+                        title="Duplicate (Ctrl+D)"
+                      >
+                        <CopyPlusIcon size={12} />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-red-500 hover:bg-red-600 hover:text-white"
                         onClick={() => removeTableFromVenue(table.positionId)}
+                        title="Remove"
                       >
                         <Trash2 size={12} />
                       </Button>
@@ -6203,6 +6516,16 @@ export function CreateEventForm({
           tables.map((rt) => ({ ...rt, venueConfigId: configId })),
       );
       data.append("venueRoundTables", JSON.stringify(allRoundTables));
+
+      // Placed entrance / exit doors — flattened to one list with each
+      // door tagged by its venueConfigId so the backend can group them
+      // back per venue on read (same shape we use for speaker zones and
+      // round tables).
+      const allDoors = Object.entries(venueDoors).flatMap(
+        ([configId, doors]) =>
+          (doors || []).map((d: any) => ({ ...d, venueConfigId: configId })),
+      );
+      data.append("venueDoors", JSON.stringify(allDoors));
 
       // Add visitor types
       data.append("visitorTypes", JSON.stringify(visitorTypes));

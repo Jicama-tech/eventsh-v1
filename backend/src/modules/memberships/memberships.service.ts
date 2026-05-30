@@ -607,13 +607,24 @@ export class MembershipsService {
     const whatsapp = String(membership?.exhibitorWhatsapp || "");
     if (!email && !whatsapp) return;
 
+    // Find the latest still-active membership for this email so we can
+    // mirror both the boolean flag AND the canonical endDate onto the
+    // Vendor — letting the CRM table / Add Exhibitor form show the
+    // right expiry without a per-row ExhibitorMembership lookup.
     const stillActive = email
-      ? await this.membershipModel.exists({
-          exhibitorEmail: email,
-          status: "active",
-        })
+      ? await this.membershipModel
+          .findOne({
+            exhibitorEmail: email,
+            status: "active",
+          })
+          .sort({ endDate: -1 })
+          .lean()
       : null;
     const isMember = !!stillActive;
+    const membershipEndDate =
+      isMember && (stillActive as any)?.endDate
+        ? new Date((stillActive as any).endDate)
+        : null;
 
     // Build a fuzzy phone candidate list to cover the four legacy
     // phone fields and their +/no-+ variants.
@@ -636,7 +647,10 @@ export class MembershipsService {
       );
     }
     if (orFilters.length === 0) return;
-    await this.vendorModel.updateMany({ $or: orFilters }, { $set: { isMember } });
+    await this.vendorModel.updateMany(
+      { $or: orFilters },
+      { $set: { isMember, membershipEndDate } },
+    );
   }
 
   // After a confirm: generate the PDF receipt once, then ship it on

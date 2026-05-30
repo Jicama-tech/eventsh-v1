@@ -56,6 +56,12 @@ interface PositionedDoor {
   x: number;
   y: number;
   rotation?: number;
+  // Shape + footprint stored by the designer. Defaults preserve the
+  // legacy 50-unit circle when these fields are missing on older
+  // saved events.
+  shape?: "circle" | "square";
+  width?: number;
+  height?: number;
 }
 
 interface VenueConfig {
@@ -387,14 +393,20 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
             </div>
           )}
 
-          {/* Doors */}
+          {/* Doors — circle (legacy / round) or square (resizable
+              doorway). Honour the stored width/height + shape so the
+              scanner view matches what the organizer placed. */}
           {doors.map((door) => {
             const isEntrance = door.type === "entrance";
-            const diameter = 50;
+            const isSquare = door.shape === "square";
+            const w = Number(door.width) > 0 ? Number(door.width) : 50;
+            const h = Number(door.height) > 0 ? Number(door.height) : 50;
             return (
               <div
                 key={door.id}
-                className={`absolute flex items-center justify-center rounded-full text-[9px] font-bold text-white shadow ${
+                className={`absolute flex items-center justify-center text-[9px] font-bold text-white shadow ${
+                  isSquare ? "rounded-md" : "rounded-full"
+                } ${
                   isEntrance
                     ? "bg-emerald-600 border-2 border-emerald-700"
                     : "bg-rose-600 border-2 border-rose-700"
@@ -402,8 +414,8 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
                 style={{
                   left: door.x * venueConfig.scale,
                   top: door.y * venueConfig.scale,
-                  width: diameter * venueConfig.scale,
-                  height: diameter * venueConfig.scale,
+                  width: w * venueConfig.scale,
+                  height: h * venueConfig.scale,
                   transform: `rotate(${door.rotation || 0}deg)`,
                 }}
                 title={isEntrance ? "Entrance" : "Exit"}
