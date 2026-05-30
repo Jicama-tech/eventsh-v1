@@ -100,4 +100,14 @@ export class CreateShopkeeperDto {
   @IsOptional()
   @IsBoolean()
   isMember?: boolean;
+
+  // ISO date string. Optional — organizers tracking memberships
+  // outside the storefront purchase flow can set this manually so
+  // the CRM badge shows the right expiry. When an ExhibitorMembership
+  // is later confirmed/expired for the same exhibitor, the
+  // memberships service overwrites this field in sync with the
+  // canonical record.
+  @IsOptional()
+  @IsString()
+  membershipEndDate?: string;
 }

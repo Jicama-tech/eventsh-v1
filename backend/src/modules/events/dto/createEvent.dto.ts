@@ -546,6 +546,13 @@ export class CreateEventDto {
   @Type(() => PositionedRoundTableDto)
   venueRoundTables?: PositionedRoundTableDto[];
 
+  // Placed entrance / exit doors. Kept as a loose array — the door
+  // shape is small and stable enough that we can skip a typed
+  // sub-DTO and still get the strict validation pipe to accept it.
+  @IsArray()
+  @IsOptional()
+  venueDoors?: any[];
+
   @ValidateNested({ each: true })
   @IsOptional()
   @Type(() => VolunteerDto)

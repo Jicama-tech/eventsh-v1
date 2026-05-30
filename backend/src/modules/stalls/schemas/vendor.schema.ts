@@ -45,6 +45,16 @@ export class Vendor {
   @Prop({ default: false })
   isMember: boolean;
 
+  // Membership end date — kept here as a denormalised mirror of the
+  // matching ExhibitorMembership.endDate so the CRM table + Add
+  // Exhibitor form can display / edit it without a separate join.
+  // Also lets organizers track members added manually (bulk import,
+  // legacy enrollments) that never went through the storefront
+  // purchase flow. The cron expiry sweep and membership confirm
+  // helpers update both fields in lockstep.
+  @Prop()
+  membershipEndDate?: Date;
+
   @Prop()
   whatsAppNumber: string;
 

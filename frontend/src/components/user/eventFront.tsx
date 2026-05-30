@@ -221,6 +221,9 @@ interface FetchedEvent {
   venueSpeakerZones?: any[];
   roundTableTemplates?: any[];
   venueRoundTables?: any[];
+  // Placed entrance / exit door markers; rendered on the venue map
+  // alongside the stalls and round tables.
+  venueDoors?: any[];
   status: string;
   featured: boolean;
   createdAt: string;
@@ -825,6 +828,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     for (const z of zones) {
       maxX = Math.max(maxX, (z?.x || 0) + (z?.width || 0));
       maxY = Math.max(maxY, (z?.y || 0) + (z?.height || 0));
+    }
+    // Doors can be circles (legacy 50×50) or organizer-resized squares;
+    // honour the stored width/height so the canvas stretches to fit any
+    // door placed past the venue edge.
+    const doors = Array.isArray((eventData as any)?.venueDoors)
+      ? ((eventData as any).venueDoors as any[])
+      : [];
+    for (const d of doors) {
+      const dw = Number(d?.width) > 0 ? Number(d.width) : 50;
+      const dh = Number(d?.height) > 0 ? Number(d.height) : 50;
+      maxX = Math.max(maxX, (d?.x || 0) + dw);
+      maxY = Math.max(maxY, (d?.y || 0) + dh);
     }
     return { width: maxX + PADDING, height: maxY + PADDING };
   };
@@ -2854,6 +2869,63 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // so the public/selection canvas grows to cover them.
   const venueDisplayCanvas = computeCanvasExtents();
 
+  // Placed entrance / exit doors for the current layout. Saved on the
+  // event under `venueDoors` (each entry tagged with its venueConfigId
+  // so multi-layout events render only the doors that belong to the
+  // currently-shown layout).
+  const currentLayoutDoors: any[] = (() => {
+    const raw: any[] = Array.isArray((eventData as any)?.venueDoors)
+      ? ((eventData as any).venueDoors as any[])
+      : [];
+    if (raw.length === 0) return [];
+    return raw.filter(
+      (d) =>
+        !d?.venueConfigId ||
+        d.venueConfigId === currentLayoutId ||
+        d.venueConfigId === "default",
+    );
+  })();
+
+  // Reusable door renderer — mirrors the designer so the storefront,
+  // exhibitor stall picker, and maximised dialog all show doors at the
+  // exact shape and footprint the organizer placed:
+  //  - shape === "square" → rounded-md rectangle at door.width × door.height
+  //  - shape === "circle" (or missing, for legacy data) → 50×50 round chip
+  const renderDoors = () =>
+    currentLayoutDoors.map((door: any) => {
+      const isEntrance = (door?.type || "").toLowerCase() === "entrance";
+      const isSquare = door?.shape === "square";
+      const w = Number(door?.width) > 0 ? Number(door.width) : 50;
+      const h = Number(door?.height) > 0 ? Number(door.height) : 50;
+      return (
+        <div
+          key={`door-${door.id || `${door.x}-${door.y}`}`}
+          className={`absolute flex items-center justify-center text-[10px] font-bold text-white shadow-md select-none pointer-events-none ${
+            isSquare ? "rounded-md" : "rounded-full"
+          } ${
+            isEntrance
+              ? "bg-green-600 border-2 border-green-700"
+              : "bg-red-600 border-2 border-red-700"
+          }`}
+          style={{
+            left: `${door.x}px`,
+            top: `${door.y}px`,
+            width: `${w}px`,
+            height: `${h}px`,
+            transform: `rotate(${door.rotation || 0}deg)`,
+            transformOrigin: "center center",
+            zIndex: 4,
+          }}
+          title={
+            (door.label as string) ||
+            (isEntrance ? "Entrance" : "Exit")
+          }
+        >
+          <span>{door.label || (isEntrance ? "IN" : "OUT")}</span>
+        </div>
+      );
+    });
+
   const handleAddOnSelect = (addon: any) => {
     setSelectedAddOns((prev) => {
       const exists = prev.find((a) => a.id === addon.id);
@@ -4675,6 +4747,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 </div>
                               );
                             })}
+                            {/* Entrance / exit door markers */}
+                            {renderDoors()}
                           </div>
                         </div>
                       </div>
@@ -7248,6 +7322,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               );
                             },
                           )}
+                          {/* Entrance / exit door markers */}
+                          {renderDoors()}
                         </div>
                       </div>
                     </div>
@@ -7820,6 +7896,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
                 );
               })}
+              {/* Entrance / exit door markers */}
+              {renderDoors()}
             </div>
             </div>
           </div>

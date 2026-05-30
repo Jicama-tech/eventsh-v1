@@ -314,6 +314,12 @@ export class EventsController {
         body.roundTableTemplates = JSON.parse(body.roundTableTemplates);
       if (typeof body.venueRoundTables === "string")
         body.venueRoundTables = JSON.parse(body.venueRoundTables);
+      // Placed entrance / exit doors — same multipart-JSON unwrap as
+      // every other venue array. Missing field stays undefined so
+      // existing events don't get their doors zeroed out by a partial
+      // payload.
+      if (typeof body.venueDoors === "string")
+        body.venueDoors = JSON.parse(body.venueDoors);
       if (typeof body.volunteers === "string")
         body.volunteers = JSON.parse(body.volunteers);
 
@@ -574,6 +580,9 @@ export class EventsController {
         body.roundTableTemplates = JSON.parse(body.roundTableTemplates);
       if (typeof body.venueRoundTables === "string")
         body.venueRoundTables = JSON.parse(body.venueRoundTables);
+      // Placed entrance / exit doors — same unwrap as the create path.
+      if (typeof body.venueDoors === "string")
+        body.venueDoors = JSON.parse(body.venueDoors);
       if (typeof body.volunteers === "string")
         body.volunteers = JSON.parse(body.volunteers);
 

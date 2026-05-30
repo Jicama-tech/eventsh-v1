@@ -430,6 +430,27 @@ export class Event {
   @Prop({ type: Array, default: [] })
   venueRoundTables: PositionedRoundTable[];
 
+  // Placed entrance / exit doors. Each entry carries its own
+  // venueConfigId so multi-config layouts can group them per venue at
+  // render time. Loose shape (Array of Object) because the door schema
+  // is small and stable enough not to warrant a typed subdocument.
+  @Prop({ type: [Object], default: [] })
+  venueDoors: {
+    id: string;
+    venueConfigId?: string;
+    type: "entrance" | "exit";
+    label?: string;
+    x: number;
+    y: number;
+    rotation?: number;
+    // Shape + footprint of the door. Square doors are user-resizable
+    // via 8 corner/edge handles in the designer; circles render at the
+    // legacy 50×50 footprint when width/height are absent.
+    shape?: "circle" | "square";
+    width?: number;
+    height?: number;
+  }[];
+
   // Volunteers allow-listed to sign in to the operator scanner via Google.
   // Match is on `email` (lowercased) — name and phoneNumber are for the
   // organizer's records.

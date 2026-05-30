@@ -37,6 +37,11 @@ const EXHIBITOR_FIELDS = [
   "city",
   "state",
   "pincode",
+  // Manual membership flags so a bulk import can pre-populate the
+  // member badge + expiry the CRM shows. Either or both can be omitted
+  // — the row imports cleanly as a non-member when missing.
+  "isMember",
+  "membershipEndDate",
   "ignore",
 ] as const;
 type ExhibitorField = (typeof EXHIBITOR_FIELDS)[number];
@@ -215,6 +220,17 @@ Return ONLY this JSON shape, nothing else:
       zip: "pincode",
       zipcode: "pincode",
       businessemail: "businessEmail",
+      // Membership column aliases — accept the common spellings so
+      // organizers don't have to match our header exactly.
+      ismember: "isMember",
+      member: "isMember",
+      memberstatus: "isMember",
+      membershipend: "membershipEndDate",
+      membershipenddate: "membershipEndDate",
+      memberend: "membershipEndDate",
+      memberenddate: "membershipEndDate",
+      expiry: "membershipEndDate",
+      memberexpiry: "membershipEndDate",
     };
     const norm = (s: string) =>
       s.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -398,6 +414,26 @@ Return ONLY this JSON shape, nothing else:
       }
 
       try {
+        // Coerce membership fields out of the raw row values. Excel
+        // gives us a date object straight for date-formatted cells but
+        // strings ("2026-05-30", "yes", "TRUE") for everything else.
+        const rawMember = String(mapped.isMember ?? "")
+          .trim()
+          .toLowerCase();
+        const isMember =
+          rawMember === "true" ||
+          rawMember === "yes" ||
+          rawMember === "y" ||
+          rawMember === "1";
+        let membershipEndDate: Date | undefined;
+        const rawEnd = mapped.membershipEndDate;
+        if (rawEnd instanceof Date && !isNaN(rawEnd.getTime())) {
+          membershipEndDate = rawEnd;
+        } else if (typeof rawEnd === "string" && rawEnd.trim()) {
+          const d = new Date(rawEnd);
+          if (!isNaN(d.getTime())) membershipEndDate = d;
+        }
+
         await this.vendorModel.create({
           organizerId: orgObjId,
           name,
@@ -417,6 +453,8 @@ Return ONLY this JSON shape, nothing else:
           whatsappNumber: wa || undefined,
           approved: true,
           isActive: true,
+          isMember,
+          membershipEndDate,
         });
         result.created++;
       } catch (err: any) {
@@ -594,6 +632,8 @@ Return ONLY this JSON shape, nothing else:
       { header: "Phone", key: "phone", width: 18 },
       { header: "Country", key: "country", width: 14 },
       { header: "Address", key: "address", width: 30 },
+      { header: "Is Member", key: "isMember", width: 12 },
+      { header: "Membership End Date", key: "membershipEndDate", width: 20 },
     ];
     sheet.getRow(1).font = { bold: true };
     sheet.addRow({
@@ -605,6 +645,8 @@ Return ONLY this JSON shape, nothing else:
       phone: "+919876543210",
       country: "IN",
       address: "MG Road, Bangalore",
+      isMember: "Yes",
+      membershipEndDate: "2026-12-31",
     });
     const info = wb.addWorksheet("Instructions");
     info.addRow(["Bulk Exhibitor Import Template"]);
@@ -616,6 +658,12 @@ Return ONLY this JSON shape, nothing else:
     ]);
     info.addRow([
       "• Duplicates (matched by WhatsApp or email under this organizer) are skipped.",
+    ]);
+    info.addRow([
+      "• Is Member: Yes / No / true / false. Leave blank for non-members.",
+    ]);
+    info.addRow([
+      "• Membership End Date: YYYY-MM-DD. Only used when Is Member is Yes.",
     ]);
     info.getRow(1).font = { bold: true, size: 14 };
     const ab = await wb.xlsx.writeBuffer();

@@ -633,6 +633,16 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
             totalSpent: 0,
             stallsBooked: 0,
             requests: [],
+            // Vendor-side denormalised member flag / end date.
+            // Either covers (a) ExhibitorMembership-driven members
+            // (where MembershipsService syncs both fields) and
+            // (b) manually-flagged members from the Add Exhibitor
+            // form / bulk import. The ExhibitorMembership lookup
+            // below still upgrades the entry with the plan name
+            // when a matching active membership exists.
+            member: !!stall.shopkeeperId?.isMember,
+            membershipExpiry:
+              stall.shopkeeperId?.membershipEndDate || undefined,
           });
         }
         const ex = exhibitorMap.get(key)!;
@@ -670,11 +680,17 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
             totalSpent: 0,
             stallsBooked: 0,
             requests: [], // No stall requests yet
+            member: !!shop.isMember,
+            membershipExpiry: shop.membershipEndDate || undefined,
           });
         }
       });
 
-      // Stamp each exhibitor with its active membership (if any) by email.
+      // Upgrade each exhibitor with their active ExhibitorMembership
+      // when one exists (gives us the plan name + canonical end date).
+      // Manually-flagged members (Vendor.isMember from Add Exhibitor
+      // form or bulk import) keep their `member` + `membershipExpiry`
+      // values set during merge above when no membership row matches.
       const exhibitorList = Array.from(exhibitorMap.values()).map((ex) => {
         const key = (ex.email || "").toLowerCase();
         const m = key ? membershipByEmail.get(key) : undefined;
@@ -1451,8 +1467,37 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                                   setSelectedExhibitor(exhibitor);
                                   setShowExhibitorDetails(true);
                                 }}
+                                title="View details"
                               >
                                 <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="buttonOutline"
+                                size="icon"
+                                onClick={() =>
+                                  showEditExhibitor({
+                                    id: exhibitor._id,
+                                    name: exhibitor.ownerName,
+                                    email: exhibitor.email,
+                                    whatsappNumber: exhibitor.whatsapp,
+                                    phone: exhibitor.phone,
+                                    shopName: exhibitor.shopName,
+                                    businessCategory:
+                                      exhibitor.category &&
+                                      exhibitor.category !== "Uncategorized"
+                                        ? exhibitor.category
+                                        : "",
+                                    businessEmail: exhibitor.email,
+                                    address: "",
+                                    member: exhibitor.member,
+                                    isMember: exhibitor.member,
+                                    membershipExpiry:
+                                      exhibitor.membershipExpiry,
+                                  })
+                                }
+                                title="Edit exhibitor"
+                              >
+                                <Edit2 className="h-4 w-4" />
                               </Button>
                             </div>
                           </TableCell>
@@ -3164,6 +3209,10 @@ export function AddExhibitorDialog({
     businessCategory: "",
     businessEmail: "",
     isMember: false,
+    // ISO date string (YYYY-MM-DD) the <input type="date"> binds to.
+    // Empty when no end date is set. Only meaningful when isMember
+    // is true; UI hides the field otherwise.
+    membershipEndDate: "",
   });
 
   // Sync Dial Code when Country changes
@@ -3207,6 +3256,15 @@ export function AddExhibitorDialog({
         businessCategory: exhibitorToEdit.businessCategory || "",
         businessEmail: exhibitorToEdit.businessEmail || "",
         isMember: !!exhibitorToEdit.isMember || !!exhibitorToEdit.member,
+        membershipEndDate: exhibitorToEdit.membershipEndDate
+          ? new Date(exhibitorToEdit.membershipEndDate)
+              .toISOString()
+              .slice(0, 10)
+          : exhibitorToEdit.membershipExpiry
+            ? new Date(exhibitorToEdit.membershipExpiry)
+                .toISOString()
+                .slice(0, 10)
+            : "",
       });
     } else if (isOpen && mode === "add") {
       resetForm();
@@ -3257,6 +3315,12 @@ export function AddExhibitorDialog({
         country: formData.country,
         whatsappNumber: `${formData.dialCode}${formData.whatsappNumber}`,
         isMember: !!formData.isMember,
+        // Only send when the toggle is on; clearing the toggle wipes
+        // the date so a returning member doesn't keep a stale expiry.
+        membershipEndDate:
+          formData.isMember && formData.membershipEndDate
+            ? formData.membershipEndDate
+            : undefined,
         phone: `${formData.dialCode}${formData.phone}`,
         address: formData.address,
         shopName: formData.shopName,
@@ -3311,6 +3375,7 @@ export function AddExhibitorDialog({
       businessCategory: "",
       businessEmail: "",
       isMember: false,
+      membershipEndDate: "",
     });
     setErrors({});
   };
@@ -3416,10 +3481,41 @@ export function AddExhibitorDialog({
             <Switch
               checked={!!formData.isMember}
               onCheckedChange={(c) =>
-                setFormData((p) => ({ ...p, isMember: !!c }))
+                setFormData((p) => ({
+                  ...p,
+                  isMember: !!c,
+                  // Clear the date when toggling off so a stale expiry
+                  // doesn't get re-saved if the user toggles back on.
+                  membershipEndDate: c ? p.membershipEndDate : "",
+                }))
               }
             />
           </div>
+
+          {/* Membership end date — only when the member toggle is on.
+              Drives the expiry shown in the CRM table + Exhibitor
+              Details card so the organizer can see when each member
+              is due to renew. */}
+          {formData.isMember && (
+            <div className="space-y-2">
+              <Label>Membership end date</Label>
+              <Input
+                type="date"
+                min={new Date().toISOString().slice(0, 10)}
+                value={formData.membershipEndDate}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    membershipEndDate: e.target.value,
+                  })
+                }
+              />
+              <p className="text-[11px] text-muted-foreground">
+                When the membership lapses. Leave blank for evergreen
+                / manually-managed members.
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
