@@ -13,12 +13,20 @@ dotenv.config();
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Security headers (relaxed for cross-origin image/resource loading)
+  // Security headers (relaxed for cross-origin image/resource loading).
+  // Referrer-Policy is loosened to `strict-origin-when-cross-origin`
+  // (the modern browser default) because Helmet's `no-referrer` default
+  // strips the Referer on the Instagram /embed/ iframe's outbound
+  // requests — and Instagram's embed endpoint uses the Referer to
+  // decide whether to serve the full reel poster or a logged-out
+  // placeholder card. Other 3rd-party embeds (Google, Facebook,
+  // YouTube) also expect at least the origin.
   app.use(
     helmet({
       contentSecurityPolicy: false,
       crossOriginEmbedderPolicy: false,
       crossOriginResourcePolicy: { policy: "cross-origin" },
+      referrerPolicy: { policy: "strict-origin-when-cross-origin" },
     }),
   );
 

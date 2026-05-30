@@ -179,6 +179,11 @@ interface ProcessedExhibitor {
   category: string;
   status: string; // From shopkeeper profile (approved/rejected) — kept for legacy callers, no longer rendered
   country: string;
+  // Business address from the Vendor record. Without this field
+  // the Edit dialog would re-hydrate as blank and the next save
+  // would wipe the persisted address (the form sends whatever's in
+  // the dialog, including an empty string).
+  address?: string;
   totalSpent: number;
   stallsBooked: number;
   requests: StallRequest[];
@@ -630,6 +635,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                 ? "Rejected"
                 : "Pending",
             country: stall.shopkeeperId?.country || "",
+            address: stall.shopkeeperId?.address || "",
             totalSpent: 0,
             stallsBooked: 0,
             requests: [],
@@ -677,6 +683,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                 ? "Rejected"
                 : "Pending",
             country: shop.country || "",
+            address: shop.address || "",
             totalSpent: 0,
             stallsBooked: 0,
             requests: [], // No stall requests yet
@@ -1148,7 +1155,14 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   <Send className="mr-2 h-4 w-4" /> Invite Visitors
                 </Button> */}
                 <Button
-                  onClick={() => setShowAddCustomer(true)}
+                  onClick={() => {
+                    // Clear any leftover edit target before opening — without
+                    // this, the dialog re-opens in "edit" mode with the last
+                    // edited customer's data and submitting overwrites that
+                    // customer instead of creating a new one.
+                    setCustomerToEdit(null);
+                    setShowAddCustomer(true);
+                  }}
                   variant="outline"
                 >
                   <Plus className="mr-2 h-4 w-4" /> Add Visitor
@@ -1317,7 +1331,14 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   <Send className="mr-2 h-4 w-4" /> Invite Exhibitors
                 </Button> */}
                 <Button
-                  onClick={() => setShowAddExhibitor(true)}
+                  onClick={() => {
+                    // Clear any leftover edit target before opening —
+                    // otherwise the dialog re-opens in "edit" mode with
+                    // the last-edited exhibitor's data and the next
+                    // save silently overwrites that record.
+                    setExhibitorToEdit(null);
+                    setShowAddExhibitor(true);
+                  }}
                   variant="outline"
                 >
                   <Plus className="mr-2 h-4 w-4" /> Add Exhibitor
@@ -1488,7 +1509,10 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                                         ? exhibitor.category
                                         : "",
                                     businessEmail: exhibitor.email,
-                                    address: "",
+                                    // Pass the saved address through;
+                                    // hard-coding "" here was wiping
+                                    // it on every edit save.
+                                    address: exhibitor.address || "",
                                     member: exhibitor.member,
                                     isMember: exhibitor.member,
                                     membershipExpiry:
@@ -1585,6 +1609,10 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
           isOpen={showAddCustomer}
           onClose={() => {
             setShowAddCustomer(false);
+            // Reset the edit target on close so the next time someone
+            // clicks "Add Visitor" we start fresh, even if this close
+            // came from ESC / click-outside rather than the button.
+            setCustomerToEdit(null);
             fetchAllData(); // Refresh data after add
           }}
           customerToEdit={customerToEdit}
@@ -1597,6 +1625,9 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
           isOpen={showAddExhibitor}
           onClose={() => {
             setShowAddExhibitor(false);
+            // Reset on close for the same reason — keeps Add and Edit
+            // strictly separated regardless of how the dialog dismissed.
+            setExhibitorToEdit(null);
             fetchAllData(); // Refresh data after add
           }}
           exhibitorToEdit={exhibitorToEdit}

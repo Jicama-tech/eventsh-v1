@@ -40,6 +40,9 @@ import {
   Accessibility,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
   Download,
   MapIcon,
   User,
@@ -100,6 +103,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import AnnouncementBar from "@/components/ui/AnnouncementBar";
 import { Checkbox } from "@radix-ui/react-checkbox";
 import { OrganizerStore } from "./organizerStoreFront";
 import { useCurrency } from "@/hooks/useCurrencyhook";
@@ -204,6 +208,10 @@ interface FetchedEvent {
   specialInstructions: string;
   image: string;
   gallery: string[];
+  // Instagram reel URLs — rendered as a click-to-play carousel below
+  // the Event Gallery. Optional so legacy events without this field
+  // don't fail the type check.
+  reelLinks?: string[];
   socialMedia: {
     facebook: string;
     instagram: string;
@@ -249,6 +257,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [ticketQuantity, setTicketQuantity] = useState(1);
   const [selectedVisitorType, setSelectedVisitorType] = useState<number>(0);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  // Collapsible "Additional Information" inside the Organizer tab.
+  const [showAdditionalInfo, setShowAdditionalInfo] = useState(false);
+  // Active Instagram reel URL — drives the page-level Dialog that
+  // plays the reel inline. Null = dialog closed. The Dialog renders
+  // an iframe pointing at instagram.com/p/<id>/embed/?cr=1&v=14&rd=...,
+  // the same self-contained embed URL kioscart-v1's InstagramCarousel
+  // uses — no embed.js script + no blockquote processing needed.
+  const [activeReelUrl, setActiveReelUrl] = useState<string | null>(null);
+  // Collapsible Venue Layout — defaults to closed so the heavy canvas
+  // (and the multi-layout selector / stats grid) only render after the
+  // user explicitly opts in by clicking the chevron header.
+  const [showVenueLayout, setShowVenueLayout] = useState(false);
   const [venueMaximized, setVenueMaximized] = useState(false);
   // Live fit-to-screen scale for the maximized venue dialog. Recomputed
   // by a ResizeObserver on the scrollable container so the entire
@@ -2829,6 +2849,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     specialInstructions,
     image,
     gallery,
+    reelLinks,
     socialMedia,
     refundPolicy,
     termsAndConditions,
@@ -2837,6 +2858,61 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     addOnItems,
     venueConfig,
   } = eventData;
+
+  // Pre-compute the cleaned reel list ONCE so the History tab's
+  // visibility, default-tab selection, and content body all read the
+  // same source of truth. Trims whitespace, drops empty rows, and
+  // tolerates a missing `reelLinks` field on legacy events. When
+  // empty, the History tab + its content are skipped entirely and
+  // the default tab falls back to Organizer.
+  const cleanedReelLinks: string[] = Array.isArray(reelLinks)
+    ? reelLinks.map((u) => String(u || "").trim()).filter(Boolean)
+    : [];
+  const hasReels = cleanedReelLinks.length > 0;
+
+  // ── "Add to Google Calendar" + "View on Google Maps" links for the
+  // top info cards. Built from the event's date/time/venue. ──
+  const toCalDate = (d: string, t?: string) => {
+    const base = new Date(d);
+    if (t) {
+      const m = String(t).match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+      if (m) {
+        let h = parseInt(m[1], 10);
+        const min = parseInt(m[2], 10);
+        const ap = m[3]?.toUpperCase();
+        if (ap === "PM" && h < 12) h += 12;
+        if (ap === "AM" && h === 12) h = 0;
+        base.setHours(h, min, 0, 0);
+      }
+    }
+    // Compact UTC format expected by Google Calendar: YYYYMMDDTHHmmssZ
+    return base.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  };
+  const googleCalendarUrl = (() => {
+    try {
+      if (!startDate) return "";
+      const start = toCalDate(startDate, time);
+      const end = toCalDate(endDate || startDate, endTime || time);
+      const params = new URLSearchParams({
+        action: "TEMPLATE",
+        text: title || "Event",
+        dates: `${start}/${end}`,
+        location: [location, address].filter(Boolean).join(", "),
+        details:
+          typeof description === "string"
+            ? description.replace(/<[^>]+>/g, "").slice(0, 500)
+            : "",
+      });
+      return `https://calendar.google.com/calendar/render?${params.toString()}`;
+    } catch {
+      return "";
+    }
+  })();
+  const googleMapsUrl = [location, address].filter(Boolean).length
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+        [location, address].filter(Boolean).join(", "),
+      )}`
+    : "";
 
   // Compute ticket price and total from visitorTypes when available
   const ticketPrice =
@@ -2975,7 +3051,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5] overflow-x-hidden">
+    // `overflow-x-clip` (not `overflow-x-hidden`) — both prevent
+    // horizontal scrollbars but `clip` does NOT establish a new
+    // scroll container, so `position: sticky` on descendants
+    // (the Ad bar) actually works. Using `overflow-x-hidden`
+    // here is what made the bar stop sticking on scroll.
+    <div className="min-h-screen bg-[#f5f5f5] overflow-x-clip">
+      {/* (Ad bar moved into the sticky top-strip wrapper just above
+          the header so it stays pinned at the top of the viewport
+          while the page scrolls.) */}
       {/* ── Animations ── */}
       <style>{`
         @keyframes fadeSlideUp {
@@ -2988,6 +3072,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           to   { opacity: 1; transform: translateX(0); }
         }
         .anim-gallery-slide { animation: gallerySlideIn 0.5s ease-out both; }
+        /* Continuous right-to-left scroll for the reel carousel inside
+           the History tab. The reel list is duplicated in the markup
+           so translating by -50% lands the second copy seamlessly
+           where the first started, giving an infinite-loop feel. */
+        @keyframes reelMarquee {
+          from { transform: translateX(0); }
+          to   { transform: translateX(-50%); }
+        }
+        .anim-reel-marquee { animation: reelMarquee 40s linear infinite; }
+        .anim-reel-marquee:hover { animation-play-state: paused; }
         .ticket-btn-gradient {
           background: linear-gradient(135deg, var(--primary-color, #f97316) 0%, var(--secondary-color, #ef4444) 100%);
         }
@@ -3001,36 +3095,24 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         }
       `}</style>
 
-      {/* ── Sticky Header ── */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14 sm:h-16 gap-4">
-            {/* Left: Back/Home button + Event name */}
-            <div className="flex items-center gap-3 min-w-0">
-              <button
-                onClick={handleBack}
-                className="flex-shrink-0 w-9 h-9 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 flex items-center justify-center transition-all"
-                aria-label="Home"
-              >
-                <ArrowLeft className="h-4 w-4 text-gray-600" />
-              </button>
-              <h1 className="text-sm sm:text-base font-semibold text-gray-800 truncate">
-                {title}
-              </h1>
-            </div>
-
-            {/* Right: Share button */}
-            <button
-              onClick={handleShare}
-              className="flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-all text-sm font-medium text-gray-600"
-              aria-label="Share"
-            >
-              <Share2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Share</span>
-            </button>
-          </div>
-        </div>
-      </header>
+      {/* ── Sticky top strip: Ad Bar only ──
+          The previous back/title/share header was removed; the Ad
+          bar (announcement marquee) is now the only sticky strip
+          at the top of the eventfront. Sticky here works because
+          the parent uses `overflow-x-clip` (not `-hidden`), which
+          doesn't establish a scroll container. */}
+      <div className="sticky top-0 z-50">
+        {(eventData as any)?.adBar?.visible &&
+          (eventData as any)?.adBar?.message && (
+            <AnnouncementBar
+              message={(eventData as any).adBar.message}
+              backgroundColor={
+                (eventData as any).adBar.bgColor || "#000000"
+              }
+              textColor={(eventData as any).adBar.textColor || "#ffffff"}
+            />
+          )}
+      </div>
 
       {/* ── Hero Banner ── */}
       <div
@@ -3061,6 +3143,22 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         )}
         {/* Subtle dark scrim for text legibility */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/40" />
+
+        {/* Floating Share button — the old sticky header (which had
+            the share action) was removed, so this overlay button is
+            now the most discoverable place to share the event. It
+            sits top-right on the hero so visitors see it instantly.
+            handleShare uses the Web Share API on mobile and falls
+            back to copying the URL on desktop. */}
+        <button
+          onClick={handleShare}
+          aria-label="Share this event"
+          title="Share this event"
+          className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10 inline-flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 rounded-full bg-white/90 hover:bg-white text-gray-800 text-xs sm:text-sm font-semibold shadow-lg backdrop-blur-sm transition-all hover:scale-[1.03]"
+        >
+          <Share2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <span className="hidden sm:inline">Share</span>
+        </button>
 
         {/* "Back to Events" link removed at user request — the small
             arrow button in the sticky top nav (handleBack → navigate(-1))
@@ -3145,7 +3243,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             </div>
 
             {/* Time Card */}
-            <div className="rounded-2xl  bg-white border border-gray-200 sm:border-l-0 p-4 sm:p-5 lg:p-6 flex flex-col gap-1 shadow-sm">
+            <div className="group relative rounded-2xl  bg-white border border-gray-200 sm:border-l-0 p-4 sm:p-5 lg:p-6 flex flex-col gap-1 shadow-sm">
               <div
                 className="w-9 h-9 rounded-xl flex items-center justify-center mb-1"
                 style={{
@@ -3158,16 +3256,38 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 />
               </div>
               <p className="text-gray-400 text-xs font-medium uppercase tracking-widest">
-                Event Time
+                Date &amp; Time
               </p>
+              {startDate && (
+                <p className="text-gray-900 font-bold text-sm sm:text-base">
+                  {new Date(startDate).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </p>
+              )}
               <p className="text-gray-900 font-bold text-sm sm:text-base">
                 {time}
                 {endTime ? ` - ${endTime}` : ""}
               </p>
+              {googleCalendarUrl && (
+                <a
+                  href={googleCalendarUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-flex items-center gap-1 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ color: design?.primaryColor || "#f97316" }}
+                >
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  Add to Google Calendar
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
             </div>
 
             {/* Venue Card */}
-            <div className="rounded-2xl  bg-white border border-gray-200 sm:border-l-0 p-4 sm:p-5 lg:p-6 flex flex-col gap-1 shadow-sm col-span-2 sm:col-span-1">
+            <div className="group relative rounded-2xl  bg-white border border-gray-200 sm:border-l-0 p-4 sm:p-5 lg:p-6 flex flex-col gap-1 shadow-sm col-span-2 sm:col-span-1">
               <div
                 className="w-9 h-9 rounded-xl flex items-center justify-center mb-1"
                 style={{
@@ -3186,6 +3306,19 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 {location}
               </p>
               {address && <p className="text-gray-400 text-xs">{address}</p>}
+              {googleMapsUrl && (
+                <a
+                  href={googleMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-flex items-center gap-1 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ color: design?.primaryColor || "#f97316" }}
+                >
+                  <MapPin className="h-3.5 w-3.5" />
+                  View on Google Maps
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
             </div>
 
             {/* Organizer Card */}
@@ -3300,6 +3433,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 )}
               </section>
             )}
+
+            {/* (Reels were moved into the new "History" tab below — see
+                the History TabsContent for the marquee carousel and
+                the page-level reel player Dialog.) */}
 
             {/* Speaker Carousel */}
             {eventData?.speakers && eventData.speakers.length > 0 && (
@@ -3457,123 +3594,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               </section>
             )}
 
-            {/* Event Details */}
-            <section>
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
-                Event Details
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Date */}
-                <div className="flex items-center gap-3 bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{
-                      backgroundColor: `${design?.primaryColor}15` || "#fff7ed",
-                    }}
-                  >
-                    <CalendarDays
-                      className="h-4 w-4"
-                      style={{ color: design?.primaryColor || "#f97316" }}
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-gray-400 text-xs uppercase tracking-widest mb-0.5">
-                      Date
-                    </p>
-                    <p className="text-gray-900 font-semibold text-sm leading-snug">
-                      {new Date(startDate).toLocaleDateString("en-US", {
-                        weekday: "long",
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })}
-                      {endDate &&
-                        ` — ${new Date(endDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Time */}
-                <div className="flex items-center gap-3 bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{
-                      backgroundColor: `${design?.primaryColor}15` || "#fff7ed",
-                    }}
-                  >
-                    <Clock
-                      className="h-4 w-4"
-                      style={{ color: design?.primaryColor || "#f97316" }}
-                    />
-                  </div>
-                  <div>
-                    <p className="text-gray-400 text-xs uppercase tracking-widest mb-0.5">
-                      Time
-                    </p>
-                    <p className="text-gray-900 font-semibold text-sm">
-                      {time}
-                      {endTime ? ` - ${endTime}` : ""}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Location */}
-                <div className="flex items-center gap-3 bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{
-                      backgroundColor: `${design?.primaryColor}15` || "#fff7ed",
-                    }}
-                  >
-                    <MapPin
-                      className="h-4 w-4"
-                      style={{ color: design?.primaryColor || "#f97316" }}
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-gray-400 text-xs uppercase tracking-widest mb-0.5">
-                      Location
-                    </p>
-                    <p className="text-gray-900 font-semibold text-sm truncate">
-                      {location}
-                    </p>
-                    {address && (
-                      <p className="text-gray-400 text-xs mt-0.5 truncate">
-                        {address}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Attendees — only if tickets exist */}
-                {visitorTypes && visitorTypes.length > 0 && (
-                  <div className="flex items-center gap-3 bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{
-                        backgroundColor:
-                          `${design?.primaryColor}15` || "#fff7ed",
-                      }}
-                    >
-                      <Users
-                        className="h-4 w-4"
-                        style={{ color: design?.primaryColor || "#f97316" }}
-                      />
-                    </div>
-                    <div>
-                      <p className="text-gray-400 text-xs uppercase tracking-widest mb-0.5">
-                        Attendees
-                      </p>
-                      <p className="text-gray-900 font-semibold text-sm">
-                        {totalTickets > 0
-                          ? `${availableTickets.toLocaleString()} / ${totalTickets.toLocaleString()}`
-                          : "Unlimited"}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </section>
+            {/* Event Details block removed — date/time/location/attendees
+                already shown in the top Info Cards row (was duplicate data). */}
           </div>
 
           {/* ── RIGHT: Sticky Sidebar ── */}
@@ -4046,46 +4068,139 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       )}
                     </div>
                   </div>
-                  {socialMedia &&
-                    (socialMedia.facebook ||
-                      socialMedia.instagram ||
-                      socialMedia.twitter) && (
-                      <div className="border-t border-gray-100 px-5 py-3 flex gap-2">
-                        {socialMedia.facebook && (
-                          <a
-                            href={socialMedia.facebook}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-all"
-                          >
-                            <Facebook className="h-3.5 w-3.5 text-gray-500" />
-                          </a>
-                        )}
-                        {socialMedia.instagram && (
-                          <a
-                            href={socialMedia.instagram}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-all"
-                          >
-                            <Instagram className="h-3.5 w-3.5 text-gray-500" />
-                          </a>
-                        )}
-                        {socialMedia.twitter && (
-                          <a
-                            href={socialMedia.twitter}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-all"
-                          >
-                            <Twitter className="h-3.5 w-3.5 text-gray-500" />
-                          </a>
-                        )}
-                      </div>
-                    )}
                 </div>
                 );
               })()}
+
+              {/* Follow Us — separate card below Contact Organizer so
+                  the social links read as their own block. Renders the
+                  social handle only (e.g. "@eventsh"), not the raw URL,
+                  while keeping the full URL as the href + title. */}
+              {socialMedia &&
+                (socialMedia.facebook ||
+                  socialMedia.instagram ||
+                  socialMedia.twitter) &&
+                (() => {
+                  // Builds the display label for a social URL.
+                  //
+                  // Account links → "@handle" (first path segment).
+                  // Post / reel / event / status links → a friendly
+                  // platform-aware label like "View Event", "View Post"
+                  // or "@handle's Tweet" so the row doesn't read like a
+                  // raw ID such as "123456789" or "ABC_xyz".
+                  //
+                  // Returns the full display string (already prefixed
+                  // with @ where appropriate) so the JSX doesn't
+                  // double-prefix labels like "View Event".
+                  const socialLabel = (raw: string): string => {
+                    const v = (raw || "").trim();
+                    if (!v) return "";
+                    try {
+                      const u = new URL(
+                        /^https?:\/\//i.test(v) ? v : `https://${v}`,
+                      );
+                      const segs = u.pathname.split("/").filter(Boolean);
+                      const first = (segs[0] || "").toLowerCase();
+                      // Instagram /p/<id>/ + /reel/<id>/; Facebook
+                      // /events/<id>/ + /posts/<id>/.
+                      if (first === "p" || first === "post" || first === "posts")
+                        return "View Post";
+                      if (first === "reel" || first === "reels")
+                        return "View Reel";
+                      if (first === "event" || first === "events")
+                        return "View Event";
+                      if (first === "share") return "View Post";
+                      // Twitter / X: /<handle>/status/<id> → show the
+                      // handle, not the status ID.
+                      if (
+                        segs.length >= 2 &&
+                        segs[1].toLowerCase() === "status"
+                      )
+                        return "@" + segs[0].replace(/^@/, "");
+                      // Default: first segment is the account handle.
+                      const handle = (segs[0] || u.hostname).replace(/^@/, "");
+                      return handle ? "@" + handle : v;
+                    } catch {
+                      // Raw handle entry (e.g. "@eventsh") — make sure
+                      // it always reads with a single leading "@".
+                      return v.startsWith("@") ? v : `@${v.replace(/^@/, "")}`;
+                    }
+                  };
+                  return (
+                    <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm mt-4">
+                      <div className="px-5 pt-5 pb-4">
+                        <p className="text-gray-400 text-xs font-medium uppercase tracking-widest mb-4">
+                          Follow Us
+                        </p>
+                        <div className="space-y-3">
+                          {socialMedia.facebook && (
+                            <a
+                              href={socialMedia.facebook}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-3 group"
+                              title={socialMedia.facebook}
+                            >
+                              <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                                <Facebook className="h-3.5 w-3.5 text-blue-600" />
+                              </div>
+                              <span
+                                className="text-sm font-medium hover:underline break-all"
+                                style={{
+                                  color: design?.secondaryColor || "#ef4444",
+                                }}
+                              >
+                                {socialLabel(socialMedia.facebook)}
+                              </span>
+                            </a>
+                          )}
+                          {socialMedia.instagram && (
+                            <a
+                              href={socialMedia.instagram}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-3 group"
+                              title={socialMedia.instagram}
+                            >
+                              <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                                <Instagram className="h-3.5 w-3.5 text-pink-500" />
+                              </div>
+                              <span
+                                className="text-sm font-medium hover:underline break-all"
+                                style={{
+                                  color: design?.secondaryColor || "#ef4444",
+                                }}
+                              >
+                                {socialLabel(socialMedia.instagram)}
+                              </span>
+                            </a>
+                          )}
+                          {socialMedia.twitter && (
+                            <a
+                              href={socialMedia.twitter}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-3 group"
+                              title={socialMedia.twitter}
+                            >
+                              <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                                <Twitter className="h-3.5 w-3.5 text-sky-500" />
+                              </div>
+                              <span
+                                className="text-sm font-medium hover:underline break-all"
+                                style={{
+                                  color: design?.secondaryColor || "#ef4444",
+                                }}
+                              >
+                                {socialLabel(socialMedia.twitter)}
+                              </span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
             </div>
           </div>
         </div>
@@ -4096,34 +4211,45 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           eventEndDate={eventData?.endDate}
         />
 
-        <Tabs defaultValue="details" className="w-full">
+        {/* Tab order: History → Organizer → Venue Layout → (rest).
+            History houses the continuously-scrolling Reels marquee so
+            visitors land on the brand's story / past-moments feed
+            before drilling into organizer details or the venue map.
+            History is only mounted when at least one reel URL is set
+            — events without reels skip it and default to Organizer. */}
+        <Tabs
+          defaultValue={hasReels ? "history" : "organizer"}
+          className="w-full"
+        >
           <TabsList className="bg-gray-100 border border-gray-200 rounded-2xl p-1 h-auto flex flex-wrap w-full mt-5 gap-1">
-            <TabsTrigger
-              value="details"
-              className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
-            >
-              Features
-            </TabsTrigger>
+            {hasReels && (
+              <TabsTrigger
+                value="history"
+                className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
+              >
+                History
+              </TabsTrigger>
+            )}
             <TabsTrigger
               value="organizer"
               className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
             >
               Organizer
             </TabsTrigger>
-            {eventData?.speakers && eventData.speakers.length > 0 && (
-              <TabsTrigger
-                value="speakers"
-                className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
-              >
-                Speakers
-              </TabsTrigger>
-            )}
             {venueTables && Object.keys(venueTables).length > 0 && (
               <TabsTrigger
                 value="venue"
                 className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
               >
                 Venue Layout
+              </TabsTrigger>
+            )}
+            {eventData?.speakers && eventData.speakers.length > 0 && (
+              <TabsTrigger
+                value="speakers"
+                className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
+              >
+                Speakers
               </TabsTrigger>
             )}
             {roundTableData.length > 0 && (
@@ -4147,128 +4273,114 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               )}
           </TabsList>
 
-          <TabsContent value="details" className="mt-4 space-y-4">
-            {/* Features — only show if at least one is active */}
-            {features && Object.values(features).some(Boolean) && (
-              <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
-                <p
-                  className="text-xs font-semibold tracking-[0.2em] uppercase mb-4"
-                  style={{ color: design?.primaryColor }}
-                >
-                  Key Features
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {[
-                    { icon: Utensils, label: "Food", active: features.food },
-                    { icon: Car, label: "Parking", active: features.parking },
-                    { icon: Wifi, label: "Wi-Fi", active: features.wifi },
-                    {
-                      icon: Camera,
-                      label: "Photography",
-                      active: features.photography,
-                    },
-                    {
-                      icon: Shield,
-                      label: "Security",
-                      active: features.security,
-                    },
-                    {
-                      icon: Accessibility,
-                      label: "Accessibility",
-                      active: features.accessibility,
-                    },
-                  ].map(({ icon: Icon, label, active }) => (
-                    <div
-                      key={label}
-                      className={`flex items-center space-x-2.5 p-3 rounded-xl border transition-colors ${active ? "border-gray-200 bg-gray-50" : "border-gray-100 opacity-40"}`}
+          {/* History tab — continuously scrolling Reels marquee (R→L).
+              Mounted only when `hasReels` is true (i.e. the organizer
+              has at least one non-empty Instagram URL in the Media
+              tab), so events without reels never see this tab or
+              its content. Built by duplicating the reel list so the
+              CSS keyframe `reelMarquee` can translate -50% for a
+              seamless loop. */}
+          {hasReels && (() => {
+            const reels = cleanedReelLinks;
+            const reelId = (url: string): string => {
+              try {
+                const u = new URL(url);
+                const segs = u.pathname.split("/").filter(Boolean);
+                const idx = segs.findIndex((s) =>
+                  ["reel", "reels", "p"].includes(s.toLowerCase()),
+                );
+                return idx >= 0 ? segs[idx + 1] || "" : "";
+              } catch {
+                return "";
+              }
+            };
+            const doubled = [...reels, ...reels];
+            return (
+              <TabsContent value="history" className="mt-4 space-y-4">
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <p
+                      className="text-xs font-semibold tracking-[0.2em] uppercase"
+                      style={{ color: design?.primaryColor }}
                     >
-                      <Icon
-                        className="h-4 w-4 flex-shrink-0"
-                        style={{
-                          color: active
-                            ? design?.primaryColor || "#f97316"
-                            : "#9ca3af",
-                        }}
-                      />
-                      <span className="text-xs font-medium text-gray-700">
-                        {label}
-                      </span>
+                      Reels Carousel
+                    </p>
+                    <span className="text-xs text-gray-400 font-medium">
+                      {reels.length} {reels.length === 1 ? "reel" : "reels"}
+                    </span>
+                  </div>
+                  {/* Horizontal scrollers — `overflow-hidden` clips the
+                      marquee, the duplicated `flex` row slides left
+                      forever. Hovering the row pauses the animation so
+                      visitors can click without chasing a moving tile. */}
+                  <div className="overflow-hidden">
+                    <div className="flex gap-4 w-max anim-reel-marquee">
+                      {doubled.map((url, idx) => {
+                        const rawId = reelId(url);
+                        // Same trim as the player Dialog — Instagram
+                        // share URLs append a share token after the
+                        // canonical 11-char media id, and the
+                        // /<id>/media/ thumbnail endpoint only
+                        // responds for that canonical id.
+                        const id =
+                          rawId.length > 11 ? rawId.slice(0, 11) : rawId;
+                        const thumb = id
+                          ? `https://www.instagram.com/p/${id}/media/?size=l`
+                          : null;
+                        return (
+                          <button
+                            key={`history-${idx}-${url}`}
+                            type="button"
+                            onClick={() => setActiveReelUrl(url)}
+                            className="relative flex-shrink-0 w-44 sm:w-52 aspect-[9/16] rounded-2xl overflow-hidden border border-gray-200 bg-gradient-to-br from-pink-100 via-orange-100 to-purple-100 shadow-sm hover:shadow-md transition-all group"
+                            title="Click to play reel"
+                          >
+                            {thumb && (
+                              <img
+                                src={thumb}
+                                alt="Reel thumbnail"
+                                loading="lazy"
+                                onError={(e) => {
+                                  (
+                                    e.currentTarget as HTMLImageElement
+                                  ).style.display = "none";
+                                }}
+                                className="absolute inset-0 w-full h-full object-cover"
+                              />
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-12 h-12 rounded-full bg-white/90 group-hover:bg-white flex items-center justify-center shadow-lg transition-all">
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  className="w-5 h-5 ml-0.5"
+                                  fill="currentColor"
+                                  style={{
+                                    color: design?.primaryColor || "#f97316",
+                                  }}
+                                >
+                                  <path d="M8 5v14l11-7z" />
+                                </svg>
+                              </div>
+                            </div>
+                            <div className="absolute bottom-2 left-2 right-2 flex items-center gap-1.5 text-white text-[11px] font-medium">
+                              <Instagram className="h-3 w-3" />
+                              <span className="truncate">
+                                Reel {(idx % reels.length) + 1}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
-                  ))}
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-3 text-center">
+                    Hover to pause · click any reel to play
+                  </p>
                 </div>
-              </div>
-            )}
-
-            {/* Additional Info */}
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
-              <p
-                className="text-xs font-semibold tracking-[0.2em] uppercase mb-4"
-                style={{ color: design?.primaryColor }}
-              >
-                Additional Information
-              </p>
-              <div className="space-y-4">
-                {ageRestriction && (
-                  <div>
-                    <p className="text-xs text-gray-400 uppercase tracking-widest mb-0.5">
-                      Age Restriction
-                    </p>
-                    <p className="text-gray-700 text-sm">{ageRestriction}</p>
-                  </div>
-                )}
-                {dresscode && (
-                  <div>
-                    <p className="text-xs text-gray-400 uppercase tracking-widest mb-0.5">
-                      Dress Code
-                    </p>
-                    <p className="text-gray-700 text-sm">{dresscode}</p>
-                  </div>
-                )}
-                {specialInstructions && (
-                  <div>
-                    <p className="text-xs text-gray-400 uppercase tracking-widest mb-0.5">
-                      Special Instructions
-                    </p>
-                    <div
-                      className="text-gray-600 prose prose-sm max-w-none 
-                   [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4 "
-                      dangerouslySetInnerHTML={{
-                        __html: specialInstructions,
-                      }}
-                    />
-                  </div>
-                )}
-
-                {refundPolicy && (
-                  <div>
-                    <p className="text-xs text-gray-400 uppercase tracking-widest mb-0.5">
-                      Refund Policy
-                    </p>
-                    <div
-                      className="text-gray-600 prose prose-sm max-w-none 
-                   [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4"
-                      dangerouslySetInnerHTML={{ __html: refundPolicy }}
-                    />
-                  </div>
-                )}
-
-                {termsAndConditions && (
-                  <div>
-                    <p className="text-xs text-gray-400 uppercase tracking-widest mb-0.5">
-                      Terms & Conditions
-                    </p>
-                    <div
-                      className="text-gray-600 prose prose-sm max-w-none 
-                   [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4"
-                      dangerouslySetInnerHTML={{
-                        __html: termsAndConditions,
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          </TabsContent>
+              </TabsContent>
+            );
+          })()}
 
           <TabsContent value="organizer" className="mt-4 space-y-4">
             <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
@@ -4338,6 +4450,95 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
                 )}
             </div>
+
+            {/* Collapsible Additional Information — moved here from the
+                deleted "Event Details" tab. Header is a button so the
+                whole row toggles; chevron flips up/down to signal state
+                (down = collapsed, "click to reveal"; up = expanded).
+                Hidden entirely when there is nothing to show. */}
+            {(ageRestriction ||
+              dresscode ||
+              specialInstructions ||
+              refundPolicy ||
+              termsAndConditions) && (
+              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowAdditionalInfo((v) => !v)}
+                  aria-expanded={showAdditionalInfo}
+                  className="w-full flex items-center justify-between p-5 sm:p-6 hover:bg-gray-50 transition-colors"
+                >
+                  <span
+                    className="text-xs font-semibold tracking-[0.2em] uppercase"
+                    style={{ color: design?.primaryColor }}
+                  >
+                    Additional Information
+                  </span>
+                  {showAdditionalInfo ? (
+                    <ChevronUp className="h-4 w-4 text-gray-500" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-500" />
+                  )}
+                </button>
+                {showAdditionalInfo && (
+                  <div className="px-5 sm:px-6 pb-5 sm:pb-6 space-y-4 border-t border-gray-100 pt-4">
+                    {ageRestriction && (
+                      <div>
+                        <p className="text-xs text-gray-400 uppercase tracking-widest mb-0.5">
+                          Age Restriction
+                        </p>
+                        <p className="text-gray-700 text-sm">{ageRestriction}</p>
+                      </div>
+                    )}
+                    {dresscode && (
+                      <div>
+                        <p className="text-xs text-gray-400 uppercase tracking-widest mb-0.5">
+                          Dress Code
+                        </p>
+                        <p className="text-gray-700 text-sm">{dresscode}</p>
+                      </div>
+                    )}
+                    {specialInstructions && (
+                      <div>
+                        <p className="text-xs text-gray-400 uppercase tracking-widest mb-0.5">
+                          Special Instructions
+                        </p>
+                        <div
+                          className="text-gray-600 prose prose-sm max-w-none [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4"
+                          dangerouslySetInnerHTML={{
+                            __html: specialInstructions,
+                          }}
+                        />
+                      </div>
+                    )}
+                    {refundPolicy && (
+                      <div>
+                        <p className="text-xs text-gray-400 uppercase tracking-widest mb-0.5">
+                          Refund Policy
+                        </p>
+                        <div
+                          className="text-gray-600 prose prose-sm max-w-none [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4"
+                          dangerouslySetInnerHTML={{ __html: refundPolicy }}
+                        />
+                      </div>
+                    )}
+                    {termsAndConditions && (
+                      <div>
+                        <p className="text-xs text-gray-400 uppercase tracking-widest mb-0.5">
+                          Terms & Conditions
+                        </p>
+                        <div
+                          className="text-gray-600 prose prose-sm max-w-none [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4"
+                          dangerouslySetInnerHTML={{
+                            __html: termsAndConditions,
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </TabsContent>
 
           {/* Speaker Zone */}
@@ -4617,19 +4818,36 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     )}
                   </div>
                 )}
-                {/* Current Layout Display */}
+                {/* Current Layout Display — the header row doubles as
+                    a toggle so the heavy canvas only renders when the
+                    user expands it. Chevron sits on the right of the
+                    "Table Arrangement" title so the whole strip reads
+                    as one clickable disclosure. */}
                 {venueConfig && venueConfig[currentLayoutIndex] && (
                   <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-                    <div className="px-5 pt-5 pb-3 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowVenueLayout((v) => !v)}
+                      aria-expanded={showVenueLayout}
+                      className="w-full px-5 pt-5 pb-3 flex items-center gap-2 hover:bg-gray-50 transition-colors"
+                    >
                       <TableIcon className="h-4 w-4 text-gray-400" />
                       <p
-                        className="text-xs font-semibold tracking-[0.2em] uppercase"
+                        className="text-xs font-semibold tracking-[0.2em] uppercase text-left"
                         style={{ color: design?.primaryColor }}
                       >
                         {venueConfig[currentLayoutIndex].name} — Table
                         Arrangement
                       </p>
-                    </div>
+                      <span className="ml-auto">
+                        {showVenueLayout ? (
+                          <ChevronUp className="h-4 w-4 text-gray-500" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-gray-500" />
+                        )}
+                      </span>
+                    </button>
+                    {showVenueLayout && (
                     <div className="px-5 pb-5 space-y-5">
                       {/* Venue map */}
                       <div
@@ -4793,6 +5011,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       {/* Available-tables list intentionally removed — space
                           availability is hidden on the public venue preview. */}
                     </div>
+                    )}
                   </div>
                 )}
 
@@ -5816,6 +6035,101 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             <VisitorFeedbackCard eventId={id || eventData?._id || ""} />
           </TabsContent>
         </Tabs>
+
+        {/* Reel player — sits OUTSIDE the Tabs tree so switching
+            tabs doesn't tear it down. Uses Instagram's official embed
+            blockquote + their embed.js (loaded by the effect above)
+            so the reel actually plays inline. The /embed iframe URL
+            alone shows a static poster for reels, which is why the
+            previous version "didn't play". The `key` forces React to
+            re-mount the blockquote per URL so embed.js re-processes
+            it cleanly when switching between reels. */}
+        <Dialog
+          open={!!activeReelUrl}
+          onOpenChange={(open) => !open && setActiveReelUrl(null)}
+        >
+          {/* Direct iframe to Instagram's self-contained embed URL —
+              matches the working pattern in kioscart-v1's
+              InstagramCarousel.tsx. The /p/<id>/embed/ endpoint serves
+              both posts AND reels, the cr=1 + v=14 + rd= query params
+              tell Instagram to render the full interactive player
+              (poster + play overlay + caption), and we let the iframe
+              size itself naturally inside DialogContent so the reel
+              poster image actually shows behind the play button —
+              fixing the "play button on blank background" we saw with
+              the blockquote/embed.js route. */}
+          <DialogContent className="max-w-[420px] p-0 overflow-hidden bg-white">
+            {activeReelUrl &&
+              (() => {
+                // Pull the reel/post id out of the URL path. Instagram
+                // share URLs sometimes append a share token after the
+                // canonical 11-char shortcode (e.g.
+                //   /reel/C2rtvw9C8Ml5L4e1In_VZDpTSCVfpFiYcZJePc0/
+                // where only C2rtvw9C8Ml is the embeddable id). Trim
+                // anything past 11 chars so /p/<id>/embed/ resolves.
+                let id = "";
+                try {
+                  const u = new URL(activeReelUrl);
+                  const segs = u.pathname.split("/").filter(Boolean);
+                  const i = segs.findIndex((s) =>
+                    ["reel", "reels", "p", "tv"].includes(s.toLowerCase()),
+                  );
+                  if (i >= 0) id = segs[i + 1] || "";
+                } catch {
+                  /* invalid URL → no embed */
+                }
+                if (!id) return null;
+                const canonicalId =
+                  id.length > 11 ? id.slice(0, 11) : id;
+                const src = `https://www.instagram.com/p/${canonicalId}/embed/?cr=1&v=14&rd=https%3A%2F%2Fwww.instagram.com`;
+                // Canonical "view on Instagram" link — given as a
+                // fallback because Instagram's embed will silently
+                // render a generic placeholder card (no poster) when
+                // the reel is private, age-restricted, region-locked,
+                // or unembeddable. The link lets visitors jump to the
+                // reel even if the inline player doesn't render.
+                const canonical = `https://www.instagram.com/reel/${canonicalId}/`;
+                return (
+                  <div className="flex flex-col bg-white">
+                    <iframe
+                      key={canonicalId}
+                      src={src}
+                      title="Instagram reel"
+                      loading="lazy"
+                      // `strict-origin-when-cross-origin` ensures
+                      // Instagram's /embed/ endpoint receives our
+                      // origin in the Referer header. Without it the
+                      // endpoint serves a logged-out placeholder card
+                      // instead of the actual reel poster.
+                      referrerPolicy="strict-origin-when-cross-origin"
+                      allow="encrypted-media; autoplay; picture-in-picture"
+                      allowFullScreen
+                      scrolling="no"
+                      className="w-full block bg-white"
+                      style={{
+                        height: "min(80vh, 760px)",
+                        border: 0,
+                      }}
+                    />
+                    <div className="flex items-center justify-between gap-2 border-t border-gray-100 px-4 py-2.5 text-xs">
+                      <span className="text-gray-400">
+                        Reel not loading? It may be private or region-locked.
+                      </span>
+                      <a
+                        href={canonical}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 font-medium text-pink-600 hover:underline"
+                      >
+                        <Instagram className="h-3.5 w-3.5" />
+                        Open on Instagram
+                      </a>
+                    </div>
+                  </div>
+                );
+              })()}
+          </DialogContent>
+        </Dialog>
 
         <EventFeedbackTokenHandler
           eventId={id || eventData?._id || ""}

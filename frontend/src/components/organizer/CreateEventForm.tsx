@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import AnnouncementBar from "@/components/ui/AnnouncementBar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
@@ -390,24 +391,30 @@ const EventBanner = ({
         Main banner (recommended: 1920x1080)
       </p>
 
-      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handleBannerChange}
-          className="hidden"
-          id="upload-banner"
-        />
-        <label
-          htmlFor="upload-banner"
-          className="flex flex-col items-center justify-center cursor-pointer"
-        >
-          <Upload className="h-12 w-12 text-gray-400 mb-3" />
-          <span className="text-sm text-gray-600 font-medium">
-            Click to upload event banner
-          </span>
-        </label>
-      </div>
+      {/* Hide the dropzone once a banner is present — same UX as the
+          gallery uploader, which collapses its picker after 5 images.
+          Clicking the X on the preview clears bannerPreview and the
+          dropzone reappears. */}
+      {!bannerPreview && (
+        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleBannerChange}
+            className="hidden"
+            id="upload-banner"
+          />
+          <label
+            htmlFor="upload-banner"
+            className="flex flex-col items-center justify-center cursor-pointer"
+          >
+            <Upload className="h-12 w-12 text-gray-400 mb-3" />
+            <span className="text-sm text-gray-600 font-medium">
+              Click to upload event banner
+            </span>
+          </label>
+        </div>
+      )}
 
       {bannerPreview && (
         <div className="relative rounded-lg overflow-hidden group">
@@ -5059,6 +5066,29 @@ export function CreateEventForm({
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [bannerPreview, setBannerPreview] = useState("");
   const [galleryImages, setGalleryImages] = useState<GalleryImage[]>([]);
+  // Instagram reel URLs — surfaced as a click-to-play carousel on the
+  // eventfront. Capped at 10 in the UI; empty strings are filtered out
+  // before submit so a half-typed row doesn't get persisted.
+  const [reelLinks, setReelLinks] = useState<string[]>(
+    Array.isArray(initialData?.reelLinks) ? initialData.reelLinks : [],
+  );
+
+  // Announcement / Ad Bar — sticky marquee strip that renders at the
+  // top of the eventfront. Same shape as kioscart-v1's storefront
+  // adBar so the look-and-feel matches. Defaults: hidden, empty
+  // message, black on white. Persisted on the event as
+  // `event.adBar = { visible, message, bgColor, textColor }`.
+  const [adBar, setAdBar] = useState<{
+    visible: boolean;
+    message: string;
+    bgColor: string;
+    textColor: string;
+  }>({
+    visible: !!initialData?.adBar?.visible,
+    message: initialData?.adBar?.message || "",
+    bgColor: initialData?.adBar?.bgColor || "#000000",
+    textColor: initialData?.adBar?.textColor || "#ffffff",
+  });
   const [stallTerms, setStallTerms] = useState<StallTermsCondition[]>(
     initialData?.termsAndConditionsforStalls?.map((t: any, i: number) => ({
       id: `term-${i}`,
@@ -6457,6 +6487,29 @@ export function CreateEventForm({
         }
       });
 
+      // Instagram reel URLs — drop blank rows before persisting so a
+      // half-typed entry doesn't end up in the carousel.
+      data.append(
+        "reelLinks",
+        JSON.stringify(
+          (reelLinks || []).map((r) => String(r || "").trim()).filter(Boolean),
+        ),
+      );
+
+      // Announcement / Ad Bar — always send the whole object so the
+      // backend can persist toggles + colors atomically. The trim on
+      // message ensures whitespace-only inputs don't render an empty
+      // bar on the eventfront.
+      data.append(
+        "adBar",
+        JSON.stringify({
+          visible: !!adBar.visible,
+          message: (adBar.message || "").trim(),
+          bgColor: adBar.bgColor || "#000000",
+          textColor: adBar.textColor || "#ffffff",
+        }),
+      );
+
       data.append("organizerId", organizer.sub);
 
       // Build speakers array ONLY from session slots (single source of truth)
@@ -6545,9 +6598,16 @@ export function CreateEventForm({
       toast({
         duration: 5000,
         title: editMode ? "Event updated!" : "Event created!",
-        description: "Your exhibition has been saved.",
+        description: "Your event has been saved.",
       });
-      onClose();
+      // In edit mode, keep the form open after a successful save so
+      // the organizer can keep tweaking and re-save without losing
+      // context. They can dismiss it from the Cancel / X button in
+      // the sticky header. Create mode still auto-closes so the
+      // user lands back on the events list with their new event.
+      if (!editMode) {
+        onClose();
+      }
     } catch (err: any) {
       toast({
         duration: 5000,
@@ -6630,7 +6690,7 @@ export function CreateEventForm({
                   Basic Info
                 </TabsTrigger>
                 <TabsTrigger value="media" className="text-sm">
-                  Images
+                  Media
                 </TabsTrigger>
                 <TabsTrigger value="visitors" className="text-sm">
                   Visitors
@@ -6673,10 +6733,11 @@ export function CreateEventForm({
           {/* BASIC INFO TAB */}
           <TabsContent value="basic" className="space-y-6">
             <ModuleGate moduleKey="events" sectionKey="basic">
-            <EventUrlImporter
-              currentValues={formData as Record<string, any>}
-              onApply={applyImportedFields}
-            />
+            {/* The "Import event details from URL" widget was removed
+                from the Basic Info tab. The `applyImportedFields`
+                handler and `EventUrlImporter` import are kept in
+                this file so the feature can be re-mounted later
+                without re-implementing the field-merge logic. */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -7342,6 +7403,142 @@ export function CreateEventForm({
                 <CardTitle>Event Media</CardTitle>
               </CardHeader>
               <CardContent className="space-y-8">
+                {/* Ad Bar — sticky marquee strip that shows at the
+                    very top of the eventfront (above the banner).
+                    Modelled on kioscart-v1's storefront adBar so the
+                    look-and-feel matches. Sits first in the Media tab
+                    so the form mirrors the rendered order on the
+                    eventfront: bar → banner → gallery → reels. */}
+                <div className="space-y-3 rounded-lg border border-gray-200 p-4 bg-gray-50/40">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <Label className="text-base font-semibold">
+                        Ad Bar
+                      </Label>
+                      <p className="text-sm text-gray-600">
+                        A continuously-scrolling announcement strip that
+                        sits at the very top of the event page. Use it
+                        for promo codes, early-bird notices, or last-
+                        minute updates.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 shrink-0">
+                      <Switch
+                        id="ad-bar-visible"
+                        checked={adBar.visible}
+                        onCheckedChange={(checked) =>
+                          setAdBar((p) => ({ ...p, visible: !!checked }))
+                        }
+                      />
+                      <Label
+                        htmlFor="ad-bar-visible"
+                        className="text-sm font-medium"
+                      >
+                        Show
+                      </Label>
+                    </div>
+                  </div>
+
+                  {adBar.visible && (
+                    <>
+                      <div className="space-y-2">
+                        <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                          Message
+                        </Label>
+                        <Input
+                          value={adBar.message}
+                          onChange={(e) =>
+                            setAdBar((p) => ({
+                              ...p,
+                              message: e.target.value,
+                            }))
+                          }
+                          placeholder="Early-bird tickets end Friday — use code EARLY20 for 20% off"
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                            Background
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={adBar.bgColor || "#000000"}
+                              onChange={(e) =>
+                                setAdBar((p) => ({
+                                  ...p,
+                                  bgColor: e.target.value,
+                                }))
+                              }
+                              className="h-9 w-12 rounded border border-gray-300 cursor-pointer"
+                            />
+                            <Input
+                              value={adBar.bgColor}
+                              onChange={(e) =>
+                                setAdBar((p) => ({
+                                  ...p,
+                                  bgColor: e.target.value,
+                                }))
+                              }
+                              placeholder="#000000"
+                              className="font-mono text-xs"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                            Text
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={adBar.textColor || "#ffffff"}
+                              onChange={(e) =>
+                                setAdBar((p) => ({
+                                  ...p,
+                                  textColor: e.target.value,
+                                }))
+                              }
+                              className="h-9 w-12 rounded border border-gray-300 cursor-pointer"
+                            />
+                            <Input
+                              value={adBar.textColor}
+                              onChange={(e) =>
+                                setAdBar((p) => ({
+                                  ...p,
+                                  textColor: e.target.value,
+                                }))
+                              }
+                              placeholder="#ffffff"
+                              className="font-mono text-xs"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Live preview — renders the same marquee
+                          AnnouncementBar the eventfront uses so the
+                          organizer can dial in colors without saving
+                          and reloading. */}
+                      {adBar.message.trim() && (
+                        <div className="space-y-2">
+                          <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                            Preview
+                          </Label>
+                          <div className="rounded-md overflow-hidden border border-gray-200">
+                            <AnnouncementBar
+                              message={adBar.message.trim()}
+                              backgroundColor={adBar.bgColor || "#000000"}
+                              textColor={adBar.textColor || "#ffffff"}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
                 <EventBanner
                   bannerFile={bannerFile}
                   setBannerFile={setBannerFile}
@@ -7352,6 +7549,94 @@ export function CreateEventForm({
                   galleryImages={galleryImages}
                   setGalleryImages={setGalleryImages}
                 />
+
+                {/* Instagram Reels — up to 10 URLs. Persisted as a
+                    string[] on the event; the eventfront turns each
+                    URL into an embeddable /reel/<id>/embed iframe so
+                    visitors can play reels inline without leaving the
+                    page. Empty rows are dropped on submit. */}
+                <div className="space-y-3">
+                  <div className="flex items-end justify-between gap-3">
+                    <div>
+                      <Label className="text-base font-semibold">
+                        Instagram Reels ({reelLinks.length}/10)
+                      </Label>
+                      <p className="text-sm text-gray-600">
+                        Paste up to 10 Instagram reel URLs (e.g.
+                        <span className="font-mono text-[11px] mx-1">
+                          https://www.instagram.com/reel/&lt;id&gt;/
+                        </span>
+                        ). The reel and the Instagram account must be
+                        <strong> public</strong> — Instagram won't embed
+                        private or restricted reels and will render a
+                        placeholder card instead.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={reelLinks.length >= 10}
+                      onClick={() => setReelLinks([...reelLinks, ""])}
+                    >
+                      <Plus size={14} className="mr-1" /> Add reel
+                    </Button>
+                  </div>
+                  {reelLinks.length === 0 && (
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                      <Instagram className="h-10 w-10 text-pink-500 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">
+                        No reels yet — click "Add reel" to drop in a
+                        link.
+                      </p>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    {reelLinks.map((url, idx) => {
+                      const trimmed = (url || "").trim();
+                      const isInstagram =
+                        !trimmed ||
+                        /^https?:\/\/(www\.)?instagram\.com\//i.test(trimmed);
+                      return (
+                        <div key={idx} className="flex items-start gap-2">
+                          <div className="flex-1">
+                            <Input
+                              value={url}
+                              onChange={(e) => {
+                                const next = [...reelLinks];
+                                next[idx] = e.target.value;
+                                setReelLinks(next);
+                              }}
+                              placeholder="https://www.instagram.com/reel/Cxyz123/"
+                              className={
+                                isInstagram ? "" : "border-red-400"
+                              }
+                            />
+                            {!isInstagram && (
+                              <p className="text-xs text-red-500 mt-1">
+                                Doesn't look like an Instagram reel URL.
+                              </p>
+                            )}
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="text-red-500 hover:bg-red-50"
+                            onClick={() =>
+                              setReelLinks(
+                                reelLinks.filter((_, i) => i !== idx),
+                              )
+                            }
+                            title="Remove this reel"
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </CardContent>
             </Card>
             </ModuleGate>

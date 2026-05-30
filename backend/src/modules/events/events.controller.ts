@@ -322,6 +322,15 @@ export class EventsController {
         body.venueDoors = JSON.parse(body.venueDoors);
       if (typeof body.volunteers === "string")
         body.volunteers = JSON.parse(body.volunteers);
+      // Instagram reel URLs travel as a JSON-stringified array because
+      // multipart can't carry a native array — unwrap the same way the
+      // other list fields above do.
+      if (typeof body.reelLinks === "string")
+        body.reelLinks = JSON.parse(body.reelLinks);
+      // Announcement / Ad Bar — small object, sent JSON-stringified
+      // through multipart same as the other nested settings.
+      if (typeof body.adBar === "string")
+        body.adBar = JSON.parse(body.adBar);
 
       // Handle banner image
       if (files.banner && files.banner[0]) {
@@ -585,6 +594,12 @@ export class EventsController {
         body.venueDoors = JSON.parse(body.venueDoors);
       if (typeof body.volunteers === "string")
         body.volunteers = JSON.parse(body.volunteers);
+      // Instagram reel URLs — same unwrap as the create path.
+      if (typeof body.reelLinks === "string")
+        body.reelLinks = JSON.parse(body.reelLinks);
+      // Announcement / Ad Bar — same unwrap as the create path.
+      if (typeof body.adBar === "string")
+        body.adBar = JSON.parse(body.adBar);
 
       // Handle new banner image
       if (files.banner && files.banner[0]) {
