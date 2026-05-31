@@ -3016,14 +3016,64 @@ const VenueDesigner = ({
   // dashed reference outline at (0,0); items can be placed anywhere up to
   // the canvas extents. Minimum kept generous so even a tiny venue gets a
   // workable grid surface to design on.
+  // Designer canvas size — the original large 3000×2000 reference
+  // grid (plus 600 around the venue) is the FLOOR, so nothing ever
+  // "shortens" even on small venues. On top of that, we expand the
+  // canvas to cover any placed item (space, round table, speaker
+  // zone, or door) whose x+w / y+h exceeds the floor — without this,
+  // items dragged far to the right in maximized mode (or items from
+  // legacy events) would render past the white grid surface and sit
+  // on the bare slate-50 wrapper with no grid behind them.
   const CANVAS_MIN_W = 3000;
   const CANVAS_MIN_H = 2000;
-  const canvasW = venueConfig
-    ? Math.max(venueConfig.width + 600, CANVAS_MIN_W)
-    : CANVAS_MIN_W;
-  const canvasH = venueConfig
-    ? Math.max(venueConfig.height + 600, CANVAS_MIN_H)
-    : CANVAS_MIN_H;
+  const currentItemsForCanvas =
+    (selectedVenueConfigId && venueTables[selectedVenueConfigId]) || [];
+  const currentRoundsForCanvas =
+    (selectedVenueConfigId && venueRoundTables[selectedVenueConfigId]) || [];
+  const currentZonesForCanvas =
+    (selectedVenueConfigId && venueSpeakerZones[selectedVenueConfigId]) || [];
+  const currentDoorsForCanvas =
+    (selectedVenueConfigId && venueDoors[selectedVenueConfigId]) || [];
+  let itemsMaxX = 0;
+  let itemsMaxY = 0;
+  for (const t of currentItemsForCanvas) {
+    const w = (t as any).displayWidth ?? t.width ?? 0;
+    const h = (t as any).displayHeight ?? t.height ?? 0;
+    itemsMaxX = Math.max(itemsMaxX, (t.x || 0) + w);
+    itemsMaxY = Math.max(itemsMaxY, (t.y || 0) + h);
+  }
+  for (const r of currentRoundsForCanvas) {
+    const d = (r as any).tableDiameter || 120;
+    itemsMaxX = Math.max(itemsMaxX, (r.x || 0) + d);
+    itemsMaxY = Math.max(itemsMaxY, (r.y || 0) + d);
+  }
+  for (const z of currentZonesForCanvas as any[]) {
+    itemsMaxX = Math.max(itemsMaxX, (z.x || 0) + (z.width || 0));
+    itemsMaxY = Math.max(itemsMaxY, (z.y || 0) + (z.height || 0));
+  }
+  for (const d of currentDoorsForCanvas as any[]) {
+    const dw = Number(d.width) > 0 ? Number(d.width) : 50;
+    const dh = Number(d.height) > 0 ? Number(d.height) : 50;
+    itemsMaxX = Math.max(itemsMaxX, (d.x || 0) + dw);
+    itemsMaxY = Math.max(itemsMaxY, (d.y || 0) + dh);
+  }
+  // Extra buffer past the right-most / bottom-most item so the
+  // scroll area still has empty grid space to drop new items into.
+  // 1200 was chosen to roughly match what one "screen" of working
+  // area looks like at typical scales (1500 venue px × 0.75 scale
+  // ≈ 1125 visible px), so the user can always scroll a screen
+  // further out than the current right edge.
+  const ITEMS_BUFFER = 1200;
+  const canvasW = Math.max(
+    CANVAS_MIN_W,
+    (venueConfig?.width || 0) + 600,
+    itemsMaxX + ITEMS_BUFFER,
+  );
+  const canvasH = Math.max(
+    CANVAS_MIN_H,
+    (venueConfig?.height || 0) + 600,
+    itemsMaxY + ITEMS_BUFFER,
+  );
 
   const applyAILayout = (result: {
     positionedTables: PositionedTable[];
@@ -3755,12 +3805,29 @@ const VenueDesigner = ({
     }
   };
 
+  // Snapshot the venue as a PNG whenever the layout actually changes
+  // (item count, venue dimensions, or active config). The old version
+  // depended on the `currentTables` / `currentRoundTables` array
+  // references themselves — those are re-derived inline every render
+  // (`venueTables[id] || []`), so each render produced a new array
+  // identity and the effect re-fired in a hot loop, calling
+  // html2canvas every ~1s forever (see the #315 / #316 / #317 spam
+  // in the console). Switching the deps to scalar values (length +
+  // venue config id) means the effect only fires when something
+  // meaningful changes.
   useEffect(() => {
     if (currentTables.length > 0 || currentRoundTables.length > 0) {
       const timeoutId = setTimeout(captureVenueAsImage, 1000);
       return () => clearTimeout(timeoutId);
     }
-  }, [currentTables, currentRoundTables, venueConfig, selectedVenueConfigId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    currentTables.length,
+    currentRoundTables.length,
+    venueConfig?.width,
+    venueConfig?.height,
+    selectedVenueConfigId,
+  ]);
 
   // --- Styles ---
 
@@ -4164,21 +4231,57 @@ const VenueDesigner = ({
           </div>
           )}
           <div
-            className="relative border-2 border-dashed border-gray-300 rounded-xl bg-slate-50 overflow-auto flex justify-center items-start p-6"
+            // Wrapper carries the grid background. Scrolling behavior:
+            //  - Inline mode → wrapper is its own scroll container
+            //    (`overflow-auto`) so the surrounding form can scroll
+            //    independently.
+            //  - Maximized mode → wrapper has `overflow-visible` so
+            //    the OUTER MaximizableSurface portal becomes the
+            //    single scroll container. Two nested scroll boxes
+            //    confused mouse-wheel events (wheel landed on the
+            //    inner one which had nothing more to scroll, never
+            //    bubbled up to the outer), forcing the user to grab
+            //    the scrollbar by hand. With one scroll container
+            //    the wheel just works anywhere on the canvas.
+            className={`relative border-2 border-dashed border-gray-300 rounded-xl flex justify-center items-start p-6 ${
+              isCanvasMaximized ? "overflow-visible" : "overflow-auto"
+            }`}
             style={{
               minHeight: isCanvasMaximized ? "calc(100vh - 48px)" : "700px",
+              backgroundColor: "#ffffff",
+              backgroundImage:
+                "linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)",
+              backgroundSize: `${venueConfig.gridSize || 40}px ${venueConfig.gridSize || 40}px`,
             }}
           >
             <div
               ref={venueRef}
-              className="relative bg-white border-2 border-gray-200 shadow-2xl rounded-lg"
+              // Inner canvas is borderless / shadowless now so it
+              // blends seamlessly with the wrapper's grid background
+              // — no visible "boundary rectangle" inside the Space
+              // Layout. Drag-target behavior is unchanged; venueRef
+              // still points here for hit-testing.
+              className="relative"
               style={{
+                // `minWidth: 100%` forces the canvas to fill the
+                // wrapper's content area at minimum, so the grid
+                // covers everywhere the horizontal scrollbar can
+                // reach (no bare slate-50 gap on the right). The
+                // explicit `width` still drives the canvas larger
+                // when there are placed items past the visible
+                // area — whichever is larger wins.
+                minWidth: "100%",
+                minHeight: "100%",
                 width: canvasW * venueConfig.scale,
                 height: canvasH * venueConfig.scale,
-                backgroundImage: venueConfig.showGrid
-                  ? `linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px)`
-                  : "none",
-                backgroundSize: `${venueConfig.gridSize * venueConfig.scale}px ${venueConfig.gridSize * venueConfig.scale}px`,
+                // Grid recipe — copied verbatim from the eventfront's
+                // Venue Layout tab. Three explicit properties (the
+                // `background` shorthand was flaky with multiple
+                // gradients + per-layer sizes).
+                backgroundColor: "#ffffff",
+                backgroundImage:
+                  "linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)",
+                backgroundSize: `${venueConfig.gridSize || 40}px ${venueConfig.gridSize || 40}px`,
               }}
             >
               {/* Stage Indicator */}
@@ -5284,11 +5387,16 @@ export function CreateEventForm({
         }
         setCategoryOptions((prev) => [...prev, name]);
       }
-      setFormData((old) => {
-        if (old.categories.includes(canonical)) return old;
-        const next = [...old.categories, canonical];
-        return { ...old, categories: next, category: next[0] };
-      });
+      // Single-select category — newly-added category becomes THE
+      // selection (overwrites whatever was previously picked).
+      // `categories` stays in sync as a one-element array for
+      // backward-compat with any reader that still uses the plural
+      // shape.
+      setFormData((old) => ({
+        ...old,
+        category: canonical,
+        categories: [canonical],
+      }));
       setNewCategoryInput("");
     } finally {
       setAddingCategory(false);
@@ -5391,6 +5499,19 @@ export function CreateEventForm({
       initialData?.termsAndConditionsforStalls?.termsAndConditionsforStalls ??
       "",
   });
+
+  // Free-form custom Basic-Info sections (heading + Quill HTML body).
+  // Mirrors the fixed Special Instructions / Refund Policy / Terms
+  // sections but lets the organizer add as many additional sections
+  // as they need. Persisted on the event as `customSections` and
+  // rendered on the eventfront alongside the other info blocks.
+  const [customSections, setCustomSections] = useState<
+    { id: string; heading: string; content: string }[]
+  >(
+    Array.isArray(initialData?.customSections)
+      ? initialData.customSections
+      : [],
+  );
 
   const [speakers, setSpeakers] = useState<any[]>(initialData?.speakers ?? []);
   // Volunteers allow-listed to sign in to the scanner page via Google.
@@ -5628,6 +5749,9 @@ export function CreateEventForm({
       }
       if (initialData.addOnItems) {
         setAddOnItems(initialData.addOnItems);
+      }
+      if (Array.isArray(initialData.customSections)) {
+        setCustomSections(initialData.customSections);
       }
       if (initialData.venueConfig) {
         setVenueConfigurations(initialData.venueConfig);
@@ -6520,6 +6644,22 @@ export function CreateEventForm({
         }),
       );
 
+      // Custom Basic-Info sections — drop entries with both an
+      // empty heading and an empty body so half-typed rows don't
+      // get persisted.
+      data.append(
+        "customSections",
+        JSON.stringify(
+          (customSections || [])
+            .map((s) => ({
+              id: s.id,
+              heading: (s.heading || "").trim(),
+              content: (s.content || "").trim(),
+            }))
+            .filter((s) => s.heading || s.content),
+        ),
+      );
+
       data.append("organizerId", organizer.sub);
 
       // Build speakers array ONLY from session slots (single source of truth)
@@ -6770,6 +6910,15 @@ export function CreateEventForm({
                   </div>
                   <div>
                     <Label>Category *</Label>
+                    {/* Single-select category — the previous popover
+                        let organizers pick multiple, but the product
+                        decision is one event = one category. Writes
+                        both `category` (string, primary) and
+                        `categories` (one-element array for
+                        backward-compat with reads that already
+                        switched to the array). "Add new" stays
+                        inline so organizers can still extend the
+                        shared /categories pool from here. */}
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button
@@ -6778,11 +6927,7 @@ export function CreateEventForm({
                           className="w-full justify-between font-normal"
                         >
                           <span className="truncate text-left">
-                            {formData.categories.length === 0
-                              ? "Select categories"
-                              : formData.categories.length === 1
-                                ? formData.categories[0]
-                                : `${formData.categories.length} selected`}
+                            {formData.category || "Select category"}
                           </span>
                           <ChevronDown className="h-4 w-4 opacity-50 ml-2 flex-shrink-0" />
                         </Button>
@@ -6791,39 +6936,51 @@ export function CreateEventForm({
                         className="w-[var(--radix-popover-trigger-width)] p-0"
                         align="start"
                       >
-                        <div className="max-h-64 overflow-y-auto py-1">
+                        {/* List scrolling — sized to fit exactly
+                            8 category rows per viewport (≈ 32px per
+                            row × 8 + 8px py-1 wrapper). Wheel scroll
+                            stays inside the list so it doesn't leak
+                            to the page underneath, and the scrollbar
+                            is always visible so the user doesn't
+                            have to hunt for it. */}
+                        <div
+                          className="overflow-y-auto py-1 overscroll-contain"
+                          style={{
+                            maxHeight: "264px",
+                            scrollbarWidth: "thin",
+                            scrollbarColor: "#94a3b8 transparent",
+                          }}
+                          onWheel={(e) => {
+                            // Eat the wheel event so it scrolls the
+                            // list rather than bubbling to whatever
+                            // is behind the popover.
+                            e.stopPropagation();
+                          }}
+                        >
                           {categoryOptions.map((cat) => {
-                            const checked =
-                              formData.categories.includes(cat);
+                            const active = formData.category === cat;
                             return (
-                              <label
+                              <button
                                 key={cat}
-                                className="flex items-center gap-2 px-3 py-1.5 hover:bg-primary/10 hover:text-primary cursor-pointer text-sm"
+                                type="button"
+                                onClick={() => {
+                                  setFormData((old) => ({
+                                    ...old,
+                                    category: cat,
+                                    categories: [cat],
+                                  }));
+                                }}
+                                className={`w-full text-left flex items-center justify-between px-3 py-1.5 hover:bg-primary/10 hover:text-primary text-sm ${
+                                  active ? "bg-primary/10 text-primary font-medium" : ""
+                                }`}
                               >
-                                <Checkbox
-                                  checked={checked}
-                                  className="rounded-none"
-                                  onCheckedChange={(c) => {
-                                    setFormData((old) => {
-                                      const set = new Set<string>(
-                                        old.categories,
-                                      );
-                                      if (c) set.add(cat);
-                                      else set.delete(cat);
-                                      const next = Array.from(set);
-                                      return {
-                                        ...old,
-                                        categories: next,
-                                        // Keep legacy `category` in sync with
-                                        // the first selection so existing
-                                        // read-sites still display something.
-                                        category: next[0] ?? "",
-                                      };
-                                    });
-                                  }}
-                                />
                                 <span>{cat}</span>
-                              </label>
+                                {active && (
+                                  <span aria-hidden className="text-primary">
+                                    ✓
+                                  </span>
+                                )}
+                              </button>
                             );
                           })}
                         </div>
@@ -6860,38 +7017,6 @@ export function CreateEventForm({
                         </div>
                       </PopoverContent>
                     </Popover>
-                    {formData.categories.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {formData.categories.map((cat) => (
-                          <Badge
-                            key={cat}
-                            variant="secondary"
-                            className="text-xs gap-1"
-                          >
-                            {cat}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setFormData((old) => {
-                                  const next = old.categories.filter(
-                                    (c) => c !== cat,
-                                  );
-                                  return {
-                                    ...old,
-                                    categories: next,
-                                    category: next[0] ?? "",
-                                  };
-                                })
-                              }
-                              className="hover:text-destructive"
-                              aria-label={`Remove ${cat}`}
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -7231,6 +7356,111 @@ export function CreateEventForm({
                         />
                       </Suspense>
                     </div>
+                  </div>
+
+                  {/* Custom Sections — heading + Quill rich-text
+                      body. Same look as the fixed sections above
+                      (Special Instructions, Refund Policy, Terms),
+                      but the organizer can add as many as they
+                      want. Renders on the eventfront's Additional
+                      Information block alongside the fixed entries. */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <Label className="text-base font-semibold">
+                        Custom Sections
+                      </Label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() =>
+                          setCustomSections((prev) => [
+                            ...prev,
+                            {
+                              id:
+                                "cs-" +
+                                Math.random().toString(36).slice(2, 10),
+                              heading: "",
+                              content: "",
+                            },
+                          ])
+                        }
+                      >
+                        <Plus size={14} className="mr-1" /> Add new section
+                      </Button>
+                    </div>
+                    {customSections.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        No custom sections yet. Click "Add new section" to
+                        add one (e.g. Parking notes, Sponsor message, Press
+                        kit). Each section gets a heading + a rich-text
+                        body that shows on the public event page.
+                      </p>
+                    ) : (
+                      <div className="space-y-4">
+                        {customSections.map((sec, idx) => (
+                          <div
+                            key={sec.id}
+                            className="border rounded-lg p-3 bg-muted/30 space-y-2"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Input
+                                value={sec.heading}
+                                placeholder={`Section ${idx + 1} heading (e.g. Parking Notes)`}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  setCustomSections((prev) =>
+                                    prev.map((s) =>
+                                      s.id === sec.id
+                                        ? { ...s, heading: v }
+                                        : s,
+                                    ),
+                                  );
+                                }}
+                                className="flex-1 font-medium"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="text-red-500 hover:bg-red-50 shrink-0"
+                                onClick={() =>
+                                  setCustomSections((prev) =>
+                                    prev.filter((s) => s.id !== sec.id),
+                                  )
+                                }
+                                title="Remove this section"
+                              >
+                                <Trash2 size={14} />
+                              </Button>
+                            </div>
+                            <div className="bg-white dark:bg-slate-950 rounded-md">
+                              <Suspense
+                                fallback={
+                                  <div className="h-[150px] border rounded-md animate-pulse bg-muted" />
+                                }
+                              >
+                                <ReactQuill
+                                  theme="snow"
+                                  value={sec.content}
+                                  modules={modules}
+                                  onChange={(content) => {
+                                    setCustomSections((prev) =>
+                                      prev.map((s) =>
+                                        s.id === sec.id
+                                          ? { ...s, content }
+                                          : s,
+                                      ),
+                                    );
+                                  }}
+                                  placeholder="Write the section content here…"
+                                  className="[&_.ql-editor]:min-h-[150px] [&_.ql-container]:rounded-b-md [&_.ql-toolbar]:rounded-t-md text-black dark:text-white"
+                                />
+                              </Suspense>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Terms & Conditions for Stalls */}

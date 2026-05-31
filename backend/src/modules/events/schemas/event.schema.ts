@@ -276,6 +276,21 @@ export class Event {
   @Prop()
   termsAndConditions?: string;
 
+  // Free-form custom sections — each one is a heading + a Quill
+  // HTML body. Renders inside the eventfront's "Additional
+  // Information" collapsible alongside the fixed sections (special
+  // instructions, refund policy, terms & conditions) so organizers
+  // can add ad-hoc info (e.g. "Parking notes", "Dress code details",
+  // "Sponsor message") without us shipping a new field every time.
+  // Loose Array of Object — small, stable shape, no need for a
+  // dedicated subdocument class.
+  @Prop({ type: [Object], default: [] })
+  customSections?: {
+    id: string;
+    heading: string;
+    content: string;
+  }[];
+
   @Prop()
   setupTime?: string;
 
