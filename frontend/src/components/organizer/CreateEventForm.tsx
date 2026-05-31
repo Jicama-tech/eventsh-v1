@@ -5673,7 +5673,17 @@ export function CreateEventForm({
         }
       }
     }
-  }, [editMode, duplicateMode, initialData]);
+    // Depend on `initialData?._id` (a stable string), NOT the full
+    // `initialData` object. Without this, every parent re-render
+    // creates a new `initialData` reference, fires this effect, and
+    // overwrites the form's local state with whatever the parent
+    // last cached — which is exactly what was wiping the freshly-
+    // added add-ons (and other fields) after clicking "Update Event"
+    // while the form stays open. Hydration now runs once per event
+    // id; switching events still re-fires correctly because the id
+    // changes. The other hydration effect above (line ~5524) already
+    // uses this pattern.
+  }, [editMode, duplicateMode, initialData?._id]);
 
   const addStallTerm = () => {
     setStallTerms((prev) => [
