@@ -735,8 +735,30 @@ export function OrganizerDashboard({
       }
       throw new Error(detail);
     }
-    setEditingEvent(null);
-    setShowCreateEvent(false);
+    // Refresh editingEvent with the backend's fresh data so any
+    // future re-hydration uses the saved snapshot (including the
+    // just-added add-ons / speakers / venue tables). The form's
+    // hydration effect is keyed on `initialData?._id` which doesn't
+    // change here, so this update doesn't disturb the form's
+    // visible local state — it just keeps the parent's cache fresh
+    // in case Radix Dialog or React causes a remount later.
+    try {
+      const j = await res.json();
+      const updatedEvent = j?.data || j;
+      if (updatedEvent?._id) {
+        setEditingEvent(updatedEvent);
+      }
+    } catch {
+      // Non-JSON success body — leave editingEvent as-is.
+    }
+    // Intentionally do NOT clear editingEvent or close the dialog —
+    // when the form stays open after Update, the form's local state
+    // (newly-added add-ons, speakers, venue tables, etc.) needs to
+    // survive. Clearing editingEvent here would unmount the Dialog
+    // and the CreateEventForm inside it, throwing away every local
+    // edit the user just saved. The form shows its own "Event
+    // updated" toast; the Cancel / X buttons are the only way to
+    // close, both of which already clear these states via onClose.
   };
 
   // Triggered by the chatbot when the user asks to create/edit an event.

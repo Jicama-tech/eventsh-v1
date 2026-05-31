@@ -688,6 +688,28 @@ const MyEvents: React.FC = () => {
         );
       }
 
+      // Capture the updated event the backend returns so we can
+      // refresh editingEvent with fresh server data. Without this,
+      // editingEvent keeps the stale pre-save reference (missing the
+      // just-added add-ons, speakers, etc.). If the form ever
+      // re-hydrates from initialData (e.g. Radix Dialog re-renders
+      // on portal updates) it'd snap back to that stale snapshot
+      // and the user would see their fresh adds vanish. The form's
+      // hydration effect is keyed on `initialData?._id`, so passing
+      // the same _id back doesn't re-fire the effect — the form's
+      // own local state stays the source of truth on screen. We
+      // only update the parent's cache.
+      let updatedEvent: any = null;
+      try {
+        const json = await response.json();
+        updatedEvent = json?.data || json;
+      } catch {
+        // Backend returned non-JSON success — fall back to no-op.
+      }
+      if (editingEvent && updatedEvent?._id) {
+        setEditingEvent(updatedEvent as Event);
+      }
+
       toast({
         duration: 5000,
         title: editingEvent ? "Event updated!" : "Event created!",
