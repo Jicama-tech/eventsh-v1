@@ -331,6 +331,10 @@ export class EventsController {
       // through multipart same as the other nested settings.
       if (typeof body.adBar === "string")
         body.adBar = JSON.parse(body.adBar);
+      // Custom Basic-Info sections (each: id + heading + content) —
+      // sent JSON-stringified.
+      if (typeof body.customSections === "string")
+        body.customSections = JSON.parse(body.customSections);
 
       // Handle banner image
       if (files.banner && files.banner[0]) {
@@ -600,6 +604,9 @@ export class EventsController {
       // Announcement / Ad Bar — same unwrap as the create path.
       if (typeof body.adBar === "string")
         body.adBar = JSON.parse(body.adBar);
+      // Custom Basic-Info sections — same unwrap as the create path.
+      if (typeof body.customSections === "string")
+        body.customSections = JSON.parse(body.customSections);
 
       // Handle new banner image
       if (files.banner && files.banner[0]) {

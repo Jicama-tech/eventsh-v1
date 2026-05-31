@@ -467,6 +467,13 @@ export class CreateEventDto {
   @IsOptional()
   termsAndConditions?: string;
 
+  // Free-form custom sections from the Basic Info tab. Loose array
+  // validation since the shape (id + heading + content) is small and
+  // stable.
+  @IsArray()
+  @IsOptional()
+  customSections?: { id: string; heading: string; content: string }[];
+
   @IsString()
   @IsOptional()
   setupTime?: string;

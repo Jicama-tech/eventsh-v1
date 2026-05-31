@@ -259,12 +259,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   // Collapsible "Additional Information" inside the Organizer tab.
   const [showAdditionalInfo, setShowAdditionalInfo] = useState(false);
-  // Active Instagram reel URL — drives the page-level Dialog that
-  // plays the reel inline. Null = dialog closed. The Dialog renders
-  // an iframe pointing at instagram.com/p/<id>/embed/?cr=1&v=14&rd=...,
-  // the same self-contained embed URL kioscart-v1's InstagramCarousel
-  // uses — no embed.js script + no blockquote processing needed.
-  const [activeReelUrl, setActiveReelUrl] = useState<string | null>(null);
+  // Reel marquee ref — kept for future scroll/focus needs but the
+  // IntersectionObserver lazy-mount was removed because the History
+  // tab content mounts inside Radix Tabs and the observer's effect
+  // races with the ref attaching, leaving `inView` stuck on false
+  // and the placeholder showing forever. Rendering iframes
+  // immediately matches what kioscart-v1's storefront does once its
+  // observer fires anyway.
+  const reelMarqueeRef = useRef<HTMLDivElement | null>(null);
   // Collapsible Venue Layout — defaults to closed so the heavy canvas
   // (and the multi-layout selector / stats grid) only render after the
   // user explicitly opts in by clicking the chevron header.
@@ -4000,7 +4002,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 return (
                 <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
                   <div className="px-5 pt-5 pb-4">
-                    <p className="text-gray-400 text-xs font-medium uppercase tracking-widest mb-4">
+                    <p
+                      className="text-lg font-bold tracking-widest uppercase mb-4"
+                      style={{ color: design?.primaryColor }}
+                    >
                       Contact Organizer
                     </p>
                     <div className="space-y-3">
@@ -4129,7 +4134,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   return (
                     <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm mt-4">
                       <div className="px-5 pt-5 pb-4">
-                        <p className="text-gray-400 text-xs font-medium uppercase tracking-widest mb-4">
+                        <p
+                          className="text-lg font-bold tracking-widest uppercase mb-4"
+                          style={{ color: design?.primaryColor }}
+                        >
                           Follow Us
                         </p>
                         <div className="space-y-3">
@@ -4273,109 +4281,108 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               )}
           </TabsList>
 
-          {/* History tab — continuously scrolling Reels marquee (R→L).
-              Mounted only when `hasReels` is true (i.e. the organizer
-              has at least one non-empty Instagram URL in the Media
-              tab), so events without reels never see this tab or
-              its content. Built by duplicating the reel list so the
-              CSS keyframe `reelMarquee` can translate -50% for a
-              seamless loop. */}
+          {/* History tab — Instagram reel carousel, ported verbatim
+              from kioscart-v1's <InstagramCarousel/> pattern
+              (frontend/src/components/ui/InstagramCarousel.tsx).
+              The key differences from our earlier attempt:
+                1. Each card embeds the Instagram iframe INLINE —
+                   no Dialog. Instagram's embed endpoint serves a
+                   placeholder when invoked from a dynamically-
+                   mounted modal; rendering the iframe directly in
+                   the marquee card avoids that.
+                2. Each card is 220 × 280 with overflow:hidden, and
+                   the iframe inside is 820px tall with marginTop
+                   −60px. That crops Instagram's header chrome and
+                   shows just the reel itself.
+                3. IntersectionObserver lazy-mounts the iframes when
+                   the carousel scrolls into view, so we don't hit
+                   instagram.com on first page load.
+                4. URL extractor accepts /reel/, /reels/, /p/, /tv/.
+                   We DO NOT truncate ids — kioscart's regex grabs
+                   the full path segment, and Instagram's embed
+                   endpoint handles both canonical and share-token
+                   ids transparently. */}
           {hasReels && (() => {
-            const reels = cleanedReelLinks;
-            const reelId = (url: string): string => {
-              try {
-                const u = new URL(url);
-                const segs = u.pathname.split("/").filter(Boolean);
-                const idx = segs.findIndex((s) =>
-                  ["reel", "reels", "p"].includes(s.toLowerCase()),
-                );
-                return idx >= 0 ? segs[idx + 1] || "" : "";
-              } catch {
-                return "";
-              }
+            const extractReelId = (url: string): string | null => {
+              const reel = url.match(/\/reel(?:s)?\/([A-Za-z0-9_-]+)/);
+              if (reel) return reel[1];
+              const post = url.match(/\/p\/([A-Za-z0-9_-]+)/);
+              if (post) return post[1];
+              const tv = url.match(/\/tv\/([A-Za-z0-9_-]+)/);
+              if (tv) return tv[1];
+              return null;
             };
-            const doubled = [...reels, ...reels];
+            const toEmbedSrc = (url: string): string | null => {
+              const id = extractReelId(url);
+              if (!id) return null;
+              return `https://www.instagram.com/p/${id}/embed/?cr=1&v=14&rd=https%3A%2F%2Fwww.instagram.com`;
+            };
+            const validEmbeds = cleanedReelLinks
+              .map((u) => ({ url: u, src: toEmbedSrc(u) }))
+              .filter((e): e is { url: string; src: string } => !!e.src);
+            if (validEmbeds.length === 0) return null;
+            // Repeat the list enough times to make the marquee feel
+            // continuous regardless of how many reels are supplied.
+            const repeatCount = Math.max(
+              2,
+              Math.ceil(12 / validEmbeds.length),
+            );
+            const marqueeItems = Array.from(
+              { length: repeatCount },
+              () => validEmbeds,
+            ).flat();
             return (
               <TabsContent value="history" className="mt-4 space-y-4">
                 <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
                     <p
-                      className="text-xs font-semibold tracking-[0.2em] uppercase"
+                      className="text-lg font-bold tracking-widest uppercase"
                       style={{ color: design?.primaryColor }}
                     >
                       Reels Carousel
                     </p>
                     <span className="text-xs text-gray-400 font-medium">
-                      {reels.length} {reels.length === 1 ? "reel" : "reels"}
+                      {cleanedReelLinks.length}{" "}
+                      {cleanedReelLinks.length === 1 ? "reel" : "reels"}
                     </span>
                   </div>
-                  {/* Horizontal scrollers — `overflow-hidden` clips the
-                      marquee, the duplicated `flex` row slides left
-                      forever. Hovering the row pauses the animation so
-                      visitors can click without chasing a moving tile. */}
-                  <div className="overflow-hidden">
+                  <div
+                    ref={reelMarqueeRef}
+                    className="overflow-hidden"
+                  >
                     <div className="flex gap-4 w-max anim-reel-marquee">
-                      {doubled.map((url, idx) => {
-                        const rawId = reelId(url);
-                        // Same trim as the player Dialog — Instagram
-                        // share URLs append a share token after the
-                        // canonical 11-char media id, and the
-                        // /<id>/media/ thumbnail endpoint only
-                        // responds for that canonical id.
-                        const id =
-                          rawId.length > 11 ? rawId.slice(0, 11) : rawId;
-                        const thumb = id
-                          ? `https://www.instagram.com/p/${id}/media/?size=l`
-                          : null;
-                        return (
-                          <button
-                            key={`history-${idx}-${url}`}
-                            type="button"
-                            onClick={() => setActiveReelUrl(url)}
-                            className="relative flex-shrink-0 w-44 sm:w-52 aspect-[9/16] rounded-2xl overflow-hidden border border-gray-200 bg-gradient-to-br from-pink-100 via-orange-100 to-purple-100 shadow-sm hover:shadow-md transition-all group"
-                            title="Click to play reel"
+                      {marqueeItems.map((item, i) => (
+                        <div
+                          key={`reel-${i}`}
+                          className="flex-shrink-0 rounded-2xl overflow-hidden border border-gray-200 bg-white shadow-sm"
+                          style={{ width: "220px" }}
+                        >
+                          <div
+                            className="overflow-hidden relative"
+                            style={{ height: "280px" }}
                           >
-                            {thumb && (
-                              <img
-                                src={thumb}
-                                alt="Reel thumbnail"
-                                loading="lazy"
-                                onError={(e) => {
-                                  (
-                                    e.currentTarget as HTMLImageElement
-                                  ).style.display = "none";
-                                }}
-                                className="absolute inset-0 w-full h-full object-cover"
-                              />
-                            )}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <div className="w-12 h-12 rounded-full bg-white/90 group-hover:bg-white flex items-center justify-center shadow-lg transition-all">
-                                <svg
-                                  viewBox="0 0 24 24"
-                                  className="w-5 h-5 ml-0.5"
-                                  fill="currentColor"
-                                  style={{
-                                    color: design?.primaryColor || "#f97316",
-                                  }}
-                                >
-                                  <path d="M8 5v14l11-7z" />
-                                </svg>
-                              </div>
-                            </div>
-                            <div className="absolute bottom-2 left-2 right-2 flex items-center gap-1.5 text-white text-[11px] font-medium">
-                              <Instagram className="h-3 w-3" />
-                              <span className="truncate">
-                                Reel {(idx % reels.length) + 1}
-                              </span>
-                            </div>
-                          </button>
-                        );
-                      })}
+                            <iframe
+                              src={item.src}
+                              title={`Instagram reel ${i}`}
+                              loading="lazy"
+                              allow="encrypted-media"
+                              allowFullScreen
+                              scrolling="no"
+                              style={{
+                                width: "100%",
+                                height: "820px",
+                                border: 0,
+                                display: "block",
+                                marginTop: "-60px",
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                   <p className="text-[11px] text-gray-400 mt-3 text-center">
-                    Hover to pause · click any reel to play
+                    Hover to pause
                   </p>
                 </div>
               </TabsContent>
@@ -4385,7 +4392,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           <TabsContent value="organizer" className="mt-4 space-y-4">
             <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
               <p
-                className="text-xs font-semibold tracking-[0.2em] uppercase mb-5"
+                className="text-lg font-bold tracking-widest uppercase mb-5"
                 style={{ color: design?.primaryColor }}
               >
                 About Organizer
@@ -4460,7 +4467,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               dresscode ||
               specialInstructions ||
               refundPolicy ||
-              termsAndConditions) && (
+              termsAndConditions ||
+              (Array.isArray((eventData as any)?.customSections) &&
+                (eventData as any).customSections.some(
+                  (s: any) =>
+                    (s?.heading || "").trim() ||
+                    (s?.content || "").trim(),
+                ))) && (
               <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                 <button
                   type="button"
@@ -4469,7 +4482,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   className="w-full flex items-center justify-between p-5 sm:p-6 hover:bg-gray-50 transition-colors"
                 >
                   <span
-                    className="text-xs font-semibold tracking-[0.2em] uppercase"
+                    className="text-lg font-bold tracking-widest uppercase"
                     style={{ color: design?.primaryColor }}
                   >
                     Additional Information
@@ -4482,9 +4495,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 </button>
                 {showAdditionalInfo && (
                   <div className="px-5 sm:px-6 pb-5 sm:pb-6 space-y-4 border-t border-gray-100 pt-4">
+                    {/* Section headings inside this panel share one
+                        style: design.primaryColor + bold + sm font +
+                        wide letter-tracking — same color family as
+                        the panel's own "Additional Information"
+                        header so the eye reads them as siblings of
+                        that title. */}
                     {ageRestriction && (
                       <div>
-                        <p className="text-xs text-gray-400 uppercase tracking-widest mb-0.5">
+                        <p
+                          className="text-sm font-bold uppercase tracking-widest mb-1"
+                          style={{ color: design?.primaryColor }}
+                        >
                           Age Restriction
                         </p>
                         <p className="text-gray-700 text-sm">{ageRestriction}</p>
@@ -4492,7 +4514,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     )}
                     {dresscode && (
                       <div>
-                        <p className="text-xs text-gray-400 uppercase tracking-widest mb-0.5">
+                        <p
+                          className="text-sm font-bold uppercase tracking-widest mb-1"
+                          style={{ color: design?.primaryColor }}
+                        >
                           Dress Code
                         </p>
                         <p className="text-gray-700 text-sm">{dresscode}</p>
@@ -4500,7 +4525,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     )}
                     {specialInstructions && (
                       <div>
-                        <p className="text-xs text-gray-400 uppercase tracking-widest mb-0.5">
+                        <p
+                          className="text-sm font-bold uppercase tracking-widest mb-1"
+                          style={{ color: design?.primaryColor }}
+                        >
                           Special Instructions
                         </p>
                         <div
@@ -4513,7 +4541,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     )}
                     {refundPolicy && (
                       <div>
-                        <p className="text-xs text-gray-400 uppercase tracking-widest mb-0.5">
+                        <p
+                          className="text-sm font-bold uppercase tracking-widest mb-1"
+                          style={{ color: design?.primaryColor }}
+                        >
                           Refund Policy
                         </p>
                         <div
@@ -4524,7 +4555,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     )}
                     {termsAndConditions && (
                       <div>
-                        <p className="text-xs text-gray-400 uppercase tracking-widest mb-0.5">
+                        <p
+                          className="text-sm font-bold uppercase tracking-widest mb-1"
+                          style={{ color: design?.primaryColor }}
+                        >
                           Terms & Conditions
                         </p>
                         <div
@@ -4535,6 +4569,38 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         />
                       </div>
                     )}
+                    {/* Free-form custom sections from the Basic Info
+                        tab. Same render pattern as the fixed entries
+                        above. Skipped when both the heading and body
+                        are empty so a half-typed section doesn't
+                        show as a blank row. */}
+                    {Array.isArray((eventData as any)?.customSections) &&
+                      (eventData as any).customSections
+                        .filter(
+                          (s: any) =>
+                            (s?.heading || "").trim() ||
+                            (s?.content || "").trim(),
+                        )
+                        .map((s: any) => (
+                          <div key={s.id || s.heading}>
+                            {(s.heading || "").trim() && (
+                              <p
+                                className="text-sm font-bold uppercase tracking-widest mb-1"
+                                style={{ color: design?.primaryColor }}
+                              >
+                                {s.heading}
+                              </p>
+                            )}
+                            {(s.content || "").trim() && (
+                              <div
+                                className="text-gray-600 prose prose-sm max-w-none [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4"
+                                dangerouslySetInnerHTML={{
+                                  __html: s.content,
+                                }}
+                              />
+                            )}
+                          </div>
+                        ))}
                   </div>
                 )}
               </div>
@@ -4546,7 +4612,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             {eventData?.speakers && eventData.speakers.length > 0 && (
               <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
                 <p
-                  className="text-xs font-semibold tracking-[0.2em] uppercase mb-6"
+                  className="text-lg font-bold tracking-widest uppercase mb-6"
                   style={{ color: design?.primaryColor }}
                 >
                   Speaker Lineup
@@ -4753,7 +4819,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       <div className="flex items-center gap-2">
                         <MapIcon className="h-4 w-4 text-gray-400" />
                         <p
-                          className="text-xs font-semibold tracking-[0.2em] uppercase"
+                          className="text-lg font-bold tracking-widest uppercase"
                           style={{ color: design?.primaryColor }}
                         >
                           Venue Layouts
@@ -4833,7 +4899,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     >
                       <TableIcon className="h-4 w-4 text-gray-400" />
                       <p
-                        className="text-xs font-semibold tracking-[0.2em] uppercase text-left"
+                        className="text-lg font-bold tracking-widest uppercase text-left"
                         style={{ color: design?.primaryColor }}
                       >
                         {venueConfig[currentLayoutIndex].name} — Table
@@ -5019,7 +5085,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 {addOnItems && addOnItems.length > 0 && (
                   <div className="space-y-3">
                     <p
-                      className="text-xs font-semibold tracking-[0.2em] uppercase"
+                      className="text-lg font-bold tracking-widest uppercase"
                       style={{ color: design?.primaryColor }}
                     >
                       Add-On Items
@@ -6036,100 +6102,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           </TabsContent>
         </Tabs>
 
-        {/* Reel player — sits OUTSIDE the Tabs tree so switching
-            tabs doesn't tear it down. Uses Instagram's official embed
-            blockquote + their embed.js (loaded by the effect above)
-            so the reel actually plays inline. The /embed iframe URL
-            alone shows a static poster for reels, which is why the
-            previous version "didn't play". The `key` forces React to
-            re-mount the blockquote per URL so embed.js re-processes
-            it cleanly when switching between reels. */}
-        <Dialog
-          open={!!activeReelUrl}
-          onOpenChange={(open) => !open && setActiveReelUrl(null)}
-        >
-          {/* Direct iframe to Instagram's self-contained embed URL —
-              matches the working pattern in kioscart-v1's
-              InstagramCarousel.tsx. The /p/<id>/embed/ endpoint serves
-              both posts AND reels, the cr=1 + v=14 + rd= query params
-              tell Instagram to render the full interactive player
-              (poster + play overlay + caption), and we let the iframe
-              size itself naturally inside DialogContent so the reel
-              poster image actually shows behind the play button —
-              fixing the "play button on blank background" we saw with
-              the blockquote/embed.js route. */}
-          <DialogContent className="max-w-[420px] p-0 overflow-hidden bg-white">
-            {activeReelUrl &&
-              (() => {
-                // Pull the reel/post id out of the URL path. Instagram
-                // share URLs sometimes append a share token after the
-                // canonical 11-char shortcode (e.g.
-                //   /reel/C2rtvw9C8Ml5L4e1In_VZDpTSCVfpFiYcZJePc0/
-                // where only C2rtvw9C8Ml is the embeddable id). Trim
-                // anything past 11 chars so /p/<id>/embed/ resolves.
-                let id = "";
-                try {
-                  const u = new URL(activeReelUrl);
-                  const segs = u.pathname.split("/").filter(Boolean);
-                  const i = segs.findIndex((s) =>
-                    ["reel", "reels", "p", "tv"].includes(s.toLowerCase()),
-                  );
-                  if (i >= 0) id = segs[i + 1] || "";
-                } catch {
-                  /* invalid URL → no embed */
-                }
-                if (!id) return null;
-                const canonicalId =
-                  id.length > 11 ? id.slice(0, 11) : id;
-                const src = `https://www.instagram.com/p/${canonicalId}/embed/?cr=1&v=14&rd=https%3A%2F%2Fwww.instagram.com`;
-                // Canonical "view on Instagram" link — given as a
-                // fallback because Instagram's embed will silently
-                // render a generic placeholder card (no poster) when
-                // the reel is private, age-restricted, region-locked,
-                // or unembeddable. The link lets visitors jump to the
-                // reel even if the inline player doesn't render.
-                const canonical = `https://www.instagram.com/reel/${canonicalId}/`;
-                return (
-                  <div className="flex flex-col bg-white">
-                    <iframe
-                      key={canonicalId}
-                      src={src}
-                      title="Instagram reel"
-                      loading="lazy"
-                      // `strict-origin-when-cross-origin` ensures
-                      // Instagram's /embed/ endpoint receives our
-                      // origin in the Referer header. Without it the
-                      // endpoint serves a logged-out placeholder card
-                      // instead of the actual reel poster.
-                      referrerPolicy="strict-origin-when-cross-origin"
-                      allow="encrypted-media; autoplay; picture-in-picture"
-                      allowFullScreen
-                      scrolling="no"
-                      className="w-full block bg-white"
-                      style={{
-                        height: "min(80vh, 760px)",
-                        border: 0,
-                      }}
-                    />
-                    <div className="flex items-center justify-between gap-2 border-t border-gray-100 px-4 py-2.5 text-xs">
-                      <span className="text-gray-400">
-                        Reel not loading? It may be private or region-locked.
-                      </span>
-                      <a
-                        href={canonical}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 font-medium text-pink-600 hover:underline"
-                      >
-                        <Instagram className="h-3.5 w-3.5" />
-                        Open on Instagram
-                      </a>
-                    </div>
-                  </div>
-                );
-              })()}
-          </DialogContent>
-        </Dialog>
+        {/* (Reel player Dialog removed — each reel card now embeds
+            the Instagram iframe inline in the History tab's marquee,
+            matching kioscart-v1's working pattern. The Dialog approach
+            consistently rendered Instagram's logged-out placeholder
+            instead of the actual reel.) */}
 
         <EventFeedbackTokenHandler
           eventId={id || eventData?._id || ""}
