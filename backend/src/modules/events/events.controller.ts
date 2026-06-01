@@ -220,7 +220,14 @@ export class EventsController {
           filename: generateFileName,
         }),
         fileFilter: imageFilter,
-        limits: { fileSize: 5 * 1024 * 1024 }, // 5MB per file
+        limits: {
+          fileSize: 5 * 1024 * 1024, // 5MB per image file
+          // Non-file text fields (venueTables, venueRoundTables,
+          // venueAnnotations, etc.) are JSON strings that can get large on
+          // big layouts. multer defaults to 1MB/field which rejected those
+          // with "Field value too long" — raise it generously.
+          fieldSize: 25 * 1024 * 1024, // 25MB per text field
+        },
       },
     ),
   )
@@ -528,7 +535,12 @@ export class EventsController {
           filename: generateFileName,
         }),
         fileFilter: imageFilter,
-        limits: { fileSize: 5 * 1024 * 1024 },
+        limits: {
+          fileSize: 5 * 1024 * 1024, // 5MB per image file
+          // Large JSON text fields (venueTables / venueAnnotations / etc.)
+          // exceed multer's 1MB/field default — raise it so big layouts save.
+          fieldSize: 25 * 1024 * 1024, // 25MB per text field
+        },
       },
     ),
   )
