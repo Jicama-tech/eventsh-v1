@@ -104,6 +104,19 @@ export default function VenueAnnotationLayer({
     left: number;
     top: number;
   } | null>(null);
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Reliably focus + select the editor when it opens (more dependable than
+  // `autoFocus` when the surrounding tree re-renders on create).
+  useEffect(() => {
+    if (editing) {
+      const el = editInputRef.current;
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    }
+  }, [editing?.id]);
 
   useEffect(() => {
     if (tool !== "select") {
@@ -169,16 +182,20 @@ export default function VenueAnnotationLayer({
 
     if (tool === "text") {
       const id = rid();
+      // Seed with a visible default so a label always appears on click,
+      // even before typing; the editor opens with it pre-selected.
       const a: VenueAnnotation = {
         id,
         type: "text",
         x: p.x,
         y: p.y,
-        text: "",
+        text: "Text",
         color,
         fontSize: 16,
       };
       commit([...annotations, a]);
+      setSelectedId(id);
+      onSelect?.(id);
       openEditor(a);
       return;
     }
@@ -267,20 +284,15 @@ export default function VenueAnnotationLayer({
   const closeEditor = (save: boolean) => {
     if (!editing) return;
     if (save) {
-      const v = editing.value.trim();
-      if (!v) {
-        commit(annotations.filter((a) => a.id !== editing.id));
-      } else {
-        commit(
-          annotations.map((a) =>
-            a.id === editing.id ? { ...a, text: v } : a,
-          ),
-        );
-      }
-    } else {
-      // Cancel on a never-saved empty text removes the stub.
-      const a = annotations.find((x) => x.id === editing.id);
-      if (a && !a.text) commit(annotations.filter((x) => x.id !== editing.id));
+      // Keep a non-empty label (fall back to "Text" rather than deleting on
+      // blur, so a placed label never silently vanishes). Use the toolbar's
+      // Delete button in Select mode to remove it.
+      const v = editing.value.trim() || "Text";
+      commit(
+        annotations.map((a) =>
+          a.id === editing.id ? { ...a, text: v } : a,
+        ),
+      );
     }
     setEditing(null);
   };
@@ -494,6 +506,7 @@ export default function VenueAnnotationLayer({
 
       {editing && (
         <input
+          ref={editInputRef}
           autoFocus
           value={editing.value}
           onChange={(e) =>

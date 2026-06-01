@@ -835,8 +835,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // never divides by zero.
   const computeCanvasExtents = () => {
     const PADDING = 80;
-    const vw = eventData?.venueConfig?.[currentLayoutIndex]?.width || 800;
-    const vh = eventData?.venueConfig?.[currentLayoutIndex]?.height || 500;
+    const cfg = eventData?.venueConfig?.[currentLayoutIndex] as any;
+    const vw = cfg?.width || 800;
+    const vh = cfg?.height || 500;
+    // If the organizer cropped the venue, the visitor view shows EXACTLY the
+    // separate crop dimensions (the real width/height stay as the reference
+    // venue size and are never overwritten). Items outside are filtered out.
+    if (cfg?.cropped) {
+      return {
+        width: Number(cfg.cropWidth) || vw,
+        height: Number(cfg.cropHeight) || vh,
+      };
+    }
     const layoutIds = eventData?.venueConfig?.map((c: any) => c.id) || [];
     const layoutId = layoutIds[currentLayoutIndex] || "default";
     const tables =
@@ -847,36 +857,46 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     const zones = Array.isArray((eventData as any)?.venueSpeakerZones)
       ? ((eventData as any).venueSpeakerZones as any[])
       : [];
+    // The venue dimensions (the organizer's crop) are the baseline. Items
+    // only extend the canvas if they fall within a sane range — a single
+    // stray item dragged thousands of px away (a known data glitch) must NOT
+    // blow the canvas up into endless empty space.
+    const limitX = Math.max(vw * 5, 6000);
+    const limitY = Math.max(vh * 5, 6000);
     let maxX = vw;
     let maxY = vh;
+    const addX = (v: number) => {
+      if (v <= limitX) maxX = Math.max(maxX, v);
+    };
+    const addY = (v: number) => {
+      if (v <= limitY) maxY = Math.max(maxY, v);
+    };
     for (const t of tables) {
       // Match the canvas render: the visible footprint is the resize
       // override when present, else the template size.
       const w = t?.displayWidth ?? t?.width ?? 0;
       const h = t?.displayHeight ?? t?.height ?? 0;
-      maxX = Math.max(maxX, (t?.x || 0) + w);
-      maxY = Math.max(maxY, (t?.y || 0) + h);
+      addX((t?.x || 0) + w);
+      addY((t?.y || 0) + h);
     }
     for (const r of round) {
       const d = r?.tableDiameter || 120;
-      maxX = Math.max(maxX, (r?.x || 0) + d);
-      maxY = Math.max(maxY, (r?.y || 0) + d);
+      addX((r?.x || 0) + d);
+      addY((r?.y || 0) + d);
     }
     for (const z of zones) {
-      maxX = Math.max(maxX, (z?.x || 0) + (z?.width || 0));
-      maxY = Math.max(maxY, (z?.y || 0) + (z?.height || 0));
+      addX((z?.x || 0) + (z?.width || 0));
+      addY((z?.y || 0) + (z?.height || 0));
     }
-    // Doors can be circles (legacy 50×50) or organizer-resized squares;
-    // honour the stored width/height so the canvas stretches to fit any
-    // door placed past the venue edge.
+    // Doors can be circles (legacy 50×50) or organizer-resized squares.
     const doors = Array.isArray((eventData as any)?.venueDoors)
       ? ((eventData as any).venueDoors as any[])
       : [];
     for (const d of doors) {
       const dw = Number(d?.width) > 0 ? Number(d.width) : 50;
       const dh = Number(d?.height) > 0 ? Number(d.height) : 50;
-      maxX = Math.max(maxX, (d?.x || 0) + dw);
-      maxY = Math.max(maxY, (d?.y || 0) + dh);
+      addX((d?.x || 0) + dw);
+      addY((d?.y || 0) + dh);
     }
     return { width: maxX + PADDING, height: maxY + PADDING };
   };
@@ -2970,16 +2990,34 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // CAD annotations (lines / text / boxes / dimensions) for the current
   // layout — rendered read-only over the venue map and the exhibitor
   // stall-selection map. Visitor maps use raw px (scale = 1).
+  // When the organizer has cropped the venue, anything whose top-left falls
+  // outside the cropped area is hidden on the visitor views. We filter the
+  // items out (rather than clipping with overflow:hidden) so hover tooltips
+  // — which extend above/below a space — are never cut off.
+  const cropCfg = eventData?.venueConfig?.[currentLayoutIndex] as any;
+  const cropActive = !!cropCfg?.cropped;
+  const cropW = Number(cropCfg?.cropWidth) || Number(cropCfg?.width) || 0;
+  const cropH = Number(cropCfg?.cropHeight) || Number(cropCfg?.height) || 0;
+  const inCrop = (x?: number, y?: number) =>
+    !cropActive || ((Number(x) || 0) < cropW && (Number(y) || 0) < cropH);
+
   const layoutAnnotations: any[] = (
     Array.isArray((eventData as any)?.venueAnnotations)
       ? ((eventData as any).venueAnnotations as any[])
       : []
-  ).filter(
-    (a) =>
-      !a?.venueConfigId ||
-      a.venueConfigId === currentLayoutId ||
-      a.venueConfigId === "default",
-  );
+  )
+    .filter(
+      (a) =>
+        !a?.venueConfigId ||
+        a.venueConfigId === currentLayoutId ||
+        a.venueConfigId === "default",
+    )
+    .filter((a) =>
+      inCrop(
+        a?.x ?? (Array.isArray(a?.points) ? a.points[0] : 0),
+        a?.y ?? (Array.isArray(a?.points) ? a.points[1] : 0),
+      ),
+    );
   const whatsAppNumber = organizer?.whatsAppNumber || "";
 
   // Canvas size for the rendered venue map. Delegates to the helper
@@ -3011,7 +3049,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   //  - shape === "square" → rounded-md rectangle at door.width × door.height
   //  - shape === "circle" (or missing, for legacy data) → 50×50 round chip
   const renderDoors = () =>
-    currentLayoutDoors.map((door: any) => {
+    currentLayoutDoors
+      .filter((door: any) => inCrop(door?.x, door?.y))
+      .map((door: any) => {
       const type = (door?.type || "").toLowerCase();
       const isEntrance = type === "entrance";
       const isExit = type === "exit";
@@ -4504,153 +4544,119 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 )}
             </div>
 
-            {/* Collapsible Additional Information — moved here from the
-                deleted "Event Details" tab. Header is a button so the
-                whole row toggles; chevron flips up/down to signal state
-                (down = collapsed, "click to reveal"; up = expanded).
-                Hidden entirely when there is nothing to show. */}
-            {(ageRestriction ||
-              dresscode ||
-              specialInstructions ||
-              refundPolicy ||
-              termsAndConditions ||
-              (Array.isArray((eventData as any)?.customSections) &&
-                (eventData as any).customSections.some(
-                  (s: any) =>
-                    (s?.heading || "").trim() ||
-                    (s?.content || "").trim(),
-                ))) && (
-              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setShowAdditionalInfo((v) => !v)}
-                  aria-expanded={showAdditionalInfo}
-                  className="w-full flex items-center justify-between p-5 sm:p-6 hover:bg-gray-50 transition-colors"
-                >
-                  <span
-                    className="text-lg font-bold tracking-widest uppercase"
-                    style={{ color: design?.primaryColor }}
-                  >
-                    Additional Information
-                  </span>
-                  {showAdditionalInfo ? (
-                    <ChevronUp className="h-4 w-4 text-gray-500" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-gray-500" />
-                  )}
-                </button>
-                {showAdditionalInfo && (
-                  <div className="px-5 sm:px-6 pb-5 sm:pb-6 space-y-4 border-t border-gray-100 pt-4">
-                    {/* Section headings inside this panel share one
-                        style: design.primaryColor + bold + sm font +
-                        wide letter-tracking — same color family as
-                        the panel's own "Additional Information"
-                        header so the eye reads them as siblings of
-                        that title. */}
-                    {ageRestriction && (
-                      <div>
-                        <p
-                          className="text-sm font-bold uppercase tracking-widest mb-1"
-                          style={{ color: design?.primaryColor }}
-                        >
-                          Age Restriction
-                        </p>
-                        <p className="text-gray-700 text-sm">{ageRestriction}</p>
-                      </div>
-                    )}
-                    {dresscode && (
-                      <div>
-                        <p
-                          className="text-sm font-bold uppercase tracking-widest mb-1"
-                          style={{ color: design?.primaryColor }}
-                        >
-                          Dress Code
-                        </p>
-                        <p className="text-gray-700 text-sm">{dresscode}</p>
-                      </div>
-                    )}
-                    {specialInstructions && (
-                      <div>
-                        <p
-                          className="text-sm font-bold uppercase tracking-widest mb-1"
-                          style={{ color: design?.primaryColor }}
-                        >
-                          Special Instructions
-                        </p>
-                        <div
-                          className="text-gray-600 prose prose-sm max-w-none [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4"
-                          dangerouslySetInnerHTML={{
-                            __html: specialInstructions,
-                          }}
-                        />
-                      </div>
-                    )}
-                    {refundPolicy && (
-                      <div>
-                        <p
-                          className="text-sm font-bold uppercase tracking-widest mb-1"
-                          style={{ color: design?.primaryColor }}
-                        >
-                          Refund Policy
-                        </p>
-                        <div
-                          className="text-gray-600 prose prose-sm max-w-none [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4"
-                          dangerouslySetInnerHTML={{ __html: refundPolicy }}
-                        />
-                      </div>
-                    )}
-                    {termsAndConditions && (
-                      <div>
-                        <p
-                          className="text-sm font-bold uppercase tracking-widest mb-1"
-                          style={{ color: design?.primaryColor }}
-                        >
-                          Terms & Conditions
-                        </p>
-                        <div
-                          className="text-gray-600 prose prose-sm max-w-none [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4"
-                          dangerouslySetInnerHTML={{
-                            __html: termsAndConditions,
-                          }}
-                        />
-                      </div>
-                    )}
-                    {/* Free-form custom sections from the Basic Info
-                        tab. Same render pattern as the fixed entries
-                        above. Skipped when both the heading and body
-                        are empty so a half-typed section doesn't
-                        show as a blank row. */}
-                    {Array.isArray((eventData as any)?.customSections) &&
-                      (eventData as any).customSections
-                        .filter(
-                          (s: any) =>
-                            (s?.heading || "").trim() ||
-                            (s?.content || "").trim(),
-                        )
-                        .map((s: any) => (
-                          <div key={s.id || s.heading}>
-                            {(s.heading || "").trim() && (
-                              <p
-                                className="text-sm font-bold uppercase tracking-widest mb-1"
-                                style={{ color: design?.primaryColor }}
-                              >
-                                {s.heading}
-                              </p>
-                            )}
-                            {(s.content || "").trim() && (
-                              <div
-                                className="text-gray-600 prose prose-sm max-w-none [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4"
-                                dangerouslySetInnerHTML={{
-                                  __html: s.content,
-                                }}
-                              />
-                            )}
+            {/* Info sections — each rendered in its OWN card, and shown only
+                when the organizer's per-section toggle is on. Age Restriction
+                + Dress Code share a single card. A missing visibility key
+                means "shown" (so older events keep displaying everything). */}
+            {(() => {
+              const secVis =
+                ((eventData as any)?.sectionVisibility as
+                  | Record<string, boolean>
+                  | undefined) || {};
+              const shown = (k: string) => secVis[k] !== false;
+              const headingStyle = { color: design?.primaryColor };
+              const cardCls =
+                "rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm";
+              const titleCls =
+                "text-lg font-bold tracking-widest uppercase mb-3";
+              const htmlCls =
+                "text-gray-600 prose prose-sm max-w-none [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4";
+              const customs = Array.isArray((eventData as any)?.customSections)
+                ? ((eventData as any).customSections as any[])
+                : [];
+              return (
+                <>
+                  {shown("ageDress") && (ageRestriction || dresscode) && (
+                    <div className={cardCls}>
+                      <p className={titleCls} style={headingStyle}>
+                        Age Restriction &amp; Dress Code
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {ageRestriction && (
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">
+                              Age Restriction
+                            </p>
+                            <p className="text-gray-700 text-sm">
+                              {ageRestriction}
+                            </p>
                           </div>
-                        ))}
-                  </div>
-                )}
-              </div>
-            )}
+                        )}
+                        {dresscode && (
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">
+                              Dress Code
+                            </p>
+                            <p className="text-gray-700 text-sm">
+                              {dresscode}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {shown("specialInstructions") && specialInstructions && (
+                    <div className={cardCls}>
+                      <p className={titleCls} style={headingStyle}>
+                        Special Instructions
+                      </p>
+                      <div
+                        className={htmlCls}
+                        dangerouslySetInnerHTML={{
+                          __html: specialInstructions,
+                        }}
+                      />
+                    </div>
+                  )}
+                  {shown("refundPolicy") && refundPolicy && (
+                    <div className={cardCls}>
+                      <p className={titleCls} style={headingStyle}>
+                        Refund Policy
+                      </p>
+                      <div
+                        className={htmlCls}
+                        dangerouslySetInnerHTML={{ __html: refundPolicy }}
+                      />
+                    </div>
+                  )}
+                  {shown("termsAndConditions") && termsAndConditions && (
+                    <div className={cardCls}>
+                      <p className={titleCls} style={headingStyle}>
+                        Terms &amp; Conditions
+                      </p>
+                      <div
+                        className={htmlCls}
+                        dangerouslySetInnerHTML={{
+                          __html: termsAndConditions,
+                        }}
+                      />
+                    </div>
+                  )}
+                  {customs
+                    .filter(
+                      (s: any) =>
+                        ((s?.heading || "").trim() ||
+                          (s?.content || "").trim()) &&
+                        shown(s?.id),
+                    )
+                    .map((s: any) => (
+                      <div key={s.id || s.heading} className={cardCls}>
+                        {(s.heading || "").trim() && (
+                          <p className={titleCls} style={headingStyle}>
+                            {s.heading}
+                          </p>
+                        )}
+                        {(s.content || "").trim() && (
+                          <div
+                            className={htmlCls}
+                            dangerouslySetInnerHTML={{ __html: s.content }}
+                          />
+                        )}
+                      </div>
+                    ))}
+                </>
+              );
+            })()}
           </TabsContent>
 
           {/* Speaker Zone */}
@@ -5006,7 +5012,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 MAIN STAGE
                               </div>
                             )}
-                            {venueTables[currentLayoutId]?.map((table) => {
+                            {venueTables[currentLayoutId]
+                              ?.filter((table) => inCrop(table.x, table.y))
+                              .map((table) => {
                               const isBooked = table.isBooked;
                               const notForSale = (table as any).forSale === false;
                               return (
@@ -5090,9 +5098,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             {roundTableData
                               .filter(
                                 (rt: any) =>
-                                  !rt.venueConfigId ||
-                                  rt.venueConfigId === currentLayoutId ||
-                                  rt.venueConfigId === "default",
+                                  (!rt.venueConfigId ||
+                                    rt.venueConfigId === currentLayoutId ||
+                                    rt.venueConfigId === "default") &&
+                                  inCrop(rt?.x, rt?.y),
                               )
                               .map((rt: any) => {
                                 const bookedChairs: number[] =
@@ -7774,8 +7783,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           )}
 
                           {/* Tables */}
-                          {(availableTables[currentLayoutId] || []).map(
-                            (table) => {
+                          {(availableTables[currentLayoutId] || [])
+                            .filter((table) => inCrop(table.x, table.y))
+                            .map((table) => {
                               const isSelected = selectedTables.some(
                                 (t) => t.positionId === table.positionId,
                               );
@@ -7795,13 +7805,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 borderColor = "border-amber-300";
                                 cursor = "cursor-default opacity-60";
                               } else if (isBooked) {
+                                // Sold — clearly visible dark grey, not selectable.
+                                bgColor = "bg-gray-500/90";
+                                borderColor = "border-gray-700";
+                                cursor = "cursor-not-allowed";
+                              } else if (isWrongTemplate || isWrongCategory) {
+                                // Not allowed for this exhibitor — darker grey
+                                // so it's visible but obviously disabled.
                                 bgColor = "bg-gray-400/80";
                                 borderColor = "border-gray-500";
-                                cursor = "cursor-not-allowed opacity-70";
-                              } else if (isWrongTemplate || isWrongCategory) {
-                                bgColor = "bg-gray-200/60";
-                                borderColor = "border-gray-300";
-                                cursor = "cursor-not-allowed opacity-40";
+                                cursor = "cursor-not-allowed opacity-90";
                               } else if (isSelected) {
                                 bgColor = "bg-blue-300";
                                 borderColor = "border-blue-600";
@@ -7828,9 +7841,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     transformOrigin: "center center",
                                     zIndex: isSelected ? 10 : 5,
                                   }}
-                                  onClick={() =>
-                                    !isBooked && handleTableClick(table)
-                                  }
+                                  onClick={() => {
+                                    // Sold / not-allowed / not-for-sale stalls
+                                    // are visible but not selectable.
+                                    if (
+                                      isBooked ||
+                                      isWrongTemplate ||
+                                      isWrongCategory ||
+                                      isNotForSale
+                                    )
+                                      return;
+                                    handleTableClick(table);
+                                  }}
                                 >
                                   {/* Label */}
                                   <div
@@ -7859,41 +7881,59 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     }}
                                   >
                                     <div className="rounded-md bg-gray-900 px-3 py-2 text-xs text-white shadow-xl border border-gray-700 flex flex-col gap-0.5">
-                                      <div className="font-bold text-sm whitespace-nowrap">
-                                        {table.name}
-                                      </div>
-                                      <div className="text-gray-300 whitespace-nowrap">
-                                        {table.type} · Row {table.rowNumber}
-                                      </div>
-                                      <div className="text-gray-300 whitespace-nowrap">
-                                        {table.width * 10}×{table.height * 10}cm
-                                      </div>
                                       {isBooked ? (
+                                        // Sold — status only, no name / price / size.
                                         <div className="text-red-400 font-bold whitespace-nowrap">
-                                          Unavailable
+                                          Sold
                                         </div>
-                                      ) : isSelected ? (
-                                        <div className="text-blue-400 font-bold whitespace-nowrap">
-                                          ✓ Selected
+                                      ) : isWrongTemplate ||
+                                        isWrongCategory ||
+                                        isNotForSale ? (
+                                        // Reserved / not available to this
+                                        // exhibitor — status only, no details.
+                                        <div className="text-amber-300 font-bold whitespace-nowrap">
+                                          Reserved
                                         </div>
                                       ) : (
-                                        (() => {
-                                          const p = resolveTablePricing(table);
-                                          return p.memberSaved > 0 ? (
-                                            <>
-                                              <div className="text-emerald-400 font-semibold whitespace-nowrap">
-                                                Member {formatPrice(p.tablePrice)}
-                                              </div>
-                                              <div className="text-gray-500 line-through whitespace-nowrap text-[10px]">
-                                                {formatPrice(table.tablePrice)}
-                                              </div>
-                                            </>
-                                          ) : (
-                                            <div className="text-green-400 font-semibold whitespace-nowrap">
-                                              {formatPrice(p.tablePrice)}
+                                        <>
+                                          <div className="font-bold text-sm whitespace-nowrap">
+                                            {table.name}
+                                          </div>
+                                          <div className="text-gray-300 whitespace-nowrap">
+                                            {table.type} · Row {table.rowNumber}
+                                          </div>
+                                          <div className="text-gray-300 whitespace-nowrap">
+                                            {table.width * 10}×{table.height * 10}
+                                            cm
+                                          </div>
+                                          {isSelected ? (
+                                            <div className="text-blue-400 font-bold whitespace-nowrap">
+                                              ✓ Selected
                                             </div>
-                                          );
-                                        })()
+                                          ) : (
+                                            (() => {
+                                              const p =
+                                                resolveTablePricing(table);
+                                              return p.memberSaved > 0 ? (
+                                                <>
+                                                  <div className="text-emerald-400 font-semibold whitespace-nowrap">
+                                                    Member{" "}
+                                                    {formatPrice(p.tablePrice)}
+                                                  </div>
+                                                  <div className="text-gray-500 line-through whitespace-nowrap text-[10px]">
+                                                    {formatPrice(
+                                                      table.tablePrice,
+                                                    )}
+                                                  </div>
+                                                </>
+                                              ) : (
+                                                <div className="text-green-400 font-semibold whitespace-nowrap">
+                                                  {formatPrice(p.tablePrice)}
+                                                </div>
+                                              );
+                                            })()
+                                          )}
+                                        </>
                                       )}
                                     </div>
                                     <div className="absolute left-1/2 top-full -mt-1 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 border-b border-r border-gray-700" />
@@ -8399,7 +8439,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               )}
 
               {/* Tables */}
-              {(availableTables[currentLayoutId] || []).map((table) => {
+              {(availableTables[currentLayoutId] || [])
+                .filter((table) => inCrop(table.x, table.y))
+                .map((table) => {
                 const isSelected = selectedTables.some(
                   (t) => t.positionId === table.positionId,
                 );
@@ -8411,13 +8453,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 let cur = "cursor-pointer hover:ring-2 hover:ring-blue-400";
 
                 if (isBooked) {
+                  bg = "bg-gray-500/90";
+                  border = "border-gray-700";
+                  cur = "cursor-not-allowed";
+                } else if (isWrongCategory) {
                   bg = "bg-gray-400/80";
                   border = "border-gray-500";
-                  cur = "cursor-not-allowed opacity-70";
-                } else if (isWrongCategory) {
-                  bg = "bg-gray-200/60";
-                  border = "border-gray-300";
-                  cur = "cursor-not-allowed opacity-40";
+                  cur = "cursor-not-allowed opacity-90";
                 } else if (isSelected) {
                   bg = "bg-blue-300";
                   border = "border-blue-600";
@@ -8439,7 +8481,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       transform: `rotate(${table.rotation || 0}deg)`,
                       zIndex: isSelected ? 10 : 5,
                     }}
-                    onClick={() => !isBooked && handleTableClick(table)}
+                    onClick={() => {
+                      if (isBooked || isWrongCategory) return;
+                      handleTableClick(table);
+                    }}
                   >
                     <span className="text-[9px] font-bold text-center leading-none px-1 truncate">
                       {table.name}
@@ -8449,35 +8494,43 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <div className="relative">
                         <div className="rounded bg-gray-900 px-3 py-2 text-[10px] text-white shadow border border-gray-700 flex flex-col gap-0.5">
-                          <div className="font-bold whitespace-nowrap">
-                            {table.name}
-                          </div>
-                          <div className="text-gray-300 whitespace-nowrap">
-                            Row {table.rowNumber}
-                          </div>
-                          <div className="text-gray-300 whitespace-nowrap">
-                            {table.width * 10}×{table.height * 10}cm
-                          </div>
-                          <div
-                            className={`whitespace-nowrap ${
-                              isBooked
-                                ? "text-red-400"
-                                : isSelected
-                                  ? "text-blue-400"
-                                  : "text-green-400"
-                            }`}
-                          >
-                            {isBooked
-                              ? "Booked"
-                              : isSelected
-                                ? "✓ Selected"
-                                : (() => {
-                                    const p = resolveTablePricing(table);
-                                    return p.memberSaved > 0
-                                      ? `Member ${formatPrice(p.tablePrice)}`
-                                      : formatPrice(p.tablePrice);
-                                  })()}
-                          </div>
+                          {isBooked ? (
+                            <div className="text-red-400 font-bold whitespace-nowrap">
+                              Sold
+                            </div>
+                          ) : isWrongCategory ? (
+                            <div className="text-amber-300 font-bold whitespace-nowrap">
+                              Reserved
+                            </div>
+                          ) : (
+                            <>
+                              <div className="font-bold whitespace-nowrap">
+                                {table.name}
+                              </div>
+                              <div className="text-gray-300 whitespace-nowrap">
+                                Row {table.rowNumber}
+                              </div>
+                              <div className="text-gray-300 whitespace-nowrap">
+                                {table.width * 10}×{table.height * 10}cm
+                              </div>
+                              <div
+                                className={`whitespace-nowrap ${
+                                  isSelected
+                                    ? "text-blue-400"
+                                    : "text-green-400"
+                                }`}
+                              >
+                                {isSelected
+                                  ? "✓ Selected"
+                                  : (() => {
+                                      const p = resolveTablePricing(table);
+                                      return p.memberSaved > 0
+                                        ? `Member ${formatPrice(p.tablePrice)}`
+                                        : formatPrice(p.tablePrice);
+                                    })()}
+                              </div>
+                            </>
+                          )}
                         </div>
                         {/* Arrow tail — points down at the hovered space */}
                         <div className="absolute left-1/2 top-full -mt-1 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 border-b border-r border-gray-700" />

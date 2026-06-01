@@ -310,6 +310,13 @@ export class Event {
     content: string;
   }[];
 
+  // Per-section visibility on the eventfront. Keys: "ageDress",
+  // "specialInstructions", "refundPolicy", "termsAndConditions", and each
+  // custom section's id. A missing key means visible (so existing events
+  // keep showing everything); explicit `false` hides that section.
+  @Prop({ type: Object, default: {} })
+  sectionVisibility?: Record<string, boolean>;
+
   @Prop()
   setupTime?: string;
 

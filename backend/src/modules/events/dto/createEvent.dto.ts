@@ -8,6 +8,7 @@ import {
   IsEnum,
   ValidateNested,
   IsNumber,
+  IsObject,
   Min,
 } from "class-validator";
 import { Type } from "class-transformer";
@@ -203,6 +204,12 @@ export class VenueConfigDto {
   @IsString() @IsOptional() entranceShape?: string;
   @IsString() @IsOptional() exitShape?: string;
   @IsArray() @IsOptional() customDoorTypes?: any[];
+  // True once the organizer crops the venue — visitor views then show
+  // exactly cropWidth×cropHeight instead of fitting to placed items. The
+  // real width/height stay the reference venue size (never overwritten).
+  @IsBoolean() @IsOptional() cropped?: boolean;
+  @IsNumber() @IsOptional() cropWidth?: number;
+  @IsNumber() @IsOptional() cropHeight?: number;
 }
 
 export class SpeakerSlotTemplateDto {
@@ -496,6 +503,13 @@ export class CreateEventDto {
   @IsArray()
   @IsOptional()
   customSections?: { id: string; heading: string; content: string }[];
+
+  // Per-section eventfront visibility map (keys: ageDress,
+  // specialInstructions, refundPolicy, termsAndConditions + custom section
+  // ids). Missing key = visible.
+  @IsObject()
+  @IsOptional()
+  sectionVisibility?: Record<string, boolean>;
 
   @IsString()
   @IsOptional()

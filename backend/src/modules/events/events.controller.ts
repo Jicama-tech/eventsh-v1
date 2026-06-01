@@ -344,6 +344,8 @@ export class EventsController {
       // sent JSON-stringified.
       if (typeof body.customSections === "string")
         body.customSections = JSON.parse(body.customSections);
+      if (typeof body.sectionVisibility === "string")
+        body.sectionVisibility = JSON.parse(body.sectionVisibility);
 
       // Handle banner image
       if (files.banner && files.banner[0]) {
@@ -623,6 +625,8 @@ export class EventsController {
       // Custom Basic-Info sections — same unwrap as the create path.
       if (typeof body.customSections === "string")
         body.customSections = JSON.parse(body.customSections);
+      if (typeof body.sectionVisibility === "string")
+        body.sectionVisibility = JSON.parse(body.sectionVisibility);
 
       // Handle new banner image
       if (files.banner && files.banner[0]) {
