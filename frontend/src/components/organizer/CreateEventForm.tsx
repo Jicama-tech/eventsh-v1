@@ -326,6 +326,13 @@ interface VenueConfig {
     shape: "circle" | "square";
     color?: string;
   }[];
+  // Crop is a SEPARATE display boundary — it never overwrites the real
+  // width/height (those stay the reference venue size shown to users).
+  // When `cropped` is true the visitor views render exactly cropWidth ×
+  // cropHeight (items outside are hidden); width/height are untouched.
+  cropped?: boolean;
+  cropWidth?: number;
+  cropHeight?: number;
   totalRows: number; // NEW: Total number of rows
 }
 
@@ -3235,7 +3242,13 @@ const VenueDesigner = ({
     };
     const onUp = () => {
       const r = canvasResizeRef.current;
-      if (r) patchVenueConfig({ width: r.w, height: r.h });
+      // Commit to the SEPARATE crop fields — never the real width/height.
+      if (r)
+        patchVenueConfig({
+          cropWidth: r.w,
+          cropHeight: r.h,
+          cropped: true,
+        });
       setCanvasResize(null);
     };
     window.addEventListener("mousemove", onMove);
@@ -3252,8 +3265,16 @@ const VenueDesigner = ({
   // round tables / zones / doors actually placed (plus a small working
   // margin so a new item can be dropped near the edge). No giant fixed
   // floor — an empty venue shows a tight grid, not an endless sheet.
-  const CANVAS_MIN_W = Math.max(600, venueConfig?.width || 1000);
-  const CANVAS_MIN_H = Math.max(400, venueConfig?.height || 700);
+  const CANVAS_MIN_W = Math.max(
+    600,
+    venueConfig?.width || 1000,
+    venueConfig?.cropWidth || 0,
+  );
+  const CANVAS_MIN_H = Math.max(
+    400,
+    venueConfig?.height || 700,
+    venueConfig?.cropHeight || 0,
+  );
   const currentItemsForCanvas =
     (selectedVenueConfigId && venueTables[selectedVenueConfigId]) || [];
   const currentRoundsForCanvas =
@@ -5411,12 +5432,13 @@ const VenueDesigner = ({
                   while a drawing tool is active so it doesn't fight drawing. */}
               {annotationTool === "none" &&
                 (() => {
-                  const liveW = canvasResize
-                    ? canvasResize.w
-                    : venueConfig.width;
-                  const liveH = canvasResize
-                    ? canvasResize.h
-                    : venueConfig.height;
+                  // The crop boundary defaults to the real venue size until
+                  // the organizer crops; cropping stores cropWidth/cropHeight
+                  // separately and never changes width/height.
+                  const baseW = venueConfig.cropWidth ?? venueConfig.width;
+                  const baseH = venueConfig.cropHeight ?? venueConfig.height;
+                  const liveW = canvasResize ? canvasResize.w : baseW;
+                  const liveH = canvasResize ? canvasResize.h : baseH;
                   const bw = liveW * venueConfig.scale;
                   const bh = liveH * venueConfig.scale;
                   return (
@@ -5445,7 +5467,7 @@ const VenueDesigner = ({
                           zIndex: 41,
                         }}
                       >
-                        Venue {Math.round(liveW)} × {Math.round(liveH)}
+                        Crop {Math.round(liveW)} × {Math.round(liveH)}
                       </div>
                       <div
                         onMouseDown={(e) => {
@@ -5454,10 +5476,10 @@ const VenueDesigner = ({
                           setCanvasResize({
                             startX: e.clientX,
                             startY: e.clientY,
-                            origW: venueConfig.width,
-                            origH: venueConfig.height,
-                            w: venueConfig.width,
-                            h: venueConfig.height,
+                            origW: baseW,
+                            origH: baseH,
+                            w: baseW,
+                            h: baseH,
                           });
                         }}
                         title="Drag to crop / resize the venue area"
@@ -6113,6 +6135,13 @@ export function CreateEventForm({
     specialInstructions: initialData?.specialInstructions ?? "",
     refundPolicy: initialData?.refundPolicy ?? "",
     termsAndConditions: initialData?.termsAndConditions ?? "",
+    // Per-section eventfront visibility. Missing key = visible (so existing
+    // events keep showing everything). Custom sections are keyed by their id.
+    sectionVisibility:
+      initialData?.sectionVisibility &&
+      typeof initialData.sectionVisibility === "object"
+        ? (initialData.sectionVisibility as Record<string, boolean>)
+        : ({} as Record<string, boolean>),
     socialMedia: initialData?.socialMedia ?? {
       facebook: "",
       instagram: "",
@@ -6619,6 +6648,18 @@ export function CreateEventForm({
       return next;
     });
   };
+
+  // Per-section eventfront visibility helpers. Missing key = visible.
+  const isSectionVisible = (key: string) =>
+    (formData.sectionVisibility as Record<string, boolean>)?.[key] !== false;
+  const setSectionVisible = (key: string, val: boolean) =>
+    setFormData((old) => ({
+      ...old,
+      sectionVisibility: {
+        ...((old.sectionVisibility as Record<string, boolean>) || {}),
+        [key]: val,
+      },
+    }));
 
   // Today's date as YYYY-MM-DD, used as the min for the Start Date picker on
   // brand-new events (and duplicates). In Edit mode we don't constrain — an
@@ -7359,6 +7400,12 @@ export function CreateEventForm({
         ),
       );
 
+      // Per-section eventfront visibility map.
+      data.append(
+        "sectionVisibility",
+        JSON.stringify(formData.sectionVisibility || {}),
+      );
+
       data.append("organizerId", organizer.sub);
 
       // Build speakers array ONLY from session slots (single source of truth)
@@ -7949,7 +7996,22 @@ export function CreateEventForm({
                   </div>
                 </div>
 
-                {/* Event Settings Section */}
+                {/* Event Settings Section — Age + Dress share one card on
+                    the event page, with a single show/hide toggle. */}
+                <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
+                  <span className="text-sm font-medium">
+                    Age Restriction &amp; Dress Code
+                  </span>
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {isSectionVisible("ageDress")
+                      ? "Shown on event page"
+                      : "Hidden"}
+                    <Switch
+                      checked={isSectionVisible("ageDress")}
+                      onCheckedChange={(v) => setSectionVisible("ageDress", v)}
+                    />
+                  </label>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label>Age Restriction</Label>
@@ -7996,9 +8058,22 @@ export function CreateEventForm({
                 <div className="space-y-4">
                   {/* Special Instructions */}
                   <div>
-                    <Label className="mb-2 block">
-                      Special Instructions / Event Itinerary
-                    </Label>
+                    <div className="mb-2 flex items-center justify-between">
+                      <Label className="block">
+                        Special Instructions / Event Itinerary
+                      </Label>
+                      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                        {isSectionVisible("specialInstructions")
+                          ? "Shown"
+                          : "Hidden"}
+                        <Switch
+                          checked={isSectionVisible("specialInstructions")}
+                          onCheckedChange={(v) =>
+                            setSectionVisible("specialInstructions", v)
+                          }
+                        />
+                      </label>
+                    </div>
                     <div className="bg-white dark:bg-slate-950 rounded-md">
                       <Suspense
                         fallback={
@@ -8021,7 +8096,18 @@ export function CreateEventForm({
 
                   {/* Refund Policy */}
                   <div>
-                    <Label className="mb-2 block">Refund Policy</Label>
+                    <div className="mb-2 flex items-center justify-between">
+                      <Label className="block">Refund Policy</Label>
+                      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                        {isSectionVisible("refundPolicy") ? "Shown" : "Hidden"}
+                        <Switch
+                          checked={isSectionVisible("refundPolicy")}
+                          onCheckedChange={(v) =>
+                            setSectionVisible("refundPolicy", v)
+                          }
+                        />
+                      </label>
+                    </div>
                     <div className="bg-white dark:bg-slate-950 rounded-md">
                       <Suspense
                         fallback={
@@ -8044,7 +8130,20 @@ export function CreateEventForm({
 
                   {/* Terms and Conditions */}
                   <div>
-                    <Label className="mb-2 block">Terms and Conditions</Label>
+                    <div className="mb-2 flex items-center justify-between">
+                      <Label className="block">Terms and Conditions</Label>
+                      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                        {isSectionVisible("termsAndConditions")
+                          ? "Shown"
+                          : "Hidden"}
+                        <Switch
+                          checked={isSectionVisible("termsAndConditions")}
+                          onCheckedChange={(v) =>
+                            setSectionVisible("termsAndConditions", v)
+                          }
+                        />
+                      </label>
+                    </div>
                     <div className="bg-white dark:bg-slate-950 rounded-md">
                       <Suspense
                         fallback={
@@ -8125,6 +8224,18 @@ export function CreateEventForm({
                                 }}
                                 className="flex-1 font-medium"
                               />
+                              <label
+                                className="flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0"
+                                title="Show this section on the event page"
+                              >
+                                {isSectionVisible(sec.id) ? "Shown" : "Hidden"}
+                                <Switch
+                                  checked={isSectionVisible(sec.id)}
+                                  onCheckedChange={(v) =>
+                                    setSectionVisible(sec.id, v)
+                                  }
+                                />
+                              </label>
                               <Button
                                 type="button"
                                 variant="ghost"

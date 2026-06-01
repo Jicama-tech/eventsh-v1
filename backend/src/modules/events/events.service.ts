@@ -125,6 +125,8 @@ export class EventsService {
         specialInstructions: createEventDto.specialInstructions,
         refundPolicy: createEventDto.refundPolicy,
         termsAndConditions: createEventDto.termsAndConditions,
+        customSections: createEventDto.customSections || [],
+        sectionVisibility: createEventDto.sectionVisibility || {},
         setupTime: createEventDto.setupTime,
         breakdownTime: createEventDto.breakdownTime,
         socialMedia: createEventDto.socialMedia || {
