@@ -142,26 +142,45 @@ class Speaker {
 class RoundTableTemplate {
   @Prop({ required: true }) id: string;
   @Prop({ required: true }) name: string;
-  @Prop({ required: true, min: 2, max: 20 }) numberOfChairs: number;
+  // Allow 0 — a standing table has no chairs. Upper bound widened to 30.
+  @Prop({ required: true, min: 0, max: 30 }) numberOfChairs: number;
   @Prop({ required: true, enum: ["table", "chair"] }) sellingMode: string;
   @Prop({ default: 0 }) tablePrice: number;
   @Prop({ default: 0 }) chairPrice: number;
+  @Prop({ default: 0 }) bookingPrice: number;
+  @Prop({ default: 0 }) depositPrice: number;
+  // Optional member-tier pricing (mirrors the Spaces model). Undefined means
+  // members pay the regular price for that field.
+  @Prop() memberTablePrice?: number;
+  @Prop() memberChairPrice?: number;
+  @Prop() memberBookingPrice?: number;
+  @Prop() memberDepositPrice?: number;
   @Prop({ default: "Standard" }) category: string;
   @Prop({ default: "#8B5CF6" }) color: string;
   @Prop({ default: 120 }) tableDiameter: number;
+  // A "not for sale" table is a layout reference only (e.g. a standing
+  // cocktail table / decoration) and cannot be booked.
+  @Prop({ default: true }) forSale: boolean;
 }
 
 class PositionedRoundTable {
   @Prop({ required: true }) positionId: string;
   @Prop({ required: true }) templateId: string;
   @Prop({ required: true }) name: string;
-  @Prop({ required: true }) numberOfChairs: number;
+  @Prop({ required: true, min: 0, max: 30 }) numberOfChairs: number;
   @Prop({ required: true, enum: ["table", "chair"] }) sellingMode: string;
   @Prop({ default: 0 }) tablePrice: number;
   @Prop({ default: 0 }) chairPrice: number;
+  @Prop({ default: 0 }) bookingPrice: number;
+  @Prop({ default: 0 }) depositPrice: number;
+  @Prop() memberTablePrice?: number;
+  @Prop() memberChairPrice?: number;
+  @Prop() memberBookingPrice?: number;
+  @Prop() memberDepositPrice?: number;
   @Prop({ default: "Standard" }) category: string;
   @Prop({ default: "#8B5CF6" }) color: string;
   @Prop({ default: 120 }) tableDiameter: number;
+  @Prop({ default: true }) forSale: boolean;
   @Prop() x: number;
   @Prop() y: number;
   @Prop({ default: 0 }) rotation: number;
@@ -490,6 +509,27 @@ export class Event {
     shape?: "circle" | "square";
     width?: number;
     height?: number;
+  }[];
+
+  // CAD-style annotations drawn on the venue canvas (lines, text labels,
+  // rectangles/zone boxes, dimension lines). Tagged with venueConfigId so
+  // each layout keeps its own drawings. Free-form enough not to warrant a
+  // typed subdocument.
+  @Prop({ type: [Object], default: [] })
+  venueAnnotations: {
+    id: string;
+    venueConfigId?: string;
+    type: "line" | "text" | "rect" | "dimension";
+    points?: number[];
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    text?: string;
+    color?: string;
+    fill?: string;
+    strokeWidth?: number;
+    fontSize?: number;
   }[];
 
   // Volunteers allow-listed to sign in to the operator scanner via Google.

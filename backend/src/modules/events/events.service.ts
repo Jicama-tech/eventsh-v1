@@ -164,6 +164,7 @@ export class EventsService {
 
         roundTableTemplates: createEventDto.roundTableTemplates || [],
         venueRoundTables: createEventDto.venueRoundTables || [],
+        venueAnnotations: createEventDto.venueAnnotations || [],
         volunteers: (createEventDto.volunteers || []).map((v) => ({
           name: v.name,
           email: (v.email || "").toLowerCase(),

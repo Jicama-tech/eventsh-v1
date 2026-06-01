@@ -127,6 +127,11 @@ export class Organizer {
   @Prop({ type: [String], default: [] })
   contactPhones?: string[];
 
+  // Optional label for each contactPhones entry (aligned by index), e.g.
+  // "Reception". Shown next to the number on the eventfront contact card.
+  @Prop({ type: [String], default: [] })
+  contactPhoneNames?: string[];
+
   @Prop({ required: true, unique: true })
   businessEmail: string;
 

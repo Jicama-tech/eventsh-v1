@@ -46,6 +46,12 @@ export class UpdateOrganizerDto {
   @IsOptional()
   contactPhones?: string[];
 
+  // Labels for each contactPhones entry (aligned by index).
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  contactPhoneNames?: string[];
+
   @IsString()
   @IsOptional()
   address?: string;
