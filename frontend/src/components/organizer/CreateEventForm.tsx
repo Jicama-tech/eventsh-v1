@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef, Fragment, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import VenueAnnotationLayer, {
   type VenueAnnotation,
   type AnnotationTool,
 } from "./VenueAnnotationLayer";
+import VenuePreview from "./VenuePreview";
 import { useCountry } from "@/hooks/useCountry";
 import { useSubscription } from "@/hooks/useSubscription";
 import { Button } from "@/components/ui/button";
@@ -39,7 +40,7 @@ import {
   Users,
   Calendar,
   IndianRupee,
-  Type,
+  Undo2,
   Image,
   Mic,
   Circle,
@@ -49,6 +50,7 @@ import {
   GripVertical,
   Pencil,
   ChevronDown,
+  ChevronUp,
   Facebook,
   Instagram,
   CopyPlus as CopyPlusIcon,
@@ -56,6 +58,7 @@ import {
   Minus,
   Square,
   ArrowUpRight,
+  Eye,
 } from "lucide-react";
 import {
   HoverCard,
@@ -1036,94 +1039,13 @@ const VenueConfiguration = ({
                 />
                 <Label className="text-sm">Main Stage</Label>
               </div>
-              {/* Entrance + Exit shape pickers. Explicit grid so the
-                  checkbox column, label column, and shape picker column
-                  all line up regardless of which side(s) are enabled.
-                  Picker buttons share an h-8 / w-20 footprint and show
-                  an actual circle / square swatch alongside the label
-                  so the choice is readable at a glance instead of just
-                  reading as small text. */}
-              <div className="grid grid-cols-[auto_auto_1fr] items-center gap-x-3 gap-y-2">
-                {(
-                  [
-                    {
-                      key: "hasEntrance" as const,
-                      shapeKey: "entranceShape" as const,
-                      label: "Entrance",
-                    },
-                    {
-                      key: "hasExit" as const,
-                      shapeKey: "exitShape" as const,
-                      label: "Exit",
-                    },
-                  ]
-                ).map(({ key, shapeKey, label }) => {
-                  const enabled = !!(selectedConfig as any)[key];
-                  const currentShape =
-                    ((selectedConfig as any)[shapeKey] as
-                      | "circle"
-                      | "square"
-                      | undefined) || "circle";
-                  return (
-                    <Fragment key={key}>
-                      <Checkbox
-                        checked={enabled}
-                        onCheckedChange={(checked) =>
-                          updateSelectedConfig({ [key]: !!checked } as any)
-                        }
-                      />
-                      <Label className="text-sm">{label}</Label>
-                      <div className="justify-self-start">
-                        {enabled ? (
-                          <div className="inline-flex rounded-md border overflow-hidden h-8 bg-white">
-                            {(["circle", "square"] as const).map((s) => {
-                              const active = currentShape === s;
-                              return (
-                                <button
-                                  key={s}
-                                  type="button"
-                                  onClick={() =>
-                                    updateSelectedConfig({
-                                      [shapeKey]: s,
-                                    } as any)
-                                  }
-                                  className={`w-20 h-full inline-flex items-center justify-center gap-1.5 text-[11px] font-medium capitalize border-r last:border-r-0 transition-colors ${
-                                    active
-                                      ? "bg-primary text-primary-foreground"
-                                      : "text-muted-foreground hover:bg-muted"
-                                  }`}
-                                  title={`Default ${label.toLowerCase()} shape: ${s}`}
-                                >
-                                  <span
-                                    aria-hidden
-                                    className={`inline-block w-3 h-3 border ${
-                                      s === "circle"
-                                        ? "rounded-full"
-                                        : "rounded-[2px]"
-                                    } ${
-                                      active
-                                        ? "border-primary-foreground bg-primary-foreground/30"
-                                        : "border-current bg-current/20"
-                                    }`}
-                                  />
-                                  {s}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : null}
-                      </div>
-                    </Fragment>
-                  );
-                })}
-              </div>
-
-              {/* Custom door types — Fire Exit, Loading Bay, etc. Each gets
-                  its own draggable marker (with chosen shape + colour) in
-                  the designer, exactly like Entrance / Exit. */}
+              {/* Custom door types — Entrance, Exit, Fire Exit, Loading Bay,
+                  etc. Each gets its own draggable marker (with chosen shape +
+                  colour) in the designer. Entrance/Exit are no longer special-
+                  cased toggles; add them here like any other door type. */}
               <div className="mt-3 pt-3 border-t">
                 <div className="flex items-center justify-between mb-2">
-                  <Label className="text-sm font-medium">Custom Doors</Label>
+                  <Label className="text-sm font-medium">Doors</Label>
                   <Button
                     type="button"
                     size="sm"
@@ -1149,8 +1071,9 @@ const VenueConfiguration = ({
                 </div>
                 {(selectedConfig.customDoorTypes || []).length === 0 ? (
                   <p className="text-[11px] text-muted-foreground">
-                    Add types like <strong>Fire Exit</strong> or{" "}
-                    <strong>Loading Bay</strong>. They appear as draggable
+                    Add any door type — <strong>Entrance</strong>,{" "}
+                    <strong>Exit</strong>, <strong>Fire Exit</strong>,{" "}
+                    <strong>Loading Bay</strong>, etc. They appear as draggable
                     markers in the designer with your chosen shape and colour.
                   </p>
                 ) : (
@@ -3035,6 +2958,79 @@ const VenueDesigner = ({
   const [annotationTool, setAnnotationTool] = useState<AnnotationTool>("none");
   const [annotationColor, setAnnotationColor] = useState("#1e293b");
   const [selectedAnnId, setSelectedAnnId] = useState<string | null>(null);
+
+  // --- Unified undo (Ctrl/Cmd+Z) ----------------------------------------
+  // ONE history stack covering every kind of canvas edit: placing / moving /
+  // resizing / deleting / duplicating Spaces, round tables, speaker zones and
+  // doors, AND the AutoCAD annotation drawings (line / arrow / box /
+  // dimension). Each discrete edit commits a fresh snapshot of all of these
+  // collections (drags commit once on drop, so a move is a single entry), and
+  // Ctrl+Z pops back to the previous snapshot.
+  const undoStackRef = useRef<
+    Array<{
+      venueTables: Record<string, PositionedTable[]>;
+      venueRoundTables: Record<string, PositionedRoundTable[]>;
+      venueSpeakerZones: Record<string, any[]>;
+      venueDoors: Record<string, PositionedDoor[]>;
+      venueAnnotations: Record<string, VenueAnnotation[]>;
+    }>
+  >([]);
+  // Set while applying an undo so the recording effect below doesn't capture
+  // the restored state as a brand-new edit.
+  const isRestoringRef = useRef(false);
+  // Drives the toolbar Undo button's enabled state.
+  const [undoDepth, setUndoDepth] = useState(0);
+
+  useEffect(() => {
+    if (isRestoringRef.current) {
+      isRestoringRef.current = false;
+      return;
+    }
+    undoStackRef.current.push({
+      venueTables,
+      venueRoundTables,
+      venueSpeakerZones,
+      venueDoors,
+      venueAnnotations,
+    });
+    // Keep memory bounded — 60 steps of history is plenty.
+    if (undoStackRef.current.length > 60) undoStackRef.current.shift();
+    setUndoDepth(undoStackRef.current.length);
+  }, [
+    venueTables,
+    venueRoundTables,
+    venueSpeakerZones,
+    venueDoors,
+    venueAnnotations,
+  ]);
+
+  const undoLastChange = () => {
+    // Need the current snapshot plus at least one prior to step back.
+    if (undoStackRef.current.length <= 1) {
+      toast({ title: "Nothing to undo" });
+      return;
+    }
+    undoStackRef.current.pop(); // drop the current state
+    const prev = undoStackRef.current[undoStackRef.current.length - 1];
+    isRestoringRef.current = true;
+    setVenueTables(prev.venueTables);
+    setVenueRoundTables(prev.venueRoundTables);
+    setVenueSpeakerZones(prev.venueSpeakerZones);
+    setVenueDoors(prev.venueDoors);
+    setVenueAnnotations(prev.venueAnnotations);
+    setSelectedTable(null);
+    setSelectedAnnId(null);
+    setUndoDepth(undoStackRef.current.length);
+  };
+  // Eventfront-style preview modal + a ref to the preview "sheet" so we can
+  // rasterise it to a PDF.
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  // Collapsible "Click to add to venue" palette — open by default; the
+  // organizer can hide the whole list of spaces/templates when they just
+  // want the canvas, then re-open it to add more.
+  const [spacesListOpen, setSpacesListOpen] = useState(true);
+  const previewRef = useRef<HTMLDivElement>(null);
   // Live crop/resize drag of the venue boundary (drag the bottom-right
   // handle to set how big the venue area is).
   const [canvasResize, setCanvasResize] = useState<{
@@ -3569,6 +3565,13 @@ const VenueDesigner = ({
         tag === "SELECT" ||
         target?.isContentEditable
       ) {
+        return;
+      }
+      // Ctrl/Cmd+Z → undo the last canvas edit (spaces OR annotations).
+      // Shift+Z is left alone (no redo) so it can't clobber anything.
+      if (e.key.toLowerCase() === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undoLastChange();
         return;
       }
       if (e.key.toLowerCase() === "d") {
@@ -4167,6 +4170,50 @@ const VenueDesigner = ({
     }
   };
 
+  // Rasterise the eventfront-style preview sheet and save it as a PDF, so the
+  // organizer can share/print exactly what visitors will see.
+  const downloadVenuePdf = async () => {
+    if (!previewRef.current || !venueConfig) return;
+    setPdfBusy(true);
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const { default: jsPDF } = await import("jspdf");
+      const canvas = await html2canvas(previewRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+      });
+      const img = canvas.toDataURL("image/png");
+      const pxW = canvas.width;
+      const pxH = canvas.height;
+      const pdf = new jsPDF({
+        orientation: pxW >= pxH ? "landscape" : "portrait",
+        unit: "pt",
+        format: "a4",
+      });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 28;
+      const titleY = margin + 6;
+      const maxW = pageW - margin * 2;
+      const maxH = pageH - titleY - margin;
+      const ratio = Math.min(maxW / pxW, maxH / pxH);
+      const drawW = pxW * ratio;
+      const drawH = pxH * ratio;
+      const x = (pageW - drawW) / 2;
+      const y = titleY + 16;
+      pdf.setFontSize(14);
+      pdf.text(`${venueConfig.name || "Venue"} — Venue Layout`, margin, titleY);
+      pdf.addImage(img, "PNG", x, y, drawW, drawH);
+      pdf.save(`${venueConfig.name || "venue"}-layout.pdf`);
+      toast({ title: "PDF downloaded" });
+    } catch (error) {
+      toast({ title: "PDF export failed", variant: "destructive" });
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
   // Snapshot the venue as a PNG whenever the layout actually changes
   // (item count, venue dimensions, or active config). The old version
   // depended on the `currentTables` / `currentRoundTables` array
@@ -4356,9 +4403,23 @@ const VenueDesigner = ({
         onClose={() => setTemplatesDialogOpen(false)}
       >
       <div className="border rounded-xl bg-slate-50 p-4">
-        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
-          Click to add to venue
-        </p>
+        <button
+          type="button"
+          onClick={() => setSpacesListOpen((v) => !v)}
+          aria-expanded={spacesListOpen}
+          className="flex w-full items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 hover:text-foreground transition-colors"
+        >
+          <span>Click to add to venue</span>
+          <span className="ml-auto flex items-center gap-1 normal-case font-medium text-[10px] text-slate-400">
+            {spacesListOpen ? "Hide" : "Show"}
+            {spacesListOpen ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </span>
+        </button>
+        {spacesListOpen && (
         <div className="flex flex-wrap gap-3 overflow-x-auto pb-2">
           {/* Space Templates */}
           {tableTemplates.map((template) => (
@@ -4464,52 +4525,12 @@ const VenueDesigner = ({
           {(tableTemplates.length > 0 ||
             speakerSlotTemplates.length > 0 ||
             roundTableTemplates.length > 0) &&
-            (venueConfig?.hasEntrance ||
-              venueConfig?.hasExit ||
-              (venueConfig?.customDoorTypes || []).length > 0) && (
+            (venueConfig?.customDoorTypes || []).length > 0 && (
               <div className="flex-shrink-0 w-px bg-gray-300 mx-1" />
             )}
 
-          {/* Entrance / Exit door templates — appear when enabled in Venue Setup */}
-          {venueConfig?.hasEntrance && (
-            <div
-              key="door-entrance-template"
-              className="flex-shrink-0 w-32 p-3 border-2 border-green-300 rounded-xl cursor-pointer hover:border-green-500 hover:shadow-md transition-all bg-green-50/60"
-              onClick={() => addDoorToVenue("entrance")}
-              title="Click to drop an entrance on the venue"
-            >
-              <div className="flex items-center gap-1 mb-1">
-                <div className="w-3 h-3 rounded-full bg-green-600" />
-                <span className="font-bold text-xs text-green-800">
-                  Entrance
-                </span>
-              </div>
-              <p className="text-[10px] text-green-700">Click to add → drag</p>
-              <p className="text-[10px] text-muted-foreground">
-                Multiple allowed
-              </p>
-            </div>
-          )}
-          {venueConfig?.hasExit && (
-            <div
-              key="door-exit-template"
-              className="flex-shrink-0 w-32 p-3 border-2 border-red-300 rounded-xl cursor-pointer hover:border-red-500 hover:shadow-md transition-all bg-red-50/60"
-              onClick={() => addDoorToVenue("exit")}
-              title="Click to drop an exit on the venue"
-            >
-              <div className="flex items-center gap-1 mb-1">
-                <div className="w-3 h-3 rounded-full bg-red-600" />
-                <span className="font-bold text-xs text-red-800">Exit</span>
-              </div>
-              <p className="text-[10px] text-red-700">Click to add → drag</p>
-              <p className="text-[10px] text-muted-foreground">
-                Multiple allowed
-              </p>
-            </div>
-          )}
-
-          {/* Custom door templates (Fire Exit, Loading Bay, …) — one per
-              type defined in Venue Setup. */}
+          {/* Door templates (Entrance, Exit, Fire Exit, …) — one per type
+              defined in the Venue Setup "Doors" section. */}
           {(venueConfig?.customDoorTypes || []).map((ct) => (
             <div
               key={`door-custom-${ct.id}`}
@@ -4545,8 +4566,6 @@ const VenueDesigner = ({
           {tableTemplates.length === 0 &&
             speakerSlotTemplates.length === 0 &&
             roundTableTemplates.length === 0 &&
-            !venueConfig?.hasEntrance &&
-            !venueConfig?.hasExit &&
             (venueConfig?.customDoorTypes || []).length === 0 && (
               <p className="text-sm text-muted-foreground py-4 w-full text-center">
                 No templates yet. Create Spaces in "Space / AddOns" tab, Speaker
@@ -4555,6 +4574,7 @@ const VenueDesigner = ({
               </p>
             )}
         </div>
+        )}
       </div>
       </TemplatesHost>
 
@@ -4596,37 +4616,53 @@ const VenueDesigner = ({
                     1×
                   </div>
                   {/* Keyboard shortcut hint — discoverability for the
-                      Ctrl/Cmd+D duplicate. */}
+                      Ctrl/Cmd+D duplicate and Ctrl/Cmd+Z undo. */}
                   <div className="hidden sm:flex items-center gap-1 text-[10px] text-slate-500 border-l pl-2 ml-1">
                     <kbd className="px-1 py-0.5 bg-white border rounded text-slate-700 font-mono">
                       Ctrl+D
                     </kbd>
-                    <span>to duplicate selected</span>
+                    <span>duplicate</span>
+                    <kbd className="px-1 py-0.5 bg-white border rounded text-slate-700 font-mono ml-1">
+                      Ctrl+Z
+                    </kbd>
+                    <span>undo</span>
                   </div>
                 </div>
               )}
             </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => setIsCanvasMaximized((v) => !v)}
-              title={
-                isCanvasMaximized
-                  ? "Exit full-screen design"
-                  : "Maximize to full screen for design"
-              }
-            >
-              {isCanvasMaximized ? (
-                <>
-                  <Minimize2 className="h-4 w-4 mr-1" /> Minimize
-                </>
-              ) : (
-                <>
-                  <Maximize2 className="h-4 w-4 mr-1" /> Maximize
-                </>
-              )}
-            </Button>
+            {/* Preview + Maximize grouped together as one control cluster. */}
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setPreviewOpen(true)}
+                title="Preview how this layout looks on the event page"
+              >
+                <Eye className="h-4 w-4 mr-1" /> Preview
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setIsCanvasMaximized((v) => !v)}
+                title={
+                  isCanvasMaximized
+                    ? "Exit full-screen design"
+                    : "Maximize to full screen for design"
+                }
+              >
+                {isCanvasMaximized ? (
+                  <>
+                    <Minimize2 className="h-4 w-4 mr-1" /> Minimize
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 className="h-4 w-4 mr-1" /> Maximize
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
           )}
           {/* CAD annotation toolbar — switch between moving Spaces and the
@@ -4647,7 +4683,6 @@ const VenueDesigner = ({
                   { t: "select", label: "Select", Icon: MousePointer2 },
                   { t: "line", label: "Line", Icon: Minus },
                   { t: "arrow", label: "Arrow", Icon: ArrowUpRight },
-                  { t: "text", label: "Text", Icon: Type },
                   { t: "rect", label: "Box", Icon: Square },
                   { t: "dimension", label: "Dimension", Icon: Ruler },
                 ] as const
@@ -4687,6 +4722,19 @@ const VenueDesigner = ({
                   className="h-6 w-7 cursor-pointer rounded border border-gray-300 bg-white p-0"
                 />
               </label>
+              <div className="mx-1 h-5 w-px bg-gray-200" />
+              {/* Single undo for everything on the canvas — spaces, round
+                  tables, doors AND the drawn annotations. Mirrors Ctrl/Cmd+Z. */}
+              <button
+                type="button"
+                onClick={undoLastChange}
+                disabled={undoDepth <= 1}
+                className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                title="Undo last change (Ctrl/Cmd+Z) — spaces & drawings"
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+                Undo
+              </button>
               {selectedAnnId && annotationTool === "select" && (
                 <Button
                   type="button"
@@ -4709,9 +4757,7 @@ const VenueDesigner = ({
                 <span className="ml-auto pr-1 text-[11px] text-gray-400">
                   {annotationTool === "select"
                     ? "Click a drawing to select · Del to remove"
-                    : annotationTool === "text"
-                      ? "Click to place a label"
-                      : "Click-drag on the canvas to draw"}
+                    : "Click-drag on the canvas to draw"}
                 </span>
               )}
             </div>
@@ -5522,6 +5568,75 @@ const VenueDesigner = ({
       </Card>
       </MaximizableSurface>
       {/* /maximize-aware design surface */}
+
+      {/* Eventfront preview modal — shows the venue exactly as visitors see
+          it (cropped, solid-colour spaces), with a one-click PDF export. */}
+      {previewOpen &&
+        venueConfig &&
+        createPortal(
+          (() => {
+            const pcW =
+              (venueConfig.cropped
+                ? venueConfig.cropWidth
+                : venueConfig.width) ||
+              venueConfig.width ||
+              800;
+            const previewScale = Math.max(0.2, Math.min(900 / pcW, 1.5));
+            return (
+              <div
+                className="fixed inset-0 z-[120] flex flex-col bg-black/60 p-4 pointer-events-auto"
+                onClick={() => setPreviewOpen(false)}
+              >
+                <div
+                  className="mx-auto mb-3 flex w-full max-w-5xl items-center justify-between"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="text-sm font-semibold text-white">
+                    Event Page Preview — {venueConfig.name}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={downloadVenuePdf}
+                      disabled={pdfBusy}
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      {pdfBusy ? "Preparing…" : "Download PDF"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPreviewOpen(false)}
+                    >
+                      Close
+                    </Button>
+                  </div>
+                </div>
+                <div
+                  className="mx-auto w-full max-w-5xl flex-1 min-h-0 overflow-auto rounded-xl bg-white p-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <p className="mb-3 text-xs text-gray-500">
+                    This is how the venue layout will appear on the event page
+                    {venueConfig.cropped ? " (cropped area)" : ""}.
+                  </p>
+                  <VenuePreview
+                    ref={previewRef}
+                    config={venueConfig}
+                    tables={currentTables}
+                    roundTables={currentRoundTables}
+                    doors={currentDoors}
+                    annotations={currentAnnotations}
+                    scale={previewScale}
+                  />
+                </div>
+              </div>
+            );
+          })(),
+          document.body,
+        )}
 
       {/* Inventory Summary - Full Width */}
       {(currentTables.length > 0 ||
@@ -6931,7 +7046,10 @@ export function CreateEventForm({
   useEffect(() => {
     const f = formData.features;
     const anyDoors = venueConfigurations.some(
-      (v) => v.hasEntrance || v.hasExit,
+      (v) =>
+        v.hasEntrance ||
+        v.hasExit ||
+        (v.customDoorTypes || []).length > 0,
     );
     const hidden =
       (currentTab === "tables" && !f.hasStalls) ||
@@ -7562,10 +7680,13 @@ export function CreateEventForm({
         const showStalls = !!formData.features.hasStalls;
         const showRoundTables = !!formData.features.hasRoundTables;
         const showSpeakers = !!formData.features.hasSpeakers;
-        // Layout tab is also useful when only Entrance/Exit are enabled (per venue),
+        // Layout tab is also useful when any door type is defined (per venue),
         // since the user needs the canvas to place those door markers.
         const anyDoorsEnabled = venueConfigurations.some(
-          (v) => v.hasEntrance || v.hasExit,
+          (v) =>
+            v.hasEntrance ||
+            v.hasExit ||
+            (v.customDoorTypes || []).length > 0,
         );
         const showLayout =
           showStalls || showRoundTables || showSpeakers || anyDoorsEnabled;

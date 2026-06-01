@@ -273,6 +273,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // user explicitly opts in by clicking the chevron header.
   const [showVenueLayout, setShowVenueLayout] = useState(false);
   const [venueMaximized, setVenueMaximized] = useState(false);
+  // Controlled active tab so the info cards can jump to a section, and a ref
+  // to the tabs block so we can scroll it into view on card click.
+  const [activeTab, setActiveTab] = useState("organizer");
+  const tabsSectionRef = useRef<HTMLDivElement>(null);
   // Live fit-to-screen scale for the maximized venue dialog. Recomputed
   // by a ResizeObserver on the scrollable container so the entire
   // layout fits the dialog viewport instead of forcing the user to
@@ -849,14 +853,25 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }
     const layoutIds = eventData?.venueConfig?.map((c: any) => c.id) || [];
     const layoutId = layoutIds[currentLayoutIndex] || "default";
+    // Only items belonging to the hall being sized count toward its extent.
+    // Untagged/legacy ("" / "default") items belong to the first hall only,
+    // so another hall's items can't inflate this one into empty space.
+    const inLayout = (cfgId?: string) =>
+      cfgId && cfgId !== "default"
+        ? cfgId === layoutId
+        : currentLayoutIndex === 0;
     const tables =
       (eventData?.venueTables?.[layoutId] as any[] | undefined) || [];
-    const round = Array.isArray((eventData as any)?.venueRoundTables)
-      ? ((eventData as any).venueRoundTables as any[])
-      : [];
-    const zones = Array.isArray((eventData as any)?.venueSpeakerZones)
-      ? ((eventData as any).venueSpeakerZones as any[])
-      : [];
+    const round = (
+      Array.isArray((eventData as any)?.venueRoundTables)
+        ? ((eventData as any).venueRoundTables as any[])
+        : []
+    ).filter((r) => inLayout(r?.venueConfigId));
+    const zones = (
+      Array.isArray((eventData as any)?.venueSpeakerZones)
+        ? ((eventData as any).venueSpeakerZones as any[])
+        : []
+    ).filter((z) => inLayout(z?.venueConfigId));
     // The venue dimensions (the organizer's crop) are the baseline. Items
     // only extend the canvas if they fall within a sane range — a single
     // stray item dragged thousands of px away (a known data glitch) must NOT
@@ -889,9 +904,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       addY((z?.y || 0) + (z?.height || 0));
     }
     // Doors can be circles (legacy 50×50) or organizer-resized squares.
-    const doors = Array.isArray((eventData as any)?.venueDoors)
-      ? ((eventData as any).venueDoors as any[])
-      : [];
+    const doors = (
+      Array.isArray((eventData as any)?.venueDoors)
+        ? ((eventData as any).venueDoors as any[])
+        : []
+    ).filter((d) => inLayout(d?.venueConfigId));
     for (const d of doors) {
       const dw = Number(d?.width) > 0 ? Number(d.width) : 50;
       const dh = Number(d?.height) > 0 ? Number(d.height) : 50;
@@ -2918,6 +2935,22 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     ? reelLinks.map((u) => String(u || "").trim()).filter(Boolean)
     : [];
   const hasReels = cleanedReelLinks.length > 0;
+  const hasVenueLayout =
+    (venueTables && Object.keys(venueTables).length > 0) ||
+    roundTableData.length > 0;
+
+  // Jump to a bottom tab section from an info card. Optionally expands the
+  // venue map. Scroll is deferred so the (lazily-mounted) tab content exists.
+  const goToTab = (tab: string, openVenue = false) => {
+    setActiveTab(tab);
+    if (openVenue) setShowVenueLayout(true);
+    setTimeout(() => {
+      tabsSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 80);
+  };
 
   // ── "Add to Google Calendar" + "View on Google Maps" links for the
   // top info cards. Built from the event's date/time/venue. ──
@@ -2987,6 +3020,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const layoutIds = venueConfig?.map((config) => config.id) || [];
   const currentLayoutId = layoutIds[currentLayoutIndex] || "default";
 
+  // Decide whether an item (round table / door / annotation) tagged with a
+  // venueConfigId belongs to the hall currently being viewed. A real tag must
+  // match the active layout exactly. Legacy/untagged items ("" or "default")
+  // belong ONLY to the first hall — otherwise they'd leak onto every hall in
+  // a multi-venue event.
+  const belongsToLayout = (cfgId?: string) => {
+    if (cfgId && cfgId !== "default") return cfgId === currentLayoutId;
+    return currentLayoutIndex === 0;
+  };
+
   // CAD annotations (lines / text / boxes / dimensions) for the current
   // layout — rendered read-only over the venue map and the exhibitor
   // stall-selection map. Visitor maps use raw px (scale = 1).
@@ -3006,12 +3049,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       ? ((eventData as any).venueAnnotations as any[])
       : []
   )
-    .filter(
-      (a) =>
-        !a?.venueConfigId ||
-        a.venueConfigId === currentLayoutId ||
-        a.venueConfigId === "default",
-    )
+    .filter((a) => belongsToLayout(a?.venueConfigId))
     .filter((a) =>
       inCrop(
         a?.x ?? (Array.isArray(a?.points) ? a.points[0] : 0),
@@ -3035,12 +3073,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       ? ((eventData as any).venueDoors as any[])
       : [];
     if (raw.length === 0) return [];
-    return raw.filter(
-      (d) =>
-        !d?.venueConfigId ||
-        d.venueConfigId === currentLayoutId ||
-        d.venueConfigId === "default",
-    );
+    return raw.filter((d) => belongsToLayout(d?.venueConfigId));
   })();
 
   // Reusable door renderer — mirrors the designer so the storefront,
@@ -3284,58 +3317,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       <div className="bg-[#f5f5f5] border-b border-gray-200 mt-6 sm:mt-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-0">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-5 sm:-mt-1">
-            {/* Price Card — contextual */}
-            <div className="rounded-2xl sm:rounded-tl-2xl sm:rounded-bl-2xl bg-white border border-gray-200 p-4 sm:p-5 lg:p-6 flex flex-col gap-1 shadow-sm col-span-2 sm:col-span-1">
+            {/* 1. Date & Time */}
+            <div className="group relative rounded-2xl bg-white border border-gray-200 p-4 sm:p-5 lg:p-6 flex flex-col gap-1 shadow-sm">
               <div
                 className="w-9 h-9 rounded-xl flex items-center justify-center mb-1"
-                style={{
-                  backgroundColor: `${design?.primaryColor}18` || "#ffffff",
-                }}
-              >
-                {visitorTypes && visitorTypes.length > 0 ? (
-                  <DollarSign
-                    className="h-4 w-4"
-                    style={{ color: design?.primaryColor || "#f97316" }}
-                  />
-                ) : (
-                  <CalendarDays
-                    className="h-4 w-4"
-                    style={{ color: design?.primaryColor || "#f97316" }}
-                  />
-                )}
-              </div>
-              {visitorTypes && visitorTypes.length > 0 ? (
-                <>
-                  <p className="text-gray-400 text-xs font-medium uppercase tracking-widest">
-                    Ticket Price
-                  </p>
-                  <p className="text-gray-900 font-bold text-xl sm:text-2xl">
-                    {ticketPrice === 0 ? "Free" : formatPrice(ticketPrice)}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-gray-400 text-xs font-medium uppercase tracking-widest">
-                    Event Date
-                  </p>
-                  <p className="text-gray-900 font-bold text-sm sm:text-base">
-                    {new Date(startDate).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </p>
-                </>
-              )}
-            </div>
-
-            {/* Time Card */}
-            <div className="group relative rounded-2xl  bg-white border border-gray-200 sm:border-l-0 p-4 sm:p-5 lg:p-6 flex flex-col gap-1 shadow-sm">
-              <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center mb-1"
-                style={{
-                  backgroundColor: `${design?.primaryColor}18` || "#fef3ee",
-                }}
+                style={{ backgroundColor: `${design?.primaryColor}18` }}
               >
                 <Clock
                   className="h-4 w-4"
@@ -3363,7 +3349,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   href={googleCalendarUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 inline-flex items-center gap-1 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="mt-1 inline-flex items-center gap-1 text-xs font-medium"
                   style={{ color: design?.primaryColor || "#f97316" }}
                 >
                   <CalendarDays className="h-3.5 w-3.5" />
@@ -3373,13 +3359,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               )}
             </div>
 
-            {/* Venue Card */}
-            <div className="group relative rounded-2xl  bg-white border border-gray-200 sm:border-l-0 p-4 sm:p-5 lg:p-6 flex flex-col gap-1 shadow-sm col-span-2 sm:col-span-1">
+            {/* 2. Location */}
+            <div className="group relative rounded-2xl bg-white border border-gray-200 p-4 sm:p-5 lg:p-6 flex flex-col gap-1 shadow-sm">
               <div
                 className="w-9 h-9 rounded-xl flex items-center justify-center mb-1"
-                style={{
-                  backgroundColor: `${design?.primaryColor}18` || "#fef3ee",
-                }}
+                style={{ backgroundColor: `${design?.primaryColor}18` }}
               >
                 <MapPin
                   className="h-4 w-4"
@@ -3387,7 +3371,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 />
               </div>
               <p className="text-gray-400 text-xs font-medium uppercase tracking-widest">
-                Venue
+                Location
               </p>
               <p className="text-gray-900 font-bold text-sm sm:text-base leading-snug">
                 {location}
@@ -3398,7 +3382,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   href={googleMapsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 inline-flex items-center gap-1 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="mt-1 inline-flex items-center gap-1 text-xs font-medium"
                   style={{ color: design?.primaryColor || "#f97316" }}
                 >
                   <MapPin className="h-3.5 w-3.5" />
@@ -3408,13 +3392,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               )}
             </div>
 
-            {/* Organizer Card */}
-            <div className="rounded-2xl  sm:rounded-tr-2xl sm:rounded-br-2xl bg-white border border-gray-200 sm:border-l-0 p-4 sm:p-5 lg:p-6 flex flex-col gap-1 shadow-sm">
+            {/* 3. Organized By — jumps to the Organizer section below */}
+            <button
+              type="button"
+              onClick={() => goToTab("organizer")}
+              className="text-left rounded-2xl bg-white border border-gray-200 p-4 sm:p-5 lg:p-6 flex flex-col gap-1 shadow-sm hover:shadow-md hover:border-gray-300 transition-all"
+            >
               <div
                 className="w-9 h-9 rounded-xl flex items-center justify-center mb-1"
-                style={{
-                  backgroundColor: `${design?.primaryColor}18` || "#fef3ee",
-                }}
+                style={{ backgroundColor: `${design?.primaryColor}18` }}
               >
                 <User
                   className="h-4 w-4"
@@ -3427,7 +3413,87 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               <p className="text-gray-900 font-bold text-sm sm:text-base">
                 {organizer.organizationName}
               </p>
-            </div>
+              <span
+                className="mt-1 inline-flex items-center gap-1 text-xs font-medium"
+                style={{ color: design?.primaryColor || "#f97316" }}
+              >
+                View details <ExternalLink className="h-3 w-3" />
+              </span>
+            </button>
+
+            {/* 4. Venue Layout (jumps to + opens the layout) — falls back to
+                  the Ticket Price / Date card when there's no venue layout. */}
+            {hasVenueLayout ? (
+              <button
+                type="button"
+                onClick={() => goToTab("venue", true)}
+                className="text-left rounded-2xl bg-white border border-gray-200 p-4 sm:p-5 lg:p-6 flex flex-col gap-1 shadow-sm hover:shadow-md hover:border-gray-300 transition-all"
+              >
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center mb-1"
+                  style={{ backgroundColor: `${design?.primaryColor}18` }}
+                >
+                  <MapIcon
+                    className="h-4 w-4"
+                    style={{ color: design?.primaryColor || "#f97316" }}
+                  />
+                </div>
+                <p className="text-gray-400 text-xs font-medium uppercase tracking-widest">
+                  Venue Layout
+                </p>
+                <p className="text-gray-900 font-bold text-sm sm:text-base">
+                  View floor plan
+                </p>
+                <span
+                  className="mt-1 inline-flex items-center gap-1 text-xs font-medium"
+                  style={{ color: design?.primaryColor || "#f97316" }}
+                >
+                  Open layout <ExternalLink className="h-3 w-3" />
+                </span>
+              </button>
+            ) : (
+              <div className="rounded-2xl bg-white border border-gray-200 p-4 sm:p-5 lg:p-6 flex flex-col gap-1 shadow-sm">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center mb-1"
+                  style={{ backgroundColor: `${design?.primaryColor}18` }}
+                >
+                  {visitorTypes && visitorTypes.length > 0 ? (
+                    <DollarSign
+                      className="h-4 w-4"
+                      style={{ color: design?.primaryColor || "#f97316" }}
+                    />
+                  ) : (
+                    <CalendarDays
+                      className="h-4 w-4"
+                      style={{ color: design?.primaryColor || "#f97316" }}
+                    />
+                  )}
+                </div>
+                {visitorTypes && visitorTypes.length > 0 ? (
+                  <>
+                    <p className="text-gray-400 text-xs font-medium uppercase tracking-widest">
+                      Ticket Price
+                    </p>
+                    <p className="text-gray-900 font-bold text-xl sm:text-2xl">
+                      {ticketPrice === 0 ? "Free" : formatPrice(ticketPrice)}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-gray-400 text-xs font-medium uppercase tracking-widest">
+                      Event Date
+                    </p>
+                    <p className="text-gray-900 font-bold text-sm sm:text-base">
+                      {new Date(startDate).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -3472,13 +3538,19 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
                   Event Gallery
                 </h2>
-                <div className="relative rounded-2xl overflow-hidden bg-gray-100 shadow-sm">
+                {/* The frame has a definite, screen-relative height so it
+                    never collapses (even while the image loads); the image
+                    fills it with object-contain, so the WHOLE image is always
+                    visible — no crop — and sized to the device. */}
+                <div
+                  className="relative rounded-2xl overflow-hidden bg-gray-100 shadow-sm flex items-center justify-center"
+                  style={{ height: "clamp(220px, 68vw, 460px)" }}
+                >
                   <img
                     key={currentImageIndex}
                     src={apiURL + gallery[currentImageIndex]}
                     alt={`Gallery image ${currentImageIndex + 1}`}
-                    className="w-full object-cover anim-gallery-slide"
-                    style={{ height: "clamp(200px, 45vw, 480px)" }}
+                    className="w-full h-full object-contain anim-gallery-slide"
                   />
                   {gallery.length > 1 && (
                     <>
@@ -3521,9 +3593,81 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               </section>
             )}
 
-            {/* (Reels were moved into the new "History" tab below — see
-                the History TabsContent for the marquee carousel and
-                the page-level reel player Dialog.) */}
+            {/* History — Instagram reels marquee, shown directly below the
+                Event Gallery. Only rendered when at least one reel is set. */}
+            {hasReels &&
+              (() => {
+                const extractReelId = (url: string): string | null => {
+                  const reel = url.match(/\/reel(?:s)?\/([A-Za-z0-9_-]+)/);
+                  if (reel) return reel[1];
+                  const post = url.match(/\/p\/([A-Za-z0-9_-]+)/);
+                  if (post) return post[1];
+                  const tv = url.match(/\/tv\/([A-Za-z0-9_-]+)/);
+                  if (tv) return tv[1];
+                  return null;
+                };
+                const toEmbedSrc = (url: string): string | null => {
+                  const id = extractReelId(url);
+                  if (!id) return null;
+                  return `https://www.instagram.com/p/${id}/embed/?cr=1&v=14&rd=https%3A%2F%2Fwww.instagram.com`;
+                };
+                const validEmbeds = cleanedReelLinks
+                  .map((u) => ({ url: u, src: toEmbedSrc(u) }))
+                  .filter((e): e is { url: string; src: string } => !!e.src);
+                if (validEmbeds.length === 0) return null;
+                const repeatCount = Math.max(
+                  2,
+                  Math.ceil(12 / validEmbeds.length),
+                );
+                const marqueeItems = Array.from(
+                  { length: repeatCount },
+                  () => validEmbeds,
+                ).flat();
+                return (
+                  <section>
+                    <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
+                      History
+                    </h2>
+                    <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
+                      <div ref={reelMarqueeRef} className="overflow-hidden">
+                        <div className="flex gap-4 w-max anim-reel-marquee">
+                          {marqueeItems.map((item, i) => (
+                            <div
+                              key={`reel-${i}`}
+                              className="flex-shrink-0 rounded-2xl overflow-hidden border border-gray-200 bg-white shadow-sm"
+                              style={{ width: "220px" }}
+                            >
+                              <div
+                                className="overflow-hidden relative"
+                                style={{ height: "280px" }}
+                              >
+                                <iframe
+                                  src={item.src}
+                                  title={`Instagram reel ${i}`}
+                                  loading="lazy"
+                                  allow="encrypted-media"
+                                  allowFullScreen
+                                  scrolling="no"
+                                  style={{
+                                    width: "100%",
+                                    height: "820px",
+                                    border: 0,
+                                    display: "block",
+                                    marginTop: "-60px",
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-3 text-center">
+                        Hover to pause
+                      </p>
+                    </div>
+                  </section>
+                );
+              })()}
 
             {/* Speaker Carousel */}
             {eventData?.speakers && eventData.speakers.length > 0 && (
@@ -3901,8 +4045,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     </div>
                   </div>
 
-                  {/* Organized by footer */}
-                  <div className="border-t border-gray-100 px-5 sm:px-6 py-4">
+                  {/* Organized by footer — tap to jump to the Organizer tab */}
+                  <button
+                    type="button"
+                    onClick={() => goToTab("organizer")}
+                    className="w-full text-left border-t border-gray-100 px-5 sm:px-6 py-4 hover:bg-gray-50 transition-colors"
+                  >
                     <p className="text-gray-400 text-xs font-medium mb-3">
                       Organized by
                     </p>
@@ -3922,7 +4070,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         <p className="text-gray-400 text-xs">Event Organizer</p>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 </div>
               ) : (
                 <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
@@ -3958,8 +4106,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     </div>
                   </div>
 
-                  {/* Organized by footer */}
-                  <div className="border-t border-gray-100 px-5 sm:px-6 py-4">
+                  {/* Organized by footer — tap to jump to the Organizer tab */}
+                  <button
+                    type="button"
+                    onClick={() => goToTab("organizer")}
+                    className="w-full text-left border-t border-gray-100 px-5 sm:px-6 py-4 hover:bg-gray-50 transition-colors"
+                  >
                     <p className="text-gray-400 text-xs font-medium mb-3">
                       Organized by
                     </p>
@@ -3979,7 +4131,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         <p className="text-gray-400 text-xs">Event Organizer</p>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 </div>
               )}
 
@@ -4310,25 +4462,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           eventEndDate={eventData?.endDate}
         />
 
-        {/* Tab order: History → Organizer → Venue Layout → (rest).
-            History houses the continuously-scrolling Reels marquee so
-            visitors land on the brand's story / past-moments feed
-            before drilling into organizer details or the venue map.
-            History is only mounted when at least one reel URL is set
-            — events without reels skip it and default to Organizer. */}
+        {/* Bottom section tabs. Controlled so the info cards above can jump
+            to a section (Organizer / Venue Layout). The History tab was
+            removed — reels now live below the Event Gallery. */}
+        <div ref={tabsSectionRef} className="scroll-mt-24">
         <Tabs
-          defaultValue={hasReels ? "history" : "organizer"}
+          value={activeTab}
+          onValueChange={setActiveTab}
           className="w-full"
         >
           <TabsList className="bg-gray-100 border border-gray-200 rounded-2xl p-1 h-auto flex flex-wrap w-full mt-5 gap-1">
-            {hasReels && (
-              <TabsTrigger
-                value="history"
-                className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
-              >
-                History
-              </TabsTrigger>
-            )}
             <TabsTrigger
               value="organizer"
               className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
@@ -4388,7 +4531,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                    the full path segment, and Instagram's embed
                    endpoint handles both canonical and share-token
                    ids transparently. */}
-          {hasReels && (() => {
+          {/* Disabled — reels were moved to a "History" section below the
+              Event Gallery; this old in-tab carousel no longer renders. */}
+          {false && (() => {
             const extractReelId = (url: string): string | null => {
               const reel = url.match(/\/reel(?:s)?\/([A-Za-z0-9_-]+)/);
               if (reel) return reel[1];
@@ -4887,7 +5032,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         <button
                           key={layout.id}
                           onClick={() => setCurrentLayoutIndex(index)}
-                          className={`whitespace-nowrap px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
+                          className={`shrink-0 whitespace-nowrap px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
                             currentLayoutIndex === index
                               ? "text-white"
                               : "border border-gray-200 text-gray-500 bg-gray-50 hover:bg-gray-100"
@@ -4903,38 +5048,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         </button>
                       ))}
                     </div>
-                    {venueConfig[currentLayoutIndex] && (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 text-xs">
-                        {[
-                          {
-                            label: "Layout",
-                            value: venueConfig[currentLayoutIndex].name,
-                          },
-                          {
-                            label: "Dimensions",
-                            value: `${venueConfig[currentLayoutIndex].width}\u00d7${venueConfig[currentLayoutIndex].height}`,
-                          },
-                          {
-                            label: "Total Rows",
-                            value: venueConfig[currentLayoutIndex].totalRows,
-                          },
-                          {
-                            label: "Tables",
-                            value: venueTables[currentLayoutId]?.length || 0,
-                          },
-                        ].map(({ label, value }) => (
-                          <div
-                            key={label}
-                            className="rounded-xl border border-gray-200 bg-gray-50 p-3"
-                          >
-                            <p className="text-gray-400 mb-0.5">{label}</p>
-                            <p className="font-semibold text-gray-800">
-                              {value}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 )}
                 {/* Current Layout Display — the header row doubles as
@@ -5038,15 +5151,27 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     transform: `rotate(${table.rotation || 0}deg)`,
                                     transformOrigin: "center center",
                                     zIndex: 5,
-                                    ...(notForSale ? {
-                                      backgroundColor: ((table as any).color || "#f59e0b") + "20",
-                                      borderColor: ((table as any).color || "#f59e0b") + "55",
-                                      backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.03) 3px, rgba(0,0,0,0.03) 6px)",
-                                    } : {
-                                      // Uniform styling — don't reveal which spaces are booked vs available.
-                                      backgroundColor: ((table as any).color || "#22c55e") + "33",
-                                      borderColor: (table as any).color || "#22c55e",
-                                    }),
+                                    // Light tint of the template colour with a
+                                    // solid coloured border; bold dark label so
+                                    // it stays clearly readable. Booked stays
+                                    // uniform (we don't reveal availability).
+                                    ...(notForSale
+                                      ? {
+                                          backgroundColor:
+                                            ((table as any).color || "#f59e0b") +
+                                            "33",
+                                          borderColor:
+                                            (table as any).color || "#f59e0b",
+                                          backgroundImage:
+                                            "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.05) 3px, rgba(0,0,0,0.05) 6px)",
+                                        }
+                                      : {
+                                          backgroundColor:
+                                            ((table as any).color || "#22c55e") +
+                                            "40",
+                                          borderColor:
+                                            (table as any).color || "#22c55e",
+                                        }),
                                   }}
                                 >
                                   <div className="relative group hover:z-50">
@@ -5056,7 +5181,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                         transform: `rotate(-${table.rotation || 0}deg)`,
                                       }}
                                     >
-                                      <span className="font-bold text-[8px] leading-none truncate w-full text-gray-900">
+                                      <span className="font-extrabold text-[8px] leading-none truncate w-full text-gray-900">
                                         {table.name}
                                       </span>
                                     </div>
@@ -5098,9 +5223,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             {roundTableData
                               .filter(
                                 (rt: any) =>
-                                  (!rt.venueConfigId ||
-                                    rt.venueConfigId === currentLayoutId ||
-                                    rt.venueConfigId === "default") &&
+                                  belongsToLayout(rt?.venueConfigId) &&
                                   inCrop(rt?.x, rt?.y),
                               )
                               .map((rt: any) => {
@@ -5320,43 +5443,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 annotations={layoutAnnotations}
                               />
                             )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Legend */}
-                      <div className="mt-4 space-y-3">
-                        <div className="flex flex-wrap gap-4">
-                          <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 bg-green-200 border-2 border-green-500 rounded-full"></div>
-                            <span className="text-gray-500 text-xs">Round</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 bg-purple-200 border-2 border-purple-500 rounded"></div>
-                            <span className="text-gray-500 text-xs">Stage</span>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-                            <p className="text-gray-400 mb-0.5">Venue Size</p>
-                            <p className="font-semibold text-gray-800">
-                              {(
-                                (venueConfig[currentLayoutIndex].width * 100) /
-                                100
-                              ).toFixed(1)}
-                              m x{" "}
-                              {(
-                                (venueConfig[currentLayoutIndex].height * 100) /
-                                100
-                              ).toFixed(1)}
-                              m
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-                            <p className="text-gray-400 mb-0.5">Total Tables</p>
-                            <p className="font-semibold text-gray-800">
-                              {venueTables[currentLayoutId]?.length || 0}
-                            </p>
                           </div>
                         </div>
                       </div>
@@ -6396,6 +6482,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             <VisitorFeedbackCard eventId={id || eventData?._id || ""} />
           </TabsContent>
         </Tabs>
+        </div>
 
         {/* (Reel player Dialog removed — each reel card now embeds
             the Instagram iframe inline in the History tab's marquee,
@@ -7693,7 +7780,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
               {/* Layout Selector — only if multiple halls */}
               {venueConfig && venueConfig.length > 1 && (
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 overflow-x-auto pb-1">
                   {venueConfig.map((layout, index) => (
                     <Button
                       key={layout.id}
@@ -7702,11 +7789,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       variant={
                         currentLayoutIndex === index ? "default" : "outline"
                       }
-                      className={
+                      className={`shrink-0 whitespace-nowrap ${
                         currentLayoutIndex === index
                           ? "bg-blue-600 text-white"
                           : "border-gray-300"
-                      }
+                      }`}
                     >
                       <MapIcon className="h-4 w-4 mr-1" />
                       {layout.name}
