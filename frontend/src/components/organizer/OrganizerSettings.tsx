@@ -403,6 +403,9 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     // (receipts, login flows); these are extras the organizer
     // publishes for buyers/exhibitors to reach them.
     contactPhones: [] as string[],
+    // Optional label for each contact number (aligned by index), e.g.
+    // "Reception", "EventSH". Shown next to the number on the eventfront.
+    contactPhoneNames: [] as string[],
     address: "",
     description: "",
     businessCategory: "",
@@ -1303,10 +1306,22 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
       // hook on the organizers controller parses it back. Empty arrays
       // serialize to "[]" so the field stays in sync when all entries
       // are removed.
-      const filteredPhones = (shopProfile.contactPhones || [])
-        .map((p) => String(p || "").trim())
-        .filter((p) => p.length > 0);
-      fd.append("contactPhones", JSON.stringify(filteredPhones));
+      // Zip numbers with their labels and drop empty-number rows together
+      // so the two arrays stay index-aligned on the server / eventfront.
+      const phonePairs = (shopProfile.contactPhones || [])
+        .map((p, i) => ({
+          phone: String(p || "").trim(),
+          name: String((shopProfile.contactPhoneNames || [])[i] || "").trim(),
+        }))
+        .filter((x) => x.phone.length > 0);
+      fd.append(
+        "contactPhones",
+        JSON.stringify(phonePairs.map((x) => x.phone)),
+      );
+      fd.append(
+        "contactPhoneNames",
+        JSON.stringify(phonePairs.map((x) => x.name)),
+      );
       fd.append("address", shopProfile.address || "");
       fd.append("description", shopProfile.description || "");
       fd.append("GSTNumber", shopProfile.GSTNumber || "");
@@ -1380,6 +1395,9 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
         contactPhones: Array.isArray(d?.contactPhones)
           ? d.contactPhones
           : p.contactPhones,
+        contactPhoneNames: Array.isArray(d?.contactPhoneNames)
+          ? d.contactPhoneNames
+          : p.contactPhoneNames,
         address: d?.address ?? p.address,
         description: d?.description ?? p.description,
         receiptType: d?.receiptType ?? p.receiptType,
@@ -1571,6 +1589,9 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           instagramHandle: d?.instagramHandle ?? "",
           phone: d?.phone ?? "",
           contactPhones: Array.isArray(d?.contactPhones) ? d.contactPhones : [],
+          contactPhoneNames: Array.isArray(d?.contactPhoneNames)
+            ? d.contactPhoneNames
+            : [],
           address: d?.address ?? "",
           GSTNumber: d?.GSTNumber ?? "",
           UENNumber: d?.UENNumber ?? "",
@@ -2186,6 +2207,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                         ? entry
                         : "+91";
                     const digits = sp > 0 ? entry.slice(sp + 1).trim() : "";
+                    const label = (shopProfile.contactPhoneNames || [])[idx] || "";
                     const writeRow = (nextDial: string, nextDigits: string) => {
                       const next = [...shopProfile.contactPhones];
                       const composed = `${nextDial} ${nextDigits}`.trim();
@@ -2199,67 +2221,92 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                         contactPhones: next,
                       }));
                     };
+                    const writeName = (nextName: string) => {
+                      const names = [...(shopProfile.contactPhoneNames || [])];
+                      while (names.length <= idx) names.push("");
+                      names[idx] = nextName;
+                      setOrganizerProfile((p) => ({
+                        ...p,
+                        contactPhoneNames: names,
+                      }));
+                    };
                     return (
-                      <div key={idx} className="flex items-center gap-2">
-                        <div className="w-32">
-                          <Select
-                            value={dial}
-                            onValueChange={(v) => writeRow(v, digits)}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Code" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {loadingCountries ? (
-                                <SelectItem value="loading" disabled>
-                                  Loading...
-                                </SelectItem>
-                              ) : (
-                                countries
-                                  .filter(
-                                    (c) =>
-                                      c.dialCode && c.dialCode.trim() !== "",
-                                  )
-                                  .map((c) => (
-                                    <SelectItem
-                                      key={`${c.code}-${c.dialCode}`}
-                                      value={c.dialCode}
-                                    >
-                                      {c.name} {c.dialCode}
-                                    </SelectItem>
-                                  ))
-                              )}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                      <div
+                        key={idx}
+                        className="rounded-lg border bg-white p-2.5 space-y-2"
+                      >
+                        {/* Label for this number — e.g. "Reception", a name */}
                         <Input
-                          type="tel"
-                          inputMode="numeric"
-                          placeholder="Enter number"
-                          value={digits}
-                          onChange={(e) =>
-                            writeRow(dial, e.target.value.replace(/\D/g, ""))
-                          }
-                          className="flex-grow"
+                          placeholder="Name / label (e.g. Reception, EventSH)"
+                          value={label}
+                          onChange={(e) => writeName(e.target.value)}
+                          className="h-8 text-sm"
                         />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="text-red-600 hover:text-red-700 shrink-0"
-                          onClick={() => {
-                            const next = shopProfile.contactPhones.filter(
-                              (_, i) => i !== idx,
-                            );
-                            setOrganizerProfile((p) => ({
-                              ...p,
-                              contactPhones: next,
-                            }));
-                          }}
-                          title="Remove this number"
-                        >
-                          <Trash className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <div className="w-32 flex-shrink-0">
+                            <Select
+                              value={dial}
+                              onValueChange={(v) => writeRow(v, digits)}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Code" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {loadingCountries ? (
+                                  <SelectItem value="loading" disabled>
+                                    Loading...
+                                  </SelectItem>
+                                ) : (
+                                  countries
+                                    .filter(
+                                      (c) =>
+                                        c.dialCode && c.dialCode.trim() !== "",
+                                    )
+                                    .map((c) => (
+                                      <SelectItem
+                                        key={`${c.code}-${c.dialCode}`}
+                                        value={c.dialCode}
+                                      >
+                                        {c.name} {c.dialCode}
+                                      </SelectItem>
+                                    ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Input
+                            type="tel"
+                            inputMode="numeric"
+                            placeholder="Enter number"
+                            value={digits}
+                            onChange={(e) =>
+                              writeRow(dial, e.target.value.replace(/\D/g, ""))
+                            }
+                            className="flex-grow"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="text-red-600 hover:text-red-700 shrink-0"
+                            onClick={() => {
+                              const next = shopProfile.contactPhones.filter(
+                                (_, i) => i !== idx,
+                              );
+                              const nextNames = (
+                                shopProfile.contactPhoneNames || []
+                              ).filter((_, i) => i !== idx);
+                              setOrganizerProfile((p) => ({
+                                ...p,
+                                contactPhones: next,
+                                contactPhoneNames: nextNames,
+                              }));
+                            }}
+                            title="Remove this number"
+                          >
+                            <Trash className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     );
                   })}
@@ -2271,6 +2318,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       setOrganizerProfile((p) => ({
                         ...p,
                         contactPhones: [...(p.contactPhones || []), ""],
+                        contactPhoneNames: [...(p.contactPhoneNames || []), ""],
                       }))
                     }
                   >

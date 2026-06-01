@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import VenueAnnotationLayer from "../organizer/VenueAnnotationLayer";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -397,6 +398,17 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     endDate?: string;
   } | null>(null);
   const isMember = !!activeMembership;
+
+  // Effective round-table prices — honour the member tier when the viewer
+  // holds an active membership (matches the backend booking calculation).
+  const rtChairPrice = (rt: any) =>
+    (isMember && rt?.memberChairPrice != null
+      ? rt.memberChairPrice
+      : rt?.chairPrice) || 0;
+  const rtTablePrice = (rt: any) =>
+    (isMember && rt?.memberTablePrice != null
+      ? rt.memberTablePrice
+      : rt?.tablePrice) || 0;
 
   // NEW: Table Selection States
   const [selectedTables, setSelectedTables] = useState<any[]>([]);
@@ -803,6 +815,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           const result = await res.json();
           if (result.success && result.data?.roundTables) {
             setRoundTableData(result.data.roundTables);
+            // Round tables are booked by clicking chairs on the venue map,
+            // so make sure that map is expanded rather than collapsed.
+            if (result.data.roundTables.length > 0) setShowVenueLayout(true);
           }
         }
       } catch {
@@ -872,23 +887,32 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       const resizeObserver = new ResizeObserver(() => {
         if (!container) return;
         const containerWidth = container.offsetWidth;
-        const containerHeight = container.offsetHeight;
-        const { width: canvasWidth, height: canvasHeight } =
-          computeCanvasExtents();
+        const { width: canvasWidth } = computeCanvasExtents();
 
-        if (canvasWidth > 0 && canvasHeight > 0) {
-          const newScale =
-            Math.min(
-              (containerWidth - 40) / canvasWidth,
-              (containerHeight - 40) / canvasHeight,
-            ) * 0.95; // 5% margin
+        if (canvasWidth > 0 && containerWidth > 0) {
+          // Fit to WIDTH (same as the public venue map). Width-only keeps a
+          // tall venue readable instead of shrinking it to a tiny dot; the
+          // box scrolls vertically if it's unusually tall. Capped at 1 so a
+          // small venue isn't upscaled and pixelated.
+          const newScale = Math.max(
+            0.05,
+            Math.min((containerWidth / canvasWidth) * 0.98, 1),
+          );
           setDynamicScale(newScale);
         }
       });
       resizeObserver.observe(container);
       return () => resizeObserver.disconnect();
     }
-  }, [showTableSelection, currentLayoutIndex, eventData?.venueConfig]);
+    // `loadingTables` is included so the observer attaches once the canvas
+    // actually mounts (it's hidden behind a spinner while tables load) —
+    // otherwise the fit scale stays stale at 1 and the map gets clipped.
+  }, [
+    showTableSelection,
+    currentLayoutIndex,
+    eventData?.venueConfig,
+    loadingTables,
+  ]);
 
   useEffect(() => {
     const container = venueDisplayContainerRef.current;
@@ -907,7 +931,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       resizeObserver.observe(container);
       return () => resizeObserver.disconnect();
     }
-  }, [currentLayoutIndex, eventData?.venueConfig]);
+    // `showVenueLayout` is included so the observer re-attaches when the
+    // (collapsible) venue map becomes visible — otherwise the fit-to-width
+    // scale stays stale at 1 and the map overflows.
+  }, [currentLayoutIndex, eventData?.venueConfig, showVenueLayout]);
 
   // Fit the canvas inside the maximized dialog by scaling its width/height
   // to whichever axis is the tighter fit. Caps at 1 so we never enlarge
@@ -2939,6 +2966,20 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // Extract layout IDs from venueConfig
   const layoutIds = venueConfig?.map((config) => config.id) || [];
   const currentLayoutId = layoutIds[currentLayoutIndex] || "default";
+
+  // CAD annotations (lines / text / boxes / dimensions) for the current
+  // layout — rendered read-only over the venue map and the exhibitor
+  // stall-selection map. Visitor maps use raw px (scale = 1).
+  const layoutAnnotations: any[] = (
+    Array.isArray((eventData as any)?.venueAnnotations)
+      ? ((eventData as any).venueAnnotations as any[])
+      : []
+  ).filter(
+    (a) =>
+      !a?.venueConfigId ||
+      a.venueConfigId === currentLayoutId ||
+      a.venueConfigId === "default",
+  );
   const whatsAppNumber = organizer?.whatsAppNumber || "";
 
   // Canvas size for the rendered venue map. Delegates to the helper
@@ -2971,35 +3012,39 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   //  - shape === "circle" (or missing, for legacy data) → 50×50 round chip
   const renderDoors = () =>
     currentLayoutDoors.map((door: any) => {
-      const isEntrance = (door?.type || "").toLowerCase() === "entrance";
+      const type = (door?.type || "").toLowerCase();
+      const isEntrance = type === "entrance";
+      const isExit = type === "exit";
       const isSquare = door?.shape === "square";
       const w = Number(door?.width) > 0 ? Number(door.width) : 50;
       const h = Number(door?.height) > 0 ? Number(door.height) : 50;
+      // Entrance green, exit red, custom door uses its stored colour.
+      const doorColor = isEntrance
+        ? "#16a34a"
+        : isExit
+          ? "#dc2626"
+          : door?.color || "#f97316";
+      const fallback = isEntrance ? "IN" : isExit ? "OUT" : "DOOR";
       return (
         <div
           key={`door-${door.id || `${door.x}-${door.y}`}`}
-          className={`absolute flex items-center justify-center text-[10px] font-bold text-white shadow-md select-none pointer-events-none ${
+          className={`absolute flex items-center justify-center text-[10px] font-bold text-white shadow-md select-none pointer-events-none border-2 ${
             isSquare ? "rounded-md" : "rounded-full"
-          } ${
-            isEntrance
-              ? "bg-green-600 border-2 border-green-700"
-              : "bg-red-600 border-2 border-red-700"
           }`}
           style={{
             left: `${door.x}px`,
             top: `${door.y}px`,
             width: `${w}px`,
             height: `${h}px`,
+            backgroundColor: doorColor,
+            borderColor: "rgba(0,0,0,0.25)",
             transform: `rotate(${door.rotation || 0}deg)`,
             transformOrigin: "center center",
             zIndex: 4,
           }}
-          title={
-            (door.label as string) ||
-            (isEntrance ? "Entrance" : "Exit")
-          }
+          title={(door.label as string) || fallback}
         >
-          <span>{door.label || (isEntrance ? "IN" : "OUT")}</span>
+          <span className="px-0.5 truncate">{door.label || fallback}</span>
         </div>
       );
     });
@@ -3980,22 +4025,33 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 )
                   ? (organizer as any).contactPhones
                   : [];
+                const rawNames: string[] = Array.isArray(
+                  (organizer as any).contactPhoneNames,
+                )
+                  ? (organizer as any).contactPhoneNames
+                  : [];
                 const legacy =
                   (organizer as any).phoneNumber ||
                   (organizer as any).phone ||
                   "";
                 const seen = new Set<string>();
-                const phones = [...(rawPhones || []), legacy]
-                  .map((p) => String(p || "").trim())
-                  .filter((p) => {
-                    if (!p) return false;
-                    const k = p.replace(/\s+/g, "");
-                    if (seen.has(k)) return false;
-                    seen.add(k);
-                    return true;
-                  });
+                // Pair each number with its label (aligned by index); append
+                // the legacy single number (no label); dedupe by number.
+                const phoneEntries = [
+                  ...rawPhones.map((p, i) => ({
+                    phone: String(p || "").trim(),
+                    name: String(rawNames[i] || "").trim(),
+                  })),
+                  { phone: String(legacy || "").trim(), name: "" },
+                ].filter((e) => {
+                  if (!e.phone) return false;
+                  const k = e.phone.replace(/\s+/g, "");
+                  if (seen.has(k)) return false;
+                  seen.add(k);
+                  return true;
+                });
                 const showCard =
-                  phones.length > 0 ||
+                  phoneEntries.length > 0 ||
                   organizer.email ||
                   organizer.whatsAppNumber;
                 if (!showCard) return null;
@@ -4009,33 +4065,28 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       Contact Organizer
                     </p>
                     <div className="space-y-3">
-                      {phones.length > 0 && (
-                        <div className="flex items-center gap-3">
+                      {phoneEntries.length > 0 && (
+                        <div className="flex items-start gap-3">
                           <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
                             <Phone className="h-3.5 w-3.5 text-gray-400" />
                           </div>
-                          <div className="text-sm font-medium flex flex-wrap gap-x-1 gap-y-0.5">
-                            {phones.map((phone, idx) => (
-                              <span
+                          <div className="text-sm font-medium flex flex-col gap-1">
+                            {phoneEntries.map((e, idx) => (
+                              <a
                                 key={`p-${idx}`}
-                                className="inline-flex items-center"
+                                href={`tel:${e.phone.replace(/\s+/g, "")}`}
+                                className="hover:underline"
+                                style={{
+                                  color: design?.secondaryColor || "#ef4444",
+                                }}
                               >
-                                <a
-                                  href={`tel:${phone.replace(/\s+/g, "")}`}
-                                  className="hover:underline"
-                                  style={{
-                                    color:
-                                      design?.secondaryColor || "#ef4444",
-                                  }}
-                                >
-                                  {phone}
-                                </a>
-                                {idx < phones.length - 1 && (
-                                  <span className="text-gray-400 ml-1">
-                                    ,
+                                {e.name && (
+                                  <span className="text-gray-700 font-semibold mr-1.5">
+                                    {e.name}:
                                   </span>
                                 )}
-                              </span>
+                                {e.phone}
+                              </a>
                             ))}
                           </div>
                         </div>
@@ -4244,7 +4295,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             >
               Organizer
             </TabsTrigger>
-            {venueTables && Object.keys(venueTables).length > 0 && (
+            {((venueTables && Object.keys(venueTables).length > 0) ||
+              roundTableData.length > 0) && (
               <TabsTrigger
                 value="venue"
                 className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
@@ -4260,14 +4312,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 Speakers
               </TabsTrigger>
             )}
-            {roundTableData.length > 0 && (
-              <TabsTrigger
-                value="roundtables"
-                className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
-              >
-                Round Tables
-              </TabsTrigger>
-            )}
+            {/* Round tables are shown inside the Venue Layout tab now —
+                no separate "Round Tables" tab. */}
             {eventData?.endDate &&
               new Date(eventData.endDate) <= new Date() &&
               !!eventData?.totalTickets &&
@@ -4810,7 +4856,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           </TabsContent>
 
           <TabsContent value="venue" className="mt-4 space-y-6">
-            {venueTables && Object.keys(venueTables).length > 0 ? (
+            {(venueTables && Object.keys(venueTables).length > 0) ||
+            roundTableData.length > 0 ? (
               <div className="space-y-5">
                 {/* Layout Selector */}
                 {venueConfig && venueConfig.length > 1 && (
@@ -4918,22 +4965,27 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       {/* Venue map */}
                       <div
                         ref={venueDisplayContainerRef}
-                        className="overflow-x-auto rounded-xl border border-gray-200"
+                        className="overflow-auto rounded-xl border border-gray-200"
                         style={{ background: "#f9fafb" }}
                       >
+                        {/* Scale the layout to fit the container width. If a
+                            wide venue still overflows, the box scrolls
+                            (horizontal + vertical) so every space — including
+                            the right-most ones — stays reachable. */}
                         <div
-                          className="relative mx-auto"
+                          className="mx-auto"
                           style={{
-                            width: `${venueDisplayCanvas.width}px`,
-                            height: `${venueDisplayCanvas.height}px`,
-                            minWidth: `${venueDisplayCanvas.width}px`,
+                            width: `${venueDisplayCanvas.width * venueDisplayScale}px`,
+                            height: `${venueDisplayCanvas.height * venueDisplayScale}px`,
                           }}
                         >
                           <div
-                            className="relative shadow-sm border border-gray-300"
+                            className="relative shadow-sm border border-gray-300 origin-top-left"
                             style={{
-                              width: "100%",
-                              height: "100%",
+                              width: `${venueDisplayCanvas.width}px`,
+                              height: `${venueDisplayCanvas.height}px`,
+                              transform: `scale(${venueDisplayScale})`,
+                              transformOrigin: "top left",
                               backgroundImage: `linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)`,
                               backgroundSize: `${venueConfig[currentLayoutIndex]?.gridSize || 40}px ${venueConfig[currentLayoutIndex]?.gridSize || 40}px`,
                               backgroundColor: "#ffffff",
@@ -5031,8 +5083,234 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 </div>
                               );
                             })}
+                            {/* Round tables — rendered on the same venue map
+                                as the Spaces. Interactive seat selection;
+                                "not for sale" tables show as non-bookable
+                                references. */}
+                            {roundTableData
+                              .filter(
+                                (rt: any) =>
+                                  !rt.venueConfigId ||
+                                  rt.venueConfigId === currentLayoutId ||
+                                  rt.venueConfigId === "default",
+                              )
+                              .map((rt: any) => {
+                                const bookedChairs: number[] =
+                                  rt.bookedChairs || [];
+                                const isReference = rt.forSale === false;
+                                const mySelection = roundTableSelections.find(
+                                  (sel) =>
+                                    sel.tablePositionId === rt.positionId,
+                                );
+                                const mySelectedChairs =
+                                  mySelection?.selectedChairIndices || [];
+                                const isFullyBooked =
+                                  rt.isFullyBooked ||
+                                  bookedChairs.length >= rt.numberOfChairs;
+                                const diameter = rt.tableDiameter || 120;
+                                const chairSz = Math.max(12, diameter * 0.14);
+                                const chairR =
+                                  diameter / 2 + chairSz / 2 + 4;
+                                const cx = (rt.x || 0) + diameter / 2;
+                                const cy = (rt.y || 0) + diameter / 2;
+                                const col = rt.color || "#8B5CF6";
+                                const hasSel = mySelectedChairs.length > 0;
+
+                                const handleChairClick = (ci: number) => {
+                                  if (isReference) return;
+                                  if (bookedChairs.includes(ci)) return;
+                                  if (rt.sellingMode === "table") {
+                                    if (mySelection) {
+                                      setRoundTableSelections(
+                                        roundTableSelections.filter(
+                                          (x) =>
+                                            x.tablePositionId !==
+                                            rt.positionId,
+                                        ),
+                                      );
+                                    } else if (!isFullyBooked) {
+                                      setRoundTableSelections([
+                                        ...roundTableSelections,
+                                        {
+                                          tablePositionId: rt.positionId,
+                                          tableName: rt.name,
+                                          tableCategory:
+                                            rt.category || "Standard",
+                                          sellingMode: rt.sellingMode,
+                                          selectedChairIndices: Array.from(
+                                            { length: rt.numberOfChairs },
+                                            (_, i) => i,
+                                          ),
+                                          amount: rtTablePrice(rt),
+                                          color: col,
+                                        },
+                                      ]);
+                                    }
+                                  } else {
+                                    const sel = mySelectedChairs.includes(ci)
+                                      ? mySelectedChairs.filter(
+                                          (c) => c !== ci,
+                                        )
+                                      : [...mySelectedChairs, ci];
+                                    const amt = rtChairPrice(rt) * sel.length;
+                                    const rest = roundTableSelections.filter(
+                                      (x) =>
+                                        x.tablePositionId !== rt.positionId,
+                                    );
+                                    if (sel.length === 0)
+                                      setRoundTableSelections(rest);
+                                    else
+                                      setRoundTableSelections([
+                                        ...rest,
+                                        {
+                                          tablePositionId: rt.positionId,
+                                          tableName: rt.name,
+                                          tableCategory:
+                                            rt.category || "Standard",
+                                          sellingMode: rt.sellingMode,
+                                          selectedChairIndices: sel,
+                                          amount: amt,
+                                          color: col,
+                                        },
+                                      ]);
+                                  }
+                                };
+
+                                return (
+                                  <div
+                                    key={`rt-${rt.positionId}`}
+                                    style={{
+                                      position: "absolute",
+                                      left: 0,
+                                      top: 0,
+                                      zIndex: 6,
+                                    }}
+                                  >
+                                    {/* Table circle */}
+                                    <div
+                                      onClick={() => {
+                                        if (
+                                          !isReference &&
+                                          rt.sellingMode === "table"
+                                        )
+                                          handleChairClick(0);
+                                      }}
+                                      title={
+                                        isReference
+                                          ? `${rt.name} — Not for sale`
+                                          : rt.name
+                                      }
+                                      className="rounded-full flex flex-col items-center justify-center"
+                                      style={{
+                                        position: "absolute",
+                                        left: cx - diameter / 2,
+                                        top: cy - diameter / 2,
+                                        width: diameter,
+                                        height: diameter,
+                                        background: hasSel
+                                          ? `radial-gradient(circle at 40% 35%, ${col}30, ${col}15)`
+                                          : `radial-gradient(circle at 40% 35%, ${col}18, ${col}08)`,
+                                        border: hasSel
+                                          ? `2.5px solid ${col}`
+                                          : `1.5px solid ${col}55`,
+                                        opacity: isReference ? 0.7 : 1,
+                                        backgroundImage: isReference
+                                          ? "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 6px)"
+                                          : undefined,
+                                        cursor: isReference
+                                          ? "not-allowed"
+                                          : rt.sellingMode === "table"
+                                            ? "pointer"
+                                            : "default",
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          fontSize: 9,
+                                          fontWeight: 800,
+                                          color: col,
+                                          textAlign: "center",
+                                          lineHeight: 1.1,
+                                          padding: "0 2px",
+                                        }}
+                                      >
+                                        {rt.name}
+                                      </span>
+                                    </div>
+
+                                    {/* Chairs */}
+                                    {Array.from({
+                                      length: rt.numberOfChairs,
+                                    }).map((_, i) => {
+                                      const a =
+                                        (2 * Math.PI * i) /
+                                          rt.numberOfChairs -
+                                        Math.PI / 2;
+                                      const px =
+                                        cx + chairR * Math.cos(a) - chairSz / 2;
+                                      const py =
+                                        cy + chairR * Math.sin(a) - chairSz / 2;
+                                      const bk = bookedChairs.includes(i);
+                                      const sl = mySelectedChairs.includes(i);
+                                      return (
+                                        <button
+                                          key={i}
+                                          type="button"
+                                          onClick={() => handleChairClick(i)}
+                                          disabled={bk || isReference}
+                                          className="rounded-full flex items-center justify-center font-bold"
+                                          style={{
+                                            position: "absolute",
+                                            left: px,
+                                            top: py,
+                                            width: chairSz,
+                                            height: chairSz,
+                                            fontSize: Math.max(
+                                              6,
+                                              chairSz * 0.45,
+                                            ),
+                                            color: bk ? "#9ca3af" : "white",
+                                            backgroundColor: bk
+                                              ? "#f3f4f6"
+                                              : sl
+                                                ? "#2563eb"
+                                                : col,
+                                            border: bk
+                                              ? "1.5px solid #d1d5db"
+                                              : sl
+                                                ? "2px solid #1d4ed8"
+                                                : "1.5px solid rgba(255,255,255,0.8)",
+                                            cursor:
+                                              bk || isReference
+                                                ? "not-allowed"
+                                                : "pointer",
+                                            opacity: bk ? 0.6 : 1,
+                                            transform: sl
+                                              ? "scale(1.15)"
+                                              : "scale(1)",
+                                            zIndex: sl ? 12 : 7,
+                                          }}
+                                          title={`Seat ${i + 1} — ${bk ? "Taken" : sl ? "Selected" : "Available"}${rt.sellingMode === "chair" && !isReference ? ` · ${formatPrice(rtChairPrice(rt))}` : ""}`}
+                                        >
+                                          {i + 1}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })}
                             {/* Entrance / exit door markers */}
                             {renderDoors()}
+                            {layoutAnnotations.length > 0 && (
+                              <VenueAnnotationLayer
+                                readOnly
+                                width={venueDisplayCanvas.width}
+                                height={venueDisplayCanvas.height}
+                                scale={1}
+                                zIndex={4}
+                                annotations={layoutAnnotations}
+                              />
+                            )}
                           </div>
                         </div>
                       </div>
@@ -5125,11 +5403,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 </p>
               </div>
             )}
-          </TabsContent>
-
-          {/* ROUND TABLES TAB */}
-          <TabsContent value="roundtables" className="mt-4 space-y-6">
-            {roundTableData.length > 0 ? (
+            {/* Round-table seat booking — lives inside the Venue tab,
+                below the layout map (the map above now shows the round
+                tables alongside the Spaces). */}
+            {roundTableData.length > 0 && (
               <div className="space-y-5">
                 {/* Header */}
                 <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
@@ -5171,19 +5448,21 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     )}
                   </div>
 
-                  {/* Table category cards */}
+                  {/* Table category cards (bookable tables only — "not for
+                      sale" tables are layout references and are excluded). */}
                   {(() => {
+                    const bookable = roundTableData.filter(
+                      (rt: any) => rt.forSale !== false,
+                    );
                     const categories = [
                       ...new Set(
-                        roundTableData.map(
-                          (rt: any) => rt.category || "Standard",
-                        ),
+                        bookable.map((rt: any) => rt.category || "Standard"),
                       ),
                     ];
                     return (
                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                         {categories.map((cat) => {
-                          const tablesInCat = roundTableData.filter(
+                          const tablesInCat = bookable.filter(
                             (rt: any) => (rt.category || "Standard") === cat,
                           );
                           const sample = tablesInCat[0];
@@ -5226,9 +5505,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                   style={{ color: sample.color || "#8B5CF6" }}
                                 >
                                   {sample.sellingMode === "table"
-                                    ? formatPrice(sample.tablePrice) +
+                                    ? formatPrice(rtTablePrice(sample)) +
                                       " / table"
-                                    : formatPrice(sample.chairPrice) +
+                                    : formatPrice(rtChairPrice(sample)) +
                                       " / seat"}
                                 </p>
                                 <div className="flex items-center gap-1.5 mt-1">
@@ -5255,8 +5534,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   })()}
                 </div>
 
-                {/* Round Tables Venue Layout */}
-                {venueConfig &&
+                {/* Round Tables now render on the main venue map above
+                    (alongside the Spaces), so this standalone round-tables
+                    map is intentionally disabled. */}
+                {false &&
+                  venueConfig &&
                   venueConfig[currentLayoutIndex] &&
                   (() => {
                     const vc = venueConfig[currentLayoutIndex];
@@ -5393,7 +5675,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 const cx = pad + (rt.x || 0) + d / 2;
                                 const cy = pad + (rt.y || 0) + d / 2;
 
+                                // A "not for sale" table is a layout
+                                // reference only and cannot be booked.
+                                const isReference = rt.forSale === false;
                                 const handleChairClick = (ci: number) => {
+                                  if (isReference) return;
                                   if (bookedChairs.includes(ci)) return;
                                   if (rt.sellingMode === "table") {
                                     if (mySelection) {
@@ -5416,7 +5702,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                             { length: rt.numberOfChairs },
                                             (_, i) => i,
                                           ),
-                                          amount: rt.tablePrice || 0,
+                                          amount: rtTablePrice(rt),
                                           color: rt.color || "#8B5CF6",
                                         },
                                       ]);
@@ -5425,8 +5711,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     const sel = mySelectedChairs.includes(ci)
                                       ? mySelectedChairs.filter((c) => c !== ci)
                                       : [...mySelectedChairs, ci];
-                                    const amt =
-                                      (rt.chairPrice || 0) * sel.length;
+                                    const amt = rtChairPrice(rt) * sel.length;
                                     const rest = roundTableSelections.filter(
                                       (x) =>
                                         x.tablePositionId !== rt.positionId,
@@ -5485,14 +5770,19 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                           ? `0 0 0 3px ${col}15, 0 4px 12px ${col}20`
                                           : `0 1px 4px rgba(0,0,0,0.06)`,
                                         zIndex: 6,
-                                        cursor:
-                                          rt.sellingMode === "table"
+                                        cursor: isReference
+                                          ? "not-allowed"
+                                          : rt.sellingMode === "table"
                                             ? "pointer"
                                             : "default",
+                                        opacity: isReference ? 0.7 : 1,
                                         pointerEvents: "auto",
                                       }}
                                       onClick={() => {
-                                        if (rt.sellingMode === "table")
+                                        if (
+                                          !isReference &&
+                                          rt.sellingMode === "table"
+                                        )
                                           handleChairClick(0);
                                       }}
                                     >
@@ -5519,7 +5809,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                           fontWeight: 600,
                                         }}
                                       >
-                                        {rt.category}
+                                        {isReference ? "Reference" : rt.category}
                                       </span>
                                     </div>
 
@@ -5541,7 +5831,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                           key={i}
                                           type="button"
                                           onClick={() => handleChairClick(i)}
-                                          disabled={bk}
+                                          disabled={bk || isReference}
                                           className="rounded-full flex items-center justify-center font-bold transition-all"
                                           style={{
                                             position: "absolute",
@@ -5576,7 +5866,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                                 ? "none"
                                                 : "0 1px 3px rgba(0,0,0,0.12)",
                                           }}
-                                          title={`Seat ${i + 1} — ${bk ? "Taken" : sl ? "Selected" : "Available"}${rt.sellingMode === "chair" ? ` · ${formatPrice(rt.chairPrice)}` : ""}`}
+                                          title={`Seat ${i + 1} — ${bk ? "Taken" : sl ? "Selected" : "Available"}${rt.sellingMode === "chair" ? ` · ${formatPrice(rtChairPrice(rt))}` : ""}`}
                                         >
                                           {i + 1}
                                         </button>
@@ -5599,9 +5889,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                           {rt.name}
                                         </p>
                                         <p className="text-gray-300 mt-0.5">
-                                          {rt.sellingMode === "table"
-                                            ? formatPrice(rt.tablePrice)
-                                            : `${formatPrice(rt.chairPrice)} / seat`}
+                                          {isReference
+                                            ? "Not for sale"
+                                            : rt.sellingMode === "table"
+                                              ? formatPrice(rtTablePrice(rt))
+                                              : `${formatPrice(rtChairPrice(rt))} / seat`}
                                         </p>
                                         <div className="w-2 h-2 bg-gray-900/95 rotate-45 absolute -bottom-1 left-1/2 -translate-x-1/2" />
                                       </div>
@@ -6087,12 +6379,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     </div>
                   </div>
                 )}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
-                <p className="text-gray-400">
-                  No round tables available for this event
-                </p>
               </div>
             )}
           </TabsContent>
@@ -7364,9 +7650,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       {/* TABLE SELECTION DIALOG                                        */}
       {/* ============================================================ */}
       <Dialog open={showTableSelection} onOpenChange={setShowTableSelection}>
-        <DialogContent className="max-w-7xl w-full max-h-[95vh] overflow-y-auto p-0">
-          {/* Sticky Header */}
-          <div className="sticky top-0 z-10 bg-white border-b px-6 py-4">
+        <DialogContent className="max-w-7xl w-full max-h-[95vh] overflow-hidden p-0 flex flex-col">
+          {/* Fixed header — stays put; only the body below scrolls. */}
+          <div className="shrink-0 z-10 bg-white border-b px-6 py-4">
             <DialogTitle className="text-xl font-bold">
               Select Your Stall
             </DialogTitle>
@@ -7376,8 +7662,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             </DialogDescription>
           </div>
 
-          {/* Single column — full width for everything */}
-          <div className="flex flex-col gap-0">
+          {/* Scrollable body — the dialog frame + header stay fixed. */}
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-0">
             {/* ── MAIN CONTENT AREA ── */}
             <div className="px-6 py-4 space-y-6">
               {/* Legend */}
@@ -7443,11 +7729,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     </div>
                   ) : (
                     <div
+                      ref={venueContainerRef}
                       className="bg-[#f8fafc] rounded-lg border-2 border-gray-200 w-full overflow-auto"
-                      style={{ maxHeight: "60vh" }}
+                      style={{ height: "55vh" }}
                     >
+                      {/* The venue map renders at natural size inside this
+                          bounded box, so the LAYOUT itself gets the scrollbars
+                          (horizontal + vertical) — the dialog stays fixed. */}
                       <div
-                        ref={venueContainerRef}
                         className="relative mx-auto"
                         style={{
                           width: `${venueDisplayCanvas.width}px`,
@@ -7615,6 +7904,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           )}
                           {/* Entrance / exit door markers */}
                           {renderDoors()}
+                          {layoutAnnotations.length > 0 && (
+                            <VenueAnnotationLayer
+                              readOnly
+                              width={venueDisplayCanvas.width}
+                              height={venueDisplayCanvas.height}
+                              scale={1}
+                              zIndex={4}
+                              annotations={layoutAnnotations}
+                            />
+                          )}
                         </div>
                       </div>
                     </div>
@@ -8189,6 +8488,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               })}
               {/* Entrance / exit door markers */}
               {renderDoors()}
+              {layoutAnnotations.length > 0 && (
+                <VenueAnnotationLayer
+                  readOnly
+                  width={venueDisplayCanvas.width}
+                  height={venueDisplayCanvas.height}
+                  scale={1}
+                  zIndex={4}
+                  annotations={layoutAnnotations}
+                />
+              )}
             </div>
             </div>
           </div>

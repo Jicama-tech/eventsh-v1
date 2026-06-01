@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef, Fragment, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import VenueAnnotationLayer, {
+  type VenueAnnotation,
+  type AnnotationTool,
+} from "./VenueAnnotationLayer";
 import { useCountry } from "@/hooks/useCountry";
 import { useSubscription } from "@/hooks/useSubscription";
 import { Button } from "@/components/ui/button";
@@ -48,6 +52,10 @@ import {
   Facebook,
   Instagram,
   CopyPlus as CopyPlusIcon,
+  MousePointer2,
+  Minus,
+  Square,
+  ArrowUpRight,
 } from "lucide-react";
 import {
   HoverCard,
@@ -260,9 +268,18 @@ interface RoundTableTemplate {
   sellingMode: "table" | "chair";
   tablePrice: number;
   chairPrice: number;
+  bookingPrice?: number;
+  depositPrice?: number;
+  memberTablePrice?: number;
+  memberChairPrice?: number;
+  memberBookingPrice?: number;
+  memberDepositPrice?: number;
   category: string;
   color: string;
   tableDiameter: number;
+  // A "not for sale" round table is a layout reference only (e.g. a
+  // standing cocktail table / decoration) and cannot be booked.
+  forSale?: boolean;
 }
 
 interface PositionedRoundTable extends RoundTableTemplate {
@@ -300,6 +317,15 @@ interface VenueConfig {
   // (preserves the pre-shape-picker behavior).
   entranceShape?: "circle" | "square";
   exitShape?: "circle" | "square";
+  // Organizer-defined door types beyond Entrance / Exit (e.g. "Fire Exit",
+  // "Loading Bay"). Each carries its own label, default shape and colour,
+  // and gets its own "add" template button in the designer.
+  customDoorTypes?: {
+    id: string;
+    label: string;
+    shape: "circle" | "square";
+    color?: string;
+  }[];
   totalRows: number; // NEW: Total number of rows
 }
 
@@ -308,7 +334,11 @@ interface PositionedDoor {
   id: string;
   x: number;
   y: number;
-  type: "entrance" | "exit";
+  type: "entrance" | "exit" | "custom";
+  /** For custom doors: id of the VenueConfig.customDoorTypes entry. */
+  customTypeId?: string;
+  /** Marker colour. Entrance/exit fall back to green/red; custom uses this. */
+  color?: string;
   rotation: number; // degrees, multiples of 90
   label?: string;
   // Shape and footprint. Square doors expose the same 8 resize handles
@@ -945,7 +975,10 @@ const VenueConfiguration = ({
                 Number of rows for pricing tiers (1-10)
               </p>
             </div> */}
-            <div className="flex flex-col gap-2">
+            {/* Span the full grid width so the toggles + Entrance/Exit +
+                Custom Doors get room instead of being squeezed into a single
+                1/5-width measurements cell. */}
+            <div className="flex flex-col gap-2 col-span-full">
               <div className="flex items-center space-x-2">
                 <Checkbox
                   checked={selectedConfig.showGrid}
@@ -1076,6 +1109,136 @@ const VenueConfiguration = ({
                     </Fragment>
                   );
                 })}
+              </div>
+
+              {/* Custom door types — Fire Exit, Loading Bay, etc. Each gets
+                  its own draggable marker (with chosen shape + colour) in
+                  the designer, exactly like Entrance / Exit. */}
+              <div className="mt-3 pt-3 border-t">
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-sm font-medium">Custom Doors</Label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7"
+                    onClick={() => {
+                      const list = selectedConfig.customDoorTypes || [];
+                      updateSelectedConfig({
+                        customDoorTypes: [
+                          ...list,
+                          {
+                            id: Math.random().toString(36).slice(2, 10),
+                            label: "",
+                            shape: "circle",
+                            color: "#f97316",
+                          },
+                        ],
+                      });
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Add
+                  </Button>
+                </div>
+                {(selectedConfig.customDoorTypes || []).length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Add types like <strong>Fire Exit</strong> or{" "}
+                    <strong>Loading Bay</strong>. They appear as draggable
+                    markers in the designer with your chosen shape and colour.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {(selectedConfig.customDoorTypes || []).map((d) => {
+                      const update = (patch: Partial<typeof d>) =>
+                        updateSelectedConfig({
+                          customDoorTypes: (
+                            selectedConfig.customDoorTypes || []
+                          ).map((x) =>
+                            x.id === d.id ? { ...x, ...patch } : x,
+                          ),
+                        });
+                      return (
+                        <div
+                          key={d.id}
+                          className="rounded-lg border bg-white p-3 space-y-2.5"
+                        >
+                          {/* Line 1 — colour swatch + name + remove */}
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={d.color || "#f97316"}
+                              onChange={(e) =>
+                                update({ color: e.target.value })
+                              }
+                              className="h-9 w-9 flex-shrink-0 cursor-pointer rounded border border-gray-300 p-0"
+                              title="Marker colour"
+                            />
+                            <Input
+                              value={d.label}
+                              placeholder="e.g. Fire Exit"
+                              onChange={(e) => update({ label: e.target.value })}
+                              className="h-9 text-sm flex-1 min-w-0"
+                            />
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-9 w-9 flex-shrink-0 text-red-500 hover:text-red-600"
+                              onClick={() =>
+                                updateSelectedConfig({
+                                  customDoorTypes: (
+                                    selectedConfig.customDoorTypes || []
+                                  ).filter((x) => x.id !== d.id),
+                                })
+                              }
+                              title="Remove"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          {/* Line 2 — shape picker on its own row, full width */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">
+                              Shape
+                            </span>
+                            <div className="inline-flex h-9 flex-1 overflow-hidden rounded-md border bg-white">
+                              {(["circle", "square"] as const).map((s) => {
+                                const active = (d.shape || "circle") === s;
+                                return (
+                                  <button
+                                    key={s}
+                                    type="button"
+                                    onClick={() => update({ shape: s })}
+                                    className={`inline-flex h-full flex-1 items-center justify-center gap-1.5 border-r text-xs capitalize last:border-r-0 transition-colors ${
+                                      active
+                                        ? "bg-primary text-primary-foreground"
+                                        : "text-muted-foreground hover:bg-muted"
+                                    }`}
+                                    title={`${s} marker`}
+                                  >
+                                    <span
+                                      aria-hidden
+                                      className={`inline-block h-3.5 w-3.5 border ${
+                                        s === "circle"
+                                          ? "rounded-full"
+                                          : "rounded-[2px]"
+                                      } ${
+                                        active
+                                          ? "border-primary-foreground bg-primary-foreground/30"
+                                          : "border-current bg-current/20"
+                                      }`}
+                                    />
+                                    {s}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -2646,8 +2809,12 @@ interface VenueDesignerProps {
   venueTables: Record<string, PositionedTable[]>;
   setVenueTables: (tables: Record<string, PositionedTable[]>) => void;
   venueConfigurations: VenueConfig[];
+  setVenueConfigurations: (configs: VenueConfig[]) => void;
   selectedVenueConfigId: string;
   setSelectedVenueConfigId: (id: string) => void;
+  /** CAD annotations keyed by venueConfigId. */
+  venueAnnotations: Record<string, VenueAnnotation[]>;
+  setVenueAnnotations: (a: Record<string, VenueAnnotation[]>) => void;
   venueRef: React.RefObject<HTMLDivElement>;
   venueLayoutImages: Record<string, string>;
   setVenueLayoutImages: (images: Record<string, string>) => void;
@@ -2834,8 +3001,11 @@ const VenueDesigner = ({
   venueTables,
   setVenueTables,
   venueConfigurations,
+  setVenueConfigurations,
   selectedVenueConfigId,
   setSelectedVenueConfigId,
+  venueAnnotations,
+  setVenueAnnotations,
   venueRef,
   venueLayoutImages,
   setVenueLayoutImages,
@@ -2854,6 +3024,10 @@ const VenueDesigner = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  // --- CAD annotation tool state ---
+  const [annotationTool, setAnnotationTool] = useState<AnnotationTool>("none");
+  const [annotationColor, setAnnotationColor] = useState("#1e293b");
+  const [selectedAnnId, setSelectedAnnId] = useState<string | null>(null);
   // Live position of the item being dragged. Updated every frame during a drag
   // so only THIS component re-renders — the final position is committed to the
   // parent's venue state once on drop. This keeps dragging smooth instead of
@@ -3010,22 +3184,23 @@ const VenueDesigner = ({
   const currentSpeakerZones = venueSpeakerZones[selectedVenueConfigId] || [];
   const currentRoundTables = venueRoundTables[selectedVenueConfigId] || [];
   const currentDoors = venueDoors[selectedVenueConfigId] || [];
+  const currentAnnotations = venueAnnotations[selectedVenueConfigId] || [];
 
-  // Designer canvas size — decoupled from the venue's actual size so the
-  // grid keeps going past the venue boundary. The venue is drawn as a
-  // dashed reference outline at (0,0); items can be placed anywhere up to
-  // the canvas extents. Minimum kept generous so even a tiny venue gets a
-  // workable grid surface to design on.
-  // Designer canvas size — the original large 3000×2000 reference
-  // grid (plus 600 around the venue) is the FLOOR, so nothing ever
-  // "shortens" even on small venues. On top of that, we expand the
-  // canvas to cover any placed item (space, round table, speaker
-  // zone, or door) whose x+w / y+h exceeds the floor — without this,
-  // items dragged far to the right in maximized mode (or items from
-  // legacy events) would render past the white grid surface and sit
-  // on the bare slate-50 wrapper with no grid behind them.
-  const CANVAS_MIN_W = 3000;
-  const CANVAS_MIN_H = 2000;
+  // Replace the current layout's annotation list.
+  const updateAnnotations = (next: VenueAnnotation[]) => {
+    setVenueAnnotations({
+      ...venueAnnotations,
+      [selectedVenueConfigId]: next,
+    });
+  };
+
+  // Designer canvas size — the canvas IS the venue. It starts at the
+  // configured venue dimensions and grows ONLY to contain the spaces /
+  // round tables / zones / doors actually placed (plus a small working
+  // margin so a new item can be dropped near the edge). No giant fixed
+  // floor — an empty venue shows a tight grid, not an endless sheet.
+  const CANVAS_MIN_W = Math.max(600, venueConfig?.width || 1000);
+  const CANVAS_MIN_H = Math.max(400, venueConfig?.height || 700);
   const currentItemsForCanvas =
     (selectedVenueConfigId && venueTables[selectedVenueConfigId]) || [];
   const currentRoundsForCanvas =
@@ -3057,23 +3232,12 @@ const VenueDesigner = ({
     itemsMaxX = Math.max(itemsMaxX, (d.x || 0) + dw);
     itemsMaxY = Math.max(itemsMaxY, (d.y || 0) + dh);
   }
-  // Extra buffer past the right-most / bottom-most item so the
-  // scroll area still has empty grid space to drop new items into.
-  // 1200 was chosen to roughly match what one "screen" of working
-  // area looks like at typical scales (1500 venue px × 0.75 scale
-  // ≈ 1125 visible px), so the user can always scroll a screen
-  // further out than the current right edge.
-  const ITEMS_BUFFER = 1200;
-  const canvasW = Math.max(
-    CANVAS_MIN_W,
-    (venueConfig?.width || 0) + 600,
-    itemsMaxX + ITEMS_BUFFER,
-  );
-  const canvasH = Math.max(
-    CANVAS_MIN_H,
-    (venueConfig?.height || 0) + 600,
-    itemsMaxY + ITEMS_BUFFER,
-  );
+  // Small working margin past the furthest-placed item so there's room to
+  // drop / nudge the next space. The canvas grows by this much beyond the
+  // content — it does NOT pre-inflate with a big empty buffer.
+  const ITEMS_MARGIN = 160;
+  const canvasW = Math.max(CANVAS_MIN_W, itemsMaxX + ITEMS_MARGIN);
+  const canvasH = Math.max(CANVAS_MIN_H, itemsMaxY + ITEMS_MARGIN);
 
   const applyAILayout = (result: {
     positionedTables: PositionedTable[];
@@ -3111,29 +3275,49 @@ const VenueDesigner = ({
   // Square doors spawn wider than tall so they look like a doorway, not a
   // box; the organizer can then drag the 8 resize handles to match the
   // real opening.
-  const addDoorToVenue = (type: "entrance" | "exit") => {
+  const addDoorToVenue = (
+    type: "entrance" | "exit" | "custom",
+    customType?: {
+      id: string;
+      label: string;
+      shape: "circle" | "square";
+      color?: string;
+    },
+  ) => {
     if (!venueConfig) return;
-    const existing = currentDoors.filter((d) => d.type === type).length;
+    const existing = currentDoors.filter((d) =>
+      type === "custom"
+        ? d.customTypeId === customType?.id
+        : d.type === type,
+    ).length;
     const shape: "circle" | "square" =
-      (type === "entrance"
-        ? venueConfig.entranceShape
-        : venueConfig.exitShape) || "circle";
+      type === "custom"
+        ? customType?.shape || "circle"
+        : (type === "entrance"
+            ? venueConfig.entranceShape
+            : venueConfig.exitShape) || "circle";
     const width = shape === "square" ? 80 : 50;
     const height = shape === "square" ? 40 : 50;
+    const baseLabel =
+      type === "entrance"
+        ? "IN"
+        : type === "exit"
+          ? "OUT"
+          : (customType?.label || "DOOR").toUpperCase().slice(0, 8);
     const newDoor: PositionedDoor = {
       id: Math.random().toString(36).slice(2, 15),
       type,
+      customTypeId: type === "custom" ? customType?.id : undefined,
+      color: type === "custom" ? customType?.color : undefined,
       shape,
       width,
       height,
       rotation: 0,
-      label: `${type === "entrance" ? "IN" : "OUT"}${
-        existing > 0 ? " " + (existing + 1) : ""
-      }`,
+      label: `${baseLabel}${existing > 0 ? " " + (existing + 1) : ""}`,
       x:
-        type === "entrance"
-          ? 50 + existing * 30
-          : venueConfig.width - width - 40 - existing * 30,
+        type === "exit"
+          ? venueConfig.width - width - 40 - existing * 30
+          : 50 + existing * 30,
       y: venueConfig.height / 2,
     };
     setVenueDoors({
@@ -3248,6 +3432,43 @@ const VenueDesigner = ({
     });
   };
 
+  // Clone the selected round table (or a specific positionId) a few units
+  // down-right of the original. Carries every property — including the
+  // resized `tableDiameter` — so the copy is visually identical. Booking
+  // state (bookedChairs / isFullyBooked) is reset so the copy starts fully
+  // available. Mirrors duplicateTable for Spaces.
+  const duplicateRoundTable = (positionId?: string) => {
+    const targetId = (positionId || selectedTable || "").replace(/^rt-/, "");
+    if (!targetId || !venueConfig) return;
+    const original = currentRoundTables.find(
+      (r) => r.positionId === targetId,
+    );
+    if (!original) return;
+    const size = original.tableDiameter || 120;
+    const OFFSET = 24;
+    let nx = original.x + OFFSET;
+    let ny = original.y + OFFSET;
+    if (nx + size > canvasW) nx = Math.max(0, canvasW - size);
+    if (ny + size > canvasH) ny = Math.max(0, canvasH - size);
+    const newRT: PositionedRoundTable = {
+      ...original,
+      positionId: Math.random().toString(36).slice(2, 15),
+      x: nx,
+      y: ny,
+      bookedChairs: [],
+      isFullyBooked: false,
+    };
+    setVenueRoundTables({
+      ...venueRoundTables,
+      [selectedVenueConfigId]: [...currentRoundTables, newRT],
+    });
+    setSelectedTable(`rt-${newRT.positionId}`);
+    toast({
+      title: "Round table duplicated",
+      description: `Cloned "${original.name}" — drag to reposition.`,
+    });
+  };
+
   // Keyboard shortcut: Ctrl/Cmd + D duplicates the selected space.
   // We skip when focus is inside a text field so the shortcut doesn't
   // hijack the browser's "Add Bookmark" behaviour AND doesn't fire
@@ -3268,11 +3489,16 @@ const VenueDesigner = ({
       }
       if (e.key.toLowerCase() === "d") {
         if (!selectedTable) return;
-        // Round tables, speaker zones, doors have separate placement
-        // collections; duplication for them isn't wired yet, so skip
+        // Round tables have their own placement collection — duplicate via
+        // the dedicated handler.
+        if (selectedTable.startsWith("rt-")) {
+          e.preventDefault();
+          duplicateRoundTable();
+          return;
+        }
+        // Speaker zones / doors aren't wired for duplication yet — skip
         // silently when the selected item isn't a Space.
         if (
-          selectedTable.startsWith("rt-") ||
           selectedTable.startsWith("sz-") ||
           selectedTable.startsWith("door-")
         ) {
@@ -3285,7 +3511,7 @@ const VenueDesigner = ({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTable, currentTables, canvasW, canvasH]);
+  }, [selectedTable, currentTables, currentRoundTables, canvasW, canvasH]);
 
   const rotateTable = (positionId: string) => {
     const table = currentTables.find((t) => t.positionId === positionId);
@@ -3562,6 +3788,15 @@ const VenueDesigner = ({
     const dx = (clientX - r.startMouseX) / venueConfig.scale;
     const dy = (clientY - r.startMouseY) / venueConfig.scale;
     const MIN = 20;
+    // Round tables stay circular — a single SE handle grows/shrinks the
+    // diameter (kept square) while the top-left stays anchored.
+    if (r.positionId.startsWith("rt-")) {
+      const delta = Math.max(dx, dy);
+      let size = Math.max(MIN, r.origW + delta);
+      size = Math.min(size, canvasW - r.origX, canvasH - r.origY);
+      setResize({ ...r, x: r.origX, y: r.origY, w: size, h: size });
+      return;
+    }
     let x = r.origX;
     let y = r.origY;
     let w = r.origW;
@@ -3632,9 +3867,52 @@ const VenueDesigner = ({
     });
   };
 
+  // Begin a circular resize on a placed round table. Seeds the shared
+  // resize state from the table's current diameter; processResizeMove has a
+  // dedicated rt- branch that keeps width == height, and commitResize writes
+  // the result back to tableDiameter.
+  const beginRoundTableResize = (
+    e: React.MouseEvent,
+    rt: PositionedRoundTable,
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const positionId = "rt-" + rt.positionId;
+    setSelectedTable(positionId);
+    const size = rt.tableDiameter || 120;
+    setResize({
+      positionId,
+      handle: "se",
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      origX: rt.x,
+      origY: rt.y,
+      origW: size,
+      origH: size,
+      x: rt.x,
+      y: rt.y,
+      w: size,
+      h: size,
+    });
+  };
+
   const commitResize = () => {
     const r = resizeRef.current;
     if (!r) return;
+    // Round-table resize commits the new diameter (kept circular).
+    if (r.positionId.startsWith("rt-")) {
+      const rtId = r.positionId.replace("rt-", "");
+      setVenueRoundTables({
+        ...venueRoundTables,
+        [selectedVenueConfigId]: currentRoundTables.map((rt) =>
+          rt.positionId === rtId
+            ? { ...rt, tableDiameter: Math.round(r.w) }
+            : rt,
+        ),
+      });
+      setResize(null);
+      return;
+    }
     // Door resize commits straight to PositionedDoor.width/height (and
     // x/y) — doors don't have a template/display split because they're
     // canvas-only and never appear on a receipt.
@@ -4102,7 +4380,9 @@ const VenueDesigner = ({
           {(tableTemplates.length > 0 ||
             speakerSlotTemplates.length > 0 ||
             roundTableTemplates.length > 0) &&
-            (venueConfig?.hasEntrance || venueConfig?.hasExit) && (
+            (venueConfig?.hasEntrance ||
+              venueConfig?.hasExit ||
+              (venueConfig?.customDoorTypes || []).length > 0) && (
               <div className="flex-shrink-0 w-px bg-gray-300 mx-1" />
             )}
 
@@ -4144,15 +4424,50 @@ const VenueDesigner = ({
             </div>
           )}
 
+          {/* Custom door templates (Fire Exit, Loading Bay, …) — one per
+              type defined in Venue Setup. */}
+          {(venueConfig?.customDoorTypes || []).map((ct) => (
+            <div
+              key={`door-custom-${ct.id}`}
+              className="flex-shrink-0 w-32 p-3 border-2 rounded-xl cursor-pointer hover:shadow-md transition-all"
+              style={{
+                borderColor: (ct.color || "#f97316") + "88",
+                backgroundColor: (ct.color || "#f97316") + "14",
+              }}
+              onClick={() => addDoorToVenue("custom", ct)}
+              title={`Click to drop ${ct.label || "a door"} on the venue`}
+            >
+              <div className="flex items-center gap-1 mb-1">
+                <div
+                  className={`w-3 h-3 ${ct.shape === "square" ? "rounded-[2px]" : "rounded-full"}`}
+                  style={{ backgroundColor: ct.color || "#f97316" }}
+                />
+                <span
+                  className="font-bold text-xs truncate"
+                  style={{ color: ct.color || "#f97316" }}
+                >
+                  {ct.label || "Custom Door"}
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Click to add → drag
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                Multiple allowed
+              </p>
+            </div>
+          ))}
+
           {tableTemplates.length === 0 &&
             speakerSlotTemplates.length === 0 &&
             roundTableTemplates.length === 0 &&
             !venueConfig?.hasEntrance &&
-            !venueConfig?.hasExit && (
+            !venueConfig?.hasExit &&
+            (venueConfig?.customDoorTypes || []).length === 0 && (
               <p className="text-sm text-muted-foreground py-4 w-full text-center">
                 No templates yet. Create Spaces in "Space / AddOns" tab, Speaker
                 Slots in "Speakers" tab, or Round Tables in "Round Tables" tab
-                first. Or enable Entrance / Exit in Venue Setup.
+                first. Or enable Entrance / Exit / custom doors in Venue Setup.
               </p>
             )}
         </div>
@@ -4230,6 +4545,93 @@ const VenueDesigner = ({
             </Button>
           </div>
           )}
+          {/* CAD annotation toolbar — switch between moving Spaces and the
+              drawing tools (line / text / rectangle / dimension). Inline in
+              normal mode; floats at top-center in maximized mode so the tools
+              stay reachable over the full-screen canvas. */}
+          {(
+            <div
+              className={
+                isCanvasMaximized
+                  ? "fixed top-3 left-1/2 -translate-x-1/2 z-[113] flex flex-wrap items-center gap-1 rounded-lg border bg-white p-1.5 shadow-xl max-w-[95vw]"
+                  : "mb-2 flex flex-wrap items-center gap-1 rounded-lg border bg-white p-1.5 shadow-sm"
+              }
+            >
+              {(
+                [
+                  { t: "none", label: "Move", Icon: Move3D },
+                  { t: "select", label: "Select", Icon: MousePointer2 },
+                  { t: "line", label: "Line", Icon: Minus },
+                  { t: "arrow", label: "Arrow", Icon: ArrowUpRight },
+                  { t: "text", label: "Text", Icon: Type },
+                  { t: "rect", label: "Box", Icon: Square },
+                  { t: "dimension", label: "Dimension", Icon: Ruler },
+                ] as const
+              ).map(({ t, label, Icon }) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => {
+                    setAnnotationTool(t as AnnotationTool);
+                    setSelectedAnnId(null);
+                  }}
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                    annotationTool === t
+                      ? "bg-primary text-primary-foreground"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                  title={
+                    t === "none"
+                      ? "Move / book spaces"
+                      : `Draw ${label.toLowerCase()}`
+                  }
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                </button>
+              ))}
+              <div className="mx-1 h-5 w-px bg-gray-200" />
+              {/* Stroke / text colour for new shapes. */}
+              <label
+                className="flex items-center gap-1.5 text-xs text-gray-500"
+                title="Drawing colour"
+              >
+                <input
+                  type="color"
+                  value={annotationColor}
+                  onChange={(e) => setAnnotationColor(e.target.value)}
+                  className="h-6 w-7 cursor-pointer rounded border border-gray-300 bg-white p-0"
+                />
+              </label>
+              {selectedAnnId && annotationTool === "select" && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-red-500 hover:bg-red-50 hover:text-red-600"
+                  onClick={() => {
+                    updateAnnotations(
+                      currentAnnotations.filter(
+                        (a) => a.id !== selectedAnnId,
+                      ),
+                    );
+                    setSelectedAnnId(null);
+                  }}
+                >
+                  <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
+                </Button>
+              )}
+              {annotationTool !== "none" && (
+                <span className="ml-auto pr-1 text-[11px] text-gray-400">
+                  {annotationTool === "select"
+                    ? "Click a drawing to select · Del to remove"
+                    : annotationTool === "text"
+                      ? "Click to place a label"
+                      : "Click-drag on the canvas to draw"}
+                </span>
+              )}
+            </div>
+          )}
           <div
             // Wrapper carries the grid background. Scrolling behavior:
             //  - Inline mode → wrapper is its own scroll container
@@ -4243,45 +4645,37 @@ const VenueDesigner = ({
             //    bubbled up to the outer), forcing the user to grab
             //    the scrollbar by hand. With one scroll container
             //    the wheel just works anywhere on the canvas.
-            className={`relative border-2 border-dashed border-gray-300 rounded-xl flex justify-center items-start p-6 ${
+            className={`relative border border-gray-200 rounded-xl flex justify-start items-start p-6 ${
               isCanvasMaximized ? "overflow-visible" : "overflow-auto"
             }`}
             style={{
               minHeight: isCanvasMaximized ? "calc(100vh - 48px)" : "700px",
-              backgroundColor: "#ffffff",
-              backgroundImage:
-                "linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)",
-              backgroundSize: `${venueConfig.gridSize || 40}px ${venueConfig.gridSize || 40}px`,
+              // Neutral backdrop — the venue "sheet" (venueRef) sits on top
+              // of it, so the grid is clearly the venue and not an endless
+              // surface.
+              backgroundColor: "#eef2f7",
             }}
           >
             <div
               ref={venueRef}
-              // Inner canvas is borderless / shadowless now so it
-              // blends seamlessly with the wrapper's grid background
-              // — no visible "boundary rectangle" inside the Space
-              // Layout. Drag-target behavior is unchanged; venueRef
-              // still points here for hit-testing.
+              // The canvas IS the venue: sized exactly to canvasW×canvasH
+              // (which tracks the placed items), drawn as a white "sheet"
+              // with a subtle border + shadow so its bounds are obvious.
               className="relative"
               style={{
-                // `minWidth: 100%` forces the canvas to fill the
-                // wrapper's content area at minimum, so the grid
-                // covers everywhere the horizontal scrollbar can
-                // reach (no bare slate-50 gap on the right). The
-                // explicit `width` still drives the canvas larger
-                // when there are placed items past the visible
-                // area — whichever is larger wins.
-                minWidth: "100%",
-                minHeight: "100%",
                 width: canvasW * venueConfig.scale,
                 height: canvasH * venueConfig.scale,
-                // Grid recipe — copied verbatim from the eventfront's
-                // Venue Layout tab. Three explicit properties (the
-                // `background` shorthand was flaky with multiple
-                // gradients + per-layer sizes).
+                flex: "none",
+                border: "1px solid #cbd5e1",
+                borderRadius: 6,
+                boxShadow: "0 4px 16px rgba(15,23,42,0.08)",
+                // CAD graph-paper grid: faint minor lines every cell plus
+                // stronger major lines every 5 cells, for a professional
+                // blueprint feel.
                 backgroundColor: "#ffffff",
                 backgroundImage:
-                  "linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)",
-                backgroundSize: `${venueConfig.gridSize || 40}px ${venueConfig.gridSize || 40}px`,
+                  "linear-gradient(to right, rgba(37,99,235,0.16) 1px, transparent 1px), linear-gradient(to bottom, rgba(37,99,235,0.16) 1px, transparent 1px), linear-gradient(to right, rgba(15,23,42,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(15,23,42,0.05) 1px, transparent 1px)",
+                backgroundSize: `${(venueConfig.gridSize || 40) * 5}px ${(venueConfig.gridSize || 40) * 5}px, ${(venueConfig.gridSize || 40) * 5}px ${(venueConfig.gridSize || 40) * 5}px, ${venueConfig.gridSize || 40}px ${venueConfig.gridSize || 40}px, ${venueConfig.gridSize || 40}px ${venueConfig.gridSize || 40}px`,
               }}
             >
               {/* Stage Indicator */}
@@ -4301,6 +4695,20 @@ const VenueDesigner = ({
                 const isSelected = selectedTable === positionId;
                 const isEntrance = door.type === "entrance";
                 const isSquare = door.shape === "square";
+                // Marker colour: entrance green, exit red, custom uses its
+                // own colour (falls back to amber).
+                const doorColor =
+                  door.type === "entrance"
+                    ? "#16a34a"
+                    : door.type === "exit"
+                      ? "#dc2626"
+                      : door.color || "#f97316";
+                const doorTypeLabel =
+                  door.type === "entrance"
+                    ? "Entrance"
+                    : door.type === "exit"
+                      ? "Exit"
+                      : door.label || "Door";
                 const liveResize =
                   resize && resize.positionId === positionId ? resize : null;
                 const pos = liveResize
@@ -4332,29 +4740,34 @@ const VenueDesigner = ({
                       e.stopPropagation();
                       setSelectedTable(positionId);
                     }}
-                    className={`absolute flex items-center justify-center text-[10px] font-bold text-white cursor-grab shadow-md select-none ${
+                    className={`absolute flex items-center justify-center text-[10px] font-bold text-white cursor-grab shadow-md select-none border-2 ${
                       isSquare ? "rounded-md" : "rounded-full"
                     } ${
                       isDragging && isSelected ? "cursor-grabbing" : ""
-                    } ${
-                      isEntrance
-                        ? "bg-green-600 border-2 border-green-700"
-                        : "bg-red-600 border-2 border-red-700"
                     } ${isSelected ? "ring-2 ring-offset-1 ring-blue-400" : ""}`}
                     style={{
                       left: pos.x * venueConfig.scale,
                       top: pos.y * venueConfig.scale,
                       width: w * venueConfig.scale,
                       height: h * venueConfig.scale,
+                      backgroundColor: doorColor,
+                      borderColor: "rgba(0,0,0,0.25)",
                       transform: `rotate(${door.rotation || 0}deg)`,
                       transformOrigin: "center center",
                     }}
-                    title={`${isEntrance ? "Entrance" : "Exit"} — drag to move, click to select`}
+                    title={`${doorTypeLabel} — drag to move, click to select`}
                   >
                     <span className="absolute top-0.5 left-1/2 -translate-x-1/2 text-[10px] leading-none">
                       ▲
                     </span>
-                    <span>{door.label || (isEntrance ? "IN" : "OUT")}</span>
+                    <span className="px-0.5 truncate">
+                      {door.label ||
+                        (door.type === "entrance"
+                          ? "IN"
+                          : door.type === "exit"
+                            ? "OUT"
+                            : "DOOR")}
+                    </span>
                     {/* 8 resize handles for square doors only — circles
                         keep their fixed 50×50 footprint to preserve the
                         legacy round look. */}
@@ -4758,7 +5171,13 @@ const VenueDesigner = ({
               {/* Placed Round Tables */}
               {currentRoundTables.map((rt) => {
                 const isSelected = selectedTable === `rt-${rt.positionId}`;
-                const diameter = (rt.tableDiameter || 120) * venueConfig.scale;
+                // While this table is being resized, render from the live
+                // resize value so the circle + chair ring update in real time.
+                const liveD =
+                  resize && resize.positionId === `rt-${rt.positionId}`
+                    ? resize.w
+                    : rt.tableDiameter || 120;
+                const diameter = liveD * venueConfig.scale;
                 const chairSize = Math.max(8, 12 * venueConfig.scale);
                 const chairOffset = diameter / 2 + chairSize / 2 + 2;
                 const centerX = diameter / 2;
@@ -4873,14 +5292,46 @@ const VenueDesigner = ({
                       );
                     })}
 
+                    {/* SE resize handle — drags the table diameter. */}
+                    {isSelected && (
+                      <div
+                        onMouseDown={(e) => beginRoundTableResize(e, rt)}
+                        onClick={(e) => e.stopPropagation()}
+                        title="Drag to resize"
+                        style={{
+                          position: "absolute",
+                          left: chairSize / 2 + 2 + diameter - 6,
+                          top: chairSize / 2 + 2 + diameter - 6,
+                          width: 12,
+                          height: 12,
+                          borderRadius: 3,
+                          background: "white",
+                          border: `2px solid ${rt.color}`,
+                          boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                          cursor: "nwse-resize",
+                          zIndex: 50,
+                        }}
+                      />
+                    )}
+
                     {/* Controls */}
                     {isSelected && (
                       <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-1 bg-white border p-1 rounded-md shadow-xl z-50">
                         <Button
                           size="icon"
                           variant="ghost"
+                          className="h-7 w-7 text-primary hover:bg-primary hover:text-primary-foreground"
+                          onClick={() => duplicateRoundTable(rt.positionId)}
+                          title="Duplicate (Ctrl+D)"
+                        >
+                          <CopyPlusIcon size={12} />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
                           className="h-7 w-7 text-red-500 hover:text-red-600"
                           onClick={() => removeRoundTable(rt.positionId)}
+                          title="Remove"
                         >
                           <Trash2 size={12} />
                         </Button>
@@ -4889,6 +5340,22 @@ const VenueDesigner = ({
                   </div>
                 );
               })}
+
+              {/* CAD annotation layer — Konva overlay over the whole canvas.
+                  Pointer-events pass through in Move mode so space booking /
+                  dragging is untouched; captures events only while a drawing
+                  tool is active. */}
+              <VenueAnnotationLayer
+                width={canvasW * venueConfig.scale}
+                height={canvasH * venueConfig.scale}
+                scale={venueConfig.scale}
+                annotations={currentAnnotations}
+                onChange={updateAnnotations}
+                tool={annotationTool}
+                color={annotationColor}
+                onSelect={setSelectedAnnId}
+                metersPerUnit={0.1}
+              />
             </div>
           </div>
         </CardContent>
@@ -5112,15 +5579,34 @@ const VenueDesigner = ({
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <div
-                      className="w-2 h-2 rounded-full"
+                      className="w-2 h-2 rounded-full flex-shrink-0"
                       style={{ backgroundColor: rt.color }}
                     />
-                    <span className="text-xs font-semibold truncate">
-                      {rt.name}
-                    </span>
+                    {/* Inline rename — same as Spaces: edit the placed
+                        round table's name directly after allocation. */}
+                    <Input
+                      className="h-6 text-xs bg-white/70 border-0 p-0 font-semibold flex-1 min-w-0"
+                      value={rt.name}
+                      placeholder="Name"
+                      onChange={(e) =>
+                        setVenueRoundTables({
+                          ...venueRoundTables,
+                          [selectedVenueConfigId]: currentRoundTables.map(
+                            (r) =>
+                              r.positionId === rt.positionId
+                                ? { ...r, name: e.target.value }
+                                : r,
+                          ),
+                        })
+                      }
+                      onClick={(e) => e.stopPropagation()}
+                    />
                   </div>
                   <p className="text-[9px] text-muted-foreground">
-                    {rt.numberOfChairs} chairs &middot; {rt.category}
+                    {rt.numberOfChairs === 0
+                      ? "Standing"
+                      : `${rt.numberOfChairs} chairs`}{" "}
+                    &middot; {rt.category}
                   </p>
                 </div>
               ))}
@@ -5265,6 +5751,10 @@ export function CreateEventForm({
 
   const { country, setCountry } = useCountry();
   const { formatPrice, getSymbol } = useCurrency(country);
+  // Membership module gate — when off, the Member-price inputs on the
+  // round-table form are hidden (mirrors the Spaces form behaviour).
+  const { isModuleEnabled } = useSubscription();
+  const isMembershipEnabled = isModuleEnabled("membership");
 
   const getOrganizerIdFromToken = () => {
     try {
@@ -5661,6 +6151,27 @@ export function CreateEventForm({
     return init;
   });
 
+  // CAD annotations (lines / text / rects / dimensions), grouped by
+  // venueConfigId — same flat-array-on-load shape as venueDoors.
+  const [venueAnnotations, setVenueAnnotations] = useState<
+    Record<string, VenueAnnotation[]>
+  >(() => {
+    const init = (initialData as any)?.venueAnnotations;
+    if (!init) return {};
+    if (Array.isArray(init)) {
+      return init.reduce(
+        (acc: Record<string, VenueAnnotation[]>, a: any) => {
+          const key = a.venueConfigId || "default";
+          if (!acc[key]) acc[key] = [];
+          acc[key].push(a);
+          return acc;
+        },
+        {},
+      );
+    }
+    return init;
+  });
+
   // Round Table states
   const [roundTableTemplates, setRoundTableTemplates] = useState<
     RoundTableTemplate[]
@@ -5685,9 +6196,16 @@ export function CreateEventForm({
     sellingMode: "chair" as "table" | "chair",
     tablePrice: "",
     chairPrice: "",
+    bookingPrice: "",
+    depositPrice: "",
+    memberTablePrice: "",
+    memberChairPrice: "",
+    memberBookingPrice: "",
+    memberDepositPrice: "",
     category: "Standard",
     color: "#8B5CF6",
     tableDiameter: "120",
+    forSale: true,
   });
   // When set, the round-table form edits this existing template in place.
   const [editingRoundTableId, setEditingRoundTableId] = useState<
@@ -6131,6 +6649,7 @@ export function CreateEventForm({
             category: "",
             color: "#8B5CF6",
             tableDiameter: r.tableDiameter ?? 120,
+            forSale: true,
           }));
         return [...prev, ...fresh];
       });
@@ -6359,9 +6878,16 @@ export function CreateEventForm({
       sellingMode: "chair",
       tablePrice: "",
       chairPrice: "",
+      bookingPrice: "",
+      depositPrice: "",
+      memberTablePrice: "",
+      memberChairPrice: "",
+      memberBookingPrice: "",
+      memberDepositPrice: "",
       category: "Standard",
       color: "#8B5CF6",
       tableDiameter: "120",
+      forSale: true,
     });
     setEditingRoundTableId(null);
   };
@@ -6372,31 +6898,57 @@ export function CreateEventForm({
       toast({ title: "Table name is required", variant: "destructive" });
       return;
     }
-    const chairs = parseInt(currentRoundTable.numberOfChairs) || 8;
-    if (chairs < 2 || chairs > 20) {
+    const chairs = parseInt(currentRoundTable.numberOfChairs);
+    const chairsSafe = Number.isFinite(chairs) ? chairs : 0;
+    if (chairsSafe < 0 || chairsSafe > 30) {
       toast({
-        title: "Chairs must be between 2 and 20",
+        title: "Chairs must be between 0 and 30",
         variant: "destructive",
       });
       return;
     }
-    const price =
-      currentRoundTable.sellingMode === "chair"
-        ? parseFloat(currentRoundTable.chairPrice) || 0
-        : parseFloat(currentRoundTable.tablePrice) || 0;
-    if (price <= 0) {
-      toast({ title: "Price must be greater than 0", variant: "destructive" });
-      return;
+    // A standing table (0 chairs) can only be sold whole — there are no
+    // seats to sell individually.
+    const sellingMode =
+      chairsSafe === 0 ? "table" : currentRoundTable.sellingMode;
+    // Optional helper to read a money field as a number or undefined when blank.
+    const numOrUndef = (v: string) => {
+      const t = (v ?? "").trim();
+      if (t === "") return undefined;
+      const n = parseFloat(t);
+      return Number.isFinite(n) ? n : undefined;
+    };
+
+    // A "not for sale" reference table skips the price requirement.
+    if (currentRoundTable.forSale) {
+      const price =
+        sellingMode === "chair"
+          ? parseFloat(currentRoundTable.chairPrice) || 0
+          : parseFloat(currentRoundTable.tablePrice) || 0;
+      if (price <= 0) {
+        toast({
+          title: "Price must be greater than 0",
+          variant: "destructive",
+        });
+        return;
+      }
     }
     const templateData = {
       name: currentRoundTable.name,
-      numberOfChairs: chairs,
-      sellingMode: currentRoundTable.sellingMode,
+      numberOfChairs: chairsSafe,
+      sellingMode,
       tablePrice: parseFloat(currentRoundTable.tablePrice) || 0,
       chairPrice: parseFloat(currentRoundTable.chairPrice) || 0,
+      bookingPrice: parseFloat(currentRoundTable.bookingPrice) || 0,
+      depositPrice: parseFloat(currentRoundTable.depositPrice) || 0,
+      memberTablePrice: numOrUndef(currentRoundTable.memberTablePrice),
+      memberChairPrice: numOrUndef(currentRoundTable.memberChairPrice),
+      memberBookingPrice: numOrUndef(currentRoundTable.memberBookingPrice),
+      memberDepositPrice: numOrUndef(currentRoundTable.memberDepositPrice),
       category: currentRoundTable.category,
       color: currentRoundTable.color,
       tableDiameter: parseInt(currentRoundTable.tableDiameter) || 120,
+      forSale: currentRoundTable.forSale,
     };
 
     if (editingRoundTableId) {
@@ -6421,15 +6973,24 @@ export function CreateEventForm({
   const editRoundTableTemplate = (id: string) => {
     const t = roundTableTemplates.find((x) => x.id === id);
     if (!t) return;
+    const toStr = (v: number | undefined | null) =>
+      v != null ? String(v) : "";
     setCurrentRoundTable({
       name: t.name ?? "",
       numberOfChairs: t.numberOfChairs != null ? String(t.numberOfChairs) : "8",
       sellingMode: t.sellingMode || "chair",
       tablePrice: t.tablePrice != null ? String(t.tablePrice) : "",
       chairPrice: t.chairPrice != null ? String(t.chairPrice) : "",
+      bookingPrice: toStr(t.bookingPrice),
+      depositPrice: toStr(t.depositPrice),
+      memberTablePrice: toStr(t.memberTablePrice),
+      memberChairPrice: toStr(t.memberChairPrice),
+      memberBookingPrice: toStr(t.memberBookingPrice),
+      memberDepositPrice: toStr(t.memberDepositPrice),
       category: t.category || "Standard",
       color: t.color || "#8B5CF6",
       tableDiameter: t.tableDiameter != null ? String(t.tableDiameter) : "120",
+      forSale: t.forSale !== false,
     });
     setEditingRoundTableId(id);
   };
@@ -6729,6 +7290,14 @@ export function CreateEventForm({
           (doors || []).map((d: any) => ({ ...d, venueConfigId: configId })),
       );
       data.append("venueDoors", JSON.stringify(allDoors));
+
+      // CAD annotations — flattened + tagged by venueConfigId, same as the
+      // collections above.
+      const allAnnotations = Object.entries(venueAnnotations).flatMap(
+        ([configId, items]) =>
+          (items || []).map((a: any) => ({ ...a, venueConfigId: configId })),
+      );
+      data.append("venueAnnotations", JSON.stringify(allAnnotations));
 
       // Add visitor types
       data.append("visitorTypes", JSON.stringify(visitorTypes));
@@ -9008,19 +9577,31 @@ export function CreateEventForm({
                       />
                     </div>
                     <div>
-                      <Label>Number of Chairs *</Label>
+                      <Label>Number of Chairs</Label>
                       <Input
                         type="number"
-                        min={2}
-                        max={20}
+                        min={0}
+                        max={30}
                         value={currentRoundTable.numberOfChairs}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          const n = parseInt(v);
                           setCurrentRoundTable({
                             ...currentRoundTable,
-                            numberOfChairs: e.target.value,
-                          })
-                        }
+                            numberOfChairs: v,
+                            // A standing table (0 chairs) has no seats to
+                            // sell individually — force whole-table mode.
+                            sellingMode:
+                              Number.isFinite(n) && n === 0
+                                ? "table"
+                                : currentRoundTable.sellingMode,
+                          });
+                        }}
                       />
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Set to <strong>0</strong> for a standing table (no
+                        seats).
+                      </p>
                     </div>
                     <div>
                       <Label>Category</Label>
@@ -9041,76 +9622,248 @@ export function CreateEventForm({
                         <option value="VIP">VIP</option>
                       </select>
                     </div>
+
+                    {/* For Sale / Not for Sale toggle (mirrors Spaces). */}
                     <div>
-                      <Label>Selling Mode *</Label>
+                      <Label>Table Type</Label>
                       <div className="flex gap-2 mt-1">
-                        <Button
+                        <button
                           type="button"
-                          size="sm"
-                          variant={
-                            currentRoundTable.sellingMode === "chair"
-                              ? "default"
-                              : "outline"
-                          }
+                          className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${
+                            currentRoundTable.forSale
+                              ? "border-green-500 bg-green-50 text-green-700"
+                              : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                          }`}
                           onClick={() =>
                             setCurrentRoundTable({
                               ...currentRoundTable,
-                              sellingMode: "chair",
+                              forSale: true,
                             })
                           }
                         >
-                          Per Chair
-                        </Button>
-                        <Button
+                          For Sale
+                        </button>
+                        <button
                           type="button"
-                          size="sm"
-                          variant={
-                            currentRoundTable.sellingMode === "table"
-                              ? "default"
-                              : "outline"
-                          }
+                          className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${
+                            !currentRoundTable.forSale
+                              ? "border-orange-500 bg-orange-50 text-orange-700"
+                              : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                          }`}
                           onClick={() =>
                             setCurrentRoundTable({
                               ...currentRoundTable,
-                              sellingMode: "table",
+                              forSale: false,
                             })
                           }
                         >
-                          Whole Table
-                        </Button>
+                          Not for Sale
+                        </button>
                       </div>
                     </div>
-                    {currentRoundTable.sellingMode === "chair" ? (
-                      <div>
-                        <Label>Price Per Chair ({getSymbol()}) *</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          placeholder="0"
-                          value={currentRoundTable.chairPrice}
-                          onChange={(e) =>
-                            setCurrentRoundTable({
-                              ...currentRoundTable,
-                              chairPrice: e.target.value,
-                            })
-                          }
-                        />
+
+                    {!currentRoundTable.forSale && (
+                      <div className="md:col-span-2 lg:col-span-3 bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-700">
+                        This table is <strong>not for sale</strong> — it appears
+                        on the venue layout as a reference (e.g. a standing
+                        cocktail table or decoration) but cannot be booked.
                       </div>
-                    ) : (
-                      <div>
-                        <Label>Table Price ({getSymbol()}) *</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          placeholder="0"
-                          value={currentRoundTable.tablePrice}
-                          onChange={(e) =>
-                            setCurrentRoundTable({
-                              ...currentRoundTable,
-                              tablePrice: e.target.value,
-                            })
-                          }
-                        />
+                    )}
+
+                    {currentRoundTable.forSale &&
+                      parseInt(currentRoundTable.numberOfChairs) !== 0 && (
+                        <div>
+                          <Label>Selling Mode *</Label>
+                          <div className="flex gap-2 mt-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={
+                                currentRoundTable.sellingMode === "chair"
+                                  ? "default"
+                                  : "outline"
+                              }
+                              onClick={() =>
+                                setCurrentRoundTable({
+                                  ...currentRoundTable,
+                                  sellingMode: "chair",
+                                })
+                              }
+                            >
+                              Per Chair
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={
+                                currentRoundTable.sellingMode === "table"
+                                  ? "default"
+                                  : "outline"
+                              }
+                              onClick={() =>
+                                setCurrentRoundTable({
+                                  ...currentRoundTable,
+                                  sellingMode: "table",
+                                })
+                              }
+                            >
+                              Whole Table
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    {currentRoundTable.forSale &&
+                      (currentRoundTable.sellingMode === "chair" ? (
+                        <div>
+                          <Label>Price Per Chair ({getSymbol()}) *</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            placeholder="0"
+                            value={currentRoundTable.chairPrice}
+                            onChange={(e) =>
+                              setCurrentRoundTable({
+                                ...currentRoundTable,
+                                chairPrice: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                      ) : (
+                        <div>
+                          <Label>Table Price ({getSymbol()}) *</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            placeholder="0"
+                            value={currentRoundTable.tablePrice}
+                            onChange={(e) =>
+                              setCurrentRoundTable({
+                                ...currentRoundTable,
+                                tablePrice: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                      ))}
+
+                    {/* Booking + Deposit (optional, mirrors Spaces). */}
+                    {currentRoundTable.forSale && (
+                      <>
+                        <div>
+                          <Label>Booking Price ({getSymbol()})</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            placeholder="0"
+                            value={currentRoundTable.bookingPrice}
+                            onChange={(e) =>
+                              setCurrentRoundTable({
+                                ...currentRoundTable,
+                                bookingPrice: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                        <div>
+                          <Label>Deposit Price ({getSymbol()})</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            placeholder="0"
+                            value={currentRoundTable.depositPrice}
+                            onChange={(e) =>
+                              setCurrentRoundTable({
+                                ...currentRoundTable,
+                                depositPrice: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {/* Member-tier pricing (only when membership is on). */}
+                    {currentRoundTable.forSale && isMembershipEnabled && (
+                      <div className="md:col-span-2 lg:col-span-3 rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 space-y-2">
+                        <div className="flex items-center gap-2 text-sm font-medium text-emerald-800">
+                          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                          Member price (optional)
+                        </div>
+                        <p className="text-[11px] text-emerald-700/80">
+                          Buyers with an active membership at this event are
+                          charged these prices. Leave blank to charge the
+                          regular price.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                          {currentRoundTable.sellingMode === "chair" ? (
+                            <div>
+                              <Label className="text-xs">
+                                Member Chair Price ({getSymbol()})
+                              </Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                value={currentRoundTable.memberChairPrice}
+                                onChange={(e) =>
+                                  setCurrentRoundTable({
+                                    ...currentRoundTable,
+                                    memberChairPrice: e.target.value,
+                                  })
+                                }
+                              />
+                            </div>
+                          ) : (
+                            <div>
+                              <Label className="text-xs">
+                                Member Table Price ({getSymbol()})
+                              </Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                value={currentRoundTable.memberTablePrice}
+                                onChange={(e) =>
+                                  setCurrentRoundTable({
+                                    ...currentRoundTable,
+                                    memberTablePrice: e.target.value,
+                                  })
+                                }
+                              />
+                            </div>
+                          )}
+                          <div>
+                            <Label className="text-xs">
+                              Member Booking ({getSymbol()})
+                            </Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={currentRoundTable.memberBookingPrice}
+                              onChange={(e) =>
+                                setCurrentRoundTable({
+                                  ...currentRoundTable,
+                                  memberBookingPrice: e.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">
+                              Member Deposit ({getSymbol()})
+                            </Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={currentRoundTable.memberDepositPrice}
+                              onChange={(e) =>
+                                setCurrentRoundTable({
+                                  ...currentRoundTable,
+                                  memberDepositPrice: e.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                        </div>
                       </div>
                     )}
                     <div>
@@ -9269,25 +10022,38 @@ export function CreateEventForm({
                             <div className="flex justify-between">
                               <span>Chairs:</span>
                               <span className="font-semibold">
-                                {template.numberOfChairs}
+                                {template.numberOfChairs === 0
+                                  ? "Standing"
+                                  : template.numberOfChairs}
                               </span>
                             </div>
-                            <div className="flex justify-between">
-                              <span>Mode:</span>
-                              <span className="font-semibold">
-                                {template.sellingMode === "table"
-                                  ? "Whole Table"
-                                  : "Per Chair"}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Price:</span>
-                              <span className="font-semibold">
-                                {template.sellingMode === "table"
-                                  ? formatPrice(template.tablePrice)
-                                  : `${formatPrice(template.chairPrice)} / chair`}
-                              </span>
-                            </div>
+                            {template.forSale === false ? (
+                              <div className="flex justify-between">
+                                <span>Type:</span>
+                                <span className="font-semibold text-orange-600">
+                                  Not for sale
+                                </span>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex justify-between">
+                                  <span>Mode:</span>
+                                  <span className="font-semibold">
+                                    {template.sellingMode === "table"
+                                      ? "Whole Table"
+                                      : "Per Chair"}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Price:</span>
+                                  <span className="font-semibold">
+                                    {template.sellingMode === "table"
+                                      ? formatPrice(template.tablePrice)
+                                      : `${formatPrice(template.chairPrice)} / chair`}
+                                  </span>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -9315,8 +10081,11 @@ export function CreateEventForm({
                 venueTables={venueTables}
                 setVenueTables={setVenueTables}
                 venueConfigurations={venueConfigurations}
+                setVenueConfigurations={setVenueConfigurations}
                 selectedVenueConfigId={selectedVenueConfigId}
                 setSelectedVenueConfigId={setSelectedVenueConfigId}
+                venueAnnotations={venueAnnotations}
+                setVenueAnnotations={setVenueAnnotations}
                 venueRef={venueRef}
                 venueLayoutImages={venueLayoutImages}
                 setVenueLayoutImages={setVenueLayoutImages}

@@ -19,6 +19,7 @@ import {
 import { CreateRoundTableBookingDto } from "./dto/create-round-table-booking.dto";
 import { OtpService } from "../otp/otp.service";
 import { FeedbackService } from "../feedback/feedback.service";
+import { MembershipsService } from "../memberships/memberships.service";
 
 function escapeHtml(str: string): string {
   return String(str)
@@ -57,6 +58,7 @@ export class RoundTableBookingsService {
     @InjectModel("Organizer") private readonly organizerModel: Model<any>,
     private readonly otpService: OtpService,
     private readonly feedbackService: FeedbackService,
+    private readonly membershipsService: MembershipsService,
   ) {}
 
   /**
@@ -74,6 +76,12 @@ export class RoundTableBookingsService {
       throw new NotFoundException("Round table not found in this event");
     }
 
+    // A "not for sale" table is a layout reference (e.g. a standing
+    // cocktail table / decoration) and can never be booked.
+    if (roundTable.forSale === false) {
+      throw new BadRequestException("This table is not available for booking");
+    }
+
     // Check availability
     const bookedChairs: number[] = roundTable.bookedChairs || [];
 
@@ -89,6 +97,10 @@ export class RoundTableBookingsService {
       );
       dto.selectedChairIndices = allChairs;
     } else {
+      // Chair mode requires at least one seat selected.
+      if (!dto.selectedChairIndices || dto.selectedChairIndices.length === 0) {
+        throw new BadRequestException("Select at least one seat to book");
+      }
       // Chair mode: check each selected chair
       const conflicting = dto.selectedChairIndices.filter((idx) =>
         bookedChairs.includes(idx),
@@ -107,11 +119,38 @@ export class RoundTableBookingsService {
       }
     }
 
+    // Resolve member-tier pricing when this buyer holds an active
+    // membership at the organizer (same lookup the storefront uses).
+    // Falls back to regular prices on any miss — never throws the booking.
+    let useMember = false;
+    try {
+      const membership = await this.membershipsService.getActiveMembership(
+        dto.organizerId,
+        dto.visitorEmail,
+        dto.visitorPhone,
+      );
+      useMember = !!membership;
+    } catch {
+      useMember = false;
+    }
+
+    const pick = (member: number | undefined | null, regular: number) =>
+      useMember && member != null && member >= 0 ? member : regular;
+
+    const effectiveTablePrice = pick(
+      roundTable.memberTablePrice,
+      roundTable.tablePrice,
+    );
+    const effectiveChairPrice = pick(
+      roundTable.memberChairPrice,
+      roundTable.chairPrice,
+    );
+
     // Calculate amount
     const amount =
       roundTable.sellingMode === "table"
-        ? roundTable.tablePrice
-        : roundTable.chairPrice * dto.selectedChairIndices.length;
+        ? effectiveTablePrice
+        : effectiveChairPrice * dto.selectedChairIndices.length;
 
     const booking = await this.bookingModel.create({
       eventId: new Types.ObjectId(dto.eventId),

@@ -5,7 +5,6 @@ import {
   IsEmail,
   IsMongoId,
   IsOptional,
-  ArrayMinSize,
   ValidateNested,
 } from "class-validator";
 import { Type } from "class-transformer";
@@ -36,9 +35,10 @@ export class CreateRoundTableBookingDto {
   @IsString()
   tablePositionId: string;
 
+  // May be empty for a whole-table booking of a standing table (0 chairs).
+  // Per-chair bookings are validated to be non-empty in the service.
   @IsArray()
   @IsNumber({}, { each: true })
-  @ArrayMinSize(1)
   selectedChairIndices: number[];
 
   @IsString()

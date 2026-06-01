@@ -194,6 +194,15 @@ export class VenueConfigDto {
   @Min(1)
   @IsOptional()
   totalRows?: number;
+
+  // Door config — entrance/exit toggles + default shapes, and any
+  // organizer-defined custom door types (Fire Exit, Loading Bay, …).
+  // Kept optional/loose so the venue config stays forward-compatible.
+  @IsBoolean() @IsOptional() hasEntrance?: boolean;
+  @IsBoolean() @IsOptional() hasExit?: boolean;
+  @IsString() @IsOptional() entranceShape?: string;
+  @IsString() @IsOptional() exitShape?: string;
+  @IsArray() @IsOptional() customDoorTypes?: any[];
 }
 
 export class SpeakerSlotTemplateDto {
@@ -336,13 +345,20 @@ export class SpeakerDto {
 export class RoundTableTemplateDto {
   @IsString() id: string;
   @IsString() name: string;
-  @IsNumber() @Min(2) numberOfChairs: number;
+  @IsNumber() @Min(0) numberOfChairs: number;
   @IsString() sellingMode: string; // "table" | "chair"
   @IsNumber() @Min(0) @IsOptional() tablePrice?: number;
   @IsNumber() @Min(0) @IsOptional() chairPrice?: number;
+  @IsNumber() @Min(0) @IsOptional() bookingPrice?: number;
+  @IsNumber() @Min(0) @IsOptional() depositPrice?: number;
+  @IsNumber() @Min(0) @IsOptional() memberTablePrice?: number;
+  @IsNumber() @Min(0) @IsOptional() memberChairPrice?: number;
+  @IsNumber() @Min(0) @IsOptional() memberBookingPrice?: number;
+  @IsNumber() @Min(0) @IsOptional() memberDepositPrice?: number;
   @IsString() @IsOptional() category?: string;
   @IsString() @IsOptional() color?: string;
   @IsNumber() @IsOptional() tableDiameter?: number;
+  @IsBoolean() @IsOptional() forSale?: boolean;
 }
 
 // Positioned round tables on venue canvas
@@ -350,13 +366,20 @@ export class PositionedRoundTableDto {
   @IsString() positionId: string;
   @IsString() templateId: string;
   @IsString() name: string;
-  @IsNumber() @Min(2) numberOfChairs: number;
+  @IsNumber() @Min(0) numberOfChairs: number;
   @IsString() sellingMode: string;
   @IsNumber() @Min(0) @IsOptional() tablePrice?: number;
   @IsNumber() @Min(0) @IsOptional() chairPrice?: number;
+  @IsNumber() @Min(0) @IsOptional() bookingPrice?: number;
+  @IsNumber() @Min(0) @IsOptional() depositPrice?: number;
+  @IsNumber() @Min(0) @IsOptional() memberTablePrice?: number;
+  @IsNumber() @Min(0) @IsOptional() memberChairPrice?: number;
+  @IsNumber() @Min(0) @IsOptional() memberBookingPrice?: number;
+  @IsNumber() @Min(0) @IsOptional() memberDepositPrice?: number;
   @IsString() @IsOptional() category?: string;
   @IsString() @IsOptional() color?: string;
   @IsNumber() @IsOptional() tableDiameter?: number;
+  @IsBoolean() @IsOptional() forSale?: boolean;
   @IsNumber() x: number;
   @IsNumber() y: number;
   @IsNumber() @IsOptional() rotation?: number;
@@ -579,6 +602,12 @@ export class CreateEventDto {
   @IsArray()
   @IsOptional()
   venueDoors?: any[];
+
+  // CAD annotations (lines / text / rects / dimensions). Loose array for
+  // the same reason as venueDoors.
+  @IsArray()
+  @IsOptional()
+  venueAnnotations?: any[];
 
   @ValidateNested({ each: true })
   @IsOptional()

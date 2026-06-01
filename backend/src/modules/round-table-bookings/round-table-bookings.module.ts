@@ -10,6 +10,7 @@ import { EventSchema } from "../events/schemas/event.schema";
 import { OrganizerSchema } from "../organizers/schemas/organizer.schema";
 import { OtpModule } from "../otp/otp.module";
 import { FeedbackModule } from "../feedback/feedback.module";
+import { MembershipsModule } from "../memberships/memberships.module";
 
 @Module({
   imports: [
@@ -20,6 +21,9 @@ import { FeedbackModule } from "../feedback/feedback.module";
     ]),
     OtpModule,
     FeedbackModule,
+    // Lets a round-table buyer who holds an active membership at this
+    // organizer be charged member-tier seat/table prices.
+    MembershipsModule,
   ],
   controllers: [RoundTableBookingsController],
   providers: [RoundTableBookingsService],

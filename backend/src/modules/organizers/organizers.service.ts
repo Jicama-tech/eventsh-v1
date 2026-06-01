@@ -908,6 +908,7 @@ export class OrganizersService {
       whatsappNumber?: string;
       phone?: string;
       contactPhones?: string[] | string;
+      contactPhoneNames?: string[] | string;
       address?: string;
       description?: string;
       GSTNumber?: string;
@@ -965,21 +966,31 @@ export class OrganizersService {
       // and persist a normalised string[]. Empty arrays clear the
       // existing list.
       if (body.contactPhones !== undefined) {
-        let phones: string[] = [];
-        if (Array.isArray(body.contactPhones)) {
-          phones = body.contactPhones as string[];
-        } else if (typeof body.contactPhones === "string") {
-          try {
-            const parsed = JSON.parse(body.contactPhones);
-            if (Array.isArray(parsed)) phones = parsed as string[];
-          } catch {
-            // Single string fallback — treat it as one entry.
-            phones = [body.contactPhones];
+        // Both fields arrive JSON-stringified through FormData. Parse each
+        // into a string[], then zip them and drop empty-number rows TOGETHER
+        // so numbers and their labels stay index-aligned.
+        const parseArr = (v: string[] | string | undefined): string[] => {
+          if (Array.isArray(v)) return v as string[];
+          if (typeof v === "string") {
+            try {
+              const parsed = JSON.parse(v);
+              if (Array.isArray(parsed)) return parsed as string[];
+            } catch {
+              return [v];
+            }
           }
-        }
-        update.contactPhones = phones
-          .map((p) => String(p || "").trim())
-          .filter((p) => p.length > 0);
+          return [];
+        };
+        const phonesRaw = parseArr(body.contactPhones);
+        const namesRaw = parseArr(body.contactPhoneNames);
+        const pairs = phonesRaw
+          .map((p, i) => ({
+            phone: String(p || "").trim(),
+            name: String(namesRaw[i] || "").trim(),
+          }))
+          .filter((x) => x.phone.length > 0);
+        update.contactPhones = pairs.map((x) => x.phone);
+        update.contactPhoneNames = pairs.map((x) => x.name);
       }
       if (body.address !== undefined) update.address = body.address;
       if (body.description !== undefined) update.description = body.description;
