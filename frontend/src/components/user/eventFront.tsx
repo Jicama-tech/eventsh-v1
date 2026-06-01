@@ -847,36 +847,46 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     const zones = Array.isArray((eventData as any)?.venueSpeakerZones)
       ? ((eventData as any).venueSpeakerZones as any[])
       : [];
+    // The venue dimensions (the organizer's crop) are the baseline. Items
+    // only extend the canvas if they fall within a sane range — a single
+    // stray item dragged thousands of px away (a known data glitch) must NOT
+    // blow the canvas up into endless empty space.
+    const limitX = Math.max(vw * 5, 6000);
+    const limitY = Math.max(vh * 5, 6000);
     let maxX = vw;
     let maxY = vh;
+    const addX = (v: number) => {
+      if (v <= limitX) maxX = Math.max(maxX, v);
+    };
+    const addY = (v: number) => {
+      if (v <= limitY) maxY = Math.max(maxY, v);
+    };
     for (const t of tables) {
       // Match the canvas render: the visible footprint is the resize
       // override when present, else the template size.
       const w = t?.displayWidth ?? t?.width ?? 0;
       const h = t?.displayHeight ?? t?.height ?? 0;
-      maxX = Math.max(maxX, (t?.x || 0) + w);
-      maxY = Math.max(maxY, (t?.y || 0) + h);
+      addX((t?.x || 0) + w);
+      addY((t?.y || 0) + h);
     }
     for (const r of round) {
       const d = r?.tableDiameter || 120;
-      maxX = Math.max(maxX, (r?.x || 0) + d);
-      maxY = Math.max(maxY, (r?.y || 0) + d);
+      addX((r?.x || 0) + d);
+      addY((r?.y || 0) + d);
     }
     for (const z of zones) {
-      maxX = Math.max(maxX, (z?.x || 0) + (z?.width || 0));
-      maxY = Math.max(maxY, (z?.y || 0) + (z?.height || 0));
+      addX((z?.x || 0) + (z?.width || 0));
+      addY((z?.y || 0) + (z?.height || 0));
     }
-    // Doors can be circles (legacy 50×50) or organizer-resized squares;
-    // honour the stored width/height so the canvas stretches to fit any
-    // door placed past the venue edge.
+    // Doors can be circles (legacy 50×50) or organizer-resized squares.
     const doors = Array.isArray((eventData as any)?.venueDoors)
       ? ((eventData as any).venueDoors as any[])
       : [];
     for (const d of doors) {
       const dw = Number(d?.width) > 0 ? Number(d.width) : 50;
       const dh = Number(d?.height) > 0 ? Number(d.height) : 50;
-      maxX = Math.max(maxX, (d?.x || 0) + dw);
-      maxY = Math.max(maxY, (d?.y || 0) + dh);
+      addX((d?.x || 0) + dw);
+      addY((d?.y || 0) + dh);
     }
     return { width: maxX + PADDING, height: maxY + PADDING };
   };

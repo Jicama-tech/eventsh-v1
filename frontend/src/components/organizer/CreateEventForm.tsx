@@ -3028,6 +3028,18 @@ const VenueDesigner = ({
   const [annotationTool, setAnnotationTool] = useState<AnnotationTool>("none");
   const [annotationColor, setAnnotationColor] = useState("#1e293b");
   const [selectedAnnId, setSelectedAnnId] = useState<string | null>(null);
+  // Live crop/resize drag of the venue boundary (drag the bottom-right
+  // handle to set how big the venue area is).
+  const [canvasResize, setCanvasResize] = useState<{
+    startX: number;
+    startY: number;
+    origW: number;
+    origH: number;
+    w: number;
+    h: number;
+  } | null>(null);
+  const canvasResizeRef = useRef<typeof canvasResize>(null);
+  canvasResizeRef.current = canvasResize;
   // Live position of the item being dragged. Updated every frame during a drag
   // so only THIS component re-renders — the final position is committed to the
   // parent's venue state once on drop. This keeps dragging smooth instead of
@@ -3194,6 +3206,47 @@ const VenueDesigner = ({
     });
   };
 
+  // Update fields on the selected venue config (used by the crop handle).
+  const patchVenueConfig = (updates: Partial<VenueConfig>) => {
+    setVenueConfigurations(
+      venueConfigurations.map((vc) =>
+        vc.id === selectedVenueConfigId ? { ...vc, ...updates } : vc,
+      ),
+    );
+  };
+
+  // Crop/resize the venue boundary by dragging the bottom-right handle.
+  // Listeners attach once per drag; geometry is read from the ref so we
+  // never re-bind mid-drag. Committed to venueConfig.width/height on mouse-up.
+  const isResizingCanvas = canvasResize !== null;
+  useEffect(() => {
+    if (!isResizingCanvas) return;
+    const onMove = (e: MouseEvent) => {
+      const r = canvasResizeRef.current;
+      const sc = venueConfig?.scale || 1;
+      if (!r) return;
+      const dw = (e.clientX - r.startX) / sc;
+      const dh = (e.clientY - r.startY) / sc;
+      setCanvasResize({
+        ...r,
+        w: Math.max(200, Math.round(r.origW + dw)),
+        h: Math.max(200, Math.round(r.origH + dh)),
+      });
+    };
+    const onUp = () => {
+      const r = canvasResizeRef.current;
+      if (r) patchVenueConfig({ width: r.w, height: r.h });
+      setCanvasResize(null);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isResizingCanvas]);
+
   // Designer canvas size — the canvas IS the venue. It starts at the
   // configured venue dimensions and grows ONLY to contain the spaces /
   // round tables / zones / doors actually placed (plus a small working
@@ -3209,28 +3262,38 @@ const VenueDesigner = ({
     (selectedVenueConfigId && venueSpeakerZones[selectedVenueConfigId]) || [];
   const currentDoorsForCanvas =
     (selectedVenueConfigId && venueDoors[selectedVenueConfigId]) || [];
+  // Ignore stray items dragged absurdly far out (a known data glitch) so a
+  // single bad coordinate can't inflate the canvas into endless empty grid.
+  const OUTLIER_X = Math.max((venueConfig?.width || 1000) * 5, 6000);
+  const OUTLIER_Y = Math.max((venueConfig?.height || 700) * 5, 6000);
   let itemsMaxX = 0;
   let itemsMaxY = 0;
+  const growX = (v: number) => {
+    if (v <= OUTLIER_X) itemsMaxX = Math.max(itemsMaxX, v);
+  };
+  const growY = (v: number) => {
+    if (v <= OUTLIER_Y) itemsMaxY = Math.max(itemsMaxY, v);
+  };
   for (const t of currentItemsForCanvas) {
     const w = (t as any).displayWidth ?? t.width ?? 0;
     const h = (t as any).displayHeight ?? t.height ?? 0;
-    itemsMaxX = Math.max(itemsMaxX, (t.x || 0) + w);
-    itemsMaxY = Math.max(itemsMaxY, (t.y || 0) + h);
+    growX((t.x || 0) + w);
+    growY((t.y || 0) + h);
   }
   for (const r of currentRoundsForCanvas) {
     const d = (r as any).tableDiameter || 120;
-    itemsMaxX = Math.max(itemsMaxX, (r.x || 0) + d);
-    itemsMaxY = Math.max(itemsMaxY, (r.y || 0) + d);
+    growX((r.x || 0) + d);
+    growY((r.y || 0) + d);
   }
   for (const z of currentZonesForCanvas as any[]) {
-    itemsMaxX = Math.max(itemsMaxX, (z.x || 0) + (z.width || 0));
-    itemsMaxY = Math.max(itemsMaxY, (z.y || 0) + (z.height || 0));
+    growX((z.x || 0) + (z.width || 0));
+    growY((z.y || 0) + (z.height || 0));
   }
   for (const d of currentDoorsForCanvas as any[]) {
     const dw = Number(d.width) > 0 ? Number(d.width) : 50;
     const dh = Number(d.height) > 0 ? Number(d.height) : 50;
-    itemsMaxX = Math.max(itemsMaxX, (d.x || 0) + dw);
-    itemsMaxY = Math.max(itemsMaxY, (d.y || 0) + dh);
+    growX((d.x || 0) + dw);
+    growY((d.y || 0) + dh);
   }
   // Small working margin past the furthest-placed item so there's room to
   // drop / nudge the next space. The canvas grows by this much beyond the
@@ -5340,6 +5403,81 @@ const VenueDesigner = ({
                   </div>
                 );
               })}
+
+              {/* Venue boundary + crop handle. The dashed rectangle is the
+                  venue's actual size; the grey area beyond it is just working
+                  room. Drag the bottom-right handle to crop / resize the
+                  venue so you can place a space flush to the edge. Hidden
+                  while a drawing tool is active so it doesn't fight drawing. */}
+              {annotationTool === "none" &&
+                (() => {
+                  const liveW = canvasResize
+                    ? canvasResize.w
+                    : venueConfig.width;
+                  const liveH = canvasResize
+                    ? canvasResize.h
+                    : venueConfig.height;
+                  const bw = liveW * venueConfig.scale;
+                  const bh = liveH * venueConfig.scale;
+                  return (
+                    <>
+                      <div
+                        style={{
+                          position: "absolute",
+                          left: 0,
+                          top: 0,
+                          width: bw,
+                          height: bh,
+                          border: "2px dashed #64748b",
+                          borderRadius: 4,
+                          pointerEvents: "none",
+                          zIndex: 3,
+                        }}
+                      />
+                      <div
+                        className="rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow"
+                        style={{
+                          position: "absolute",
+                          left: bw,
+                          top: bh + 4,
+                          transform: "translateX(-100%)",
+                          pointerEvents: "none",
+                          zIndex: 41,
+                        }}
+                      >
+                        Venue {Math.round(liveW)} × {Math.round(liveH)}
+                      </div>
+                      <div
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setCanvasResize({
+                            startX: e.clientX,
+                            startY: e.clientY,
+                            origW: venueConfig.width,
+                            origH: venueConfig.height,
+                            w: venueConfig.width,
+                            h: venueConfig.height,
+                          });
+                        }}
+                        title="Drag to crop / resize the venue area"
+                        style={{
+                          position: "absolute",
+                          left: bw - 9,
+                          top: bh - 9,
+                          width: 18,
+                          height: 18,
+                          background: "#2563eb",
+                          border: "2px solid white",
+                          borderRadius: 4,
+                          cursor: "nwse-resize",
+                          zIndex: 42,
+                          boxShadow: "0 1px 4px rgba(0,0,0,0.35)",
+                        }}
+                      />
+                    </>
+                  );
+                })()}
 
               {/* CAD annotation layer — Konva overlay over the whole canvas.
                   Pointer-events pass through in Move mode so space booking /
