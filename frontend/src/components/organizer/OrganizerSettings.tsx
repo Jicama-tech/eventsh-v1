@@ -82,6 +82,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
+import { buildPayNowQrUrl, describePayNowPayee } from "@/lib/paynowQr";
 import { lazy, Suspense } from "react";
 import "react-quill/dist/quill.snow.css";
 const ReactQuill = lazy(() => import("react-quill"));
@@ -384,6 +385,9 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
   const [uenVerified, setUenVerified] = useState(false);
   const [uenVerifying, setUenVerifying] = useState(false);
   const [uenError, setUenError] = useState("");
+  // Live $1 PayNow QR so the organizer can scan and confirm the UEN routes
+  // money to their own account.
+  const [payNowVerifyOpen, setPayNowVerifyOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [gstDetails, setGstDetails] = useState(null);
   const [gstValid, setGstValid] = useState<boolean | null>(null);
@@ -1929,6 +1933,15 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                             {uenVerifying ? "Verifying..." : "Verify"}
                           </Button>
                         )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setPayNowVerifyOpen(true)}
+                          disabled={!shopProfile.UENNumber}
+                          className="whitespace-nowrap"
+                        >
+                          Verify with PayNow
+                        </Button>
                       </div>
                       {uenError && (
                         <p className="text-xs text-red-600">{uenError}</p>
@@ -1942,6 +1955,67 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       <p className="text-xs text-gray-600">
                         Your Unique Entity Number (UEN)
                       </p>
+
+                      {/* Live $1 PayNow dynamic QR — scan to confirm the UEN
+                          routes to your own account. */}
+                      <Dialog
+                        open={payNowVerifyOpen}
+                        onOpenChange={setPayNowVerifyOpen}
+                      >
+                        <DialogContent className="max-w-sm">
+                          <DialogHeader>
+                            <DialogTitle>Verify PayNow (SGD 1.00)</DialogTitle>
+                            <DialogDescription>
+                              Scan this QR with your banking app and confirm the
+                              payee name is your business. It's a live SGD 1.00
+                              PayNow transfer to your UEN.
+                            </DialogDescription>
+                          </DialogHeader>
+                          {(() => {
+                            const qrUrl = buildPayNowQrUrl({
+                              organizer: { UENNumber: shopProfile.UENNumber },
+                              amount: "1.00",
+                              company: shopProfile.organizationName || "",
+                              refId: "UEN-VERIFY",
+                              editable: false,
+                            });
+                            const payee = describePayNowPayee({
+                              UENNumber: shopProfile.UENNumber,
+                            });
+                            return qrUrl ? (
+                              <div className="flex flex-col items-center gap-3 py-2">
+                                <img
+                                  src={qrUrl}
+                                  alt="PayNow $1 verification QR"
+                                  className="w-64 h-64 object-contain border rounded-lg bg-white"
+                                />
+                                {payee && (
+                                  <p className="text-sm font-medium">
+                                    Paying to {payee}
+                                  </p>
+                                )}
+                                <p className="text-xs text-gray-500 text-center">
+                                  Amount: SGD 1.00 — if your bank app shows your
+                                  own business name as the payee, your UEN is set
+                                  up correctly.
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-red-600 py-2">
+                                Enter a valid UEN number first.
+                              </p>
+                            );
+                          })()}
+                          <div className="flex justify-end">
+                            <Button
+                              type="button"
+                              onClick={() => setPayNowVerifyOpen(false)}
+                            >
+                              Close
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
                     </div>
                   )}
                 </>

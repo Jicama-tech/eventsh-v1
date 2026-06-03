@@ -398,6 +398,19 @@ Return ONLY this JSON shape, nothing else:
       errorRows: [],
     };
 
+    // Vendors that "belong" to this organizer for matching purposes: ones it
+    // owns (organizerId) PLUS ones linked through its stall records (which may
+    // have no organizerId — e.g. joined via the stall form). Matching against
+    // this combined scope is what lets a re-uploaded export UPDATE those stall
+    // vendors instead of creating duplicates.
+    const stallVendorIds = await this.stallModel
+      .find({ organizerId: orgObjId })
+      .distinct("shopkeeperId");
+    const orgScope: any[] = [
+      { organizerId: orgObjId },
+      { _id: { $in: stallVendorIds } },
+    ];
+
     for (let i = 0; i < rows.length; i++) {
       const raw = rows[i];
       const mapped = this.applyMapping<ExhibitorField>(raw, mapping as any);
@@ -430,10 +443,13 @@ Return ONLY this JSON shape, nothing else:
         // Locate an existing vendor to update. Prefer the exported row id
         // (survives email / WhatsApp edits); fall back to matching on the
         // contact fields so sheets built from our template still update.
+        // Both lookups are confined to this organizer's scope (owned OR
+        // stall-linked) so a re-uploaded export updates the right record and
+        // never touches another organizer's vendors.
         let existing: any = null;
         if (idVal && Types.ObjectId.isValid(idVal)) {
           existing = await this.vendorModel
-            .findOne({ _id: new Types.ObjectId(idVal), organizerId: orgObjId })
+            .findOne({ _id: new Types.ObjectId(idVal), $or: orgScope })
             .lean();
         }
         if (!existing) {
@@ -442,7 +458,7 @@ Return ONLY this JSON shape, nothing else:
           if (email) dupOr.push({ email });
           if (dupOr.length) {
             existing = await this.vendorModel
-              .findOne({ organizerId: orgObjId, $or: dupOr })
+              .findOne({ $and: [{ $or: orgScope }, { $or: dupOr }] })
               .lean();
           }
         }
@@ -452,6 +468,9 @@ Return ONLY this JSON shape, nothing else:
         const fields = this.buildExhibitorFields(mapped);
 
         if (existing) {
+          // Self-heal: stamp the owning organizer on stall-only vendors so
+          // future imports match them directly by organizerId.
+          if (!existing.organizerId) fields.organizerId = orgObjId;
           await this.vendorModel.updateOne(
             { _id: existing._id },
             { $set: fields },
