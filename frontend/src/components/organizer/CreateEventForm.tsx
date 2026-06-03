@@ -4139,10 +4139,14 @@ const VenueDesigner = ({
       const { default: html2canvas } = await import("html2canvas");
       const canvas = await html2canvas(venueRef.current, {
         backgroundColor: "#ffffff",
-        scale: 2,
+        // Lower scale + JPEG (not PNG) keeps this layout snapshot small. It's
+        // stored INLINE in the event document; a full-res PNG can be several
+        // MB each, and multiple layouts then blow past MongoDB's 16MB
+        // per-document limit (which was causing event saves to fail).
+        scale: 1.5,
         useCORS: true,
       });
-      const imageDataUrl = canvas.toDataURL("image/png");
+      const imageDataUrl = canvas.toDataURL("image/jpeg", 0.7);
       setVenueLayoutImages({
         ...venueLayoutImages,
         [selectedVenueConfigId]: imageDataUrl,
