@@ -6314,11 +6314,19 @@ export function CreateEventForm({
     termsAndConditions: initialData?.termsAndConditions ?? "",
     // Per-section eventfront visibility. Missing key = visible (so existing
     // events keep showing everything). Custom sections are keyed by their id.
-    sectionVisibility:
-      initialData?.sectionVisibility &&
-      typeof initialData.sectionVisibility === "object"
-        ? (initialData.sectionVisibility as Record<string, boolean>)
-        : ({} as Record<string, boolean>),
+    // Only accept a plain { key: boolean } object. Guard against a corrupted
+    // array/garbage value (a past bug let this field self-concatenate into
+    // megabytes) by keeping just the boolean entries.
+    sectionVisibility: (() => {
+      const sv = initialData?.sectionVisibility as unknown;
+      if (!sv || typeof sv !== "object" || Array.isArray(sv))
+        return {} as Record<string, boolean>;
+      const clean: Record<string, boolean> = {};
+      for (const [k, val] of Object.entries(sv as Record<string, unknown>)) {
+        if (typeof val === "boolean") clean[k] = val;
+      }
+      return clean;
+    })(),
     socialMedia: initialData?.socialMedia ?? {
       facebook: "",
       instagram: "",
