@@ -147,7 +147,9 @@ export class TicketsService {
         ticketDetails,
       );
 
-      // 5. Delivery - WhatsApp or Email fallback (prefer WhatsApp)
+      // 5. Delivery — send to BOTH channels when available. WhatsApp and
+      // email are independent and best-effort, so the ticket still reaches
+      // the registered email even when WhatsApp succeeds (or fails).
       if (whatsAppNumber) {
         try {
           await this.sendTicketViaWhatsApp(
@@ -157,12 +159,15 @@ export class TicketsService {
             country
           );
         } catch (error) {
-          if (ticketEmail) {
-            await this.sendTicketViaEmail(savedTicket, qrCodeBase64, country);
-          }
+          console.error("Ticket WhatsApp delivery failed:", error);
         }
-      } else if (ticketEmail) {
-        await this.sendTicketViaEmail(savedTicket, qrCodeBase64, country);
+      }
+      if (ticketEmail) {
+        try {
+          await this.sendTicketViaEmail(savedTicket, qrCodeBase64, country);
+        } catch (error) {
+          console.error("Ticket email delivery failed:", error);
+        }
       }
 
       return savedTicket;
@@ -332,6 +337,10 @@ Thank you for choosing Eventsh! 🎊`;
             <p style="margin: 0;">© ${new Date().getFullYear()} Eventsh. All rights reserved.</p>
           </div>
         </div>`;
+      // Attach the full ticket PDF (same one sent over WhatsApp) so the
+      // recipient can download / forward it. The inline PNG stays for the
+      // QR preview inside the email body.
+      const pdfBuffer = await this.generateTicketPDF(ticket, qrBase64, country);
       await this.mailService.sendEmail({
         to: ticket.customerEmail,
         subject: `🎟️ Your Eventsh Ticket - ${ticket.eventTitle}`,
@@ -342,6 +351,10 @@ Thank you for choosing Eventsh! 🎊`;
             content: qrBase64.split(",")[1],
             encoding: "base64",
             cid: "qrcodeeventsh",
+          },
+          {
+            filename: `eventsh-ticket-${ticket.ticketId}.pdf`,
+            content: pdfBuffer,
           },
         ],
       });

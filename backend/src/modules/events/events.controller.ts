@@ -441,9 +441,15 @@ export class EventsController {
   }
 
   @Get("organizer/:organizerId")
-  async getEventsByOrganizer(@Param("organizerId") organizerId: string) {
+  async getEventsByOrganizer(
+    @Param("organizerId") organizerId: string,
+    @Query("publicOnly") publicOnly?: string,
+  ) {
     try {
-      const result = await this.eventsService.findByOrganizer(organizerId);
+      const result = await this.eventsService.findByOrganizer(
+        organizerId,
+        publicOnly === "true" || publicOnly === "1",
+      );
       return {
         success: true,
         message: "Organizer events retrieved successfully",

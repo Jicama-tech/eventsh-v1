@@ -23,20 +23,23 @@ const VISITOR_FIELDS = [
 type VisitorField = (typeof VISITOR_FIELDS)[number];
 
 const EXHIBITOR_FIELDS = [
+  // Stable record id. Present in exported sheets so a re-upload updates the
+  // exact same vendor even when the email / WhatsApp was edited in the row.
+  // Blank on fresh template rows — those create new vendors.
+  "id",
+  // Mirrors the organizer's "Add Exhibitor" form so the sheet carries the
+  // same fields the form collects (name split into first/last).
+  "firstName",
+  "lastName",
   "name",
   "email",
   "businessEmail",
+  "shopName",
+  "businessCategory",
+  "country",
   "whatsAppNumber",
   "phone",
-  "country",
   "address",
-  "shopName",
-  "businessName",
-  "businessCategory",
-  "brandName",
-  "city",
-  "state",
-  "pincode",
   // Manual membership flags so a bulk import can pre-populate the
   // member badge + expiry the CRM shows. Either or both can be omitted
   // — the row imports cleanly as a non-member when missing.
@@ -49,6 +52,10 @@ type ExhibitorField = (typeof EXHIBITOR_FIELDS)[number];
 type ImportResult = {
   totalRows: number;
   created: number;
+  // Existing records matched (by id, else email / WhatsApp) and refreshed
+  // with the row's values. Drives the round-trip "export → edit → re-upload"
+  // workflow for exhibitors.
+  updated: number;
   skipped: number;
   errors: number;
   mapping: Record<string, string>;
@@ -66,6 +73,7 @@ export class BulkImportService {
   constructor(
     @InjectModel("User") private userModel: Model<any>,
     @InjectModel("Vendor") private vendorModel: Model<any>,
+    @InjectModel("Stall") private stallModel: Model<any>,
   ) {
     // Mirror chatbot.service AI client setup so column-mapping uses whichever
     // provider the project is already configured for.
@@ -160,10 +168,17 @@ Return ONLY this JSON shape, nothing else:
       const m = parsed.mapping || {};
       for (const h of headers) {
         const proposal = m[h];
-        if (canonicalFields.includes(proposal as T)) {
+        const cheap = cheapMap[h];
+        // Trust our deterministic alias/direct match first — it reliably maps
+        // our own exported/template headers (e.g. "Owner Name" -> name). The
+        // AI sometimes downgrades a known column to "ignore", which would drop
+        // required data; only fall back to the AI for headers we can't resolve.
+        if (cheap && cheap !== ("ignore" as T)) {
+          aiMap[h] = cheap;
+        } else if (canonicalFields.includes(proposal as T)) {
           aiMap[h] = proposal as T;
         } else {
-          aiMap[h] = (cheapMap[h] || "ignore") as T;
+          aiMap[h] = "ignore" as T;
         }
       }
       return aiMap;
@@ -220,6 +235,13 @@ Return ONLY this JSON shape, nothing else:
       zip: "pincode",
       zipcode: "pincode",
       businessemail: "businessEmail",
+      primaryemail: "email",
+      personalemail: "email",
+      // Record-id aliases so an exported sheet round-trips for updates.
+      id: "id",
+      recordid: "id",
+      vendorid: "id",
+      exhibitorid: "id",
       // Membership column aliases — accept the common spellings so
       // organizers don't have to match our header exactly.
       ismember: "isMember",
@@ -272,6 +294,7 @@ Return ONLY this JSON shape, nothing else:
     const result: ImportResult = {
       totalRows: rows.length,
       created: 0,
+      updated: 0,
       skipped: 0,
       errors: 0,
       mapping,
@@ -367,6 +390,7 @@ Return ONLY this JSON shape, nothing else:
     const result: ImportResult = {
       totalRows: rows.length,
       created: 0,
+      updated: 0,
       skipped: 0,
       errors: 0,
       mapping,
@@ -374,13 +398,32 @@ Return ONLY this JSON shape, nothing else:
       errorRows: [],
     };
 
+    // Vendors that "belong" to this organizer for matching purposes: ones it
+    // owns (organizerId) PLUS ones linked through its stall records (which may
+    // have no organizerId — e.g. joined via the stall form). Matching against
+    // this combined scope is what lets a re-uploaded export UPDATE those stall
+    // vendors instead of creating duplicates.
+    const stallVendorIds = await this.stallModel
+      .find({ organizerId: orgObjId })
+      .distinct("shopkeeperId");
+    const orgScope: any[] = [
+      { organizerId: orgObjId },
+      { _id: { $in: stallVendorIds } },
+    ];
+
     for (let i = 0; i < rows.length; i++) {
       const raw = rows[i];
       const mapped = this.applyMapping<ExhibitorField>(raw, mapping as any);
-      const name = String(mapped.name || "").trim();
+      // Name may arrive as a single column or as first/last (Add Exhibitor
+      // form shape) — accept either.
+      const first = String((mapped as any).firstName || "").trim();
+      const last = String((mapped as any).lastName || "").trim();
+      const name =
+        String(mapped.name || "").trim() ||
+        `${first} ${last}`.trim();
       const email = String(mapped.email || "").trim().toLowerCase() || undefined;
       const wa = String(mapped.whatsAppNumber || "").trim();
-      const shopName = String(mapped.shopName || mapped.businessName || "").trim();
+      const idVal = String((mapped as any).id || "").trim();
 
       if (!name) {
         result.skipped++;
@@ -396,67 +439,53 @@ Return ONLY this JSON shape, nothing else:
         continue;
       }
 
-      const dupOr: any[] = [];
-      if (wa) {
-        dupOr.push({ whatsappNumber: wa }, { whatsAppNumber: wa });
-      }
-      if (email) dupOr.push({ email });
-      const exists = dupOr.length
-        ? await this.vendorModel.exists({
-            organizerId: orgObjId,
-            $or: dupOr,
-          })
-        : null;
-      if (exists) {
-        result.skipped++;
-        result.skippedRows.push({ row: i + 2, reason: "Already exists" });
-        continue;
-      }
-
       try {
-        // Coerce membership fields out of the raw row values. Excel
-        // gives us a date object straight for date-formatted cells but
-        // strings ("2026-05-30", "yes", "TRUE") for everything else.
-        const rawMember = String(mapped.isMember ?? "")
-          .trim()
-          .toLowerCase();
-        const isMember =
-          rawMember === "true" ||
-          rawMember === "yes" ||
-          rawMember === "y" ||
-          rawMember === "1";
-        let membershipEndDate: Date | undefined;
-        const rawEnd = mapped.membershipEndDate;
-        if (rawEnd instanceof Date && !isNaN(rawEnd.getTime())) {
-          membershipEndDate = rawEnd;
-        } else if (typeof rawEnd === "string" && rawEnd.trim()) {
-          const d = new Date(rawEnd);
-          if (!isNaN(d.getTime())) membershipEndDate = d;
+        // Locate an existing vendor to update. Prefer the exported row id
+        // (survives email / WhatsApp edits); fall back to matching on the
+        // contact fields so sheets built from our template still update.
+        // Both lookups are confined to this organizer's scope (owned OR
+        // stall-linked) so a re-uploaded export updates the right record and
+        // never touches another organizer's vendors.
+        let existing: any = null;
+        if (idVal && Types.ObjectId.isValid(idVal)) {
+          existing = await this.vendorModel
+            .findOne({ _id: new Types.ObjectId(idVal), $or: orgScope })
+            .lean();
+        }
+        if (!existing) {
+          const dupOr: any[] = [];
+          if (wa) dupOr.push({ whatsappNumber: wa }, { whatsAppNumber: wa });
+          if (email) dupOr.push({ email });
+          if (dupOr.length) {
+            existing = await this.vendorModel
+              .findOne({ $and: [{ $or: orgScope }, { $or: dupOr }] })
+              .lean();
+          }
         }
 
-        await this.vendorModel.create({
-          organizerId: orgObjId,
-          name,
-          email,
-          businessEmail: mapped.businessEmail || undefined,
-          phone: mapped.phone || undefined,
-          country: mapped.country || undefined,
-          address: mapped.address || undefined,
-          shopName: shopName || undefined,
-          businessName: mapped.businessName || shopName || undefined,
-          businessCategory: mapped.businessCategory || undefined,
-          brandName: mapped.brandName || undefined,
-          city: mapped.city || undefined,
-          state: mapped.state || undefined,
-          pincode: mapped.pincode || undefined,
-          whatsAppNumber: wa || undefined,
-          whatsappNumber: wa || undefined,
-          approved: true,
-          isActive: true,
-          isMember,
-          membershipEndDate,
-        });
-        result.created++;
+        // Only the columns actually present in the row are written, so a
+        // partial sheet never wipes existing data on update.
+        const fields = this.buildExhibitorFields(mapped);
+
+        if (existing) {
+          // Self-heal: stamp the owning organizer on stall-only vendors so
+          // future imports match them directly by organizerId.
+          if (!existing.organizerId) fields.organizerId = orgObjId;
+          await this.vendorModel.updateOne(
+            { _id: existing._id },
+            { $set: fields },
+          );
+          result.updated++;
+        } else {
+          await this.vendorModel.create({
+            organizerId: orgObjId,
+            approved: true,
+            isActive: true,
+            isMember: false,
+            ...fields,
+          });
+          result.created++;
+        }
       } catch (err: any) {
         result.errors++;
         result.errorRows.push({
@@ -467,6 +496,115 @@ Return ONLY this JSON shape, nothing else:
     }
 
     return result;
+  }
+
+  // Translate a mapped exhibitor row into the vendor fields to persist.
+  // Returns ONLY the keys whose source cells had a value — callers spread
+  // this onto a create payload or pass it to $set so blank cells never
+  // clobber stored data on update.
+  private buildExhibitorFields(
+    mapped: Partial<Record<ExhibitorField, any>>,
+  ): Record<string, any> {
+    const set: Record<string, any> = {};
+    const put = (key: string, val: any) => {
+      const v = typeof val === "string" ? val.trim() : val;
+      if (v !== undefined && v !== null && v !== "") set[key] = v;
+    };
+
+    // Derive the combined name from first/last when a single Name column
+    // wasn't supplied — mirrors the Add Exhibitor form (first + last).
+    const firstName = String(mapped.firstName || "").trim();
+    const lastName = String(mapped.lastName || "").trim();
+    let name = String(mapped.name || "").trim();
+    if (!name && (firstName || lastName)) {
+      name = `${firstName} ${lastName}`.trim();
+    }
+
+    put("name", name);
+    put("email", String(mapped.email || "").trim().toLowerCase());
+    put("businessEmail", String(mapped.businessEmail || "").trim().toLowerCase());
+    put("shopName", mapped.shopName);
+    put("businessCategory", mapped.businessCategory);
+    put("country", mapped.country);
+    put("phone", mapped.phone);
+    put("address", mapped.address);
+
+    const wa = String(mapped.whatsAppNumber || "").trim();
+    if (wa) {
+      set.whatsAppNumber = wa;
+      set.whatsappNumber = wa;
+    }
+
+    // Membership flag — coerced from "Yes"/"true"/"1" etc. Only written
+    // when the column actually carries a value, so omitting it leaves the
+    // stored flag untouched on update.
+    if (mapped.isMember != null && String(mapped.isMember).trim() !== "") {
+      const r = String(mapped.isMember).trim().toLowerCase();
+      set.isMember = r === "true" || r === "yes" || r === "y" || r === "1";
+    }
+    // Membership end date — Excel hands us a Date for date-formatted cells
+    // and a string ("2026-12-31") otherwise.
+    const end = this.parseDate(mapped.membershipEndDate);
+    if (end) set.membershipEndDate = end;
+
+    return set;
+  }
+
+  // Parse a sheet date cell into a date-only value stored as UTC midnight.
+  // This avoids the classic off-by-one: a date parsed at LOCAL midnight and
+  // later serialized with toISOString() (UTC) rolls back a day in +offset
+  // timezones (SGT/IST). We always rebuild from the intended calendar Y/M/D.
+  private parseDate(raw: any): Date | undefined {
+    if (raw == null || raw === "") return undefined;
+
+    // Excel date cell — take its displayed calendar day (local getters) and
+    // re-anchor to UTC midnight.
+    if (raw instanceof Date && !isNaN(raw.getTime())) {
+      return new Date(
+        Date.UTC(raw.getFullYear(), raw.getMonth(), raw.getDate()),
+      );
+    }
+
+    const s = String(raw).trim();
+    if (!s) return undefined;
+
+    // ISO YYYY-MM-DD — the format our export writes (unambiguous).
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+
+    // Slash/dot/dash dates: dd/mm/yyyy or mm/dd/yyyy.
+    m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
+    if (m) {
+      const p1 = +m[1];
+      const p2 = +m[2];
+      let year = +m[3];
+      if (year < 100) year += 2000;
+      let day: number;
+      let month: number;
+      if (p1 > 12) {
+        day = p1;
+        month = p2; // clearly day-first
+      } else if (p2 > 12) {
+        month = p1;
+        day = p2; // clearly month-first
+      } else {
+        // Ambiguous — default to day-first (dd/mm/yyyy), the common SG/IN
+        // convention. (Our export uses ISO, so this only affects hand-typed
+        // dates.)
+        day = p1;
+        month = p2;
+      }
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        return new Date(Date.UTC(year, month - 1, day));
+      }
+    }
+
+    // Fallback: let JS parse, then snap to UTC midnight of its calendar day.
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    }
+    return undefined;
   }
 
   private applyMapping<T extends string>(
@@ -530,48 +668,71 @@ Return ONLY this JSON shape, nothing else:
       throw new BadRequestException("Invalid organizer id");
     }
     const orgObjId = new Types.ObjectId(organizerId);
-    const exhibitors = await this.vendorModel
+    // Include BOTH sources of exhibitors:
+    //   1. vendors owned by this organizer (added via CRM / bulk import)
+    //   2. vendors who registered through the stall form for this organizer's
+    //      events (older ones may not carry organizerId) — matched via their
+    //      stall records.
+    const stallVendorIds = await this.stallModel
       .find({ organizerId: orgObjId })
+      .distinct("shopkeeperId");
+    const exhibitors = await this.vendorModel
+      .find({
+        $or: [
+          { organizerId: orgObjId },
+          { _id: { $in: stallVendorIds } },
+        ],
+      })
       .sort({ createdAt: -1 })
       .lean();
 
     const wb = new ExcelJS.Workbook();
     const sheet = wb.addWorksheet("Exhibitors");
+    // Columns mirror the organizer's "Add Exhibitor" form. ID is first so
+    // editing a row and re-uploading updates that exact vendor; leave ID
+    // blank to create a new exhibitor.
     sheet.columns = [
-      { header: "Name", key: "name", width: 22 },
-      { header: "Shop Name", key: "shopName", width: 22 },
-      { header: "Business Name", key: "businessName", width: 22 },
-      { header: "Business Category", key: "businessCategory", width: 22 },
-      { header: "Brand Name", key: "brandName", width: 18 },
+      { header: "ID", key: "id", width: 26 },
+      { header: "First Name", key: "firstName", width: 18 },
+      { header: "Last Name", key: "lastName", width: 18 },
       { header: "Email", key: "email", width: 28 },
       { header: "Business Email", key: "businessEmail", width: 28 },
-      { header: "WhatsApp Number", key: "whatsAppNumber", width: 22 },
-      { header: "Phone", key: "phone", width: 18 },
+      { header: "Shop Name", key: "shopName", width: 24 },
+      { header: "Business Category", key: "businessCategory", width: 20 },
       { header: "Country", key: "country", width: 14 },
+      { header: "WhatsApp Number", key: "whatsAppNumber", width: 20 },
+      { header: "Phone", key: "phone", width: 18 },
       { header: "Address", key: "address", width: 30 },
-      { header: "City", key: "city", width: 16 },
-      { header: "State", key: "state", width: 16 },
-      { header: "Pincode", key: "pincode", width: 12 },
+      // Membership status + validity. Edit these and re-upload to change a
+      // vendor's member badge / expiry in bulk.
+      { header: "Is Member", key: "isMember", width: 12 },
+      { header: "Membership End Date", key: "membershipEndDate", width: 20 },
+      // Read-only metadata (mapped to "ignore" on re-import).
       { header: "Approved", key: "approved", width: 10 },
       { header: "Created At", key: "createdAt", width: 22 },
     ];
     sheet.getRow(1).font = { bold: true };
     for (const v of exhibitors as any[]) {
+      const end = v.membershipEndDate ? new Date(v.membershipEndDate) : null;
+      const fullName = String(v.name || "").trim();
+      const [firstName, ...rest] = fullName.split(" ");
       sheet.addRow({
-        name: v.name || "",
-        shopName: v.shopName || "",
-        businessName: v.businessName || "",
-        businessCategory: v.businessCategory || "",
-        brandName: v.brandName || "",
+        id: String(v._id || ""),
+        firstName: firstName || "",
+        lastName: rest.join(" ") || "",
         email: v.email || "",
         businessEmail: v.businessEmail || "",
+        shopName: v.shopName || v.businessName || "",
+        businessCategory: v.businessCategory || v.businessType || "",
+        country: v.country || "",
         whatsAppNumber: v.whatsAppNumber || v.whatsappNumber || "",
         phone: v.phone || v.phoneNumber || "",
-        country: v.country || "",
         address: v.address || "",
-        city: v.city || "",
-        state: v.state || "",
-        pincode: v.pincode || "",
+        isMember: v.isMember ? "Yes" : "No",
+        membershipEndDate:
+          end && !isNaN(end.getTime())
+            ? end.toISOString().slice(0, 10)
+            : "",
         approved: v.approved ? "Yes" : "No",
         createdAt: v.createdAt
           ? new Date(v.createdAt).toISOString().slice(0, 19).replace("T", " ")
@@ -623,27 +784,34 @@ Return ONLY this JSON shape, nothing else:
   async exhibitorTemplate(): Promise<Buffer> {
     const wb = new ExcelJS.Workbook();
     const sheet = wb.addWorksheet("Exhibitors");
+    // Same columns as the export / "Add Exhibitor" form so the template,
+    // export and import all line up. ID is included (blank = new rows).
     sheet.columns = [
-      { header: "Name", key: "name", width: 22 },
-      { header: "Shop Name", key: "shopName", width: 22 },
-      { header: "Business Category", key: "businessCategory", width: 22 },
+      { header: "ID", key: "id", width: 26 },
+      { header: "First Name", key: "firstName", width: 18 },
+      { header: "Last Name", key: "lastName", width: 18 },
       { header: "Email", key: "email", width: 28 },
-      { header: "WhatsApp Number", key: "whatsAppNumber", width: 22 },
-      { header: "Phone", key: "phone", width: 18 },
+      { header: "Business Email", key: "businessEmail", width: 28 },
+      { header: "Shop Name", key: "shopName", width: 24 },
+      { header: "Business Category", key: "businessCategory", width: 20 },
       { header: "Country", key: "country", width: 14 },
+      { header: "WhatsApp Number", key: "whatsAppNumber", width: 20 },
+      { header: "Phone", key: "phone", width: 18 },
       { header: "Address", key: "address", width: 30 },
       { header: "Is Member", key: "isMember", width: 12 },
       { header: "Membership End Date", key: "membershipEndDate", width: 20 },
     ];
     sheet.getRow(1).font = { bold: true };
     sheet.addRow({
-      name: "Alex Vendor",
-      shopName: "Alex's Crafts",
-      businessCategory: "Handmade",
+      firstName: "Alex",
+      lastName: "Kumar",
       email: "alex@vendor.com",
+      businessEmail: "info@alexcrafts.com",
+      shopName: "Alex Crafts Pvt Ltd",
+      businessCategory: "Handmade",
+      country: "IN",
       whatsAppNumber: "+919876543210",
       phone: "+919876543210",
-      country: "IN",
       address: "MG Road, Bangalore",
       isMember: "Yes",
       membershipEndDate: "2026-12-31",
@@ -651,19 +819,35 @@ Return ONLY this JSON shape, nothing else:
     const info = wb.addWorksheet("Instructions");
     info.addRow(["Bulk Exhibitor Import Template"]);
     info.addRow([]);
-    info.addRow(["• Each row creates one Exhibitor (vendor)."]);
-    info.addRow(["• Required: Name + (WhatsApp Number OR Email)."]);
+    info.addRow(["• Each new row creates one Exhibitor (vendor)."]);
+    info.addRow([
+      "• Columns mirror the 'Add Exhibitor' form: First/Last Name, Email,",
+    ]);
+    info.addRow([
+      "  Business Email, Shop Name, Business Category, Country, WhatsApp,",
+    ]);
+    info.addRow(["  Phone, Address, Is Member, Membership End Date."]);
+    info.addRow(["• Required: First Name + (WhatsApp Number OR Email)."]);
     info.addRow([
       "• Column headers can be renamed — AI will map common variants.",
     ]);
     info.addRow([
-      "• Duplicates (matched by WhatsApp or email under this organizer) are skipped.",
+      "• Update existing exhibitors: export the current list, edit the cells,",
+    ]);
+    info.addRow([
+      "  and re-upload. Rows are matched by the ID column (or by WhatsApp /",
+    ]);
+    info.addRow([
+      "  email when ID is blank) and the matching record is updated in place.",
+    ]);
+    info.addRow([
+      "• Only the cells you fill are written — blank cells never erase data.",
     ]);
     info.addRow([
       "• Is Member: Yes / No / true / false. Leave blank for non-members.",
     ]);
     info.addRow([
-      "• Membership End Date: YYYY-MM-DD. Only used when Is Member is Yes.",
+      "• Membership End Date: YYYY-MM-DD. The membership validity period.",
     ]);
     info.getRow(1).font = { bold: true, size: 14 };
     const ab = await wb.xlsx.writeBuffer();

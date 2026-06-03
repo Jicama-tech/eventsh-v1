@@ -306,6 +306,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [whatsappVerified, setWhatsappVerified] = useState(false);
   const [sendingWhatsappOtp, setSendingWhatsappOtp] = useState(false);
   const [verifyingWhatsappOtp, setVerifyingWhatsappOtp] = useState(false);
+  // Google sign-in (vendor lookup by email) inside the Rent a Stall dialog.
+  const [stallGoogleLoading, setStallGoogleLoading] = useState(false);
+  // When a Google-authenticated vendor is an active member, we pause on a
+  // membership card before continuing to the rent form. `pendingVendorData`
+  // holds the looked-up vendor so the Continue button can resume the flow.
+  const [stallMembership, setStallMembership] = useState<{
+    planName: string;
+    endDate?: string;
+    color?: string;
+  } | null>(null);
 
   // Rent Form States
   const [showRentForm, setShowRentForm] = useState(false);
@@ -1006,6 +1016,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     setShopkeeperDetails(initialForm);
     setRequiresSelection(false); // <--- ADD THIS
     setSelectedDialogShopId("");
+    setStallGoogleLoading(false);
+    setStallMembership(null);
   };
 
   // Send WhatsApp OTP
@@ -1131,6 +1143,62 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }
   };
 
+  // Prefill the rent form from a vendor record (shared by the WhatsApp and
+  // Google sign-in lookups) and route the user to the right next screen.
+  // `fallbackWhatsApp` keeps the verified WhatsApp number when the vendor
+  // doc itself doesn't carry one (e.g. matched only by email).
+  const applyVendorRecord = async (shopData: any, fallbackWhatsApp?: string) => {
+    setShopkeeperExists(true);
+    setShopkeeperId(shopData._id);
+    // Denormalised member flag — set by the memberships pipeline
+    // whenever an active enrollment exists for this vendor. Drives
+    // the eventfront's Member-price tier the instant the vendor
+    // logs in, before the per-organizer email lookup completes.
+    if (shopData.isMember) {
+      setActiveMembership((prev) => prev || { planName: undefined });
+    }
+    setShopkeeperDetails({
+      shopName: shopData.businessName || shopData.shopName || "",
+      name: shopData.name || "",
+      email: shopData.email || shopData.businessEmail || "",
+      businessEmail: shopData.businessEmail || shopData.email || "",
+      phone: shopData.phoneNumber || shopData.phone || "",
+      address: shopData.address || "",
+      description:
+        shopData.productDescription || shopData.businessDescription || "",
+      whatsappNumber:
+        shopData.whatsAppNumber ||
+        shopData.whatsappNumber ||
+        fallbackWhatsApp ||
+        "",
+      taxPercentage: shopData.taxPercentage || 0,
+      businessCategory:
+        shopData.businessCategory || shopData.businessType || "",
+      noOfOperators: shopData.noOfOperators || 0,
+      brandName: shopData.brandName || "",
+      nameOfApplicant: shopData.nameOfApplicant || "",
+      businessOwnerNationality: shopData.businessOwnerNationality || "",
+      productDescription: shopData.productDescription || "",
+      instagramLink: shopData.instagramLink || "",
+      faceBookLink: shopData.faceBookLink || "",
+      registrationNumber: shopData.registrationNumber || "",
+      residency: shopData.residency || "",
+      refundPaymentDescription: shopData.refundPaymentDescription || "",
+      preferredTemplateId: "",
+      preferredTemplateName: "",
+    });
+    setEmailVerified(true); // Assume verified if exists
+
+    toast({
+      duration: 5000,
+      title: "Shopkeeper Found",
+      description: "Your details have been loaded",
+    });
+
+    // Fetch existing request. fetchExistingRequest will handle opening the right dialog.
+    await fetchExistingRequest(shopData._id, eventData?._id);
+  };
+
   // Check if shopkeeper exists
   // Check if shopkeeper exists
   const checkShopkeeperExists = async (
@@ -1152,51 +1220,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
         if (shopData && (shopData.name || shopData.businessName)) {
           // Vendor exists - prefill form with saved details
-          setShopkeeperExists(true);
-          setShopkeeperId(shopData._id);
-          // Denormalised member flag — set by the memberships pipeline
-          // whenever an active enrollment exists for this vendor. Drives
-          // the eventfront's Member-price tier the instant the vendor
-          // logs in, before the per-organizer email lookup completes.
-          if (shopData.isMember) {
-            setActiveMembership((prev) => prev || { planName: undefined });
-          }
-          setShopkeeperDetails({
-            shopName: shopData.businessName || shopData.shopName || "",
-            name: shopData.name || "",
-            email: shopData.email || "",
-            businessEmail: shopData.businessEmail || shopData.email || "",
-            phone: shopData.phoneNumber || shopData.phone || "",
-            address: shopData.address || "",
-            description:
-              shopData.productDescription || shopData.businessDescription || "",
-            whatsappNumber: whatsAppNum,
-            taxPercentage: shopData.taxPercentage || 0,
-            businessCategory:
-              shopData.businessCategory || shopData.businessType || "",
-            noOfOperators: shopData.noOfOperators || 0,
-            brandName: shopData.brandName || "",
-            nameOfApplicant: shopData.nameOfApplicant || "",
-            businessOwnerNationality: shopData.businessOwnerNationality || "",
-            productDescription: shopData.productDescription || "",
-            instagramLink: shopData.instagramLink || "",
-            faceBookLink: shopData.faceBookLink || "",
-            registrationNumber: shopData.registrationNumber || "",
-            residency: shopData.residency || "",
-            refundPaymentDescription: shopData.refundPaymentDescription || "",
-            preferredTemplateId: "",
-            preferredTemplateName: "",
-          });
-          setEmailVerified(true); // Assume verified if exists
-
-          toast({
-            duration: 5000,
-            title: "Shopkeeper Found",
-            description: "Your details have been loaded",
-          });
-
-          // Fetch existing request. fetchExistingRequest will handle opening the right dialog.
-          await fetchExistingRequest(shopData._id, eventData?._id);
+          await applyVendorRecord(shopData, whatsAppNum);
           return; // <--- CRITICAL FIX: Stop execution here so the rent form doesn't blindly open
         }
       }
@@ -1214,6 +1238,189 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       setShowRentForm(true);
     }
   };
+
+  // --- Google sign-in path for Rent a Stall ---
+  // Mirrors the "Become a member" popup flow: open the backend-mediated
+  // Google OAuth endpoint in a popup, receive the verified email via
+  // postMessage / localStorage handshake, then look the email up in the
+  // vendors collection (by email OR businessEmail). If a vendor is found
+  // we prefill exactly like the WhatsApp path; otherwise we open a blank
+  // rent form with the email pre-filled so they can register.
+  const popupRef = useRef<Window | null>(null);
+
+  const handleGoogleStallLogin = () => {
+    const url = `${apiURL}/auth/google-member`;
+    const w = 480;
+    const h = 600;
+    const left =
+      typeof window !== "undefined"
+        ? window.screenX + (window.outerWidth - w) / 2
+        : 0;
+    const top =
+      typeof window !== "undefined"
+        ? window.screenY + (window.outerHeight - h) / 2
+        : 0;
+    const popup = window.open(
+      url,
+      "eventsh-google-member",
+      `width=${w},height=${h},left=${left},top=${top}`,
+    );
+    if (!popup) {
+      toast({
+        duration: 5000,
+        title: "Popup blocked",
+        description: "Allow pop-ups for this site and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    popupRef.current = popup;
+    setStallGoogleLoading(true);
+  };
+
+  // Look up a returning vendor by the Google email and continue the flow.
+  const lookupVendorByEmail = async (email: string) => {
+    const clean = String(email || "").trim().toLowerCase();
+    if (!clean) {
+      setStallGoogleLoading(false);
+      toast({
+        duration: 5000,
+        title: "Sign-in failed",
+        description: "Couldn't read your Google email.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const res = await fetch(
+        `${apiURL}/stalls/vendor/by-email/${encodeURIComponent(clean)}`,
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const shopData = data.data || data;
+        if (shopData && (shopData.name || shopData.businessName)) {
+          // Active member → load the membership details so the rent form can
+          // show a small card. We don't pause here; the registration form
+          // opens with the card on top.
+          if (shopData.isMember) {
+            let planName = "Member";
+            let endDate: string | undefined = shopData.membershipEndDate;
+            let color: string | undefined;
+            try {
+              const orgId = eventData?.organizer?._id;
+              if (orgId) {
+                const mRes = await fetch(
+                  `${apiURL}/exhibitor-memberships/by-email/${encodeURIComponent(
+                    clean,
+                  )}?organizerId=${orgId}`,
+                );
+                const txt = await mRes.text();
+                const m = txt ? JSON.parse(txt) : null;
+                if (m) {
+                  planName = m.planId?.name || planName;
+                  endDate = m.endDate || endDate;
+                  color = m.planId?.color;
+                }
+              }
+            } catch {
+              // non-fatal — fall back to vendor's denormalised fields
+            }
+            setStallMembership({ planName, endDate, color });
+          } else {
+            setStallMembership(null);
+          }
+          setStallGoogleLoading(false);
+          await applyVendorRecord(shopData);
+          return;
+        }
+      }
+      // No vendor on this email — open a fresh form pre-filled with it.
+      setStallGoogleLoading(false);
+      setShopkeeperExists(false);
+      setShopkeeperDetails({
+        ...initialForm,
+        email: clean,
+        businessEmail: clean,
+      });
+      setShowWhatsAppDialog(false);
+      setShowRentForm(true);
+      toast({
+        duration: 5000,
+        title: "Let's get you set up",
+        description: "No saved profile found — please fill in your details.",
+      });
+    } catch (error) {
+      console.error("Vendor email lookup failed:", error);
+      setStallGoogleLoading(false);
+      setShopkeeperExists(false);
+      setShopkeeperDetails({
+        ...initialForm,
+        email: clean,
+        businessEmail: clean,
+      });
+      setShowWhatsAppDialog(false);
+      setShowRentForm(true);
+    }
+  };
+
+  // Listen for the Google profile while the stall dialog is open and a
+  // sign-in is in flight. Two delivery channels (postMessage + polled
+  // localStorage handshake) mirror EventfrontMemberDialog so the result
+  // lands even on browsers that sever window.opener on cross-origin
+  // popup navigations.
+  useEffect(() => {
+    if (!showWhatsAppDialog || !stallGoogleLoading) return;
+    const KEY = "eventsh:google-member";
+    const prev = (() => {
+      try {
+        return localStorage.getItem(KEY) || "";
+      } catch {
+        return "";
+      }
+    })();
+    let handled = false;
+    let sawPopupClosed = false;
+
+    const onMessage = (ev: MessageEvent) => {
+      const data = ev?.data;
+      if (!data || data.kind !== "eventsh:google-member" || handled) return;
+      handled = true;
+      lookupVendorByEmail(data.email || "");
+    };
+    window.addEventListener("message", onMessage);
+
+    const t = window.setInterval(() => {
+      try {
+        const raw = localStorage.getItem(KEY);
+        if (raw && raw !== prev && !handled) {
+          handled = true;
+          window.clearInterval(t);
+          localStorage.removeItem(KEY);
+          const parsed = JSON.parse(raw);
+          lookupVendorByEmail(parsed?.email || "");
+          return;
+        }
+      } catch {
+        // ignore — private mode, quota, etc.
+      }
+      // Abandon only after the popup has been closed for more than one
+      // tick, so a fast close() doesn't race the handshake.
+      if (popupRef.current && popupRef.current.closed && !handled) {
+        if (sawPopupClosed) {
+          window.clearInterval(t);
+          setStallGoogleLoading(false);
+        } else {
+          sawPopupClosed = true;
+        }
+      }
+    }, 500);
+
+    return () => {
+      window.removeEventListener("message", onMessage);
+      window.clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showWhatsAppDialog, stallGoogleLoading]);
 
   const allMandatoryTermsAccepted = () => {
     const terms = eventData?.termsAndConditionsforStalls || [];
@@ -2509,6 +2716,62 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       return;
     }
 
+    // ---- Mandatory-field validation ----
+    // Selects, file uploads, the phone input and textareas can't rely on the
+    // native `required` attribute inside this dialog, so we validate every
+    // required field explicitly and surface the complete list of what's
+    // missing in one message.
+    const d = shopkeeperDetails;
+    const missing: string[] = [];
+    const blank = (v: any) => !String(v ?? "").trim();
+    const req = (isMissing: boolean, label: string) => {
+      if (isMissing) missing.push(label);
+    };
+
+    req(blank(d.nameOfApplicant), "Name of Applicant");
+    req(blank(d.name), "Owner Name");
+    req(blank(d.businessOwnerNationality), "Owner Nationality");
+    req(blank(d.residency), "Residency");
+    req(blank(d.brandName), "Brand Name");
+    req(blank(d.shopName), "Registered Business Name");
+    if (!shopkeeperExists) req(blank(d.businessEmail), "Business Email");
+    req(blank(d.email), "Primary Email");
+    req(blank(d.whatsappNumber), "WhatsApp Number");
+    req(blank(d.phone), "Phone Number");
+    req(blank(d.businessCategory), "Business Category");
+    req(!d.noOfOperators || Number(d.noOfOperators) < 1, "No. of Operators");
+    req(blank(d.registrationNumber), "Registration Number");
+    req(blank(d.description), "Business, Products & Brand Description");
+    req(blank(d.refundPaymentDescription), "Refund Payment Description");
+    req(blank(d.address), "Full Address");
+
+    // Document uploads + at least one product image are required for new
+    // registrations. Returning vendors already have these stored on their
+    // profile, so we don't force a re-upload (the server reuses them).
+    if (!shopkeeperExists) {
+      req(!regImageFile, "Business Registration Document");
+      req(!logoFile, "Company Logo");
+      req(productFiles.length < 1, "at least 1 Product Image");
+    }
+
+    // Preferred space type — only required when the event exposes sellable
+    // space templates (same condition that renders the picker).
+    const sellableTemplates =
+      eventData?.tableTemplates?.filter((t: any) => t.forSale !== false) || [];
+    if (sellableTemplates.length > 0) {
+      req(blank(d.preferredTemplateId), "Preferred Space Type");
+    }
+
+    if (missing.length) {
+      toast({
+        duration: 6000,
+        title: "Missing required fields",
+        description: `Please complete: ${missing.join(", ")}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -2599,6 +2862,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       setLogoPreview("");
       setProductFiles([]);
       setProductPreviews([]);
+      setStallMembership(null);
     } catch (error: any) {
       toast({
         duration: 5000,
@@ -2617,6 +2881,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     setEmailVerified(false);
     setOtpSent(false);
     setOtp("");
+    setStallMembership(null);
   };
 
   const handleShare = async () => {
@@ -3235,10 +3500,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       </div>
 
       {/* ── Hero Banner ── */}
-      <div
-        className="relative w-full h-full overflow-hidden"
-        // style={{ height: "clamp(240px, 40vw, 550px)" }}
-      >
+      {/* Full width, natural height: the image fills the entire width
+          (width is never affected) and its height follows the image's own
+          aspect ratio, so the whole image is shown — nothing cropped on
+          any side. */}
+      <div className="relative w-full overflow-hidden">
         {image ? (
           <img
             src={
@@ -3247,13 +3513,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 : image
             }
             alt={title}
-            className="w-full h-full object-cover"
+            className="block w-full h-auto"
             onError={(e) => {
               e.currentTarget.style.display = "none";
             }}
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-700 flex items-center justify-center">
+          <div
+            className="w-full bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-700 flex items-center justify-center"
+            style={{ height: "clamp(220px, 34vw, 440px)" }}
+          >
             <div className="text-center text-white/90">
               <div className="text-5xl mb-3">🎪</div>
               <p className="text-xl font-bold">{title}</p>
@@ -3593,81 +3862,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               </section>
             )}
 
-            {/* History — Instagram reels marquee, shown directly below the
-                Event Gallery. Only rendered when at least one reel is set. */}
-            {hasReels &&
-              (() => {
-                const extractReelId = (url: string): string | null => {
-                  const reel = url.match(/\/reel(?:s)?\/([A-Za-z0-9_-]+)/);
-                  if (reel) return reel[1];
-                  const post = url.match(/\/p\/([A-Za-z0-9_-]+)/);
-                  if (post) return post[1];
-                  const tv = url.match(/\/tv\/([A-Za-z0-9_-]+)/);
-                  if (tv) return tv[1];
-                  return null;
-                };
-                const toEmbedSrc = (url: string): string | null => {
-                  const id = extractReelId(url);
-                  if (!id) return null;
-                  return `https://www.instagram.com/p/${id}/embed/?cr=1&v=14&rd=https%3A%2F%2Fwww.instagram.com`;
-                };
-                const validEmbeds = cleanedReelLinks
-                  .map((u) => ({ url: u, src: toEmbedSrc(u) }))
-                  .filter((e): e is { url: string; src: string } => !!e.src);
-                if (validEmbeds.length === 0) return null;
-                const repeatCount = Math.max(
-                  2,
-                  Math.ceil(12 / validEmbeds.length),
-                );
-                const marqueeItems = Array.from(
-                  { length: repeatCount },
-                  () => validEmbeds,
-                ).flat();
-                return (
-                  <section>
-                    <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
-                      History
-                    </h2>
-                    <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
-                      <div ref={reelMarqueeRef} className="overflow-hidden">
-                        <div className="flex gap-4 w-max anim-reel-marquee">
-                          {marqueeItems.map((item, i) => (
-                            <div
-                              key={`reel-${i}`}
-                              className="flex-shrink-0 rounded-2xl overflow-hidden border border-gray-200 bg-white shadow-sm"
-                              style={{ width: "220px" }}
-                            >
-                              <div
-                                className="overflow-hidden relative"
-                                style={{ height: "280px" }}
-                              >
-                                <iframe
-                                  src={item.src}
-                                  title={`Instagram reel ${i}`}
-                                  loading="lazy"
-                                  allow="encrypted-media"
-                                  allowFullScreen
-                                  scrolling="no"
-                                  style={{
-                                    width: "100%",
-                                    height: "820px",
-                                    border: 0,
-                                    display: "block",
-                                    marginTop: "-60px",
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <p className="text-[11px] text-gray-400 mt-3 text-center">
-                        Hover to pause
-                      </p>
-                    </div>
-                  </section>
-                );
-              })()}
+            {/* History (Instagram reels) moved out of this column — it now
+                renders as a full-width section below the main content +
+                sidebar row. See the "History — full-width reel marquee"
+                block further down. */}
 
             {/* Speaker Carousel */}
             {eventData?.speakers && eventData.speakers.length > 0 && (
@@ -4455,6 +4653,82 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             </div>
           </div>
         </div>
+
+        {/* History — full-width reel marquee. Sits below the main content +
+            sidebar row (so it's a little lower on the page) and spans the
+            ENTIRE content width instead of being squeezed into the left
+            column. Only rendered when at least one valid reel is set. */}
+        {hasReels &&
+          (() => {
+            const extractReelId = (url: string): string | null => {
+              const reel = url.match(/\/reel(?:s)?\/([A-Za-z0-9_-]+)/);
+              if (reel) return reel[1];
+              const post = url.match(/\/p\/([A-Za-z0-9_-]+)/);
+              if (post) return post[1];
+              const tv = url.match(/\/tv\/([A-Za-z0-9_-]+)/);
+              if (tv) return tv[1];
+              return null;
+            };
+            const toEmbedSrc = (url: string): string | null => {
+              const id = extractReelId(url);
+              if (!id) return null;
+              return `https://www.instagram.com/p/${id}/embed/?cr=1&v=14&rd=https%3A%2F%2Fwww.instagram.com`;
+            };
+            const validEmbeds = cleanedReelLinks
+              .map((u) => ({ url: u, src: toEmbedSrc(u) }))
+              .filter((e): e is { url: string; src: string } => !!e.src);
+            if (validEmbeds.length === 0) return null;
+            const repeatCount = Math.max(2, Math.ceil(12 / validEmbeds.length));
+            const marqueeItems = Array.from(
+              { length: repeatCount },
+              () => validEmbeds,
+            ).flat();
+            return (
+              <section className="mt-10">
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
+                  History
+                </h2>
+                <div className="w-full rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
+                  <div ref={reelMarqueeRef} className="overflow-hidden">
+                    <div className="flex gap-4 w-max anim-reel-marquee">
+                      {marqueeItems.map((item, i) => (
+                        <div
+                          key={`reel-${i}`}
+                          className="flex-shrink-0 rounded-2xl overflow-hidden border border-gray-200 bg-white shadow-sm"
+                          style={{ width: "240px" }}
+                        >
+                          <div
+                            className="overflow-hidden relative"
+                            style={{ height: "300px" }}
+                          >
+                            <iframe
+                              src={item.src}
+                              title={`Instagram reel ${i}`}
+                              loading="lazy"
+                              allow="encrypted-media"
+                              allowFullScreen
+                              scrolling="no"
+                              style={{
+                                width: "100%",
+                                height: "880px",
+                                border: 0,
+                                display: "block",
+                                marginTop: "-64px",
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-3 text-center">
+                    Hover to pause
+                  </p>
+                </div>
+              </section>
+            );
+          })()}
+
         <Separator className="mt-5 mb-5" />
         {/* Tabs */}
         <EventStatistics
@@ -5151,7 +5425,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     transform: `rotate(${table.rotation || 0}deg)`,
                                     transformOrigin: "center center",
                                     zIndex: 5,
-                                    // Light tint of the template colour with a
+                                    // Darker tint of the template colour with a
                                     // solid coloured border; bold dark label so
                                     // it stays clearly readable. Booked stays
                                     // uniform (we don't reveal availability).
@@ -5159,7 +5433,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                       ? {
                                           backgroundColor:
                                             ((table as any).color || "#f59e0b") +
-                                            "33",
+                                            "59",
                                           borderColor:
                                             (table as any).color || "#f59e0b",
                                           backgroundImage:
@@ -5168,7 +5442,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                       : {
                                           backgroundColor:
                                             ((table as any).color || "#22c55e") +
-                                            "40",
+                                            "80",
                                           borderColor:
                                             (table as any).color || "#22c55e",
                                         }),
@@ -7600,141 +7874,35 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center space-x-2">
-              {requiresSelection ? (
-                <Store className="h-6 w-6 text-blue-600" />
-              ) : (
-                <FaWhatsapp className="h-6 w-6 text-green-600" />
-              )}
-              <span>
-                {requiresSelection ? "Select Store" : "Verify WhatsApp Number"}
-              </span>
+              <Store className="h-6 w-6 text-blue-600" />
+              <span>Sign in to Rent a Stall</span>
             </DialogTitle>
             <DialogDescription>
-              {requiresSelection
-                ? "Multiple stores found linked to this number. Please select one."
-                : "Enter your WhatsApp number to continue with stall rental"}
+              Sign in with Google to continue with stall rental
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {requiresSelection ? (
-              // MULTI-SHOP SELECTION UI
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Select Store to Manage</Label>
-                  <Select
-                    onValueChange={setSelectedDialogShopId}
-                    value={selectedDialogShopId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose a shop..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {shops.map((shop) => (
-                        <SelectItem
-                          key={shop.id}
-                          value={shop.id}
-                          disabled={!shop.approved}
-                        >
-                          <div className="flex items-center justify-between w-full gap-2">
-                            <span
-                              className={
-                                !shop.approved ? "text-muted-foreground" : ""
-                              }
-                            >
-                              {shop.shopName}
-                            </span>
-                            {!shop.approved && (
-                              <span className="text-[10px] bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full whitespace-nowrap">
-                                Pending Approval
-                              </span>
-                            )}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button
-                  onClick={handleVerifyWhatsAppOtp}
-                  disabled={verifyingWhatsappOtp || !selectedDialogShopId}
-                  className="w-full"
-                >
-                  {verifyingWhatsappOtp ? "Confirming..." : "Confirm Selection"}
-                </Button>
+            {stallGoogleLoading ? (
+              // GOOGLE SIGN-IN IN PROGRESS
+              <div className="py-6 text-center space-y-2">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" />
+                <p className="text-sm text-muted-foreground">Looking you up…</p>
               </div>
-            ) : !whatsappOtpSent ? (
-              // NUMBER INPUT UI
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="whatsapp">WhatsApp Number</Label>
-                  <PhoneInput
-                    value={whatsappNumber}
-                    onChange={setWhatsappNumber}
-                    disabled={whatsappOtpSent}
-                    enableSearch={true}
-                    countryCodeEditable={false}
-                    preferredCountries={["us", "in", "gb", "ca"]}
-                    inputProps={{
-                      name: "whatsapp",
-                      required: true,
-                      autoFocus: false,
-                    }}
-                    inputStyle={{
-                      width: "100%",
-                      height: "44px",
-                      fontSize: "14px",
-                      paddingLeft: "48px",
-                      borderRadius: "6px",
-                      border: "1px solid #e2e8f0",
-                    }}
-                    buttonStyle={{
-                      borderRadius: "6px 0 0 6px",
-                      border: "1px solid #e2e8f0",
-                      borderRight: "none",
-                    }}
-                    containerStyle={{
-                      width: "100%",
-                    }}
-                  />
-                </div>
-                <Button
-                  onClick={handleSendWhatsAppOtp}
-                  disabled={sendingWhatsappOtp || !whatsappNumber}
-                  className="w-full"
-                >
-                  {sendingWhatsappOtp ? "Sending..." : "Send OTP"}
-                </Button>
-              </>
             ) : (
-              // OTP INPUT UI
+              // GOOGLE SIGN-IN
               <>
-                <div className="space-y-2">
-                  <Label htmlFor="whatsapp-otp">Enter OTP</Label>
-                  <Input
-                    id="whatsapp-otp"
-                    type="text"
-                    placeholder="Enter 6-digit OTP"
-                    value={whatsappOtp}
-                    onChange={(e) => setWhatsappOtp(e.target.value)}
-                    maxLength={6}
-                  />
-                </div>
                 <Button
-                  onClick={handleVerifyWhatsAppOtp}
-                  disabled={verifyingWhatsappOtp || !whatsappOtp}
+                  variant="outline"
+                  onClick={handleGoogleStallLogin}
                   className="w-full"
                 >
-                  {verifyingWhatsappOtp ? "Verifying..." : "Verify OTP"}
+                  <Mail className="h-4 w-4 mr-2" />
+                  Continue with Google
                 </Button>
-                <Button
-                  variant="ghost"
-                  onClick={handleSendWhatsAppOtp}
-                  disabled={sendingWhatsappOtp}
-                  className="w-full"
-                >
-                  Resend OTP
-                </Button>
+                <p className="text-[11px] text-muted-foreground text-center">
+                  We use your email to find your saved vendor profile.
+                </p>
               </>
             )}
           </div>
@@ -9649,6 +9817,49 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 : "Fill in your details to rent a stall at this event"}
             </p>
 
+            {/* Active membership card — shown when the signed-in vendor is a
+                member, so they see their plan + validity right on the form. */}
+            {stallMembership && (
+              <div
+                className="rounded-xl border-2 p-3 mb-4 flex items-center gap-3"
+                style={{
+                  borderColor: (stallMembership.color || "#10b981") + "55",
+                  background: (stallMembership.color || "#10b981") + "08",
+                }}
+              >
+                <div
+                  className="h-9 w-9 rounded-full flex items-center justify-center shrink-0"
+                  style={{
+                    background: (stallMembership.color || "#10b981") + "1a",
+                  }}
+                >
+                  <Star
+                    className="h-5 w-5"
+                    style={{ color: stallMembership.color || "#10b981" }}
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="font-bold text-sm truncate"
+                      style={{ color: stallMembership.color || "#10b981" }}
+                    >
+                      {stallMembership.planName}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700">
+                      <CheckCircle2 className="h-3 w-3" /> Active
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-gray-500">
+                    Valid till{" "}
+                    {stallMembership.endDate
+                      ? new Date(stallMembership.endDate).toLocaleDateString()
+                      : "—"}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleRentFormSubmit} className="space-y-4">
               {/* --- SECTION: PERSONAL & BUSINESS DETAILS --- */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -9744,12 +9955,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Registered Business Name (If applicable)</Label>
+                  <Label>
+                    Registered Business Name{" "}
+                    <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     name="shopName"
                     value={shopkeeperDetails.shopName}
                     onChange={handleRentFormChange}
                     placeholder="Business Name"
+                    required
                   />
                 </div>
               </div>
@@ -9852,7 +10067,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Phone Number</Label>
+                  <Label>
+                    Phone Number <span className="text-red-500">*</span>
+                  </Label>
                   <PhoneInput
                     value={shopkeeperDetails.phone}
                     onChange={(phone) =>
@@ -9947,7 +10164,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Reg Image */}
                   <div className="space-y-2">
-                    <Label>Business Registration Document</Label>
+                    <Label>
+                      Business Registration Document{" "}
+                      {!shopkeeperExists && (
+                        <span className="text-red-500">*</span>
+                      )}
+                    </Label>
                     <div className="flex items-center gap-4">
                       <Button
                         type="button"
@@ -9977,7 +10199,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
                   {/* Logo */}
                   <div className="space-y-2">
-                    <Label>Company Logo</Label>
+                    <Label>
+                      Company Logo{" "}
+                      {!shopkeeperExists && (
+                        <span className="text-red-500">*</span>
+                      )}
+                    </Label>
                     <div className="flex items-center gap-4">
                       <Button
                         type="button"
@@ -10008,7 +10235,17 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
                 {/* Product Images */}
                 <div className="space-y-2 pt-4 border-t border-gray-200">
-                  <Label>Product Images ({productFiles.length}/5)</Label>
+                  <Label>
+                    Product Images ({productFiles.length}/5){" "}
+                    {!shopkeeperExists && (
+                      <span className="text-red-500">*</span>
+                    )}
+                    {!shopkeeperExists && (
+                      <span className="ml-1 text-[11px] font-normal text-gray-400">
+                        (at least 1 required)
+                      </span>
+                    )}
+                  </Label>
                   <div className="flex items-center gap-4 flex-wrap">
                     <Button
                       type="button"
@@ -10051,7 +10288,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
               {/* Description */}
               <div className="space-y-2">
-                <Label>Business, Products & Brand Description</Label>
+                <Label>
+                  Business, Products & Brand Description{" "}
+                  <span className="text-red-500">*</span>
+                </Label>
                 <Textarea
                   name="description"
                   value={shopkeeperDetails.description}
@@ -10062,7 +10302,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               </div>
 
               <div className="space-y-2">
-                <Label>Refund Payment Description</Label>
+                <Label>
+                  Refund Payment Description{" "}
+                  <span className="text-red-500">*</span>
+                </Label>
                 <Textarea
                   name="refundPaymentDescription"
                   value={shopkeeperDetails.refundPaymentDescription}
@@ -10073,7 +10316,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               </div>
 
               <div className="space-y-2">
-                <Label>Full Address</Label>
+                <Label>
+                  Full Address <span className="text-red-500">*</span>
+                </Label>
                 <Textarea
                   name="address"
                   value={shopkeeperDetails.address}

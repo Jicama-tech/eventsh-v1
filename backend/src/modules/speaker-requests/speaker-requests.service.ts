@@ -348,6 +348,18 @@ export class SpeakerRequestsService {
           request.phone,
           pdfPath,
           `🎤 Your speaker pass for ${event.title}`,
+          "speaker-pass.pdf",
+          {
+            to: request.email,
+            subject: `Your speaker pass for ${event.title}`,
+            heading: "Your Speaker Pass is Ready!",
+            message:
+              `Speaker: ${request.name}\n` +
+              `Event: ${event.title}\n` +
+              `Date: ${eventDate}\n` +
+              `Venue: ${event.location || "TBD"}\n\n` +
+              `Your speaker pass PDF is attached. The QR code can ONLY be scanned using the official EventSH app.`,
+          },
         );
       } catch (err) {
         this.logger.warn("Could not send PDF via WhatsApp:", err);

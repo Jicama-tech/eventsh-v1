@@ -161,6 +161,16 @@ export class StallsController {
   }
 
   /**
+   * Lookup vendor by email (for returning vendors signing in with Google).
+   * Matches against either the personal email or the business email.
+   * GET /stalls/vendor/by-email/:email
+   */
+  @Get("vendor/by-email/:email")
+  async findVendorByEmail(@Param("email") email: string) {
+    return await this.stallsService.findVendorByEmail(email);
+  }
+
+  /**
    * Check if vendor has existing request for event
    * GET /stalls/check-request/:eventId/:vendorId
    */

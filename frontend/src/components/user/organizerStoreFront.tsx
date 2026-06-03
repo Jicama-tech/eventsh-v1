@@ -447,7 +447,8 @@ export function OrganizerStorefront({
         }
 
         const response = await fetch(
-          `${apiURL}/events/organizer/${organizerId}`,
+          // publicOnly hides Private events from this public storefront.
+          `${apiURL}/events/organizer/${organizerId}?publicOnly=true`,
           {
             method: "GET",
           },

@@ -10,6 +10,8 @@ import { EventSchema } from "../events/schemas/event.schema";
 import { OrganizerSchema } from "../organizers/schemas/organizer.schema";
 import { StallPaymentSchedulerService } from "./stall-payment-scheduler.service";
 import { FeedbackModule } from "../feedback/feedback.module";
+import { MailModule } from "../roles/mail.module";
+import { Operator, OperatorSchema } from "../operators/entities/operator.entity";
 
 @Module({
   imports: [
@@ -18,10 +20,14 @@ import { FeedbackModule } from "../feedback/feedback.module";
       { name: Vendor.name, schema: VendorSchema },
       { name: "Event", schema: EventSchema },
       { name: "Organizer", schema: OrganizerSchema },
+      // Operators of the organizer — emailed when a new stall request lands
+      // so any of them can approve/reject quickly.
+      { name: Operator.name, schema: OperatorSchema },
     ]),
     OtpModule,
     CouponModule,
     FeedbackModule,
+    MailModule,
   ],
   controllers: [StallsController],
   providers: [StallsService, StallPaymentSchedulerService],

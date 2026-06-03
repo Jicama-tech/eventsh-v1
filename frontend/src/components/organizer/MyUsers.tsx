@@ -290,6 +290,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
     kind: "visitors" | "exhibitors";
     totalRows: number;
     created: number;
+    updated?: number;
     skipped: number;
     errors: number;
     skippedRows?: { row: number; reason: string }[];
@@ -326,7 +327,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
       setBulkResult({ kind, ...json });
       toast({
         title: `${kind === "visitors" ? "Visitors" : "Exhibitors"} imported`,
-        description: `${json.created} created · ${json.skipped} skipped · ${json.errors} errors`,
+        description: `${json.created} created · ${json.updated || 0} updated · ${json.skipped} skipped · ${json.errors} errors`,
       });
       // Refresh underlying lists.
       try {
@@ -1546,16 +1547,22 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               </DialogTitle>
               <DialogDescription>
                 {bulkResult.totalRows} rows processed. AI mapped your columns and we
-                created the records below.
+                created or updated the records below.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="grid grid-cols-3 gap-3 py-2">
+            <div className="grid grid-cols-4 gap-3 py-2">
               <div className="rounded-md border p-3 text-center">
                 <div className="text-2xl font-semibold text-emerald-600">
                   {bulkResult.created}
                 </div>
                 <div className="text-xs text-muted-foreground">Created</div>
+              </div>
+              <div className="rounded-md border p-3 text-center">
+                <div className="text-2xl font-semibold text-blue-600">
+                  {bulkResult.updated || 0}
+                </div>
+                <div className="text-xs text-muted-foreground">Updated</div>
               </div>
               <div className="rounded-md border p-3 text-center">
                 <div className="text-2xl font-semibold text-amber-600">

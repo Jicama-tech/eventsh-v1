@@ -106,7 +106,7 @@ const VenuePreview = forwardRef<HTMLDivElement, Props>(function VenuePreview(
                 height: h,
                 transform: `rotate(${t.rotation || 0}deg)`,
                 transformOrigin: "center center",
-                backgroundColor: color + (notForSale ? "33" : "40"),
+                backgroundColor: color + (notForSale ? "59" : "80"),
                 border: `1px solid ${color}`,
                 borderRadius:
                   t.type === "Round" ? "50%" : t.type === "Corner" ? 6 : 3,

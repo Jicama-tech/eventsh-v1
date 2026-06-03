@@ -983,27 +983,14 @@ const TablePaymentPage = () => {
                   )}
 
                   <div className="mt-6">
-                    {AmountToBePaid > 0 ? (
-                      paymentMode === "qr" && !showQR ? (
-                        <Button
-                          className="w-full py-6 text-lg font-bold bg-blue-600 hover:bg-blue-700"
-                          onClick={() => setShowQR(true)}
-                        >
-                          Generate QR for {formatPrice(AmountToBePaid)}
-                        </Button>
-                      ) : null
-                    ) : (
-                      <div className="p-4 bg-green-50 border-2 border-green-200 rounded-xl text-center">
-                        <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-2" />
-                        <h3 className="font-bold text-green-800 text-lg">
-                          Complimentary Entry
-                        </h3>
-                        <p className="text-green-700 text-sm">
-                          A 100% discount has been applied. No payment is
-                          required for this booking.
-                        </p>
-                      </div>
-                    )}
+                    {AmountToBePaid > 0 && paymentMode === "qr" && !showQR ? (
+                      <Button
+                        className="w-full py-6 text-lg font-bold bg-blue-600 hover:bg-blue-700"
+                        onClick={() => setShowQR(true)}
+                      >
+                        Generate QR for {formatPrice(AmountToBePaid)}
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
 
