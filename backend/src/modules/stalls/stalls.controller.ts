@@ -39,7 +39,8 @@ function generateFileName(req: any, file: any, cb: any) {
 }
 
 const imageFilter = (req: any, file: any, cb: any) => {
-  if (!file.mimetype.match(/\/(jpg|jpeg|png|gif)$/)) {
+  // webp included — the client compresses stall images to webp before upload.
+  if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
     cb(new Error("Only image files are allowed!"), false);
   } else {
     cb(null, true);

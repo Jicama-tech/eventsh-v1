@@ -30,6 +30,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { Switch } from "@/components/ui/switch";
 import { CreateEventForm } from "./CreateEventForm";
 import { CouponsManager } from "./CouponsManager";
 import { EventFeedbackDialog } from "./EventFeedbackDialog";
@@ -53,6 +54,7 @@ import {
   Share2,
   QrCode,
   MessageSquare,
+  Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { jwtDecode } from "jwt-decode";
@@ -142,6 +144,8 @@ export interface Event {
     hasMainStage: boolean;
   };
   status: "draft" | "published" | "cancelled" | "active" | "completed";
+  // Public-link kill switch. Undefined on legacy events = treated as published.
+  published?: boolean;
   featured: boolean;
   registrationRequired?: boolean;
   createdAt: string;
@@ -176,6 +180,11 @@ const MyEvents: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [shouldRefresh, setShouldRefresh] = useState(0);
+  // Type-to-confirm guard for deleting an event.
+  const [deleteEventTarget, setDeleteEventTarget] = useState<Event | null>(null);
+  const [deleteEventConfirmText, setDeleteEventConfirmText] = useState("");
+  const [deletingEvent, setDeletingEvent] = useState(false);
+  const DELETE_EVENT_PHRASE = "I_WANT_TO_DELETE";
   const [ticketsInfoMap, setTicketsInfoMap] = useState<
     Record<string, { ticketsSold: number; revenue: number }>
   >({});
@@ -603,6 +612,49 @@ const MyEvents: React.FC = () => {
     return `${window.location.origin}/${encodeURIComponent(org || "event")}/events/${eventId}`;
   };
 
+  // Publish toggle — ON makes the public eventfront link live; OFF blocks the
+  // page even for someone who already has the URL. Optimistic local update,
+  // reverted on failure.
+  const [publishBusyId, setPublishBusyId] = useState<string | null>(null);
+  const handleTogglePublish = async (event: Event, next: boolean) => {
+    setPublishBusyId(event._id);
+    setEvents((prev) =>
+      prev.map((e) => (e._id === event._id ? { ...e, published: next } : e)),
+    );
+    try {
+      const token = sessionStorage.getItem("token");
+      const res = await fetch(`${apiURL}/events/${event._id}/publish`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ published: next }),
+      });
+      if (!res.ok) throw new Error("Failed to update publish status");
+      toast({
+        title: next ? "Event published" : "Event unpublished",
+        description: next
+          ? "The public event link is now live."
+          : "The public link is now disabled — visitors can't open it.",
+      });
+    } catch (err: any) {
+      // revert
+      setEvents((prev) =>
+        prev.map((e) =>
+          e._id === event._id ? { ...e, published: !next } : e,
+        ),
+      );
+      toast({
+        title: "Error",
+        description: err.message || "Could not update publish status",
+        variant: "destructive",
+      });
+    } finally {
+      setPublishBusyId(null);
+    }
+  };
+
   /**
    * Try the Web Share API first (native dialog on mobile, OS share sheet on
    * supported desktops) and fall back to writing the URL to the clipboard.
@@ -725,14 +777,19 @@ const MyEvents: React.FC = () => {
     }
   };
 
-  const handleDeleteEvent = async (eventId: string) => {
-    if (!window.confirm("Are you sure you want to delete this event?")) return;
+  const handleDeleteEvent = async () => {
+    const target = deleteEventTarget;
+    if (!target) return;
+    // Require the exact confirmation phrase (the button is also disabled until
+    // it matches — belt-and-suspenders).
+    if (deleteEventConfirmText !== DELETE_EVENT_PHRASE) return;
 
+    setDeletingEvent(true);
     try {
       const token = sessionStorage.getItem("token");
       if (!token) throw new Error("No authentication token");
 
-      const response = await fetch(`${apiURL}/events/${eventId}`, {
+      const response = await fetch(`${apiURL}/events/${target._id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -747,6 +804,8 @@ const MyEvents: React.FC = () => {
         description: "Event has been successfully deleted",
       });
 
+      setDeleteEventTarget(null);
+      setDeleteEventConfirmText("");
       setShouldRefresh((prev) => prev + 1);
     } catch (err: any) {
       toast({
@@ -755,8 +814,28 @@ const MyEvents: React.FC = () => {
         description: err.message,
         variant: "destructive",
       });
+    } finally {
+      setDeletingEvent(false);
     }
   };
+
+  // Operator permission gate for deleting events. The organizer (no
+  // operatorId) can always delete; an operator needs the "deleteEvents"
+  // sub-permission — or full access (empty accessTabs). Controls whether the
+  // Delete button is shown on each event card.
+  const canDeleteEvents = (() => {
+    const token = sessionStorage.getItem("token");
+    if (!token) return false;
+    try {
+      const d: any = jwtDecode(token);
+      if (!d.operatorId) return true; // organizer
+      const tabs: string[] = Array.isArray(d.accessTabs) ? d.accessTabs : [];
+      if (tabs.length === 0) return true; // operator with full access
+      return tabs.includes("deleteEvents");
+    } catch {
+      return false;
+    }
+  })();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1115,12 +1194,34 @@ const MyEvents: React.FC = () => {
                             Edit
                           </Button>
                         )}
+                        <div
+                          className="flex items-center gap-2 rounded-md border px-2.5 py-1.5"
+                          title="When ON, the public event link works. When OFF, visitors can't open it even with the link."
+                        >
+                          <Switch
+                            checked={event.published !== false}
+                            disabled={publishBusyId === event._id}
+                            onCheckedChange={(v) =>
+                              handleTogglePublish(event, v)
+                            }
+                          />
+                          <span className="text-xs font-medium">
+                            {event.published !== false
+                              ? "Published"
+                              : "Unpublished"}
+                          </span>
+                        </div>
                         <Button
                           variant="buttonOutline"
                           size="sm"
                           onClick={() => handleShareEvent(event)}
+                          disabled={event.published === false}
                           className="flex-1 lg:flex-none"
-                          title="Copy or share the public event link"
+                          title={
+                            event.published === false
+                              ? "Publish the event to share its link"
+                              : "Copy or share the public event link"
+                          }
                         >
                           <Share2 size={16} className="mr-1" />
                           Share
@@ -1147,15 +1248,20 @@ const MyEvents: React.FC = () => {
                             Feedback
                           </Button>
                         )}
-                        <Button
-                          variant="buttonOutline"
-                          size="sm"
-                          onClick={() => handleDeleteEvent(event._id)}
-                          className="text-red-600 hover:text-red-700 hover:border-red-300 flex-1 lg:flex-none"
-                        >
-                          <Trash2 size={16} className="mr-1" />
-                          Delete
-                        </Button>
+                        {canDeleteEvents && (
+                          <Button
+                            variant="buttonOutline"
+                            size="sm"
+                            onClick={() => {
+                              setDeleteEventTarget(event);
+                              setDeleteEventConfirmText("");
+                            }}
+                            className="text-red-600 hover:text-red-700 hover:border-red-300 flex-1 lg:flex-none"
+                          >
+                            <Trash2 size={16} className="mr-1" />
+                            Delete
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -1205,6 +1311,78 @@ const MyEvents: React.FC = () => {
         open={!!feedbackForEvent}
         onOpenChange={(o) => !o && setFeedbackForEvent(null)}
       />
+
+      {/* Delete Event confirmation (type-to-confirm) */}
+      <Dialog
+        open={!!deleteEventTarget}
+        onOpenChange={(o) => {
+          if (!o) {
+            setDeleteEventTarget(null);
+            setDeleteEventConfirmText("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-600" />
+              Are you sure you want to delete?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This permanently deletes the event{" "}
+            <strong>{deleteEventTarget?.title || "this event"}</strong> and its
+            data. This cannot be undone.
+          </p>
+          <div className="space-y-2 mt-2">
+            <label htmlFor="delete-event-confirm" className="text-sm">
+              To confirm, type{" "}
+              <code className="font-mono font-semibold text-red-600">
+                {DELETE_EVENT_PHRASE}
+              </code>{" "}
+              below:
+            </label>
+            <Input
+              id="delete-event-confirm"
+              autoComplete="off"
+              placeholder={DELETE_EVENT_PHRASE}
+              value={deleteEventConfirmText}
+              onChange={(e) => setDeleteEventConfirmText(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button
+              variant="buttonOutline"
+              onClick={() => {
+                setDeleteEventTarget(null);
+                setDeleteEventConfirmText("");
+              }}
+            >
+              Go Back
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteEvent}
+              disabled={
+                deletingEvent ||
+                deleteEventConfirmText !== DELETE_EVENT_PHRASE
+              }
+            >
+              {deletingEvent ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Event
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

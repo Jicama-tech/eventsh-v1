@@ -1944,10 +1944,19 @@ Thank you for choosing Eventsh! 🎊`;
         throw new BadRequestException("Invalid stall ID format");
       }
 
-      const stall = await this.stallModel.findByIdAndDelete(id);
+      // Fetch first so we know which space(s) to release before deleting.
+      const stall = await this.stallModel.findById(id);
       if (!stall) {
         throw new NotFoundException("Stall not found");
       }
+
+      // Free up any space this stall held — clear isBooked / bookedBy on the
+      // event's venueTables for its selected positions. Covers stalls at any
+      // stage (incl. partial payment), so the space goes vacant on the venue
+      // map / availability immediately.
+      await this.releaseStallTables(stall);
+
+      await this.stallModel.findByIdAndDelete(id);
 
       return {
         success: true,
@@ -1960,6 +1969,47 @@ Thank you for choosing Eventsh! 🎊`;
         message: error.message,
         data: null,
       };
+    }
+  }
+
+  // Release the tables/space a stall occupied back to "available" on the
+  // event document. Handles venueTables as an array OR an object keyed by
+  // layoutId. Best-effort — never blocks the caller.
+  private async releaseStallTables(stall: any) {
+    try {
+      const positionIds = (stall?.selectedTables || [])
+        .map((t: any) => t.positionId)
+        .filter(Boolean);
+      if (positionIds.length === 0 || !stall.eventId) return;
+
+      const eventDoc: any = await this.eventModel.findById(stall.eventId);
+      if (!eventDoc?.venueTables) return;
+
+      const release = (t: any) => {
+        if (!positionIds.includes(t.positionId)) return t;
+        const obj = t.toObject ? t.toObject() : t;
+        return { ...obj, isBooked: false, bookedBy: null };
+      };
+
+      if (Array.isArray(eventDoc.venueTables)) {
+        eventDoc.venueTables = eventDoc.venueTables.map(release);
+      } else {
+        for (const layoutId of Object.keys(eventDoc.venueTables)) {
+          eventDoc.venueTables[layoutId] = (
+            eventDoc.venueTables[layoutId] || []
+          ).map(release);
+        }
+      }
+
+      eventDoc.markModified("venueTables");
+      await eventDoc.save();
+      this.logger.log(
+        `Released ${positionIds.length} table(s) for deleted stall ${stall._id}`,
+      );
+    } catch (e: any) {
+      this.logger.warn(
+        `Failed to release tables for stall ${stall?._id}: ${e?.message}`,
+      );
     }
   }
 

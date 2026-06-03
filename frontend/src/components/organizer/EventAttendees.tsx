@@ -56,6 +56,7 @@ import {
   Camera,
   ParkingCircle,
   Wifi,
+  Trash2,
 } from "lucide-react";
 import {
   FaFacebook,
@@ -314,6 +315,12 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   const [stallRequest, setStallRequest] = useState<StallRequest | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  // Delete-stall confirmation (removes the stall booking + frees its space;
+  // the vendor's profile is kept).
+  const [showDeleteStallDialog, setShowDeleteStallDialog] = useState(false);
+  // Type-to-confirm guard for the destructive stall delete.
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const DELETE_CONFIRM_PHRASE = "I_WANT_TO_DELETE";
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [actionNotes, setActionNotes] = useState("");
   const [cancellationReason, setCancellationReason] = useState("");
@@ -1407,6 +1414,81 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     }
   };
 
+  // Delete an exhibitor's STALL (booking) only — keeps the vendor profile.
+  // The backend hard-deletes the stall; since space occupancy is derived from
+  // active stalls' selectedTables, removing the stall automatically frees any
+  // space it had selected.
+  const handleDeleteStall = async () => {
+    if (!selectedRequest || !selectedEvent) return;
+    // Require the exact confirmation phrase (the button is also disabled until
+    // it matches — this is a belt-and-suspenders guard).
+    if (deleteConfirmText !== DELETE_CONFIRM_PHRASE) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${apiURL}/stalls/${selectedRequest._id}`, {
+        method: "DELETE",
+      });
+      // The endpoint replies 204 No Content (empty body), so don't parse JSON —
+      // rely on the HTTP status.
+      if (!response.ok) {
+        let msg = "Failed to delete stall";
+        try {
+          const j = await response.json();
+          msg = j?.message || msg;
+        } catch {
+          /* no body */
+        }
+        throw new Error(msg);
+      }
+      toast({
+        duration: 5000,
+        title: "Stall deleted",
+        description:
+          "The exhibitor's stall was removed and its space freed. The vendor's profile was kept.",
+      });
+      setShowDeleteStallDialog(false);
+      setSelectedRequest(null);
+      setDeleteConfirmText("");
+      await fetchStallTickets(selectedEvent._id);
+    } catch (error: any) {
+      toast({
+        duration: 5000,
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // A stall can be deleted UNLESS it's fully paid AND the event is already
+  // over — those are settled, historical bookings and shouldn't be removed.
+  const canDeleteStall = (stall: any) => {
+    const end = selectedEvent?.endDate || selectedEvent?.startDate;
+    const eventPassed = end ? new Date(end).getTime() < Date.now() : false;
+    const fullyPaid = stall?.paymentStatus === "Paid";
+    return !(fullyPaid && eventPassed);
+  };
+
+  // Operator permission gate for deleting stalls. The organizer (no
+  // operatorId) can always delete; an operator needs the "deleteStalls"
+  // sub-permission — or full access (empty accessTabs). Controls whether the
+  // Delete button is rendered at all.
+  const canManageStallDeletion = (() => {
+    const token = sessionStorage.getItem("token");
+    if (!token) return false;
+    try {
+      const d: any = jwtDecode(token);
+      if (!d.operatorId) return true; // organizer
+      const tabs: string[] = Array.isArray(d.accessTabs) ? d.accessTabs : [];
+      if (tabs.length === 0) return true; // operator with full access
+      return tabs.includes("deleteStalls");
+    } catch {
+      return false;
+    }
+  })();
+
   const handleUpdatePaymentStatus = async () => {
     if (!selectedRequest || !selectedEvent) return;
     setIsSubmitting(true);
@@ -2435,6 +2517,20 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                     >
                                       <Eye className="h-4 w-4" />
                                     </Button>
+                                    {canManageStallDeletion && canDeleteStall(s) && (
+                                      <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-7 w-7 text-red-700 border-red-300 hover:bg-red-50"
+                                        onClick={() => {
+                                          setSelectedRequest(s);
+                                          setShowDeleteStallDialog(true);
+                                        }}
+                                        title="Delete stall (keeps vendor, frees the space)"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    )}
                                   </div>
                                 </TableCell>
                               </TableRow>
@@ -3083,6 +3179,20 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                 <Eye className="h-3 w-3" />
                               </Button>
 
+                              {canManageStallDeletion && canDeleteStall(stall) && (
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  title="Delete stall (keeps vendor, frees the space)"
+                                  onClick={() => {
+                                    setSelectedRequest(stall);
+                                    setShowDeleteStallDialog(true);
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              )}
+
                               {stall.status === "Pending" && (
                                 <>
                                   <Button
@@ -3445,6 +3555,101 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 <>
                   <X className="mr-2 h-4 w-4" />
                   Cancel Request
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Stall Dialog */}
+      <Dialog
+        open={showDeleteStallDialog}
+        onOpenChange={(o) => {
+          setShowDeleteStallDialog(o);
+          if (!o) {
+            setSelectedRequest(null);
+            setDeleteConfirmText("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-600" />
+              Are you sure you want to delete?
+            </DialogTitle>
+            <DialogDescription>
+              This removes only the stall booking for{" "}
+              <strong>
+                {selectedRequest?.shopkeeperId?.name ||
+                  selectedRequest?.nameOfApplicant ||
+                  "this exhibitor"}
+              </strong>
+              . Any space they selected will be freed up for others. The
+              vendor's profile and details are <strong>not</strong> deleted.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedRequest?.selectedTables?.length > 0 && (
+            <div className="rounded-md border bg-amber-50 border-amber-200 p-3 text-sm text-amber-800">
+              This stall has{" "}
+              <strong>{selectedRequest.selectedTables.length}</strong> space
+              {selectedRequest.selectedTables.length === 1 ? "" : "s"} selected —
+              {" "}
+              {selectedRequest.selectedTables
+                .map((t: any) => t.tableName)
+                .filter(Boolean)
+                .join(", ") || "they"}{" "}
+              will become available again.
+            </div>
+          )}
+
+          {/* Type-to-confirm guard against accidental deletion. */}
+          <div className="space-y-2">
+            <Label htmlFor="delete-confirm" className="text-sm">
+              To confirm, type{" "}
+              <code className="font-mono font-semibold text-red-600">
+                {DELETE_CONFIRM_PHRASE}
+              </code>{" "}
+              below:
+            </Label>
+            <Input
+              id="delete-confirm"
+              autoComplete="off"
+              placeholder={DELETE_CONFIRM_PHRASE}
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="buttonOutline"
+              onClick={() => {
+                setShowDeleteStallDialog(false);
+                setSelectedRequest(null);
+                setDeleteConfirmText("");
+              }}
+            >
+              Go Back
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteStall}
+              disabled={
+                isSubmitting || deleteConfirmText !== DELETE_CONFIRM_PHRASE
+              }
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Stall
                 </>
               )}
             </Button>

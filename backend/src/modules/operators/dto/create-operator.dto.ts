@@ -10,9 +10,10 @@ export class CreateOperatorDto {
   @IsNotEmpty()
   name: string;
 
+  // Optional — operators sign in with Google, so email is the identity.
   @IsString()
-  @IsNotEmpty()
-  whatsAppNumber: string;
+  @IsOptional()
+  whatsAppNumber?: string;
 
   @IsString()
   @IsOptional()

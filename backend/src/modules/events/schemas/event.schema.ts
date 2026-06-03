@@ -472,6 +472,12 @@ export class Event {
   @Prop({ enum: ["draft", "published", "cancelled"], default: "draft" })
   status: string;
 
+  // Public-link kill switch driven by the My Events "Publish" toggle. When
+  // false, the public eventfront refuses to render even if someone has the
+  // link. Defaults true so existing events stay visible (non-breaking).
+  @Prop({ default: true })
+  published: boolean;
+
   @Prop({ default: false })
   featured: boolean;
 
