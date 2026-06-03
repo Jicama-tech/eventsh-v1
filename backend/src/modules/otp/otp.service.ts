@@ -421,7 +421,23 @@ export class OtpService implements OnModuleInit {
      *  for back-compat with the original ticket-send flow; receipts pass
      *  something descriptive like `eventsh-receipt-<ref>.pdf`. */
     fileName?: string,
+    /** When provided with a `to` address, the same document is also emailed
+     *  to the registered email — so everything we send on WhatsApp also
+     *  lands in the recipient's inbox. Best-effort: a mail failure never
+     *  affects the WhatsApp delivery. */
+    email?: {
+      to?: string;
+      subject?: string;
+      heading?: string;
+      message?: string;
+    },
   ) {
+    // Mirror to email FIRST (independent of WhatsApp connectivity) so the
+    // recipient still gets it even when the WhatsApp socket is down.
+    if (email?.to) {
+      await this.emailDocument(filePath, fileName, caption, email);
+    }
+
     if (!this.sock) throw new Error("WhatsApp not connected");
     const jid = this.toJid(whatsappNumber);
 
@@ -434,5 +450,51 @@ export class OtpService implements OnModuleInit {
       fileName: fileName || "ticket.pdf",
       caption: caption || "",
     });
+  }
+
+  // Email a document attachment, reusing the WhatsApp caption/message as the
+  // body. Swallows its own errors (logged) so callers never have to guard it.
+  private async emailDocument(
+    filePath: string,
+    fileName: string | undefined,
+    caption: string | undefined,
+    email: { to?: string; subject?: string; heading?: string; message?: string },
+  ): Promise<void> {
+    if (!email?.to) return;
+    try {
+      const buffer = await fs.promises.readFile(filePath);
+      const heading = email.heading || "Your Eventsh document";
+      // Strip WhatsApp's *bold* markers and turn newlines into <br/>.
+      const body = (
+        email.message ||
+        caption ||
+        "Please find your document attached."
+      )
+        .replace(/\*/g, "")
+        .replace(/\n/g, "<br/>");
+      const html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+          <div style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:24px;text-align:center">
+            <h1 style="margin:0;font-size:20px">${heading}</h1>
+          </div>
+          <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+            <p>${body}</p>
+            <p style="color:#64748b;font-size:12px;margin-top:20px">Your document is attached to this email as a PDF.</p>
+          </div>
+        </div>`;
+      await this.mailService.sendEmail({
+        to: email.to,
+        subject:
+          email.subject ||
+          (caption ? caption.replace(/\*/g, "") : "Your Eventsh document"),
+        html,
+        attachments: [{ filename: fileName || "document.pdf", content: buffer }],
+      });
+      this.logger.log(`Document also emailed to ${email.to}`);
+    } catch (e: any) {
+      this.logger.warn(
+        `Email mirror failed for ${email.to}: ${e?.message || e}`,
+      );
+    }
   }
 }

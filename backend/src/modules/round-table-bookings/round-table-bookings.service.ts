@@ -351,6 +351,18 @@ export class RoundTableBookingsService {
             booking.visitorPhone,
             pdfPath,
             `Table Ticket - ${eventDoc.title}`,
+            "table-ticket.pdf",
+            {
+              to: booking.visitorEmail,
+              subject: `Round table booking confirmed — ${eventDoc.title}`,
+              heading: "Round Table Booking Confirmed!",
+              message:
+                `Event: ${eventDoc.title}\n` +
+                `Table: ${booking.tableName} (${booking.tableCategory})\n` +
+                `${chairList}\n` +
+                `Amount: ${formatCurrency(booking.amount, country)}\n\n` +
+                `Your table ticket with QR code is attached. Individual seat QRs have been sent to each guest.`,
+            },
           );
         } catch (err) {
           this.logger.warn("Failed to send table ticket to booker", err);
@@ -404,6 +416,18 @@ export class RoundTableBookingsService {
             guest.whatsApp,
             seatPdfPath,
             `Seat Ticket - Chair ${guest.chairIndex + 1} - ${eventDoc.title}`,
+            "seat-ticket.pdf",
+            {
+              to: guest.email,
+              subject: `Your seat for ${eventDoc.title}`,
+              heading: "You're Invited!",
+              message:
+                `Hi ${guest.name}, you have a reserved seat at:\n` +
+                `Event: ${eventDoc.title}\n` +
+                `Table: ${booking.tableName} (${booking.tableCategory})\n` +
+                `Seat: Chair ${guest.chairIndex + 1}\n\n` +
+                `Your personal QR ticket is attached. Please show it at the entrance.`,
+            },
           );
 
           this.logger.log(`Sent seat QR to ${guest.name} (${guest.whatsApp})`);

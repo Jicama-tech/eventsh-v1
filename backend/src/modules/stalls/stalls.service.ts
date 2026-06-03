@@ -20,6 +20,7 @@ import { OtpService } from "../otp/otp.service";
 import { CouponService } from "../coupon/coupon.service";
 import { CreateCouponDto } from "../coupon/dto/create-coupon.dto";
 import { FeedbackService } from "../feedback/feedback.service";
+import { MailService } from "../roles/mail.service";
 
 function formatCurrency(amount: number, country?: string): string {
   if (country === "IN") {
@@ -45,9 +46,11 @@ export class StallsService {
     @InjectModel("Vendor") private vendorModel: Model<any>,
     @InjectModel("Event") private eventModel: Model<any>,
     @InjectModel("Organizer") private organizerModel: Model<any>,
+    @InjectModel("Operator") private operatorModel: Model<any>,
     private otpService: OtpService,
     private couponService: CouponService,
     private feedbackService: FeedbackService,
+    private mailService: MailService,
   ) {
     // Ensure upload directory exists
     const qrDir = path.join(process.cwd(), "uploads", "stallQRs");
@@ -642,6 +645,13 @@ export class StallsService {
             vendorWhatsApp,
             pdfPath,
             `Stall Ticket - ${eventObj?.title || "Event"}`,
+            "stall-ticket.pdf",
+            {
+              to: vendor.email || vendor.businessEmail,
+              subject: `Your stall ticket for ${eventObj?.title || "Event"}`,
+              heading: "Your Stall Confirmation is Ready!",
+              message,
+            },
           );
         } catch (whatsAppError) {
           this.logger.warn("Failed to send stall ticket via WhatsApp", whatsAppError);
@@ -1010,11 +1020,18 @@ Thank you for choosing Eventsh! 🎊`;
       // Send WhatsApp message
       await this.otpService.sendWhatsAppMessage(whatsappNumber, message);
 
-      // Send PDF as media
+      // Send PDF as media (+ mirror to the vendor's registered email)
       await this.otpService.sendMediaMessage(
         whatsappNumber,
         pdfPath,
         `🎪 Your stall confirmation for ${stall.eventId["title"]}`,
+        "stall-ticket.pdf",
+        {
+          to: vendorObj?.email || vendorObj?.businessEmail,
+          subject: `Your stall confirmation for ${eventObj?.title || "Event"}`,
+          heading: "Your Stall Confirmation is Ready!",
+          message,
+        },
       );
     } catch (error) {
       this.logger.error("Error sending stall ticket via WhatsApp:", error);
@@ -1221,9 +1238,113 @@ Thank you for choosing Eventsh! 🎊`;
         `Your request is now pending organizer approval.\n\n` +
         `Thank you! 🙏`;
 
-      await this.otpService.sendWhatsAppMessage((vendor.whatsAppNumber || vendor.whatsappNumber), message);
+      // Vendor's own WhatsApp confirmation — isolated so a WhatsApp failure
+      // never prevents the reviewer email below from going out.
+      try {
+        await this.otpService.sendWhatsAppMessage(
+          vendor.whatsAppNumber || vendor.whatsappNumber,
+          message,
+        );
+      } catch (waErr) {
+        this.logger.warn("Stall created WhatsApp notify failed", waErr);
+      }
+
+      // Alert the organizer + every operator by email so the Approve/Reject
+      // action can be taken quickly. Best-effort — never blocks the request.
+      await this.notifyReviewersOfNewStall(stall, vendor, event);
     } catch (error) {
       this.logger.error("Error sending stall created notification:", error);
+    }
+  }
+
+  // Email the organizer and all of their operators about a freshly submitted
+  // stall request, with the applicant details and a link to the dashboard
+  // where they can approve or reject it.
+  private async notifyReviewersOfNewStall(stall: any, vendor: any, event: any) {
+    try {
+      const orgId = stall.organizerId?._id || stall.organizerId;
+      if (!orgId) return;
+
+      const organizer: any = await this.organizerModel.findById(orgId).lean();
+      const operators = await this.operatorModel
+        .find({ organizerId: String(orgId) })
+        .lean();
+
+      // Collect unique recipient emails: organizer (login + business) + ops.
+      const recipients = new Set<string>();
+      const add = (e?: string) => {
+        const v = String(e || "").trim().toLowerCase();
+        if (v) recipients.add(v);
+      };
+      add(organizer?.email);
+      add(organizer?.businessEmail);
+      for (const op of operators as any[]) add(op.email);
+
+      if (recipients.size === 0) return;
+
+      const fe = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
+      const dashboardUrl = `${fe}/organizer-dashboard`;
+      const eventDate = event?.startDate
+        ? new Date(event.startDate).toLocaleDateString()
+        : "TBA";
+      const businessName =
+        vendor?.businessName || vendor?.shopName || vendor?.brandName || "—";
+
+      const row = (label: string, value: any) =>
+        `<tr><td style="padding:4px 14px 4px 0;color:#64748b">${label}</td><td style="padding:4px 0;font-weight:600;color:#0f172a">${
+          value || "—"
+        }</td></tr>`;
+
+      const html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+          <div style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:24px;text-align:center">
+            <h1 style="margin:0;font-size:20px">New Stall Registration</h1>
+            <p style="margin:6px 0 0;opacity:.9">${event?.title || "Your event"}</p>
+          </div>
+          <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+            <p>A new exhibitor has requested a stall and is awaiting your review.</p>
+            <table style="border-collapse:collapse;margin:12px 0">
+              ${row("Applicant", vendor?.nameOfApplicant || vendor?.name)}
+              ${row("Business", businessName)}
+              ${row("Category", vendor?.businessCategory || vendor?.businessType)}
+              ${row("Email", vendor?.email)}
+              ${row("WhatsApp", vendor?.whatsAppNumber || vendor?.whatsappNumber)}
+              ${row("Event", event?.title)}
+              ${row("Date", eventDate)}
+              ${row("Status", "Pending approval")}
+            </table>
+            <div style="text-align:center;margin:22px 0 6px">
+              <a href="${dashboardUrl}" style="display:inline-block;background:#3b82f6;color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px">
+                Review &amp; Approve / Reject
+              </a>
+            </div>
+            <p style="color:#64748b;font-size:12px;margin-top:16px">Open your dashboard → Exhibitors/Visitors to approve or reject this request.</p>
+          </div>
+        </div>`;
+
+      // Send individually so operators don't see each other's addresses.
+      await Promise.all(
+        Array.from(recipients).map((to) =>
+          this.mailService
+            .sendEmail({
+              to,
+              subject: `New stall request: ${businessName} — ${event?.title || "Event"}`,
+              html,
+            })
+            .catch((e: any) =>
+              this.logger.warn(
+                `[stalls] reviewer notify failed for ${to}: ${e?.message || e}`,
+              ),
+            ),
+        ),
+      );
+      this.logger.log(
+        `New stall request emailed to ${recipients.size} reviewer(s)`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `[stalls] notifyReviewersOfNewStall failed: ${(error as any)?.message}`,
+      );
     }
   }
 
@@ -1469,6 +1590,18 @@ Thank you for choosing Eventsh! 🎊`;
                   vendorWhatsApp,
                   pdfPath,
                   `Booking Details - ${eventObj?.title || "Event"}`,
+                  "booking-details.pdf",
+                  {
+                    to: vendor?.email || vendor?.businessEmail,
+                    subject: `Partial payment received — ${eventObj?.title || "Event"}`,
+                    heading: "Partial Payment Received",
+                    message:
+                      `We have received your partial payment for ${eventObj?.title || "your event"}.\n\n` +
+                      `Paid: ${populatedStall.paidAmount}\n` +
+                      `Remaining: ${populatedStall.remainingAmount}\n` +
+                      `Grand Total: ${populatedStall.grandTotal}\n\n` +
+                      `Your stall QR ticket will be released once full payment is confirmed by the organizer. Your booking details PDF is attached.`,
+                  },
                 );
               }
             }
@@ -1591,6 +1724,29 @@ Thank you for choosing Eventsh! 🎊`;
 
   async findVendorById(vendorId: string) {
     const vendor = await this.vendorModel.findById(vendorId).lean().exec();
+    if (!vendor) {
+      throw new NotFoundException("Vendor not found");
+    }
+    return { success: true, data: vendor };
+  }
+
+  // Lookup a returning vendor by their Google email. Vendors created via
+  // different flows store the sign-in address in either `email` or
+  // `businessEmail`, so we match (case-insensitively) against both.
+  async findVendorByEmail(email: string) {
+    const normalized = String(email || "").trim();
+    if (!normalized) {
+      throw new NotFoundException("Vendor not found");
+    }
+    const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const emailRegex = new RegExp(`^${escaped}$`, "i");
+    const vendor = await this.vendorModel
+      .findOne({
+        $or: [{ email: emailRegex }, { businessEmail: emailRegex }],
+      })
+      .lean()
+      .exec();
+
     if (!vendor) {
       throw new NotFoundException("Vendor not found");
     }

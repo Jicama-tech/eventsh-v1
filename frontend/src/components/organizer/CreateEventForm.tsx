@@ -4805,9 +4805,67 @@ const VenueDesigner = ({
                 backgroundColor: "#ffffff",
                 backgroundImage:
                   "linear-gradient(to right, rgba(37,99,235,0.16) 1px, transparent 1px), linear-gradient(to bottom, rgba(37,99,235,0.16) 1px, transparent 1px), linear-gradient(to right, rgba(15,23,42,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(15,23,42,0.05) 1px, transparent 1px)",
-                backgroundSize: `${(venueConfig.gridSize || 40) * 5}px ${(venueConfig.gridSize || 40) * 5}px, ${(venueConfig.gridSize || 40) * 5}px ${(venueConfig.gridSize || 40) * 5}px, ${venueConfig.gridSize || 40}px ${venueConfig.gridSize || 40}px, ${venueConfig.gridSize || 40}px ${venueConfig.gridSize || 40}px`,
+                // Grid is scaled to match item coordinates (items render at
+                // x*scale), so one cell == gridSize venue-units on screen and
+                // the axis rulers below line up with the major gridlines.
+                backgroundSize: `${(venueConfig.gridSize || 40) * 5 * venueConfig.scale}px ${(venueConfig.gridSize || 40) * 5 * venueConfig.scale}px, ${(venueConfig.gridSize || 40) * 5 * venueConfig.scale}px ${(venueConfig.gridSize || 40) * 5 * venueConfig.scale}px, ${(venueConfig.gridSize || 40) * venueConfig.scale}px ${(venueConfig.gridSize || 40) * venueConfig.scale}px, ${(venueConfig.gridSize || 40) * venueConfig.scale}px ${(venueConfig.gridSize || 40) * venueConfig.scale}px`,
               }}
             >
+              {/* ── Scale rulers ─────────────────────────────────────────
+                  Distance markers along the X (top) and Y (left) axes so the
+                  organizer can read how big the venue is. Labels are in
+                  metres (the venue uses a 1 m = 10 unit convention). Ticks
+                  sit on every MAJOR gridline (every 5 cells). pointer-events-
+                  none so they never block placing or dragging items. */}
+              {(() => {
+                const cell = venueConfig.gridSize || 40;
+                const major = cell * 5; // venue-units between major lines
+                const s = venueConfig.scale;
+                const fmt = (units: number) => {
+                  const m = units / 10;
+                  return Number.isInteger(m) ? `${m}m` : `${m.toFixed(1)}m`;
+                };
+                const xCount = Math.max(0, Math.floor(canvasW / major));
+                const yCount = Math.max(0, Math.floor(canvasH / major));
+                return (
+                  <div className="pointer-events-none absolute inset-0 z-30">
+                    {/* X axis — top */}
+                    {Array.from({ length: xCount + 1 }).map((_, i) => (
+                      <div
+                        key={`rx-${i}`}
+                        className="absolute top-0"
+                        style={{ left: i * major * s }}
+                      >
+                        <div className="h-2 w-px bg-blue-500/50" />
+                        {i > 0 && (
+                          <span className="absolute left-0.5 top-1.5 rounded bg-white/80 px-0.5 text-[9px] font-medium leading-none text-slate-500">
+                            {fmt(i * major)}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                    {/* Y axis — left */}
+                    {Array.from({ length: yCount + 1 }).map((_, i) => (
+                      <div
+                        key={`ry-${i}`}
+                        className="absolute left-0"
+                        style={{ top: i * major * s }}
+                      >
+                        <div className="h-px w-2 bg-blue-500/50" />
+                        {i > 0 && (
+                          <span className="absolute left-0.5 top-0.5 rounded bg-white/80 px-0.5 text-[9px] font-medium leading-none text-slate-500">
+                            {fmt(i * major)}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                    {/* Origin label */}
+                    <span className="absolute left-0.5 top-0.5 rounded bg-white/80 px-0.5 text-[9px] font-semibold leading-none text-slate-600">
+                      0
+                    </span>
+                  </div>
+                );
+              })()}
               {/* Stage Indicator */}
               {venueConfig.hasMainStage && (
                 <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-purple-100 border border-purple-300 px-6 py-2 rounded-lg text-[10px] font-bold text-purple-700 shadow-sm">

@@ -3049,6 +3049,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       { id: "users", label: "Exhibitors/Visitors" },
                       { id: "events", label: "Events/Coupons" },
                       { id: "feedback", label: "Feedback" },
+                      { id: "membership", label: "Membership" },
+                      { id: "support", label: "Support" },
                       { id: "storefront", label: "Eventfront" },
                       { id: "settings", label: "Settings" },
                     ].map((t) => {

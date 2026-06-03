@@ -898,43 +898,6 @@ Please confirm my ticket booking. Thank you!`,
                         </div>
                       </CardHeader>
                       <CardContent className="text-center space-y-6">
-                        {state.total === 0 && (
-                          <div className="flex flex-col items-center gap-6 p-8 bg-green-50 rounded-xl border-2 border-green-200 shadow-sm text-center">
-                            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center">
-                              <CheckCircle2 className="w-12 h-12 text-green-600" />
-                            </div>
-
-                            <div className="space-y-2">
-                              <h3 className="text-2xl font-bold text-green-800">
-                                Free Entry Confirmed!
-                              </h3>
-                              <p className="text-gray-600 max-w-xs mx-auto">
-                                As an{" "}
-                                <span className="font-semibold text-green-700">
-                                  Exhibitor Operator
-                                </span>
-                                , your entry to this event is complimentary.
-                              </p>
-                            </div>
-
-                            <div className="bg-white p-4 rounded-lg border border-green-100 w-full">
-                              <p className="text-sm text-gray-500 italic">
-                                "No payment is required for your registration."
-                              </p>
-                            </div>
-
-                            {/* <Button
-                              className="w-full py-6 text-lg font-semibold bg-green-600 hover:bg-green-700 transition-colors"
-                              onClick={handlePayClick} // Assuming this function handles the final ticket generation logic
-                            >
-                              Generate My Free Ticket
-                            </Button>
-
-                            <p className="text-xs text-green-600 font-medium animate-pulse">
-                              Click above to finalize your registration
-                            </p> */}
-                          </div>
-                        )}
                         {/* Dynamic QR Code */}
                         {dynamicQR && country === "IN" && state.total > 0 && (
                           <div>

@@ -23,20 +23,39 @@ const VISITOR_FIELDS = [
 type VisitorField = (typeof VISITOR_FIELDS)[number];
 
 const EXHIBITOR_FIELDS = [
+  // Stable record id. Present in exported sheets so a re-upload updates the
+  // exact same vendor even when the email / WhatsApp was edited in the row.
+  // Blank on fresh template rows — those create new vendors.
+  "id",
+  // Mirrors the exhibitor (Rent a Stall) form so a sheet can carry every
+  // detail the form collects.
+  "nameOfApplicant",
   "name",
+  "businessOwnerNationality",
+  "residency",
+  "brandName",
+  "shopName",
+  "businessName",
+  "businessCategory",
   "email",
   "businessEmail",
   "whatsAppNumber",
   "phone",
+  "registrationNumber",
+  "noOfOperators",
+  "faceBookLink",
+  "instagramLink",
   "country",
   "address",
-  "shopName",
-  "businessName",
-  "businessCategory",
-  "brandName",
   "city",
   "state",
   "pincode",
+  "productDescription",
+  "refundPaymentDescription",
+  // Document/image URLs — exported so they round-trip; importable as URLs.
+  "companyLogo",
+  "registrationImage",
+  "productImage",
   // Manual membership flags so a bulk import can pre-populate the
   // member badge + expiry the CRM shows. Either or both can be omitted
   // — the row imports cleanly as a non-member when missing.
@@ -49,6 +68,10 @@ type ExhibitorField = (typeof EXHIBITOR_FIELDS)[number];
 type ImportResult = {
   totalRows: number;
   created: number;
+  // Existing records matched (by id, else email / WhatsApp) and refreshed
+  // with the row's values. Drives the round-trip "export → edit → re-upload"
+  // workflow for exhibitors.
+  updated: number;
   skipped: number;
   errors: number;
   mapping: Record<string, string>;
@@ -160,10 +183,17 @@ Return ONLY this JSON shape, nothing else:
       const m = parsed.mapping || {};
       for (const h of headers) {
         const proposal = m[h];
-        if (canonicalFields.includes(proposal as T)) {
+        const cheap = cheapMap[h];
+        // Trust our deterministic alias/direct match first — it reliably maps
+        // our own exported/template headers (e.g. "Owner Name" -> name). The
+        // AI sometimes downgrades a known column to "ignore", which would drop
+        // required data; only fall back to the AI for headers we can't resolve.
+        if (cheap && cheap !== ("ignore" as T)) {
+          aiMap[h] = cheap;
+        } else if (canonicalFields.includes(proposal as T)) {
           aiMap[h] = proposal as T;
         } else {
-          aiMap[h] = (cheapMap[h] || "ignore") as T;
+          aiMap[h] = "ignore" as T;
         }
       }
       return aiMap;
@@ -220,6 +250,44 @@ Return ONLY this JSON shape, nothing else:
       zip: "pincode",
       zipcode: "pincode",
       businessemail: "businessEmail",
+      primaryemail: "email",
+      // Exhibitor-form field aliases (headers whose natural spelling differs
+      // from the canonical key) so an exported sheet round-trips cleanly.
+      nameofapplicant: "nameOfApplicant",
+      applicant: "nameOfApplicant",
+      legalname: "name",
+      ownernationality: "businessOwnerNationality",
+      businessownernationality: "businessOwnerNationality",
+      nationality: "businessOwnerNationality",
+      residency: "residency",
+      registeredbusinessname: "shopName",
+      registrationnumber: "registrationNumber",
+      regno: "registrationNumber",
+      registrationno: "registrationNumber",
+      noofoperators: "noOfOperators",
+      operators: "noOfOperators",
+      facebook: "faceBookLink",
+      facebooklink: "faceBookLink",
+      fb: "faceBookLink",
+      instagram: "instagramLink",
+      instagramlink: "instagramLink",
+      ig: "instagramLink",
+      productdescription: "productDescription",
+      description: "productDescription",
+      refund: "refundPaymentDescription",
+      refundpaymentdescription: "refundPaymentDescription",
+      companylogo: "companyLogo",
+      logo: "companyLogo",
+      registrationimage: "registrationImage",
+      registrationdocument: "registrationImage",
+      productimage: "productImage",
+      productimages: "productImage",
+      products: "productImage",
+      // Record-id aliases so an exported sheet round-trips for updates.
+      id: "id",
+      recordid: "id",
+      vendorid: "id",
+      exhibitorid: "id",
       // Membership column aliases — accept the common spellings so
       // organizers don't have to match our header exactly.
       ismember: "isMember",
@@ -272,6 +340,7 @@ Return ONLY this JSON shape, nothing else:
     const result: ImportResult = {
       totalRows: rows.length,
       created: 0,
+      updated: 0,
       skipped: 0,
       errors: 0,
       mapping,
@@ -367,6 +436,7 @@ Return ONLY this JSON shape, nothing else:
     const result: ImportResult = {
       totalRows: rows.length,
       created: 0,
+      updated: 0,
       skipped: 0,
       errors: 0,
       mapping,
@@ -380,7 +450,7 @@ Return ONLY this JSON shape, nothing else:
       const name = String(mapped.name || "").trim();
       const email = String(mapped.email || "").trim().toLowerCase() || undefined;
       const wa = String(mapped.whatsAppNumber || "").trim();
-      const shopName = String(mapped.shopName || mapped.businessName || "").trim();
+      const idVal = String((mapped as any).id || "").trim();
 
       if (!name) {
         result.skipped++;
@@ -396,67 +466,47 @@ Return ONLY this JSON shape, nothing else:
         continue;
       }
 
-      const dupOr: any[] = [];
-      if (wa) {
-        dupOr.push({ whatsappNumber: wa }, { whatsAppNumber: wa });
-      }
-      if (email) dupOr.push({ email });
-      const exists = dupOr.length
-        ? await this.vendorModel.exists({
-            organizerId: orgObjId,
-            $or: dupOr,
-          })
-        : null;
-      if (exists) {
-        result.skipped++;
-        result.skippedRows.push({ row: i + 2, reason: "Already exists" });
-        continue;
-      }
-
       try {
-        // Coerce membership fields out of the raw row values. Excel
-        // gives us a date object straight for date-formatted cells but
-        // strings ("2026-05-30", "yes", "TRUE") for everything else.
-        const rawMember = String(mapped.isMember ?? "")
-          .trim()
-          .toLowerCase();
-        const isMember =
-          rawMember === "true" ||
-          rawMember === "yes" ||
-          rawMember === "y" ||
-          rawMember === "1";
-        let membershipEndDate: Date | undefined;
-        const rawEnd = mapped.membershipEndDate;
-        if (rawEnd instanceof Date && !isNaN(rawEnd.getTime())) {
-          membershipEndDate = rawEnd;
-        } else if (typeof rawEnd === "string" && rawEnd.trim()) {
-          const d = new Date(rawEnd);
-          if (!isNaN(d.getTime())) membershipEndDate = d;
+        // Locate an existing vendor to update. Prefer the exported row id
+        // (survives email / WhatsApp edits); fall back to matching on the
+        // contact fields so sheets built from our template still update.
+        let existing: any = null;
+        if (idVal && Types.ObjectId.isValid(idVal)) {
+          existing = await this.vendorModel
+            .findOne({ _id: new Types.ObjectId(idVal), organizerId: orgObjId })
+            .lean();
+        }
+        if (!existing) {
+          const dupOr: any[] = [];
+          if (wa) dupOr.push({ whatsappNumber: wa }, { whatsAppNumber: wa });
+          if (email) dupOr.push({ email });
+          if (dupOr.length) {
+            existing = await this.vendorModel
+              .findOne({ organizerId: orgObjId, $or: dupOr })
+              .lean();
+          }
         }
 
-        await this.vendorModel.create({
-          organizerId: orgObjId,
-          name,
-          email,
-          businessEmail: mapped.businessEmail || undefined,
-          phone: mapped.phone || undefined,
-          country: mapped.country || undefined,
-          address: mapped.address || undefined,
-          shopName: shopName || undefined,
-          businessName: mapped.businessName || shopName || undefined,
-          businessCategory: mapped.businessCategory || undefined,
-          brandName: mapped.brandName || undefined,
-          city: mapped.city || undefined,
-          state: mapped.state || undefined,
-          pincode: mapped.pincode || undefined,
-          whatsAppNumber: wa || undefined,
-          whatsappNumber: wa || undefined,
-          approved: true,
-          isActive: true,
-          isMember,
-          membershipEndDate,
-        });
-        result.created++;
+        // Only the columns actually present in the row are written, so a
+        // partial sheet never wipes existing data on update.
+        const fields = this.buildExhibitorFields(mapped);
+
+        if (existing) {
+          await this.vendorModel.updateOne(
+            { _id: existing._id },
+            { $set: fields },
+          );
+          result.updated++;
+        } else {
+          await this.vendorModel.create({
+            organizerId: orgObjId,
+            approved: true,
+            isActive: true,
+            isMember: false,
+            ...fields,
+          });
+          result.created++;
+        }
       } catch (err: any) {
         result.errors++;
         result.errorRows.push({
@@ -467,6 +517,92 @@ Return ONLY this JSON shape, nothing else:
     }
 
     return result;
+  }
+
+  // Translate a mapped exhibitor row into the vendor fields to persist.
+  // Returns ONLY the keys whose source cells had a value — callers spread
+  // this onto a create payload or pass it to $set so blank cells never
+  // clobber stored data on update.
+  private buildExhibitorFields(
+    mapped: Partial<Record<ExhibitorField, any>>,
+  ): Record<string, any> {
+    const set: Record<string, any> = {};
+    const put = (key: string, val: any) => {
+      const v = typeof val === "string" ? val.trim() : val;
+      if (v !== undefined && v !== null && v !== "") set[key] = v;
+    };
+
+    const shopName = String(mapped.shopName || mapped.businessName || "").trim();
+    const businessName = String(
+      mapped.businessName || shopName || "",
+    ).trim();
+
+    put("nameOfApplicant", mapped.nameOfApplicant);
+    put("name", mapped.name);
+    put("businessOwnerNationality", mapped.businessOwnerNationality);
+    put("residency", mapped.residency);
+    put("brandName", mapped.brandName);
+    put("shopName", shopName);
+    put("businessName", businessName);
+    put("businessCategory", mapped.businessCategory);
+    put("email", String(mapped.email || "").trim().toLowerCase());
+    put("businessEmail", String(mapped.businessEmail || "").trim().toLowerCase());
+    put("phone", mapped.phone);
+    put("registrationNumber", mapped.registrationNumber);
+    put("noOfOperators", mapped.noOfOperators);
+    put("faceBookLink", mapped.faceBookLink);
+    put("instagramLink", mapped.instagramLink);
+    put("country", mapped.country);
+    put("address", mapped.address);
+    put("city", mapped.city);
+    put("state", mapped.state);
+    put("pincode", mapped.pincode);
+    put("productDescription", mapped.productDescription);
+    put("refundPaymentDescription", mapped.refundPaymentDescription);
+    put("companyLogo", mapped.companyLogo);
+    put("registrationImage", mapped.registrationImage);
+
+    const wa = String(mapped.whatsAppNumber || "").trim();
+    if (wa) {
+      set.whatsAppNumber = wa;
+      set.whatsappNumber = wa;
+    }
+
+    // Product images — stored as an array. Accept either a real array or a
+    // string of URLs separated by "|" or "," (how the export writes them).
+    if (mapped.productImage != null && mapped.productImage !== "") {
+      const raw = mapped.productImage;
+      const arr = Array.isArray(raw)
+        ? raw
+        : String(raw)
+            .split(/\s*[|,]\s*/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+      if (arr.length) set.productImage = arr;
+    }
+
+    // Membership flag — coerced from "Yes"/"true"/"1" etc. Only written
+    // when the column actually carries a value, so omitting it leaves the
+    // stored flag untouched on update.
+    if (mapped.isMember != null && String(mapped.isMember).trim() !== "") {
+      const r = String(mapped.isMember).trim().toLowerCase();
+      set.isMember = r === "true" || r === "yes" || r === "y" || r === "1";
+    }
+    // Membership end date — Excel hands us a Date for date-formatted cells
+    // and a string ("2026-12-31") otherwise.
+    const end = this.parseDate(mapped.membershipEndDate);
+    if (end) set.membershipEndDate = end;
+
+    return set;
+  }
+
+  private parseDate(raw: any): Date | undefined {
+    if (raw instanceof Date && !isNaN(raw.getTime())) return raw;
+    if (typeof raw === "string" && raw.trim()) {
+      const d = new Date(raw.trim());
+      if (!isNaN(d.getTime())) return d;
+    }
+    return undefined;
   }
 
   private applyMapping<T extends string>(
@@ -537,41 +673,88 @@ Return ONLY this JSON shape, nothing else:
 
     const wb = new ExcelJS.Workbook();
     const sheet = wb.addWorksheet("Exhibitors");
+    // Columns mirror the exhibitor (Rent a Stall) form so the sheet carries
+    // every field the form collects. ID is first so editing a row and
+    // re-uploading updates that exact vendor; leave ID blank to create new.
     sheet.columns = [
-      { header: "Name", key: "name", width: 22 },
-      { header: "Shop Name", key: "shopName", width: 22 },
-      { header: "Business Name", key: "businessName", width: 22 },
-      { header: "Business Category", key: "businessCategory", width: 22 },
+      { header: "ID", key: "id", width: 26 },
+      { header: "Name of Applicant", key: "nameOfApplicant", width: 22 },
+      { header: "Owner Name", key: "name", width: 22 },
+      { header: "Owner Nationality", key: "businessOwnerNationality", width: 18 },
+      { header: "Residency", key: "residency", width: 16 },
       { header: "Brand Name", key: "brandName", width: 18 },
+      { header: "Registered Business Name", key: "shopName", width: 24 },
+      { header: "Business Name", key: "businessName", width: 22 },
+      { header: "Business Category", key: "businessCategory", width: 20 },
       { header: "Email", key: "email", width: 28 },
       { header: "Business Email", key: "businessEmail", width: 28 },
-      { header: "WhatsApp Number", key: "whatsAppNumber", width: 22 },
+      { header: "WhatsApp Number", key: "whatsAppNumber", width: 20 },
       { header: "Phone", key: "phone", width: 18 },
-      { header: "Country", key: "country", width: 14 },
+      { header: "Registration Number", key: "registrationNumber", width: 20 },
+      { header: "No. of Operators", key: "noOfOperators", width: 14 },
+      { header: "Facebook Link", key: "faceBookLink", width: 26 },
+      { header: "Instagram Link", key: "instagramLink", width: 26 },
+      { header: "Country", key: "country", width: 12 },
       { header: "Address", key: "address", width: 30 },
-      { header: "City", key: "city", width: 16 },
-      { header: "State", key: "state", width: 16 },
+      { header: "City", key: "city", width: 14 },
+      { header: "State", key: "state", width: 14 },
       { header: "Pincode", key: "pincode", width: 12 },
+      { header: "Product Description", key: "productDescription", width: 34 },
+      {
+        header: "Refund Payment Description",
+        key: "refundPaymentDescription",
+        width: 30,
+      },
+      { header: "Company Logo", key: "companyLogo", width: 30 },
+      { header: "Registration Image", key: "registrationImage", width: 30 },
+      { header: "Product Images", key: "productImage", width: 34 },
+      // Membership status + validity. Edit these and re-upload to change a
+      // vendor's member badge / expiry in bulk.
+      { header: "Is Member", key: "isMember", width: 12 },
+      { header: "Membership End Date", key: "membershipEndDate", width: 20 },
       { header: "Approved", key: "approved", width: 10 },
       { header: "Created At", key: "createdAt", width: 22 },
     ];
     sheet.getRow(1).font = { bold: true };
+    const fileUrl = (p?: string) =>
+      !p ? "" : /^https?:\/\//i.test(p) ? p : `${process.env.FRONTEND_BASE_URL || ""}${p}`;
     for (const v of exhibitors as any[]) {
+      const end = v.membershipEndDate ? new Date(v.membershipEndDate) : null;
       sheet.addRow({
+        id: String(v._id || ""),
+        nameOfApplicant: v.nameOfApplicant || "",
         name: v.name || "",
+        businessOwnerNationality: v.businessOwnerNationality || "",
+        residency: v.residency || "",
+        brandName: v.brandName || "",
         shopName: v.shopName || "",
         businessName: v.businessName || "",
-        businessCategory: v.businessCategory || "",
-        brandName: v.brandName || "",
+        businessCategory: v.businessCategory || v.businessType || "",
         email: v.email || "",
         businessEmail: v.businessEmail || "",
         whatsAppNumber: v.whatsAppNumber || v.whatsappNumber || "",
         phone: v.phone || v.phoneNumber || "",
+        registrationNumber: v.registrationNumber || "",
+        noOfOperators: v.noOfOperators ?? "",
+        faceBookLink: v.faceBookLink || "",
+        instagramLink: v.instagramLink || "",
         country: v.country || "",
         address: v.address || "",
         city: v.city || "",
         state: v.state || "",
         pincode: v.pincode || "",
+        productDescription: v.productDescription || v.businessDescription || "",
+        refundPaymentDescription: v.refundPaymentDescription || "",
+        companyLogo: fileUrl(v.companyLogo),
+        registrationImage: fileUrl(v.registrationImage),
+        productImage: Array.isArray(v.productImage)
+          ? v.productImage.map(fileUrl).filter(Boolean).join(" | ")
+          : "",
+        isMember: v.isMember ? "Yes" : "No",
+        membershipEndDate:
+          end && !isNaN(end.getTime())
+            ? end.toISOString().slice(0, 10)
+            : "",
         approved: v.approved ? "Yes" : "No",
         createdAt: v.createdAt
           ? new Date(v.createdAt).toISOString().slice(0, 19).replace("T", " ")
@@ -623,47 +806,111 @@ Return ONLY this JSON shape, nothing else:
   async exhibitorTemplate(): Promise<Buffer> {
     const wb = new ExcelJS.Workbook();
     const sheet = wb.addWorksheet("Exhibitors");
+    // Same columns as the export / exhibitor form so the template, export and
+    // import all line up. ID is included (blank on this template = new rows).
     sheet.columns = [
-      { header: "Name", key: "name", width: 22 },
-      { header: "Shop Name", key: "shopName", width: 22 },
-      { header: "Business Category", key: "businessCategory", width: 22 },
+      { header: "ID", key: "id", width: 26 },
+      { header: "Name of Applicant", key: "nameOfApplicant", width: 22 },
+      { header: "Owner Name", key: "name", width: 22 },
+      { header: "Owner Nationality", key: "businessOwnerNationality", width: 18 },
+      { header: "Residency", key: "residency", width: 16 },
+      { header: "Brand Name", key: "brandName", width: 18 },
+      { header: "Registered Business Name", key: "shopName", width: 24 },
+      { header: "Business Name", key: "businessName", width: 22 },
+      { header: "Business Category", key: "businessCategory", width: 20 },
       { header: "Email", key: "email", width: 28 },
-      { header: "WhatsApp Number", key: "whatsAppNumber", width: 22 },
+      { header: "Business Email", key: "businessEmail", width: 28 },
+      { header: "WhatsApp Number", key: "whatsAppNumber", width: 20 },
       { header: "Phone", key: "phone", width: 18 },
-      { header: "Country", key: "country", width: 14 },
+      { header: "Registration Number", key: "registrationNumber", width: 20 },
+      { header: "No. of Operators", key: "noOfOperators", width: 14 },
+      { header: "Facebook Link", key: "faceBookLink", width: 26 },
+      { header: "Instagram Link", key: "instagramLink", width: 26 },
+      { header: "Country", key: "country", width: 12 },
       { header: "Address", key: "address", width: 30 },
+      { header: "City", key: "city", width: 14 },
+      { header: "State", key: "state", width: 14 },
+      { header: "Pincode", key: "pincode", width: 12 },
+      { header: "Product Description", key: "productDescription", width: 34 },
+      {
+        header: "Refund Payment Description",
+        key: "refundPaymentDescription",
+        width: 30,
+      },
+      { header: "Company Logo", key: "companyLogo", width: 30 },
+      { header: "Registration Image", key: "registrationImage", width: 30 },
+      { header: "Product Images", key: "productImage", width: 34 },
       { header: "Is Member", key: "isMember", width: 12 },
       { header: "Membership End Date", key: "membershipEndDate", width: 20 },
     ];
     sheet.getRow(1).font = { bold: true };
     sheet.addRow({
-      name: "Alex Vendor",
-      shopName: "Alex's Crafts",
+      nameOfApplicant: "Alex Kumar",
+      name: "Alex Kumar",
+      businessOwnerNationality: "India",
+      residency: "India",
+      brandName: "Alex's Crafts",
+      shopName: "Alex Crafts Pvt Ltd",
+      businessName: "Alex Crafts Pvt Ltd",
       businessCategory: "Handmade",
       email: "alex@vendor.com",
+      businessEmail: "info@alexcrafts.com",
       whatsAppNumber: "+919876543210",
       phone: "+919876543210",
+      registrationNumber: "REG-12345",
+      noOfOperators: "2",
+      faceBookLink: "https://facebook.com/alexcrafts",
+      instagramLink: "@alexcrafts",
       country: "IN",
       address: "MG Road, Bangalore",
+      city: "Bangalore",
+      state: "Karnataka",
+      pincode: "560001",
+      productDescription: "Handmade home decor and gifts",
+      refundPaymentDescription: "Refunds processed within 7 days",
+      companyLogo: "",
+      registrationImage: "",
+      productImage: "",
       isMember: "Yes",
       membershipEndDate: "2026-12-31",
     });
     const info = wb.addWorksheet("Instructions");
     info.addRow(["Bulk Exhibitor Import Template"]);
     info.addRow([]);
-    info.addRow(["• Each row creates one Exhibitor (vendor)."]);
+    info.addRow(["• Each new row creates one Exhibitor (vendor)."]);
     info.addRow(["• Required: Name + (WhatsApp Number OR Email)."]);
     info.addRow([
       "• Column headers can be renamed — AI will map common variants.",
     ]);
     info.addRow([
-      "• Duplicates (matched by WhatsApp or email under this organizer) are skipped.",
+      "• Update existing exhibitors: export the current list, edit the cells,",
+    ]);
+    info.addRow([
+      "  and re-upload. Rows are matched by the ID column (or by WhatsApp /",
+    ]);
+    info.addRow([
+      "  email when ID is blank) and the matching record is updated in place.",
+    ]);
+    info.addRow([
+      "• Only the cells you fill are written — blank cells never erase data.",
     ]);
     info.addRow([
       "• Is Member: Yes / No / true / false. Leave blank for non-members.",
     ]);
     info.addRow([
-      "• Membership End Date: YYYY-MM-DD. Only used when Is Member is Yes.",
+      "• Membership End Date: YYYY-MM-DD. The membership validity period.",
+    ]);
+    info.addRow([
+      "• Columns match the exhibitor form (applicant, owner, nationality,",
+    ]);
+    info.addRow([
+      "  brand, registration no., operators, social links, address, etc.).",
+    ]);
+    info.addRow([
+      "• Company Logo / Registration Image / Product Images are URLs.",
+    ]);
+    info.addRow([
+      "  Put multiple product image URLs in one cell separated by ' | '.",
     ]);
     info.getRow(1).font = { bold: true, size: 14 };
     const ab = await wb.xlsx.writeBuffer();

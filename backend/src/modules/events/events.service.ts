@@ -235,15 +235,25 @@ export class EventsService {
 
   async findByOrganizer(
     organizerId: string,
+    publicOnly = false,
   ): Promise<{ events: Event[]; total: number }> {
     try {
+      // The organizer's own dashboard fetches every event; the public
+      // storefront passes publicOnly so Private events stay hidden. Match
+      // on `$ne: "private"` (not `=== "public"`) so legacy events with a
+      // missing/blank visibility still show on the storefront.
+      const query: any = { organizer: organizerId };
+      if (publicOnly) {
+        query.visibility = { $ne: "private" };
+      }
+
       const [events, total] = await Promise.all([
         this.eventModel
-          .find({ organizer: organizerId })
+          .find(query)
           .populate("organizer")
           .sort({ createdAt: -1 })
           .exec(),
-        this.eventModel.countDocuments({ organizer: organizerId }).exec(),
+        this.eventModel.countDocuments(query).exec(),
       ]);
 
       return { events, total };
