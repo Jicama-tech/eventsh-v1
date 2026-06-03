@@ -265,12 +265,30 @@ export class EventsService {
 
   async update(id: string, updateEventDto: UpdateEventDto): Promise<Event> {
     try {
-      // Handle date conversions
+      if (!Types.ObjectId.isValid(id)) {
+        throw new BadRequestException(`Invalid event id: ${id}`);
+      }
+
+      // Handle date conversions — guard against invalid date strings so we
+      // don't push an "Invalid Date" into a Date field (which throws a cast
+      // error during save and surfaces as an opaque 500).
       if (updateEventDto.startDate) {
-        updateEventDto.startDate = new Date(updateEventDto.startDate) as any;
+        const d = new Date(updateEventDto.startDate);
+        if (isNaN(d.getTime())) {
+          throw new BadRequestException(
+            `Invalid start date: "${updateEventDto.startDate}"`,
+          );
+        }
+        updateEventDto.startDate = d as any;
       }
       if (updateEventDto.endDate) {
-        updateEventDto.endDate = new Date(updateEventDto.endDate) as any;
+        const d = new Date(updateEventDto.endDate);
+        if (isNaN(d.getTime())) {
+          throw new BadRequestException(
+            `Invalid end date: "${updateEventDto.endDate}"`,
+          );
+        }
+        updateEventDto.endDate = d as any;
       } else if (updateEventDto.startDate) {
         updateEventDto.endDate = new Date(updateEventDto.startDate) as any;
       }
@@ -308,8 +326,24 @@ export class EventsService {
         .catch(() => {});
 
       return updatedEvent;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating event:", error);
+      // Surface Mongoose validation/cast failures as a clear 400 with the
+      // offending field, instead of an opaque 500. Helps the organizer fix
+      // the actual problem (e.g. a bad number/enum/date in a venue field).
+      if (error?.name === "ValidationError") {
+        const details = Object.values(error.errors || {})
+          .map((e: any) => e.message)
+          .join("; ");
+        throw new BadRequestException(
+          `Event validation failed: ${details || error.message}`,
+        );
+      }
+      if (error?.name === "CastError") {
+        throw new BadRequestException(
+          `Invalid value for "${error.path}": ${error.message}`,
+        );
+      }
       throw error;
     }
   }
