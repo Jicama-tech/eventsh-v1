@@ -117,6 +117,13 @@ export class StallsService {
           if (!createStallDto.businessCategory)
             updateFields.businessCategory = createStallDto.businessType;
         }
+        // Backfill the owning organizer if this vendor never had one (e.g.
+        // created by an older stall flow), so they surface in the CRM/export.
+        if (!(existingVendor as any).organizerId) {
+          updateFields.organizerId = new Types.ObjectId(
+            createStallDto.organizerId,
+          );
+        }
 
         if (Object.keys(updateFields).length > 0) {
           await this.vendorModel.findByIdAndUpdate(
@@ -159,6 +166,10 @@ export class StallsService {
           }
 
           const newVendor = await this.vendorModel.create({
+            // Stamp the owning organizer so this exhibitor shows up in the
+            // organizer's CRM list, export, and membership lookups — not just
+            // via their stall record.
+            organizerId: new Types.ObjectId(createStallDto.organizerId),
             name: createStallDto.shopkeeperName,
             email: createStallDto.shopkeeperEmail,
             whatsAppNumber: createStallDto.shopkeeperWhatsAppNumber,

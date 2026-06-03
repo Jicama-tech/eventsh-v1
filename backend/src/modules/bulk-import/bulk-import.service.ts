@@ -73,6 +73,7 @@ export class BulkImportService {
   constructor(
     @InjectModel("User") private userModel: Model<any>,
     @InjectModel("Vendor") private vendorModel: Model<any>,
+    @InjectModel("Stall") private stallModel: Model<any>,
   ) {
     // Mirror chatbot.service AI client setup so column-mapping uses whichever
     // provider the project is already configured for.
@@ -600,8 +601,21 @@ Return ONLY this JSON shape, nothing else:
       throw new BadRequestException("Invalid organizer id");
     }
     const orgObjId = new Types.ObjectId(organizerId);
-    const exhibitors = await this.vendorModel
+    // Include BOTH sources of exhibitors:
+    //   1. vendors owned by this organizer (added via CRM / bulk import)
+    //   2. vendors who registered through the stall form for this organizer's
+    //      events (older ones may not carry organizerId) — matched via their
+    //      stall records.
+    const stallVendorIds = await this.stallModel
       .find({ organizerId: orgObjId })
+      .distinct("shopkeeperId");
+    const exhibitors = await this.vendorModel
+      .find({
+        $or: [
+          { organizerId: orgObjId },
+          { _id: { $in: stallVendorIds } },
+        ],
+      })
       .sort({ createdAt: -1 })
       .lean();
 
