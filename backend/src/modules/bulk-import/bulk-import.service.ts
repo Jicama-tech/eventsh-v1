@@ -550,11 +550,59 @@ Return ONLY this JSON shape, nothing else:
     return set;
   }
 
+  // Parse a sheet date cell into a date-only value stored as UTC midnight.
+  // This avoids the classic off-by-one: a date parsed at LOCAL midnight and
+  // later serialized with toISOString() (UTC) rolls back a day in +offset
+  // timezones (SGT/IST). We always rebuild from the intended calendar Y/M/D.
   private parseDate(raw: any): Date | undefined {
-    if (raw instanceof Date && !isNaN(raw.getTime())) return raw;
-    if (typeof raw === "string" && raw.trim()) {
-      const d = new Date(raw.trim());
-      if (!isNaN(d.getTime())) return d;
+    if (raw == null || raw === "") return undefined;
+
+    // Excel date cell — take its displayed calendar day (local getters) and
+    // re-anchor to UTC midnight.
+    if (raw instanceof Date && !isNaN(raw.getTime())) {
+      return new Date(
+        Date.UTC(raw.getFullYear(), raw.getMonth(), raw.getDate()),
+      );
+    }
+
+    const s = String(raw).trim();
+    if (!s) return undefined;
+
+    // ISO YYYY-MM-DD — the format our export writes (unambiguous).
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+
+    // Slash/dot/dash dates: dd/mm/yyyy or mm/dd/yyyy.
+    m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
+    if (m) {
+      const p1 = +m[1];
+      const p2 = +m[2];
+      let year = +m[3];
+      if (year < 100) year += 2000;
+      let day: number;
+      let month: number;
+      if (p1 > 12) {
+        day = p1;
+        month = p2; // clearly day-first
+      } else if (p2 > 12) {
+        month = p1;
+        day = p2; // clearly month-first
+      } else {
+        // Ambiguous — default to day-first (dd/mm/yyyy), the common SG/IN
+        // convention. (Our export uses ISO, so this only affects hand-typed
+        // dates.)
+        day = p1;
+        month = p2;
+      }
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        return new Date(Date.UTC(year, month - 1, day));
+      }
+    }
+
+    // Fallback: let JS parse, then snap to UTC midnight of its calendar day.
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     }
     return undefined;
   }

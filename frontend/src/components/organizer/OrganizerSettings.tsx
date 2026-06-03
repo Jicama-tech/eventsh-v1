@@ -1923,24 +1923,13 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                           className="uppercase font-mono"
                           disabled={uenVerified}
                         />
-                        {!uenVerified && (
-                          <Button
-                            type="button"
-                            onClick={handleVerifyUEN}
-                            disabled={!shopProfile.UENNumber || uenVerifying}
-                            className="whitespace-nowrap"
-                          >
-                            {uenVerifying ? "Verifying..." : "Verify"}
-                          </Button>
-                        )}
                         <Button
                           type="button"
-                          variant="outline"
                           onClick={() => setPayNowVerifyOpen(true)}
                           disabled={!shopProfile.UENNumber}
                           className="whitespace-nowrap"
                         >
-                          Verify with PayNow
+                          Verify
                         </Button>
                       </div>
                       {uenError && (
@@ -2006,12 +1995,29 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                               </p>
                             );
                           })()}
-                          <div className="flex justify-end">
+                          <div className="flex justify-end gap-2">
                             <Button
                               type="button"
+                              variant="outline"
                               onClick={() => setPayNowVerifyOpen(false)}
                             >
                               Close
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => {
+                                setUenVerified(true);
+                                setUenError("");
+                                setPayNowVerifyOpen(false);
+                                toast({
+                                  duration: 4000,
+                                  title: "✓ UEN verified",
+                                  description:
+                                    "Confirmed via PayNow. Save your profile to secure it.",
+                                });
+                              }}
+                            >
+                              It's correct — mark verified
                             </Button>
                           </div>
                         </DialogContent>
