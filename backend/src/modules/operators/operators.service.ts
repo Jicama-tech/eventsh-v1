@@ -36,24 +36,42 @@ export class OperatorsService {
         throw new NotFoundException("Organizer Not Found");
       }
 
-      const existingOperator = await this.operatorModel.findOne({
-        whatsAppNumber: createOperatorDto.whatsAppNumber,
-        organizerId: organizerId,
-      });
+      const whatsApp = (createOperatorDto.whatsAppNumber || "").trim();
 
-      if (existingOperator) {
-        throw new BadRequestException(
-          "Operator with this WhatsApp number already exists for this Organizer",
-        );
+      // Only de-dupe on WhatsApp when one is actually provided — otherwise
+      // multiple operators without a number would falsely collide.
+      if (whatsApp) {
+        const existingOperator = await this.operatorModel.findOne({
+          whatsAppNumber: whatsApp,
+          organizerId: organizerId,
+        });
+        if (existingOperator) {
+          throw new BadRequestException(
+            "Operator with this WhatsApp number already exists for this Organizer",
+          );
+        }
       }
 
       const normalizedEmail = createOperatorDto.email
         ? createOperatorDto.email.trim().toLowerCase()
         : undefined;
 
+      // Email is the login identity (Google Auth) — de-dupe on it.
+      if (normalizedEmail) {
+        const existingByEmail = await this.operatorModel.findOne({
+          email: normalizedEmail,
+          organizerId: organizerId,
+        });
+        if (existingByEmail) {
+          throw new BadRequestException(
+            "Operator with this email already exists for this Organizer",
+          );
+        }
+      }
+
       const newOperator = new this.operatorModel({
         name: createOperatorDto.name,
-        whatsAppNumber: createOperatorDto.whatsAppNumber,
+        ...(whatsApp ? { whatsAppNumber: whatsApp } : {}),
         organizerId: organizerId,
         ...(normalizedEmail ? { email: normalizedEmail } : {}),
         ...(createOperatorDto.accessTabs

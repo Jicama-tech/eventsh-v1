@@ -151,7 +151,19 @@ export class OtpService implements OnModuleInit {
     return code;
   }
 
-  async sendWhatsAppMessage(whatsappNumber: string, text: string) {
+  // Kill-switches for outbound WhatsApp (we're moving to email). Set in env:
+  //   WHATSAPP_ENABLED=false      -> stop notification/ticket/receipt messages
+  //   WHATSAPP_OTP_ENABLED=false  -> stop login OTPs (only after those flows
+  //                                  are moved to email/Google sign-in)
+  private get whatsAppEnabled() {
+    return process.env.WHATSAPP_ENABLED !== "false";
+  }
+  private get whatsAppOtpEnabled() {
+    return process.env.WHATSAPP_OTP_ENABLED !== "false";
+  }
+
+  // Low-level send — used by both messaging and OTP. Not gated; callers decide.
+  private async rawSendText(whatsappNumber: string, text: string) {
     if (!this.sock) {
       throw new BadRequestException(
         "WhatsApp gateway not initialized. Please contact admin.",
@@ -167,6 +179,14 @@ export class OtpService implements OnModuleInit {
     }
     const jid = this.toJid(whatsappNumber);
     await this.sock.sendMessage(jid, { text });
+  }
+
+  async sendWhatsAppMessage(whatsappNumber: string, text: string) {
+    if (!this.whatsAppEnabled) {
+      this.logger.log("WhatsApp messaging disabled — skipping text message.");
+      return;
+    }
+    await this.rawSendText(whatsappNumber, text);
   }
 
   // =========================
@@ -286,7 +306,14 @@ export class OtpService implements OnModuleInit {
       `It expires in 5 minutes. Do not share it with anyone.\n\n` +
       `EventSh Verification`;
 
-    await this.sendWhatsAppMessage(digits, text);
+    // Separate switch from notifications: fail loudly rather than pretend the
+    // OTP was sent, so login flows surface the issue instead of hanging.
+    if (!this.whatsAppOtpEnabled) {
+      throw new BadRequestException(
+        "WhatsApp OTP is disabled. Please sign in with email or Google instead.",
+      );
+    }
+    await this.rawSendText(digits, text);
 
     return { message: "OTP sent to WhatsApp" };
   }
@@ -436,6 +463,13 @@ export class OtpService implements OnModuleInit {
     // recipient still gets it even when the WhatsApp socket is down.
     if (email?.to) {
       await this.emailDocument(filePath, fileName, caption, email);
+    }
+
+    // WhatsApp messaging is being phased out — when disabled, the document
+    // was already delivered by email above, so just stop here.
+    if (!this.whatsAppEnabled) {
+      this.logger.log("WhatsApp messaging disabled — skipping document send.");
+      return;
     }
 
     if (!this.sock) throw new Error("WhatsApp not connected");

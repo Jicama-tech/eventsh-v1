@@ -365,6 +365,21 @@ export class EventsService {
     }
   }
 
+  // Lightweight toggle for the My Events "Publish" switch — flips the public
+  // visibility of the eventfront link without running the full update flow.
+  async setPublished(id: string, published: boolean): Promise<Event> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException(`Invalid event id: ${id}`);
+    }
+    const updated = await this.eventModel
+      .findByIdAndUpdate(id, { published }, { new: true })
+      .exec();
+    if (!updated) {
+      throw new NotFoundException(`Event with ID ${id} not found`);
+    }
+    return updated;
+  }
+
   async remove(id: string): Promise<Event> {
     try {
       const deletedEvent = await this.eventModel

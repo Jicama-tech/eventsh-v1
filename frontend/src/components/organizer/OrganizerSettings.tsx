@@ -1096,10 +1096,12 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
   // ✅ Create operator via POST
   const handleSubmitOperator = async () => {
-    if (!operatorForm.name.trim() || !operatorForm.operatorLocalNumber.trim()) {
+    // WhatsApp is optional now — operators sign in with Google, so email is
+    // the required identity instead.
+    if (!operatorForm.name.trim() || !operatorForm.operatorEmail.trim()) {
       toast({
         duration: 3000,
-        title: "Please fill all fields",
+        title: "Name and email are required",
         variant: "destructive",
       });
       return;
@@ -1112,8 +1114,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
       const decoded = jwtDecode<{ sub: string }>(token);
       const organizerId = decoded.sub;
 
-      const fullWhatsApp =
-        operatorForm.operatorCountryCode + operatorForm.operatorLocalNumber;
+      // Only build a number when one was actually entered; otherwise send
+      // empty so we don't persist a bare country code like "+91".
+      const fullWhatsApp = operatorForm.operatorLocalNumber.trim()
+        ? operatorForm.operatorCountryCode + operatorForm.operatorLocalNumber
+        : "";
 
       const isEditing = editingOperatorIndex !== null;
       const editingOperator = isEditing
@@ -3039,7 +3044,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>WhatsApp Number *</Label>
+                  <Label>WhatsApp Number (optional)</Label>
                   <div className="flex items-center space-x-2">
                     <div className="w-32">
                       <Select
@@ -3146,12 +3151,20 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                             type="checkbox"
                             checked={checked}
                             onChange={(e) =>
-                              setOperatorForm((prev) => ({
-                                ...prev,
-                                accessTabs: e.target.checked
+                              setOperatorForm((prev) => {
+                                let next = e.target.checked
                                   ? [...prev.accessTabs, t.id]
-                                  : prev.accessTabs.filter((x) => x !== t.id),
-                              }))
+                                  : prev.accessTabs.filter((x) => x !== t.id);
+                                // Revoking a parent tab also revokes its nested
+                                // sub-permission(s).
+                                if (t.id === "eventAttendees" && !e.target.checked) {
+                                  next = next.filter((x) => x !== "deleteStalls");
+                                }
+                                if (t.id === "events" && !e.target.checked) {
+                                  next = next.filter((x) => x !== "deleteEvents");
+                                }
+                                return { ...prev, accessTabs: next };
+                              })
                             }
                           />
                           {t.label}
@@ -3159,6 +3172,64 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       );
                     })}
                   </div>
+
+                  {/* Nested permissions under Participants — only shown when
+                      the Participants tab itself is granted. */}
+                  {(operatorForm.accessTabs ?? []).includes("eventAttendees") && (
+                    <div className="mt-3 ml-1 pl-3 border-l-2 border-blue-200 space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Participants — extra permissions
+                      </p>
+                      <label className="flex items-center gap-2 text-sm border rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/30">
+                        <input
+                          type="checkbox"
+                          checked={(operatorForm.accessTabs ?? []).includes(
+                            "deleteStalls",
+                          )}
+                          onChange={(e) =>
+                            setOperatorForm((prev) => ({
+                              ...prev,
+                              accessTabs: e.target.checked
+                                ? [...prev.accessTabs, "deleteStalls"]
+                                : prev.accessTabs.filter(
+                                    (x) => x !== "deleteStalls",
+                                  ),
+                            }))
+                          }
+                        />
+                        Allow deleting exhibitor stalls
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Nested permissions under Events/Coupons — only shown when
+                      the Events tab itself is granted. */}
+                  {(operatorForm.accessTabs ?? []).includes("events") && (
+                    <div className="mt-3 ml-1 pl-3 border-l-2 border-blue-200 space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Events — extra permissions
+                      </p>
+                      <label className="flex items-center gap-2 text-sm border rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/30">
+                        <input
+                          type="checkbox"
+                          checked={(operatorForm.accessTabs ?? []).includes(
+                            "deleteEvents",
+                          )}
+                          onChange={(e) =>
+                            setOperatorForm((prev) => ({
+                              ...prev,
+                              accessTabs: e.target.checked
+                                ? [...prev.accessTabs, "deleteEvents"]
+                                : prev.accessTabs.filter(
+                                    (x) => x !== "deleteEvents",
+                                  ),
+                            }))
+                          }
+                        />
+                        Allow deleting events
+                      </label>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="px-6 pb-6 pt-3 border-t shrink-0">

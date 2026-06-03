@@ -30,6 +30,47 @@ export class ShopkeepersService {
     return { whatsappNumber: wa, whatsAppNumber: wa };
   }
 
+  // Store membershipEndDate as UTC midnight of the intended calendar day, so
+  // it never drifts a day when later serialized with toISOString() (the
+  // classic +offset timezone off-by-one). Accepts "YYYY-MM-DD", "DD/MM/YYYY",
+  // or a Date.
+  private toUtcMidnight(v: any): Date | undefined {
+    if (v == null || v === "") return undefined;
+    if (v instanceof Date && !isNaN(v.getTime())) {
+      return new Date(Date.UTC(v.getFullYear(), v.getMonth(), v.getDate()));
+    }
+    const s = String(v).trim();
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
+    if (m) {
+      const a = +m[1];
+      const b = +m[2];
+      let y = +m[3];
+      if (y < 100) y += 2000;
+      let day: number;
+      let mon: number;
+      if (a > 12) {
+        day = a;
+        mon = b;
+      } else if (b > 12) {
+        mon = a;
+        day = b;
+      } else {
+        day = a;
+        mon = b; // ambiguous -> day-first (DD/MM), the SG/IN convention
+      }
+      if (mon >= 1 && mon <= 12 && day >= 1 && day <= 31) {
+        return new Date(Date.UTC(y, mon - 1, day));
+      }
+    }
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    }
+    return undefined;
+  }
+
   async createForOrganizer(organizerId: string, dto: CreateShopkeeperDto) {
     if (!Types.ObjectId.isValid(organizerId)) {
       throw new BadRequestException("Invalid organizer id");
@@ -57,6 +98,9 @@ export class ShopkeepersService {
       const created = await this.vendorModel.create({
         ...dto,
         ...wa,
+        ...(dto.membershipEndDate !== undefined
+          ? { membershipEndDate: this.toUtcMidnight(dto.membershipEndDate) }
+          : {}),
         organizerId: orgObjId,
         approved: dto.approved ?? true,
       });
@@ -85,6 +129,9 @@ export class ShopkeepersService {
     const wa = this.normalizeWhatsApp(dto);
 
     const update: Record<string, any> = { ...dto, ...wa };
+    if (dto.membershipEndDate !== undefined) {
+      update.membershipEndDate = this.toUtcMidnight(dto.membershipEndDate);
+    }
 
     const updated = await this.vendorModel.findOneAndUpdate(
       // Allow updating vendors that have no organizerId yet (legacy stall-only

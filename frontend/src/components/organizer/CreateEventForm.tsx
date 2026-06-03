@@ -493,7 +493,8 @@ const EventBanner = ({
             setCropImage(null);
           }}
           onCropComplete={handleCroppedImage}
-          // Optional: Pass aspect={16/9} if you want a specific ratio
+          // Free cropping by default — drag any of the 8 handles. Use the
+          // ratio-lock buttons in the cropper if a fixed ratio is wanted.
         />
       )}
     </div>

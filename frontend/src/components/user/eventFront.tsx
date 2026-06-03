@@ -113,6 +113,64 @@ import { StatusHistoryEntry } from "../organizer/EventAttendees";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
+// Client-side image compressor for stall uploads: downscales + re-encodes to
+// WebP, shrinking dimension/quality until the result is under `maxBytes`
+// (1 MB). Keeps server load + storage tiny. Returns a new .webp File; on any
+// failure returns the original file untouched.
+async function compressStallImage(
+  file: File,
+  maxBytes = 1024 * 1024,
+): Promise<File> {
+  try {
+    const dataUrl = await new Promise<string>((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result as string);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = dataUrl;
+    });
+
+    const encode = (maxDim: number, quality: number): Promise<Blob | null> => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return Promise.resolve(null);
+      ctx.fillStyle = "#ffffff"; // flatten transparency for webp
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      return new Promise((res) => canvas.toBlob(res, "image/webp", quality));
+    };
+
+    const toFile = (blob: Blob) =>
+      new File([blob], file.name.replace(/\.[^.]+$/, "") + ".webp", {
+        type: "image/webp",
+      });
+
+    // Progressively shrink dimension + quality until under the cap.
+    let last: Blob | null = null;
+    for (const maxDim of [1280, 1024, 800, 640, 480]) {
+      for (const q of [0.8, 0.65, 0.5, 0.4]) {
+        const blob = await encode(maxDim, q);
+        if (!blob) continue;
+        last = blob;
+        if (blob.size <= maxBytes) return toFile(blob);
+      }
+    }
+    return last ? toFile(last) : file;
+  } catch {
+    return file;
+  }
+}
+
 interface Organizer {
   _id: string;
   name: string;
@@ -505,6 +563,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
   const [productFiles, setProductFiles] = useState<File[]>([]);
   const [productPreviews, setProductPreviews] = useState<string[]>([]);
+  // Product images already stored on a returning vendor's profile. Kept apart
+  // from productFiles/productPreviews (which stay parallel for new uploads) so
+  // removeProductImage indices don't desync. Counts toward the requirement.
+  const [existingProductImages, setExistingProductImages] = useState<string[]>(
+    [],
+  );
 
   const [cropOpen, setCropOpen] = useState(false);
   const [cropImage, setCropImage] = useState<string | null>(null);
@@ -829,9 +893,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           const result = await res.json();
           if (result.success && result.data?.roundTables) {
             setRoundTableData(result.data.roundTables);
-            // Round tables are booked by clicking chairs on the venue map,
-            // so make sure that map is expanded rather than collapsed.
-            if (result.data.roundTables.length > 0) setShowVenueLayout(true);
+            // Keep the layout COLLAPSED by default — the visitor clicks the
+            // venue name header to reveal the map (incl. round-table chairs).
           }
         }
       } catch {
@@ -1188,6 +1251,23 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       preferredTemplateName: "",
     });
     setEmailVerified(true); // Assume verified if exists
+
+    // Load any stored brand assets as previews so the (now mandatory) image
+    // fields are satisfied without forcing a returning vendor to re-upload.
+    // No new File is set, so the server keeps the existing image on submit.
+    const toAbs = (p: string) =>
+      p && /^https?:\/\//.test(p) ? p : p ? `${__API_URL__}${p}` : "";
+    setRegImageFile(null);
+    setRegImagePreview(toAbs(shopData.registrationImage || ""));
+    setLogoFile(null);
+    setLogoPreview(toAbs(shopData.companyLogo || ""));
+    setProductFiles([]);
+    setProductPreviews([]);
+    setExistingProductImages(
+      Array.isArray(shopData.productImage)
+        ? shopData.productImage.map(toAbs).filter(Boolean)
+        : [],
+    );
 
     toast({
       duration: 5000,
@@ -2041,19 +2121,32 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   };
 
   // ====== Handle Result from Cropper ======
-  const handleCroppedImage = (croppedFile: File) => {
-    const previewUrl = URL.createObjectURL(croppedFile);
+  const handleCroppedImage = async (croppedFile: File) => {
+    // Compress to WebP under 1 MB before storing for upload.
+    const compressed = await compressStallImage(croppedFile, 1024 * 1024);
+    if (compressed.size > 1024 * 1024) {
+      toast({
+        duration: 5000,
+        title: "Image too large",
+        description:
+          "This image couldn't be reduced under 1 MB. Please pick a smaller / simpler image.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const finalFile = compressed;
+    const previewUrl = URL.createObjectURL(finalFile);
 
     if (cropType === "reg") {
-      setRegImageFile(croppedFile);
+      setRegImageFile(finalFile);
       setRegImagePreview(previewUrl);
       setCropOpen(false);
     } else if (cropType === "logo") {
-      setLogoFile(croppedFile);
+      setLogoFile(finalFile);
       setLogoPreview(previewUrl);
       setCropOpen(false);
     } else if (cropType === "product") {
-      setProductFiles((prev) => [...prev, croppedFile]);
+      setProductFiles((prev) => [...prev, finalFile]);
       setProductPreviews((prev) => [...prev, previewUrl]);
 
       const remaining = cropQueue.slice(1);
@@ -2741,18 +2834,21 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     req(blank(d.businessCategory), "Business Category");
     req(!d.noOfOperators || Number(d.noOfOperators) < 1, "No. of Operators");
     req(blank(d.registrationNumber), "Registration Number");
+    req(blank(d.faceBookLink), "Facebook Link");
+    req(blank(d.instagramLink), "Instagram Link");
     req(blank(d.description), "Business, Products & Brand Description");
     req(blank(d.refundPaymentDescription), "Refund Payment Description");
     req(blank(d.address), "Full Address");
 
-    // Document uploads + at least one product image are required for new
-    // registrations. Returning vendors already have these stored on their
-    // profile, so we don't force a re-upload (the server reuses them).
-    if (!shopkeeperExists) {
-      req(!regImageFile, "Business Registration Document");
-      req(!logoFile, "Company Logo");
-      req(productFiles.length < 1, "at least 1 Product Image");
-    }
+    // Document uploads + at least one product image are mandatory. A returning
+    // vendor's stored images are loaded as previews, so an existing preview
+    // satisfies the requirement (no forced re-upload); a new file overrides it.
+    req(!regImageFile && !regImagePreview, "Business Registration Document");
+    req(!logoFile && !logoPreview, "Company Logo");
+    req(
+      productFiles.length < 1 && existingProductImages.length < 1,
+      "at least 1 Product Image",
+    );
 
     // Preferred space type — only required when the event exposes sellable
     // space templates (same condition that renders the picker).
@@ -2862,6 +2958,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       setLogoPreview("");
       setProductFiles([]);
       setProductPreviews([]);
+      setExistingProductImages([]);
       setStallMembership(null);
     } catch (error: any) {
       toast({
@@ -3153,6 +3250,25 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           >
             Go Back
           </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Publish gate: when the organizer has unpublished the event, the public
+  // link must not render it — even for someone who already has the URL.
+  // Only block on an explicit `false` so legacy events (no field) stay visible.
+  if ((eventData as any).published === false) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="text-center rounded-2xl border border-gray-200 bg-white p-6 sm:p-8 max-w-md w-full shadow-sm">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">
+            Event not available
+          </h2>
+          <p className="text-sm sm:text-base text-gray-500">
+            This event is not currently published by the organizer. Please check
+            back later.
+          </p>
         </div>
       </div>
     );
@@ -3695,7 +3811,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             {hasVenueLayout ? (
               <button
                 type="button"
-                onClick={() => goToTab("venue", true)}
+                // Land on the venue section COLLAPSED — the visitor sees the
+                // venue name header and clicks it to reveal the layout.
+                onClick={() => goToTab("venue")}
                 className="text-left rounded-2xl bg-white border border-gray-200 p-4 sm:p-5 lg:p-6 flex flex-col gap-1 shadow-sm hover:shadow-md hover:border-gray-300 transition-all"
               >
                 <div
@@ -10027,7 +10145,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <Label>Business Email</Label>
+                    <Label>
+                      Business Email <span className="text-red-500">*</span>
+                    </Label>
                     <Input
                       value={shopkeeperDetails.businessEmail}
                       disabled
@@ -10053,17 +10173,24 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               {/* --- SECTION: CONTACT & VERIFICATION --- */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>WhatsApp Number</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      value={shopkeeperDetails.whatsappNumber}
-                      disabled
-                      className="bg-gray-100 flex-1"
-                    />
-                    <Badge className="bg-green-600 mt-1 h-8">
-                      <CheckCircle className="w-3 h-3 mr-1" /> Verified
-                    </Badge>
-                  </div>
+                  <Label>
+                    WhatsApp Number <span className="text-red-500">*</span>
+                  </Label>
+                  <PhoneInput
+                    value={shopkeeperDetails.whatsappNumber}
+                    onChange={(whatsappNumber) =>
+                      setShopkeeperDetails((prev) => ({
+                        ...prev,
+                        whatsappNumber,
+                      }))
+                    }
+                    countryCodeEditable={false}
+                    inputStyle={{
+                      width: "100%",
+                      height: "36px",
+                      borderRadius: "6px",
+                    }}
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -10122,7 +10249,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Registration Number</Label>
+                  <Label>
+                    Registration Number{" "}
+                    <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     name="registrationNumber"
                     value={shopkeeperDetails.registrationNumber}
@@ -10136,7 +10266,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               {/* --- SECTION: SOCIAL & IMAGES --- */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Facebook Link</Label>
+                  <Label>
+                    Facebook Link <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     name="faceBookLink"
                     value={shopkeeperDetails.faceBookLink}
@@ -10145,7 +10277,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Instagram Link</Label>
+                  <Label>
+                    Instagram Link <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     name="instagramLink"
                     value={shopkeeperDetails.instagramLink}
@@ -10166,9 +10300,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   <div className="space-y-2">
                     <Label>
                       Business Registration Document{" "}
-                      {!shopkeeperExists && (
-                        <span className="text-red-500">*</span>
-                      )}
+                      <span className="text-red-500">*</span>
                     </Label>
                     <div className="flex items-center gap-4">
                       <Button
@@ -10200,10 +10332,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   {/* Logo */}
                   <div className="space-y-2">
                     <Label>
-                      Company Logo{" "}
-                      {!shopkeeperExists && (
-                        <span className="text-red-500">*</span>
-                      )}
+                      Company Logo <span className="text-red-500">*</span>
                     </Label>
                     <div className="flex items-center gap-4">
                       <Button
@@ -10236,21 +10365,20 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 {/* Product Images */}
                 <div className="space-y-2 pt-4 border-t border-gray-200">
                   <Label>
-                    Product Images ({productFiles.length}/5){" "}
-                    {!shopkeeperExists && (
-                      <span className="text-red-500">*</span>
-                    )}
-                    {!shopkeeperExists && (
-                      <span className="ml-1 text-[11px] font-normal text-gray-400">
-                        (at least 1 required)
-                      </span>
-                    )}
+                    Product Images (
+                    {productFiles.length + existingProductImages.length}/5){" "}
+                    <span className="text-red-500">*</span>
+                    <span className="ml-1 text-[11px] font-normal text-gray-400">
+                      (at least 1 required)
+                    </span>
                   </Label>
                   <div className="flex items-center gap-4 flex-wrap">
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={productFiles.length >= 5}
+                      disabled={
+                        productFiles.length + existingProductImages.length >= 5
+                      }
                       onClick={() =>
                         document.getElementById("productUpload")?.click()
                       }
@@ -10265,6 +10393,28 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       className="hidden"
                       onChange={handleMultipleImageSelect}
                     />
+
+                    {/* Stored images from a returning vendor's profile */}
+                    {existingProductImages.map((preview, idx) => (
+                      <div key={`existing-${idx}`} className="relative group">
+                        <img
+                          src={preview}
+                          className="h-14 w-14 object-cover rounded border border-gray-300"
+                          alt={`Saved product ${idx}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExistingProductImages((prev) =>
+                              prev.filter((_, i) => i !== idx),
+                            )
+                          }
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <XCircle className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
 
                     {productPreviews.map((preview, idx) => (
                       <div key={idx} className="relative group">

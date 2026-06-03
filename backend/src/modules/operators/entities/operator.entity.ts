@@ -24,7 +24,8 @@ export class Operator {
   @Prop({ required: true })
   name: string;
 
-  @Prop({ required: true })
+  // Optional — login is handled via Google Auth (email is the identity).
+  @Prop()
   whatsAppNumber: string;
 
   @Prop()

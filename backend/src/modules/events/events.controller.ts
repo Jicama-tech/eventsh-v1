@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -743,6 +744,26 @@ export class EventsController {
       };
     } catch (error) {
       console.error("Error in updateEventStatus:", error);
+      throw error;
+    }
+  }
+
+  // Toggle the public eventfront link on/off (My Events "Publish" switch).
+  @Patch(":id/publish")
+  @UseGuards(AuthGuard("jwt"))
+  async setPublished(
+    @Param("id") id: string,
+    @Body("published") published: boolean,
+  ) {
+    try {
+      const event = await this.eventsService.setPublished(id, !!published);
+      return {
+        success: true,
+        message: published ? "Event published" : "Event unpublished",
+        data: event,
+      };
+    } catch (error) {
+      console.error("Error in setPublished:", error);
       throw error;
     }
   }

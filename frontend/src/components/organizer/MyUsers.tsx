@@ -1467,7 +1467,9 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                                   {exhibitor.membershipExpiry
                                     ? ` · exp ${new Date(
                                         exhibitor.membershipExpiry,
-                                      ).toLocaleDateString()}`
+                                      ).toLocaleDateString(undefined, {
+                                        timeZone: "UTC",
+                                      })}`
                                     : ""}
                                 </span>
                               </div>
@@ -2478,7 +2480,9 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                         {selectedExhibitor.membershipExpiry
                           ? ` · exp ${new Date(
                               selectedExhibitor.membershipExpiry,
-                            ).toLocaleDateString()}`
+                            ).toLocaleDateString(undefined, {
+                              timeZone: "UTC",
+                            })}`
                           : ""}
                       </Badge>
                     )}
@@ -3250,7 +3254,7 @@ export function AddExhibitorDialog({
     // ISO date string (YYYY-MM-DD) the <input type="date"> binds to.
     // Empty when no end date is set. Only meaningful when isMember
     // is true; UI hides the field otherwise.
-    membershipEndDate: "",
+    membershipEndDate: "2026-12-31",
   });
 
   // Sync Dial Code when Country changes
@@ -3413,7 +3417,7 @@ export function AddExhibitorDialog({
       businessCategory: "",
       businessEmail: "",
       isMember: false,
-      membershipEndDate: "",
+      membershipEndDate: "2026-12-31",
     });
     setErrors({});
   };
