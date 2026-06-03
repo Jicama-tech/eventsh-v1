@@ -41,6 +41,28 @@ function generateFileName(req: any, file: any, cb: any) {
   cb(null, filename);
 }
 
+// Coerce sectionVisibility to a clean { [key]: boolean } map. A bug let this
+// field accumulate stringified copies of itself on every save (growing into
+// MEGABYTES of "[object Object],{}…" junk and eventually blowing MongoDB's
+// 16MB per-document limit). Restricting it to plain boolean values stops that
+// permanently: any array / string / non-boolean garbage collapses to {}.
+function sanitizeSectionVisibility(input: any): Record<string, boolean> {
+  let v = input;
+  if (typeof v === "string") {
+    try {
+      v = JSON.parse(v);
+    } catch {
+      return {};
+    }
+  }
+  if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+  const out: Record<string, boolean> = {};
+  for (const [k, val] of Object.entries(v)) {
+    if (typeof val === "boolean") out[k] = val;
+  }
+  return out;
+}
+
 const imageFilter = (req: any, file: any, cb: any) => {
   // Accept the formats the cropper / browsers commonly emit. Webp is what
   // the rest of the pipeline already converts to (see WebpValidationPipe);
@@ -345,8 +367,9 @@ export class EventsController {
       // sent JSON-stringified.
       if (typeof body.customSections === "string")
         body.customSections = JSON.parse(body.customSections);
-      if (typeof body.sectionVisibility === "string")
-        body.sectionVisibility = JSON.parse(body.sectionVisibility);
+      // Always normalize to a clean { key: boolean } map (guards against the
+      // legacy self-concatenation bug that bloated this field into MBs).
+      body.sectionVisibility = sanitizeSectionVisibility(body.sectionVisibility);
 
       // Compress every uploaded image (downscale + WebP) before building URLs.
       await compressEventUploadFiles(files);
@@ -635,8 +658,9 @@ export class EventsController {
       // Custom Basic-Info sections — same unwrap as the create path.
       if (typeof body.customSections === "string")
         body.customSections = JSON.parse(body.customSections);
-      if (typeof body.sectionVisibility === "string")
-        body.sectionVisibility = JSON.parse(body.sectionVisibility);
+      // Always normalize to a clean { key: boolean } map (guards against the
+      // legacy self-concatenation bug that bloated this field into MBs).
+      body.sectionVisibility = sanitizeSectionVisibility(body.sectionVisibility);
 
       // Compress every uploaded image (downscale + WebP) before we build the
       // URLs, so stored files stay small. Mutates each file's filename to .webp.
