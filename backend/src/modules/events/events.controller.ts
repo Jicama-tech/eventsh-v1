@@ -30,6 +30,7 @@ import { UpdateEventDto } from "./dto/updateEvent.dto";
 import { v4 as uuidv4 } from "uuid";
 import * as path from "path";
 import { WebpValidationPipe } from "../../seed/parse-webp.pipe";
+import { compressEventUploadFiles } from "../../seed/compress-event-images.util";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import { buildDefaultStorefrontSettings } from "../organizer-stores/default-settings";
@@ -347,6 +348,9 @@ export class EventsController {
       if (typeof body.sectionVisibility === "string")
         body.sectionVisibility = JSON.parse(body.sectionVisibility);
 
+      // Compress every uploaded image (downscale + WebP) before building URLs.
+      await compressEventUploadFiles(files);
+
       // Handle banner image
       if (files.banner && files.banner[0]) {
         body.image = `/uploads/events/${files.banner[0].filename}`;
@@ -633,6 +637,10 @@ export class EventsController {
         body.customSections = JSON.parse(body.customSections);
       if (typeof body.sectionVisibility === "string")
         body.sectionVisibility = JSON.parse(body.sectionVisibility);
+
+      // Compress every uploaded image (downscale + WebP) before we build the
+      // URLs, so stored files stay small. Mutates each file's filename to .webp.
+      await compressEventUploadFiles(files);
 
       // Handle new banner image
       if (files.banner && files.banner[0]) {

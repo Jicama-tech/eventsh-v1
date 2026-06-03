@@ -344,6 +344,23 @@ export class EventsService {
           `Invalid value for "${error.path}": ${error.message}`,
         );
       }
+      // MongoDB rejects any single document over 16 MB. This usually means
+      // images/large data were embedded directly in the event (e.g. base64)
+      // instead of uploaded as files. Surface it clearly instead of a 500.
+      const msg = String(error?.message || "");
+      if (
+        error?.name === "RangeError" ||
+        error?.code === 10334 || // BSONObjectTooLarge
+        /out of range|object to insert too large|document is larger|BSONObjectTooLarge/i.test(
+          msg,
+        )
+      ) {
+        throw new BadRequestException(
+          "This event is too large to save (over MongoDB's 16 MB per-document limit). " +
+            "This is usually caused by images embedded directly in the event (base64) " +
+            "instead of being uploaded as files. Please re-upload large images/logos as files and try again.",
+        );
+      }
       throw error;
     }
   }
