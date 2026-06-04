@@ -1,9 +1,25 @@
 import { Injectable } from "@nestjs/common";
 import * as nodemailer from "nodemailer";
 
+// Per-organizer custom sender. When `enabled` and the SMTP fields are filled,
+// emails for that organizer are sent FROM their address via their own server.
+export interface OrgEmailConfig {
+  enabled?: boolean;
+  fromName?: string;
+  fromEmail?: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpSecure?: boolean;
+  smtpUser?: string;
+  smtpPass?: string;
+}
+
 @Injectable()
 export class MailService {
   private transporter;
+  // Cache of per-organizer SMTP transporters, keyed by host|port|user|pass so a
+  // credential change transparently spins up a fresh transporter.
+  private customTransporters = new Map<string, nodemailer.Transporter>();
 
   constructor() {
     this.transporter = nodemailer.createTransport({
@@ -14,6 +30,70 @@ export class MailService {
         user: process.env.SMTP_USER || "attendancemanagement2025@gmail.com",
         pass: process.env.SMTP_PASS || "kigu gpta alwr jbbf",
       },
+    });
+  }
+
+  // True when the organizer has a usable custom sender configured.
+  private isCustomActive(c?: OrgEmailConfig): boolean {
+    return !!(
+      c &&
+      c.enabled &&
+      c.smtpHost &&
+      c.smtpUser &&
+      c.smtpPass &&
+      (c.fromEmail || c.smtpUser)
+    );
+  }
+
+  // Pick the transporter + From header for a given organizer config, falling
+  // back to the global EventSH sender when no custom config is active.
+  private resolveSender(c?: OrgEmailConfig): {
+    transporter: nodemailer.Transporter;
+    from: string;
+  } {
+    if (this.isCustomActive(c)) {
+      const port = Number(c!.smtpPort) || 465;
+      const key = `${c!.smtpHost}|${port}|${c!.smtpUser}|${c!.smtpPass}`;
+      let t = this.customTransporters.get(key);
+      if (!t) {
+        t = nodemailer.createTransport({
+          host: c!.smtpHost,
+          port,
+          secure: c!.smtpSecure ?? port === 465,
+          auth: { user: c!.smtpUser, pass: c!.smtpPass },
+        });
+        this.customTransporters.set(key, t);
+      }
+      const fromEmail = c!.fromEmail || c!.smtpUser!;
+      const fromName = (c!.fromName || fromEmail).replace(/"/g, "");
+      return { transporter: t, from: `"${fromName}" <${fromEmail}>` };
+    }
+    return {
+      transporter: this.transporter,
+      from: `"EventSH" <${process.env.SMTP_USER}>`,
+    };
+  }
+
+  // Verify a custom config and send a one-off test email. Forces `enabled` so
+  // an organizer can test before turning the feature on. Throws on failure so
+  // the caller can surface the SMTP error.
+  async sendTestEmail(config: OrgEmailConfig, to: string): Promise<void> {
+    const { transporter, from } = this.resolveSender({
+      ...config,
+      enabled: true,
+    });
+    await transporter.verify();
+    await transporter.sendMail({
+      from,
+      to,
+      subject: "EventSH — test email from your address",
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
+          <h2 style="color:#0f172a">It works! ✅</h2>
+          <p>This is a test email sent from <strong>${from}</strong> using your own mail server.</p>
+          <p>All emails for your events will now be sent from this address.</p>
+          <p style="color:#64748b;font-size:12px">— EventSH</p>
+        </div>`,
     });
   }
 
@@ -437,10 +517,14 @@ export class MailService {
       encoding?: string;
       cid?: string;
     }[];
+    // When passed (an organizer's emailConfig), the message is sent from their
+    // custom address/SMTP; otherwise it goes from the global EventSH sender.
+    senderConfig?: OrgEmailConfig;
   }) {
     try {
-      await this.transporter.sendMail({
-        from: `"EventSH" <${process.env.SMTP_USER}>`,
+      const { transporter, from } = this.resolveSender(options.senderConfig);
+      await transporter.sendMail({
+        from,
         to: options.to,
         subject: options.subject,
         html: options.html,

@@ -829,14 +829,121 @@ export class OrganizersService {
   async getProfile(id: string) {
     try {
       const _id = new Types.ObjectId(id);
-      const organizer = await this.organizerModel.findOne({ _id });
+      const organizer = await this.organizerModel.findOne({ _id }).lean();
       if (!organizer) {
         throw new NotFoundException("Not Found");
+      }
+
+      // Never echo the SMTP password back to the client; expose only whether
+      // one is set (the dedicated email-config endpoint handles editing).
+      const ec: any = (organizer as any).emailConfig;
+      if (ec && typeof ec === "object") {
+        (organizer as any).emailConfig = {
+          ...ec,
+          smtpPass: undefined,
+          hasPassword: !!ec.smtpPass,
+        };
       }
 
       return { message: "Organizer Found", data: organizer };
     } catch (error) {
       throw error;
+    }
+  }
+
+  // ----- Personal / custom sending email -----------------------------------
+
+  // Return the organizer's email config WITHOUT the SMTP password. The UI only
+  // needs to know whether a password is already saved (`hasPassword`).
+  async getEmailConfig(id: string) {
+    const organizer = await this.organizerModel
+      .findById(new Types.ObjectId(id))
+      .lean();
+    if (!organizer) throw new NotFoundException("Organizer Not Found");
+    const cfg: any = (organizer as any).emailConfig || {};
+    const { smtpPass, ...safe } = cfg;
+    return { data: { ...safe, hasPassword: !!smtpPass } };
+  }
+
+  // Save the email config. A blank smtpPass means "keep the existing password"
+  // so the organizer doesn't have to retype it on every edit.
+  async updateEmailConfig(id: string, body: any) {
+    const organizer = await this.organizerModel
+      .findById(new Types.ObjectId(id))
+      .lean();
+    if (!organizer) throw new NotFoundException("Organizer Not Found");
+
+    const existing: any = (organizer as any).emailConfig || {};
+    const next: any = {
+      enabled: !!body.enabled,
+      fromName: (body.fromName || "").trim(),
+      fromEmail: (body.fromEmail || "").trim(),
+      smtpHost: (body.smtpHost || "").trim(),
+      smtpPort: Number(body.smtpPort) || 465,
+      smtpSecure:
+        body.smtpSecure === undefined
+          ? (Number(body.smtpPort) || 465) === 465
+          : !!body.smtpSecure,
+      smtpUser: (body.smtpUser || "").trim(),
+      smtpPass: body.smtpPass ? String(body.smtpPass) : existing.smtpPass || "",
+    };
+
+    // Guard: can't enable without the essentials.
+    if (
+      next.enabled &&
+      (!next.smtpHost || !next.smtpUser || !next.smtpPass ||
+        !(next.fromEmail || next.smtpUser))
+    ) {
+      throw new BadRequestException(
+        "To enable a personal email, fill in the From email and SMTP host, username and password.",
+      );
+    }
+
+    // $set only the emailConfig so we don't re-validate the whole document.
+    await this.organizerModel.updateOne(
+      { _id: new Types.ObjectId(id) },
+      { $set: { emailConfig: next } },
+    );
+
+    const { smtpPass, ...safe } = next;
+    return {
+      message: "Email settings saved",
+      data: { ...safe, hasPassword: !!smtpPass },
+    };
+  }
+
+  // Send a test email using the supplied config (merging the stored password
+  // when the form left it blank).
+  async sendTestEmailConfig(id: string, body: any, to: string) {
+    if (!to) throw new BadRequestException("A recipient email is required");
+    const organizer = await this.organizerModel
+      .findById(new Types.ObjectId(id))
+      .lean();
+    if (!organizer) throw new NotFoundException("Organizer Not Found");
+
+    const existing: any = (organizer as any).emailConfig || {};
+    const config = {
+      fromName: body.fromName || existing.fromName,
+      fromEmail: body.fromEmail || existing.fromEmail,
+      smtpHost: body.smtpHost || existing.smtpHost,
+      smtpPort: Number(body.smtpPort) || existing.smtpPort || 465,
+      smtpSecure:
+        body.smtpSecure === undefined ? existing.smtpSecure : !!body.smtpSecure,
+      smtpUser: body.smtpUser || existing.smtpUser,
+      smtpPass: body.smtpPass || existing.smtpPass,
+    };
+    if (!config.smtpHost || !config.smtpUser || !config.smtpPass) {
+      throw new BadRequestException(
+        "SMTP host, username and password are required to send a test email.",
+      );
+    }
+    try {
+      await this.mailService.sendTestEmail(config, to);
+      return { message: `Test email sent to ${to}` };
+    } catch (err: any) {
+      throw new BadRequestException(
+        `Couldn't send test email: ${err?.message || "SMTP error"}`,
+      );
     }
   }
 

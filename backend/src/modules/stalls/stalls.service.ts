@@ -662,6 +662,7 @@ export class StallsService {
               subject: `Your stall ticket for ${eventObj?.title || "Event"}`,
               heading: "Your Stall Confirmation is Ready!",
               message,
+              senderConfig: (organizerDoc as any)?.emailConfig,
             },
           );
         } catch (whatsAppError) {
@@ -1031,6 +1032,18 @@ Thank you for choosing Eventsh! 🎊`;
       // Send WhatsApp message
       await this.otpService.sendWhatsAppMessage(whatsappNumber, message);
 
+      // Resolve the owning organizer's custom-sender config (if any) so the
+      // confirmation email goes from their address.
+      const orgId2 = (stall as any).organizerId?._id || (stall as any).organizerId;
+      let orgEmailCfg: any = (stall as any).organizerId?.emailConfig;
+      if (!orgEmailCfg && orgId2) {
+        const od = await this.organizerModel
+          .findById(orgId2)
+          .select("emailConfig")
+          .lean();
+        orgEmailCfg = (od as any)?.emailConfig;
+      }
+
       // Send PDF as media (+ mirror to the vendor's registered email)
       await this.otpService.sendMediaMessage(
         whatsappNumber,
@@ -1042,6 +1055,7 @@ Thank you for choosing Eventsh! 🎊`;
           subject: `Your stall confirmation for ${eventObj?.title || "Event"}`,
           heading: "Your Stall Confirmation is Ready!",
           message,
+          senderConfig: orgEmailCfg,
         },
       );
     } catch (error) {
@@ -1341,6 +1355,7 @@ Thank you for choosing Eventsh! 🎊`;
               to,
               subject: `New stall request: ${businessName} — ${event?.title || "Event"}`,
               html,
+              senderConfig: (organizer as any)?.emailConfig,
             })
             .catch((e: any) =>
               this.logger.warn(

@@ -457,6 +457,9 @@ export class OtpService implements OnModuleInit {
       subject?: string;
       heading?: string;
       message?: string;
+      // Organizer's custom-sender config — when present the mirror email is
+      // sent from their address instead of the global EventSH sender.
+      senderConfig?: any;
     },
   ) {
     // Mirror to email FIRST (independent of WhatsApp connectivity) so the
@@ -492,7 +495,13 @@ export class OtpService implements OnModuleInit {
     filePath: string,
     fileName: string | undefined,
     caption: string | undefined,
-    email: { to?: string; subject?: string; heading?: string; message?: string },
+    email: {
+      to?: string;
+      subject?: string;
+      heading?: string;
+      message?: string;
+      senderConfig?: any;
+    },
   ): Promise<void> {
     if (!email?.to) return;
     try {
@@ -523,6 +532,7 @@ export class OtpService implements OnModuleInit {
           (caption ? caption.replace(/\*/g, "") : "Your Eventsh document"),
         html,
         attachments: [{ filename: fileName || "document.pdf", content: buffer }],
+        senderConfig: email.senderConfig,
       });
       this.logger.log(`Document also emailed to ${email.to}`);
     } catch (e: any) {
