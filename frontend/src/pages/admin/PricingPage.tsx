@@ -38,6 +38,7 @@ import {
   Ticket,
   User,
   Award,
+  Mail as MailIcon,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -246,6 +247,14 @@ const ORGANIZER_FEATURE_MODULES: {
   },
   { key: "whatsappQR", label: "WhatsApp QR", icon: Zap },
   { key: "instagram", label: "Instagram QR", icon: Zap },
+  {
+    // When enabled, the organizer gets the "Personal Email (custom sender)"
+    // card in Settings and can send all vendor/attendee emails from their
+    // own address instead of admin@eventsh.com.
+    key: "customEmail",
+    label: "Customize Email (own sender)",
+    icon: MailIcon,
+  },
   {
     key: "operators",
     label: "Operators",

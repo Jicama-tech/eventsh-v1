@@ -44,6 +44,7 @@ export class OtpService implements OnModuleInit {
   constructor(
     @InjectModel(Otp.name) private otpModel: Model<Otp>,
     @InjectModel("Agent") private agentModel: Model<any>,
+    @InjectModel("Organizer") private organizerModel: Model<any>,
     private mailService: MailService,
     private readonly organizerService: OrganizersService,
     private readonly jwtService: JwtService,
@@ -205,7 +206,11 @@ export class OtpService implements OnModuleInit {
   // =========================
   // Business Email OTP (existing)
   // =========================
-  async sendOtp(email: string, role: string) {
+  // `organizerId` is passed for event-scoped flows (vendor/visitor verifying
+  // their email for an organizer's event) so the OTP goes out from the
+  // organizer's custom sender when enabled. Platform-level flows (e.g.
+  // organizer registration) omit it and keep the global EventSH sender.
+  async sendOtp(email: string, role: string, organizerId?: string) {
     if (!email) throw new BadRequestException("Email is required");
     const otp = Math.floor(100000 + Math.random() * 900000).toString(); // preserves your original method
     const expiresAt = new Date(Date.now() + this.EMAIL_TTL_MS);
@@ -239,7 +244,19 @@ export class OtpService implements OnModuleInit {
       { upsert: true, new: true },
     );
 
-    await this.mailService.sendOtpEmail(email, otp);
+    let senderConfig: any;
+    if (organizerId) {
+      try {
+        const org = await this.organizerModel
+          .findById(organizerId)
+          .select("emailConfig")
+          .lean();
+        senderConfig = (org as any)?.emailConfig;
+      } catch {
+        // Bad/unknown organizerId — fall back to the global sender.
+      }
+    }
+    await this.mailService.sendOtpEmail(email, otp, senderConfig);
   }
 
   async verifyOtp(email: string, role: string, otp: string) {
@@ -457,6 +474,9 @@ export class OtpService implements OnModuleInit {
       subject?: string;
       heading?: string;
       message?: string;
+      // Organizer's custom-sender config — when present the mirror email is
+      // sent from their address instead of the global EventSH sender.
+      senderConfig?: any;
     },
   ) {
     // Mirror to email FIRST (independent of WhatsApp connectivity) so the
@@ -492,7 +512,13 @@ export class OtpService implements OnModuleInit {
     filePath: string,
     fileName: string | undefined,
     caption: string | undefined,
-    email: { to?: string; subject?: string; heading?: string; message?: string },
+    email: {
+      to?: string;
+      subject?: string;
+      heading?: string;
+      message?: string;
+      senderConfig?: any;
+    },
   ): Promise<void> {
     if (!email?.to) return;
     try {
@@ -523,6 +549,7 @@ export class OtpService implements OnModuleInit {
           (caption ? caption.replace(/\*/g, "") : "Your Eventsh document"),
         html,
         attachments: [{ filename: fileName || "document.pdf", content: buffer }],
+        senderConfig: email.senderConfig,
       });
       this.logger.log(`Document also emailed to ${email.to}`);
     } catch (e: any) {

@@ -362,6 +362,7 @@ export class RoundTableBookingsService {
                 `${chairList}\n` +
                 `Amount: ${formatCurrency(booking.amount, country)}\n\n` +
                 `Your table ticket with QR code is attached. Individual seat QRs have been sent to each guest.`,
+              senderConfig: (organizerDoc as any)?.emailConfig,
             },
           );
         } catch (err) {
@@ -427,6 +428,7 @@ export class RoundTableBookingsService {
                 `Table: ${booking.tableName} (${booking.tableCategory})\n` +
                 `Seat: Chair ${guest.chairIndex + 1}\n\n` +
                 `Your personal QR ticket is attached. Please show it at the entrance.`,
+              senderConfig: (organizerDoc as any)?.emailConfig,
             },
           );
 

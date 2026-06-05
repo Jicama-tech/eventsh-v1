@@ -2717,6 +2717,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         },
         body: JSON.stringify({
           businessEmail: shopkeeperDetails.businessEmail,
+          // Lets the backend send the OTP from the organizer's custom
+          // sender (Personal Email) when their toggle is on.
+          organizerId:
+            (eventData as any)?.organizer?._id ||
+            (typeof (eventData as any)?.organizer === "string"
+              ? (eventData as any).organizer
+              : undefined),
         }),
       });
 

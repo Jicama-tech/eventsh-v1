@@ -17,6 +17,7 @@ import { JwtService } from "@nestjs/jwt";
 import { EventDocument } from "../events/schemas/event.schema";
 import { User } from "../users/schemas/user.schema";
 import { MailService } from "../roles/mail.service";
+import { encryptSecret } from "../../common/secret-crypto.util";
 import { CreateOrganizerDto } from "./dto/createOrganizer.dto";
 import { Otp } from "../otp/entities/otp.entity";
 import { Plan } from "../plans/entities/plan.entity";
@@ -836,14 +837,150 @@ export class OrganizersService {
   async getProfile(id: string) {
     try {
       const _id = new Types.ObjectId(id);
-      const organizer = await this.organizerModel.findOne({ _id });
+      const organizer = await this.organizerModel.findOne({ _id }).lean();
       if (!organizer) {
         throw new NotFoundException("Not Found");
+      }
+
+      // Never echo the SMTP password back to the client; expose only whether
+      // one is set (the dedicated email-config endpoint handles editing).
+      const ec: any = (organizer as any).emailConfig;
+      if (ec && typeof ec === "object") {
+        (organizer as any).emailConfig = {
+          ...ec,
+          smtpPass: undefined,
+          hasPassword: !!ec.smtpPass,
+        };
       }
 
       return { message: "Organizer Found", data: organizer };
     } catch (error) {
       throw error;
+    }
+  }
+
+  // ----- Personal / custom sending email -----------------------------------
+
+  // Return the organizer's email config WITHOUT the SMTP password. The UI only
+  // needs to know whether a password is already saved (`hasPassword`).
+  async getEmailConfig(id: string) {
+    const organizer = await this.organizerModel
+      .findById(new Types.ObjectId(id))
+      .lean();
+    if (!organizer) throw new NotFoundException("Organizer Not Found");
+    const cfg: any = (organizer as any).emailConfig || {};
+    const { smtpPass, ...safe } = cfg;
+    return { data: { ...safe, hasPassword: !!smtpPass } };
+  }
+
+  // Save the email config. A blank smtpPass means "keep the existing password"
+  // so the organizer doesn't have to retype it on every edit.
+  async updateEmailConfig(id: string, body: any) {
+    const organizer = await this.organizerModel
+      .findById(new Types.ObjectId(id))
+      .lean();
+    if (!organizer) throw new NotFoundException("Organizer Not Found");
+
+    const existing: any = (organizer as any).emailConfig || {};
+    const next: any = {
+      enabled: !!body.enabled,
+      fromName: (body.fromName || "").trim(),
+      fromEmail: (body.fromEmail || "").trim(),
+      smtpHost: (body.smtpHost || "").trim(),
+      smtpPort: Number(body.smtpPort) || 465,
+      smtpSecure:
+        body.smtpSecure === undefined
+          ? (Number(body.smtpPort) || 465) === 465
+          : !!body.smtpSecure,
+      smtpUser: (body.smtpUser || "").trim(),
+      // Encrypted at rest (AES-256-GCM) so the password is unreadable in the
+      // DB — even to admins. Re-saving an already-encrypted value is a no-op.
+      smtpPass: body.smtpPass
+        ? encryptSecret(String(body.smtpPass))
+        : encryptSecret(existing.smtpPass || ""),
+    };
+
+    // Guard: can't enable without the essentials.
+    if (
+      next.enabled &&
+      (!next.smtpHost || !next.smtpUser || !next.smtpPass ||
+        !(next.fromEmail || next.smtpUser))
+    ) {
+      throw new BadRequestException(
+        "To enable a personal email, fill in the From email and SMTP host, username and password.",
+      );
+    }
+
+    // Plan gate: Customize Email is a subscription-plan feature. Mirrors the
+    // frontend's isModuleEnabled logic (plan modules → default-plan fallback;
+    // plans with no module config at all stay permissive for legacy data).
+    if (next.enabled) {
+      let plan: any = (organizer as any).planId
+        ? await this.planModel.findById((organizer as any).planId).lean()
+        : null;
+      if (!plan?.modules || Object.keys(plan.modules).length === 0) {
+        plan =
+          (await this.planModel
+            .findOne({ moduleType: "Organizer", isDefault: true, isActive: true })
+            .lean()) || plan;
+      }
+      const modules: any = plan?.modules;
+      if (
+        modules &&
+        Object.keys(modules).length > 0 &&
+        !modules.customEmail?.enabled
+      ) {
+        throw new BadRequestException(
+          "Customize Email isn't included in your current plan. Upgrade your subscription to send from your own email address.",
+        );
+      }
+    }
+
+    // $set only the emailConfig so we don't re-validate the whole document.
+    await this.organizerModel.updateOne(
+      { _id: new Types.ObjectId(id) },
+      { $set: { emailConfig: next } },
+    );
+
+    const { smtpPass, ...safe } = next;
+    return {
+      message: "Email settings saved",
+      data: { ...safe, hasPassword: !!smtpPass },
+    };
+  }
+
+  // Send a test email using the supplied config (merging the stored password
+  // when the form left it blank).
+  async sendTestEmailConfig(id: string, body: any, to: string) {
+    if (!to) throw new BadRequestException("A recipient email is required");
+    const organizer = await this.organizerModel
+      .findById(new Types.ObjectId(id))
+      .lean();
+    if (!organizer) throw new NotFoundException("Organizer Not Found");
+
+    const existing: any = (organizer as any).emailConfig || {};
+    const config = {
+      fromName: body.fromName || existing.fromName,
+      fromEmail: body.fromEmail || existing.fromEmail,
+      smtpHost: body.smtpHost || existing.smtpHost,
+      smtpPort: Number(body.smtpPort) || existing.smtpPort || 465,
+      smtpSecure:
+        body.smtpSecure === undefined ? existing.smtpSecure : !!body.smtpSecure,
+      smtpUser: body.smtpUser || existing.smtpUser,
+      smtpPass: body.smtpPass || existing.smtpPass,
+    };
+    if (!config.smtpHost || !config.smtpUser || !config.smtpPass) {
+      throw new BadRequestException(
+        "SMTP host, username and password are required to send a test email.",
+      );
+    }
+    try {
+      await this.mailService.sendTestEmail(config, to);
+      return { message: `Test email sent to ${to}` };
+    } catch (err: any) {
+      throw new BadRequestException(
+        `Couldn't send test email: ${err?.message || "SMTP error"}`,
+      );
     }
   }
 

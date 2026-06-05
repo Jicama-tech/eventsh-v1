@@ -661,7 +661,7 @@ export class MembershipsService {
   private async sendReceiptEverywhere(membership: any, plan: any) {
     const org = await this.organizerModel
       .findById(membership.organizerId)
-      .select("organizationName businessEmail name")
+      .select("organizationName businessEmail name emailConfig")
       .lean();
     const orgName = (org as any)?.organizationName || "Your organizer";
 
@@ -709,6 +709,7 @@ export class MembershipsService {
           subject: `Welcome to ${plan.name} membership at ${orgName}`,
           html,
           attachments: [{ filename: fileName, content: buffer }],
+          senderConfig: (org as any)?.emailConfig,
         });
       } catch (err: any) {
         this.logger.warn(

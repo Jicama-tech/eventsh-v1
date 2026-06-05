@@ -52,8 +52,10 @@ export class OtpController {
 
   // Business Email OTP (existing)
   @Post("send-business-email-otp")
-  async sendOtp(@Body() body: { businessEmail: string; role: string }) {
-    await this.otpService.sendOtp(body.businessEmail, body.role);
+  async sendOtp(
+    @Body() body: { businessEmail: string; role: string; organizerId?: string },
+  ) {
+    await this.otpService.sendOtp(body.businessEmail, body.role, body.organizerId);
     return { message: "OTP sent" };
   }
 
