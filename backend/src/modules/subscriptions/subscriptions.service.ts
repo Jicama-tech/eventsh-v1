@@ -9,6 +9,10 @@ import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import { OtpService } from "../otp/otp.service";
 import { MailService } from "../roles/mail.service";
+import {
+  computePlanExpiry,
+  formatPlanValidity,
+} from "../plans/plan-validity.util";
 import * as fs from "fs";
 import * as path from "path";
 // pdfkit ships without @types; use require to skip the missing-type error
@@ -129,7 +133,7 @@ export class SubscriptionsService {
         .lean(),
       this.planModel
         .find({ _id: { $in: planIds } })
-        .select("planName price priceINR validityInDays")
+        .select("planName price priceINR validityInDays validityType validUntil")
         .lean(),
     ]);
     const orgMap = new Map(orgs.map((o: any) => [String(o._id), o]));
@@ -167,9 +171,9 @@ export class SubscriptionsService {
     organizer.subscribed = true;
     organizer.planId = plan._id;
     organizer.planStartDate = new Date();
-    organizer.planExpiryDate = new Date(
-      organizer.planStartDate.getTime() +
-        plan.validityInDays * 24 * 60 * 60 * 1000,
+    organizer.planExpiryDate = computePlanExpiry(
+      plan,
+      organizer.planStartDate,
     );
     organizer.pricePaid = String(doc.amount);
     await organizer.save();
@@ -473,7 +477,7 @@ export class SubscriptionsService {
         .fillColor(C.body)
         .font("Helvetica")
         .fontSize(10.5)
-        .text(`${plan.validityInDays} days`, cols[1].x + 8, y + 12, {
+        .text(`${formatPlanValidity(plan)}`, cols[1].x + 8, y + 12, {
           width: cols[1].w - 16,
           align: "center",
         })
@@ -673,7 +677,7 @@ export class SubscriptionsService {
           <p>Your <strong>${this.escapeHtml(plan.planName)}</strong> plan is now active. A PDF receipt is attached for your records.</p>
           <table style="border-collapse: collapse; margin: 12px 0;">
             <tr><td style="padding: 4px 12px; color: #6b7280;">Amount paid</td><td style="padding: 4px 12px; font-weight: 600;">${symbol}${doc.amount} ${doc.currency}</td></tr>
-            <tr><td style="padding: 4px 12px; color: #6b7280;">Validity</td><td style="padding: 4px 12px; font-weight: 600;">${plan.validityInDays} days</td></tr>
+            <tr><td style="padding: 4px 12px; color: #6b7280;">Validity</td><td style="padding: 4px 12px; font-weight: 600;">${formatPlanValidity(plan)}</td></tr>
             <tr><td style="padding: 4px 12px; color: #6b7280;">Active until</td><td style="padding: 4px 12px; font-weight: 600;">${validTill}</td></tr>
             <tr><td style="padding: 4px 12px; color: #6b7280;">Reference</td><td style="padding: 4px 12px; font-family: monospace;">${this.escapeHtml(doc.ref)}</td></tr>
           </table>
@@ -729,7 +733,7 @@ export class SubscriptionsService {
       `*Plan:* ${plan.planName}`,
       plan.description ? `*About:* ${plan.description}` : null,
       `*Amount paid:* ${symbol}${doc.amount}`,
-      `*Validity:* ${plan.validityInDays} days (until ${validTill})`,
+      `*Validity:* ${formatPlanValidity(plan)} (until ${validTill})`,
       `*Reference:* ${doc.ref}`,
       ``,
       `*Included:*`,

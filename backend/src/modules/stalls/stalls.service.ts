@@ -1308,7 +1308,14 @@ Thank you for choosing Eventsh! 🎊`;
       if (recipients.size === 0) return;
 
       const fe = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
-      const dashboardUrl = `${fe}/organizer-dashboard`;
+      // Route reviewers through the organizer login first. If they're not
+      // signed in (no token), they land on the login screen and are sent to
+      // the dashboard afterwards — instead of hitting /organizer-dashboard
+      // directly and getting a stuck "loading" page. Already-signed-in
+      // reviewers are forwarded straight to the dashboard by the app router.
+      const dashboardUrl = `${fe}/organizer/login?redirect=${encodeURIComponent(
+        "/organizer-dashboard",
+      )}`;
       const eventDate = event?.startDate
         ? new Date(event.startDate).toLocaleDateString()
         : "TBA";

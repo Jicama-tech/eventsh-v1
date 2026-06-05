@@ -20,6 +20,7 @@ import { MailService } from "../roles/mail.service";
 import { CreateOrganizerDto } from "./dto/createOrganizer.dto";
 import { Otp } from "../otp/entities/otp.entity";
 import { Plan } from "../plans/entities/plan.entity";
+import { computePlanExpiry } from "../plans/plan-validity.util";
 import {
   Operator,
   OperatorDocument,
@@ -190,18 +191,21 @@ export class OrganizersService {
         isActive: true,
       }));
     const validity = Number(defaultPlan?.validityInDays);
-    const subscriptionFields =
-      defaultPlan && Number.isFinite(validity) && validity > 0
-        ? {
-            subscribed: true,
-            planId: defaultPlan._id,
-            planStartDate: new Date(),
-            planExpiryDate: new Date(
-              Date.now() + validity * 24 * 60 * 60 * 1000,
-            ),
-            pricePaid: defaultPlan.price?.toString?.() ?? "0",
-          }
-        : {};
+    // Day-based plans need a positive day count; date-based plans need a
+    // validUntil. Either qualifies the organizer for the default subscription.
+    const hasValidity =
+      !!defaultPlan &&
+      ((defaultPlan.validityType === "date" && !!defaultPlan.validUntil) ||
+        (Number.isFinite(validity) && validity > 0));
+    const subscriptionFields = hasValidity
+      ? {
+          subscribed: true,
+          planId: defaultPlan._id,
+          planStartDate: new Date(),
+          planExpiryDate: computePlanExpiry(defaultPlan),
+          pricePaid: defaultPlan.price?.toString?.() ?? "0",
+        }
+      : {};
 
     const { agentReferralCode, ...rest } = dto;
     // Drop accountType from `rest` so we control it explicitly below.
@@ -353,18 +357,21 @@ export class OrganizersService {
       }));
 
     const validity = Number(defaultPlan?.validityInDays);
-    const subscriptionFields =
-      defaultPlan && Number.isFinite(validity) && validity > 0
-        ? {
-            subscribed: true,
-            planId: defaultPlan._id,
-            planStartDate: new Date(),
-            planExpiryDate: new Date(
-              Date.now() + validity * 24 * 60 * 60 * 1000,
-            ),
-            pricePaid: defaultPlan.price?.toString?.() ?? "0",
-          }
-        : {};
+    // Day-based plans need a positive day count; date-based plans need a
+    // validUntil. Either qualifies the organizer for the default subscription.
+    const hasValidity =
+      !!defaultPlan &&
+      ((defaultPlan.validityType === "date" && !!defaultPlan.validUntil) ||
+        (Number.isFinite(validity) && validity > 0));
+    const subscriptionFields = hasValidity
+      ? {
+          subscribed: true,
+          planId: defaultPlan._id,
+          planStartDate: new Date(),
+          planExpiryDate: computePlanExpiry(defaultPlan),
+          pricePaid: defaultPlan.price?.toString?.() ?? "0",
+        }
+      : {};
 
     // 3. Create organizer auto-approved (no manual gate).
     const { agentReferralCode, ...rest } = dto;
@@ -1572,9 +1579,19 @@ export class OrganizersService {
 
     const DAY = 24 * 60 * 60 * 1000;
     const now = Date.now();
-    const expiry = organizer.planExpiryDate
-      ? new Date(organizer.planExpiryDate).getTime()
-      : 0;
+    // For date-based plans the validity is a FIXED calendar date shared by
+    // everyone, so derive the expiry from the plan's current validUntil at
+    // read time — that way an admin editing the plan's date is reflected on
+    // the organizer dashboard immediately, without re-activating. Day-based
+    // plans keep their per-organizer expiry stamped at activation.
+    const isDatePlan =
+      (plan as any)?.validityType === "date" && !!(plan as any)?.validUntil;
+    const effectiveExpiryDate = isDatePlan
+      ? new Date((plan as any).validUntil)
+      : organizer.planExpiryDate
+        ? new Date(organizer.planExpiryDate)
+        : null;
+    const expiry = effectiveExpiryDate ? effectiveExpiryDate.getTime() : 0;
     const subscribed = !!organizer.subscribed;
     const isExpired = subscribed && expiry > 0 && expiry < now;
     const daysLeft = expiry > now ? Math.ceil((expiry - now) / DAY) : 0;
@@ -1595,8 +1612,12 @@ export class OrganizersService {
       planName: plan?.planName || null,
       pricePaid: organizer.pricePaid || null,
       validityInDays: plan?.validityInDays || null,
+      validityType: (plan as any)?.validityType || "days",
+      validUntil: (plan as any)?.validUntil || null,
       planStartDate: organizer.planStartDate || null,
-      planExpiryDate: organizer.planExpiryDate || null,
+      // Effective expiry — for date plans this is the plan's validUntil so it
+      // tracks admin edits; for day plans it's the stored per-organizer expiry.
+      planExpiryDate: effectiveExpiryDate || organizer.planExpiryDate || null,
       isExpired,
       daysLeft,
       // Grace window fields (kioscart parity)
@@ -1625,9 +1646,9 @@ export class OrganizersService {
       organizer.subscribed = true;
       organizer.planId = plan._id;
       organizer.planStartDate = new Date();
-      organizer.planExpiryDate = new Date(
-        organizer.planStartDate.getTime() +
-          plan.validityInDays * 24 * 60 * 60 * 1000,
+      organizer.planExpiryDate = computePlanExpiry(
+        plan,
+        organizer.planStartDate,
       );
       organizer.pricePaid = plan.price.toString();
 

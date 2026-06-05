@@ -64,11 +64,28 @@ export function OrganizerEShopLogin() {
   const [selectedAccountKey, setSelectedAccountKey] = useState<string>("");
   const [isSubmittingSelection, setIsSubmittingSelection] = useState(false);
 
+  // Where to land after a successful sign-in. Email links (e.g. the stall
+  // review notification) hit /organizer/login?redirect=/organizer-dashboard so
+  // a logged-out reviewer is sent through login first. We stash it in
+  // sessionStorage because the Google OAuth round-trip drops the query string.
+  const resolvePostLogin = () => {
+    const dest = sessionStorage.getItem("postLoginRedirect");
+    sessionStorage.removeItem("postLoginRedirect");
+    // Only honour internal paths to avoid an open-redirect.
+    return dest && dest.startsWith("/") ? dest : "/organizer-dashboard";
+  };
+
   useEffect(() => {
     const token = searchParams.get("token");
     const direct = searchParams.get("direct");
     const errorCode = searchParams.get("error");
     const selTokenParam = searchParams.get("selToken");
+
+    // Capture the post-login redirect before any early-return / OAuth hop.
+    const redirectParam = searchParams.get("redirect");
+    if (redirectParam && redirectParam.startsWith("/")) {
+      sessionStorage.setItem("postLoginRedirect", redirectParam);
+    }
 
     if (errorCode === "auth_failed") {
       toast({
@@ -101,7 +118,7 @@ export function OrganizerEShopLogin() {
         title: "Welcome back!",
         description: "Signed in via Google.",
       });
-      navigate("/organizer-dashboard", { replace: true });
+      navigate(resolvePostLogin(), { replace: true });
       return;
     }
 
@@ -160,7 +177,7 @@ export function OrganizerEShopLogin() {
         title: "Welcome back!",
         description: `Signed in to ${chosen.organizationName}`,
       });
-      navigate("/organizer-dashboard", { replace: true });
+      navigate(resolvePostLogin(), { replace: true });
     } catch (err: any) {
       toast({
         duration: 6000,

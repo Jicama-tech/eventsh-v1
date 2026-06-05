@@ -13,6 +13,14 @@ export enum ModuleType {
   INDIVIDUAL = "Individual",
 }
 
+// How a plan's validity is expressed. "days" = a rolling window of N days from
+// the day it's activated (legacy behaviour). "date" = a fixed calendar date the
+// plan is valid up to, regardless of when it's purchased.
+export enum ValidityType {
+  DAYS = "days",
+  DATE = "date",
+}
+
 // Use a dedicated collection so eventsh plans stay isolated from kioscart's
 // shared `plans` collection on the live MongoDB.
 @Schema({ timestamps: true, collection: "eventsh_plans" })
@@ -36,8 +44,18 @@ export class Plan {
   })
   moduleType: ModuleType;
 
-  @Prop({ required: true })
-  validityInDays: number;
+  // Validity window. When validityType is "days", planExpiry = activation +
+  // validityInDays. When "date", planExpiry = validUntil (fixed calendar date).
+  @Prop({ enum: ValidityType, default: ValidityType.DAYS })
+  validityType: ValidityType;
+
+  // Used when validityType === "days". Optional now that date-based plans exist.
+  @Prop()
+  validityInDays?: number;
+
+  // Used when validityType === "date" — the plan is valid up to this date.
+  @Prop()
+  validUntil?: Date;
 
   @Prop({ default: true })
   isActive: boolean;
