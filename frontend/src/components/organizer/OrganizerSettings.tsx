@@ -24,6 +24,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { useSubscription } from "@/hooks/useSubscription";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Store,
@@ -140,6 +141,10 @@ export function BlurWrapper({
 
 export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
   const { toast } = useToast();
+  // Customize Email is a subscription-plan feature — the Personal Email
+  // (custom sender) card only renders when the active plan includes it.
+  const { isModuleEnabled } = useSubscription();
+  const customEmailInPlan = isModuleEnabled("customEmail");
   const [paymentQrFile, setPaymentQrFile] = useState<File | null>(null);
   const [paymentQrPreview, setPaymentQrPreview] = useState<string | null>(null);
   const apiURL = __API_URL__;
@@ -2686,7 +2691,10 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
             </CardContent>
           </Card>
 
-          {/* ---- Personal / custom sending email ---- */}
+          {/* ---- Personal / custom sending email ----
+               Only rendered when the subscription plan includes the
+               "Customize Email" module. */}
+          {customEmailInPlan && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -2846,6 +2854,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               </div>
             </CardContent>
           </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="subscription" className="space-y-6">
@@ -3031,32 +3040,60 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                             { key: "whatsappQR", label: "WhatsApp QR" },
                             { key: "instagram", label: "Instagram" },
                             { key: "operators", label: "Operators" },
+                            {
+                              key: "membership",
+                              label: "Exhibitor Membership",
+                            },
+                            { key: "feedback", label: "Feedback" },
+                            {
+                              key: "customEmail",
+                              label: "Customize Email (own sender)",
+                            },
                           ].map((m) => {
                             const cfg = subscription.modules[m.key];
                             const on = !!cfg?.enabled;
+                            // Feedback: list which audiences the plan covers.
+                            const audienceLabels =
+                              m.key === "feedback" && on && cfg?.audiences
+                                ? [
+                                    ["visitor", "Visitors"],
+                                    ["exhibitor", "Exhibitors"],
+                                    ["speaker", "Speakers"],
+                                    ["roundTable", "Round Tables"],
+                                  ]
+                                    .filter(([k]) => !!cfg.audiences[k])
+                                    .map(([, l]) => l)
+                                : [];
                             return (
                               <div
                                 key={m.key}
-                                className={`flex items-center justify-between px-3 py-2 rounded-lg border ${
+                                className={`px-3 py-2 rounded-lg border ${
                                   on
                                     ? "bg-green-50 border-green-200"
                                     : "bg-gray-50 border-gray-200 opacity-60"
                                 }`}
                               >
-                                <span className="text-sm">{m.label}</span>
-                                <div className="flex items-center gap-2">
-                                  {cfg?.limit > 0 && on && (
-                                    <span className="text-xs text-muted-foreground">
-                                      Limit: {cfg.limit}
-                                    </span>
-                                  )}
-                                  <Badge
-                                    variant={on ? "default" : "secondary"}
-                                    className="text-[10px] px-1.5 py-0"
-                                  >
-                                    {on ? "ON" : "OFF"}
-                                  </Badge>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm">{m.label}</span>
+                                  <div className="flex items-center gap-2">
+                                    {cfg?.limit > 0 && on && (
+                                      <span className="text-xs text-muted-foreground">
+                                        Limit: {cfg.limit}
+                                      </span>
+                                    )}
+                                    <Badge
+                                      variant={on ? "default" : "secondary"}
+                                      className="text-[10px] px-1.5 py-0"
+                                    >
+                                      {on ? "ON" : "OFF"}
+                                    </Badge>
+                                  </div>
                                 </div>
+                                {audienceLabels.length > 0 && (
+                                  <p className="text-[11px] text-muted-foreground mt-1">
+                                    {audienceLabels.join(", ")}
+                                  </p>
+                                )}
                               </div>
                             );
                           })}

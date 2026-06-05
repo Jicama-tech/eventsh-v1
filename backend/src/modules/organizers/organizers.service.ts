@@ -911,6 +911,31 @@ export class OrganizersService {
       );
     }
 
+    // Plan gate: Customize Email is a subscription-plan feature. Mirrors the
+    // frontend's isModuleEnabled logic (plan modules → default-plan fallback;
+    // plans with no module config at all stay permissive for legacy data).
+    if (next.enabled) {
+      let plan: any = (organizer as any).planId
+        ? await this.planModel.findById((organizer as any).planId).lean()
+        : null;
+      if (!plan?.modules || Object.keys(plan.modules).length === 0) {
+        plan =
+          (await this.planModel
+            .findOne({ moduleType: "Organizer", isDefault: true, isActive: true })
+            .lean()) || plan;
+      }
+      const modules: any = plan?.modules;
+      if (
+        modules &&
+        Object.keys(modules).length > 0 &&
+        !modules.customEmail?.enabled
+      ) {
+        throw new BadRequestException(
+          "Customize Email isn't included in your current plan. Upgrade your subscription to send from your own email address.",
+        );
+      }
+    }
+
     // $set only the emailConfig so we don't re-validate the whole document.
     await this.organizerModel.updateOne(
       { _id: new Types.ObjectId(id) },

@@ -95,6 +95,9 @@ export class Plan {
     // Communication
     whatsappQR?: { enabled: boolean };
     instagram?: { enabled: boolean };
+    // Customize Email — lets the organizer send emails from their own
+    // address (Personal Email card in Settings) instead of admin@eventsh.com.
+    customEmail?: { enabled: boolean };
     // Operators
     operators?: { enabled: boolean; limit: number };
     // Exhibitor membership programs. When enabled, the organizer can
