@@ -24,6 +24,8 @@ export interface SubscriptionState {
   planName: string | null;
   pricePaid: string | null;
   validityInDays: number | null;
+  validityType?: "days" | "date";
+  validUntil?: string | null;
   planStartDate: string | null;
   planExpiryDate: string | null;
   isExpired: boolean;

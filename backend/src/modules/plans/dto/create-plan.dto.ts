@@ -6,9 +6,10 @@ import {
   IsBoolean,
   IsOptional,
   IsObject,
+  IsDateString,
   Min,
 } from "class-validator";
-import { ModuleType } from "../entities/plan.entity";
+import { ModuleType, ValidityType } from "../entities/plan.entity";
 
 export class CreatePlanDto {
   @IsString()
@@ -31,9 +32,21 @@ export class CreatePlanDto {
   @IsEnum(ModuleType)
   moduleType?: ModuleType = ModuleType.ORGANIZER;
 
+  // "days" (rolling N-day window) or "date" (valid up to a fixed date).
+  @IsOptional()
+  @IsEnum(ValidityType)
+  validityType?: ValidityType;
+
+  // Required only when validityType is "days".
+  @IsOptional()
   @IsNumber()
   @Min(1)
-  validityInDays: number;
+  validityInDays?: number;
+
+  // Required only when validityType is "date" (ISO date string).
+  @IsOptional()
+  @IsDateString()
+  validUntil?: string;
 
   @IsOptional()
   @IsBoolean()

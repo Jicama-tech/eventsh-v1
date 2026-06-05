@@ -12,6 +12,10 @@ import { StallPaymentSchedulerService } from "./stall-payment-scheduler.service"
 import { FeedbackModule } from "../feedback/feedback.module";
 import { MailModule } from "../roles/mail.module";
 import { Operator, OperatorSchema } from "../operators/entities/operator.entity";
+import {
+  OrganizerStore,
+  OrganizerStoreSchema,
+} from "../organizer-stores/entities/organizer-store.entity";
 
 @Module({
   imports: [
@@ -23,6 +27,9 @@ import { Operator, OperatorSchema } from "../operators/entities/operator.entity"
       // Operators of the organizer — emailed when a new stall request lands
       // so any of them can approve/reject quickly.
       { name: Operator.name, schema: OperatorSchema },
+      // Store lookup for the organizer's public storefront slug, used to
+      // build the event-front link in vendor status emails.
+      { name: OrganizerStore.name, schema: OrganizerStoreSchema },
     ]),
     OtpModule,
     CouponModule,

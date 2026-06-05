@@ -17,9 +17,11 @@ import { JwtService } from "@nestjs/jwt";
 import { EventDocument } from "../events/schemas/event.schema";
 import { User } from "../users/schemas/user.schema";
 import { MailService } from "../roles/mail.service";
+import { encryptSecret } from "../../common/secret-crypto.util";
 import { CreateOrganizerDto } from "./dto/createOrganizer.dto";
 import { Otp } from "../otp/entities/otp.entity";
 import { Plan } from "../plans/entities/plan.entity";
+import { computePlanExpiry } from "../plans/plan-validity.util";
 import {
   Operator,
   OperatorDocument,
@@ -190,18 +192,21 @@ export class OrganizersService {
         isActive: true,
       }));
     const validity = Number(defaultPlan?.validityInDays);
-    const subscriptionFields =
-      defaultPlan && Number.isFinite(validity) && validity > 0
-        ? {
-            subscribed: true,
-            planId: defaultPlan._id,
-            planStartDate: new Date(),
-            planExpiryDate: new Date(
-              Date.now() + validity * 24 * 60 * 60 * 1000,
-            ),
-            pricePaid: defaultPlan.price?.toString?.() ?? "0",
-          }
-        : {};
+    // Day-based plans need a positive day count; date-based plans need a
+    // validUntil. Either qualifies the organizer for the default subscription.
+    const hasValidity =
+      !!defaultPlan &&
+      ((defaultPlan.validityType === "date" && !!defaultPlan.validUntil) ||
+        (Number.isFinite(validity) && validity > 0));
+    const subscriptionFields = hasValidity
+      ? {
+          subscribed: true,
+          planId: defaultPlan._id,
+          planStartDate: new Date(),
+          planExpiryDate: computePlanExpiry(defaultPlan),
+          pricePaid: defaultPlan.price?.toString?.() ?? "0",
+        }
+      : {};
 
     const { agentReferralCode, ...rest } = dto;
     // Drop accountType from `rest` so we control it explicitly below.
@@ -353,18 +358,21 @@ export class OrganizersService {
       }));
 
     const validity = Number(defaultPlan?.validityInDays);
-    const subscriptionFields =
-      defaultPlan && Number.isFinite(validity) && validity > 0
-        ? {
-            subscribed: true,
-            planId: defaultPlan._id,
-            planStartDate: new Date(),
-            planExpiryDate: new Date(
-              Date.now() + validity * 24 * 60 * 60 * 1000,
-            ),
-            pricePaid: defaultPlan.price?.toString?.() ?? "0",
-          }
-        : {};
+    // Day-based plans need a positive day count; date-based plans need a
+    // validUntil. Either qualifies the organizer for the default subscription.
+    const hasValidity =
+      !!defaultPlan &&
+      ((defaultPlan.validityType === "date" && !!defaultPlan.validUntil) ||
+        (Number.isFinite(validity) && validity > 0));
+    const subscriptionFields = hasValidity
+      ? {
+          subscribed: true,
+          planId: defaultPlan._id,
+          planStartDate: new Date(),
+          planExpiryDate: computePlanExpiry(defaultPlan),
+          pricePaid: defaultPlan.price?.toString?.() ?? "0",
+        }
+      : {};
 
     // 3. Create organizer auto-approved (no manual gate).
     const { agentReferralCode, ...rest } = dto;
@@ -829,14 +837,150 @@ export class OrganizersService {
   async getProfile(id: string) {
     try {
       const _id = new Types.ObjectId(id);
-      const organizer = await this.organizerModel.findOne({ _id });
+      const organizer = await this.organizerModel.findOne({ _id }).lean();
       if (!organizer) {
         throw new NotFoundException("Not Found");
+      }
+
+      // Never echo the SMTP password back to the client; expose only whether
+      // one is set (the dedicated email-config endpoint handles editing).
+      const ec: any = (organizer as any).emailConfig;
+      if (ec && typeof ec === "object") {
+        (organizer as any).emailConfig = {
+          ...ec,
+          smtpPass: undefined,
+          hasPassword: !!ec.smtpPass,
+        };
       }
 
       return { message: "Organizer Found", data: organizer };
     } catch (error) {
       throw error;
+    }
+  }
+
+  // ----- Personal / custom sending email -----------------------------------
+
+  // Return the organizer's email config WITHOUT the SMTP password. The UI only
+  // needs to know whether a password is already saved (`hasPassword`).
+  async getEmailConfig(id: string) {
+    const organizer = await this.organizerModel
+      .findById(new Types.ObjectId(id))
+      .lean();
+    if (!organizer) throw new NotFoundException("Organizer Not Found");
+    const cfg: any = (organizer as any).emailConfig || {};
+    const { smtpPass, ...safe } = cfg;
+    return { data: { ...safe, hasPassword: !!smtpPass } };
+  }
+
+  // Save the email config. A blank smtpPass means "keep the existing password"
+  // so the organizer doesn't have to retype it on every edit.
+  async updateEmailConfig(id: string, body: any) {
+    const organizer = await this.organizerModel
+      .findById(new Types.ObjectId(id))
+      .lean();
+    if (!organizer) throw new NotFoundException("Organizer Not Found");
+
+    const existing: any = (organizer as any).emailConfig || {};
+    const next: any = {
+      enabled: !!body.enabled,
+      fromName: (body.fromName || "").trim(),
+      fromEmail: (body.fromEmail || "").trim(),
+      smtpHost: (body.smtpHost || "").trim(),
+      smtpPort: Number(body.smtpPort) || 465,
+      smtpSecure:
+        body.smtpSecure === undefined
+          ? (Number(body.smtpPort) || 465) === 465
+          : !!body.smtpSecure,
+      smtpUser: (body.smtpUser || "").trim(),
+      // Encrypted at rest (AES-256-GCM) so the password is unreadable in the
+      // DB — even to admins. Re-saving an already-encrypted value is a no-op.
+      smtpPass: body.smtpPass
+        ? encryptSecret(String(body.smtpPass))
+        : encryptSecret(existing.smtpPass || ""),
+    };
+
+    // Guard: can't enable without the essentials.
+    if (
+      next.enabled &&
+      (!next.smtpHost || !next.smtpUser || !next.smtpPass ||
+        !(next.fromEmail || next.smtpUser))
+    ) {
+      throw new BadRequestException(
+        "To enable a personal email, fill in the From email and SMTP host, username and password.",
+      );
+    }
+
+    // Plan gate: Customize Email is a subscription-plan feature. Mirrors the
+    // frontend's isModuleEnabled logic (plan modules → default-plan fallback;
+    // plans with no module config at all stay permissive for legacy data).
+    if (next.enabled) {
+      let plan: any = (organizer as any).planId
+        ? await this.planModel.findById((organizer as any).planId).lean()
+        : null;
+      if (!plan?.modules || Object.keys(plan.modules).length === 0) {
+        plan =
+          (await this.planModel
+            .findOne({ moduleType: "Organizer", isDefault: true, isActive: true })
+            .lean()) || plan;
+      }
+      const modules: any = plan?.modules;
+      if (
+        modules &&
+        Object.keys(modules).length > 0 &&
+        !modules.customEmail?.enabled
+      ) {
+        throw new BadRequestException(
+          "Customize Email isn't included in your current plan. Upgrade your subscription to send from your own email address.",
+        );
+      }
+    }
+
+    // $set only the emailConfig so we don't re-validate the whole document.
+    await this.organizerModel.updateOne(
+      { _id: new Types.ObjectId(id) },
+      { $set: { emailConfig: next } },
+    );
+
+    const { smtpPass, ...safe } = next;
+    return {
+      message: "Email settings saved",
+      data: { ...safe, hasPassword: !!smtpPass },
+    };
+  }
+
+  // Send a test email using the supplied config (merging the stored password
+  // when the form left it blank).
+  async sendTestEmailConfig(id: string, body: any, to: string) {
+    if (!to) throw new BadRequestException("A recipient email is required");
+    const organizer = await this.organizerModel
+      .findById(new Types.ObjectId(id))
+      .lean();
+    if (!organizer) throw new NotFoundException("Organizer Not Found");
+
+    const existing: any = (organizer as any).emailConfig || {};
+    const config = {
+      fromName: body.fromName || existing.fromName,
+      fromEmail: body.fromEmail || existing.fromEmail,
+      smtpHost: body.smtpHost || existing.smtpHost,
+      smtpPort: Number(body.smtpPort) || existing.smtpPort || 465,
+      smtpSecure:
+        body.smtpSecure === undefined ? existing.smtpSecure : !!body.smtpSecure,
+      smtpUser: body.smtpUser || existing.smtpUser,
+      smtpPass: body.smtpPass || existing.smtpPass,
+    };
+    if (!config.smtpHost || !config.smtpUser || !config.smtpPass) {
+      throw new BadRequestException(
+        "SMTP host, username and password are required to send a test email.",
+      );
+    }
+    try {
+      await this.mailService.sendTestEmail(config, to);
+      return { message: `Test email sent to ${to}` };
+    } catch (err: any) {
+      throw new BadRequestException(
+        `Couldn't send test email: ${err?.message || "SMTP error"}`,
+      );
     }
   }
 
@@ -1465,9 +1609,19 @@ export class OrganizersService {
 
     const DAY = 24 * 60 * 60 * 1000;
     const now = Date.now();
-    const expiry = organizer.planExpiryDate
-      ? new Date(organizer.planExpiryDate).getTime()
-      : 0;
+    // For date-based plans the validity is a FIXED calendar date shared by
+    // everyone, so derive the expiry from the plan's current validUntil at
+    // read time — that way an admin editing the plan's date is reflected on
+    // the organizer dashboard immediately, without re-activating. Day-based
+    // plans keep their per-organizer expiry stamped at activation.
+    const isDatePlan =
+      (plan as any)?.validityType === "date" && !!(plan as any)?.validUntil;
+    const effectiveExpiryDate = isDatePlan
+      ? new Date((plan as any).validUntil)
+      : organizer.planExpiryDate
+        ? new Date(organizer.planExpiryDate)
+        : null;
+    const expiry = effectiveExpiryDate ? effectiveExpiryDate.getTime() : 0;
     const subscribed = !!organizer.subscribed;
     const isExpired = subscribed && expiry > 0 && expiry < now;
     const daysLeft = expiry > now ? Math.ceil((expiry - now) / DAY) : 0;
@@ -1488,8 +1642,12 @@ export class OrganizersService {
       planName: plan?.planName || null,
       pricePaid: organizer.pricePaid || null,
       validityInDays: plan?.validityInDays || null,
+      validityType: (plan as any)?.validityType || "days",
+      validUntil: (plan as any)?.validUntil || null,
       planStartDate: organizer.planStartDate || null,
-      planExpiryDate: organizer.planExpiryDate || null,
+      // Effective expiry — for date plans this is the plan's validUntil so it
+      // tracks admin edits; for day plans it's the stored per-organizer expiry.
+      planExpiryDate: effectiveExpiryDate || organizer.planExpiryDate || null,
       isExpired,
       daysLeft,
       // Grace window fields (kioscart parity)
@@ -1518,9 +1676,9 @@ export class OrganizersService {
       organizer.subscribed = true;
       organizer.planId = plan._id;
       organizer.planStartDate = new Date();
-      organizer.planExpiryDate = new Date(
-        organizer.planStartDate.getTime() +
-          plan.validityInDays * 24 * 60 * 60 * 1000,
+      organizer.planExpiryDate = computePlanExpiry(
+        plan,
+        organizer.planStartDate,
       );
       organizer.pricePaid = plan.price.toString();
 

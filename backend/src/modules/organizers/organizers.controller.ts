@@ -119,6 +119,22 @@ export class OrganizersController {
     return this.organizersService.approve(id);
   }
 
+  // ----- Personal / custom sending email -----------------------------------
+  @Get(":id/email-config")
+  async getEmailConfig(@Param("id") id: string) {
+    return this.organizersService.getEmailConfig(id);
+  }
+
+  @Patch(":id/email-config")
+  async updateEmailConfig(@Param("id") id: string, @Body() body: any) {
+    return this.organizersService.updateEmailConfig(id, body);
+  }
+
+  @Post(":id/email-config/test")
+  async testEmailConfig(@Param("id") id: string, @Body() body: any) {
+    return this.organizersService.sendTestEmailConfig(id, body, body?.to);
+  }
+
   @Patch("profile/:id")
   @UsePipes(new ValidationPipe({ whitelist: false, forbidNonWhitelisted: false, transform: true }))
   @UseInterceptors(

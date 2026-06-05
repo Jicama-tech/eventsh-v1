@@ -32,6 +32,7 @@ import { v4 as uuidv4 } from "uuid";
 import * as path from "path";
 import { WebpValidationPipe } from "../../seed/parse-webp.pipe";
 import { compressEventUploadFiles } from "../../seed/compress-event-images.util";
+import { computePlanExpiry } from "../plans/plan-validity.util";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import { buildDefaultStorefrontSettings } from "../organizer-stores/default-settings";
@@ -134,18 +135,20 @@ export class EventsController {
       isActive: true,
     });
     const validity = Number(defaultPlan?.validityInDays);
-    const subFields =
-      defaultPlan && Number.isFinite(validity) && validity > 0
-        ? {
-            subscribed: true,
-            planId: defaultPlan._id,
-            planStartDate: new Date(),
-            planExpiryDate: new Date(
-              Date.now() + validity * 24 * 60 * 60 * 1000,
-            ),
-            pricePaid: defaultPlan.price?.toString?.() ?? "0",
-          }
-        : {};
+    const hasValidity =
+      !!defaultPlan &&
+      (((defaultPlan as any).validityType === "date" &&
+        !!(defaultPlan as any).validUntil) ||
+        (Number.isFinite(validity) && validity > 0));
+    const subFields = hasValidity
+      ? {
+          subscribed: true,
+          planId: defaultPlan._id,
+          planStartDate: new Date(),
+          planExpiryDate: computePlanExpiry(defaultPlan as any),
+          pricePaid: defaultPlan.price?.toString?.() ?? "0",
+        }
+      : {};
     const displayName = user?.name || email.split("@")[0];
     // whatsAppNumber + businessEmail have unique indexes — use synthetic
     // placeholders keyed on email so each Individual gets a distinct value.

@@ -47,6 +47,7 @@ export class StallsService {
     @InjectModel("Event") private eventModel: Model<any>,
     @InjectModel("Organizer") private organizerModel: Model<any>,
     @InjectModel("Operator") private operatorModel: Model<any>,
+    @InjectModel("OrganizerStore") private organizerStoreModel: Model<any>,
     private otpService: OtpService,
     private couponService: CouponService,
     private feedbackService: FeedbackService,
@@ -640,7 +641,7 @@ export class StallsService {
           const message =
             `🎉 *Your Stall Confirmation is Ready!*\n\n` +
             `🎪 *Event:* ${eventObj?.title || "Event"}\n` +
-            `👤 *Business:* ${vendor.name || stall.brandName || "—"}\n` +
+            `👤 *Business:* ${vendor.businessName || vendor.shopName || vendor.brandName || stall.brandName || vendor.name || "—"}\n` +
             `📅 *Date:* ${eventDate}\n` +
             `📍 *Venue:* ${eventObj?.location || "TBA"}\n\n` +
             `📊 *Booking Summary:*\n` +
@@ -662,6 +663,7 @@ export class StallsService {
               subject: `Your stall ticket for ${eventObj?.title || "Event"}`,
               heading: "Your Stall Confirmation is Ready!",
               message,
+              senderConfig: (organizerDoc as any)?.emailConfig,
             },
           );
         } catch (whatsAppError) {
@@ -697,6 +699,56 @@ export class StallsService {
     country?: string,
   ): Promise<string> {
     const eventDate = new Date(stall.eventId["startDate"]).toLocaleDateString();
+
+    // Resolve the full vendor document — callers sometimes pass the stall with
+    // shopkeeperId populated only partially (or not at all), which is why the
+    // PDF used to show "Business: N/A". Fetch fresh so every field is there.
+    const skRaw: any = stall.shopkeeperId;
+    let vendor: any = skRaw && skRaw.name ? skRaw : null;
+    const vendorId = skRaw?._id || skRaw;
+    if (!vendor && vendorId) {
+      vendor = await this.vendorModel.findById(vendorId).lean();
+    }
+    vendor = vendor || {};
+
+    // Organizer contact card ("Event Management") so the vendor knows who to
+    // call — uses the contact numbers the organizer published in Settings
+    // (contactPhones/contactPhoneNames), falling back to their primary phone.
+    const orgIdForPdf = (stall as any).organizerId?._id || (stall as any).organizerId;
+    let organizer: any = {};
+    if (orgIdForPdf) {
+      organizer =
+        (await this.organizerModel
+          .findById(orgIdForPdf)
+          .select(
+            "name organizationName phone businessPhone whatsAppNumber contactPhones contactPhoneNames email businessEmail",
+          )
+          .lean()) || {};
+    }
+    const contactPhones: string[] = Array.isArray(organizer.contactPhones)
+      ? organizer.contactPhones.filter((p: string) => String(p || "").trim())
+      : [];
+    const contactNames: string[] = Array.isArray(organizer.contactPhoneNames)
+      ? organizer.contactPhoneNames
+      : [];
+    const contactRows = contactPhones.length
+      ? contactPhones
+          .map((p, i) => {
+            const label = String(contactNames[i] || "").trim() || "Contact";
+            return `<div class="detail-row"><span class="detail-label">📞 ${label}:</span><span class="detail-value">${p}</span></div>`;
+          })
+          .join("")
+      : organizer.phone || organizer.businessPhone || organizer.whatsAppNumber
+        ? `<div class="detail-row"><span class="detail-label">📞 Phone:</span><span class="detail-value">${
+            organizer.phone || organizer.businessPhone || organizer.whatsAppNumber
+          }</span></div>`
+        : "";
+
+    // Row helper — skips empty values so the PDF never shows "N/A" filler.
+    const row = (label: string, value: any) =>
+      value
+        ? `<div class="detail-row"><span class="detail-label">${label}:</span><span class="detail-value">${value}</span></div>`
+        : "";
 
     return `
       <!DOCTYPE html>
@@ -826,14 +878,21 @@ export class StallsService {
           <div class="event-title">${stall.eventId["title"]}</div>
 
           <div class="details-section">
-            <div class="detail-row">
-              <span class="detail-label">Vendor:</span>
-              <span class="detail-value">${stall.shopkeeperId["name"]}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Business:</span>
-              <span class="detail-value">${stall.shopkeeperId["shopName"] || "N/A"}</span>
-            </div>
+            <h3>Business Details</h3>
+            ${row("Business Name", vendor.businessName || vendor.shopName || (stall as any).brandName)}
+            ${row("Brand Name", vendor.brandName)}
+            ${row("Applicant Name", vendor.nameOfApplicant)}
+            ${row("Owner Name", vendor.name)}
+            ${row("Category", vendor.businessCategory || vendor.businessType)}
+            ${row("Email", vendor.email || vendor.businessEmail)}
+            ${row("WhatsApp", vendor.whatsAppNumber || vendor.whatsappNumber || vendor.phone)}
+            ${row(
+              "Address",
+              [vendor.address, vendor.city, vendor.state, vendor.pincode]
+                .filter(Boolean)
+                .join(", "),
+            )}
+            ${row("Registration No.", vendor.registrationNumber)}
           </div>
 
           <div class="details-section">
@@ -846,10 +905,11 @@ export class StallsService {
               <span class="detail-label">📍 Venue:</span>
               <span class="detail-value">${stall.eventId["location"] || "N/A"}</span>
             </div>
+            ${row("Organized by", organizer.organizationName || organizer.name)}
           </div>
 
           <div class="details-section">
-            <h3>Tables Booked</h3>
+            <h3>Spaces Booked</h3>
             ${stall.selectedTables
               .map(
                 (t) => `
@@ -886,7 +946,7 @@ export class StallsService {
           <div class="details-section">
             <h3>Payment Summary</h3>
             <div class="detail-row">
-              <span class="detail-label">Tables Total:</span>
+              <span class="detail-label">Spaces Total:</span>
               <span class="detail-value">${formatCurrency(stall.tablesTotal, country)}</span>
             </div>
             <div class="detail-row">
@@ -928,6 +988,20 @@ export class StallsService {
                This coupon is valid for <strong>${stall.noOfOperators} Operator(s)</strong>.<br>
                Use this code at the time of Purchasing ticket to waive the entry price for your exhibitors/operators.
              </div>
+          </div>
+          `
+              : ""
+          }
+
+          ${
+            contactRows || organizer.organizationName || organizer.name
+              ? `
+          <div class="details-section">
+            <h3>Event Management Contact</h3>
+            ${row("Organizer", organizer.organizationName || organizer.name)}
+            ${contactRows}
+            ${row("Email", organizer.businessEmail || organizer.email)}
+            <p style="font-size:9px;color:#888;margin:6px 0 0">For any queries about your stall, spaces or payments, reach out to the event management using the contact details above.</p>
           </div>
           `
               : ""
@@ -1010,7 +1084,7 @@ export class StallsService {
 
 🎪 *Stall:* Confirmed for ${eventObj?.title || "Event"}
 
-👤 *Business:* ${vendorObj?.name || stall.brandName || "—"}
+👤 *Business:* ${vendorObj?.businessName || vendorObj?.shopName || vendorObj?.brandName || stall.brandName || vendorObj?.name || "—"}
 
 📅 *Date:* ${eventDate}
 
@@ -1031,6 +1105,18 @@ Thank you for choosing Eventsh! 🎊`;
       // Send WhatsApp message
       await this.otpService.sendWhatsAppMessage(whatsappNumber, message);
 
+      // Resolve the owning organizer's custom-sender config (if any) so the
+      // confirmation email goes from their address.
+      const orgId2 = (stall as any).organizerId?._id || (stall as any).organizerId;
+      let orgEmailCfg: any = (stall as any).organizerId?.emailConfig;
+      if (!orgEmailCfg && orgId2) {
+        const od = await this.organizerModel
+          .findById(orgId2)
+          .select("emailConfig")
+          .lean();
+        orgEmailCfg = (od as any)?.emailConfig;
+      }
+
       // Send PDF as media (+ mirror to the vendor's registered email)
       await this.otpService.sendMediaMessage(
         whatsappNumber,
@@ -1042,6 +1128,7 @@ Thank you for choosing Eventsh! 🎊`;
           subject: `Your stall confirmation for ${eventObj?.title || "Event"}`,
           heading: "Your Stall Confirmation is Ready!",
           message,
+          senderConfig: orgEmailCfg,
         },
       );
     } catch (error) {
@@ -1232,6 +1319,45 @@ Thank you for choosing Eventsh! 🎊`;
     }
   }
 
+  // Public event-front URL for a vendor-facing email. Prefers the pretty
+  // storefront route (/:slug/events/:id) when the organizer has a store,
+  // falling back to the plain /events/:id route.
+  private async buildEventFrontUrl(
+    organizerId: any,
+    eventId: any,
+  ): Promise<string> {
+    const fe = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
+    const evId = String(eventId?._id || eventId || "");
+    try {
+      const orgId = organizerId?._id || organizerId;
+      const store = orgId
+        ? await this.organizerStoreModel
+            .findOne({ organizerId: orgId })
+            .select("slug")
+            .lean()
+        : null;
+      if ((store as any)?.slug) return `${fe}/${(store as any).slug}/events/${evId}`;
+    } catch {
+      // Slug lookup is cosmetic — fall through to the plain route.
+    }
+    return `${fe}/events/${evId}`;
+  }
+
+  // Fetch just the organizer's custom-sender config for vendor-facing email.
+  private async getOrganizerSenderConfig(organizerId: any): Promise<any> {
+    try {
+      const orgId = organizerId?._id || organizerId;
+      if (!orgId) return undefined;
+      const org = await this.organizerModel
+        .findById(orgId)
+        .select("emailConfig")
+        .lean();
+      return (org as any)?.emailConfig;
+    } catch {
+      return undefined;
+    }
+  }
+
   private async sendStallCreatedNotification(stall: any) {
     try {
       const vendor = await this.vendorModel.findById(stall.shopkeeperId);
@@ -1258,6 +1384,49 @@ Thank you for choosing Eventsh! 🎊`;
         );
       } catch (waErr) {
         this.logger.warn("Stall created WhatsApp notify failed", waErr);
+      }
+
+      // Email the vendor the same submission confirmation. Vendor-facing, so
+      // it goes out from the organizer's custom sender when enabled.
+      const vendorEmail = vendor.email || vendor.businessEmail;
+      if (vendorEmail) {
+        try {
+          const senderConfig = await this.getOrganizerSenderConfig(
+            stall.organizerId,
+          );
+          const eventDate = event?.startDate
+            ? new Date(event.startDate).toLocaleDateString()
+            : "TBA";
+          const html = `
+            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+              <div style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:24px;text-align:center">
+                <h1 style="margin:0;font-size:20px">Stall Request Submitted</h1>
+                <p style="margin:6px 0 0;opacity:.9">${event?.title || "Event"}</p>
+              </div>
+              <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+                <p>Dear ${vendor.name || "Vendor"},</p>
+                <p>Your stall request for <strong>${event?.title || "the event"}</strong> has been submitted successfully and is now <strong>pending organizer approval</strong>.</p>
+                <table style="border-collapse:collapse;margin:12px 0">
+                  <tr><td style="padding:4px 14px 4px 0;color:#64748b">Event</td><td style="padding:4px 0;font-weight:600">${event?.title || "—"}</td></tr>
+                  <tr><td style="padding:4px 14px 4px 0;color:#64748b">Location</td><td style="padding:4px 0;font-weight:600">${event?.location || "—"}</td></tr>
+                  <tr><td style="padding:4px 14px 4px 0;color:#64748b">Date</td><td style="padding:4px 0;font-weight:600">${eventDate}</td></tr>
+                  <tr><td style="padding:4px 14px 4px 0;color:#64748b">Status</td><td style="padding:4px 0;font-weight:600">Pending approval</td></tr>
+                </table>
+                <p>We'll email you as soon as the organizer approves or rejects your request.</p>
+                <p style="color:#64748b;font-size:12px;margin-top:16px">Thank you for registering!</p>
+              </div>
+            </div>`;
+          await this.mailService.sendEmail({
+            to: vendorEmail,
+            subject: `Stall request submitted — ${event?.title || "Event"}`,
+            html,
+            senderConfig,
+          });
+        } catch (mailErr: any) {
+          this.logger.warn(
+            `Stall created vendor email failed: ${mailErr?.message || mailErr}`,
+          );
+        }
       }
 
       // Alert the organizer + every operator by email so the Approve/Reject
@@ -1294,7 +1463,14 @@ Thank you for choosing Eventsh! 🎊`;
       if (recipients.size === 0) return;
 
       const fe = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
-      const dashboardUrl = `${fe}/organizer-dashboard`;
+      // Route reviewers through the organizer login first. If they're not
+      // signed in (no token), they land on the login screen and are sent to
+      // the dashboard afterwards — instead of hitting /organizer-dashboard
+      // directly and getting a stuck "loading" page. Already-signed-in
+      // reviewers are forwarded straight to the dashboard by the app router.
+      const dashboardUrl = `${fe}/organizer/login?redirect=${encodeURIComponent(
+        "/organizer-dashboard",
+      )}`;
       const eventDate = event?.startDate
         ? new Date(event.startDate).toLocaleDateString()
         : "TBA";
@@ -1341,6 +1517,8 @@ Thank you for choosing Eventsh! 🎊`;
               to,
               subject: `New stall request: ${businessName} — ${event?.title || "Event"}`,
               html,
+              // Internal notification to the organizer/operators — always sent
+              // from the global EventSH sender, never the organizer's custom one.
             })
             .catch((e: any) =>
               this.logger.warn(
@@ -1390,10 +1568,87 @@ Thank you for choosing Eventsh! 🎊`;
       }
 
       if (message) {
-        await this.otpService.sendWhatsAppMessage(
-          (vendor.whatsAppNumber || vendor.whatsappNumber),
-          message,
-        );
+        try {
+          await this.otpService.sendWhatsAppMessage(
+            (vendor.whatsAppNumber || vendor.whatsappNumber),
+            message,
+          );
+        } catch (waErr) {
+          this.logger.warn("Status update WhatsApp notify failed", waErr);
+        }
+      }
+
+      // Email the vendor the same status update, with a link to the event
+      // page so they can log in and continue (select tables, pay). Vendor-
+      // facing, so it goes out from the organizer's custom sender when on.
+      const vendorEmail = vendor.email || vendor.businessEmail;
+      const isApproved = newStatus === "Confirmed" || newStatus === "Approved";
+      const isRejected = newStatus === "Cancelled";
+      if (vendorEmail && (isApproved || isRejected)) {
+        try {
+          const senderConfig = await this.getOrganizerSenderConfig(
+            stall.organizerId,
+          );
+          const eventUrl = await this.buildEventFrontUrl(
+            stall.organizerId,
+            stall.eventId,
+          );
+          const headerBg = isApproved
+            ? "linear-gradient(135deg,#22c55e,#16a34a)"
+            : "linear-gradient(135deg,#ef4444,#dc2626)";
+          const title = isApproved
+            ? "Stall Request Approved 🎉"
+            : "Stall Request Rejected";
+          const body = isApproved
+            ? `
+                <p>Congratulations ${vendor.name || "Vendor"}!</p>
+                <p>Your stall request for <strong>${event?.title || "the event"}</strong> has been <strong style="color:#16a34a">approved</strong>.</p>
+                <p><strong>Next steps:</strong></p>
+                <ol style="margin:8px 0 16px;padding-left:20px">
+                  <li>Click the button below to open the event page</li>
+                  <li>Log in with your registered details</li>
+                  <li>Select your preferred tables and add-ons</li>
+                  <li>Complete the payment to confirm your stall</li>
+                </ol>
+                <div style="text-align:center;margin:22px 0 6px">
+                  <a href="${eventUrl}" style="display:inline-block;background:#16a34a;color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px">
+                    Open Event Page
+                  </a>
+                </div>`
+            : `
+                <p>Dear ${vendor.name || "Vendor"},</p>
+                <p>We're sorry — your stall request for <strong>${event?.title || "the event"}</strong> has been <strong style="color:#dc2626">rejected</strong>.</p>
+                <p><strong>Reason:</strong> ${stall.cancellationReason || "Not specified"}</p>
+                <p>Please contact the organizer for more information, or visit the event page below.</p>
+                <div style="text-align:center;margin:22px 0 6px">
+                  <a href="${eventUrl}" style="display:inline-block;background:#3b82f6;color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px">
+                    View Event Page
+                  </a>
+                </div>`;
+          const html = `
+            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+              <div style="background:${headerBg};color:#fff;padding:24px;text-align:center">
+                <h1 style="margin:0;font-size:20px">${title}</h1>
+                <p style="margin:6px 0 0;opacity:.9">${event?.title || "Event"}</p>
+              </div>
+              <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+                ${body}
+                <p style="color:#64748b;font-size:12px;margin-top:16px">If the button doesn't work, copy this link into your browser:<br/><a href="${eventUrl}">${eventUrl}</a></p>
+              </div>
+            </div>`;
+          await this.mailService.sendEmail({
+            to: vendorEmail,
+            subject: isApproved
+              ? `✅ Stall request approved — ${event?.title || "Event"}`
+              : `Stall request rejected — ${event?.title || "Event"}`,
+            html,
+            senderConfig,
+          });
+        } catch (mailErr: any) {
+          this.logger.warn(
+            `Status update vendor email failed: ${mailErr?.message || mailErr}`,
+          );
+        }
       }
     } catch (error) {
       this.logger.error("Error sending status update notification:", error);
@@ -1612,6 +1867,7 @@ Thank you for choosing Eventsh! 🎊`;
                       `Remaining: ${populatedStall.remainingAmount}\n` +
                       `Grand Total: ${populatedStall.grandTotal}\n\n` +
                       `Your stall QR ticket will be released once full payment is confirmed by the organizer. Your booking details PDF is attached.`,
+                    senderConfig: (orgDoc as any)?.emailConfig,
                   },
                 );
               }

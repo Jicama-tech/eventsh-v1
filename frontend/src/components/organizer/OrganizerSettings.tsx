@@ -24,6 +24,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { useSubscription } from "@/hooks/useSubscription";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Store,
@@ -140,9 +141,122 @@ export function BlurWrapper({
 
 export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
   const { toast } = useToast();
+  // Customize Email is a subscription-plan feature — the Personal Email
+  // (custom sender) card only renders when the active plan includes it.
+  const { isModuleEnabled } = useSubscription();
+  const customEmailInPlan = isModuleEnabled("customEmail");
   const [paymentQrFile, setPaymentQrFile] = useState<File | null>(null);
   const [paymentQrPreview, setPaymentQrPreview] = useState<string | null>(null);
   const apiURL = __API_URL__;
+
+  // --- Personal / custom sending email ---
+  const [emailCfg, setEmailCfg] = useState({
+    enabled: false,
+    fromName: "",
+    fromEmail: "",
+    smtpHost: "",
+    smtpPort: 465,
+    smtpSecure: true,
+    smtpUser: "",
+    smtpPass: "",
+  });
+  const [emailCfgHasPassword, setEmailCfgHasPassword] = useState(false);
+  const [emailCfgSaving, setEmailCfgSaving] = useState(false);
+  const [emailCfgTesting, setEmailCfgTesting] = useState(false);
+  const [emailTestTo, setEmailTestTo] = useState("");
+
+  // The organizer id lives in the JWT (sub), with fallbacks for operator
+  // tokens that carry it under organizerId/userId.
+  const getOrgId = (): string | null => {
+    try {
+      const token = sessionStorage.getItem("token");
+      if (!token) return null;
+      const decoded: any = jwtDecode(token);
+      return decoded?.sub || decoded?.organizerId || decoded?.userId || null;
+    } catch {
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    const id = getOrgId();
+    if (!id) return;
+    fetch(`${apiURL}/organizers/${id}/email-config`)
+      .then((r) => r.json())
+      .then((j) => {
+        const d = j?.data || {};
+        setEmailCfg((prev) => ({
+          ...prev,
+          enabled: !!d.enabled,
+          fromName: d.fromName || "",
+          fromEmail: d.fromEmail || "",
+          smtpHost: d.smtpHost || "",
+          smtpPort: d.smtpPort || 465,
+          smtpSecure: d.smtpSecure ?? true,
+          smtpUser: d.smtpUser || "",
+          smtpPass: "",
+        }));
+        setEmailCfgHasPassword(!!d.hasPassword);
+        if (!emailTestTo && d.fromEmail) setEmailTestTo(d.fromEmail);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const saveEmailConfig = async () => {
+    const id = getOrgId();
+    if (!id) return;
+    setEmailCfgSaving(true);
+    try {
+      const res = await fetch(`${apiURL}/organizers/${id}/email-config`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(emailCfg),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.message || "Could not save");
+      setEmailCfgHasPassword(!!j?.data?.hasPassword);
+      setEmailCfg((p) => ({ ...p, smtpPass: "" }));
+      toast({ title: "Saved", description: "Email settings updated." });
+    } catch (e: any) {
+      toast({
+        title: "Couldn't save",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setEmailCfgSaving(false);
+    }
+  };
+
+  const sendTestEmail = async () => {
+    const id = getOrgId();
+    if (!id) return;
+    const to = emailTestTo || emailCfg.fromEmail;
+    if (!to) {
+      toast({ title: "Enter a test recipient", variant: "destructive" });
+      return;
+    }
+    setEmailCfgTesting(true);
+    try {
+      const res = await fetch(`${apiURL}/organizers/${id}/email-config/test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...emailCfg, to }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.message || "Test failed");
+      toast({ title: "Test sent", description: j?.message || `Sent to ${to}` });
+    } catch (e: any) {
+      toast({
+        title: "Test failed",
+        description: e?.message || "Check your SMTP details.",
+        variant: "destructive",
+      });
+    } finally {
+      setEmailCfgTesting(false);
+    }
+  };
 
   // --- Subscription tab state ---
   const [subscription, setSubscription] = useState<any>(null);
@@ -2576,6 +2690,171 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               </div>
             </CardContent>
           </Card>
+
+          {/* ---- Personal / custom sending email ----
+               Only rendered when the subscription plan includes the
+               "Customize Email" module. */}
+          {customEmailInPlan && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mail className="w-5 h-5" />
+                Personal Email (custom sender)
+              </CardTitle>
+              <CardDescription>
+                By default all emails to your exhibitors, attendees and
+                operators are sent from <strong>admin@eventsh.com</strong>.
+                Enable this to send them from your own email address instead.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div>
+                  <p className="font-medium text-sm">Use my own email</p>
+                  <p className="text-xs text-muted-foreground">
+                    When off, emails are sent from admin@eventsh.com.
+                  </p>
+                </div>
+                <Switch
+                  checked={emailCfg.enabled}
+                  onCheckedChange={(v) =>
+                    setEmailCfg((p) => ({ ...p, enabled: v }))
+                  }
+                />
+              </div>
+
+              <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+                For your emails to arrive (and not land in spam), you must enter
+                your mailbox's SMTP details below — these come from your email
+                provider (e.g. a Gmail App Password, or your Hostinger / Outlook
+                SMTP). Use <strong>Send test email</strong> to confirm it works
+                before saving.
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>From name</Label>
+                  <Input
+                    value={emailCfg.fromName}
+                    onChange={(e) =>
+                      setEmailCfg((p) => ({ ...p, fromName: e.target.value }))
+                    }
+                    placeholder="e.g. Jicama Tech"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>From email</Label>
+                  <Input
+                    type="email"
+                    value={emailCfg.fromEmail}
+                    onChange={(e) =>
+                      setEmailCfg((p) => ({ ...p, fromEmail: e.target.value }))
+                    }
+                    placeholder="events@yourdomain.com"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>SMTP host</Label>
+                  <Input
+                    value={emailCfg.smtpHost}
+                    onChange={(e) =>
+                      setEmailCfg((p) => ({ ...p, smtpHost: e.target.value }))
+                    }
+                    placeholder="smtp.hostinger.com"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>SMTP port</Label>
+                    <Input
+                      type="number"
+                      value={emailCfg.smtpPort}
+                      onChange={(e) =>
+                        setEmailCfg((p) => ({
+                          ...p,
+                          smtpPort: parseInt(e.target.value) || 465,
+                          smtpSecure: (parseInt(e.target.value) || 465) === 465,
+                        }))
+                      }
+                      placeholder="465"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>SSL</Label>
+                    <div className="flex items-center h-10">
+                      <Switch
+                        checked={emailCfg.smtpSecure}
+                        onCheckedChange={(v) =>
+                          setEmailCfg((p) => ({ ...p, smtpSecure: v }))
+                        }
+                      />
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {emailCfg.smtpSecure ? "On (port 465)" : "Off (587)"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>SMTP username</Label>
+                  <Input
+                    value={emailCfg.smtpUser}
+                    onChange={(e) =>
+                      setEmailCfg((p) => ({ ...p, smtpUser: e.target.value }))
+                    }
+                    placeholder="usually your full email address"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>
+                    SMTP password{" "}
+                    {emailCfgHasPassword && (
+                      <span className="text-[11px] text-emerald-600">
+                        (saved — leave blank to keep)
+                      </span>
+                    )}
+                  </Label>
+                  <Input
+                    type="password"
+                    value={emailCfg.smtpPass}
+                    onChange={(e) =>
+                      setEmailCfg((p) => ({ ...p, smtpPass: e.target.value }))
+                    }
+                    placeholder={
+                      emailCfgHasPassword ? "••••••••" : "app password / SMTP password"
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-end pt-2 border-t">
+                <div className="space-y-1.5 flex-1">
+                  <Label>Send a test email to</Label>
+                  <Input
+                    type="email"
+                    value={emailTestTo}
+                    onChange={(e) => setEmailTestTo(e.target.value)}
+                    placeholder="you@example.com"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={sendTestEmail}
+                  disabled={emailCfgTesting}
+                >
+                  {emailCfgTesting ? "Sending…" : "Send test email"}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={saveEmailConfig}
+                  disabled={emailCfgSaving}
+                >
+                  {emailCfgSaving ? "Saving…" : "Save email settings"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="subscription" className="space-y-6">
@@ -2615,9 +2894,19 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                         {selectedCountry === "IN" || selectedCountry === "India"
                           ? `₹${subscription.pricePaid || 0}`
                           : `$${subscription.pricePaid || 0}`}
-                        {subscription.validityInDays
-                          ? ` / ${subscription.validityInDays} days`
-                          : ""}
+                        {subscription.validityType === "date" &&
+                        subscription.validUntil
+                          ? ` / valid until ${new Date(
+                              subscription.validUntil,
+                            ).toLocaleDateString(undefined, {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                              timeZone: "UTC",
+                            })}`
+                          : subscription.validityInDays
+                            ? ` / ${subscription.validityInDays} days`
+                            : ""}
                       </p>
                       {subscription.description && (
                         <p className="text-xs text-muted-foreground mt-1">
@@ -2751,32 +3040,60 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                             { key: "whatsappQR", label: "WhatsApp QR" },
                             { key: "instagram", label: "Instagram" },
                             { key: "operators", label: "Operators" },
+                            {
+                              key: "membership",
+                              label: "Exhibitor Membership",
+                            },
+                            { key: "feedback", label: "Feedback" },
+                            {
+                              key: "customEmail",
+                              label: "Customize Email (own sender)",
+                            },
                           ].map((m) => {
                             const cfg = subscription.modules[m.key];
                             const on = !!cfg?.enabled;
+                            // Feedback: list which audiences the plan covers.
+                            const audienceLabels =
+                              m.key === "feedback" && on && cfg?.audiences
+                                ? [
+                                    ["visitor", "Visitors"],
+                                    ["exhibitor", "Exhibitors"],
+                                    ["speaker", "Speakers"],
+                                    ["roundTable", "Round Tables"],
+                                  ]
+                                    .filter(([k]) => !!cfg.audiences[k])
+                                    .map(([, l]) => l)
+                                : [];
                             return (
                               <div
                                 key={m.key}
-                                className={`flex items-center justify-between px-3 py-2 rounded-lg border ${
+                                className={`px-3 py-2 rounded-lg border ${
                                   on
                                     ? "bg-green-50 border-green-200"
                                     : "bg-gray-50 border-gray-200 opacity-60"
                                 }`}
                               >
-                                <span className="text-sm">{m.label}</span>
-                                <div className="flex items-center gap-2">
-                                  {cfg?.limit > 0 && on && (
-                                    <span className="text-xs text-muted-foreground">
-                                      Limit: {cfg.limit}
-                                    </span>
-                                  )}
-                                  <Badge
-                                    variant={on ? "default" : "secondary"}
-                                    className="text-[10px] px-1.5 py-0"
-                                  >
-                                    {on ? "ON" : "OFF"}
-                                  </Badge>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm">{m.label}</span>
+                                  <div className="flex items-center gap-2">
+                                    {cfg?.limit > 0 && on && (
+                                      <span className="text-xs text-muted-foreground">
+                                        Limit: {cfg.limit}
+                                      </span>
+                                    )}
+                                    <Badge
+                                      variant={on ? "default" : "secondary"}
+                                      className="text-[10px] px-1.5 py-0"
+                                    >
+                                      {on ? "ON" : "OFF"}
+                                    </Badge>
+                                  </div>
                                 </div>
+                                {audienceLabels.length > 0 && (
+                                  <p className="text-[11px] text-muted-foreground mt-1">
+                                    {audienceLabels.join(", ")}
+                                  </p>
+                                )}
                               </div>
                             );
                           })}
@@ -2844,7 +3161,17 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                               : `$${plan.price}`}
                             <span className="text-sm font-normal text-muted-foreground">
                               {" "}
-                              / {plan.validityInDays}d
+                              /{" "}
+                              {plan.validityType === "date" && plan.validUntil
+                                ? `until ${new Date(
+                                    plan.validUntil,
+                                  ).toLocaleDateString(undefined, {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
+                                    timeZone: "UTC",
+                                  })}`
+                                : `${plan.validityInDays}d`}
                             </span>
                           </div>
                           {(() => {

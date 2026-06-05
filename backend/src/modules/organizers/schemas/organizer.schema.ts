@@ -169,6 +169,24 @@ export class Organizer {
   @Prop()
   termsAndConditions: string;
 
+  // --- Personal/custom sending email ---
+  // When enabled and SMTP is configured, all emails for this organizer are
+  // sent FROM their address via their own mail server (so they pass SPF/DKIM
+  // and aren't flagged as spoofed). When disabled/unconfigured, the platform
+  // falls back to the global admin@eventsh.com sender. smtpPass is never
+  // returned to the client (stripped in responses).
+  @Prop({ type: Object, default: {} })
+  emailConfig?: {
+    enabled?: boolean;
+    fromName?: string;
+    fromEmail?: string;
+    smtpHost?: string;
+    smtpPort?: number;
+    smtpSecure?: boolean;
+    smtpUser?: string;
+    smtpPass?: string;
+  };
+
   // --- Status & Verification ---
   @Prop({ default: false })
   approved: boolean;

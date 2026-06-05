@@ -38,6 +38,7 @@ import {
   Ticket,
   User,
   Award,
+  Mail as MailIcon,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -247,6 +248,14 @@ const ORGANIZER_FEATURE_MODULES: {
   { key: "whatsappQR", label: "WhatsApp QR", icon: Zap },
   { key: "instagram", label: "Instagram QR", icon: Zap },
   {
+    // When enabled, the organizer gets the "Personal Email (custom sender)"
+    // card in Settings and can send all vendor/attendee emails from their
+    // own address instead of admin@eventsh.com.
+    key: "customEmail",
+    label: "Customize Email (own sender)",
+    icon: MailIcon,
+  },
+  {
     key: "operators",
     label: "Operators",
     hasLimit: true,
@@ -315,6 +324,9 @@ interface Plan {
   features: string[];
   moduleType: string;
   validityInDays: number;
+  // "days" = rolling N-day window (default). "date" = valid up to validUntil.
+  validityType?: "days" | "date";
+  validUntil?: string;
   isActive: boolean;
   isDefault: boolean;
   description?: string;
@@ -334,6 +346,8 @@ interface PlanFormState {
   price: number;
   priceINR: number;
   validityInDays: number;
+  validityType: "days" | "date";
+  validUntil: string; // yyyy-mm-dd for the date input (empty when day-based)
   description: string;
   features: string[];
   isActive: boolean;
@@ -348,6 +362,8 @@ const emptyForm: PlanFormState = {
   price: 0,
   priceINR: 0,
   validityInDays: 30,
+  validityType: "days",
+  validUntil: "",
   description: "",
   features: [],
   isActive: true,
@@ -396,6 +412,8 @@ const INDIVIDUAL_PLAN_TEMPLATE: PlanFormState = {
   price: 0,
   priceINR: 0,
   validityInDays: 365,
+  validityType: "days",
+  validUntil: "",
   description:
     "For one-off organizers (weddings, birthdays, single conferences). One event with the essentials. Upgrade to unlock more.",
   features: [
@@ -505,7 +523,10 @@ export function PricingPage() {
       planName: plan.planName,
       price: plan.price,
       priceINR: plan.priceINR || 0,
-      validityInDays: plan.validityInDays,
+      validityInDays: plan.validityInDays || 30,
+      validityType: plan.validityType === "date" ? "date" : "days",
+      // Backend stores an ISO datetime; the date input needs yyyy-mm-dd.
+      validUntil: plan.validUntil ? plan.validUntil.slice(0, 10) : "",
       description: plan.description || "",
       features: Array.isArray(plan.features) ? [...plan.features] : [],
       isActive: plan.isActive,
@@ -549,11 +570,32 @@ export function PricingPage() {
       return;
     }
 
+    // Validate the chosen validity mode.
+    if (form.validityType === "date") {
+      if (!form.validUntil) {
+        toast({
+          title: "Pick a valid-until date",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else if (!form.validityInDays || form.validityInDays < 1) {
+      toast({
+        title: "Enter a valid number of days",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const body = {
       planName: form.planName,
       price: form.price,
       priceINR: form.priceINR,
-      validityInDays: form.validityInDays,
+      validityType: form.validityType,
+      // Send only the field relevant to the chosen mode.
+      ...(form.validityType === "date"
+        ? { validUntil: form.validUntil, validityInDays: undefined }
+        : { validityInDays: form.validityInDays, validUntil: undefined }),
       description: form.description || undefined,
       features: form.features.filter((f) => f.trim()),
       isActive: form.isActive,
@@ -898,7 +940,17 @@ export function PricingPage() {
                       ${plan.price}
                       <span className="text-sm font-normal text-muted-foreground">
                         {" "}
-                        / {plan.validityInDays}d
+                        /{" "}
+                        {plan.validityType === "date" && plan.validUntil
+                          ? `until ${new Date(plan.validUntil).toLocaleDateString(
+                              "en-GB",
+                              {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              },
+                            )}`
+                          : `${plan.validityInDays}d`}
                       </span>
                     </div>
                     {plan.priceINR ? (
@@ -1017,17 +1069,51 @@ export function PricingPage() {
                 />
               </div>
               <div>
-                <Label>Validity (days)</Label>
-                <Input
-                  type="number"
-                  value={form.validityInDays}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      validityInDays: parseInt(e.target.value) || 1,
-                    })
-                  }
-                />
+                <Label>Validity</Label>
+                <div className="flex gap-2">
+                  {/* Dropdown: choose how validity is expressed */}
+                  <select
+                    value={form.validityType}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        validityType: e.target.value as "days" | "date",
+                      })
+                    }
+                    className="h-10 rounded-md border border-input bg-background px-2 text-sm shrink-0"
+                  >
+                    <option value="days">Number of days</option>
+                    <option value="date">Valid up to date</option>
+                  </select>
+
+                  {form.validityType === "date" ? (
+                    <Input
+                      type="date"
+                      value={form.validUntil}
+                      onChange={(e) =>
+                        setForm({ ...form, validUntil: e.target.value })
+                      }
+                    />
+                  ) : (
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="e.g., 30"
+                      value={form.validityInDays}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          validityInDays: parseInt(e.target.value) || 1,
+                        })
+                      }
+                    />
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {form.validityType === "date"
+                    ? "Plan stays valid up to this fixed date, regardless of purchase day."
+                    : "Plan is valid for this many days from the day it's activated."}
+                </p>
               </div>
             </div>
 
