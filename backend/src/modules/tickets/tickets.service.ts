@@ -164,7 +164,12 @@ export class TicketsService {
       }
       if (ticketEmail) {
         try {
-          await this.sendTicketViaEmail(savedTicket, qrCodeBase64, country);
+          await this.sendTicketViaEmail(
+            savedTicket,
+            qrCodeBase64,
+            country,
+            (organizer as any)?.emailConfig,
+          );
         } catch (error) {
           console.error("Ticket email delivery failed:", error);
         }
@@ -302,7 +307,10 @@ Thank you for choosing Eventsh! 🎊`;
   private async sendTicketViaEmail(
     ticket: Ticket,
     qrBase64: string,
-    country?: string
+    country?: string,
+    // Organizer's custom-sender config — attendee tickets go out from the
+    // organizer's address when their "Personal Email" toggle is on.
+    senderConfig?: any
   ): Promise<void> {
     try {
       const eventDate = new Date(ticket.eventDate).toLocaleDateString();
@@ -345,6 +353,7 @@ Thank you for choosing Eventsh! 🎊`;
         to: ticket.customerEmail,
         subject: `🎟️ Your Eventsh Ticket - ${ticket.eventTitle}`,
         html,
+        senderConfig,
         attachments: [
           {
             filename: "ticket-qrcode.png",

@@ -17,6 +17,7 @@ import { JwtService } from "@nestjs/jwt";
 import { EventDocument } from "../events/schemas/event.schema";
 import { User } from "../users/schemas/user.schema";
 import { MailService } from "../roles/mail.service";
+import { encryptSecret } from "../../common/secret-crypto.util";
 import { CreateOrganizerDto } from "./dto/createOrganizer.dto";
 import { Otp } from "../otp/entities/otp.entity";
 import { Plan } from "../plans/entities/plan.entity";
@@ -892,7 +893,11 @@ export class OrganizersService {
           ? (Number(body.smtpPort) || 465) === 465
           : !!body.smtpSecure,
       smtpUser: (body.smtpUser || "").trim(),
-      smtpPass: body.smtpPass ? String(body.smtpPass) : existing.smtpPass || "",
+      // Encrypted at rest (AES-256-GCM) so the password is unreadable in the
+      // DB — even to admins. Re-saving an already-encrypted value is a no-op.
+      smtpPass: body.smtpPass
+        ? encryptSecret(String(body.smtpPass))
+        : encryptSecret(existing.smtpPass || ""),
     };
 
     // Guard: can't enable without the essentials.

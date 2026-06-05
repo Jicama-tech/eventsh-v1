@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import * as nodemailer from "nodemailer";
+import { decryptSecret } from "../../common/secret-crypto.util";
 
 // Per-organizer custom sender. When `enabled` and the SMTP fields are filled,
 // emails for that organizer are sent FROM their address via their own server.
@@ -53,6 +54,8 @@ export class MailService {
   } {
     if (this.isCustomActive(c)) {
       const port = Number(c!.smtpPort) || 465;
+      // Cache key keeps the stored (encrypted) value so the plaintext never
+      // sits in the map; the password is decrypted only for the SMTP auth.
       const key = `${c!.smtpHost}|${port}|${c!.smtpUser}|${c!.smtpPass}`;
       let t = this.customTransporters.get(key);
       if (!t) {
@@ -60,7 +63,7 @@ export class MailService {
           host: c!.smtpHost,
           port,
           secure: c!.smtpSecure ?? port === 465,
-          auth: { user: c!.smtpUser, pass: c!.smtpPass },
+          auth: { user: c!.smtpUser, pass: decryptSecret(c!.smtpPass) },
         });
         this.customTransporters.set(key, t);
       }
@@ -249,9 +252,16 @@ export class MailService {
     });
   }
 
-  async sendOtpEmail(businessEmail: string, otp: string) {
-    await this.transporter.sendMail({
-      from: `"EventSH" <${process.env.SMTP_USER}>`,
+  // `senderConfig` (organizer's emailConfig) makes attendee/vendor-facing OTPs
+  // go out from the organizer's custom address when their toggle is on.
+  async sendOtpEmail(
+    businessEmail: string,
+    otp: string,
+    senderConfig?: OrgEmailConfig,
+  ) {
+    const { transporter, from } = this.resolveSender(senderConfig);
+    await transporter.sendMail({
+      from,
       to: businessEmail,
       subject: "Your OTP Code for Business Email Verification",
       html: `

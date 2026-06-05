@@ -344,6 +344,12 @@ export class SpeakerRequestsService {
 
       // Send PDF
       try {
+        // Organizer's custom-sender config so the emailed pass goes out from
+        // their address when the "Personal Email" toggle is on.
+        const orgId = (event as any)?.organizer?._id || (event as any)?.organizer;
+        const orgDoc = orgId
+          ? await this.organizerModel.findById(orgId).select("emailConfig").lean()
+          : null;
         await this.otpService.sendMediaMessage(
           request.phone,
           pdfPath,
@@ -359,6 +365,7 @@ export class SpeakerRequestsService {
               `Date: ${eventDate}\n` +
               `Venue: ${event.location || "TBD"}\n\n` +
               `Your speaker pass PDF is attached. The QR code can ONLY be scanned using the official EventSH app.`,
+            senderConfig: (orgDoc as any)?.emailConfig,
           },
         );
       } catch (err) {
