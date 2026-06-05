@@ -2615,9 +2615,19 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                         {selectedCountry === "IN" || selectedCountry === "India"
                           ? `₹${subscription.pricePaid || 0}`
                           : `$${subscription.pricePaid || 0}`}
-                        {subscription.validityInDays
-                          ? ` / ${subscription.validityInDays} days`
-                          : ""}
+                        {subscription.validityType === "date" &&
+                        subscription.validUntil
+                          ? ` / valid until ${new Date(
+                              subscription.validUntil,
+                            ).toLocaleDateString(undefined, {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                              timeZone: "UTC",
+                            })}`
+                          : subscription.validityInDays
+                            ? ` / ${subscription.validityInDays} days`
+                            : ""}
                       </p>
                       {subscription.description && (
                         <p className="text-xs text-muted-foreground mt-1">
@@ -2844,7 +2854,17 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                               : `$${plan.price}`}
                             <span className="text-sm font-normal text-muted-foreground">
                               {" "}
-                              / {plan.validityInDays}d
+                              /{" "}
+                              {plan.validityType === "date" && plan.validUntil
+                                ? `until ${new Date(
+                                    plan.validUntil,
+                                  ).toLocaleDateString(undefined, {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
+                                    timeZone: "UTC",
+                                  })}`
+                                : `${plan.validityInDays}d`}
                             </span>
                           </div>
                           {(() => {
