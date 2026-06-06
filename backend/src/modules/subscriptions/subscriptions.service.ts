@@ -197,6 +197,7 @@ export class SubscriptionsService {
         .map((p) => p.addOnKey),
     );
 
+    const baseModules = plan.modules || {};
     const rows = (Array.isArray(plan.addOns) ? plan.addOns : [])
       .filter((a: any) => a && a.isActive !== false)
       .map((a: any) => {
@@ -207,16 +208,25 @@ export class SubscriptionsService {
         const proration = computeAddOnProration(amount, startDate, expiry, now);
         const owned = ownedKeys.has(a.key);
         const pending = pendingKeys.has(a.key);
+        // "module" or "module:section" — section add-ons unlock one
+        // sub-toggle and need their parent module live first.
+        const [modKey, sectionKey] = String(a.key).split(":");
+        const baseIncluded = sectionKey
+          ? baseModules[modKey]?.sections?.[sectionKey] === true
+          : baseModules[modKey]?.enabled === true;
+        const parentLive =
+          baseModules[modKey]?.enabled === true || ownedKeys.has(modKey);
         let blockedReason: string | null = null;
         if (!Number.isFinite(amount) || amount <= 0) {
           blockedReason = "No price configured for your region.";
-        } else if (
-          !a.limitDelta &&
-          owned
-        ) {
+        } else if (baseIncluded) {
+          blockedReason = "Already included in your plan.";
+        } else if (!a.limitDelta && owned) {
           blockedReason = "Already active on your plan.";
         } else if (pending) {
           blockedReason = "A purchase for this add-on is awaiting confirmation.";
+        } else if (sectionKey && !parentLive) {
+          blockedReason = `Requires the "${modKey}" module — unlock that add-on first.`;
         } else if (proration.remainingDays < MIN_ADDON_REMAINING_DAYS) {
           blockedReason = `Less than ${MIN_ADDON_REMAINING_DAYS} days left on your plan — renew the plan to add features.`;
         }
@@ -293,6 +303,17 @@ export class SubscriptionsService {
       );
     }
 
+    // Pointless-purchase guards: the base plan may already include this
+    // module/section (e.g. admin re-included it after pricing it earlier).
+    const [modKey, sectionKey] = String(addOn.key).split(":");
+    const baseModules = plan.modules || {};
+    const baseIncluded = sectionKey
+      ? baseModules[modKey]?.sections?.[sectionKey] === true
+      : baseModules[modKey]?.enabled === true;
+    if (baseIncluded) {
+      throw new ConflictException("Already included in your plan.");
+    }
+
     // Toggle add-ons can't be double-owned; limit packs may stack.
     if (!addOn.limitDelta) {
       const owned = await this.addOnPurchaseModel.exists({
@@ -303,6 +324,22 @@ export class SubscriptionsService {
       });
       if (owned) {
         throw new ConflictException("This add-on is already active on your plan.");
+      }
+    }
+
+    // Section add-ons need their parent module live (base or owned add-on)
+    // — a section unlock inside a disabled module would grant nothing.
+    if (sectionKey) {
+      const parentOwned = await this.addOnPurchaseModel.exists({
+        organizerId,
+        addOnKey: modKey,
+        status: "active",
+        endDate: { $gte: now },
+      });
+      if (baseModules[modKey]?.enabled !== true && !parentOwned) {
+        throw new BadRequestException(
+          `Requires the "${modKey}" module — unlock that add-on first.`,
+        );
       }
     }
 

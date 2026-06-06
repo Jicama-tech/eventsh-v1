@@ -282,11 +282,12 @@ interface ModuleConfig {
   sections?: Record<string, boolean>;
 }
 
-// A purchasable feature add-on on the plan. `key` is a Module Access key;
-// without `limitDelta` it's a toggle (switches the module ON for the buyer),
-// with `limitDelta` it's a limit pack (+N on top of the base limit). Prices
-// are FULL-CYCLE; mid-cycle buyers pay pro-rata for the days left and the
-// add-on expires together with the plan.
+// A purchasable feature add-on on the plan, DERIVED from the inline price
+// fields next to each toggle: `key` is a Module Access key ("crm") or a
+// section path ("events:venue"). Toggle ON + price 0 = included in the base
+// fare; toggle ON + price > 0 = sold as an add-on (excluded from base until
+// bought). Prices are FULL-CYCLE USD; mid-cycle buyers pay pro-rata for the
+// days left and the add-on expires together with the plan.
 interface PlanAddOn {
   key: string;
   name: string;
@@ -370,7 +371,9 @@ interface PlanFormState {
   isDefault: boolean;
   moduleType: AccountType;
   modules: Record<string, ModuleConfig>;
-  addOns: PlanAddOn[];
+  // USD price per toggle, keyed "moduleKey" or "moduleKey:sectionKey".
+  // 0 / missing = included in base fare; > 0 = sold as an add-on.
+  addOnPrices: Record<string, number>;
   visibleToOrganizers: string[]; // empty = visible to all
 }
 
@@ -393,7 +396,7 @@ const emptyForm: PlanFormState = {
     },
     {} as Record<string, ModuleConfig>,
   ),
-  addOns: [],
+  addOnPrices: {},
   visibleToOrganizers: [],
 };
 
@@ -444,7 +447,7 @@ const INDIVIDUAL_PLAN_TEMPLATE: PlanFormState = {
   isDefault: true,
   moduleType: "Individual",
   modules: INDIVIDUAL_PLAN_MODULES,
-  addOns: [],
+  addOnPrices: {},
   visibleToOrganizers: [],
 };
 
@@ -538,6 +541,16 @@ export function PricingPage() {
 
   function openEdit(plan: Plan) {
     setEditingPlan(plan);
+    // Saved plans store priced toggles as DISABLED in base modules (the buyer
+    // unlocks them via the add-on). The editor shows them back as toggle-ON
+    // with the price filled, so rebuild both views from plan.addOns.
+    const addOnPrices: Record<string, number> = {};
+    const addOnKeys = new Set<string>();
+    (Array.isArray(plan.addOns) ? plan.addOns : []).forEach((a) => {
+      if (!a?.key || a.isActive === false) return;
+      addOnPrices[a.key] = a.price ?? 0;
+      addOnKeys.add(a.key);
+    });
     setForm({
       planName: plan.planName,
       price: plan.price,
@@ -555,7 +568,11 @@ export function PricingPage() {
       modules: ORGANIZER_FEATURE_MODULES.reduce(
         (acc, m) => {
           const existing = plan.modules?.[m.key];
-          const cfg: ModuleConfig = { enabled: existing?.enabled ?? false };
+          // Toggle reads ON when the module is in the base OR sold as an
+          // add-on — the price field is what distinguishes the two.
+          const cfg: ModuleConfig = {
+            enabled: (existing?.enabled ?? false) || addOnKeys.has(m.key),
+          };
           if (m.hasLimit) cfg.limit = existing?.limit ?? 0;
           if (m.hasAudiences) {
             cfg.audiences = FEEDBACK_AUDIENCES.reduce(
@@ -567,23 +584,19 @@ export function PricingPage() {
             );
           }
           const sections = buildDefaultSections(m.sections, existing?.sections);
-          if (sections) cfg.sections = sections;
+          if (sections) {
+            // Priced sections are stored false in base — show them ON here.
+            for (const s of m.sections || []) {
+              if (addOnKeys.has(`${m.key}:${s.key}`)) sections[s.key] = true;
+            }
+            cfg.sections = sections;
+          }
           acc[m.key] = cfg;
           return acc;
         },
         {} as Record<string, ModuleConfig>,
       ),
-      addOns: Array.isArray(plan.addOns)
-        ? plan.addOns.map((a) => ({
-            key: a.key,
-            name: a.name || "",
-            description: a.description || "",
-            price: a.price ?? 0,
-            priceINR: a.priceINR ?? 0,
-            limitDelta: a.limitDelta || undefined,
-            isActive: a.isActive !== false,
-          }))
-        : [],
+      addOnPrices,
       visibleToOrganizers: Array.isArray(plan.visibleToOrganizers)
         ? plan.visibleToOrganizers.map(String)
         : [],
@@ -617,6 +630,48 @@ export function PricingPage() {
       return;
     }
 
+    // Derive base modules + add-ons from the inline price fields:
+    //   toggle ON  + price 0   → included in base fare
+    //   toggle ON  + price > 0 → excluded from base, sold as an add-on
+    //   toggle OFF             → not available (price ignored)
+    // Section prices follow the same rule inside their module; a priced
+    // module's add-on buyer still gets the limit/audiences/sections
+    // configured here (the entitlement overlay keeps everything but
+    // `enabled`).
+    const derivedModules: Record<string, ModuleConfig> = JSON.parse(
+      JSON.stringify(form.modules),
+    );
+    const derivedAddOns: PlanAddOn[] = [];
+    for (const m of ORGANIZER_FEATURE_MODULES) {
+      const cfg = derivedModules[m.key];
+      if (!cfg?.enabled) continue;
+      const mPrice = Number(form.addOnPrices[m.key]) || 0;
+      if (mPrice > 0) {
+        cfg.enabled = false;
+        derivedAddOns.push({
+          key: m.key,
+          name: m.label,
+          price: mPrice,
+          priceINR: 0,
+          isActive: true,
+        });
+      }
+      for (const s of m.sections || []) {
+        if (!cfg.sections?.[s.key]) continue;
+        const sPrice = Number(form.addOnPrices[`${m.key}:${s.key}`]) || 0;
+        if (sPrice > 0) {
+          cfg.sections[s.key] = false;
+          derivedAddOns.push({
+            key: `${m.key}:${s.key}`,
+            name: `${m.label} — ${s.label}`,
+            price: sPrice,
+            priceINR: 0,
+            isActive: true,
+          });
+        }
+      }
+    }
+
     const body = {
       planName: form.planName,
       price: form.price,
@@ -631,20 +686,8 @@ export function PricingPage() {
       isActive: form.isActive,
       isDefault: form.isDefault,
       moduleType: form.moduleType,
-      modules: form.modules,
-      // Drop incomplete rows (no module picked / no name) so half-filled
-      // editor lines never reach the backend.
-      addOns: form.addOns
-        .filter((a) => a.key && a.name.trim())
-        .map((a) => ({
-          key: a.key,
-          name: a.name.trim(),
-          description: a.description?.trim() || undefined,
-          price: a.price || 0,
-          priceINR: a.priceINR || 0,
-          limitDelta: a.limitDelta || undefined,
-          isActive: a.isActive !== false,
-        })),
+      modules: derivedModules,
+      addOns: derivedAddOns,
       // Empty list = visible to everyone (backend default). Populated
       // list = restrict to those organizer ids.
       visibleToOrganizers: form.visibleToOrganizers,
@@ -808,33 +851,12 @@ export function PricingPage() {
     });
   }
 
-  function addAddOnRow() {
+  // Inline price next to a toggle — key is "moduleKey" or "moduleKey:sectionKey".
+  // 0/empty = included in base fare; > 0 = sold as an add-on (USD only for now).
+  function setAddOnPrice(key: string, price: number) {
     setForm({
       ...form,
-      addOns: [
-        ...form.addOns,
-        {
-          key: "",
-          name: "",
-          description: "",
-          price: 0,
-          priceINR: 0,
-          isActive: true,
-        },
-      ],
-    });
-  }
-
-  function setAddOn(index: number, patch: Partial<PlanAddOn>) {
-    const next = [...form.addOns];
-    next[index] = { ...next[index], ...patch };
-    setForm({ ...form, addOns: next });
-  }
-
-  function removeAddOn(index: number) {
-    setForm({
-      ...form,
-      addOns: form.addOns.filter((_, i) => i !== index),
+      addOnPrices: { ...form.addOnPrices, [key]: price },
     });
   }
 
@@ -1316,13 +1338,21 @@ export function PricingPage() {
             <Separator />
 
             <div>
-              <Label className="text-base font-semibold mb-3 block">
-                Module Access
+              <Label className="text-base font-semibold mb-1 block">
+                Module Access &amp; Pricing
               </Label>
+              <p className="text-xs text-muted-foreground mb-3">
+                Toggle ON what this plan offers. Leave the price at{" "}
+                <strong>$0</strong> to include it in the base fare, or set a
+                price to sell it as an <strong>Add-On</strong> — organizers
+                buy it separately, prorated for the days left on their plan
+                (USD only for now).
+              </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {ORGANIZER_FEATURE_MODULES.map((m) => {
                   const cfg = form.modules[m.key];
                   const Icon = m.icon;
+                  const mPrice = Number(form.addOnPrices[m.key]) || 0;
                   return (
                     <div
                       key={m.key}
@@ -1340,6 +1370,35 @@ export function PricingPage() {
                           onCheckedChange={(v) => toggleModule(m.key, v)}
                         />
                       </div>
+                      {/* Price tag: 0 = included in the base fare; > 0 =
+                          sold as a prorated add-on. USD only for now. */}
+                      {cfg?.enabled && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            $
+                          </span>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            className="h-7 w-24 text-xs"
+                            value={mPrice || ""}
+                            placeholder="0"
+                            onChange={(e) =>
+                              setAddOnPrice(
+                                m.key,
+                                parseFloat(e.target.value) || 0,
+                              )
+                            }
+                          />
+                          <Badge
+                            variant={mPrice > 0 ? "default" : "secondary"}
+                            className="text-[10px] px-1.5 py-0"
+                          >
+                            {mPrice > 0 ? "Add-On" : "Included"}
+                          </Badge>
+                        </div>
+                      )}
                       {m.hasLimit && cfg?.enabled && (
                         <div>
                           <Label className="text-xs">Limit (0 = unlimited)</Label>
@@ -1381,201 +1440,59 @@ export function PricingPage() {
                       {m.sections && cfg?.enabled && (
                         <div className="pt-2 border-t space-y-2">
                           <Label className="text-xs text-muted-foreground">
-                            Sections (unlock specific tabs)
+                            Sections (price 0 = in base fare, &gt;0 = add-on)
                           </Label>
                           <div className="grid grid-cols-1 gap-1.5">
-                            {m.sections.map((s) => (
-                              <div
-                                key={s.key}
-                                className="flex items-center justify-between text-xs pl-1"
-                              >
-                                <span>{s.label}</span>
-                                <Switch
-                                  checked={cfg.sections?.[s.key] ?? true}
-                                  onCheckedChange={(v) =>
-                                    toggleSection(m.key, s.key, v)
-                                  }
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Paid feature add-ons. Each row maps to a Module Access key:
-                modules left OFF above can be sold as toggle add-ons; modules
-                with a limit can be topped up via limit packs. Prices are
-                full-cycle — mid-cycle buyers pay pro-rata for the days left
-                on their plan and the add-on expires with the plan. */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <Label className="text-base font-semibold">
-                  Feature Add-Ons (paid)
-                </Label>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={addAddOnRow}
-                >
-                  <Plus className="h-4 w-4 mr-1" /> Add
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground mb-3">
-                Optional extras organizers can buy on top of this plan.
-                Mid-cycle purchases are prorated for the days left and expire
-                together with the plan. Modules enabled above are already
-                included free — sell only what the base plan doesn't cover.
-              </p>
-              <div className="space-y-3">
-                {form.addOns.length === 0 && (
-                  <p className="text-xs text-muted-foreground border rounded-lg p-3 text-center">
-                    No add-ons yet — the plan sells as base price only.
-                  </p>
-                )}
-                {form.addOns.map((a, i) => {
-                  const mod = ORGANIZER_FEATURE_MODULES.find(
-                    (m) => m.key === a.key,
-                  );
-                  const includedFree = !!form.modules[a.key]?.enabled;
-                  return (
-                    <div key={i} className="border rounded-lg p-3 space-y-2">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        <div>
-                          <Label className="text-xs">Module *</Label>
-                          <select
-                            value={a.key}
-                            onChange={(e) => {
-                              const key = e.target.value;
-                              const m = ORGANIZER_FEATURE_MODULES.find(
-                                (x) => x.key === key,
+                            {m.sections.map((s) => {
+                              const sKey = `${m.key}:${s.key}`;
+                              const sOn = cfg.sections?.[s.key] ?? true;
+                              const sPrice =
+                                Number(form.addOnPrices[sKey]) || 0;
+                              return (
+                                <div
+                                  key={s.key}
+                                  className="flex items-center justify-between text-xs pl-1 gap-2"
+                                >
+                                  <span className="flex-1 truncate">
+                                    {s.label}
+                                  </span>
+                                  {sOn && (
+                                    <span className="flex items-center gap-1">
+                                      <span className="text-muted-foreground">
+                                        $
+                                      </span>
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        min={0}
+                                        className="h-6 w-16 text-xs px-1.5"
+                                        value={sPrice || ""}
+                                        placeholder="0"
+                                        onChange={(e) =>
+                                          setAddOnPrice(
+                                            sKey,
+                                            parseFloat(e.target.value) || 0,
+                                          )
+                                        }
+                                      />
+                                      {sPrice > 0 && (
+                                        <Badge className="text-[9px] px-1 py-0">
+                                          Add-On
+                                        </Badge>
+                                      )}
+                                    </span>
+                                  )}
+                                  <Switch
+                                    checked={sOn}
+                                    onCheckedChange={(v) =>
+                                      toggleSection(m.key, s.key, v)
+                                    }
+                                  />
+                                </div>
                               );
-                              setAddOn(i, {
-                                key,
-                                // Prefill a sensible display name once.
-                                name: a.name || m?.label || "",
-                                // Limit packs only make sense on limit modules.
-                                limitDelta: m?.hasLimit ? a.limitDelta : undefined,
-                              });
-                            }}
-                            className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
-                          >
-                            <option value="">Pick a module…</option>
-                            {ORGANIZER_FEATURE_MODULES.map((m) => (
-                              <option key={m.key} value={m.key}>
-                                {m.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <Label className="text-xs">Display name *</Label>
-                          <Input
-                            className="h-9"
-                            value={a.name}
-                            onChange={(e) =>
-                              setAddOn(i, { name: e.target.value })
-                            }
-                            placeholder="e.g. Custom Domain"
-                          />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                        <div>
-                          <Label className="text-xs">Price (USD) *</Label>
-                          <Input
-                            className="h-9"
-                            type="number"
-                            step="0.01"
-                            min={0}
-                            value={a.price}
-                            onChange={(e) =>
-                              setAddOn(i, {
-                                price: parseFloat(e.target.value) || 0,
-                              })
-                            }
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Price (INR)</Label>
-                          <Input
-                            className="h-9"
-                            type="number"
-                            step="0.01"
-                            min={0}
-                            value={a.priceINR}
-                            onChange={(e) =>
-                              setAddOn(i, {
-                                priceINR: parseFloat(e.target.value) || 0,
-                              })
-                            }
-                          />
-                        </div>
-                        {mod?.hasLimit && (
-                          <div>
-                            <Label className="text-xs">
-                              Limit pack (+N, empty = toggle)
-                            </Label>
-                            <Input
-                              className="h-9"
-                              type="number"
-                              min={1}
-                              value={a.limitDelta ?? ""}
-                              placeholder="e.g. 5"
-                              onChange={(e) =>
-                                setAddOn(i, {
-                                  limitDelta:
-                                    parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
+                            })}
                           </div>
-                        )}
-                        <div className="flex items-end justify-between gap-2 pb-1">
-                          <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
-                            <Switch
-                              checked={a.isActive !== false}
-                              onCheckedChange={(v) =>
-                                setAddOn(i, { isActive: v })
-                              }
-                            />
-                            Active
-                          </label>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => removeAddOn(i)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
                         </div>
-                      </div>
-                      <div>
-                        <Label className="text-xs">Description</Label>
-                        <Input
-                          className="h-9"
-                          value={a.description || ""}
-                          onChange={(e) =>
-                            setAddOn(i, { description: e.target.value })
-                          }
-                          placeholder="Shown on the organizer's add-on store"
-                        />
-                      </div>
-                      {includedFree && !a.limitDelta && (
-                        <p className="text-[11px] text-amber-600">
-                          ⚠ This module is already enabled free in Module
-                          Access above — organizers on this plan won't need to
-                          buy it. Turn the module off above or make this a
-                          limit pack.
-                        </p>
                       )}
                     </div>
                   );

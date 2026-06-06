@@ -1677,15 +1677,24 @@ export class OrganizersService {
         for (const a of liveAddOns as any[]) {
           const key = a.addOnKey;
           if (!key) continue;
-          const cfg = modules[key] || {};
-          if (a.limitDelta) {
-            modules[key] = {
+          // "module" enables a whole module; "module:section" unlocks one
+          // sub-toggle inside it (the module itself must be enabled — base
+          // or via its own add-on — for section gates to pass).
+          const [modKey, sectionKey] = String(key).split(":");
+          const cfg = modules[modKey] || {};
+          if (sectionKey) {
+            modules[modKey] = {
+              ...cfg,
+              sections: { ...(cfg.sections || {}), [sectionKey]: true },
+            };
+          } else if (a.limitDelta) {
+            modules[modKey] = {
               ...cfg,
               enabled: true,
               limit: (Number(cfg.limit) || 0) + Number(a.limitDelta),
             };
           } else {
-            modules[key] = { ...cfg, enabled: true };
+            modules[modKey] = { ...cfg, enabled: true };
           }
         }
       }
