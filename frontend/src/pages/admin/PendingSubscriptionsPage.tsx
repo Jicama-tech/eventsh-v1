@@ -35,6 +35,7 @@ import {
   Receipt,
   CreditCard,
   Package,
+  Zap,
 } from "lucide-react";
 import { adminFetch } from "@/lib/adminFetch";
 import { useToast } from "@/hooks/use-toast";
@@ -46,6 +47,9 @@ type RowType = "subscription" | "event_fee";
 interface UnifiedRow {
   _id: string;
   type: RowType;
+  // Subscription rows only: "plan" (full plan purchase) or "addon"
+  // (prorated feature add-on purchase).
+  subType?: "plan" | "addon";
   organizer: {
     _id?: string;
     name?: string;
@@ -103,11 +107,20 @@ export function PendingSubscriptionsPage() {
       const subRows: UnifiedRow[] = (subData || []).map((r: any) => ({
         _id: r._id,
         type: "subscription",
+        subType: r.type === "addon" ? "addon" : "plan",
         organizer: r.organizer,
-        itemLabel: r.plan?.planName || "—",
-        itemSub: r.plan?.validityInDays
-          ? `${r.plan.validityInDays} days`
-          : undefined,
+        // Add-on rows show the add-on name with the host plan as the
+        // subtitle; plan rows keep the existing plan + validity labels.
+        itemLabel:
+          r.type === "addon"
+            ? r.addOnName || "Add-on"
+            : r.plan?.planName || "—",
+        itemSub:
+          r.type === "addon"
+            ? `on ${r.plan?.planName || "current plan"} · prorated`
+            : r.plan?.validityInDays
+              ? `${r.plan.validityInDays} days`
+              : undefined,
         amount: r.amount,
         currency: r.currency,
         scheme: r.scheme,
@@ -170,7 +183,9 @@ export function PendingSubscriptionsPage() {
   const confirm = async (row: UnifiedRow) => {
     const verb =
       row.type === "subscription"
-        ? `activate "${row.itemLabel}"`
+        ? row.subType === "addon"
+          ? `activate the "${row.itemLabel}" add-on`
+          : `activate "${row.itemLabel}"`
         : `mark "${row.itemLabel}" paid`;
     if (
       !window.confirm(
@@ -303,7 +318,11 @@ export function PendingSubscriptionsPage() {
                   {rows.map((r) => (
                     <TableRow key={`${r.type}-${r._id}`}>
                       <TableCell>
-                        {r.type === "subscription" ? (
+                        {r.type === "subscription" && r.subType === "addon" ? (
+                          <Badge variant="outline" className="text-purple-600 border-purple-200">
+                            <Zap className="h-3 w-3 mr-1" /> Add-On
+                          </Badge>
+                        ) : r.type === "subscription" ? (
                           <Badge variant="outline" className="text-indigo-600 border-indigo-200">
                             <Package className="h-3 w-3 mr-1" /> Subscription
                           </Badge>

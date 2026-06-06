@@ -22,6 +22,30 @@ export class SubscriptionsController {
     return this.subs.initiate(organizerId, body);
   }
 
+  // Add-on store: available add-ons on the organizer's current plan with
+  // live prorated pricing.
+  @Get("add-ons")
+  @UseGuards(JwtAuthGuard)
+  listAddOns(@Req() req: any) {
+    const organizerId = req?.user?.userId || req?.user?.sub;
+    return this.subs.listAddOns(organizerId);
+  }
+
+  @Post("add-ons/initiate")
+  @UseGuards(JwtAuthGuard)
+  initiateAddOn(@Body() body: { addOnKey: string }, @Req() req: any) {
+    const organizerId = req?.user?.userId || req?.user?.sub;
+    return this.subs.initiateAddOn(organizerId, body);
+  }
+
+  // The organizer's own add-on purchases (active + history).
+  @Get("my-addons")
+  @UseGuards(JwtAuthGuard)
+  myAddOns(@Req() req: any) {
+    const organizerId = req?.user?.userId || req?.user?.sub;
+    return this.subs.listMyAddOns(organizerId);
+  }
+
   @Post(":id/mark-paid")
   @UseGuards(JwtAuthGuard)
   markPaid(@Param("id") id: string, @Req() req: any) {

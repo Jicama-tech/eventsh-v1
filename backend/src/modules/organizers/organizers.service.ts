@@ -41,6 +41,8 @@ export class OrganizersService {
     private userModel: Model<User>,
     @InjectModel(Plan.name) private planModel: Model<Plan>,
     @InjectModel(Operator.name) private operatorModel: Model<OperatorDocument>,
+    @InjectModel("OrganizerAddOnPurchase")
+    private addOnPurchaseModel: Model<any>,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
     // private readonly otpService: OtpService
@@ -1636,6 +1638,59 @@ export class OrganizersService {
     const fullyLapsed = isExpired && !inGracePeriod;
     const planActive = subscribed && (!isExpired || inGracePeriod);
 
+    // ----- Add-on entitlement overlay -------------------------------------
+    // Active add-on purchases extend the plan's module config: toggle
+    // add-ons switch a disabled module ON, limit packs raise a numeric
+    // limit. endDate is checked at read time (not just the daily sweep) so
+    // an expired add-on never grants access even before the cron runs.
+    // Overlay happens AFTER the default-plan fallback so add-ons apply to
+    // whatever module baseline the organizer actually got.
+    const baseModules = (plan as any)?.modules || {};
+    let modules = baseModules;
+    let activeAddOns: Array<{
+      key: string;
+      name: string;
+      limitDelta: number | null;
+      endDate: Date;
+    }> = [];
+    if (subscribed) {
+      const liveAddOns = await this.addOnPurchaseModel
+        .find({
+          organizerId: id,
+          status: "active",
+          endDate: { $gte: new Date() },
+        })
+        .lean();
+      activeAddOns = (liveAddOns as any[]).map((a) => ({
+        key: a.addOnKey,
+        name: a.addOnName,
+        limitDelta: a.limitDelta || null,
+        endDate: a.endDate,
+      }));
+      // Guard: an EMPTY modules object means "unrestricted legacy plan" to
+      // the frontend (permissive fallback in useSubscription). Writing an
+      // add-on key into it would flip the whole account to restricted mode,
+      // so only overlay when the plan actually defines a module baseline
+      // (everything is already enabled on an empty baseline anyway).
+      if (liveAddOns.length > 0 && Object.keys(baseModules).length > 0) {
+        modules = JSON.parse(JSON.stringify(baseModules));
+        for (const a of liveAddOns as any[]) {
+          const key = a.addOnKey;
+          if (!key) continue;
+          const cfg = modules[key] || {};
+          if (a.limitDelta) {
+            modules[key] = {
+              ...cfg,
+              enabled: true,
+              limit: (Number(cfg.limit) || 0) + Number(a.limitDelta),
+            };
+          } else {
+            modules[key] = { ...cfg, enabled: true };
+          }
+        }
+      }
+    }
+
     return {
       subscribed,
       planId: organizer.planId ? String(organizer.planId) : null,
@@ -1657,7 +1712,10 @@ export class OrganizersService {
       fullyLapsed,
       planActive,
       features: plan?.features || [],
-      modules: (plan as any)?.modules || {},
+      modules,
+      // Live add-on entitlements (key/name/limitDelta/endDate) — the
+      // Subscription tab renders these as "Your add-ons" badges.
+      activeAddOns,
       description: plan?.description || null,
     };
   }

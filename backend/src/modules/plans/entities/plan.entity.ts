@@ -21,6 +21,27 @@ export enum ValidityType {
   DATE = "date",
 }
 
+// A paid add-on an organizer can buy ON TOP of this plan, mid-cycle or at
+// purchase time. Two flavours, distinguished by `limitDelta`:
+//   - toggle add-on (`limitDelta` absent): switches ON a module the base
+//     plan ships disabled — `key` must match a Plan.modules key
+//     (e.g. "customDomain", "analytics", "crm").
+//   - limit pack (`limitDelta` present): raises a numeric module limit
+//     (e.g. key "events" + limitDelta 5 = "+5 events pack").
+// Prices are FULL-CYCLE figures (same dual-currency convention as the plan:
+// `price` = USD/SGD face value, `priceINR` for IN organizers). Mid-cycle
+// purchases are prorated for the days left on the plan and always expire
+// together with the plan (co-terminus) — see addon-proration.util.ts.
+export interface PlanAddOn {
+  key: string;
+  name: string;
+  description?: string;
+  price: number;
+  priceINR: number;
+  limitDelta?: number;
+  isActive: boolean;
+}
+
 // Use a dedicated collection so eventsh plans stay isolated from kioscart's
 // shared `plans` collection on the live MongoDB.
 @Schema({ timestamps: true, collection: "eventsh_plans" })
@@ -124,6 +145,13 @@ export class Plan {
       };
     };
   };
+
+  // Purchasable feature add-ons for this plan. Modules already enabled in
+  // `modules` are the plan's included-free baseline; entries here are the
+  // optional paid extras. Kept loose (`[Object]`) to match the `modules`
+  // prop style — the admin pricing form is the single writer.
+  @Prop({ type: [Object], default: [] })
+  addOns?: PlanAddOn[];
 
   @Prop()
   createdAt?: Date;

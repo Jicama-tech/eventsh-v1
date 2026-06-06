@@ -25,6 +25,10 @@ interface Props {
   onClose: () => void;
   planId: string | null;
   planName: string;
+  /** Add-on checkout mode — when set, the dialog initiates an add-on
+   *  purchase (prorated for the days left on the plan) instead of a plan
+   *  purchase. `planName` then carries the add-on display label. */
+  addOnKey?: string | null;
   /** Called once the organizer's mark-paid call succeeds. Parent can refresh
    *  the subscription banner to show "Awaiting confirmation". */
   onSubmitted?: () => void;
@@ -40,6 +44,12 @@ interface PendingResponse {
   ref: string;
   status: "awaiting_payment" | "submitted" | "confirmed" | "rejected";
   submittedAt: string | null;
+  // Present on add-on checkouts — used to render the proration breakdown.
+  type?: "plan" | "addon";
+  addOnName?: string;
+  fullPrice?: number;
+  remainingDays?: number;
+  cycleDays?: number;
 }
 
 interface PlatformConfig {
@@ -59,6 +69,7 @@ export function SubscriptionCheckoutDialog({
   onClose,
   planId,
   planName,
+  addOnKey,
   onSubmitted,
 }: Props) {
   const { toast } = useToast();
@@ -74,7 +85,7 @@ export function SubscriptionCheckoutDialog({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!open || !planId) return;
+    if (!open || (!planId && !addOnKey)) return;
     let cancelled = false;
     (async () => {
       setInitiating(true);
@@ -83,11 +94,18 @@ export function SubscriptionCheckoutDialog({
       setQrIntent(null);
       setQrError(null);
       try {
-        const res = await fetch(`${apiURL}/subscriptions/initiate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...auth },
-          body: JSON.stringify({ planId }),
-        });
+        // Add-on mode rides the same pipeline through its own initiate
+        // endpoint (server computes the prorated charge).
+        const res = await fetch(
+          addOnKey
+            ? `${apiURL}/subscriptions/add-ons/initiate`
+            : `${apiURL}/subscriptions/initiate`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...auth },
+            body: JSON.stringify(addOnKey ? { addOnKey } : { planId }),
+          },
+        );
         const data = await res.json();
         if (!res.ok) {
           throw new Error(data?.message || `HTTP ${res.status}`);
@@ -111,7 +129,7 @@ export function SubscriptionCheckoutDialog({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, planId]);
+  }, [open, planId, addOnKey]);
 
   const generateQr = async (row: PendingResponse) => {
     setQrLoading(true);
@@ -213,7 +231,7 @@ export function SubscriptionCheckoutDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <QrCode className="h-5 w-5" />
-            Subscription Checkout
+            {addOnKey ? "Add-On Checkout" : "Subscription Checkout"}
           </DialogTitle>
           <DialogDescription>{planName}</DialogDescription>
         </DialogHeader>
@@ -237,8 +255,8 @@ export function SubscriptionCheckoutDialog({
                   <code className="bg-white border px-1 rounded text-xs">
                     {pending.ref}
                   </code>
-                  ), your plan will activate and a receipt will be sent to
-                  your WhatsApp number.
+                  ), your {addOnKey ? "add-on" : "plan"} will activate and a
+                  receipt will be sent to you.
                 </p>
               </div>
             </div>
@@ -254,6 +272,18 @@ export function SubscriptionCheckoutDialog({
                   {symbolFor(pending.currency)}
                   {pending.amount}
                 </div>
+                {pending.type === "addon" &&
+                  typeof pending.fullPrice === "number" &&
+                  pending.remainingDays != null && (
+                    <div className="text-xs text-slate-500 mt-1">
+                      <span className="line-through mr-1">
+                        {symbolFor(pending.currency)}
+                        {pending.fullPrice}
+                      </span>
+                      prorated for {pending.remainingDays} of{" "}
+                      {pending.cycleDays} days left on your plan
+                    </div>
+                  )}
               </div>
               <div className="text-right">
                 <div className="text-xs uppercase tracking-wide text-slate-500">

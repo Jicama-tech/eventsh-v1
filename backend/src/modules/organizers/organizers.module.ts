@@ -14,6 +14,7 @@ import { PlanSchema } from "../plans/entities/plan.entity";
 import { OtpService } from "../otp/otp.service";
 import { OperatorsModule } from "../operators/operators.module";
 import { OperatorSchema } from "../operators/entities/operator.entity";
+import { OrganizerAddOnPurchaseSchema } from "../subscriptions/entities/organizer-addon-purchase.entity";
 
 @Module({
   imports: [
@@ -24,6 +25,10 @@ import { OperatorSchema } from "../operators/entities/operator.entity";
       { name: "Otp", schema: OtpSchema },
       { name: "Plan", schema: PlanSchema },
       { name: "Operator", schema: OperatorSchema },
+      {
+        name: "OrganizerAddOnPurchase",
+        schema: OrganizerAddOnPurchaseSchema,
+      },
     ]),
     forwardRef(() => OtpModule),
     forwardRef(() => OperatorsModule),

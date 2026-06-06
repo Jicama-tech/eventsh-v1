@@ -271,6 +271,16 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
   const [availablePlans, setAvailablePlans] = useState<any[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(false);
   const [switchingPlanId, setSwitchingPlanId] = useState<string | null>(null);
+  // --- Feature add-on store state ---
+  // Quote payload from /subscriptions/add-ons: per add-on full price,
+  // prorated price for "buy today", and owned/pending flags.
+  const [addOnStore, setAddOnStore] = useState<any>(null);
+  const [loadingAddOns, setLoadingAddOns] = useState(false);
+  // When set, the checkout dialog opens in add-on mode (prorated charge).
+  const [checkoutAddOn, setCheckoutAddOn] = useState<{
+    key: string;
+    name: string;
+  } | null>(null);
 
   // --- Business categories (shared across all organizers) ---
   const [categories, setCategories] = useState<{ _id: string; name: string }[]>(
@@ -347,6 +357,22 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
       console.error("Failed to load subscription:", err);
     } finally {
       setLoadingSubscription(false);
+    }
+  };
+
+  const loadAddOnStore = async () => {
+    try {
+      setLoadingAddOns(true);
+      const token = sessionStorage.getItem("token");
+      if (!token) return;
+      const res = await fetch(`${apiURL}/subscriptions/add-ons`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setAddOnStore(await res.json());
+    } catch (err) {
+      console.error("Failed to load add-ons:", err);
+    } finally {
+      setLoadingAddOns(false);
     }
   };
 
@@ -438,6 +464,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
   useEffect(() => {
     loadSubscription();
+    loadAddOnStore();
     loadCategories();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -3105,6 +3132,160 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
             </CardContent>
           </Card>
 
+          {/* Feature add-on store — extras the organizer can buy on top of
+              the plan. Mid-cycle purchases are prorated for the days left
+              and expire together with the plan (single renewal date). */}
+          {subscription?.subscribed &&
+            (loadingAddOns ||
+              (addOnStore?.planActive && addOnStore.addOns?.length > 0) ||
+              (subscription.activeAddOns?.length ?? 0) > 0) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Zap className="w-5 h-5" />
+                    Feature Add-Ons
+                  </CardTitle>
+                  <CardDescription>
+                    Unlock extra features for the rest of your plan cycle —
+                    prorated, and renewed together with your plan.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loadingAddOns ? (
+                    <div className="flex items-center justify-center py-6">
+                      <Loader className="h-5 w-5 animate-spin text-primary" />
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      {/* Active add-ons */}
+                      {(subscription.activeAddOns?.length ?? 0) > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold mb-2">
+                            Your add-ons
+                          </h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {subscription.activeAddOns.map((a: any) => (
+                              <div
+                                key={a.key}
+                                className="px-3 py-2 rounded-lg border bg-green-50 border-green-200 flex items-center justify-between"
+                              >
+                                <span className="text-sm">
+                                  {a.name}
+                                  {a.limitDelta ? ` (+${a.limitDelta})` : ""}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  until{" "}
+                                  {a.endDate
+                                    ? new Date(a.endDate).toLocaleDateString()
+                                    : "—"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Available add-ons */}
+                      {addOnStore?.planActive &&
+                        addOnStore.addOns?.filter((a: any) => !a.owned)
+                          .length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold mb-2">
+                              Available add-ons
+                            </h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {addOnStore.addOns
+                                .filter((a: any) => !a.owned)
+                                .map((a: any) => {
+                                  const sym =
+                                    a.currency === "INR"
+                                      ? "₹"
+                                      : a.currency === "SGD"
+                                        ? "SG$"
+                                        : "$";
+                                  const prorated =
+                                    a.proratedPrice < a.fullPrice;
+                                  return (
+                                    <div
+                                      key={a.key}
+                                      className="border rounded-lg p-3 flex flex-col gap-2"
+                                    >
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                          <p className="text-sm font-medium">
+                                            {a.name}
+                                            {a.limitDelta
+                                              ? ` (+${a.limitDelta})`
+                                              : ""}
+                                          </p>
+                                          {a.description && (
+                                            <p className="text-xs text-muted-foreground mt-0.5">
+                                              {a.description}
+                                            </p>
+                                          )}
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                          {prorated && (
+                                            <p className="text-xs text-muted-foreground line-through">
+                                              {sym}
+                                              {a.fullPrice}
+                                            </p>
+                                          )}
+                                          <p className="text-lg font-bold">
+                                            {sym}
+                                            {a.proratedPrice}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <p className="text-[11px] text-muted-foreground">
+                                        {prorated
+                                          ? `Prorated for the ${a.remainingDays} days left on your plan · `
+                                          : ""}
+                                        Active until{" "}
+                                        {addOnStore.planExpiryDate
+                                          ? new Date(
+                                              addOnStore.planExpiryDate,
+                                            ).toLocaleDateString()
+                                          : "plan expiry"}
+                                      </p>
+                                      {a.pending ? (
+                                        <Badge
+                                          variant="secondary"
+                                          className="w-fit"
+                                        >
+                                          Awaiting confirmation
+                                        </Badge>
+                                      ) : a.canPurchase ? (
+                                        <Button
+                                          size="sm"
+                                          onClick={() =>
+                                            setCheckoutAddOn({
+                                              key: a.key,
+                                              name: a.limitDelta
+                                                ? `${a.name} (+${a.limitDelta})`
+                                                : a.name,
+                                            })
+                                          }
+                                        >
+                                          Buy add-on
+                                        </Button>
+                                      ) : (
+                                        <p className="text-[11px] text-amber-600">
+                                          {a.blockedReason}
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          </div>
+                        )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
           {/* Change Plan Dialog */}
           <Dialog open={changePlanOpen} onOpenChange={setChangePlanOpen}>
             <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
@@ -4976,6 +5157,24 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           // "awaiting confirmation" state on next admin review.
           setChangePlanOpen(false);
           loadSubscription();
+        }}
+      />
+
+      {/* Add-on checkout — same dialog in add-on mode (prorated charge). */}
+      <SubscriptionCheckoutDialog
+        open={!!checkoutAddOn}
+        onClose={() => {
+          setCheckoutAddOn(null);
+          // Refresh the store so a just-initiated purchase shows its
+          // "awaiting confirmation" badge instead of the buy button.
+          loadAddOnStore();
+        }}
+        planId={null}
+        addOnKey={checkoutAddOn?.key || null}
+        planName={checkoutAddOn?.name || ""}
+        onSubmitted={() => {
+          loadSubscription();
+          loadAddOnStore();
         }}
       />
     </div>

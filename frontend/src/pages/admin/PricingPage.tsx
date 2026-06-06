@@ -282,6 +282,21 @@ interface ModuleConfig {
   sections?: Record<string, boolean>;
 }
 
+// A purchasable feature add-on on the plan. `key` is a Module Access key;
+// without `limitDelta` it's a toggle (switches the module ON for the buyer),
+// with `limitDelta` it's a limit pack (+N on top of the base limit). Prices
+// are FULL-CYCLE; mid-cycle buyers pay pro-rata for the days left and the
+// add-on expires together with the plan.
+interface PlanAddOn {
+  key: string;
+  name: string;
+  description?: string;
+  price: number;
+  priceINR: number;
+  limitDelta?: number;
+  isActive: boolean;
+}
+
 function buildDefaultSections(
   sections?: { key: string; label: string }[],
   existing?: Record<string, boolean>,
@@ -331,6 +346,7 @@ interface Plan {
   isDefault: boolean;
   description?: string;
   modules?: Record<string, ModuleConfig>;
+  addOns?: PlanAddOn[];
   // Empty array (or undefined) = visible to every organizer (default).
   // Populated = only those organizers can see/buy this plan.
   visibleToOrganizers?: string[];
@@ -354,6 +370,7 @@ interface PlanFormState {
   isDefault: boolean;
   moduleType: AccountType;
   modules: Record<string, ModuleConfig>;
+  addOns: PlanAddOn[];
   visibleToOrganizers: string[]; // empty = visible to all
 }
 
@@ -376,6 +393,7 @@ const emptyForm: PlanFormState = {
     },
     {} as Record<string, ModuleConfig>,
   ),
+  addOns: [],
   visibleToOrganizers: [],
 };
 
@@ -426,6 +444,7 @@ const INDIVIDUAL_PLAN_TEMPLATE: PlanFormState = {
   isDefault: true,
   moduleType: "Individual",
   modules: INDIVIDUAL_PLAN_MODULES,
+  addOns: [],
   visibleToOrganizers: [],
 };
 
@@ -554,6 +573,17 @@ export function PricingPage() {
         },
         {} as Record<string, ModuleConfig>,
       ),
+      addOns: Array.isArray(plan.addOns)
+        ? plan.addOns.map((a) => ({
+            key: a.key,
+            name: a.name || "",
+            description: a.description || "",
+            price: a.price ?? 0,
+            priceINR: a.priceINR ?? 0,
+            limitDelta: a.limitDelta || undefined,
+            isActive: a.isActive !== false,
+          }))
+        : [],
       visibleToOrganizers: Array.isArray(plan.visibleToOrganizers)
         ? plan.visibleToOrganizers.map(String)
         : [],
@@ -602,6 +632,19 @@ export function PricingPage() {
       isDefault: form.isDefault,
       moduleType: form.moduleType,
       modules: form.modules,
+      // Drop incomplete rows (no module picked / no name) so half-filled
+      // editor lines never reach the backend.
+      addOns: form.addOns
+        .filter((a) => a.key && a.name.trim())
+        .map((a) => ({
+          key: a.key,
+          name: a.name.trim(),
+          description: a.description?.trim() || undefined,
+          price: a.price || 0,
+          priceINR: a.priceINR || 0,
+          limitDelta: a.limitDelta || undefined,
+          isActive: a.isActive !== false,
+        })),
       // Empty list = visible to everyone (backend default). Populated
       // list = restrict to those organizer ids.
       visibleToOrganizers: form.visibleToOrganizers,
@@ -762,6 +805,36 @@ export function PricingPage() {
           },
         },
       },
+    });
+  }
+
+  function addAddOnRow() {
+    setForm({
+      ...form,
+      addOns: [
+        ...form.addOns,
+        {
+          key: "",
+          name: "",
+          description: "",
+          price: 0,
+          priceINR: 0,
+          isActive: true,
+        },
+      ],
+    });
+  }
+
+  function setAddOn(index: number, patch: Partial<PlanAddOn>) {
+    const next = [...form.addOns];
+    next[index] = { ...next[index], ...patch };
+    setForm({ ...form, addOns: next });
+  }
+
+  function removeAddOn(index: number) {
+    setForm({
+      ...form,
+      addOns: form.addOns.filter((_, i) => i !== index),
     });
   }
 
@@ -1327,6 +1400,182 @@ export function PricingPage() {
                             ))}
                           </div>
                         </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Paid feature add-ons. Each row maps to a Module Access key:
+                modules left OFF above can be sold as toggle add-ons; modules
+                with a limit can be topped up via limit packs. Prices are
+                full-cycle — mid-cycle buyers pay pro-rata for the days left
+                on their plan and the add-on expires with the plan. */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <Label className="text-base font-semibold">
+                  Feature Add-Ons (paid)
+                </Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={addAddOnRow}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Add
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">
+                Optional extras organizers can buy on top of this plan.
+                Mid-cycle purchases are prorated for the days left and expire
+                together with the plan. Modules enabled above are already
+                included free — sell only what the base plan doesn't cover.
+              </p>
+              <div className="space-y-3">
+                {form.addOns.length === 0 && (
+                  <p className="text-xs text-muted-foreground border rounded-lg p-3 text-center">
+                    No add-ons yet — the plan sells as base price only.
+                  </p>
+                )}
+                {form.addOns.map((a, i) => {
+                  const mod = ORGANIZER_FEATURE_MODULES.find(
+                    (m) => m.key === a.key,
+                  );
+                  const includedFree = !!form.modules[a.key]?.enabled;
+                  return (
+                    <div key={i} className="border rounded-lg p-3 space-y-2">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs">Module *</Label>
+                          <select
+                            value={a.key}
+                            onChange={(e) => {
+                              const key = e.target.value;
+                              const m = ORGANIZER_FEATURE_MODULES.find(
+                                (x) => x.key === key,
+                              );
+                              setAddOn(i, {
+                                key,
+                                // Prefill a sensible display name once.
+                                name: a.name || m?.label || "",
+                                // Limit packs only make sense on limit modules.
+                                limitDelta: m?.hasLimit ? a.limitDelta : undefined,
+                              });
+                            }}
+                            className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                          >
+                            <option value="">Pick a module…</option>
+                            {ORGANIZER_FEATURE_MODULES.map((m) => (
+                              <option key={m.key} value={m.key}>
+                                {m.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Display name *</Label>
+                          <Input
+                            className="h-9"
+                            value={a.name}
+                            onChange={(e) =>
+                              setAddOn(i, { name: e.target.value })
+                            }
+                            placeholder="e.g. Custom Domain"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        <div>
+                          <Label className="text-xs">Price (USD) *</Label>
+                          <Input
+                            className="h-9"
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            value={a.price}
+                            onChange={(e) =>
+                              setAddOn(i, {
+                                price: parseFloat(e.target.value) || 0,
+                              })
+                            }
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Price (INR)</Label>
+                          <Input
+                            className="h-9"
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            value={a.priceINR}
+                            onChange={(e) =>
+                              setAddOn(i, {
+                                priceINR: parseFloat(e.target.value) || 0,
+                              })
+                            }
+                          />
+                        </div>
+                        {mod?.hasLimit && (
+                          <div>
+                            <Label className="text-xs">
+                              Limit pack (+N, empty = toggle)
+                            </Label>
+                            <Input
+                              className="h-9"
+                              type="number"
+                              min={1}
+                              value={a.limitDelta ?? ""}
+                              placeholder="e.g. 5"
+                              onChange={(e) =>
+                                setAddOn(i, {
+                                  limitDelta:
+                                    parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+                        <div className="flex items-end justify-between gap-2 pb-1">
+                          <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                            <Switch
+                              checked={a.isActive !== false}
+                              onCheckedChange={(v) =>
+                                setAddOn(i, { isActive: v })
+                              }
+                            />
+                            Active
+                          </label>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => removeAddOn(i)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Description</Label>
+                        <Input
+                          className="h-9"
+                          value={a.description || ""}
+                          onChange={(e) =>
+                            setAddOn(i, { description: e.target.value })
+                          }
+                          placeholder="Shown on the organizer's add-on store"
+                        />
+                      </div>
+                      {includedFree && !a.limitDelta && (
+                        <p className="text-[11px] text-amber-600">
+                          ⚠ This module is already enabled free in Module
+                          Access above — organizers on this plan won't need to
+                          buy it. Turn the module off above or make this a
+                          limit pack.
+                        </p>
                       )}
                     </div>
                   );
