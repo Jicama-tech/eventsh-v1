@@ -437,28 +437,72 @@ export class StallsService {
         { new: true },
       );
 
-      // Notify vendor that tables were selected — organizer will confirm payment
+      // Email the exhibitor that their request + payment were submitted and are
+      // now pending organizer approval. The stall QR ticket is released only
+      // after the organizer confirms the payment (a separate email). WhatsApp is
+      // phased out — email is the single channel.
       try {
         const vendor = await this.vendorModel.findById(stall.shopkeeperId);
-        const vendorWhatsApp = vendor?.whatsAppNumber || vendor?.whatsappNumber;
-        if (vendorWhatsApp) {
-          const tableNames = selectDto.selectedTables.map((t) => t.tableName).join(", ");
-          await this.otpService.sendWhatsAppMessage(
-            vendorWhatsApp,
-            `*Tables Selected — ${event.title}*\n\n` +
-              `Your table selection has been saved:\n` +
-              `Tables: ${tableNames}\n` +
-              `Grand Total: ${updatedStall.grandTotal}\n\n` +
-              `Please complete your payment. The organizer will confirm and your stall ticket with QR code will be sent to you.`,
+        const vendorEmail = vendor?.email || vendor?.businessEmail;
+        if (vendorEmail) {
+          const senderConfig = await this.getOrganizerSenderConfig(
+            stall.organizerId,
+          );
+          const tableNames = selectDto.selectedTables
+            .map((t) => t.tableName)
+            .join(", ");
+          const html = `
+            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+              <div style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:24px;text-align:center">
+                <h1 style="margin:0;font-size:20px">Booking Accepted ✅</h1>
+                <p style="margin:6px 0 0;opacity:.9">${event.title}</p>
+              </div>
+              <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+                <p>Hi ${vendor?.name || "there"},</p>
+                <p>Your booking for <strong>${event.title}</strong> has been
+                  <strong>accepted</strong> and your payment details have been
+                  submitted.</p>
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin:14px 0">
+                  <p style="margin:0 0 6px"><strong>Spaces:</strong> ${tableNames || "—"}</p>
+                  <p style="margin:0 0 6px"><strong>Grand Total:</strong> ${updatedStall.grandTotal}</p>
+                  <p style="margin:0"><strong>Status:</strong> Awaiting organizer payment approval</p>
+                </div>
+                <p><strong>What happens next?</strong> Please wait for the
+                  organizer to verify and approve your payment. Once approved,
+                  your <strong>stall ticket with the QR code</strong> will be
+                  emailed to you.</p>
+                <p style="color:#64748b;font-size:12px;margin-top:16px">You'll
+                  receive another email with your QR code as soon as the
+                  organizer releases it. Thank you!</p>
+              </div>
+            </div>`;
+          await this.mailService.sendEmail({
+            to: vendorEmail,
+            subject: `Booking accepted — awaiting payment approval for ${event.title}`,
+            html,
+            senderConfig,
+          });
+          this.logger.log(`Payment-submitted email sent to ${vendorEmail}`);
+        } else {
+          this.logger.warn(
+            `Vendor ${stall.shopkeeperId} has no email — submission notice not sent`,
           );
         }
-      } catch {
-        this.logger.warn("Failed to send table selection notification");
+      } catch (notifyErr) {
+        this.logger.warn(
+          "Failed to send payment-submitted notification",
+          notifyErr,
+        );
       }
+
+      // Alert the organizer + all operators that a payment is awaiting approval
+      // so the team can action it on priority (best-effort, never blocks).
+      await this.notifyReviewersOfPayment(stall, event, grandTotal);
 
       return {
         success: true,
-        message: "Tables and add-ons selected. Awaiting payment confirmation from organizer.",
+        message:
+          "Tables and add-ons selected. A confirmation email was sent; awaiting payment approval from the organizer.",
         data: updatedStall,
       };
     } catch (error) {
@@ -629,50 +673,59 @@ export class StallsService {
       stall.qrCodeData = JSON.stringify(qrPayload);
       await stall.save();
 
-      // ===== SEND VIA WHATSAPP =====
+      // ===== DELIVER THE STALL TICKET =====
+      // Email is the primary channel and is ALWAYS sent (it no longer depends
+      // on the vendor having a WhatsApp number). WhatsApp is an extra channel,
+      // sent only when a number is on file and the integration is enabled.
       const vendorWhatsApp = vendor.whatsAppNumber || vendor.whatsappNumber;
-      if (vendorWhatsApp) {
-        try {
-          const eventObj = stall.eventId as any;
-          const eventDate = eventObj?.startDate
-            ? new Date(eventObj.startDate).toLocaleDateString()
-            : "TBA";
+      const vendorEmail = vendor.email || vendor.businessEmail;
+      try {
+        const eventObj = stall.eventId as any;
+        const eventDate = eventObj?.startDate
+          ? new Date(eventObj.startDate).toLocaleDateString()
+          : "TBA";
 
-          const message =
-            `🎉 *Your Stall Confirmation is Ready!*\n\n` +
-            `🎪 *Event:* ${eventObj?.title || "Event"}\n` +
-            `👤 *Business:* ${vendor.businessName || vendor.shopName || vendor.brandName || stall.brandName || vendor.name || "—"}\n` +
-            `📅 *Date:* ${eventDate}\n` +
-            `📍 *Venue:* ${eventObj?.location || "TBA"}\n\n` +
-            `📊 *Booking Summary:*\n` +
-            `• Tables: ${stall.selectedTables.length}\n` +
-            `• Add-ons: ${stall.selectedAddOns?.length || 0}\n` +
-            `• Total: ${formatCurrency(stall.grandTotal, country)}\n` +
-            (coupon ? `\n🎟️ *Coupon:* ${coupon.code} (${stall.noOfOperators} free entries)\n` : "") +
-            `\n⚠️ Your stall ticket PDF is attached. Present the QR code at the event entrance.`;
+        const message =
+          `🎉 *Your Stall Confirmation is Ready!*\n\n` +
+          `🎪 *Event:* ${eventObj?.title || "Event"}\n` +
+          `👤 *Business:* ${vendor.businessName || vendor.shopName || vendor.brandName || stall.brandName || vendor.name || "—"}\n` +
+          `📅 *Date:* ${eventDate}\n` +
+          `📍 *Venue:* ${eventObj?.location || "TBA"}\n\n` +
+          `📊 *Booking Summary:*\n` +
+          `• Tables: ${stall.selectedTables.length}\n` +
+          `• Add-ons: ${stall.selectedAddOns?.length || 0}\n` +
+          `• Total: ${formatCurrency(stall.grandTotal, country)}\n` +
+          (coupon ? `\n🎟️ *Coupon:* ${coupon.code} (${stall.noOfOperators} free entries)\n` : "") +
+          `\n⚠️ Your stall ticket PDF is attached. Present the QR code at the event entrance.`;
 
+        // WhatsApp text notification only when a number is on file.
+        if (vendorWhatsApp) {
           await this.otpService.sendWhatsAppMessage(vendorWhatsApp, message);
-
-          await this.otpService.sendMediaMessage(
-            vendorWhatsApp,
-            pdfPath,
-            `Stall Ticket - ${eventObj?.title || "Event"}`,
-            "stall-ticket.pdf",
-            {
-              to: vendor.email || vendor.businessEmail,
-              subject: `Your stall ticket for ${eventObj?.title || "Event"}`,
-              heading: "Your Stall Confirmation is Ready!",
-              message,
-              senderConfig: (organizerDoc as any)?.emailConfig,
-            },
-          );
-        } catch (whatsAppError) {
-          this.logger.warn("Failed to send stall ticket via WhatsApp", whatsAppError);
         }
-      } else {
-        this.logger.warn(
-          `No WhatsApp number found for vendor ${vendorId}, skipping message`,
+
+        // Deliver the ticket PDF: sendMediaMessage emails first (independent of
+        // WhatsApp) and only attempts WhatsApp when a number is present.
+        await this.otpService.sendMediaMessage(
+          vendorWhatsApp || "",
+          pdfPath,
+          `Stall Ticket - ${eventObj?.title || "Event"}`,
+          "stall-ticket.pdf",
+          {
+            to: vendorEmail,
+            subject: `Your stall ticket for ${eventObj?.title || "Event"}`,
+            heading: "Your Stall Confirmation is Ready!",
+            message,
+            senderConfig: (organizerDoc as any)?.emailConfig,
+          },
         );
+
+        if (!vendorEmail && !vendorWhatsApp) {
+          this.logger.warn(
+            `Vendor ${vendorId} has no email or WhatsApp — stall ticket not delivered`,
+          );
+        }
+      } catch (sendError) {
+        this.logger.warn("Failed to send stall ticket", sendError);
       }
 
       this.logger.log(
@@ -682,7 +735,7 @@ export class StallsService {
       return {
         success: true,
         message:
-          "Payment confirmed and stall ticket PDF sent to vendor via WhatsApp",
+          "Payment confirmed and stall ticket sent to the vendor (email + WhatsApp)",
         data: stall,
       };
     } catch (error) {
@@ -1559,6 +1612,100 @@ Thank you for choosing Eventsh! 🎊`;
     }
   }
 
+  // Email the organizer + all operators that an exhibitor has submitted their
+  // payment and is awaiting approval — so the team can verify and release the
+  // QR ticket on priority. Always from the global EventSH sender (internal).
+  private async notifyReviewersOfPayment(
+    stall: any,
+    event: any,
+    grandTotal: number,
+  ) {
+    try {
+      const orgId = stall.organizerId?._id || stall.organizerId;
+      if (!orgId) return;
+
+      const [organizer, operators, vendor] = await Promise.all([
+        this.organizerModel.findById(orgId).lean(),
+        this.operatorModel.find({ organizerId: String(orgId) }).lean(),
+        this.vendorModel.findById(stall.shopkeeperId).lean(),
+      ]);
+
+      const recipients = new Set<string>();
+      const add = (e?: string) => {
+        const v = String(e || "").trim().toLowerCase();
+        if (v) recipients.add(v);
+      };
+      add((organizer as any)?.email);
+      add((organizer as any)?.businessEmail);
+      for (const op of operators as any[]) add(op.email);
+      if (recipients.size === 0) return;
+
+      const fe = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
+      const dashboardUrl = `${fe}/organizer/login?redirect=${encodeURIComponent(
+        "/organizer-dashboard",
+      )}`;
+      const businessName =
+        (vendor as any)?.businessName ||
+        (vendor as any)?.shopName ||
+        (vendor as any)?.brandName ||
+        (vendor as any)?.name ||
+        "An exhibitor";
+      const row = (label: string, value: any) =>
+        `<tr><td style="padding:4px 14px 4px 0;color:#64748b">${label}</td><td style="padding:4px 0;font-weight:600;color:#0f172a">${
+          value || "—"
+        }</td></tr>`;
+
+      const html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+          <div style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;padding:24px;text-align:center">
+            <h1 style="margin:0;font-size:20px">⏳ Payment Awaiting Approval</h1>
+            <p style="margin:6px 0 0;opacity:.9">${event?.title || "Your event"}</p>
+          </div>
+          <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+            <p><strong>${businessName}</strong> has submitted their payment and is
+              waiting for your approval. Please verify the payment and release
+              their stall ticket on priority so they aren't kept waiting.</p>
+            <table style="border-collapse:collapse;margin:12px 0">
+              ${row("Exhibitor", businessName)}
+              ${row("Email", (vendor as any)?.email || (vendor as any)?.businessEmail)}
+              ${row("Event", event?.title)}
+              ${row("Grand Total", grandTotal)}
+              ${row("Status", "Payment submitted — awaiting approval")}
+            </table>
+            <div style="text-align:center;margin:22px 0 6px">
+              <a href="${dashboardUrl}" style="display:inline-block;background:#d97706;color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px">
+                Review &amp; Approve Payment
+              </a>
+            </div>
+            <p style="color:#64748b;font-size:12px;margin-top:16px">Open your dashboard → Participants to verify the payment and confirm the booking.</p>
+          </div>
+        </div>`;
+
+      await Promise.all(
+        Array.from(recipients).map((to) =>
+          this.mailService
+            .sendEmail({
+              to,
+              subject: `⏳ Payment awaiting approval: ${businessName} — ${event?.title || "Event"}`,
+              html,
+            })
+            .catch((e: any) =>
+              this.logger.warn(
+                `[stalls] payment reviewer notify failed for ${to}: ${e?.message || e}`,
+              ),
+            ),
+        ),
+      );
+      this.logger.log(
+        `Payment-pending alert emailed to ${recipients.size} reviewer(s)`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `[stalls] notifyReviewersOfPayment failed: ${(error as any)?.message}`,
+      );
+    }
+  }
+
   private async sendStatusUpdateNotification(
     stall: any,
     oldStatus: string,
@@ -1860,39 +2007,42 @@ Thank you for choosing Eventsh! 🎊`;
 
               const vendor = populatedStall.shopkeeperId as any;
               const vendorWhatsApp = vendor?.whatsAppNumber || vendor?.whatsappNumber;
+              const eventObj = populatedStall.eventId as any;
 
+              const waText =
+                `*Partial Payment Received — ${eventObj?.title || "Event"}*\n\n` +
+                `We have received your partial payment.\n\n` +
+                `Paid: ${populatedStall.paidAmount}\n` +
+                `Remaining: ${populatedStall.remainingAmount}\n` +
+                `Grand Total: ${populatedStall.grandTotal}\n\n` +
+                `Please complete the remaining payment. Your stall QR ticket will be released once full payment is confirmed by the organizer.\n\n` +
+                `Your booking details PDF is attached.`;
+
+              // WhatsApp text only when a number is on file.
               if (vendorWhatsApp) {
-                const eventObj = populatedStall.eventId as any;
-                await this.otpService.sendWhatsAppMessage(
-                  vendorWhatsApp,
-                  `*Partial Payment Received — ${eventObj?.title || "Event"}*\n\n` +
-                    `We have received your partial payment.\n\n` +
+                await this.otpService.sendWhatsAppMessage(vendorWhatsApp, waText);
+              }
+
+              // Always email the booking-details PDF (WhatsApp too when a
+              // number exists). Email is independent of WhatsApp connectivity.
+              await this.otpService.sendMediaMessage(
+                vendorWhatsApp || "",
+                pdfPath,
+                `Booking Details - ${eventObj?.title || "Event"}`,
+                "booking-details.pdf",
+                {
+                  to: vendor?.email || vendor?.businessEmail,
+                  subject: `Partial payment received — ${eventObj?.title || "Event"}`,
+                  heading: "Partial Payment Received",
+                  message:
+                    `We have received your partial payment for ${eventObj?.title || "your event"}.\n\n` +
                     `Paid: ${populatedStall.paidAmount}\n` +
                     `Remaining: ${populatedStall.remainingAmount}\n` +
                     `Grand Total: ${populatedStall.grandTotal}\n\n` +
-                    `Please complete the remaining payment. Your stall QR ticket will be released once full payment is confirmed by the organizer.\n\n` +
-                    `Your booking details PDF is attached.`,
-                );
-
-                await this.otpService.sendMediaMessage(
-                  vendorWhatsApp,
-                  pdfPath,
-                  `Booking Details - ${eventObj?.title || "Event"}`,
-                  "booking-details.pdf",
-                  {
-                    to: vendor?.email || vendor?.businessEmail,
-                    subject: `Partial payment received — ${eventObj?.title || "Event"}`,
-                    heading: "Partial Payment Received",
-                    message:
-                      `We have received your partial payment for ${eventObj?.title || "your event"}.\n\n` +
-                      `Paid: ${populatedStall.paidAmount}\n` +
-                      `Remaining: ${populatedStall.remainingAmount}\n` +
-                      `Grand Total: ${populatedStall.grandTotal}\n\n` +
-                      `Your stall QR ticket will be released once full payment is confirmed by the organizer. Your booking details PDF is attached.`,
-                    senderConfig: (orgDoc as any)?.emailConfig,
-                  },
-                );
-              }
+                    `Your stall QR ticket will be released once full payment is confirmed by the organizer. Your booking details PDF is attached.`,
+                  senderConfig: (orgDoc as any)?.emailConfig,
+                },
+              );
             }
           } catch (partialErr) {
             this.logger.warn("Failed to send partial payment notification", partialErr);
