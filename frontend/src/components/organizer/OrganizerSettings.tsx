@@ -161,6 +161,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     smtpPass: "",
   });
   const [emailCfgHasPassword, setEmailCfgHasPassword] = useState(false);
+  const [showSmtpPass, setShowSmtpPass] = useState(false);
   const [emailCfgSaving, setEmailCfgSaving] = useState(false);
   const [emailCfgTesting, setEmailCfgTesting] = useState(false);
   const [emailTestTo, setEmailTestTo] = useState("");
@@ -181,7 +182,10 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
   useEffect(() => {
     const id = getOrgId();
     if (!id) return;
-    fetch(`${apiURL}/organizers/${id}/email-config`)
+    const token = sessionStorage.getItem("token");
+    fetch(`${apiURL}/organizers/${id}/email-config`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
       .then((r) => r.json())
       .then((j) => {
         const d = j?.data || {};
@@ -194,7 +198,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           smtpPort: d.smtpPort || 465,
           smtpSecure: d.smtpSecure ?? true,
           smtpUser: d.smtpUser || "",
-          smtpPass: "",
+          // Load the saved (decrypted) password so the organizer can reveal it.
+          smtpPass: d.smtpPass || "",
         }));
         setEmailCfgHasPassword(!!d.hasPassword);
         if (!emailTestTo && d.fromEmail) setEmailTestTo(d.fromEmail);
@@ -216,7 +221,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
       const j = await res.json();
       if (!res.ok) throw new Error(j?.message || "Could not save");
       setEmailCfgHasPassword(!!j?.data?.hasPassword);
-      setEmailCfg((p) => ({ ...p, smtpPass: "" }));
+      // Keep the password in the field so the organizer can still view it via
+      // the eye toggle after saving (it stays encrypted at rest in the DB).
       toast({ title: "Saved", description: "Email settings updated." });
     } catch (e: any) {
       toast({
@@ -2809,20 +2815,34 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     SMTP password{" "}
                     {emailCfgHasPassword && (
                       <span className="text-[11px] text-emerald-600">
-                        (saved — leave blank to keep)
+                        (saved — click the eye to view)
                       </span>
                     )}
                   </Label>
-                  <Input
-                    type="password"
-                    value={emailCfg.smtpPass}
-                    onChange={(e) =>
-                      setEmailCfg((p) => ({ ...p, smtpPass: e.target.value }))
-                    }
-                    placeholder={
-                      emailCfgHasPassword ? "••••••••" : "app password / SMTP password"
-                    }
-                  />
+                  <div className="relative">
+                    <Input
+                      type={showSmtpPass ? "text" : "password"}
+                      value={emailCfg.smtpPass}
+                      onChange={(e) =>
+                        setEmailCfg((p) => ({ ...p, smtpPass: e.target.value }))
+                      }
+                      placeholder="app password / SMTP password"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSmtpPass((v) => !v)}
+                      className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                      aria-label={showSmtpPass ? "Hide password" : "Show password"}
+                      title={showSmtpPass ? "Hide password" : "Show password"}
+                    >
+                      {showSmtpPass ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
 

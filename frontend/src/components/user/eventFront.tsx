@@ -200,6 +200,9 @@ interface TableTemplate {
   tablePrice: number;
   bookingPrice: number;
   depositPrice: number;
+  // Master switch for offering the minimum/partial payment plan on this space.
+  // When false, exhibitors can only pay in full. Defaults to true when absent.
+  minimumPaymentEnabled?: boolean;
   // When true, the deposit is part of Option 1 (minimum payment); otherwise
   // Option 1 is the booking amount only. Defaults to false when absent.
   depositInOption1?: boolean;
@@ -2347,6 +2350,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       // running totals, summary, and downstream payment payload all
       // agree on what the exhibitor was quoted.
       const pricing = resolveTablePricing(table);
+      // Resolve the minimum-payment flag from the placed space AND its source
+      // template (matched by id). Either being explicitly disabled wins, so a
+      // space placed before the organizer turned the toggle off still respects
+      // it. Defaults to enabled when neither says otherwise (legacy spaces).
+      const sourceTemplate = (eventData?.tableTemplates || []).find(
+        (tpl: any) => tpl?.id === table.id,
+      );
+      const spaceAllowsMinimum =
+        table.minimumPaymentEnabled !== false &&
+        sourceTemplate?.minimumPaymentEnabled !== false;
       const newTable = {
         tableId: table.id,
         positionId: table.positionId,
@@ -2368,6 +2381,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         appliedTier: isMember && pricing.memberSaved > 0 ? "member" : "regular",
         regularPrice: table.tablePrice,
         memberSaved: pricing.memberSaved,
+        minimumPaymentEnabled: spaceAllowsMinimum,
         depositInOption1: table.depositInOption1 === true,
         x: table.x,
         y: table.y,
@@ -2453,7 +2467,17 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   };
 
   const daysUntilEvent = getDaysUntilEvent();
-  const showMinimumPayment = daysUntilEvent === null || daysUntilEvent > 60;
+  // Minimum payment is only offered when every currently-selected space allows
+  // it (organizer toggle) — a single full-payment-only space disables the
+  // partial option for the whole selection.
+  const selectedSpacesAllowMinimum = selectedTables.every(
+    (t: any) => t.minimumPaymentEnabled !== false,
+  );
+  // The minimum-payment option also stays hidden when the event is under 60
+  // days away (existing date rule).
+  const showMinimumPayment =
+    selectedSpacesAllowMinimum &&
+    (daysUntilEvent === null || daysUntilEvent > 60);
 
   // NEW: Submit table and add-on selection
   const handleTableSelectionSubmit = async () => {
@@ -2545,6 +2569,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           price: addon.price,
         })),
         minimumPayment: bookingPrice + depositInOption1Total,
+        // Offer the minimum-payment plan only when every selected space allows
+        // it; if any space is full-payment-only, the whole order must be paid
+        // in full. Consumed by the payment page to show/hide the option.
+        minimumPaymentAllowed: selectedTables.every(
+          (t) => t.minimumPaymentEnabled !== false,
+        ),
         priceSummary: {
           tablesTotal,
           depositTotal,
@@ -4475,7 +4505,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       color: design?.primaryColor || "#f97316",
                     }}
                   >
-                    Rent a Stall
+                    Rent a Stall / Preview Request
                   </button>
                   {/* Member entry point — small link under the main CTA.
                       Clicking opens the Google-verified Member dialog
@@ -8648,8 +8678,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       </div>
                     )}
 
-                    {/* Minimum Payment — hidden if ≤ 60 days away */}
-                    {showMinimumPayment ? (
+                    {/* Minimum Payment — only shown when available. When it is
+                        not (space disabled it or the event is <60 days away)
+                        nothing is shown here; only Full Payment remains. */}
+                    {showMinimumPayment && (
                       <div className="bg-green-50 p-2 rounded border border-green-200">
                         <p className="text-[10px] font-semibold text-green-800">
                           Option 1: Minimum Payment
@@ -8665,17 +8697,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         <p className="text-[10px] text-green-500 mt-0.5">
                           Remaining:{" "}
                           {formatPrice(calculateTotals().remainingAfterBooking)}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="bg-orange-50 p-2 rounded border border-orange-300">
-                        <p className="text-[10px] font-semibold text-orange-800 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" />
-                          Minimum Payment Unavailable
-                        </p>
-                        <p className="text-[10px] text-orange-700 mt-0.5">
-                          Event is less than 60 days away. Full payment is
-                          required.
                         </p>
                       </div>
                     )}

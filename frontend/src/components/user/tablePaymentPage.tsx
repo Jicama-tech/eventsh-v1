@@ -240,7 +240,13 @@ const TablePaymentPage = () => {
   };
 
   const daysUntilEvent = getDaysUntilEvent();
-  const showMinimumPayment = daysUntilEvent === null || daysUntilEvent > 60;
+  // Minimum payment is offered only when the organizer enabled it for every
+  // selected space (orderData.minimumPaymentAllowed) AND the event is still
+  // more than 60 days away. Either condition failing forces full payment.
+  const minimumPaymentAllowed = orderData?.minimumPaymentAllowed !== false;
+  const showMinimumPayment =
+    minimumPaymentAllowed &&
+    (daysUntilEvent === null || daysUntilEvent > 60);
 
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return;
@@ -807,8 +813,10 @@ const TablePaymentPage = () => {
                     className="grid gap-4"
                     disabled={paymentStatus === "success"}
                   >
-                    {/* Minimum Payment — hidden if event < 60 days away */}
-                    {showMinimumPayment ? (
+                    {/* Minimum Payment — only shown when available. When it is
+                        not (space disabled it or the event is <60 days away)
+                        nothing is shown here; only Full Payment remains. */}
+                    {showMinimumPayment && (
                       <div
                         className={`flex items-start space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-colors ${
                           selectedPaymentOption === "minimum"
@@ -839,26 +847,6 @@ const TablePaymentPage = () => {
                             </p>
                           </div>
                         </Label>
-                      </div>
-                    ) : (
-                      <div className="flex items-start gap-3 p-4 border-2 border-orange-300 bg-orange-50 rounded-lg">
-                        <AlertCircle className="h-5 w-5 text-orange-600 flex-shrink-0 mt-0.5" />
-                        <div>
-                          <p className="font-semibold text-orange-800">
-                            Minimum Payment Unavailable
-                          </p>
-                          <p className="text-sm text-orange-700">
-                            Event is less than 60 days away — full payment is
-                            required.
-                            {daysUntilEvent !== null && (
-                              <span className="font-bold">
-                                {" "}
-                                ({daysUntilEvent} day
-                                {daysUntilEvent === 1 ? "" : "s"} remaining)
-                              </span>
-                            )}
-                          </p>
-                        </div>
                       </div>
                     )}
 
