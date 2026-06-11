@@ -1319,9 +1319,13 @@ Thank you for choosing Eventsh! 🎊`;
     }
   }
 
-  // Public event-front URL for a vendor-facing email. Prefers the pretty
-  // storefront route (/:slug/events/:id) when the organizer has a store,
-  // falling back to the plain /events/:id route.
+  // Public event-front URL for a vendor-facing email. Points at the storefront
+  // route `/:organizationName/events/:id`, which renders the event front
+  // directly (where the vendor can click "Rent a Stall"). `:organizationName`
+  // is resolved by slug, so we use — in order — the organizer-store slug, the
+  // organizer's own slug, or a slugified organization name. The bare
+  // `/events/:id` route only exists in embed mode, so it's a last resort that
+  // lands on the home page on the public site — avoid it when a slug exists.
   private async buildEventFrontUrl(
     organizerId: any,
     eventId: any,
@@ -1330,13 +1334,31 @@ Thank you for choosing Eventsh! 🎊`;
     const evId = String(eventId?._id || eventId || "");
     try {
       const orgId = organizerId?._id || organizerId;
-      const store = orgId
-        ? await this.organizerStoreModel
-            .findOne({ organizerId: orgId })
-            .select("slug")
-            .lean()
-        : null;
-      if ((store as any)?.slug) return `${fe}/${(store as any).slug}/events/${evId}`;
+      let slug: string | undefined;
+      if (orgId) {
+        const store = await this.organizerStoreModel
+          .findOne({ organizerId: orgId })
+          .select("slug")
+          .lean();
+        slug = (store as any)?.slug || undefined;
+        if (!slug) {
+          const org = await this.organizerModel
+            .findById(orgId)
+            .select("slug organizationName")
+            .lean();
+          const orgName = (org as any)?.organizationName;
+          slug =
+            (org as any)?.slug ||
+            (orgName
+              ? String(orgName)
+                  .toLowerCase()
+                  .trim()
+                  .replace(/[^a-z0-9]+/g, "-")
+                  .replace(/^-+|-+$/g, "")
+              : undefined);
+        }
+      }
+      if (slug) return `${fe}/${slug}/events/${evId}`;
     } catch {
       // Slug lookup is cosmetic — fall through to the plain route.
     }

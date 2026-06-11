@@ -1,6 +1,6 @@
 // File: src/components/DashboardTabs/EventAttendees.tsx
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -172,6 +172,9 @@ interface TableTemplate {
   tablePrice: number;
   bookingPrice: number;
   depositPrice: number;
+  // Master switch for offering the minimum/partial payment plan on this space.
+  // Defaults to true when absent (legacy spaces stay partial-eligible).
+  minimumPaymentEnabled?: boolean;
   customDimensions: boolean;
   isBooked?: boolean;
   bookedBy?: string;
@@ -329,6 +332,47 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   >("Paid");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showReturnDepositDialog, setShowReturnDepositDialog] = useState(false);
+
+  // Set of space identifiers (template id + placement positionId) on the
+  // current event for which the organizer disabled the minimum-payment plan.
+  // Used to decide whether the payment-status dialog may offer "Partial".
+  const minimumDisabledSpaceIds = useMemo(() => {
+    const disabled = new Set<string>();
+    const scan = (arr?: any[]) =>
+      (arr || []).forEach((t) => {
+        if (t && t.minimumPaymentEnabled === false) {
+          if (t.id) disabled.add(String(t.id));
+          if (t.positionId) disabled.add(String(t.positionId));
+        }
+      });
+    scan(selectedEvent?.tableTemplates as any);
+    const vt = (selectedEvent as any)?.venueTables;
+    if (Array.isArray(vt)) scan(vt);
+    else if (vt) Object.values(vt).forEach((a) => scan(a as any[]));
+    return disabled;
+  }, [selectedEvent]);
+
+  // The minimum/partial-payment option is offered only when every space the
+  // stall booked still allows it. A booking with no spaces, or against spaces
+  // that predate the toggle, stays partial-eligible (preserves old behavior).
+  const selectedStallAllowsMinimum = useMemo(() => {
+    const tables = selectedRequest?.selectedTables || [];
+    if (tables.length === 0 || minimumDisabledSpaceIds.size === 0) return true;
+    return !tables.some(
+      (t: any) =>
+        minimumDisabledSpaceIds.has(String(t.tableId)) ||
+        minimumDisabledSpaceIds.has(String(t.positionId)),
+    );
+  }, [selectedRequest, minimumDisabledSpaceIds]);
+
+  // When the booked spaces don't allow minimum payment, force the dialog to
+  // "Paid" so the organizer can't record a partial payment that the exhibitor
+  // could never have made.
+  useEffect(() => {
+    if (showPaymentDialog && !selectedStallAllowsMinimum) {
+      setPaymentStatusUpdate("Paid");
+    }
+  }, [showPaymentDialog, selectedStallAllowsMinimum]);
   const [returnDepositNotes, setReturnDepositNotes] = useState("");
   const [returnDepositStallId, setReturnDepositStallId] = useState<
     string | null
@@ -3680,10 +3724,21 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Partial">Partial Payment</SelectItem>
+                  {selectedStallAllowsMinimum && (
+                    <SelectItem value="Partial">Partial Payment</SelectItem>
+                  )}
                   <SelectItem value="Paid">Fully Paid</SelectItem>
                 </SelectContent>
               </Select>
+              {!selectedStallAllowsMinimum && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Minimum payment is disabled for the booked space
+                  {(selectedRequest?.selectedTables?.length || 0) === 1
+                    ? ""
+                    : "s"}{" "}
+                  — only full payment can be recorded.
+                </p>
+              )}
             </div>
             <div>
               <Label htmlFor="payment-notes">Notes (Optional)</Label>

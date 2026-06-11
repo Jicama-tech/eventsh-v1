@@ -197,10 +197,16 @@ interface TableTemplate {
   memberPrice?: number;
   memberBookingPrice?: number;
   memberDepositPrice?: number;
+  // Master switch for offering the minimum/partial payment plan on this space.
+  // When false, exhibitors can only pay in full at checkout (the minimum-payment
+  // option is hidden). Defaults to true (absent === enabled) so existing
+  // templates keep offering minimum payment.
+  minimumPaymentEnabled?: boolean;
   // Whether the security deposit is part of Option 1 (minimum payment). When
   // false (default), Option 1 is the booking amount only and the deposit is
   // collected with the remaining balance — matching the long-standing booking
-  // behavior. Turn on to make Option 1 = Booking + Deposit.
+  // behavior. Turn on to make Option 1 = Booking + Deposit. Only meaningful
+  // when `minimumPaymentEnabled` is true.
   depositInOption1?: boolean;
   color?: string;
   forSale?: boolean;
@@ -1240,6 +1246,7 @@ const SavedSpaceTemplatePicker: React.FC<{
         p.bookingPrice != null ? String(p.bookingPrice) : prev.bookingPrice,
       depositPrice:
         p.depositPrice != null ? String(p.depositPrice) : prev.depositPrice,
+      minimumPaymentEnabled: p.minimumPaymentEnabled !== false,
       depositInOption1: p.depositInOption1 === true,
       color: p.color ?? prev.color,
       forSale: prev.forSale,
@@ -1375,6 +1382,7 @@ const TableManagement = ({
     memberPrice?: string;
     memberBookingPrice?: string;
     memberDepositPrice?: string;
+    minimumPaymentEnabled: boolean;
     depositInOption1: boolean;
     color: string;
     forSale: boolean;
@@ -1392,6 +1400,7 @@ const TableManagement = ({
       memberPrice?: string;
       memberBookingPrice?: string;
       memberDepositPrice?: string;
+      minimumPaymentEnabled: boolean;
       depositInOption1: boolean;
       color: string;
       forSale: boolean;
@@ -1612,7 +1621,10 @@ const TableManagement = ({
       memberPrice,
       memberBookingPrice,
       memberDepositPrice,
-      depositInOption1: currentTable.depositInOption1,
+      minimumPaymentEnabled: currentTable.minimumPaymentEnabled,
+      // Deposit can only ride Option 1 when the minimum-payment plan exists.
+      depositInOption1:
+        currentTable.minimumPaymentEnabled && currentTable.depositInOption1,
       color: currentTable.color || "#6b7280",
       forSale: currentTable.forSale,
       customDimensions: currentTable.type === "Straight",
@@ -1660,6 +1672,7 @@ const TableManagement = ({
       memberPrice: "",
       memberBookingPrice: "",
       memberDepositPrice: "",
+      minimumPaymentEnabled: true,
       depositInOption1: false,
       color: "#6b7280",
       forSale: true,
@@ -1685,6 +1698,7 @@ const TableManagement = ({
         t.memberBookingPrice != null ? String(t.memberBookingPrice) : "",
       memberDepositPrice:
         t.memberDepositPrice != null ? String(t.memberDepositPrice) : "",
+      minimumPaymentEnabled: t.minimumPaymentEnabled !== false,
       depositInOption1: t.depositInOption1 === true,
       color: t.color || "#6b7280",
       forSale: t.forSale !== false,
@@ -2051,10 +2065,41 @@ const TableManagement = ({
               </div>
             )}
 
+            {/* Minimum-payment master toggle. Controls whether the partial /
+                minimum-payment plan is offered at checkout at all. When off,
+                exhibitors must pay in full and the deposit-in-Option-1 toggle
+                below is hidden (it only matters when Option 1 exists). */}
+            {currentTable.forSale && (
+              <div className="flex items-center justify-between gap-3 rounded-lg border bg-slate-50 p-3">
+                <div>
+                  <Label className="text-sm">
+                    Offer minimum payment option
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {currentTable.minimumPaymentEnabled
+                      ? "Exhibitors can pay the booking amount now and the balance later"
+                      : "Exhibitors must pay the full amount at checkout"}
+                  </p>
+                </div>
+                <Switch
+                  checked={currentTable.minimumPaymentEnabled}
+                  onCheckedChange={(checked) =>
+                    setCurrentTable((prev) => ({
+                      ...prev,
+                      minimumPaymentEnabled: checked,
+                      // Deposit-in-Option-1 is meaningless without Option 1.
+                      depositInOption1: checked ? prev.depositInOption1 : false,
+                    }))
+                  }
+                />
+              </div>
+            )}
+
             {/* Include-deposit-in-Option-1 toggle. Controls whether the
                 minimum-payment option (Option 1) is Booking + Deposit (on) or
-                Booking only (off, deposit collected with the balance). */}
-            {currentTable.forSale && (
+                Booking only (off, deposit collected with the balance). Only
+                shown when the minimum-payment plan is enabled above. */}
+            {currentTable.forSale && currentTable.minimumPaymentEnabled && (
               <div className="flex items-center justify-between gap-3 rounded-lg border bg-slate-50 p-3">
                 <div>
                   <Label className="text-sm">
@@ -2164,38 +2209,48 @@ const TableManagement = ({
               currentTable.depositPrice && (
                 <div className="bg-white p-3 rounded border border-blue-200">
                   <p className="text-sm font-semibold mb-2">
-                    Payment Options for Shopkeepers:
+                    Payment Options for Exhibitors:
                   </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                    <div className="bg-green-50 p-2 rounded">
-                      <p className="font-medium text-green-800">
-                        Option 1: Minimum Payment
-                      </p>
-                      <p className="text-green-700">
-                        {currentTable.depositInOption1
-                          ? "Booking + Deposit = "
-                          : "Booking only = "}
-                        {formatPrice(
-                          parseFloat(currentTable.bookingPrice) +
-                            (currentTable.depositInOption1
-                              ? parseFloat(currentTable.depositPrice)
-                              : 0),
-                        )}
-                      </p>
-                      <p className="text-xs text-green-600">
-                        Remaining:
-                        {formatPrice(
-                          parseFloat(currentTable.tablePrice) -
+                  <div
+                    className={`grid grid-cols-1 gap-3 text-sm ${
+                      currentTable.minimumPaymentEnabled ? "md:grid-cols-2" : ""
+                    }`}
+                  >
+                    {/* Option 1 only exists when the minimum-payment plan is
+                        enabled for this space. */}
+                    {currentTable.minimumPaymentEnabled && (
+                      <div className="bg-green-50 p-2 rounded">
+                        <p className="font-medium text-green-800">
+                          Option 1: Minimum Payment
+                        </p>
+                        <p className="text-green-700">
+                          {currentTable.depositInOption1
+                            ? "Booking + Deposit = "
+                            : "Booking only = "}
+                          {formatPrice(
                             parseFloat(currentTable.bookingPrice) +
-                            (currentTable.depositInOption1
-                              ? 0
-                              : parseFloat(currentTable.depositPrice)),
-                        )}
-                      </p>
-                    </div>
+                              (currentTable.depositInOption1
+                                ? parseFloat(currentTable.depositPrice)
+                                : 0),
+                          )}
+                        </p>
+                        <p className="text-xs text-green-600">
+                          Remaining:
+                          {formatPrice(
+                            parseFloat(currentTable.tablePrice) -
+                              parseFloat(currentTable.bookingPrice) +
+                              (currentTable.depositInOption1
+                                ? 0
+                                : parseFloat(currentTable.depositPrice)),
+                          )}
+                        </p>
+                      </div>
+                    )}
                     <div className="bg-purple-50 p-2 rounded">
                       <p className="font-medium text-purple-800">
-                        Option 2: Full Payment
+                        {currentTable.minimumPaymentEnabled
+                          ? "Option 2: Full Payment"
+                          : "Full Payment (minimum payment disabled)"}
                       </p>
                       <p className="text-purple-700">
                         Deposit + Space Price =
@@ -2260,24 +2315,34 @@ const TableManagement = ({
                       (currentTable.depositInOption1 ? 0 : memDeposit);
                     const opt2 = memSpace + memDeposit;
                     return (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                        <div className="bg-emerald-50 p-2 rounded">
-                          <p className="font-medium text-emerald-800">
-                            Option 1: Minimum Payment
-                          </p>
-                          <p className="text-emerald-700">
-                            {currentTable.depositInOption1
-                              ? "Booking + Deposit = "
-                              : "Booking only = "}
-                            {formatPrice(opt1)}
-                          </p>
-                          <p className="text-xs text-emerald-600">
-                            Remaining: {formatPrice(opt1Remaining)}
-                          </p>
-                        </div>
+                      <div
+                        className={`grid grid-cols-1 gap-3 text-sm ${
+                          currentTable.minimumPaymentEnabled
+                            ? "md:grid-cols-2"
+                            : ""
+                        }`}
+                      >
+                        {currentTable.minimumPaymentEnabled && (
+                          <div className="bg-emerald-50 p-2 rounded">
+                            <p className="font-medium text-emerald-800">
+                              Option 1: Minimum Payment
+                            </p>
+                            <p className="text-emerald-700">
+                              {currentTable.depositInOption1
+                                ? "Booking + Deposit = "
+                                : "Booking only = "}
+                              {formatPrice(opt1)}
+                            </p>
+                            <p className="text-xs text-emerald-600">
+                              Remaining: {formatPrice(opt1Remaining)}
+                            </p>
+                          </div>
+                        )}
                         <div className="bg-teal-50 p-2 rounded">
                           <p className="font-medium text-teal-800">
-                            Option 2: Full Payment
+                            {currentTable.minimumPaymentEnabled
+                              ? "Option 2: Full Payment"
+                              : "Full Payment (minimum payment disabled)"}
                           </p>
                           <p className="text-teal-700">
                             Deposit + Space Price = {formatPrice(opt2)}
@@ -6072,6 +6137,7 @@ export function CreateEventForm({
     memberPrice: "",
     memberBookingPrice: "",
     memberDepositPrice: "",
+    minimumPaymentEnabled: true,
     depositInOption1: false,
     color: "#6b7280",
     forSale: true,
@@ -7496,9 +7562,27 @@ export function CreateEventForm({
         };
       });
 
-      // Add exhibition data
+      // Add exhibition data. Placed spaces inherit `minimumPaymentEnabled`
+      // from their source template (matched by id) when they don't carry it
+      // — so editing a template's toggle propagates to spaces placed earlier,
+      // and the booking/payment flow reads a consistent flag everywhere.
+      const tplById = new Map(
+        (tableTemplates || []).map((t: any) => [t.id, t]),
+      );
+      const venueTablesForSave = Object.fromEntries(
+        Object.entries(venueTables).map(([layoutId, tables]) => [
+          layoutId,
+          (tables as any[]).map((t) => ({
+            ...t,
+            minimumPaymentEnabled:
+              t.minimumPaymentEnabled ??
+              tplById.get(t.id)?.minimumPaymentEnabled ??
+              true,
+          })),
+        ]),
+      );
       data.append("tableTemplates", JSON.stringify(tableTemplates));
-      data.append("venueTables", JSON.stringify(venueTables));
+      data.append("venueTables", JSON.stringify(venueTablesForSave));
       data.append("addOnItems", JSON.stringify(formattedAddOns));
       data.append("venueConfig", JSON.stringify(venueConfigurations));
       data.append("venueLayoutImage", JSON.stringify(venueLayoutImages));

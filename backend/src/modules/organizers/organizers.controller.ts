@@ -120,7 +120,10 @@ export class OrganizersController {
   }
 
   // ----- Personal / custom sending email -----------------------------------
+  // Guarded: returns the decrypted SMTP password so the organizer can view it,
+  // so it must require an authenticated request (not a public-by-id read).
   @Get(":id/email-config")
+  @UseGuards(AuthGuard("jwt"))
   async getEmailConfig(@Param("id") id: string) {
     return this.organizersService.getEmailConfig(id);
   }

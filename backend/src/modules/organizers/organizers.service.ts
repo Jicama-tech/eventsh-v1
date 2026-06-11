@@ -17,7 +17,7 @@ import { JwtService } from "@nestjs/jwt";
 import { EventDocument } from "../events/schemas/event.schema";
 import { User } from "../users/schemas/user.schema";
 import { MailService } from "../roles/mail.service";
-import { encryptSecret } from "../../common/secret-crypto.util";
+import { encryptSecret, decryptSecret } from "../../common/secret-crypto.util";
 import { CreateOrganizerDto } from "./dto/createOrganizer.dto";
 import { Otp } from "../otp/entities/otp.entity";
 import { Plan } from "../plans/entities/plan.entity";
@@ -861,8 +861,10 @@ export class OrganizersService {
 
   // ----- Personal / custom sending email -----------------------------------
 
-  // Return the organizer's email config WITHOUT the SMTP password. The UI only
-  // needs to know whether a password is already saved (`hasPassword`).
+  // Return the organizer's email config, including the DECRYPTED SMTP password
+  // so the organizer can view what they saved (the field is encrypted at rest;
+  // this route is JWT-guarded so only an authenticated user can read it).
+  // `hasPassword` is kept for the UI's "saved" hint.
   async getEmailConfig(id: string) {
     const organizer = await this.organizerModel
       .findById(new Types.ObjectId(id))
@@ -870,7 +872,13 @@ export class OrganizersService {
     if (!organizer) throw new NotFoundException("Organizer Not Found");
     const cfg: any = (organizer as any).emailConfig || {};
     const { smtpPass, ...safe } = cfg;
-    return { data: { ...safe, hasPassword: !!smtpPass } };
+    return {
+      data: {
+        ...safe,
+        hasPassword: !!smtpPass,
+        smtpPass: decryptSecret(smtpPass),
+      },
+    };
   }
 
   // Save the email config. A blank smtpPass means "keep the existing password"

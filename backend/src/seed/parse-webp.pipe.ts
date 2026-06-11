@@ -43,6 +43,10 @@ export class WebpValidationPipe implements PipeTransform {
       bannerImage: "banners",
       heroBannerImage: "banners",
       eventImage: "events",
+      // Organizer payment QR — must match the public URL the organizers
+      // controller persists (`/uploads/organizerPayments/<file>`), otherwise
+      // the saved QR 404s and the preview never loads.
+      paymentURL: "organizerPayments",
     };
 
     const subFolder = folderMap[file.fieldname] || "misc";
