@@ -937,6 +937,49 @@ export function ChatbotWidget({
     organizationName: string;
     country: string;
   } | null>(null);
+  // Counts of exhibitor stalls awaiting organizer action — surfaced as
+  // flickering pills under the greeting so the team can act on priority.
+  const [pendingRequests, setPendingRequests] = useState(0);
+  const [pendingPayments, setPendingPayments] = useState(0);
+
+  useEffect(() => {
+    if (isIndividual) return;
+    let cancelled = false;
+    try {
+      const token = sessionStorage.getItem("token");
+      if (!token) return;
+      const decoded: any = jwtDecode(token);
+      const orgId = decoded?.organizerId || decoded?.sub;
+      if (!orgId) return;
+      const load = () => {
+        fetch(`${apiURL}/stalls/organizer/${orgId}`)
+          .then((r) => r.json())
+          .then((j) => {
+            if (cancelled) return;
+            const stalls: any[] = Array.isArray(j) ? j : j?.data || [];
+            // Pending requests = awaiting approve/reject. Pending payments =
+            // payment submitted, awaiting the organizer's verification.
+            setPendingRequests(
+              stalls.filter((s) => s?.status === "Pending").length,
+            );
+            setPendingPayments(
+              stalls.filter((s) => s?.status === "Processing").length,
+            );
+          })
+          .catch(() => {});
+      };
+      load();
+      // Light polling so the pills stay fresh while the dashboard is open.
+      const t = setInterval(load, 60000);
+      return () => {
+        cancelled = true;
+        clearInterval(t);
+      };
+    } catch {
+      /* token decode failed — no pills */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isIndividual]);
   // Country resolution priority:
   //   1. orgInfo.country from JWT (newest source after login)
   //   2. useCountry() context (set by OrganizerDashboard from /organizers/profile)
@@ -1500,6 +1543,40 @@ export function ChatbotWidget({
                             ),
                       )}
                     </div>
+
+                    {/* Action pills — pending exhibitor requests & payments.
+                        They flicker to draw attention; clicking jumps straight
+                        to Participants so the team can approve/verify fast. */}
+                    {!isIndividual &&
+                      (pendingRequests > 0 || pendingPayments > 0) && (
+                        <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                          {pendingRequests > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => onNavigate?.("eventAttendees")}
+                              className="animate-flicker inline-flex items-center gap-1.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1 text-xs font-semibold hover:bg-amber-200 transition"
+                              title="Approve or reject exhibitor requests"
+                            >
+                              <span className="w-2 h-2 rounded-full bg-amber-500" />
+                              {pendingRequests} Pending Request
+                              {pendingRequests === 1 ? "" : "s"} — Approve /
+                              Reject
+                            </button>
+                          )}
+                          {pendingPayments > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => onNavigate?.("eventAttendees")}
+                              className="animate-flicker inline-flex items-center gap-1.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 px-3 py-1 text-xs font-semibold hover:bg-rose-200 transition"
+                              title="Verify pending exhibitor payments"
+                            >
+                              <span className="w-2 h-2 rounded-full bg-rose-500" />
+                              {pendingPayments} Pending Payment
+                              {pendingPayments === 1 ? "" : "s"}
+                            </button>
+                          )}
+                        </div>
+                      )}
                   </div>
                 </div>
               </div>

@@ -663,7 +663,7 @@ const TablePaymentPage = () => {
             <h1 className="text-3xl font-bold">Complete Your Booking</h1>
             <p className="text-gray-600">
               {paymentStatus === "success"
-                ? "Your table booking has been created"
+                ? "Booking accepted — awaiting organizer payment approval"
                 : "Review your selection and complete payment"}
             </p>
           </div>
@@ -729,7 +729,8 @@ const TablePaymentPage = () => {
               </CardContent>
             </Card>
 
-            {/* Selected Tables */}
+            {/* Selected Tables — hidden once the booking is submitted */}
+            {paymentStatus !== "success" && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -764,9 +765,11 @@ const TablePaymentPage = () => {
                 ))}
               </CardContent>
             </Card>
+            )}
 
-            {/* Selected Add-ons */}
-            {orderData?.selectedAddOns &&
+            {/* Selected Add-ons — hidden once the booking is submitted */}
+            {paymentStatus !== "success" &&
+              orderData?.selectedAddOns &&
               orderData.selectedAddOns.length > 0 && (
                 <Card>
                   <CardHeader>
@@ -797,7 +800,8 @@ const TablePaymentPage = () => {
                 </Card>
               )}
 
-            {/* Payment Options */}
+            {/* Payment Options — hidden once the booking is submitted */}
+            {paymentStatus !== "success" && (
             <Card>
               <CardHeader>
                 <CardTitle>Payment Options</CardTitle>
@@ -997,6 +1001,7 @@ const TablePaymentPage = () => {
                 </div>
               </CardContent>
             </Card>
+            )}
 
             {/* QR Code Section - Auto Loaded */}
             {paymentStatus === "loading" && (
@@ -1271,27 +1276,49 @@ const TablePaymentPage = () => {
               </Card>
             )}
 
-            {/* Success Message */}
+            {/* Success Message — replaces the QR / payment cards on submit */}
             {paymentStatus === "success" && (
               <Card className="border-green-200 bg-green-50">
-                <CardContent className="pt-6">
+                <CardContent className="pt-8 pb-8">
                   <div className="text-center">
                     <CheckCircle2 className="h-20 w-20 text-green-600 mx-auto mb-4" />
-                    <h3 className="text-2xl font-bold text-green-900 mb-2">
-                      Booking Confirmed!
+                    <h3 className="text-2xl font-bold text-green-900 mb-1">
+                      Booking Accepted
                     </h3>
-                    <p className="text-green-700 mb-4">
-                      Your table booking request has been submitted successfully
+                    <p className="text-green-700 font-medium mb-3">
+                      Awaiting Organizer Payment Approval
+                    </p>
+                    <p className="text-sm text-green-700/80 max-w-md mx-auto mb-5">
+                      Your request and payment details have been submitted. The
+                      organizer will verify your payment, and your stall ticket
+                      with the QR code will be emailed to you once approved.
                     </p>
                     {bookingId && (
-                      <p className="text-sm text-green-600 font-mono bg-white p-2 rounded">
+                      <p className="text-sm text-green-700 font-mono bg-white px-3 py-2 rounded inline-block mb-4">
                         Booking ID: {bookingId}
                       </p>
                     )}
-                    {/* <p className="text-sm text-gray-600 mt-4">
-                      Redirecting to event page...
-                    </p> */}
                   </div>
+                  {(transactionId || screenshotPreview) && (
+                    <div className="bg-white rounded-lg border border-green-200 p-4 text-left max-w-md mx-auto">
+                      <p className="text-xs font-semibold text-gray-700 mb-2">
+                        Recorded payment details
+                      </p>
+                      {transactionId && (
+                        <p className="text-sm text-gray-700">
+                          Transaction ID:{" "}
+                          <span className="font-mono">{transactionId}</span>
+                        </p>
+                      )}
+                      {screenshotPreview && (
+                        <img
+                          src={screenshotPreview}
+                          alt="Payment screenshot"
+                          className="mt-2 max-h-40 rounded border object-contain"
+                        />
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}

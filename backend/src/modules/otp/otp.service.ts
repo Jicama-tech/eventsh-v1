@@ -485,10 +485,13 @@ export class OtpService implements OnModuleInit {
       await this.emailDocument(filePath, fileName, caption, email);
     }
 
-    // WhatsApp messaging is being phased out — when disabled, the document
-    // was already delivered by email above, so just stop here.
-    if (!this.whatsAppEnabled) {
-      this.logger.log("WhatsApp messaging disabled — skipping document send.");
+    // WhatsApp messaging is being phased out — when disabled, OR when there's
+    // no number to send to, the document was already delivered by email above,
+    // so just stop here (callers can safely pass an empty number to email-only).
+    if (!this.whatsAppEnabled || !whatsappNumber) {
+      this.logger.log(
+        "WhatsApp document send skipped (disabled or no number) — delivered by email.",
+      );
       return;
     }
 
