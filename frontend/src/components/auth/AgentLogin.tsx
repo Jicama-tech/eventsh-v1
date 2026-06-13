@@ -20,16 +20,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-const COUNTRY_CODES = [
-  { code: "+91", name: "India" },
-  { code: "+65", name: "Singapore" },
-];
+import { useCountryCodes } from "@/hooks/useCountryCodes";
 
 type LoginStep = "number" | "otp";
 
 export function AgentLogin() {
   const apiURL = __API_URL__;
+  // Full country dial-code list from the shared hook (local data, no network).
+  const { countries } = useCountryCodes();
   const [whatsappNumber, setWhatsAppNumber] = useState("");
   const [countryCode, setCountryCode] = useState("+91");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
@@ -170,9 +168,9 @@ export function AgentLogin() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {COUNTRY_CODES.map((c) => (
-                          <SelectItem key={c.code} value={c.code}>
-                            {c.code} {c.name}
+                        {countries.map((c) => (
+                          <SelectItem key={c.code} value={c.dialCode}>
+                            {c.dialCode} {c.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
