@@ -895,7 +895,7 @@ const TablePaymentPage = () => {
                       <div className="flex gap-2">
                         <button type="button" onClick={() => setPaymentMode("qr")}
                           className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium border-2 transition-all ${paymentMode === "qr" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500"}`}>
-                          QR / UPI Payment
+                          QR Payment
                         </button>
                         <button type="button" onClick={() => setPaymentMode("bank")}
                           className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium border-2 transition-all ${paymentMode === "bank" ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 text-gray-500"}`}>

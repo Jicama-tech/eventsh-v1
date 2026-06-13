@@ -31,6 +31,11 @@ export class Operator {
   @Prop()
   email: string;
 
+  // Optional company / private email. Progress notifications are sent here in
+  // addition to the operator's (Google) login email.
+  @Prop()
+  companyEmail?: string;
+
   @Prop()
   shopkeeperId?: string;
 
@@ -41,6 +46,12 @@ export class Operator {
   // restriction (full access). Non-empty array → restricted to listed tabs.
   @Prop({ type: [String], default: [] })
   accessTabs: string[];
+
+  // Whether this operator receives notification emails (new vendor requests,
+  // payment-awaiting-approval alerts, etc.). Opt-in: the organizer must switch
+  // it ON per operator; only those operators get emailed. Defaults false.
+  @Prop({ default: false })
+  allowEmails: boolean;
 }
 
 export const OperatorSchema = SchemaFactory.createForClass(Operator);

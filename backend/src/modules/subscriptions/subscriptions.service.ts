@@ -657,7 +657,10 @@ export class SubscriptionsService {
     doc: any,
     pdfPath: string,
   ): Promise<{ sent: boolean; error?: string }> {
-    const to = organizer.email || organizer.businessEmail;
+    const to = MailService.recipientList(
+      organizer.email,
+      organizer.businessEmail,
+    );
     if (!to) return { sent: false, error: "no_email" };
     try {
       const symbol = this.currencySymbol(doc.currency);

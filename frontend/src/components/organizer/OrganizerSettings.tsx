@@ -104,9 +104,13 @@ interface Operator {
   _id?: string;
   name: string;
   email: string;
+  // Optional company/private email — progress emails go here too.
+  companyEmail?: string;
   whatsAppNumber: string;
   organizerId?: string;
   accessTabs?: string[];
+  // When false, this operator does not receive notification emails.
+  allowEmails?: boolean;
 }
 
 interface ShopkeeperSettingsProps {
@@ -1149,15 +1153,23 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
   const [operatorForm, setOperatorForm] = useState<{
     name: string;
     operatorCountryCode: string;
+    // Only the Google ID name (the part before "@gmail.com"); the suffix is
+    // appended on submit so operators always end up as name@gmail.com.
     operatorEmail: string;
+    // Optional company / private email — receives progress emails too.
+    operatorCompanyEmail: string;
     operatorLocalNumber: string;
     accessTabs: string[];
+    // When off, this operator does not receive notification emails.
+    allowEmails: boolean;
   }>({
     name: "",
     operatorCountryCode: "+91",
     operatorEmail: "",
+    operatorCompanyEmail: "",
     operatorLocalNumber: "",
     accessTabs: [],
+    allowEmails: false,
   });
   const [isSavingOperators, setIsSavingOperators] = useState(false);
 
@@ -1240,6 +1252,12 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
         ? operatorForm.operatorCountryCode + operatorForm.operatorLocalNumber
         : "";
 
+      // Operators sign in with Google — the form only takes the ID name and we
+      // always append "@gmail.com" so it's stored as name@gmail.com.
+      const fullEmail = `${operatorForm.operatorEmail.trim().toLowerCase()}@gmail.com`;
+      // Company email is optional and free-form (any domain).
+      const companyEmail = operatorForm.operatorCompanyEmail.trim().toLowerCase();
+
       const isEditing = editingOperatorIndex !== null;
       const editingOperator = isEditing
         ? operators[editingOperatorIndex!]
@@ -1260,8 +1278,10 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
         body: JSON.stringify({
           name: operatorForm.name,
           whatsAppNumber: fullWhatsApp,
-          email: operatorForm.operatorEmail,
+          email: fullEmail,
+          companyEmail,
           accessTabs: operatorForm.accessTabs,
+          allowEmails: operatorForm.allowEmails,
         }),
       });
 
@@ -1280,8 +1300,10 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
         name: "",
         operatorCountryCode: "+91",
         operatorEmail: "",
+        operatorCompanyEmail: "",
         operatorLocalNumber: "",
         accessTabs: [],
+        allowEmails: false,
       });
       setEditingOperatorIndex(null);
     } catch (err: any) {
@@ -3332,9 +3354,14 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                               setOperatorForm({
                                 name: op.name,
                                 operatorCountryCode: splitCode,
-                                operatorEmail: op.email,
+                                // Show only the Google ID name; the "@gmail.com"
+                                // suffix is fixed in the input and re-appended
+                                // on save.
+                                operatorEmail: (op.email ?? "").split("@")[0],
+                                operatorCompanyEmail: op.companyEmail ?? "",
                                 operatorLocalNumber: splitLocal,
                                 accessTabs: op.accessTabs ?? [],
+                                allowEmails: op.allowEmails === true,
                               });
                               setEditingOperatorIndex(index);
                               setOperatorDialogOpen(true);
@@ -3448,13 +3475,63 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 </div>
                 <div className="space-y-1">
                   <Label>Operator Email *</Label>
+                  <div className="flex items-center">
+                    <Input
+                      placeholder="e.g. johndoe"
+                      value={operatorForm.operatorEmail}
+                      onChange={(e) =>
+                        setOperatorForm((prev) => ({
+                          ...prev,
+                          // Keep only the Google ID name — strip any "@..."
+                          // and whitespace the user may type or paste.
+                          operatorEmail: e.target.value
+                            .replace(/@.*/, "")
+                            .replace(/\s/g, ""),
+                        }))
+                      }
+                      className="rounded-r-none"
+                    />
+                    <span className="inline-flex items-center h-10 px-3 rounded-r-md border border-l-0 border-input bg-muted text-sm text-muted-foreground whitespace-nowrap">
+                      @gmail.com
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Operators sign in with Google — enter only the Gmail ID name.
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label>Company Email (optional)</Label>
                   <Input
-                    placeholder="e.g. John Doe"
-                    value={operatorForm.operatorEmail}
+                    type="email"
+                    placeholder="e.g. info@yourcompany.com"
+                    value={operatorForm.operatorCompanyEmail}
                     onChange={(e) =>
                       setOperatorForm((prev) => ({
                         ...prev,
-                        operatorEmail: e.target.value,
+                        operatorCompanyEmail: e.target.value,
+                      }))
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Progress emails are also sent here. You can use a private
+                    company address.
+                  </p>
+                </div>
+                <div className="flex items-start justify-between gap-3 rounded-md border p-3">
+                  <div className="space-y-0.5">
+                    <Label>Allow Emails</Label>
+                    <p className="text-xs text-muted-foreground">
+                      When on, this operator receives notification emails (new
+                      vendor requests, payment alerts). Turn off to stop emails
+                      to this operator.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={operatorForm.allowEmails}
+                    onCheckedChange={(checked) =>
+                      setOperatorForm((prev) => ({
+                        ...prev,
+                        allowEmails: checked,
                       }))
                     }
                   />

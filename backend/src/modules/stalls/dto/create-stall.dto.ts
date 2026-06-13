@@ -34,6 +34,12 @@ export class CreateStallDto {
   @IsEmail()
   shopkeeperEmail?: string;
 
+  // Second exhibitor email (the "Business Email" on the stall form). Persisted
+  // alongside `email` so stall notifications reach BOTH addresses.
+  @IsOptional()
+  @IsEmail()
+  shopkeeperBusinessEmail?: string;
+
   @IsOptional()
   @IsString()
   shopkeeperWhatsAppNumber?: string;

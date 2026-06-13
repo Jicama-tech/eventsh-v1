@@ -503,6 +503,23 @@ export class MailService {
     });
   }
 
+  /**
+   * Recipient list for organizer-facing emails: when the primary and business
+   * emails differ, BOTH addresses receive the message. Identical or empty
+   * values are de-duped. Returns a comma-joined string (nodemailer delivers to
+   * every listed recipient) or "" when none are valid.
+   */
+  static recipientList(...emails: (string | undefined | null)[]): string {
+    const seen = new Set<string>();
+    for (const raw of emails) {
+      const v = String(raw || "")
+        .trim()
+        .toLowerCase();
+      if (v) seen.add(v);
+    }
+    return Array.from(seen).join(", ");
+  }
+
   async sendMail(options: { to: string; subject: string; html: string }) {
     try {
       await this.transporter.sendMail({

@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -19,6 +20,11 @@ export class CreateOperatorDto {
   @IsOptional()
   email?: string;
 
+  // Optional company / private email — receives progress emails too.
+  @IsString()
+  @IsOptional()
+  companyEmail?: string;
+
   @IsString()
   @IsOptional()
   shopkeeperId?: string;
@@ -32,4 +38,9 @@ export class CreateOperatorDto {
   @IsOptional()
   @IsString({ each: true })
   accessTabs?: string[];
+
+  // Whether this operator receives notification emails. Opt-in, defaults false.
+  @IsBoolean()
+  @IsOptional()
+  allowEmails?: boolean;
 }
