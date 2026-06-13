@@ -118,6 +118,25 @@ export class StallsService {
           if (!createStallDto.businessCategory)
             updateFields.businessCategory = createStallDto.businessType;
         }
+        // Persist edits to the core contact/profile fields too, so changing
+        // anything on the stall form reflects back into the vendors collection
+        // (not just the new-schema fields above). Each is guarded so a missing
+        // value never wipes existing data.
+        if (createStallDto.shopkeeperName)
+          updateFields.name = createStallDto.shopkeeperName;
+        if (createStallDto.shopkeeperEmail)
+          updateFields.email = createStallDto.shopkeeperEmail;
+        if (createStallDto.shopkeeperBusinessEmail)
+          updateFields.businessEmail = createStallDto.shopkeeperBusinessEmail;
+        if (createStallDto.shopkeeperWhatsAppNumber)
+          updateFields.whatsAppNumber =
+            createStallDto.shopkeeperWhatsAppNumber;
+        if (createStallDto.shopkeeperPhoneNumber)
+          updateFields.phoneNumber = createStallDto.shopkeeperPhoneNumber;
+        if (createStallDto.businessName)
+          updateFields.businessName = createStallDto.businessName;
+        if (createStallDto.businessAddress)
+          updateFields.address = createStallDto.businessAddress;
         // Backfill the owning organizer if this vendor never had one (e.g.
         // created by an older stall flow), so they surface in the CRM/export.
         if (!(existingVendor as any).organizerId) {
@@ -173,6 +192,8 @@ export class StallsService {
             organizerId: new Types.ObjectId(createStallDto.organizerId),
             name: createStallDto.shopkeeperName,
             email: createStallDto.shopkeeperEmail,
+            // Save the second email too so stall updates go to both inboxes.
+            businessEmail: createStallDto.shopkeeperBusinessEmail,
             whatsAppNumber: createStallDto.shopkeeperWhatsAppNumber,
             countryCode: createStallDto.shopkeeperCountryCode || "+91",
             phoneNumber: createStallDto.shopkeeperPhoneNumber,
@@ -216,6 +237,17 @@ export class StallsService {
         );
       }
 
+      // When this submission didn't include a freshly uploaded image, inherit
+      // whatever the vendor already has on file so the stall always carries the
+      // exhibitor's registration doc, logo, and product images. Existing
+      // vendors who re-apply keep their previously uploaded files (the form
+      // shows them as previews but doesn't re-upload them), so without this the
+      // new stall would be saved with no images.
+      const vendorImages: any = await this.vendorModel
+        .findById(shopkeeperId)
+        .select("registrationImage companyLogo productImage")
+        .lean();
+
       const newStall = await this.stallModel.create({
         shopkeeperId,
         eventId: new Types.ObjectId(createStallDto.eventId),
@@ -235,16 +267,20 @@ export class StallsService {
         notes: createStallDto.notes,
         brandName: createStallDto.brandName,
         nameOfApplicant: createStallDto.nameOfApplicant,
-        registrationImage: createStallDto.registrationImage,
+        registrationImage:
+          createStallDto.registrationImage || vendorImages?.registrationImage,
         businessOwnerNationality: createStallDto.businessOwnerNationality,
         registrationNumber: createStallDto.registrationNumber,
         residency: createStallDto.residency,
         refundPaymentDescription: createStallDto.refundPaymentDescription,
-        companyLogo: createStallDto.companyLogo,
+        companyLogo: createStallDto.companyLogo || vendorImages?.companyLogo,
         faceBookLink: createStallDto.faceBookLink,
         instagramLink: createStallDto.instagramLink,
         productDescription: createStallDto.productDescription,
-        productImage: createStallDto.productImage,
+        productImage:
+          createStallDto.productImage && createStallDto.productImage.length
+            ? createStallDto.productImage
+            : vendorImages?.productImage || [],
         preferredTemplateId: createStallDto.preferredTemplateId || null,
         preferredTemplateName: createStallDto.preferredTemplateName || null,
       });
@@ -443,7 +479,7 @@ export class StallsService {
       // phased out — email is the single channel.
       try {
         const vendor = await this.vendorModel.findById(stall.shopkeeperId);
-        const vendorEmail = vendor?.email || vendor?.businessEmail;
+        const vendorEmail = this.vendorEmailRecipients(vendor);
         if (vendorEmail) {
           const senderConfig = await this.getOrganizerSenderConfig(
             stall.organizerId,
@@ -678,7 +714,7 @@ export class StallsService {
       // on the vendor having a WhatsApp number). WhatsApp is an extra channel,
       // sent only when a number is on file and the integration is enabled.
       const vendorWhatsApp = vendor.whatsAppNumber || vendor.whatsappNumber;
-      const vendorEmail = vendor.email || vendor.businessEmail;
+      const vendorEmail = this.vendorEmailRecipients(vendor);
       try {
         const eventObj = stall.eventId as any;
         const eventDate = eventObj?.startDate
@@ -1177,7 +1213,7 @@ Thank you for choosing Eventsh! 🎊`;
         `🎪 Your stall confirmation for ${stall.eventId["title"]}`,
         "stall-ticket.pdf",
         {
-          to: vendorObj?.email || vendorObj?.businessEmail,
+          to: this.vendorEmailRecipients(vendorObj),
           subject: `Your stall confirmation for ${eventObj?.title || "Event"}`,
           heading: "Your Stall Confirmation is Ready!",
           message,
@@ -1433,6 +1469,23 @@ Thank you for choosing Eventsh! 🎊`;
     }
   }
 
+  // Build the recipient list for vendor/exhibitor-facing emails. Previously
+  // these went to the personal `email` only (with `businessEmail` as a mere
+  // fallback); now BOTH the personal and the business email receive every
+  // exhibitor notification. Returns a single comma-joined string — nodemailer
+  // accepts multiple recipients this way — deduped and lower-cased, or "" when
+  // neither address is on file (callers already guard the empty case).
+  private vendorEmailRecipients(vendor: any): string {
+    const seen = new Set<string>();
+    for (const raw of [vendor?.email, vendor?.businessEmail]) {
+      const v = String(raw || "")
+        .trim()
+        .toLowerCase();
+      if (v) seen.add(v);
+    }
+    return Array.from(seen).join(", ");
+  }
+
   private async sendStallCreatedNotification(stall: any) {
     try {
       const vendor = await this.vendorModel.findById(stall.shopkeeperId);
@@ -1463,7 +1516,7 @@ Thank you for choosing Eventsh! 🎊`;
 
       // Email the vendor the same submission confirmation. Vendor-facing, so
       // it goes out from the organizer's custom sender when enabled.
-      const vendorEmail = vendor.email || vendor.businessEmail;
+      const vendorEmail = this.vendorEmailRecipients(vendor);
       if (vendorEmail) {
         try {
           const senderConfig = await this.getOrganizerSenderConfig(
@@ -1525,6 +1578,10 @@ Thank you for choosing Eventsh! 🎊`;
         .find({ organizerId: String(orgId) })
         .lean();
 
+      // Vendor/operator-facing operational notification → sent from the
+      // organizer's custom sender (falls back to the global EventSH sender).
+      const senderConfig = await this.getOrganizerSenderConfig(orgId);
+
       // Collect unique recipient emails: organizer (login + business) + ops.
       const recipients = new Set<string>();
       const add = (e?: string) => {
@@ -1533,7 +1590,12 @@ Thank you for choosing Eventsh! 🎊`;
       };
       add(organizer?.email);
       add(organizer?.businessEmail);
-      for (const op of operators as any[]) add(op.email);
+      for (const op of operators as any[]) {
+        // Opt-in: only operators with "Allow Emails" switched ON get notified.
+        if (!op.allowEmails) continue;
+        add(op.email);
+        add(op.companyEmail);
+      }
 
       if (recipients.size === 0) return;
 
@@ -1592,8 +1654,7 @@ Thank you for choosing Eventsh! 🎊`;
               to,
               subject: `New stall request: ${businessName} — ${event?.title || "Event"}`,
               html,
-              // Internal notification to the organizer/operators — always sent
-              // from the global EventSH sender, never the organizer's custom one.
+              senderConfig,
             })
             .catch((e: any) =>
               this.logger.warn(
@@ -1637,8 +1698,17 @@ Thank you for choosing Eventsh! 🎊`;
       };
       add((organizer as any)?.email);
       add((organizer as any)?.businessEmail);
-      for (const op of operators as any[]) add(op.email);
+      for (const op of operators as any[]) {
+        // Opt-in: only operators with "Allow Emails" switched ON get notified.
+        if (!op.allowEmails) continue;
+        add(op.email);
+        add(op.companyEmail);
+      }
       if (recipients.size === 0) return;
+
+      // Operational alert → from the organizer's custom sender (falls back to
+      // the global EventSH sender when none is configured).
+      const senderConfig = await this.getOrganizerSenderConfig(orgId);
 
       const fe = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
       const dashboardUrl = `${fe}/organizer/login?redirect=${encodeURIComponent(
@@ -1688,6 +1758,7 @@ Thank you for choosing Eventsh! 🎊`;
               to,
               subject: `⏳ Payment awaiting approval: ${businessName} — ${event?.title || "Event"}`,
               html,
+              senderConfig,
             })
             .catch((e: any) =>
               this.logger.warn(
@@ -1750,7 +1821,7 @@ Thank you for choosing Eventsh! 🎊`;
       // Email the vendor the same status update, with a link to the event
       // page so they can log in and continue (select tables, pay). Vendor-
       // facing, so it goes out from the organizer's custom sender when on.
-      const vendorEmail = vendor.email || vendor.businessEmail;
+      const vendorEmail = this.vendorEmailRecipients(vendor);
       const isApproved = newStatus === "Confirmed" || newStatus === "Approved";
       const isRejected = newStatus === "Cancelled";
       if (vendorEmail && (isApproved || isRejected)) {
@@ -2031,7 +2102,7 @@ Thank you for choosing Eventsh! 🎊`;
                 `Booking Details - ${eventObj?.title || "Event"}`,
                 "booking-details.pdf",
                 {
-                  to: vendor?.email || vendor?.businessEmail,
+                  to: this.vendorEmailRecipients(vendor),
                   subject: `Partial payment received — ${eventObj?.title || "Event"}`,
                   heading: "Partial Payment Received",
                   message:

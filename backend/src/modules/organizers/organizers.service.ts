@@ -257,7 +257,10 @@ export class OrganizersService {
       try {
         await this.mailService.sendOrganizerWelcome({
           name: dto.name,
-          email: normalized.normalizedEmail,
+          email: MailService.recipientList(
+            normalized.normalizedEmail,
+            normalized.normalizedBusinessEmail,
+          ),
           organizationName: dto.organizationName,
           planName: defaultPlan?.planName || null,
           validityInDays: defaultPlan?.validityInDays || null,
@@ -415,7 +418,7 @@ export class OrganizersService {
     try {
       await this.mailService.sendOrganizerWelcome({
         name: dto.name,
-        email: normalizedEmail,
+        email: MailService.recipientList(normalizedEmail, normalizedBusinessEmail),
         organizationName: dto.organizationName,
         planName: defaultPlan?.planName || null,
         validityInDays: defaultPlan?.validityInDays || null,
@@ -1320,7 +1323,7 @@ export class OrganizersService {
           );
           await this.mailService.sendPlanExpiryWarning({
             name: org.name,
-            email: org.email,
+            email: MailService.recipientList(org.email, org.businessEmail),
             organizationName: org.organizationName,
             planName: plan.planName,
             daysLeft,
@@ -1695,7 +1698,10 @@ export class OrganizersService {
       try {
         await this.mailService.sendPlanPurchaseConfirmation({
           name: organizer.name,
-          email: organizer.email,
+          email: MailService.recipientList(
+            organizer.email,
+            organizer.businessEmail,
+          ),
           organizationName: organizer.organizationName,
           planName: plan.planName,
           pricePaid: plan.price.toString(),
@@ -1733,7 +1739,10 @@ export class OrganizersService {
           : null;
         await this.mailService.sendSubscriptionCancelled({
           name: organizer.name,
-          email: organizer.email,
+          email: MailService.recipientList(
+            organizer.email,
+            organizer.businessEmail,
+          ),
           organizationName: organizer.organizationName,
           planName: previousPlan?.planName || null,
         });

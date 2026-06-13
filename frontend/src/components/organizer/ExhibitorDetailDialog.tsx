@@ -428,6 +428,23 @@ export function ExhibitorDetailDialog({
                       "—"}
                   </p>
                 </div>
+                {stallRequest.shopkeeperId?.email && (
+                  <div>
+                    <Label className="text-muted-foreground">
+                      Primary Email
+                    </Label>
+                    <p className="font-medium">
+                      <a
+                        href={`mailto:${stallRequest.shopkeeperId?.email}`}
+                        className="text-blue-600 hover:underline block truncate"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {stallRequest.shopkeeperId?.email}
+                      </a>
+                    </p>
+                  </div>
+                )}
                 {stallRequest.shopkeeperId?.businessEmail && (
                   <div>
                     <Label className="text-muted-foreground">

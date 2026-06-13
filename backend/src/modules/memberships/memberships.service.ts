@@ -680,8 +680,34 @@ export class MembershipsService {
       ? new Date(membership.endDate).toLocaleDateString()
       : "";
 
+    // Mirror the stall-flow behavior: send the receipt to BOTH of the vendor's
+    // emails (primary `email` + `businessEmail`) plus the exhibitor email
+    // captured at purchase, deduped and comma-joined (nodemailer accepts
+    // multiple recipients).
+    let vendorEmail: string | undefined;
+    let vendorBusinessEmail: string | undefined;
+    if (membership?.exhibitorId) {
+      try {
+        const vendor = await this.vendorModel
+          .findById(membership.exhibitorId)
+          .select("email businessEmail")
+          .lean();
+        vendorEmail = (vendor as any)?.email;
+        vendorBusinessEmail = (vendor as any)?.businessEmail;
+      } catch {
+        // Best-effort — fall back to the exhibitor email alone.
+      }
+    }
+    const emailRecipients = Array.from(
+      new Set(
+        [membership?.exhibitorEmail, vendorEmail, vendorBusinessEmail]
+          .map((e) => String(e || "").trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ).join(", ");
+
     // ── Email channel ───────────────────────────────────────────────
-    if (membership?.exhibitorEmail) {
+    if (emailRecipients) {
       const html = `
         <div style="font-family:Inter,Arial,sans-serif;color:#111">
           <h2 style="margin:0 0 8px">Welcome to ${escapeHtml(plan.name)} membership at ${escapeHtml(orgName)}</h2>
@@ -705,7 +731,7 @@ export class MembershipsService {
       try {
         const buffer = await fs.promises.readFile(filePath);
         await this.mailService.sendEmail({
-          to: membership.exhibitorEmail,
+          to: emailRecipients,
           subject: `Welcome to ${plan.name} membership at ${orgName}`,
           html,
           attachments: [{ filename: fileName, content: buffer }],

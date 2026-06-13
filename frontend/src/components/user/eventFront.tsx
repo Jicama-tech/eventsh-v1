@@ -2726,11 +2726,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
   // Send Business Email OTP
   const sendOtpToBusinessEmail = async () => {
-    if (!shopkeeperDetails.businessEmail) {
+    if (!shopkeeperDetails.email) {
       toast({
         duration: 5000,
         title: "Email Required",
-        description: "Please enter business email",
+        description: "Please enter your email",
         variant: "destructive",
       });
       return;
@@ -2746,7 +2746,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          businessEmail: shopkeeperDetails.businessEmail,
+          businessEmail: shopkeeperDetails.email,
           // Lets the backend send the OTP from the organizer's custom
           // sender (Personal Email) when their toggle is on.
           organizerId:
@@ -2766,7 +2766,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       toast({
         duration: 5000,
         title: "OTP Sent",
-        description: "OTP sent to your business email",
+        description: "OTP sent to your email",
       });
     } catch (error: any) {
       toast({
@@ -2796,7 +2796,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          businessEmail: shopkeeperDetails.businessEmail,
+          businessEmail: shopkeeperDetails.email,
           otp,
         }),
       });
@@ -2809,7 +2809,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       toast({
         duration: 5000,
         title: "Verified",
-        description: "Business email verified",
+        description: "Email verified",
       });
     } catch (error: any) {
       setOtpError(error.message);
@@ -2864,8 +2864,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     req(blank(d.residency), "Residency");
     req(blank(d.brandName), "Brand Name");
     req(blank(d.shopName), "Registered Business Name");
-    if (!shopkeeperExists) req(blank(d.businessEmail), "Business Email");
-    req(blank(d.email), "Primary Email");
+    if (!shopkeeperExists) req(blank(d.email), "Primary Email");
+    req(blank(d.businessEmail), "Business Email");
     req(blank(d.whatsappNumber), "WhatsApp Number");
     req(blank(d.phone), "Phone Number");
     req(blank(d.businessCategory), "Business Category");
@@ -2913,22 +2913,30 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       formData.append("organizerId", eventData?.organizer._id || "");
 
       // Append standard info
+      // For an existing vendor we pass the id (update path); for a new one the
+      // backend creates the record. Either way we send the full profile so any
+      // edits made on the form persist back to the vendors collection.
       if (shopkeeperExists && shopkeeperId) {
         formData.append("shopkeeperId", shopkeeperId);
-      } else {
-        formData.append("shopkeeperName", shopkeeperDetails.name);
-        formData.append("shopkeeperEmail", shopkeeperDetails.email);
-        formData.append(
-          "shopkeeperWhatsAppNumber",
-          shopkeeperDetails.whatsappNumber.startsWith("+")
-            ? shopkeeperDetails.whatsappNumber
-            : `+${shopkeeperDetails.whatsappNumber}`,
-        );
-        formData.append("shopkeeperPhoneNumber", shopkeeperDetails.phone);
-        formData.append("businessName", shopkeeperDetails.shopName);
-        formData.append("businessType", shopkeeperDetails.businessCategory);
-        formData.append("businessAddress", shopkeeperDetails.address);
       }
+      formData.append("shopkeeperName", shopkeeperDetails.name);
+      formData.append("shopkeeperEmail", shopkeeperDetails.email);
+      // Both exhibitor emails are persisted so stall updates go to each.
+      if (shopkeeperDetails.businessEmail)
+        formData.append(
+          "shopkeeperBusinessEmail",
+          shopkeeperDetails.businessEmail,
+        );
+      formData.append(
+        "shopkeeperWhatsAppNumber",
+        shopkeeperDetails.whatsappNumber.startsWith("+")
+          ? shopkeeperDetails.whatsappNumber
+          : `+${shopkeeperDetails.whatsappNumber}`,
+      );
+      formData.append("shopkeeperPhoneNumber", shopkeeperDetails.phone);
+      formData.append("businessName", shopkeeperDetails.shopName);
+      formData.append("businessType", shopkeeperDetails.businessCategory);
+      formData.append("businessAddress", shopkeeperDetails.address);
 
       // Append new schema fields
       formData.append("brandName", shopkeeperDetails.brandName);
@@ -9153,6 +9161,23 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     "—"}
                                 </p>
                               </div>
+                              {stallRequest.shopkeeperId?.email && (
+                                <div>
+                                  <Label className="text-muted-foreground">
+                                    Primary Email
+                                  </Label>
+                                  <p className="font-medium">
+                                    <a
+                                      href={`mailto:${stallRequest.shopkeeperId?.email}`}
+                                      className="text-blue-600 hover:underline block truncate"
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      {stallRequest.shopkeeperId?.email}
+                                    </a>
+                                  </p>
+                                </div>
+                              )}
                               {stallRequest.shopkeeperId?.businessEmail && (
                                 <div>
                                   <Label className="text-muted-foreground">
@@ -10122,7 +10147,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
                       <Label>
-                        Business Email <span className="text-red-500">*</span>
+                        Primary Email <span className="text-red-500">*</span>
                       </Label>
                       {emailVerified && (
                         <Badge className="bg-green-600">
@@ -10133,8 +10158,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     <div className="flex gap-2">
                       <Input
                         type="email"
-                        name="businessEmail"
-                        value={shopkeeperDetails.businessEmail}
+                        name="email"
+                        value={shopkeeperDetails.email}
                         onChange={handleRentFormChange}
                         disabled={emailVerified}
                       />
@@ -10143,7 +10168,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         onClick={sendOtpToBusinessEmail}
                         disabled={
                           sendingOtp ||
-                          !shopkeeperDetails.businessEmail ||
+                          !shopkeeperDetails.email ||
                           emailVerified
                         }
                       >
@@ -10174,10 +10199,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 ) : (
                   <div className="space-y-2">
                     <Label>
-                      Business Email <span className="text-red-500">*</span>
+                      Primary Email <span className="text-red-500">*</span>
                     </Label>
                     <Input
-                      value={shopkeeperDetails.businessEmail}
+                      value={shopkeeperDetails.email}
                       disabled
                       className="bg-gray-100"
                     />
@@ -10186,12 +10211,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
                 <div className="space-y-2">
                   <Label>
-                    Primary Email <span className="text-red-500">*</span>
+                    Business Email <span className="text-red-500">*</span>
                   </Label>
                   <Input
                     type="email"
-                    name="email"
-                    value={shopkeeperDetails.email}
+                    name="businessEmail"
+                    value={shopkeeperDetails.businessEmail}
                     onChange={handleRentFormChange}
                     required
                   />

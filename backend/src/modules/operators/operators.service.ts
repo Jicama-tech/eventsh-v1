@@ -56,6 +56,10 @@ export class OperatorsService {
         ? createOperatorDto.email.trim().toLowerCase()
         : undefined;
 
+      const normalizedCompanyEmail = createOperatorDto.companyEmail
+        ? createOperatorDto.companyEmail.trim().toLowerCase()
+        : undefined;
+
       // Email is the login identity (Google Auth) — de-dupe on it.
       if (normalizedEmail) {
         const existingByEmail = await this.operatorModel.findOne({
@@ -74,8 +78,14 @@ export class OperatorsService {
         ...(whatsApp ? { whatsAppNumber: whatsApp } : {}),
         organizerId: organizerId,
         ...(normalizedEmail ? { email: normalizedEmail } : {}),
+        ...(normalizedCompanyEmail
+          ? { companyEmail: normalizedCompanyEmail }
+          : {}),
         ...(createOperatorDto.accessTabs
           ? { accessTabs: createOperatorDto.accessTabs }
+          : {}),
+        ...(typeof createOperatorDto.allowEmails === "boolean"
+          ? { allowEmails: createOperatorDto.allowEmails }
           : {}),
       });
 
@@ -142,6 +152,9 @@ export class OperatorsService {
       const update: Record<string, any> = { ...updateOperatorDto };
       if (typeof update.email === "string") {
         update.email = update.email.trim().toLowerCase();
+      }
+      if (typeof update.companyEmail === "string") {
+        update.companyEmail = update.companyEmail.trim().toLowerCase();
       }
 
       const operator = await this.operatorModel.findByIdAndUpdate(
