@@ -71,6 +71,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { FaUtensilSpoon, FaWhatsapp } from "react-icons/fa";
 import { useToast } from "@/hooks/use-toast";
 
+import { useCountryCodes } from "@/hooks/useCountryCodes";
+
 interface Country {
   name: string;
   code: string;
@@ -580,9 +582,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
   const [shopkeeperDetails, setShopkeeperDetails] = useState(initialForm);
   const { toast } = useToast();
-  const [countries, setCountries] = useState<Country[]>([]);
+  // Country dial codes come from a single shared hook (local data, no network).
+  const { countries, loading: loadingCountries } = useCountryCodes();
   const [settings, setSettings] = useState<OrganizerStore | null>(null);
-  const [loadingCountries, setLoadingCountries] = useState(true);
   const [requiresSelection, setRequiresSelection] = useState(false);
   const [shops, setShops] = useState<
     { id: string; shopName: string; approved: boolean }[]
@@ -781,46 +783,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     // deps — they update orthogonally and we don't want a refresh loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMember]);
-
-  // Fetch countries for phone input
-  useEffect(() => {
-    async function fetchCountries() {
-      try {
-        setLoadingCountries(true);
-        const response = await fetch(
-          "https://restcountries.com/v3.1/all?fields=name,cca2,idd",
-        );
-        const data = await response.json();
-
-        const fetchedCountries: Country[] = data
-          .map((country: any) => {
-            const root = country.idd?.root ?? "";
-            const suffixes = country.idd?.suffixes ?? [];
-            let dial = "";
-            if (root && suffixes.length === 1) dial = root + suffixes[0];
-            else if (root) dial = root;
-            return {
-              name: country.name?.common || "",
-              code: country.cca2 || "",
-              dialCode: dial,
-            };
-          })
-          .filter((c) => c.dialCode)
-          .sort((a, b) => a.name.localeCompare(b.name));
-        setCountries(fetchedCountries);
-      } catch (e) {
-        toast({
-          duration: 5000,
-          title: "Error loading countries",
-          description: "Failed to fetch country codes",
-          variant: "destructive",
-        });
-      } finally {
-        setLoadingCountries(false);
-      }
-    }
-    fetchCountries();
-  }, []);
 
   // Fetch event data
   useEffect(() => {

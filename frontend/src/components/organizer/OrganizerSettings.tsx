@@ -117,6 +117,8 @@ interface ShopkeeperSettingsProps {
   onSave?: (settings: any) => void;
 }
 
+import { useCountryCodes } from "@/hooks/useCountryCodes";
+
 interface Country {
   name: string;
   code: string;
@@ -452,9 +454,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Country codes for WhatsApp
-  const [countries, setCountries] = useState<Country[]>([]);
-  const [loadingCountries, setLoadingCountries] = useState(true);
+  // Country codes for WhatsApp — single shared hook (local data, no network).
+  const { countries, loading: loadingCountries } = useCountryCodes();
   const [countryCode, setCountryCode] = useState("+91");
   const [whatsAppNumber, setwhatsAppNumber] = useState("");
   const [whatsappVerified, setWhatsappVerified] = useState(false);
@@ -673,59 +674,6 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     d.setDate(d.getDate() + 1);
     return d;
   };
-
-  // Fetch countries from REST Countries API
-  // Update the fetchCountries function
-  useEffect(() => {
-    async function fetchCountries() {
-      try {
-        setLoadingCountries(true);
-        const response = await fetch(
-          "https://restcountries.com/v3.1/all?fields=name,cca2,idd",
-        );
-        const data = await response.json();
-        const mapped = data
-          .map((country: any) => {
-            const root = country.idd?.root ?? "";
-            const suffixes = country.idd?.suffixes ?? [];
-            const dialCode = suffixes.length === 1 ? root + suffixes[0] : root;
-            return {
-              name: country.name?.common || "",
-              code: country.cca2 || "",
-              dialCode: dialCode,
-            };
-          })
-          .filter(
-            (c: Country) =>
-              c.dialCode &&
-              c.dialCode.trim() !== "" &&
-              c.name &&
-              c.name.trim() !== "" &&
-              c.code &&
-              c.code.trim() !== "",
-          ) // More robust filtering
-          .sort((a: Country, b: Country) => a.name.localeCompare(b.name));
-        setCountries(mapped);
-      } catch (error) {
-        console.error("Failed to fetch countries:", error);
-        toast({
-          duration: 5000,
-          title: "Error",
-          description: "Failed to load country codes",
-          variant: "destructive",
-        });
-        // Set fallback countries if API fails
-        setCountries([
-          { name: "India", code: "IN", dialCode: "+91" },
-          { name: "United States", code: "US", dialCode: "+1" },
-          { name: "United Kingdom", code: "GB", dialCode: "+44" },
-        ]);
-      } finally {
-        setLoadingCountries(false);
-      }
-    }
-    fetchCountries();
-  }, []);
 
   const handleVerifyGST = async (GSTnumber: string) => {
     try {

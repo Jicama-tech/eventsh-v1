@@ -75,6 +75,8 @@ interface OrderSummary {
   total: number;
 }
 
+import { useCountryCodes } from "@/hooks/useCountryCodes";
+
 interface Country {
   name: string;
   code: string;
@@ -104,8 +106,8 @@ export default function TicketCart() {
   const [emailVerifying, setEmailVerifying] = useState(false);
 
   const [countryCode, setCountryCode] = useState("+91");
-  const [countries, setCountries] = useState<Country[]>([]);
-  const [loadingCountries, setLoadingCountries] = useState(true);
+  // Country dial codes come from a single shared hook (local data, no network).
+  const { countries, loading: loadingCountries } = useCountryCodes();
 
   const [whatsapp, setWhatsapp] = useState("");
   const [whatsappVerified, setWhatsappVerified] = useState(false);
@@ -161,9 +163,9 @@ export default function TicketCart() {
   const [googleAuthed, setGoogleAuthed] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   // Pending raw "+919876543210" from Google/DB — split into countryCode +
-  // local digits inside an effect once `countries` finishes loading. Doing
-  // the split synchronously inside the Google callback risked countries
-  // being [] (still fetching from restcountries.com) → no match found.
+  // local digits inside an effect once `countries` is populated. Doing the
+  // split synchronously inside the Google callback risked countries being []
+  // before the populate effect ran → no match found.
   const [pendingWhatsApp, setPendingWhatsApp] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -272,45 +274,6 @@ export default function TicketCart() {
 
     getShopkeeper();
   }, []);
-
-  // Fetch countries on component mount
-  useEffect(() => {
-    async function fetchCountries() {
-      try {
-        setLoadingCountries(true);
-        const response = await fetch(
-          "https://restcountries.com/v3.1/all?fields=name,cca2,idd",
-        );
-        const data = await response.json();
-        const fetchedCountries: Country[] = data
-          .map((country: any) => {
-            const root = country.idd?.root ?? "";
-            const suffixes = country.idd?.suffixes ?? [];
-            let dial = "";
-            if (root && suffixes.length === 1) dial = root + suffixes[0];
-            else if (root) dial = root;
-            return {
-              name: country.name?.common || "",
-              code: country.cca2 || "",
-              dialCode: dial,
-            };
-          })
-          .filter((c) => c.dialCode)
-          .sort((a, b) => a.name.localeCompare(b.name));
-        setCountries(fetchedCountries);
-      } catch (e) {
-        toast({
-          duration: 5000,
-          title: "Error loading countries",
-          description: "Failed to fetch country codes",
-          variant: "destructive",
-        });
-      } finally {
-        setLoadingCountries(false);
-      }
-    }
-    fetchCountries();
-  }, [toast]);
 
   useEffect(() => {
     fetchWhatsAppNumber();

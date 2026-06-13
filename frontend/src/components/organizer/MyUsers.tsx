@@ -194,6 +194,8 @@ interface ProcessedExhibitor {
   membershipExpiry?: string;
 }
 
+import { useCountryCodes } from "@/hooks/useCountryCodes";
+
 interface Country {
   name: string;
   dialCode: string;
@@ -2761,44 +2763,20 @@ export function AddCustomerDialog({
     email: "",
   });
   const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
-  const [countries, setCountries] = useState<Country[]>([]);
+  // Country dial codes come from a single shared hook (local data, no network).
+  const { countries } = useCountryCodes();
   const [searchQuery, setSearchQuery] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
+  // Default the WhatsApp country to India unless one is already selected.
   useEffect(() => {
-    async function fetchCountries() {
-      try {
-        const response = await fetch(
-          "https://restcountries.com/v3.1/all?fields=name,cca2,idd",
-        );
-        const data = await response.json();
-        const fetched: Country[] = data
-          .map((c: any) => {
-            const root = c.idd?.root || "";
-            const suffix = c.idd?.suffixes?.[0] || "";
-            return {
-              name: c.name?.common,
-              code: c.cca2,
-              dialCode: root + suffix,
-              flag: "",
-            }; // Simplified flag handling
-          })
-          .filter((c: any) => c.dialCode)
-          .sort((a: any, b: any) => a.name.localeCompare(b.name));
-        setCountries(fetched);
-
-        // Default to India or inferred
-        if (!selectedCountry) {
-          const def = fetched.find((c) => c.code === "IN");
-          if (def) setSelectedCountry(def);
-        }
-      } catch (e) {
-        console.error(e);
-      }
+    if (!selectedCountry) {
+      const def = countries.find((c) => c.code === "IN");
+      if (def) setSelectedCountry(def);
     }
-    fetchCountries();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countries]);
 
   useEffect(() => {
     if (isOpen && customerToEdit && mode === "edit" && countries.length > 0) {
