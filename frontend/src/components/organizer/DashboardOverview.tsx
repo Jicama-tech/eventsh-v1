@@ -33,6 +33,7 @@ import { Progress } from "@/components/ui/progress";
 import { jwtDecode } from "jwt-decode";
 import { EventQRCode } from "./EventQRCode";
 import { EventAnalyticsDialog } from "./EventAnalyticsDialog";
+import { EventSpaceAnalyticsDialog } from "./EventSpaceAnalyticsDialog";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";
 
@@ -85,6 +86,9 @@ export default function DashboardOverview({
   const [selectedQrCodeEvent, setSelectedQrCodeEvent] = useState(null);
   const [showAnalyticsDialog, setShowAnalyticsDialog] = useState(false);
   const [selectedAnalyticsEvent, setSelectedAnalyticsEvent] = useState(null);
+  // Space-template analytics drill-down (Upcoming/Current events).
+  const [showSpaceAnalytics, setShowSpaceAnalytics] = useState(false);
+  const [spaceAnalyticsEvent, setSpaceAnalyticsEvent] = useState<any>(null);
   const { country } = useCountry();
   const { formatPrice, getSymbol } = useCurrency(country);
 
@@ -572,6 +576,22 @@ export default function DashboardOverview({
                     <Share className="h-4 w-4 mr-1" />
                     Share
                   </Button>
+                  {/* Space-template analytics — booked vs available spaces and
+                      the brands behind each booking. Hidden for personal /
+                      marriage events, which have no sellable spaces. */}
+                  {event.eventType !== "personal" && (
+                    <Button
+                      variant="buttonOutline"
+                      size="sm"
+                      onClick={() => {
+                        setSpaceAnalyticsEvent(event);
+                        setShowSpaceAnalytics(true);
+                      }}
+                    >
+                      <LineChart className="h-4 w-4 mr-1" />
+                      Analytics
+                    </Button>
+                  )}
                   {/* <Button
                     variant="buttonOutline"
                     size="sm"
@@ -1328,6 +1348,16 @@ export default function DashboardOverview({
           onClose={() => setShowAnalyticsDialog(false)}
         />
       )}
+
+      {/* Space-template analytics drill-down for Upcoming/Current events. */}
+      <EventSpaceAnalyticsDialog
+        open={showSpaceAnalytics}
+        onOpenChange={(o) => {
+          setShowSpaceAnalytics(o);
+          if (!o) setSpaceAnalyticsEvent(null);
+        }}
+        event={spaceAnalyticsEvent}
+      />
     </div>
   );
 }
