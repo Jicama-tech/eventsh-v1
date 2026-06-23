@@ -175,7 +175,19 @@ export function EventSpaceAnalyticsDialog({
     const tpls = Array.isArray(detail.tableTemplates)
       ? detail.tableTemplates
       : [];
-    return tpls.map((tpl: any) => {
+    return tpls
+      // Only sellable templates belong in the analytics. A template the
+      // organizer marked "Not for sale" (display-only area) is excluded —
+      // either via its own forSale flag or, defensively, when every placed
+      // space of it is forSale:false. Unset/true = sellable (older data).
+      .filter((tpl: any) => {
+        if (tpl.forSale === false) return false;
+        const ofThis = placed.filter((p) => String(p.id) === String(tpl.id));
+        if (ofThis.length > 0 && ofThis.every((p) => p.forSale === false))
+          return false;
+        return true;
+      })
+      .map((tpl: any) => {
       const tplPlaced = placed.filter(
         (p) => String(p.id) === String(tpl.id),
       );
