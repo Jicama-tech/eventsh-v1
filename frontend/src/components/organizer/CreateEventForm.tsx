@@ -3134,6 +3134,9 @@ const VenueDesigner = ({
     origY: number;
     origW: number;
     origH: number;
+    // Rotation (deg) of the item being resized, so the drag math can map the
+    // screen-space mouse delta into the item's own (unrotated) axes.
+    rotation?: number;
     // Live (in-progress) values shown until commit.
     x: number;
     y: number;
@@ -3917,6 +3920,7 @@ const VenueDesigner = ({
     setResize({
       positionId: table.positionId,
       handle,
+      rotation: table.rotation || 0,
       startMouseX: e.clientX,
       startMouseY: e.clientY,
       origX: table.x,
@@ -3950,32 +3954,53 @@ const VenueDesigner = ({
       setResize({ ...r, x: r.origX, y: r.origY, w: size, h: size });
       return;
     }
-    let x = r.origX;
-    let y = r.origY;
+    const handle = r.handle;
+    // The space is rendered with `transform: rotate(θ)` around its center, so
+    // a handle the user grabs is visually rotated. Map the screen-space mouse
+    // delta into the space's OWN (unrotated) axes so dragging an edge always
+    // resizes the dimension that edge actually represents — then move the
+    // rotation centre so the edge OPPOSITE the handle stays put on screen.
+    const th = (((r.rotation || 0) % 360) * Math.PI) / 180;
+    const cos = Math.cos(th);
+    const sin = Math.sin(th);
+    // screen delta → local delta  (rotate by -θ)
+    const ldx = dx * cos + dy * sin;
+    const ldy = -dx * sin + dy * cos;
+
     let w = r.origW;
     let h = r.origH;
-    const handle = r.handle;
-    // East edge — extend / pull width to the right.
     if (handle === "ne" || handle === "e" || handle === "se") {
-      w = Math.max(MIN, r.origW + dx);
+      w = Math.max(MIN, r.origW + ldx);
     }
-    // West edge — extend / pull width on the left; x shifts to keep
-    // the right edge anchored.
     if (handle === "nw" || handle === "w" || handle === "sw") {
-      w = Math.max(MIN, r.origW - dx);
-      x = r.origX + (r.origW - w);
+      w = Math.max(MIN, r.origW - ldx);
     }
-    // South edge — extend / pull height downward.
     if (handle === "sw" || handle === "s" || handle === "se") {
-      h = Math.max(MIN, r.origH + dy);
+      h = Math.max(MIN, r.origH + ldy);
     }
-    // North edge — extend / pull height upward; y shifts to keep the
-    // bottom edge anchored.
     if (handle === "nw" || handle === "n" || handle === "ne") {
-      h = Math.max(MIN, r.origH - dy);
-      y = r.origY + (r.origH - h);
+      h = Math.max(MIN, r.origH - ldy);
     }
-    // Keep the resized stall inside the canvas extents.
+
+    // Keep the opposite edge anchored: shift the centre by half the size
+    // change, in the direction of the moved edge, expressed in local axes…
+    const dw = w - r.origW;
+    const dh = h - r.origH;
+    let shiftLX = 0;
+    let shiftLY = 0;
+    if (handle === "ne" || handle === "e" || handle === "se") shiftLX = dw / 2;
+    if (handle === "nw" || handle === "w" || handle === "sw") shiftLX = -dw / 2;
+    if (handle === "sw" || handle === "s" || handle === "se") shiftLY = dh / 2;
+    if (handle === "nw" || handle === "n" || handle === "ne") shiftLY = -dh / 2;
+    // …then rotate that centre shift back into screen axes (rotate by +θ).
+    const cx = r.origX + r.origW / 2 + (shiftLX * cos - shiftLY * sin);
+    const cy = r.origY + r.origH / 2 + (shiftLX * sin + shiftLY * cos);
+    let x = cx - w / 2;
+    let y = cy - h / 2;
+
+    // Keep the (unrotated) box within the canvas extents. For θ = 0 this is
+    // identical to the original clamp; for rotated items it's an approximation
+    // that simply prevents the stored box from running off-canvas.
     if (x < 0) {
       w += x;
       x = 0;
@@ -4007,6 +4032,7 @@ const VenueDesigner = ({
     setResize({
       positionId,
       handle,
+      rotation: door.rotation || 0,
       startMouseX: e.clientX,
       startMouseY: e.clientY,
       origX: door.x,
@@ -4351,6 +4377,33 @@ const VenueDesigner = ({
       transition: isDragging ? "none" : "all 0.1s ease",
       boxShadow: isSelected ? "0 4px 12px rgba(0,0,0,0.2)" : "none",
     };
+  };
+
+  // Resize cursors are authored for the UNROTATED box. When a space/door is
+  // rotated, the handle the user grabs points in a different screen direction,
+  // so the cursor must rotate too — otherwise a vertical (rotated) space shows
+  // a ↕ cursor on the side handle that actually resizes horizontally. Snaps to
+  // the nearest of the four resize-cursor types.
+  const rotatedCursor = (handle: string, rotationDeg = 0): string => {
+    const base: Record<string, number> = {
+      e: 0,
+      se: 45,
+      s: 90,
+      sw: 135,
+      w: 180,
+      nw: 225,
+      n: 270,
+      ne: 315,
+    };
+    const a = ((((base[handle] ?? 0) + rotationDeg) % 360) + 360) % 360;
+    const snapped = (Math.round((a % 180) / 45) * 45) % 180;
+    return snapped === 0
+      ? "ew-resize"
+      : snapped === 45
+        ? "nwse-resize"
+        : snapped === 90
+          ? "ns-resize"
+          : "nesw-resize";
   };
 
   if (!venueConfig)
@@ -4805,6 +4858,91 @@ const VenueDesigner = ({
                 <Undo2 className="h-3.5 w-3.5" />
                 Undo
               </button>
+              {/* Selected-item actions (Rotate / Copy / Delete) live HERE in
+                  the toolbar — not floating over the canvas — so the venue grid
+                  stays clean for designing. Dispatches to the right handler
+                  based on the selected item's type (space / round table /
+                  speaker zone / door). */}
+              {selectedTable &&
+                (() => {
+                  const id = selectedTable;
+                  let kind = "Space";
+                  let onRotate: (() => void) | null = null;
+                  let onCopy: (() => void) | null = null;
+                  let onDelete: (() => void) | null = null;
+                  if (id.startsWith("sz-")) {
+                    const realId = id.slice(3);
+                    kind = "Speaker zone";
+                    onRotate = () => {
+                      const updated = currentSpeakerZones.map((z) =>
+                        z.positionId === realId
+                          ? { ...z, rotation: ((z.rotation || 0) + 90) % 360 }
+                          : z,
+                      );
+                      setVenueSpeakerZones({
+                        ...venueSpeakerZones,
+                        [selectedVenueConfigId]: updated,
+                      });
+                    };
+                    onDelete = () => removeSpeakerZone(realId);
+                  } else if (id.startsWith("rt-")) {
+                    const realId = id.slice(3);
+                    kind = "Round table";
+                    onCopy = () => duplicateRoundTable(realId);
+                    onDelete = () => removeRoundTable(realId);
+                  } else if (id.startsWith("door-")) {
+                    const realId = id.slice(5);
+                    kind = "Door";
+                    onRotate = () => rotateDoor(realId);
+                    onDelete = () => removeDoorFromVenue(realId);
+                  } else {
+                    kind = "Space";
+                    onRotate = () => rotateTable(id);
+                    onCopy = () => duplicateTable(id);
+                    onDelete = () => removeTableFromVenue(id);
+                  }
+                  const actBtn =
+                    "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-100";
+                  return (
+                    <>
+                      <div className="mx-1 h-5 w-px bg-gray-200" />
+                      <span className="px-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                        {kind}
+                      </span>
+                      {onRotate && (
+                        <button
+                          type="button"
+                          onClick={onRotate}
+                          className={actBtn}
+                          title="Rotate 90°"
+                        >
+                          <RotateCw className="h-3.5 w-3.5" />
+                          Rotate
+                        </button>
+                      )}
+                      {onCopy && (
+                        <button
+                          type="button"
+                          onClick={onCopy}
+                          className={actBtn}
+                          title="Duplicate (Ctrl+D)"
+                        >
+                          <CopyPlusIcon className="h-3.5 w-3.5" />
+                          Copy
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={onDelete ?? undefined}
+                        className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-red-500 transition-colors hover:bg-red-50 hover:text-red-600"
+                        title="Delete selected"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete
+                      </button>
+                    </>
+                  );
+                })()}
               {selectedAnnId && annotationTool === "select" && (
                 <Button
                   type="button"
@@ -5070,46 +5208,14 @@ const VenueDesigner = ({
                               ...(posStyle as React.CSSProperties),
                               width: 10,
                               height: 10,
-                              cursor: cur,
+                              cursor: rotatedCursor(handle, door.rotation),
                             }}
                             title="Drag to resize"
                           />
                         ))}
                       </>
                     )}
-                    {isSelected && (
-                      <div
-                        className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-1 bg-white border p-1 rounded-md shadow-xl z-50"
-                        style={{
-                          transform: `rotate(${-(door.rotation || 0)}deg)`,
-                        }}
-                      >
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            rotateDoor(door.id);
-                          }}
-                          title="Rotate 90°"
-                        >
-                          <RotateCw size={12} />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-red-500 hover:text-red-600"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeDoorFromVenue(door.id);
-                          }}
-                          title="Remove this door"
-                        >
-                          <Trash2 size={12} />
-                        </Button>
-                      </div>
-                    )}
+                    {/* Door actions moved to the fixed toolbar. */}
                   </div>
                 );
               })}
@@ -5219,49 +5325,15 @@ const VenueDesigner = ({
                             ...(posStyle as React.CSSProperties),
                             width: 10,
                             height: 10,
-                            cursor: cur,
+                            cursor: rotatedCursor(h, table.rotation),
                           }}
                           title="Drag to resize"
                         />
                       ))}
                     </>
                   )}
-                  {selectedTable === table.positionId && (
-                    <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-1 bg-white border p-1 rounded-md shadow-xl z-50">
-                      {/* Idle = primary (clearly visible on the white
-                          toolbar). Hover = darker primary fill with
-                          white icon so the action being targeted reads
-                          loud and clear. Delete keeps its red identity
-                          since red signals destructive everywhere. */}
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 text-primary hover:bg-primary hover:text-primary-foreground"
-                        onClick={() => rotateTable(table.positionId)}
-                        title="Rotate 90°"
-                      >
-                        <RotateCw size={12} />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 text-primary hover:bg-primary hover:text-primary-foreground"
-                        onClick={() => duplicateTable(table.positionId)}
-                        title="Duplicate (Ctrl+D)"
-                      >
-                        <CopyPlusIcon size={12} />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 text-red-500 hover:bg-red-600 hover:text-white"
-                        onClick={() => removeTableFromVenue(table.positionId)}
-                        title="Remove"
-                      >
-                        <Trash2 size={12} />
-                      </Button>
-                    </div>
-                  )}
+                  {/* Per-space actions now live in the fixed toolbar (Rotate /
+                      Copy / Delete) instead of floating over the canvas. */}
                 </div>
                 );
                 // Wrap booked stalls in a HoverCard so the organizer gets a
@@ -5389,39 +5461,7 @@ const VenueDesigner = ({
                           : "SPEAKER ZONE"}
                       </div>
                     </div>
-                    {isSelected && (
-                      <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-1 bg-white border p-1 rounded-md shadow-xl z-50">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7"
-                          onClick={() => {
-                            const updated = currentSpeakerZones.map((z) =>
-                              z.positionId === zone.positionId
-                                ? {
-                                    ...z,
-                                    rotation: ((z.rotation || 0) + 90) % 360,
-                                  }
-                                : z,
-                            );
-                            setVenueSpeakerZones({
-                              ...venueSpeakerZones,
-                              [selectedVenueConfigId]: updated,
-                            });
-                          }}
-                        >
-                          <RotateCw size={12} />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-red-500 hover:text-red-600"
-                          onClick={() => removeSpeakerZone(zone.positionId)}
-                        >
-                          <Trash2 size={12} />
-                        </Button>
-                      </div>
-                    )}
+                    {/* Speaker-zone actions moved to the fixed toolbar. */}
                   </div>
                 );
               })}
@@ -5572,29 +5612,7 @@ const VenueDesigner = ({
                       />
                     )}
 
-                    {/* Controls */}
-                    {isSelected && (
-                      <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-1 bg-white border p-1 rounded-md shadow-xl z-50">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-primary hover:bg-primary hover:text-primary-foreground"
-                          onClick={() => duplicateRoundTable(rt.positionId)}
-                          title="Duplicate (Ctrl+D)"
-                        >
-                          <CopyPlusIcon size={12} />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-red-500 hover:text-red-600"
-                          onClick={() => removeRoundTable(rt.positionId)}
-                          title="Remove"
-                        >
-                          <Trash2 size={12} />
-                        </Button>
-                      </div>
-                    )}
+                    {/* Round-table actions moved to the fixed toolbar. */}
                   </div>
                 );
               })}
