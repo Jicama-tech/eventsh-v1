@@ -5617,7 +5617,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               return (
                                 <div
                                   key={table.positionId}
-                                  className={`absolute border flex items-center justify-center transition-all group hover:z-50 ${
+                                  className={`absolute border flex items-center justify-center transition-all group z-[5] hover:z-[100] ${
                                     table.type === "Round"
                                       ? "rounded-full"
                                       : table.type === "Corner"
@@ -5634,7 +5634,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     height: `${(table as any).displayHeight ?? table.height}px`,
                                     transform: `rotate(${table.rotation || 0}deg)`,
                                     transformOrigin: "center center",
-                                    zIndex: 5,
+                                    // z-index is driven by the class above so
+                                    // `hover:z-[100]` can lift the hovered space
+                                    // (and its tooltip) above its neighbours —
+                                    // an inline zIndex would override the class
+                                    // and the tooltip would render under the
+                                    // adjacent spaces.
                                     // Darker tint of the template colour with a
                                     // solid coloured border; bold dark label so
                                     // it stays clearly readable. Booked stays
@@ -10790,7 +10795,34 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             {isSelected && <span className="ml-auto text-xs font-medium" style={{ color: template.color || "#3b82f6" }}>Selected</span>}
                           </div>
                           <div className="text-[11px] text-gray-500">
-                            {template.width}x{template.height}cm &middot; {formatPrice(template.tablePrice)}
+                            {template.width}x{template.height}cm &middot;{" "}
+                            {(() => {
+                              // Member-authenticated bookers see member pricing;
+                              // everyone else sees the normal price. When both
+                              // exist the regular price is shown struck through.
+                              const hasMember =
+                                isMember &&
+                                template.memberPrice != null &&
+                                Number(template.memberPrice) !==
+                                  Number(template.tablePrice);
+                              if (hasMember) {
+                                return (
+                                  <>
+                                    <span className="font-semibold text-emerald-600">
+                                      {formatPrice(template.memberPrice)}
+                                    </span>{" "}
+                                    <span className="line-through text-gray-400">
+                                      {formatPrice(template.tablePrice)}
+                                    </span>
+                                  </>
+                                );
+                              }
+                              return formatPrice(
+                                isMember && template.memberPrice != null
+                                  ? template.memberPrice
+                                  : template.tablePrice,
+                              );
+                            })()}
                           </div>
                         </button>
                       );
