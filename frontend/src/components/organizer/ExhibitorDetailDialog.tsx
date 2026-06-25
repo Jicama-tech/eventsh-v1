@@ -230,6 +230,47 @@ export function ExhibitorDetailDialog({
     }
   };
 
+  // "Resend ticket" is an organizer-only recovery action (volunteers get a
+  // read-only dialog with no admin callbacks). It re-delivers the QR ticket
+  // email and surfaces the real failure if the mail server rejects it.
+  const canManage = !!onConfirmPayment || !!onReturnDeposit;
+  const [isResending, setIsResending] = useState(false);
+
+  const handleResendTicket = async () => {
+    if (!stallRequest?._id) return;
+    setIsResending(true);
+    try {
+      const token = sessionStorage.getItem("token");
+      const res = await fetch(
+        `${apiURL}/stalls/${stallRequest._id}/resend-ticket`,
+        {
+          method: "POST",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        },
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body?.message || `Resend failed (${res.status})`);
+      }
+      toast({
+        duration: 5000,
+        title: "Ticket re-sent",
+        description: body?.message || "The stall ticket email was sent.",
+      });
+    } catch (err: any) {
+      toast({
+        duration: 8000,
+        title: "Couldn't send the ticket",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsResending(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -369,12 +410,41 @@ export function ExhibitorDetailDialog({
             {stallRequest.paymentStatus === "Paid" && (
               <Card className="border-green-200 bg-green-50/50">
                 <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    <p className="font-semibold text-sm text-green-800">
-                      Payment Confirmed — QR ticket generated and sent to vendor
-                    </p>
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <p className="font-semibold text-sm text-green-800">
+                        Payment Confirmed — QR ticket generated and sent to
+                        vendor
+                      </p>
+                    </div>
+                    {canManage && (
+                      <Button
+                        size="sm"
+                        variant="buttonOutline"
+                        onClick={handleResendTicket}
+                        disabled={isResending}
+                        className="h-8"
+                      >
+                        {isResending ? (
+                          <>
+                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                            Sending…
+                          </>
+                        ) : (
+                          <>
+                            <Send className="mr-1.5 h-3.5 w-3.5" />
+                            Resend ticket
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </div>
+                  {canManage && (
+                    <p className="mt-2 text-xs text-green-700/80">
+                      Didn't arrive? Re-send the QR ticket email to the vendor.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             )}

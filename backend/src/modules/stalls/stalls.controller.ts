@@ -310,6 +310,17 @@ export class StallsController {
   }
 
   /**
+   * Re-send the QR stall ticket email for an already-Paid stall. Returns a
+   * clear error (e.g. SMTP failure) when delivery fails, instead of the
+   * silent best-effort send used during payment confirmation.
+   * POST /stalls/:id/resend-ticket
+   */
+  @Post(":id/resend-ticket")
+  async resendTicket(@Param("id") id: string) {
+    return await this.stallsService.resendStallTicket(id);
+  }
+
+  /**
    * Get stalls by organizer ID
    * GET /stalls/organizer/:organizerId
    */

@@ -313,7 +313,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   const [selectedSpeaker, setSelectedSpeaker] = useState<any | null>(null);
   // Inner-tab state for the unified View dialog
   const [detailTab, setDetailTab] = useState<
-    "visitors" | "exhibitors" | "speakers" | "roundtables" | "layout"
+    "visitors" | "exhibitors" | "speakers" | "roundtables"
   >("visitors");
   const [stallRequest, setStallRequest] = useState<StallRequest | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -1768,13 +1768,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       Array.isArray(e.speakerSlotTemplates) && e.speakerSlotTemplates.length > 0;
     const roundtables =
       Array.isArray(e.venueRoundTables) && e.venueRoundTables.length > 0;
-    // Layout tab is useful whenever there's any placed table, round table, or
-    // venue config — that's where the organizer sees the booked-vs-available view.
-    const layout =
-      exhibitors ||
-      roundtables ||
-      (Array.isArray(e.venueConfig) && e.venueConfig.length > 0);
-    return { visitors, exhibitors, speakers, roundtables, layout };
+    return { visitors, exhibitors, speakers, roundtables };
   };
 
   const handleViewAttendance = async (event: Event) => {
@@ -1786,7 +1780,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     // full event loads in case Layout / Speakers / etc. become available.
     const provisional = eventHasSection(event);
     const provisionalFirst = (
-      ["visitors", "exhibitors", "speakers", "roundtables", "layout"] as const
+      ["visitors", "exhibitors", "speakers", "roundtables"] as const
     ).find((k) => provisional[k]);
     setDetailTab(provisionalFirst ?? "visitors");
 
@@ -1807,7 +1801,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     // 2) Re-pick landing tab now that we know what the event actually has.
     const sections = eventHasSection(fullEvent);
     const firstAvailable = (
-      ["visitors", "exhibitors", "speakers", "roundtables", "layout"] as const
+      ["visitors", "exhibitors", "speakers", "roundtables"] as const
     ).find((k) => sections[k]);
     if (firstAvailable && !sections[provisionalFirst as keyof typeof sections]) {
       setDetailTab(firstAvailable);
@@ -1817,11 +1811,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     //    its own component once mounted.
     const tasks: Promise<any>[] = [];
     if (sections.visitors) tasks.push(fetchEventTickets(event._id));
-    if (sections.exhibitors || sections.layout)
-      tasks.push(fetchStallTickets(event._id));
+    if (sections.exhibitors) tasks.push(fetchStallTickets(event._id));
     if (sections.speakers) tasks.push(fetchEventSpeakers(event._id));
-    if (sections.roundtables || sections.layout)
-      tasks.push(fetchEventRoundBookings(event._id));
+    if (sections.roundtables) tasks.push(fetchEventRoundBookings(event._id));
     await Promise.all(tasks);
   };
 
@@ -2229,8 +2221,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   (sections.visitors ? 1 : 0) +
                   (sections.exhibitors ? 1 : 0) +
                   (sections.speakers ? 1 : 0) +
-                  (sections.roundtables ? 1 : 0) +
-                  (sections.layout ? 1 : 0);
+                  (sections.roundtables ? 1 : 0);
                 if (visibleCount === 0) {
                   return (
                     <Card>
@@ -2267,9 +2258,6 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   )}
                   {sections.roundtables && (
                     <TabsTrigger value="roundtables">Round Tables</TabsTrigger>
-                  )}
-                  {sections.layout && (
-                    <TabsTrigger value="layout">Venue Layout</TabsTrigger>
                   )}
                 </TabsList>
 
@@ -2751,257 +2739,6 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 {sections.roundtables && (
                 <TabsContent value="roundtables" className="pt-4">
                   <RoundTableBookings eventId={selectedEvent._id} />
-                </TabsContent>
-                )}
-
-                {/* VENUE LAYOUT TAB — visual + sold/available summary */}
-                {sections.layout && (
-                <TabsContent value="layout" className="pt-4 space-y-4">
-                  {(() => {
-                    const e: any = selectedEvent;
-                    const configs: any[] = Array.isArray(e.venueConfig)
-                      ? e.venueConfig
-                      : [];
-                    // Tables/round tables can be a flat array (with venueConfigId
-                    // on each item) or a Record. Normalize to a flat array.
-                    const flatTables: any[] = Array.isArray(e.venueTables)
-                      ? e.venueTables
-                      : Object.values(e.venueTables || {}).flat();
-                    const flatRounds: any[] = Array.isArray(e.venueRoundTables)
-                      ? e.venueRoundTables
-                      : Object.values(e.venueRoundTables || {}).flat();
-
-                    if (configs.length === 0) {
-                      return (
-                        <Card>
-                          <CardContent className="py-8 text-center text-muted-foreground">
-                            No venue configuration found for this event.
-                          </CardContent>
-                        </Card>
-                      );
-                    }
-
-                    return configs.map((cfg: any) => {
-                      const cfgId =
-                        cfg.venueConfigId || cfg.id || "default";
-                      const tables = flatTables.filter(
-                        (t) => (t.venueConfigId || "default") === cfgId,
-                      );
-                      const rounds = flatRounds.filter(
-                        (r) => (r.venueConfigId || "default") === cfgId,
-                      );
-                      const tablesBooked = tables.filter(
-                        (t) => t.isBooked,
-                      ).length;
-                      const totalChairs = rounds.reduce(
-                        (sum, r) => sum + (r.numberOfChairs || 0),
-                        0,
-                      );
-                      const bookedChairs = rounds.reduce(
-                        (sum, r) =>
-                          sum +
-                          (Array.isArray(r.bookedChairs)
-                            ? r.bookedChairs.length
-                            : 0),
-                        0,
-                      );
-
-                      // Mini-canvas at fixed width (max 760px), aspect-correct
-                      const canvasMaxW = 760;
-                      const previewScale = Math.min(
-                        canvasMaxW / (cfg.width || 800),
-                        1,
-                      );
-                      const cw = (cfg.width || 800) * previewScale;
-                      const ch = (cfg.height || 500) * previewScale;
-
-                      return (
-                        <Card key={cfgId}>
-                          <CardHeader>
-                            <CardTitle className="text-base flex items-center justify-between">
-                              <span>{cfg.name || "Venue"}</span>
-                              <span className="text-xs font-normal text-muted-foreground">
-                                {(cfg.width || 0) / 10}m ×{" "}
-                                {(cfg.height || 0) / 10}m
-                              </span>
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-4">
-                            {/* Visual mini canvas */}
-                            <div className="flex justify-center">
-                              <div
-                                className="relative bg-slate-50 border-2 border-dashed border-slate-300 rounded-md overflow-hidden"
-                                style={{
-                                  width: cw,
-                                  height: ch,
-                                  backgroundImage: cfg.showGrid
-                                    ? `linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px)`
-                                    : "none",
-                                  backgroundSize: `${(cfg.gridSize || 20) * previewScale}px ${(cfg.gridSize || 20) * previewScale}px`,
-                                }}
-                              >
-                                {cfg.hasMainStage && (
-                                  <div className="absolute top-1 left-1/2 -translate-x-1/2 bg-purple-100 border border-purple-300 px-3 py-0.5 rounded text-[8px] font-bold text-purple-700">
-                                    MAIN STAGE
-                                  </div>
-                                )}
-                                {/* Tables (rectangles) — color reflects stall state:
-                                    White  = available (no stall selected this table)
-                                    Yellow = exhibitor paid, awaiting organizer approval
-                                    Green  = approved / confirmed by organizer */}
-                                {tables.map((t: any) => {
-                                  // Find any stall that has selected this table
-                                  const stall = stalls.find((s: any) =>
-                                    Array.isArray(s.selectedTables)
-                                      ? s.selectedTables.some(
-                                          (st: any) =>
-                                            st.tableId === t.id ||
-                                            st.positionId === t.positionId,
-                                        )
-                                      : false,
-                                  );
-                                  const paid =
-                                    stall?.paymentStatus === "Paid";
-                                  const approved =
-                                    stall?.status === "Confirmed" ||
-                                    stall?.status === "Completed" ||
-                                    stall?.status === "Approved";
-                                  let bg = "bg-white border-slate-400 text-slate-700";
-                                  let label = "Available";
-                                  if (stall && paid && approved) {
-                                    bg =
-                                      "bg-green-500/80 border-green-700 text-white";
-                                    label = `Approved · ${stall.shopkeeperId?.name || stall.nameOfApplicant || "Booked"}`;
-                                  } else if (stall && paid && !approved) {
-                                    bg =
-                                      "bg-yellow-300/80 border-yellow-600 text-yellow-900";
-                                    label = `Paid · awaiting approval (${stall.shopkeeperId?.name || stall.nameOfApplicant || "exhibitor"})`;
-                                  } else if (stall) {
-                                    bg =
-                                      "bg-blue-200 border-blue-500 text-blue-900";
-                                    label = `Selected · unpaid (${stall.shopkeeperId?.name || stall.nameOfApplicant || "exhibitor"})`;
-                                  }
-                                  return (
-                                    <div
-                                      key={t.positionId}
-                                      title={`${t.name} — ${label}`}
-                                      className={`absolute flex items-center justify-center text-[7px] font-semibold border ${bg}`}
-                                      style={{
-                                        left: (t.x || 0) * previewScale,
-                                        top: (t.y || 0) * previewScale,
-                                        width: (t.width || 60) * previewScale,
-                                        height: (t.height || 30) * previewScale,
-                                        transform: `rotate(${t.rotation || 0}deg)`,
-                                        transformOrigin: "center center",
-                                      }}
-                                    >
-                                      <span className="truncate px-0.5">
-                                        {t.name}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-                                {/* Round tables (circles) — booked vs not.
-                                    No "partial" yellow here: any chair booked
-                                    counts as Booked. */}
-                                {rounds.map((r: any) => {
-                                  const d = (r.tableDiameter || 120) *
-                                    previewScale;
-                                  const seatsBooked =
-                                    r.bookedChairs?.length || 0;
-                                  const hasBooking = seatsBooked > 0;
-                                  const bg = hasBooking
-                                    ? "bg-green-500/80"
-                                    : "bg-white";
-                                  return (
-                                    <div
-                                      key={r.positionId}
-                                      title={`${r.name} — ${seatsBooked}/${r.numberOfChairs} chairs booked`}
-                                      className={`absolute rounded-full border flex items-center justify-center text-[7px] font-semibold ${bg}`}
-                                      style={{
-                                        left: (r.x || 0) * previewScale,
-                                        top: (r.y || 0) * previewScale,
-                                        width: d,
-                                        height: d,
-                                        borderColor: r.color || "#8B5CF6",
-                                      }}
-                                    >
-                                      <span className="truncate px-1 text-center leading-tight">
-                                        {r.name}
-                                        <br />
-                                        {seatsBooked}/{r.numberOfChairs}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            {/* Legend */}
-                            <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                              <span className="flex items-center gap-1">
-                                <span className="w-3 h-3 inline-block bg-white border border-slate-400" />
-                                Available
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <span className="w-3 h-3 inline-block bg-blue-200 border border-blue-500" />
-                                Selected · unpaid
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <span className="w-3 h-3 inline-block bg-yellow-300/80 border border-yellow-600" />
-                                Paid · awaiting your approval
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <span className="w-3 h-3 inline-block bg-green-500/80 border" />
-                                Approved / Booked
-                              </span>
-                            </div>
-
-                            {/* Summary tiles */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t">
-                              <div>
-                                <div className="text-xs uppercase text-muted-foreground">
-                                  Tables Booked
-                                </div>
-                                <div className="text-xl font-bold">
-                                  {tablesBooked} / {tables.length}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-xs uppercase text-muted-foreground">
-                                  Round Tables
-                                </div>
-                                <div className="text-xl font-bold">
-                                  {rounds.length}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-xs uppercase text-muted-foreground">
-                                  Chairs Booked
-                                </div>
-                                <div className="text-xl font-bold">
-                                  {bookedChairs} / {totalChairs}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-xs uppercase text-muted-foreground">
-                                  Occupancy
-                                </div>
-                                <div className="text-xl font-bold">
-                                  {totalChairs
-                                    ? Math.round(
-                                        (bookedChairs / totalChairs) * 100,
-                                      )
-                                    : 0}
-                                  %
-                                </div>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    });
-                  })()}
                 </TabsContent>
                 )}
               </Tabs>

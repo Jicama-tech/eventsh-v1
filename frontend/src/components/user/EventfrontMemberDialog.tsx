@@ -36,14 +36,18 @@ interface MembershipPlan {
 
 interface ActiveMembership {
   _id: string;
+  // "crm" when the organizer added this member manually (no plan / no payment);
+  // absent for platform-purchased memberships.
+  source?: string;
   exhibitorName?: string;
   exhibitorEmail: string;
   startDate?: string;
   endDate?: string;
-  amountPaid: number;
-  currency: string;
+  amountPaid?: number;
+  currency?: string;
   paymentRef?: string;
-  planId: {
+  // null for CRM-added memberships (no plan document → no name/perks/price).
+  planId?: {
     _id?: string;
     name: string;
     color?: string;
@@ -52,7 +56,7 @@ interface ActiveMembership {
     price?: number;
     currency?: string;
     description?: string;
-  };
+  } | null;
 }
 
 interface Props {
@@ -510,7 +514,7 @@ export function EventfrontMemberDialog({ open, onClose, organizerId }: Props) {
                   className="text-lg font-bold"
                   style={{ color: active.planId?.color || "#10b981" }}
                 >
-                  {active.planId?.name || "Member"}
+                  {active.planId?.name || "Membership Activated"}
                 </span>
                 <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
                   <CheckCircle2 className="h-3.5 w-3.5" /> Active
@@ -586,12 +590,20 @@ export function EventfrontMemberDialog({ open, onClose, organizerId }: Props) {
                   </div>
                 )}
 
-              <div className="text-[10px] text-muted-foreground border-t pt-2">
-                {active.paymentRef ? `Ref: ${active.paymentRef} · ` : ""}
-                {planSymbol}
-                {active.amountPaid?.toLocaleString?.() || active.amountPaid}
-                {" paid"}
-              </div>
+              {/* Platform-purchased memberships show the payment line; a
+                  CRM-added one (no plan / no payment) shows who enrolled it. */}
+              {active.source === "crm" || !active.amountPaid ? (
+                <div className="text-[10px] text-muted-foreground border-t pt-2">
+                  Membership added by the organizer.
+                </div>
+              ) : (
+                <div className="text-[10px] text-muted-foreground border-t pt-2">
+                  {active.paymentRef ? `Ref: ${active.paymentRef} · ` : ""}
+                  {planSymbol}
+                  {active.amountPaid?.toLocaleString?.() || active.amountPaid}
+                  {" paid"}
+                </div>
+              )}
             </div>
             <Button
               onClick={() => handleClose(false)}

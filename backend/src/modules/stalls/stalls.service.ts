@@ -3,6 +3,7 @@ import {
   BadRequestException,
   NotFoundException,
   ConflictException,
+  InternalServerErrorException,
   Logger,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
@@ -761,7 +762,15 @@ export class StallsService {
           );
         }
       } catch (sendError) {
-        this.logger.warn("Failed to send stall ticket", sendError);
+        // Make the real cause visible in production logs (SMTP timeout, auth
+        // failure, blocked port, bad organizer email config, …) instead of
+        // swallowing it as a vague warning. The organizer can re-deliver via
+        // the "Resend ticket" action once the underlying issue is fixed.
+        this.logger.error(
+          `Failed to send stall ticket for stall ${stallId}: ${
+            (sendError as any)?.message || sendError
+          }`,
+        );
       }
 
       this.logger.log(
@@ -2727,5 +2736,103 @@ Thank you for choosing Eventsh! 🎊`;
       );
       throw error;
     }
+  }
+
+  // ============ RESEND STALL TICKET (QR) EMAIL ============
+  // Re-deliver the QR stall ticket for an already-Paid stall. Unlike the
+  // best-effort send inside confirmPayment, this SURFACES the real failure
+  // (SMTP timeout / auth / blocked port / bad organizer email config) so the
+  // organizer sees exactly why it didn't go out — and can retry once fixed.
+  async resendStallTicket(stallId: string) {
+    if (!Types.ObjectId.isValid(stallId)) {
+      throw new BadRequestException("Invalid stall ID format");
+    }
+
+    // Reuse the canonical PDF path: returns the saved ticket, or regenerates it
+    // on the fly, and enforces the "Paid" precondition.
+    const { buffer } = await this.downloadStallTicket(stallId);
+
+    const stall: any = await this.stallModel
+      .findById(stallId)
+      .populate("shopkeeperId")
+      .populate("eventId")
+      .populate("organizerId");
+    if (!stall) {
+      throw new NotFoundException("Stall not found");
+    }
+
+    const vendorObj = stall.shopkeeperId as any;
+    const vendorEmail = this.vendorEmailRecipients(vendorObj);
+    if (!vendorEmail) {
+      throw new BadRequestException(
+        "This vendor has no email on file, so the ticket can't be emailed.",
+      );
+    }
+
+    const eventObj = stall.eventId as any;
+    const orgId = (stall.organizerId as any)?._id || stall.organizerId;
+    const orgDoc = await this.organizerModel.findById(orgId).lean();
+    const senderConfig = (orgDoc as any)?.emailConfig;
+
+    const eventTitle = eventObj?.title || "Event";
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+        <div style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:24px;text-align:center">
+          <h1 style="margin:0;font-size:20px">Your Stall Ticket</h1>
+        </div>
+        <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+          <p>Hello ${vendorObj?.businessName || vendorObj?.shopName || vendorObj?.name || "there"},</p>
+          <p>Here is your stall ticket for <strong>${eventTitle}</strong>. Your QR code is attached as a PDF — present it at the event entrance.</p>
+          <p style="color:#64748b;font-size:12px;margin-top:20px">The QR code can only be scanned with the official Eventsh app.</p>
+        </div>
+      </div>`;
+
+    try {
+      await this.mailService.sendEmail({
+        to: vendorEmail,
+        subject: `Your stall ticket for ${eventTitle}`,
+        html,
+        attachments: [{ filename: "stall-ticket.pdf", content: buffer }],
+        senderConfig,
+      });
+    } catch (err: any) {
+      this.logger.error(
+        `Resend stall ticket email failed for ${stallId}: ${err?.message || err}`,
+      );
+      throw new InternalServerErrorException(
+        `Couldn't email the ticket: ${err?.message || "mail server error"}`,
+      );
+    }
+
+    // Best-effort WhatsApp mirror (never fails the resend).
+    const wa = vendorObj?.whatsAppNumber || vendorObj?.whatsappNumber;
+    if (wa) {
+      try {
+        const pdfPath = path.join(
+          process.cwd(),
+          "uploads",
+          "stallTickets",
+          `stall_ticket_${stallId}.pdf`,
+        );
+        await this.otpService.sendMediaMessage(
+          wa,
+          pdfPath,
+          `Stall Ticket - ${eventTitle}`,
+          "stall-ticket.pdf",
+        );
+      } catch (waErr) {
+        this.logger.warn(
+          `Resend: WhatsApp mirror failed for ${stallId}: ${
+            (waErr as any)?.message || waErr
+          }`,
+        );
+      }
+    }
+
+    this.logger.log(`Stall ticket re-sent for ${stallId} to ${vendorEmail}`);
+    return {
+      success: true,
+      message: `Stall ticket re-sent to ${vendorEmail}`,
+    };
   }
 }

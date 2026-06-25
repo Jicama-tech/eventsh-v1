@@ -13,10 +13,12 @@ import {
   UploadedFile,
   UploadedFiles,
   Req,
+  Res,
   ParseIntPipe,
   ValidationPipe,
   ForbiddenException,
 } from "@nestjs/common";
+import { Response } from "express";
 import {
   FileInterceptor,
   FilesInterceptor,
@@ -495,6 +497,62 @@ export class EventsController {
     }
   }
 
+  // ── Volunteer Google sign-in (redirect flow) ──────────────────────────────
+  // Step 1: kick off the OAuth redirect. The eventId rides along in `state` so
+  // the callback knows which event's volunteer allow-list to check.
+  // NOTE: declared BEFORE @Get(":id") so "volunteer-google" isn't swallowed as
+  // an :id param.
+  @Get("volunteer-google")
+  async volunteerGoogleStart(
+    @Query("eventId") eventId: string,
+    @Res() res: Response,
+  ) {
+    const base = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
+    try {
+      const url = this.eventsService.buildVolunteerGoogleAuthUrl(eventId);
+      return res.redirect(url);
+    } catch (e: any) {
+      return res.redirect(
+        `${base}/events/${eventId || ""}/scan-tickets?verror=${encodeURIComponent(
+          e?.message || "Volunteer sign-in is unavailable.",
+        )}`,
+      );
+    }
+  }
+
+  // Step 2: Google redirects back here with ?code & ?state(eventId). Verify the
+  // id_token, confirm the Gmail is on the event's volunteer list, mint a
+  // volunteer JWT, then bounce back to the scanner page with the token (or an
+  // error message) in the query string.
+  @Get("volunteer-google/redirect")
+  async volunteerGoogleRedirect(
+    @Query("code") code: string,
+    @Query("state") state: string,
+    @Res() res: Response,
+  ) {
+    const base = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
+    const eventId = state || "";
+    try {
+      const result = await this.eventsService.handleVolunteerGoogleRedirect(
+        code,
+        state,
+      );
+      return res.redirect(
+        `${base}/events/${result.eventId}/scan-tickets?vtoken=${encodeURIComponent(
+          result.token,
+        )}`,
+      );
+    } catch (e: any) {
+      const msg =
+        e?.message === "not_on_list"
+          ? "This Google account isn't on the volunteer list for this event."
+          : e?.message || "Google sign-in failed.";
+      return res.redirect(
+        `${base}/events/${eventId}/scan-tickets?verror=${encodeURIComponent(msg)}`,
+      );
+    }
+  }
+
   @Get(":id")
   async getEventById(@Param("id") id: string) {
     try {
@@ -556,6 +614,17 @@ export class EventsController {
     @Body() body: { email: string; otp: string },
   ) {
     return this.eventsService.verifyVolunteerOtp(id, body?.email, body?.otp);
+  }
+
+  // Google-Auth volunteer sign-in: verify the Google id_token and confirm the
+  // Gmail is on the event's volunteer allow-list. Public — gating is on the
+  // verified email being in event.volunteers.
+  @Post(":id/verify-volunteer-google")
+  async verifyVolunteerGoogle(
+    @Param("id") id: string,
+    @Body() body: { credential: string },
+  ) {
+    return this.eventsService.verifyVolunteerGoogle(id, body?.credential);
   }
 
   @Put(":id")

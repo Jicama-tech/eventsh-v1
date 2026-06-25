@@ -14,6 +14,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Html5QrcodeScanner, Html5Qrcode } from "html5-qrcode";
+import { jwtDecode } from "jwt-decode";
 import {
   Tabs,
   TabsContent,
@@ -174,105 +175,93 @@ export default function QRTicketScanner() {
     }
   };
 
-  // Volunteer email-OTP sign-in. Parallel to the existing organizer OTP
-  // path but gated on the event's volunteers allow-list rather than the
-  // organizer's WhatsApp number.
-  const [volunteerEmail, setVolunteerEmail] = useState("");
-  const [volunteerOtp, setVolunteerOtp] = useState("");
-  const [volunteerOtpSent, setVolunteerOtpSent] = useState(false);
-  const [isSendingVolunteerOtp, setIsSendingVolunteerOtp] = useState(false);
-  const [isVerifyingVolunteerOtp, setIsVerifyingVolunteerOtp] = useState(false);
+  // Volunteer sign-in is Google-only via an OAuth *redirect* flow. The backend
+  // verifies the Gmail against the event's volunteer list and returns a JWT in
+  // the callback URL; we persist it (localStorage) so the session survives a
+  // page refresh — the volunteer lands straight back on the scanner.
+  const [volunteer, setVolunteer] = useState<{
+    name?: string;
+    email?: string;
+  } | null>(null);
 
-  const sendVolunteerOtp = async () => {
-    if (!volunteerEmail.trim()) {
-      toast({
-        duration: 4000,
-        title: "Email required",
-        description: "Enter your email to receive the OTP.",
-        variant: "destructive",
-      });
-      return;
-    }
-    setIsSendingVolunteerOtp(true);
-    try {
-      const response = await fetch(
-        `${apiURL}/events/${eventId}/send-volunteer-otp`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: volunteerEmail.trim() }),
-        },
-      );
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.message || "Failed to send OTP");
-      }
-      setVolunteerOtpSent(true);
-      toast({
-        duration: 5000,
-        title: "OTP sent",
-        description: `Check ${volunteerEmail.trim()} for the code.`,
-      });
-    } catch (error) {
-      toast({
-        duration: 6000,
-        title: "Couldn't send OTP",
-        description:
-          error instanceof Error
-            ? error.message
-            : "This email isn't on the volunteer list for this event.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSendingVolunteerOtp(false);
-    }
+  const volunteerTokenKey = `eventsh_volunteer_token_${eventId || ""}`;
+
+  const startVolunteerGoogleLogin = () => {
+    window.location.href = `${apiURL}/events/volunteer-google?eventId=${encodeURIComponent(
+      eventId || "",
+    )}`;
   };
 
-  const verifyVolunteerOtp = async () => {
-    if (!volunteerOtp.trim()) {
+  const signOutVolunteer = () => {
+    try {
+      localStorage.removeItem(volunteerTokenKey);
+    } catch {
+      /* ignore */
+    }
+    setVolunteer(null);
+    setScanMode(null);
+    setStep("otp-verification");
+  };
+
+  // On load: pick up the JWT the OAuth callback left in the URL (?vtoken), or
+  // restore a still-valid one saved from a previous visit, so a refresh keeps
+  // the volunteer signed in instead of bouncing them back to the login screen.
+  useEffect(() => {
+    if (!eventId) return;
+    const params = new URLSearchParams(window.location.search);
+    const vtoken = params.get("vtoken");
+    const verror = params.get("verror");
+    const clearQuery = () =>
+      window.history.replaceState({}, "", `/events/${eventId}/scan-tickets`);
+
+    if (verror) {
       toast({
-        duration: 4000,
-        title: "OTP required",
-        description: "Enter the code you received.",
+        duration: 6000,
+        title: "Sign-in failed",
+        description: verror,
         variant: "destructive",
       });
+      clearQuery();
       return;
     }
-    setIsVerifyingVolunteerOtp(true);
-    try {
-      const response = await fetch(
-        `${apiURL}/events/${eventId}/verify-volunteer-otp`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: volunteerEmail.trim(),
-            otp: volunteerOtp.trim(),
-          }),
-        },
-      );
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.message || "Invalid or expired OTP");
+
+    if (vtoken) {
+      try {
+        localStorage.setItem(volunteerTokenKey, vtoken);
+        const p: any = jwtDecode(vtoken);
+        setVolunteer({ name: p?.name, email: p?.email });
+      } catch {
+        /* ignore decode errors */
       }
-      toast({
-        duration: 5000,
-        title: "Welcome",
-        description: `Signed in as ${data?.volunteer?.name || data?.volunteer?.email || "volunteer"}.`,
-      });
       setStep("mode-selection");
-    } catch (error) {
+      clearQuery();
       toast({
-        duration: 6000,
-        title: "Verification failed",
-        description:
-          error instanceof Error ? error.message : "Invalid or expired OTP.",
-        variant: "destructive",
+        duration: 4000,
+        title: "Welcome",
+        description: "You're signed in as a volunteer.",
       });
-    } finally {
-      setIsVerifyingVolunteerOtp(false);
+      return;
     }
-  };
+
+    // Restore a previous session if the saved token is still valid.
+    try {
+      const saved = localStorage.getItem(volunteerTokenKey);
+      if (saved) {
+        const p: any = jwtDecode(saved);
+        const expired = p?.exp && p.exp * 1000 < Date.now();
+        const wrongEvent = p?.eventId && p.eventId !== eventId;
+        if (expired || wrongEvent) {
+          localStorage.removeItem(volunteerTokenKey);
+        } else {
+          setVolunteer({ name: p?.name, email: p?.email });
+          setStep("mode-selection");
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId]);
 
   // Select scan mode and proceed to scanning
   const handleModeSelection = (mode: ScanMode) => {
@@ -767,8 +756,8 @@ export default function QRTicketScanner() {
         <Shield className="mx-auto h-12 w-12 text-blue-600 mb-4" />
         <CardTitle>Volunteer Sign-In</CardTitle>
         <p className="text-sm text-gray-600">
-          Enter the email the organizer added to this event's volunteer list.
-          We'll mail you a one-time code.
+          Sign in with the Google account (Gmail) the organizer added to this
+          event's volunteer list.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -781,75 +770,38 @@ export default function QRTicketScanner() {
           </div>
         )}
 
-        {/* Volunteer email-OTP path. */}
-        <div className="space-y-3">
-          {!volunteerOtpSent ? (
-            <>
-              <Input
-                type="email"
-                placeholder="your-email@example.com"
-                value={volunteerEmail}
-                onChange={(e) => setVolunteerEmail(e.target.value)}
-                autoComplete="email"
+        {/* Google sign-in via OAuth redirect, gated on the event's whitelisted
+            Gmail volunteer list. */}
+        <div className="space-y-2">
+          <Button
+            onClick={startVolunteerGoogleLogin}
+            disabled={!eventId}
+            variant="buttonOutline"
+            className="w-full"
+          >
+            <svg className="mr-2 h-4 w-4" viewBox="0 0 48 48" aria-hidden="true">
+              <path
+                fill="#EA4335"
+                d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
               />
-              <Button
-                onClick={sendVolunteerOtp}
-                disabled={isSendingVolunteerOtp || !volunteerEmail.trim()}
-                className="w-full"
-              >
-                {isSendingVolunteerOtp ? (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Sending OTP…
-                  </>
-                ) : (
-                  "Send OTP to Email"
-                )}
-              </Button>
-              <p className="text-xs text-gray-500">
-                Your email must be on this event's volunteer list.
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-xs text-gray-600">
-                Code sent to <strong>{volunteerEmail}</strong>
-              </p>
-              <Input
-                type="text"
-                placeholder="Enter 6-digit OTP"
-                value={volunteerOtp}
-                onChange={(e) => setVolunteerOtp(e.target.value)}
-                maxLength={6}
-                className="text-center text-lg tracking-widest"
+              <path
+                fill="#4285F4"
+                d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
               />
-              <div className="flex gap-2">
-                <Button
-                  onClick={verifyVolunteerOtp}
-                  disabled={isVerifyingVolunteerOtp || !volunteerOtp.trim()}
-                  className="flex-1"
-                >
-                  {isVerifyingVolunteerOtp ? (
-                    <>
-                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                      Verifying…
-                    </>
-                  ) : (
-                    "Verify OTP"
-                  )}
-                </Button>
-                <Button
-                  onClick={() => {
-                    setVolunteerOtpSent(false);
-                    setVolunteerOtp("");
-                  }}
-                  variant="buttonOutline"
-                >
-                  Change email
-                </Button>
-              </div>
-            </>
-          )}
+              <path
+                fill="#FBBC05"
+                d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+              />
+              <path
+                fill="#34A853"
+                d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+              />
+            </svg>
+            Continue with Google
+          </Button>
+          <p className="text-xs text-gray-500 text-center">
+            Only Gmail IDs on this event's volunteer list can sign in.
+          </p>
         </div>
 
       </CardContent>
@@ -871,6 +823,25 @@ export default function QRTicketScanner() {
             <p className="text-sm text-gray-600">
               {eventData.organizer.organizationName}
             </p>
+          </div>
+        )}
+
+        {/* Signed-in volunteer banner + sign out. */}
+        {volunteer && (
+          <div className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-xs text-gray-500">Signed in as</p>
+              <p className="truncate text-sm font-medium">
+                {volunteer.name || volunteer.email}
+              </p>
+            </div>
+            <Button
+              onClick={signOutVolunteer}
+              variant="buttonOutline"
+              className="h-8 px-3 text-xs"
+            >
+              Sign out
+            </Button>
           </div>
         )}
 
