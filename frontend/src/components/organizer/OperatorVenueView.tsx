@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   HoverCard,
   HoverCardContent,
@@ -7,6 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Loader2, Info } from "lucide-react";
 import { ExhibitorDetailDialog } from "./ExhibitorDetailDialog";
+import SpaceLayout from "./SpaceLayout";
 import type { StallRequest } from "./shopKeeper";
 
 const apiURL = __API_URL__;
@@ -132,6 +133,30 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
   const [selectedStall, setSelectedStall] = useState<StallRequest | null>(null);
   const [stallDialogOpen, setStallDialogOpen] = useState(false);
   const [loadingStall, setLoadingStall] = useState(false);
+
+  // Fit-to-width scaling, identical to the public eventfront map: the canvas
+  // renders at natural size (1px per logical unit) and the whole thing is
+  // CSS-scaled down to fit the container width, so spacing + sizing match the
+  // eventfront exactly. extentsRef holds the latest computed canvas extents so
+  // the ResizeObserver can read them without re-subscribing every render.
+  const venueScrollRef = useRef<HTMLDivElement>(null);
+  const extentsRef = useRef({ width: 800, height: 500 });
+  const [fitScale, setFitScale] = useState(1);
+
+  useEffect(() => {
+    const el = venueScrollRef.current;
+    if (!el) return;
+    const recompute = () => {
+      const cw = el.clientWidth - 32; // minus the p-4 padding (16px each side)
+      const canvasWidth = extentsRef.current.width;
+      if (cw > 0 && canvasWidth > 0) {
+        setFitScale(Math.max(0.05, Math.min((cw / canvasWidth) * 0.98, 1)));
+      }
+    };
+    const ro = new ResizeObserver(recompute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [event, selectedConfigId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -303,40 +328,138 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
     addOnItems.map((a) => [a.id, { color: a.color || "#6b7280", name: a.name }]),
   );
 
-  // Filter layout items to the currently selected venue config.
-  const matchesConfig = (item: any) =>
-    !item?.venueConfigId || item.venueConfigId === venueConfig.id;
+  // Which hall an item belongs to. Mirrors the eventfront's belongsToLayout so
+  // a multi-venue event never merges halls: a real tag must match the selected
+  // venue exactly; untagged / "default" items belong ONLY to the first hall
+  // (legacy single-venue data) instead of leaking onto every venue.
+  const layoutIndex = Math.max(
+    0,
+    venueConfigs.findIndex((vc) => vc.id === venueConfig.id),
+  );
+  const belongsToLayout = (cfgId?: string) =>
+    cfgId && cfgId !== "default"
+      ? cfgId === venueConfig.id
+      : layoutIndex === 0;
 
-  const tables = flatten<PositionedTable>(event.venueTables).filter(matchesConfig);
+  // Tables may be stored as a flat array (tagged with venueConfigId) OR as a
+  // Record keyed by layout id — the eventfront reads venueTables[layoutId], so
+  // do the same here, otherwise every hall's spaces get flattened together.
+  const tablesRaw: any = event.venueTables;
+  const tables: PositionedTable[] = Array.isArray(tablesRaw)
+    ? tablesRaw.filter((t: any) => belongsToLayout(t?.venueConfigId))
+    : (tablesRaw?.[venueConfig.id] as PositionedTable[] | undefined) ||
+      // Legacy single-venue data may key the first hall under "default".
+      (layoutIndex === 0
+        ? (tablesRaw?.["default"] as PositionedTable[] | undefined)
+        : undefined) ||
+      [];
+
+  // Round tables / speaker zones / doors are flat arrays tagged with
+  // venueConfigId — filter each to the selected hall.
   const rounds = flatten<PositionedRoundTable>(event.venueRoundTables).filter(
-    matchesConfig,
+    (r) => belongsToLayout((r as any)?.venueConfigId),
   );
   const zones = flatten<PositionedSpeakerZone>(event.venueSpeakerZones).filter(
-    matchesConfig,
+    (z) => belongsToLayout((z as any)?.venueConfigId),
   );
-  const doors = flatten<PositionedDoor>(event.venueDoors).filter(
-    (d) => !(d as any)?.venueConfigId || (d as any).venueConfigId === venueConfig.id,
+  const doors = flatten<PositionedDoor>(event.venueDoors).filter((d) =>
+    belongsToLayout((d as any)?.venueConfigId),
   );
+
+  // Canvas size — matches the eventfront's computeCanvasExtents EXACTLY so the
+  // map is proportioned the same:
+  //  • If the organizer cropped the venue, show precisely the crop box (items
+  //    outside it are filtered out by SpaceLayout). This is why eventfront
+  //    spaces look bigger — the cropped area scales up to fill the width.
+  //  • Otherwise grow the canvas to cover every placed item (+ padding), with a
+  //    baseline of the configured venue size, capped so a stray far-flung item
+  //    can't blow the canvas into endless empty space.
+  const PADDING = 80;
+  const cfgAny = venueConfig as any;
+  const baseW = venueConfig.width || 800;
+  const baseH = venueConfig.height || 500;
+  const cropped = !!cfgAny.cropped;
+  let canvasW: number;
+  let canvasH: number;
+  if (cropped) {
+    canvasW = Number(cfgAny.cropWidth) || baseW;
+    canvasH = Number(cfgAny.cropHeight) || baseH;
+  } else {
+    const limitX = Math.max(baseW * 5, 6000);
+    const limitY = Math.max(baseH * 5, 6000);
+    let maxX = baseW;
+    let maxY = baseH;
+    const addX = (v: number) => {
+      if (v <= limitX) maxX = Math.max(maxX, v);
+    };
+    const addY = (v: number) => {
+      if (v <= limitY) maxY = Math.max(maxY, v);
+    };
+    for (const t of tables) {
+      const w = (t as any).displayWidth ?? t.width ?? 0;
+      const h = (t as any).displayHeight ?? t.height ?? 0;
+      addX((t.x || 0) + w);
+      addY((t.y || 0) + h);
+    }
+    for (const r of rounds) {
+      const d = r.tableDiameter || 120;
+      addX((r.x || 0) + d);
+      addY((r.y || 0) + d);
+    }
+    for (const z of zones) {
+      addX((z.x || 0) + (z.width || 0));
+      addY((z.y || 0) + (z.height || 0));
+    }
+    for (const d of doors) {
+      const dw = Number(d.width) > 0 ? Number(d.width) : 50;
+      const dh = Number(d.height) > 0 ? Number(d.height) : 50;
+      addX((d.x || 0) + dw);
+      addY((d.y || 0) + dh);
+    }
+    canvasW = maxX + PADDING;
+    canvasH = maxY + PADDING;
+  }
+  extentsRef.current = { width: canvasW, height: canvasH };
+
+  // Config handed to SpaceLayout — the canvas dimensions are the computed
+  // extents / crop box (NOT the raw venue width/height) so the grid + bounds
+  // match the rendered spaces, and items outside a crop are clipped away.
+  const canvasConfig = {
+    width: canvasW,
+    height: canvasH,
+    gridSize: venueConfig.gridSize,
+    showGrid: venueConfig.showGrid,
+    hasMainStage: venueConfig.hasMainStage,
+    cropped,
+    cropWidth: canvasW,
+    cropHeight: canvasH,
+  };
 
   return (
     <div className="space-y-4">
-      {/* Venue selector (only when multiple) */}
+      {/* Venue selector — one tab per venue (only shown for multi-venue
+          events). Selecting a venue shows ONLY that venue's layout. */}
       {venueConfigs.length > 1 && (
-        <div className="flex gap-2 flex-wrap">
-          {venueConfigs.map((vc) => (
-            <button
-              key={vc.id}
-              type="button"
-              onClick={() => setSelectedConfigId(vc.id)}
-              className={`px-3 py-1.5 rounded-md border text-xs font-medium transition-colors ${
-                vc.id === venueConfig.id
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-              }`}
-            >
-              {vc.name}
-            </button>
-          ))}
+        <div className="space-y-1.5">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Select venue
+          </div>
+          <div className="flex gap-1 flex-wrap rounded-lg bg-slate-100 p-1 w-fit">
+            {venueConfigs.map((vc, i) => (
+              <button
+                key={vc.id}
+                type="button"
+                onClick={() => setSelectedConfigId(vc.id)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  vc.id === venueConfig.id
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-600 hover:bg-white/70"
+                }`}
+              >
+                {vc.name || `Venue ${i + 1}`}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -344,12 +467,8 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
       <div className="rounded-md border bg-slate-50 px-3 py-2 text-[11px] text-slate-600 flex flex-wrap items-center gap-3">
         <span className="font-semibold uppercase tracking-wide">Legend:</span>
         <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-3 bg-green-500 rounded-sm" />
-          Booked stall
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-3 bg-slate-300 rounded-sm" />
-          Available
+          <span className="inline-block w-3 h-3 bg-pink-400/80 border border-pink-600 rounded-sm" />
+          Space (template colour)
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-3 bg-purple-400 rounded-sm" />
@@ -372,218 +491,108 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
         </span>
       </div>
 
-      {/* Canvas */}
-      <div className="relative border-2 border-dashed border-gray-300 rounded-xl bg-slate-50 overflow-auto flex justify-center items-start p-4">
+      {/* Canvas — fit-to-width, same approach as the public eventfront map.
+          The inner board renders at natural size and is CSS-scaled down so the
+          spacing/proportions match the eventfront exactly. */}
+      <div
+        ref={venueScrollRef}
+        className="relative border-2 border-dashed border-gray-300 rounded-xl bg-slate-50 overflow-auto p-4"
+      >
         <div
-          className="relative bg-white border-2 border-gray-200 shadow-xl rounded-lg"
-          style={{
-            width: venueConfig.width * venueConfig.scale,
-            height: venueConfig.height * venueConfig.scale,
-            backgroundImage: venueConfig.showGrid
-              ? `linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px)`
-              : "none",
-            backgroundSize: `${venueConfig.gridSize * venueConfig.scale}px ${
-              venueConfig.gridSize * venueConfig.scale
-            }px`,
-          }}
+          className="mx-auto"
+          style={{ width: canvasW * fitScale, height: canvasH * fitScale }}
         >
-          {venueConfig.hasMainStage && (
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-purple-100 border border-purple-300 px-4 py-1 rounded-md text-[9px] font-bold text-purple-700">
-              MAIN STAGE
-            </div>
-          )}
-
-          {/* Doors — circle (legacy / round) or square (resizable
-              doorway). Honour the stored width/height + shape so the
-              scanner view matches what the organizer placed. */}
-          {doors.map((door) => {
-            const isEntrance = door.type === "entrance";
-            const isSquare = door.shape === "square";
-            const w = Number(door.width) > 0 ? Number(door.width) : 50;
-            const h = Number(door.height) > 0 ? Number(door.height) : 50;
+          <div
+            style={{
+              width: canvasW,
+              height: canvasH,
+              transform: `scale(${fitScale})`,
+              transformOrigin: "top left",
+            }}
+          >
+        <SpaceLayout
+          config={canvasConfig}
+          crop={cropped}
+          scale={1}
+          tables={tables}
+          roundTables={rounds}
+          doors={doors}
+          speakerZones={zones}
+          getState={(t: any) => {
+            // Same look as the eventfront: every space keeps its template
+            // colour. booked:false is explicit so SpaceLayout doesn't fall
+            // back to t.isBooked and grey it out — who booked it shows on hover.
+            const booking = bookings[t.positionId];
+            return {
+              booked: false,
+              title: booking
+                ? `${t.tableName || t.name || "Stall"} — ${booking.vendorName}`
+                : t.tableName || t.name || "Available",
+            };
+          }}
+          renderSpaceLabel={(t: any) => {
+            // Show the SPACE NAME on the tile (same as the eventfront map);
+            // vendor + add-on details live in the hover card. Booked stalls keep
+            // their purchased add-on colour dots along the bottom edge.
+            const booking = bookings[t.positionId];
+            const stallLabel = t.tableName || t.name || "";
+            const dots = (booking?.addOns || []).map((a: any) => ({
+              color: addOnColorMap.get(a.id)?.color || "#6b7280",
+            }));
             return (
-              <div
-                key={door.id}
-                className={`absolute flex items-center justify-center text-[9px] font-bold text-white shadow ${
-                  isSquare ? "rounded-md" : "rounded-full"
-                } ${
-                  isEntrance
-                    ? "bg-emerald-600 border-2 border-emerald-700"
-                    : "bg-rose-600 border-2 border-rose-700"
-                }`}
-                style={{
-                  left: door.x * venueConfig.scale,
-                  top: door.y * venueConfig.scale,
-                  width: w * venueConfig.scale,
-                  height: h * venueConfig.scale,
-                  transform: `rotate(${door.rotation || 0}deg)`,
-                }}
-                title={isEntrance ? "Entrance" : "Exit"}
-              >
-                {isEntrance ? "IN" : "OUT"}
-              </div>
+              <>
+                <span
+                  className="truncate w-full text-center"
+                  style={{
+                    color: "#111827",
+                    fontWeight: 800,
+                    fontSize: 8,
+                    lineHeight: 1,
+                    padding: 1,
+                  }}
+                >
+                  {stallLabel}
+                </span>
+                {dots.length > 0 && (
+                  <div
+                    className="absolute left-1/2 -translate-x-1/2 flex gap-0.5"
+                    style={{ bottom: 2 }}
+                  >
+                    {dots.slice(0, 8).map((d: any, i: number) => (
+                      <span
+                        key={i}
+                        className="rounded-full border border-white/80 shadow"
+                        style={{ width: 6, height: 6, backgroundColor: d.color }}
+                      />
+                    ))}
+                    {dots.length > 8 && (
+                      <span className="text-[7px] font-bold text-slate-600 ml-0.5">
+                        +{dots.length - 8}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </>
             );
-          })}
-
-          {/* Speaker zones */}
-          {zones.map((zone) => (
-            <div
-              key={`sz-${zone.positionId}`}
-              className="absolute rounded-md border-2 flex items-center justify-center text-[9px] font-bold text-white shadow"
-              style={{
-                left: zone.x * venueConfig.scale,
-                top: zone.y * venueConfig.scale,
-                width: zone.width * venueConfig.scale,
-                height: zone.height * venueConfig.scale,
-                background: zone.isMainStage
-                  ? "linear-gradient(135deg,#a855f7,#8b5cf6)"
-                  : "linear-gradient(135deg,#9ca3af,#6b7280)",
-                borderColor: zone.isMainStage ? "#7c3aed" : "#4b5563",
-                transform: `rotate(${zone.rotation || 0}deg)`,
-              }}
-              title={zone.name}
-            >
-              {zone.isMainStage ? "STAGE" : zone.name}
-            </div>
-          ))}
-
-          {/* Round tables */}
-          {rounds.map((rt) => {
-            const d = (rt.tableDiameter || 120) * venueConfig.scale;
-            return (
-              <div
-                key={`rt-${rt.positionId}`}
-                className="absolute rounded-full border-2 flex items-center justify-center text-[9px] font-bold text-white shadow"
-                style={{
-                  left: rt.x * venueConfig.scale,
-                  top: rt.y * venueConfig.scale,
-                  width: d,
-                  height: d,
-                  background: rt.color || "#f59e0b",
-                  borderColor: rt.color
-                    ? `${rt.color}cc`
-                    : "#d97706",
-                  transform: `rotate(${rt.rotation || 0}deg)`,
-                }}
-                title={rt.name}
-              >
-                {rt.name}
-              </div>
-            );
-          })}
-
-          {/* Stalls */}
-          {tables.map((table) => {
-            const booking = bookings[table.positionId];
-            const dots = (booking?.addOns || []).map((a) => ({
+          }}
+          wrapSpace={(t: any, node: any) => {
+            const booking = bookings[t.positionId];
+            if (!booking) return node;
+            const dots = (booking.addOns || []).map((a: any) => ({
               id: a.id,
               name: addOnColorMap.get(a.id)?.name || a.name,
               color: addOnColorMap.get(a.id)?.color || "#6b7280",
               quantity: a.quantity,
               price: a.price,
             }));
-            const isBooked = !!booking || !!table.isBooked;
-            const stallLabel = table.tableName || table.name || "";
-            const node = (
-              <div
-                key={table.positionId}
-                className={`absolute rounded-sm border-2 flex flex-col items-center justify-center text-white shadow overflow-hidden ${
-                  isBooked
-                    ? ""
-                    : "border-slate-400 bg-slate-300/70 text-slate-700"
-                }`}
-                style={{
-                  left: table.x * venueConfig.scale,
-                  top: table.y * venueConfig.scale,
-                  width: table.width * venueConfig.scale,
-                  height: table.height * venueConfig.scale,
-                  transform: `rotate(${table.rotation || 0}deg)`,
-                  background: isBooked
-                    ? table.color || "#10b981"
-                    : undefined,
-                  borderColor: isBooked
-                    ? `${table.color || "#10b981"}cc`
-                    : undefined,
-                  lineHeight: 1.1,
-                }}
-              >
-                {booking ? (
-                  <>
-                    {/* Vendor name is the operator's primary signal — front
-                        and centre. Stall id + business name as supporting
-                        lines below, sized by available room. */}
-                    <span
-                      className="font-bold text-center leading-tight px-1 truncate w-full"
-                      style={{ fontSize: 11 }}
-                      title={booking.vendorName}
-                    >
-                      {booking.vendorName}
-                    </span>
-                    {booking.businessName && (
-                      <span
-                        className="text-center leading-tight px-1 truncate w-full opacity-90"
-                        style={{ fontSize: 9 }}
-                        title={booking.businessName}
-                      >
-                        {booking.businessName}
-                      </span>
-                    )}
-                    {stallLabel && (
-                      <span
-                        className="text-center leading-tight px-1 truncate w-full opacity-70 mt-0.5"
-                        style={{ fontSize: 8 }}
-                      >
-                        #{stallLabel}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <span className="font-bold text-[9px] truncate px-1">
-                    {stallLabel}
-                  </span>
-                )}
-                {dots.length > 0 && (
-                  <div
-                    className="absolute left-1/2 -translate-x-1/2 flex gap-0.5"
-                    style={{ bottom: 2 }}
-                  >
-                    {dots.slice(0, 8).map((d, i) => (
-                      <span
-                        key={i}
-                        className="rounded-full border border-white/80 shadow"
-                        style={{
-                          width: 6,
-                          height: 6,
-                          backgroundColor: d.color,
-                        }}
-                      />
-                    ))}
-                    {dots.length > 8 && (
-                      <span className="text-[7px] font-bold text-white/90 ml-0.5">
-                        +{dots.length - 8}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-
-            // Hover popover only on booked stalls (the operator's primary
-            // interest — what's actually deployed here and what add-ons it
-            // came with).
-            if (!booking) return node;
             return (
-              <HoverCard key={table.positionId} openDelay={120}>
+              <HoverCard openDelay={120}>
                 <HoverCardTrigger asChild>{node}</HoverCardTrigger>
-                <HoverCardContent
-                  side="top"
-                  align="center"
-                  className="w-80 p-3"
-                >
+                <HoverCardContent side="top" align="center" className="w-80 p-3">
                   <div className="space-y-2">
                     <div>
                       <div className="font-semibold text-sm">
-                        {table.tableName || table.name || "Stall"}
+                        {t.tableName || t.name || "Stall"}
                       </div>
                       <div className="text-xs text-slate-600">
                         Booked by {booking.vendorName}
@@ -624,7 +633,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
                           Add-ons ({dots.length})
                         </div>
                         <ul className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                          {dots.map((d, i) => (
+                          {dots.map((d: any, i: number) => (
                             <li
                               key={`${d.id}-${i}`}
                               className="flex items-center gap-2 text-xs"
@@ -649,8 +658,8 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
                       variant="outline"
                       size="sm"
                       className="w-full mt-1"
-                      disabled={!positionToStallId[table.positionId]}
-                      onClick={() => openStallDetails(table.positionId)}
+                      disabled={!positionToStallId[t.positionId]}
+                      onClick={() => openStallDetails(t.positionId)}
                     >
                       {loadingStall ? (
                         <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
@@ -663,7 +672,9 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
                 </HoverCardContent>
               </HoverCard>
             );
-          })}
+          }}
+        />
+          </div>
         </div>
       </div>
 

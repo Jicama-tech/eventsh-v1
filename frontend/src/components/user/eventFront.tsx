@@ -183,6 +183,9 @@ interface Organizer {
   whatsAppNumber: string;
   address: string;
   bio: string;
+  // "Description" the organizer enters in Settings → shown in the About
+  // Organizer section on the public event page.
+  description?: string;
   approved: boolean;
   rejected: boolean;
   createdAt: string;
@@ -5039,9 +5042,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     {organizer.organizationName}
                   </h3>
                   <p className="text-gray-500 text-sm">{organizer.name}</p>
-                  <p className="text-gray-400 text-sm mt-2 leading-relaxed">
-                    {organizer.bio}
-                  </p>
+                  {(organizer.description || organizer.bio) && (
+                    <p className="text-gray-400 text-sm mt-2 leading-relaxed whitespace-pre-line">
+                      {organizer.description || organizer.bio}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -8175,29 +8180,49 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               const isWrongCategory = !isCategoryAllowed(table);
                               const isNotForSale = table.forSale === false;
 
-                              let bgColor = "bg-green-200/80";
-                              let borderColor = "border-green-600";
+                              // EventFront colour rule: available spaces show
+                              // their own template colour; booked/disabled grey
+                              // out; not-for-sale shows an amber hatch; the
+                              // selected space keeps its colour + a blue ring.
+                              const tpl =
+                                (table as any).color ||
+                                (isNotForSale ? "#f59e0b" : "#22c55e");
+                              let fillStyle: any = {
+                                backgroundColor: tpl + "80",
+                                borderColor: tpl,
+                              };
                               let cursor =
                                 "cursor-pointer hover:shadow-xl hover:ring-2 hover:ring-blue-400";
 
                               if (isNotForSale) {
-                                bgColor = "bg-amber-100/50";
-                                borderColor = "border-amber-300";
-                                cursor = "cursor-default opacity-60";
+                                fillStyle = {
+                                  backgroundColor: tpl + "59",
+                                  borderColor: tpl,
+                                  backgroundImage:
+                                    "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.05) 3px, rgba(0,0,0,0.05) 6px)",
+                                };
+                                cursor = "cursor-default opacity-80";
                               } else if (isBooked) {
-                                // Sold — clearly visible dark grey, not selectable.
-                                bgColor = "bg-gray-500/90";
-                                borderColor = "border-gray-700";
+                                // Sold — grey, not selectable.
+                                fillStyle = {
+                                  backgroundColor: "#9ca3af80",
+                                  borderColor: "#6b7280",
+                                };
                                 cursor = "cursor-not-allowed";
                               } else if (isWrongTemplate || isWrongCategory) {
-                                // Not allowed for this exhibitor — darker grey
-                                // so it's visible but obviously disabled.
-                                bgColor = "bg-gray-400/80";
-                                borderColor = "border-gray-500";
+                                // Not allowed for this exhibitor — grey.
+                                fillStyle = {
+                                  backgroundColor: "#9ca3af66",
+                                  borderColor: "#9ca3af",
+                                };
                                 cursor = "cursor-not-allowed opacity-90";
                               } else if (isSelected) {
-                                bgColor = "bg-blue-300";
-                                borderColor = "border-blue-600";
+                                // Selected — solid blue background (regardless
+                                // of the space's own template colour).
+                                fillStyle = {
+                                  backgroundColor: "#93c5fd", // blue-300
+                                  borderColor: "#2563eb", // blue-600
+                                };
                                 cursor =
                                   "cursor-pointer shadow-lg ring-2 ring-blue-500";
                               }
@@ -8205,7 +8230,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               return (
                                 <div
                                   key={table.positionId}
-                                  className={`absolute border flex items-center justify-center transition-all group hover:z-50 ${bgColor} ${borderColor} ${cursor} ${
+                                  className={`absolute border flex items-center justify-center transition-all group hover:z-50 ${cursor} ${
                                     table.type === "Round"
                                       ? "rounded-full"
                                       : table.type === "Corner"
@@ -8220,6 +8245,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     transform: `rotate(${table.rotation || 0}deg)`,
                                     transformOrigin: "center center",
                                     zIndex: isSelected ? 10 : 5,
+                                    ...fillStyle,
                                   }}
                                   onClick={() => {
                                     // Sold / not-allowed / not-for-sale stalls

@@ -3,9 +3,12 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  UnauthorizedException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
+import { JwtService } from "@nestjs/jwt";
+import { OAuth2Client } from "google-auth-library";
 import { Event, EventDocument } from "./schemas/event.schema";
 import { CreateEventDto } from "./dto/createEvent.dto";
 import { UpdateEventDto } from "./dto/updateEvent.dto";
@@ -18,6 +21,7 @@ export class EventsService {
     @InjectModel(Event.name) private eventModel: Model<EventDocument>,
     private readonly templatesService: TemplatesService,
     private readonly otpService: OtpService,
+    private readonly jwtService: JwtService,
   ) {}
 
   // Email-OTP gate for volunteer sign-in on the scanner page. Two steps:
@@ -73,6 +77,167 @@ export class EventsService {
         phoneNumber: volunteer.phoneNumber,
       },
     };
+  }
+
+  // Google-Auth gate for volunteer sign-in. The volunteer signs in with Google
+  // on the scanner page; we verify the id_token Google issued, then confirm the
+  // verified Gmail is on this event's volunteer allow-list. Only whitelisted
+  // Gmail IDs (the ones the organizer added) can get in — no password, no OTP.
+  async verifyVolunteerGoogle(eventId: string, credential: string) {
+    if (!credential) {
+      throw new BadRequestException("Google credential is required");
+    }
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      throw new BadRequestException(
+        "Google sign-in is not configured on the server",
+      );
+    }
+
+    // Verify the id_token's signature + audience against our own client id
+    // (same pattern as /auth/google-token-exchange).
+    let email = "";
+    let emailVerified = false;
+    let googleName = "";
+    try {
+      const oauth2 = new OAuth2Client(clientId);
+      const ticket = await oauth2.verifyIdToken({
+        idToken: credential,
+        audience: clientId,
+      });
+      const p: any = ticket.getPayload() || {};
+      email = (p.email || "").trim();
+      emailVerified = !!p.email_verified;
+      googleName = p.name || "";
+    } catch {
+      throw new UnauthorizedException(
+        "Google rejected the sign-in. Please try again.",
+      );
+    }
+
+    if (!email || !emailVerified) {
+      throw new UnauthorizedException(
+        "Your Google account email could not be verified.",
+      );
+    }
+
+    const normalized = email.toLowerCase();
+    const event: any = await this.eventModel.findById(eventId).lean();
+    if (!event) {
+      throw new NotFoundException("Event not found");
+    }
+    const volunteer = (event.volunteers || []).find(
+      (v: any) => (v.email || "").toLowerCase() === normalized,
+    );
+    if (!volunteer) {
+      throw new ForbiddenException(
+        "This Google account isn't on the volunteer list for this event.",
+      );
+    }
+
+    return {
+      volunteer: {
+        name: volunteer.name || googleName,
+        email: volunteer.email,
+        phoneNumber: volunteer.phoneNumber,
+      },
+    };
+  }
+
+  // ── Volunteer Google sign-in via OAuth redirect ──────────────────────────
+  // A redirect flow (rather than the in-browser button) so it works with an
+  // Authorized *redirect URI* in Google Cloud — no JavaScript-origin setup —
+  // and returns a JWT so the volunteer stays signed in across page refreshes.
+  private volunteerGoogleClient() {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const redirectUri = process.env.GOOGLE_VOLUNTEER_REDIRECT_URI;
+    if (!clientId || !clientSecret || !redirectUri) {
+      throw new BadRequestException(
+        "Volunteer Google sign-in is not configured on the server",
+      );
+    }
+    return {
+      client: new OAuth2Client(clientId, clientSecret, redirectUri),
+      clientId,
+    };
+  }
+
+  // Build the Google consent URL. eventId travels in `state` so the callback
+  // knows which event's volunteer allow-list to validate against.
+  buildVolunteerGoogleAuthUrl(eventId: string): string {
+    if (!eventId) {
+      throw new BadRequestException("eventId is required");
+    }
+    const { client } = this.volunteerGoogleClient();
+    return client.generateAuthUrl({
+      access_type: "online",
+      scope: ["openid", "email", "profile"],
+      state: eventId,
+      prompt: "select_account",
+    });
+  }
+
+  // Handle the OAuth callback: exchange the code, verify the id_token, confirm
+  // the Gmail is on the event's volunteer list, then mint a volunteer JWT.
+  async handleVolunteerGoogleRedirect(code: string, state: string) {
+    if (!code || !state) {
+      throw new BadRequestException("Missing authorization code");
+    }
+    const eventId = state;
+    const { client, clientId } = this.volunteerGoogleClient();
+
+    let email = "";
+    let googleName = "";
+    let emailVerified = false;
+    try {
+      const { tokens } = await client.getToken(code);
+      if (!tokens?.id_token) {
+        throw new Error("Google response had no id_token");
+      }
+      const ticket = await client.verifyIdToken({
+        idToken: tokens.id_token,
+        audience: clientId,
+      });
+      const p: any = ticket.getPayload() || {};
+      email = (p.email || "").trim();
+      googleName = p.name || "";
+      emailVerified = !!p.email_verified;
+    } catch {
+      throw new UnauthorizedException(
+        "Google rejected the sign-in. Please try again.",
+      );
+    }
+
+    if (!email || !emailVerified) {
+      throw new UnauthorizedException(
+        "Your Google account email could not be verified.",
+      );
+    }
+
+    const normalized = email.toLowerCase();
+    const event: any = await this.eventModel.findById(eventId).lean();
+    if (!event) {
+      throw new NotFoundException("Event not found");
+    }
+    const volunteer = (event.volunteers || []).find(
+      (v: any) => (v.email || "").toLowerCase() === normalized,
+    );
+    if (!volunteer) {
+      // Surfaced as a friendly message by the controller.
+      throw new ForbiddenException("not_on_list");
+    }
+
+    const name = volunteer.name || googleName;
+    const token = this.jwtService.sign({
+      sub: eventId,
+      eventId,
+      email: volunteer.email,
+      name,
+      roles: ["volunteer"],
+    });
+
+    return { token, eventId, name, email: volunteer.email };
   }
 
   async create(createEventDto: CreateEventDto): Promise<Event> {
