@@ -172,6 +172,17 @@ export class StallsController {
   }
 
   /**
+   * List ALL vendor profiles registered under an email (linked accounts) so
+   * the eventfront can show an account picker. Returns [] (never 404) so the
+   * frontend can treat 0/1/2+ uniformly.
+   * GET /stalls/vendors/by-email/:email
+   */
+  @Get("vendors/by-email/:email")
+  async findVendorsByEmail(@Param("email") email: string) {
+    return await this.stallsService.findVendorsByEmail(email);
+  }
+
+  /**
    * Check if vendor has existing request for event
    * GET /stalls/check-request/:eventId/:vendorId
    */
