@@ -5886,7 +5886,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               className="font-bold text-base"
                               style={{ color: design?.secondaryColor }}
                             >
-                              {item.price}
+                              {formatPrice(item.price || 0)}
                             </p>
                           </div>
                         </div>
@@ -5904,8 +5904,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             )}
             {/* Round-table seat booking — lives inside the Venue tab,
                 below the layout map (the map above now shows the round
-                tables alongside the Spaces). */}
-            {roundTableData.length > 0 && (
+                tables alongside the Spaces). Only shown when at least one
+                round table is actually sellable; "not for sale" round tables
+                are layout references only, so the box is hidden for them. */}
+            {roundTableData.some((rt: any) => rt.forSale !== false) && (
               <div className="space-y-5">
                 {/* Header */}
                 <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
