@@ -466,6 +466,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [existingStallRequest, setExistingStallRequest] = useState<any>(null);
   const [showTableSelection, setShowTableSelection] = useState(false);
   const [shopkeeperId, setShopkeeperId] = useState<string | null>(null);
+  // Linked-accounts (multi-vendor) state for the Google "Rent a Stall" flow.
+  // One authenticated email can own several vendor profiles; the booker picks
+  // which one to register with, or registers a brand-new one.
+  const [linkedVendors, setLinkedVendors] = useState<any[]>([]);
+  const [authedEmail, setAuthedEmail] = useState("");
+  const [showAccountChooser, setShowAccountChooser] = useState(false);
+  // Shown when the chosen vendor has already COMPLETED (paid) a stall for this
+  // event: preview the existing booking, or register a new request.
+  const [showCompletedChoice, setShowCompletedChoice] = useState(false);
+  // When true the rent form is blank (except the locked authenticated email)
+  // and submit force-creates a new vendor profile.
+  const [registerNewMode, setRegisterNewMode] = useState(false);
   // Controls the new Google-verified Member dialog mounted under the
   // Rent-a-Stall card. Replaces the old storefront-only entry point.
   const [showMemberDialog, setShowMemberDialog] = useState(false);
@@ -561,6 +573,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     faceBookLink: "",
     preferredTemplateId: "",
     preferredTemplateName: "",
+    preferredTemplateIds: [] as string[],
+    preferredTemplateNames: [] as string[],
   };
 
   const [regImageFile, setRegImageFile] = useState<File | null>(null);
@@ -1179,6 +1193,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // `fallbackWhatsApp` keeps the verified WhatsApp number when the vendor
   // doc itself doesn't carry one (e.g. matched only by email).
   const applyVendorRecord = async (shopData: any, fallbackWhatsApp?: string) => {
+    // Applying an existing profile is never a "register new" flow.
+    setRegisterNewMode(false);
     setShopkeeperExists(true);
     setShopkeeperId(shopData._id);
     // Denormalised member flag — set by the memberships pipeline
@@ -1217,6 +1233,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       refundPaymentDescription: shopData.refundPaymentDescription || "",
       preferredTemplateId: "",
       preferredTemplateName: "",
+      preferredTemplateIds: [] as string[],
+      preferredTemplateNames: [] as string[],
     });
     setEmailVerified(true); // Assume verified if exists
 
@@ -1326,7 +1344,77 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     setStallGoogleLoading(true);
   };
 
-  // Look up a returning vendor by the Google email and continue the flow.
+  // Load the membership card for a vendor (after a profile is chosen).
+  const resolveStallMembership = async (vendor: any, email: string) => {
+    if (!vendor?.isMember) {
+      setStallMembership(null);
+      return;
+    }
+    let planName = "Member";
+    let endDate: string | undefined = vendor.membershipEndDate;
+    let color: string | undefined;
+    try {
+      const orgId = eventData?.organizer?._id;
+      if (orgId) {
+        const mRes = await fetch(
+          `${apiURL}/exhibitor-memberships/by-email/${encodeURIComponent(
+            email,
+          )}?organizerId=${orgId}`,
+        );
+        const txt = await mRes.text();
+        const m = txt ? JSON.parse(txt) : null;
+        if (m) {
+          planName = m.planId?.name || planName;
+          endDate = m.endDate || endDate;
+          color = m.planId?.color;
+        }
+      }
+    } catch {
+      // non-fatal — fall back to the vendor's denormalised fields
+    }
+    setStallMembership({ planName, endDate, color });
+  };
+
+  // Open a BLANK rent form for a NEW vendor profile under the authenticated
+  // email. The email stays locked (emailVerified); submit force-creates a new
+  // vendor so this email can own multiple linked profiles.
+  const startRegisterNew = (email: string) => {
+    setRegisterNewMode(true);
+    setShopkeeperExists(false);
+    setShopkeeperId(null);
+    setStallMembership(null);
+    setShopkeeperDetails({
+      ...initialForm,
+      email,
+      businessEmail: email,
+    });
+    setEmailVerified(true); // Google-verified — keep the primary email locked
+    setRegImageFile(null);
+    setRegImagePreview("");
+    setLogoFile(null);
+    setLogoPreview("");
+    setProductFiles([]);
+    setProductPreviews([]);
+    setExistingProductImages([]);
+    setShowAccountChooser(false);
+    setShowCompletedChoice(false);
+    setShowWhatsAppDialog(false);
+    setShowRentForm(true);
+  };
+
+  // Continue with a specific existing vendor profile: prefill, then route by
+  // that vendor's request status for this event (applyVendorRecord →
+  // fetchExistingRequest). A completed cycle opens the preview/register choice.
+  const continueWithVendor = async (vendor: any, email: string) => {
+    setRegisterNewMode(false);
+    setShowAccountChooser(false);
+    await resolveStallMembership(vendor, email);
+    await applyVendorRecord(vendor);
+  };
+
+  // Google sign-in result handler. Looks up ALL vendor profiles for the email
+  // (linked accounts) and branches: 0 → fresh registration, 1 → continue,
+  // 2+ → account chooser.
   const lookupVendorByEmail = async (email: string) => {
     const clean = String(email || "").trim().toLowerCase();
     if (!clean) {
@@ -1339,75 +1427,33 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       });
       return;
     }
+    setAuthedEmail(clean);
     try {
       const res = await fetch(
-        `${apiURL}/stalls/vendor/by-email/${encodeURIComponent(clean)}`,
+        `${apiURL}/stalls/vendors/by-email/${encodeURIComponent(clean)}`,
       );
-      if (res.ok) {
-        const data = await res.json();
-        const shopData = data.data || data;
-        if (shopData && (shopData.name || shopData.businessName)) {
-          // Active member → load the membership details so the rent form can
-          // show a small card. We don't pause here; the registration form
-          // opens with the card on top.
-          if (shopData.isMember) {
-            let planName = "Member";
-            let endDate: string | undefined = shopData.membershipEndDate;
-            let color: string | undefined;
-            try {
-              const orgId = eventData?.organizer?._id;
-              if (orgId) {
-                const mRes = await fetch(
-                  `${apiURL}/exhibitor-memberships/by-email/${encodeURIComponent(
-                    clean,
-                  )}?organizerId=${orgId}`,
-                );
-                const txt = await mRes.text();
-                const m = txt ? JSON.parse(txt) : null;
-                if (m) {
-                  planName = m.planId?.name || planName;
-                  endDate = m.endDate || endDate;
-                  color = m.planId?.color;
-                }
-              }
-            } catch {
-              // non-fatal — fall back to vendor's denormalised fields
-            }
-            setStallMembership({ planName, endDate, color });
-          } else {
-            setStallMembership(null);
-          }
-          setStallGoogleLoading(false);
-          await applyVendorRecord(shopData);
-          return;
-        }
-      }
-      // No vendor on this email — open a fresh form pre-filled with it.
+      const json = res.ok ? await res.json() : { data: [] };
+      const list: any[] = Array.isArray(json?.data) ? json.data : [];
+      setLinkedVendors(list);
       setStallGoogleLoading(false);
-      setShopkeeperExists(false);
-      setShopkeeperDetails({
-        ...initialForm,
-        email: clean,
-        businessEmail: clean,
-      });
-      setShowWhatsAppDialog(false);
-      setShowRentForm(true);
-      toast({
-        duration: 5000,
-        title: "Let's get you set up",
-        description: "No saved profile found — please fill in your details.",
-      });
+      if (list.length === 0) {
+        startRegisterNew(clean);
+        toast({
+          duration: 5000,
+          title: "Let's get you set up",
+          description: "No saved profile found — please fill in your details.",
+        });
+      } else if (list.length === 1) {
+        await continueWithVendor(list[0], clean);
+      } else {
+        // Multiple linked profiles on this email → let the booker pick one.
+        setShowWhatsAppDialog(false);
+        setShowAccountChooser(true);
+      }
     } catch (error) {
       console.error("Vendor email lookup failed:", error);
       setStallGoogleLoading(false);
-      setShopkeeperExists(false);
-      setShopkeeperDetails({
-        ...initialForm,
-        email: clean,
-        businessEmail: clean,
-      });
-      setShowWhatsAppDialog(false);
-      setShowRentForm(true);
+      startRegisterNew(clean);
     }
   };
 
@@ -2286,13 +2332,25 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       return;
     }
 
-    // Check if vendor has a preferred template and this table doesn't match
-    const preferredId = existingStallRequest?.preferredTemplateId;
-    if (preferredId && table.id !== preferredId) {
+    // Check if vendor has preferred template(s) and this table doesn't match
+    // any of them (combination preferences allow several types).
+    const preferredIds: string[] =
+      Array.isArray(existingStallRequest?.preferredTemplateIds) &&
+      existingStallRequest.preferredTemplateIds.length
+        ? existingStallRequest.preferredTemplateIds
+        : existingStallRequest?.preferredTemplateId
+          ? [existingStallRequest.preferredTemplateId]
+          : [];
+    if (preferredIds.length > 0 && !preferredIds.includes(table.id)) {
+      const label =
+        (Array.isArray(existingStallRequest?.preferredTemplateNames) &&
+          existingStallRequest.preferredTemplateNames.join(", ")) ||
+        existingStallRequest?.preferredTemplateName ||
+        "your selected";
       toast({
         duration: 5000,
         title: "Not Available for Your Category",
-        description: `You registered for "${existingStallRequest?.preferredTemplateName}" spaces only. This space belongs to a different category.`,
+        description: `You registered for "${label}" spaces only. This space belongs to a different category.`,
         variant: "destructive",
       });
       return;
@@ -2646,14 +2704,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             description: "Your tables are selected. Please complete payment.",
           });
         } else if (result.data.status === "Completed") {
-          // Booking completed
+          // Booking completed (paid). Offer: preview the existing booking, or
+          // register a NEW request (a different vendor under the same email).
           setShowWhatsAppDialog(false);
           setShowRentForm(false);
-          toast({
-            duration: 5000,
-            title: "Booking Completed",
-            description: "Your stall booking is confirmed and paid",
-          });
+          setShowAccountChooser(false);
+          setShowCompletedChoice(true);
         } else if (result.data.status === "Approved") {
           // Request approved - go directly to space/table selection
           setShowWhatsAppDialog(false);
@@ -2857,7 +2913,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     const sellableTemplates =
       eventData?.tableTemplates?.filter((t: any) => t.forSale !== false) || [];
     if (sellableTemplates.length > 0) {
-      req(blank(d.preferredTemplateId), "Preferred Space Type");
+      req(
+        !(d.preferredTemplateIds && d.preferredTemplateIds.length > 0),
+        "Preferred Space Type",
+      );
     }
 
     if (missing.length) {
@@ -2883,6 +2942,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       // edits made on the form persist back to the vendors collection.
       if (shopkeeperExists && shopkeeperId) {
         formData.append("shopkeeperId", shopkeeperId);
+      }
+      // "Register a new request": force a brand-new vendor profile even though
+      // the authenticated email already belongs to one or more vendors.
+      if (registerNewMode) {
+        formData.append("forceNewVendor", "true");
       }
       formData.append("shopkeeperName", shopkeeperDetails.name);
       formData.append("shopkeeperEmail", shopkeeperDetails.email);
@@ -2931,10 +2995,26 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         formData.append("faceBookLink", shopkeeperDetails.faceBookLink);
       if (shopkeeperDetails.instagramLink)
         formData.append("instagramLink", shopkeeperDetails.instagramLink);
-      if (shopkeeperDetails.preferredTemplateId)
-        formData.append("preferredTemplateId", shopkeeperDetails.preferredTemplateId);
-      if (shopkeeperDetails.preferredTemplateName)
-        formData.append("preferredTemplateName", shopkeeperDetails.preferredTemplateName);
+      // Multiple preferred space types (combination). Sent as JSON; the legacy
+      // singular fields are kept in sync (first selection) for older paths.
+      const prefIds: string[] = shopkeeperDetails.preferredTemplateIds || [];
+      const prefNames: string[] = shopkeeperDetails.preferredTemplateNames || [];
+      if (prefIds.length > 0) {
+        formData.append("preferredTemplateIds", JSON.stringify(prefIds));
+        formData.append("preferredTemplateNames", JSON.stringify(prefNames));
+        formData.append("preferredTemplateId", prefIds[0]);
+        formData.append("preferredTemplateName", prefNames.join(", "));
+      } else if (shopkeeperDetails.preferredTemplateId) {
+        formData.append(
+          "preferredTemplateId",
+          shopkeeperDetails.preferredTemplateId,
+        );
+        if (shopkeeperDetails.preferredTemplateName)
+          formData.append(
+            "preferredTemplateName",
+            shopkeeperDetails.preferredTemplateName,
+          );
+      }
 
       // Append Files
       if (regImageFile) formData.append("registrationImage", regImageFile);
@@ -5607,9 +5687,47 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                           <div className="text-gray-300 whitespace-nowrap">
                                             {table.width * 10}×{table.height * 10}cm
                                           </div>
-                                          <div className="text-green-400 font-semibold whitespace-nowrap">
-                                            {formatPrice(table.tablePrice)}
-                                          </div>
+                                          {(() => {
+                                            // Show BOTH the member price and the
+                                            // regular price whenever the space
+                                            // has a member price (resolved from
+                                            // the placed space or its template),
+                                            // so any visitor sees both tiers.
+                                            const tpls = Array.isArray(
+                                              (eventData as any)?.tableTemplates,
+                                            )
+                                              ? (eventData as any).tableTemplates
+                                              : [];
+                                            const tpl =
+                                              (table as any).id != null
+                                                ? tpls.find(
+                                                    (t: any) =>
+                                                      t?.id === (table as any).id,
+                                                  )
+                                                : null;
+                                            const member =
+                                              (table as any).memberPrice != null
+                                                ? (table as any).memberPrice
+                                                : tpl?.memberPrice ?? null;
+                                            const regular = table.tablePrice ?? 0;
+                                            const hasMember =
+                                              member != null &&
+                                              Number(member) !== Number(regular);
+                                            return hasMember ? (
+                                              <>
+                                                <div className="text-emerald-400 font-semibold whitespace-nowrap">
+                                                  Member {formatPrice(member)}
+                                                </div>
+                                                <div className="text-gray-400 whitespace-nowrap text-[11px]">
+                                                  Regular {formatPrice(regular)}
+                                                </div>
+                                              </>
+                                            ) : (
+                                              <div className="text-green-400 font-semibold whitespace-nowrap">
+                                                {formatPrice(regular)}
+                                              </div>
+                                            );
+                                          })()}
                                         </div>
 
                                         {/* Arrow tail */}
@@ -8041,6 +8159,107 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         </DialogContent>
       </Dialog>
 
+      {/* Linked-accounts picker: this email owns multiple vendor profiles. */}
+      <Dialog open={showAccountChooser} onOpenChange={setShowAccountChooser}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Store className="h-5 w-5 text-blue-600" />
+              Choose a vendor profile
+            </DialogTitle>
+            <DialogDescription>
+              <span className="font-medium">{authedEmail}</span> has{" "}
+              {linkedVendors.length} linked profiles. Pick the one you want to
+              register with, or add a new one.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2 max-h-[50vh] overflow-y-auto">
+            {linkedVendors.map((v) => (
+              <button
+                key={v._id}
+                type="button"
+                onClick={() => continueWithVendor(v, authedEmail)}
+                className="w-full text-left rounded-lg border border-gray-200 p-3 hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
+              >
+                <p className="font-semibold text-sm text-gray-900">
+                  {v.businessName || v.shopName || v.name || "Vendor"}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {v.name}
+                  {v.whatsAppNumber ? ` · ${v.whatsAppNumber}` : ""}
+                </p>
+              </button>
+            ))}
+          </div>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => startRegisterNew(authedEmail)}
+          >
+            + Register a new profile
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* Completed cycle: preview the existing booking, or register a new one. */}
+      <Dialog open={showCompletedChoice} onOpenChange={setShowCompletedChoice}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Store className="h-5 w-5 text-green-600" />
+              You've already booked this event
+            </DialogTitle>
+            <DialogDescription>
+              This profile has a completed, paid stall for{" "}
+              <span className="font-medium">{eventData?.title}</span>. Preview
+              it below, or register a new request for a different vendor.
+            </DialogDescription>
+          </DialogHeader>
+          {existingStallRequest && (
+            <div className="rounded-lg border border-green-200 bg-green-50/50 p-3 text-sm space-y-1">
+              <div className="flex justify-between gap-3">
+                <span className="text-gray-500">Vendor</span>
+                <span className="font-medium text-right">
+                  {existingStallRequest.shopkeeperId?.businessName ||
+                    existingStallRequest.businessName ||
+                    existingStallRequest.shopkeeperId?.name ||
+                    "—"}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-gray-500">Status</span>
+                <span className="font-medium text-green-700">
+                  Paid · Completed
+                </span>
+              </div>
+              {typeof existingStallRequest.grandTotal === "number" && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500">Total</span>
+                  <span className="font-medium">
+                    {formatPrice(existingStallRequest.grandTotal)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowCompletedChoice(false)}
+            >
+              Close
+            </Button>
+            <Button
+              onClick={() =>
+                startRegisterNew(authedEmail || shopkeeperDetails.email)
+              }
+            >
+              Register a new request
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Table Selection Dialog - NEW */}
       {/* ============================================================ */}
       {/* TABLE SELECTION DIALOG                                        */}
@@ -8177,8 +8396,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 (t) => t.positionId === table.positionId,
                               );
                               const isBooked = table.isBooked;
-                              const preferredId = existingStallRequest?.preferredTemplateId;
-                              const isWrongTemplate = preferredId && table.id !== preferredId;
+                              const preferredIds: string[] =
+                                Array.isArray(
+                                  existingStallRequest?.preferredTemplateIds,
+                                ) &&
+                                existingStallRequest.preferredTemplateIds.length
+                                  ? existingStallRequest.preferredTemplateIds
+                                  : existingStallRequest?.preferredTemplateId
+                                    ? [existingStallRequest.preferredTemplateId]
+                                    : [];
+                              const isWrongTemplate =
+                                preferredIds.length > 0 &&
+                                !preferredIds.includes(table.id);
                               const isWrongCategory = !isCategoryAllowed(table);
                               const isNotForSale = table.forSale === false;
 
@@ -10524,20 +10753,34 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               {/* Preferred Space Template */}
               {eventData?.tableTemplates && eventData.tableTemplates.filter((t: any) => t.forSale !== false).length > 0 && (
                 <div className="space-y-2 border-t pt-4">
-                  <Label>Preferred Space Type <span className="text-red-500">*</span></Label>
-                  <p className="text-[11px] text-gray-400 mb-2">Select the type of space you're interested in. You'll only be able to book spaces of this type.</p>
+                  <Label>Preferred Space Type(s) <span className="text-red-500">*</span></Label>
+                  <p className="text-[11px] text-gray-400 mb-2">Select one or more space types you want to book — you can combine types. You'll only be able to book spaces of the selected type(s).</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {eventData.tableTemplates.filter((t: any) => t.forSale !== false).map((template: any) => {
-                      const isSelected = shopkeeperDetails.preferredTemplateId === template.id;
+                      const ids: string[] = shopkeeperDetails.preferredTemplateIds || [];
+                      const names: string[] = shopkeeperDetails.preferredTemplateNames || [];
+                      const isSelected = ids.includes(template.id);
                       return (
                         <button
                           key={template.id}
                           type="button"
-                          onClick={() => setShopkeeperDetails({
-                            ...shopkeeperDetails,
-                            preferredTemplateId: template.id,
-                            preferredTemplateName: template.name,
-                          })}
+                          onClick={() => {
+                            const has = ids.includes(template.id);
+                            const newIds = has
+                              ? ids.filter((x) => x !== template.id)
+                              : [...ids, template.id];
+                            const newNames = has
+                              ? names.filter((n) => n !== template.name)
+                              : [...names, template.name];
+                            setShopkeeperDetails({
+                              ...shopkeeperDetails,
+                              preferredTemplateIds: newIds,
+                              preferredTemplateNames: newNames,
+                              // Legacy single fields kept in sync for old data paths.
+                              preferredTemplateId: newIds[0] || "",
+                              preferredTemplateName: newNames.join(", "),
+                            });
+                          }}
                           className={`text-left p-3 rounded-xl border-2 transition-all ${isSelected ? "shadow-md" : "border-gray-200 hover:border-gray-300"}`}
                           style={isSelected ? { borderColor: template.color || "#3b82f6", backgroundColor: (template.color || "#3b82f6") + "08" } : {}}
                         >

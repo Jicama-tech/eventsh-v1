@@ -23,6 +23,22 @@ import { CreateCouponDto } from "../coupon/dto/create-coupon.dto";
 import { FeedbackService } from "../feedback/feedback.service";
 import { MailService } from "../roles/mail.service";
 
+// Parse a JSON-encoded string[] (multipart sends arrays as a string). Falls
+// back to a single legacy value when the array form isn't present, so older
+// single-preference clients keep working.
+function parsePreferredArray(json?: string, legacy?: string): string[] {
+  if (json) {
+    try {
+      const a = JSON.parse(json);
+      if (Array.isArray(a)) return a.map((x) => String(x)).filter(Boolean);
+    } catch {
+      // not JSON — fall through and treat as a single bare value
+    }
+    return [String(json)].filter(Boolean);
+  }
+  return legacy ? [String(legacy)] : [];
+}
+
 function formatCurrency(amount: number, country?: string): string {
   if (country === "IN") {
     return new Intl.NumberFormat("en-IN", {
@@ -157,9 +173,17 @@ export class StallsService {
       } else {
         let vendor = null;
 
+        // "Register a new request" (linked accounts) forces a brand-new vendor
+        // even when one with the same email/WhatsApp exists — so the reuse
+        // lookup is skipped. Multipart sends the flag as a string, so coerce.
+        const forceNew =
+          (createStallDto as any).forceNewVendor === true ||
+          (createStallDto as any).forceNewVendor === "true";
+
         if (
-          createStallDto.shopkeeperWhatsAppNumber ||
-          createStallDto.shopkeeperEmail
+          !forceNew &&
+          (createStallDto.shopkeeperWhatsAppNumber ||
+            createStallDto.shopkeeperEmail)
         ) {
           vendor = await this.vendorModel.findOne({
             $or: [
@@ -284,6 +308,14 @@ export class StallsService {
             : vendorImages?.productImage || [],
         preferredTemplateId: createStallDto.preferredTemplateId || null,
         preferredTemplateName: createStallDto.preferredTemplateName || null,
+        preferredTemplateIds: parsePreferredArray(
+          createStallDto.preferredTemplateIds,
+          createStallDto.preferredTemplateId,
+        ),
+        preferredTemplateNames: parsePreferredArray(
+          createStallDto.preferredTemplateNames,
+          createStallDto.preferredTemplateName,
+        ),
       });
 
       const populatedStall = await newStall.populate([
@@ -2270,6 +2302,23 @@ Thank you for choosing Eventsh! 🎊`;
       throw new NotFoundException("Vendor not found");
     }
     return { success: true, data: vendor };
+  }
+
+  // ALL vendor profiles registered under an email (or businessEmail). Powers
+  // the eventfront "linked accounts" picker: one authenticated email can own
+  // several vendor profiles, and the booker chooses which one to register
+  // with (or adds a new one). Returns [] when none — never 404s.
+  async findVendorsByEmail(email: string) {
+    const normalized = String(email || "").trim();
+    if (!normalized) return { success: true, data: [] };
+    const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const emailRegex = new RegExp(`^${escaped}$`, "i");
+    const vendors = await this.vendorModel
+      .find({ $or: [{ email: emailRegex }, { businessEmail: emailRegex }] })
+      .sort({ createdAt: 1 })
+      .lean()
+      .exec();
+    return { success: true, data: vendors };
   }
 
   async findAll() {

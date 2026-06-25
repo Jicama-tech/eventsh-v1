@@ -83,12 +83,22 @@ export class Stall {
   @Prop({ type: Types.ObjectId, ref: "Organizer", required: true })
   organizerId: Types.ObjectId;
 
-  // Preferred space template — vendor's interest during registration
+  // Preferred space template — vendor's interest during registration.
+  // Singular fields kept for legacy / backward compatibility.
   @Prop({ default: null })
   preferredTemplateId: string;
 
   @Prop({ default: null })
   preferredTemplateName: string;
+
+  // Multiple preferred templates — lets a vendor register interest in a
+  // COMBINATION of space types. Selection on the venue map is restricted to
+  // any template in this set (falls back to the singular field above).
+  @Prop({ type: [String], default: [] })
+  preferredTemplateIds: string[];
+
+  @Prop({ type: [String], default: [] })
+  preferredTemplateNames: string[];
 
   // Payment verification
   @Prop({ default: null })
