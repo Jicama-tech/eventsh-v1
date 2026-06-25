@@ -1498,7 +1498,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           ? d.contactPhoneNames
           : p.contactPhoneNames,
         address: d?.address ?? p.address,
-        description: d?.description ?? p.description,
+        // The "About Organizer" text on the event page reads description first,
+        // then bio. Registration captures it as `bio`, so seed the Settings
+        // field from bio when description is empty — otherwise the organizer
+        // sees their About text on the event page but an empty field here.
+        description: d?.description ?? d?.bio ?? p.description,
         receiptType: d?.receiptType ?? p.receiptType,
         termsAndConditions: d?.termsAndConditions ?? p.termsAndConditions,
         businessCategory: d?.businessCategory ?? p.businessCategory,
@@ -2621,9 +2625,10 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 />
               </div>
 
-              {/* DESCRIPTION */}
+              {/* DESCRIPTION — shown publicly in "About Organizer" on the
+                  event page (this is the same text captured at registration). */}
               <div className="md:col-span-2">
-                <Label>Description</Label>
+                <Label>Description (About Organizer)</Label>
                 <Textarea
                   value={shopProfile.description}
                   onChange={(e) =>
@@ -2632,8 +2637,12 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       description: e.target.value,
                     }))
                   }
-                  placeholder="Tell customers about your shop and services"
+                  placeholder="Tell visitors about your organization — this appears in the “About Organizer” section on your event page."
                 />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Shown publicly in the “About Organizer” section of your event
+                  page.
+                </p>
               </div>
 
               <div className="md:col-span-2">
