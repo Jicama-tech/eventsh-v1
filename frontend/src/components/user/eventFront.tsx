@@ -475,6 +475,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // Shown when the chosen vendor has already COMPLETED (paid) a stall for this
   // event: preview the existing booking, or register a new request.
   const [showCompletedChoice, setShowCompletedChoice] = useState(false);
+  // Second step inside the completed-choice dialog: after the booker clicks
+  // "Register a new request" we reveal two paths — register again under THIS
+  // same vendor profile (for yourself), or spin up a brand-new linked vendor.
+  const [showRegisterTargetChoice, setShowRegisterTargetChoice] =
+    useState(false);
   // When true the rent form is blank (except the locked authenticated email)
   // and submit force-creates a new vendor profile.
   const [registerNewMode, setRegisterNewMode] = useState(false);
@@ -1398,6 +1403,23 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     setExistingProductImages([]);
     setShowAccountChooser(false);
     setShowCompletedChoice(false);
+    setShowRegisterTargetChoice(false);
+    setShowWhatsAppDialog(false);
+    setShowRentForm(true);
+  };
+
+  // Open the rent form to register ANOTHER request under the SAME vendor
+  // profile the booker just previewed. The profile is already prefilled (we got
+  // here via continueWithVendor → applyVendorRecord), so we keep shopkeeperId /
+  // shopkeeperExists intact and ensure registerNewMode is off — submit then
+  // passes the existing shopkeeperId (no forceNewVendor), and the backend's
+  // existing-request guard ignores Completed bookings, so a fresh Pending stall
+  // is created under this same vendor.
+  const startRegisterForSelf = () => {
+    setRegisterNewMode(false);
+    setShowRegisterTargetChoice(false);
+    setShowCompletedChoice(false);
+    setShowAccountChooser(false);
     setShowWhatsAppDialog(false);
     setShowRentForm(true);
   };
@@ -2709,6 +2731,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           setShowWhatsAppDialog(false);
           setShowRentForm(false);
           setShowAccountChooser(false);
+          setShowRegisterTargetChoice(false);
           setShowCompletedChoice(true);
         } else if (result.data.status === "Approved") {
           // Request approved - go directly to space/table selection
@@ -8207,7 +8230,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       </Dialog>
 
       {/* Completed cycle: preview the existing booking, or register a new one. */}
-      <Dialog open={showCompletedChoice} onOpenChange={setShowCompletedChoice}>
+      <Dialog
+        open={showCompletedChoice}
+        onOpenChange={(open) => {
+          setShowCompletedChoice(open);
+          if (!open) setShowRegisterTargetChoice(false);
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -8247,21 +8276,63 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               )}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-2 pt-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowCompletedChoice(false)}
-            >
-              Close
-            </Button>
-            <Button
-              onClick={() =>
-                startRegisterNew(authedEmail || shopkeeperDetails.email)
-              }
-            >
-              Register a new request
-            </Button>
-          </div>
+          {!showRegisterTargetChoice ? (
+            // Step 1 — preview the existing booking, or start a new request.
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowCompletedChoice(false)}
+              >
+                Close
+              </Button>
+              <Button onClick={() => setShowRegisterTargetChoice(true)}>
+                Register a new request
+              </Button>
+            </div>
+          ) : (
+            // Step 2 — who is this new request for? Reuse THIS profile, or
+            // create a brand-new linked vendor account under the same email.
+            <div className="space-y-2 pt-2">
+              <p className="text-sm font-medium text-gray-700">
+                Who is this new request for?
+              </p>
+              <button
+                type="button"
+                onClick={startRegisterForSelf}
+                className="w-full text-left rounded-lg border border-gray-200 p-3 hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
+              >
+                <p className="font-semibold text-sm text-gray-900">
+                  Register for yourself
+                </p>
+                <p className="text-xs text-gray-500">
+                  Book again using this same vendor profile.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  startRegisterNew(authedEmail || shopkeeperDetails.email)
+                }
+                className="w-full text-left rounded-lg border border-gray-200 p-3 hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
+              >
+                <p className="font-semibold text-sm text-gray-900">
+                  Register for a new vendor
+                </p>
+                <p className="text-xs text-gray-500">
+                  Create a separate vendor account under{" "}
+                  {authedEmail || shopkeeperDetails.email}. You'll be able to
+                  pick between your accounts next time.
+                </p>
+              </button>
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => setShowRegisterTargetChoice(false)}
+              >
+                Back
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

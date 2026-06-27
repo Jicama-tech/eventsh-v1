@@ -7563,7 +7563,11 @@ export function CreateEventForm({
           key === "features" ||
           key === "tags" ||
           key === "socialMedia" ||
-          key === "categories"
+          key === "categories" ||
+          // Object-valued — must be JSON-encoded, NOT left to FormData's string
+          // coercion (which turns it into the literal "[object Object]" that the
+          // backend can't parse, wiping the per-section visibility on save).
+          key === "sectionVisibility"
         ) {
           data.append(key, JSON.stringify(value));
         } else {
@@ -7691,11 +7695,10 @@ export function CreateEventForm({
         ),
       );
 
-      // Per-section eventfront visibility map.
-      data.append(
-        "sectionVisibility",
-        JSON.stringify(formData.sectionVisibility || {}),
-      );
+      // NOTE: sectionVisibility is appended (JSON-encoded) by the generic
+      // formData loop above. Do NOT append it again here — a second field with
+      // the same name makes the backend receive an array it can't parse, which
+      // silently wiped the per-section visibility on every save.
 
       data.append("organizerId", organizer.sub);
 
@@ -10587,8 +10590,7 @@ export function CreateEventForm({
                                       : "Per Chair"}
                                   </span>
                                 </div>
-                                <div className="flex justify-between">
-                                  <span>Price:</span>
+                                <div className="flex justify-between">                                  <span>Price:</span>
                                   <span className="font-semibold">
                                     {template.sellingMode === "table"
                                       ? formatPrice(template.tablePrice)

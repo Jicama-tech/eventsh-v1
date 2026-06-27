@@ -3,9 +3,12 @@ import {
   Controller,
   Post,
   Req,
+  Res,
+  Query,
   UseGuards,
   Get,
 } from "@nestjs/common";
+import { Response } from "express";
 import { AuthGuard } from "@nestjs/passport";
 import { ChatbotService } from "./chatbot.service";
 
@@ -99,6 +102,27 @@ export class ChatbotController {
   @Get("health")
   health() {
     return { ok: true, provider: this.chatbot.activeProvider };
+  }
+
+  // Download the organizer guide as a PDF. `slug` picks a single topic;
+  // omit it (or pass "all") for the complete guide. Public + static content
+  // (no org data), so no auth is required — the browser can hit it directly
+  // from a download link.
+  @Get("guide/pdf")
+  async guidePdf(@Query("slug") slug: string, @Res() res: Response) {
+    try {
+      const { buffer, filename } = await this.chatbot.generateGuidePdf(slug);
+      res.set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Length": String(buffer.length),
+      });
+      res.end(buffer);
+    } catch (err: any) {
+      res
+        .status(400)
+        .json({ success: false, message: err?.message || "Guide not found" });
+    }
   }
 
   // TEMP diagnostic: hit /chatbot/debug/individual?email=foo@bar.com OR
