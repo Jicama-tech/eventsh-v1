@@ -56,6 +56,9 @@ import {
   MessageSquare,
   Copy,
   ExternalLink,
+  BookOpen,
+  Download,
+  FileText,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -141,6 +144,19 @@ interface IndividualParticipant {
   used?: boolean;
 }
 
+interface GuideTopicMeta {
+  slug: string;
+  title: string;
+  summary: string;
+}
+
+interface GuidePayload {
+  intro: string;
+  topics: GuideTopicMeta[];
+  /** Path the frontend appends `?slug=<slug|all>` to for the PDF download. */
+  pdfBasePath: string;
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
@@ -153,6 +169,8 @@ interface Message {
   // thread when the bot returns event/participant data.
   events?: IndividualEventCard[];
   participants?: IndividualParticipant[];
+  // Organizer guide: topic catalog + downloadable PDF links (Guide pill).
+  guide?: GuidePayload;
   ts: number;
 }
 
@@ -207,6 +225,47 @@ type SuggestionCard = {
 };
 
 const SUGGESTION_CARDS: SuggestionCard[] = [
+  // ========== GUIDE ==========
+  {
+    category: "Guide",
+    Icon: BookOpen,
+    tint: "text-indigo-600 bg-indigo-50",
+    title: "Guide",
+    sub: "Full how-to: setup, tickets, stalls & more — download as PDF",
+    prompt: "Show me the complete organizer guide",
+  },
+  {
+    category: "Guide",
+    Icon: Ticket,
+    tint: "text-indigo-600 bg-indigo-50",
+    title: "How visitors book tickets",
+    sub: "Step-by-step ticket booking flow + PDF",
+    prompt: "How do visitors book a ticket?",
+  },
+  {
+    category: "Guide",
+    Icon: Store,
+    tint: "text-indigo-600 bg-indigo-50",
+    title: "How vendors book stalls",
+    sub: "Step-by-step stall rental flow + PDF",
+    prompt: "How do vendors rent a stall?",
+  },
+  {
+    category: "Guide",
+    Icon: Grid3x3,
+    tint: "text-indigo-600 bg-indigo-50",
+    title: "How to reserve round tables",
+    sub: "Step-by-step round-table seat booking + PDF",
+    prompt: "How do visitors reserve round-table seats?",
+  },
+  {
+    category: "Guide",
+    Icon: Mic2,
+    tint: "text-indigo-600 bg-indigo-50",
+    title: "How speakers apply",
+    sub: "Step-by-step speaker application flow + PDF",
+    prompt: "How do speakers apply to speak?",
+  },
   // ========== ANALYTICS / DASHBOARD ==========
   {
     category: "Analytics",
@@ -833,6 +892,49 @@ function renderMarkdown(text: string): React.ReactNode {
       );
       continue;
     }
+    // Headings (#, ##, ###…). Rendered as weighted text rather than raw
+    // <h*> so they sit naturally inside a chat bubble.
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)/);
+    if (headingMatch) {
+      flushList();
+      const lvl = headingMatch[1].length;
+      const cls =
+        lvl <= 1
+          ? "text-base font-bold mt-2 mb-1 text-slate-900"
+          : lvl === 2
+            ? "text-sm font-semibold mt-2 mb-1 text-indigo-700"
+            : "text-xs font-semibold mt-1.5 mb-0.5 text-slate-700";
+      out.push(
+        <p
+          key={`h-${key++}`}
+          className={cls}
+          dangerouslySetInnerHTML={{ __html: formatInline(headingMatch[2]) }}
+        />,
+      );
+      i++;
+      continue;
+    }
+    // Horizontal rule.
+    if (/^---+$/.test(line.trim())) {
+      flushList();
+      out.push(<hr key={`hr-${key++}`} className="my-2 border-slate-200" />);
+      i++;
+      continue;
+    }
+    // Blockquote. The leading ">" has already been HTML-escaped to "&gt;".
+    const quoteMatch = line.match(/^&gt;\s?(.*)/);
+    if (quoteMatch) {
+      flushList();
+      out.push(
+        <blockquote
+          key={`q-${key++}`}
+          className="border-l-2 border-indigo-300 pl-2 my-1 text-slate-600 italic"
+          dangerouslySetInnerHTML={{ __html: formatInline(quoteMatch[1]) }}
+        />,
+      );
+      i++;
+      continue;
+    }
     const ulMatch = line.match(/^[\s]*[-*]\s+(.*)/);
     const olMatch = line.match(/^[\s]*\d+\.\s+(.*)/);
     if (ulMatch) {
@@ -1177,6 +1279,7 @@ export function ChatbotWidget({
           botAction: data.botAction,
           events: data.events,
           participants: data.participants,
+          guide: data.guide,
           ts: Date.now(),
         };
         setMessages((prev) => [...prev, botMsg]);
@@ -1641,6 +1744,53 @@ export function ChatbotWidget({
                       ))}
                     </div>
                   )}
+                {/* Organizer guide: download the whole thing or any topic */}
+                {m.role === "assistant" && m.guide && (
+                  <div className="ml-9 mt-2 space-y-2">
+                    <button
+                      onClick={() =>
+                        window.open(
+                          `${apiURL}${m.guide!.pdfBasePath}?slug=all`,
+                          "_blank",
+                        )
+                      }
+                      className="w-full inline-flex items-center justify-center gap-2 text-xs font-semibold px-3 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download complete guide (PDF)
+                    </button>
+                    <div className="grid grid-cols-1 gap-1.5">
+                      {m.guide.topics.map((t) => (
+                        <div
+                          key={t.slug}
+                          className="flex items-center justify-between gap-3 border border-slate-200 rounded-lg p-2.5 bg-white"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 text-sm font-medium text-slate-900">
+                              <FileText className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                              <span className="truncate">{t.title}</span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">
+                              {t.summary}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() =>
+                              window.open(
+                                `${apiURL}${m.guide!.pdfBasePath}?slug=${t.slug}`,
+                                "_blank",
+                              )
+                            }
+                            className="shrink-0 inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50/60 hover:bg-indigo-100 transition"
+                          >
+                            <Download className="h-3 w-3" />
+                            PDF
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {/* Navigate hint */}
                 {m.role === "assistant" && m.botAction?.type === "navigate" && (
                   <div className="ml-9 mt-1.5">

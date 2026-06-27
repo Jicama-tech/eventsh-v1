@@ -744,12 +744,41 @@ export class EventsController {
         body.image = `/uploads/events/${files.banner[0].filename}`;
       }
 
-      // Handle new gallery images
-      if (files.gallery && files.gallery.length > 0) {
+      // Rebuild the gallery from the manifest so editing an event MERGES the
+      // images the organizer kept with any newly uploaded ones — instead of
+      // replacing the whole gallery with just the new files (which dropped the
+      // existing images). The manifest lists every image to keep, in order;
+      // each "new" entry consumes the next uploaded file, in the same order the
+      // client appended them under the "gallery" field.
+      let galleryManifest: any[] | null = null;
+      if (typeof body.galleryManifest === "string") {
+        try {
+          galleryManifest = JSON.parse(body.galleryManifest);
+        } catch {
+          galleryManifest = null;
+        }
+      }
+      if (Array.isArray(galleryManifest)) {
+        const newGalleryFiles = files.gallery || [];
+        let newFileIdx = 0;
+        body.gallery = galleryManifest
+          .map((item: any) => {
+            if (item?.type === "new") {
+              const file = newGalleryFiles[newFileIdx++];
+              return file ? `/uploads/events/${file.filename}` : null;
+            }
+            // "existing" — keep the previously stored URL as-is.
+            return item?.url || null;
+          })
+          .filter((url: string | null): url is string => !!url);
+      } else if (files.gallery && files.gallery.length > 0) {
+        // Legacy clients that don't send a manifest: keep the old behaviour.
         body.gallery = files.gallery.map(
           (file) => `/uploads/events/${file.filename}`,
         );
       }
+      // Never persist the helper manifest onto the event document.
+      delete body.galleryManifest;
 
       // 3. Handle Add-On Images (Mapping new files to correct items)
       if (
