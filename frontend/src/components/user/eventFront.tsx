@@ -4067,7 +4067,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 : image
             }
             alt={title}
-            className="block w-full h-auto min-h-[200px] object-contain bg-gray-100 sm:min-h-0 sm:bg-transparent"
+            className="block w-full h-48 object-cover object-center sm:h-auto"
             onError={(e) => {
               e.currentTarget.style.display = "none";
             }}
@@ -11403,7 +11403,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               <button
                                 type="button"
                                 onClick={() => togglePreferredType(template)}
-                                disabled={!isSelected && atCap}
+                                disabled={
+                                  !isSelected && atCap && maxSpacesPerVendor > 1
+                                }
                                 className="w-full text-left disabled:opacity-50"
                               >
                                 <div className="mb-1 flex items-center gap-2">
