@@ -284,7 +284,7 @@ export function ExhibitorDetailDialog({
         {stallRequest && (
           <div className="space-y-6" ref={detailRef}>
             {/* Status and Payment */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm">Request Status</CardTitle>
@@ -456,7 +456,7 @@ export function ExhibitorDetailDialog({
                   Shopkeeper Information
                 </CardTitle>
               </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-4">
+              <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {stallRequest.companyLogo && (
                   <div className="col-span-2 mb-2 flex items-center gap-4">
                     <img
@@ -719,6 +719,38 @@ export function ExhibitorDetailDialog({
                   </div>
                 )}
 
+                {/* Vendor's preferred space type(s), with requested quantity. */}
+                {(() => {
+                  const sr = stallRequest as any;
+                  const names: string[] =
+                    Array.isArray(sr.preferredTemplateNames) &&
+                    sr.preferredTemplateNames.length
+                      ? sr.preferredTemplateNames
+                      : sr.preferredTemplateName
+                        ? [sr.preferredTemplateName]
+                        : [];
+                  if (!names.length) return null;
+                  const qtys: any[] = Array.isArray(
+                    sr.preferredTemplateQuantities,
+                  )
+                    ? sr.preferredTemplateQuantities
+                    : [];
+                  const label = names
+                    .map((n, i) => {
+                      const q = Number(qtys[i]) || 1;
+                      return q > 1 ? `${n} × ${q}` : n;
+                    })
+                    .join(", ");
+                  return (
+                    <div className="pt-2 border-t">
+                      <Label className="text-muted-foreground">
+                        Preferred Space Type(s)
+                      </Label>
+                      <p className="font-medium">{label}</p>
+                    </div>
+                  );
+                })()}
+
                 {stallRequest.registrationImage && (
                   <div className="col-span-2 pt-2 border-t">
                     <Label className="text-muted-foreground block mb-2">
@@ -792,7 +824,7 @@ export function ExhibitorDetailDialog({
                 <CardTitle className="text-lg">Event Information</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label className="text-muted-foreground">Event Title</Label>
                     <div className="flex items-center gap-2">
@@ -809,7 +841,7 @@ export function ExhibitorDetailDialog({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 p-3 bg-muted/30 rounded-lg">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-muted/30 rounded-lg">
                   <div>
                     <Label className="text-muted-foreground flex items-center gap-1">
                       <Calendar className="w-3 h-3" /> Duration
@@ -886,7 +918,7 @@ export function ExhibitorDetailDialog({
                     </div>
                   )}
 
-                <div className="grid grid-cols-2 gap-4 border-t pt-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4">
                   <div>
                     <Label className="text-muted-foreground">Dress Code</Label>
                     <p className="text-sm font-medium">

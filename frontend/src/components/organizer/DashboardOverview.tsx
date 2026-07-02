@@ -1247,7 +1247,7 @@ export default function DashboardOverview({
 
       {/* Events Tabs */}
       <Tabs defaultValue="current" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 h-auto">
+        <TabsList className="grid w-full grid-cols-3 h-auto [&>button]:whitespace-nowrap [&>button]:px-1 [&>button]:text-xs sm:[&>button]:px-3 sm:[&>button]:text-sm">
           <TabsTrigger value="current">
             Current Events ({currentEvents.length})
           </TabsTrigger>

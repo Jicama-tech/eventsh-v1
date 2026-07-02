@@ -316,6 +316,18 @@ export class StallsService {
           createStallDto.preferredTemplateNames,
           createStallDto.preferredTemplateName,
         ),
+        preferredTemplateQuantities: (() => {
+          try {
+            const q = JSON.parse(
+              createStallDto.preferredTemplateQuantities || "[]",
+            );
+            return Array.isArray(q)
+              ? q.map((n: any) => Math.max(1, Math.floor(Number(n) || 1)))
+              : [];
+          } catch {
+            return [];
+          }
+        })(),
       });
 
       const populatedStall = await newStall.populate([
@@ -422,6 +434,47 @@ export class StallsService {
         );
       }
 
+      // Enforce the organizer's per-space-type booking cap (maxPerBooking on
+      // each stall template, e.g. max 1 large + 2 small). Resolve each
+      // selected position to its source template, count per template, and
+      // reject if any type exceeds its cap. Blank / 0 = unlimited.
+      const templatesById: Record<string, any> = {};
+      (event.tableTemplates || []).forEach((tpl: any) => {
+        if (tpl?.id) templatesById[tpl.id] = tpl;
+      });
+      const posToTemplateId: Record<string, string> = {};
+      allTables.forEach((t: any) => {
+        if (t?.positionId) posToTemplateId[t.positionId] = t.id;
+      });
+      const countByTemplate: Record<string, number> = {};
+      for (const sel of selectDto.selectedTables) {
+        const tplId = posToTemplateId[sel.positionId] || (sel as any).tableId;
+        if (!tplId) continue;
+        countByTemplate[tplId] = (countByTemplate[tplId] || 0) + 1;
+      }
+      for (const [tplId, count] of Object.entries(countByTemplate)) {
+        const max = Number(templatesById[tplId]?.maxPerBooking);
+        if (Number.isFinite(max) && max > 0 && count > max) {
+          const name = templatesById[tplId]?.name || "this type";
+          throw new BadRequestException(
+            `You can select at most ${max} "${name}" space${max === 1 ? "" : "s"} per booking.`,
+          );
+        }
+      }
+
+      // Event-level total cap: a vendor can't book more spaces than
+      // maxSpacesPerVendor across all types.
+      const maxTotal = Number(event.maxSpacesPerVendor);
+      if (
+        Number.isFinite(maxTotal) &&
+        maxTotal > 0 &&
+        selectDto.selectedTables.length > maxTotal
+      ) {
+        throw new BadRequestException(
+          `You can book at most ${maxTotal} space${maxTotal === 1 ? "" : "s"} for this event.`,
+        );
+      }
+
       const tablesTotal = selectDto.selectedTables.reduce(
         (sum, table) => sum + table.price,
         0,
@@ -523,13 +576,13 @@ export class StallsService {
           const html = `
             <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
               <div style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:24px;text-align:center">
-                <h1 style="margin:0;font-size:20px">Booking Accepted ✅</h1>
+                <h1 style="margin:0;font-size:20px">Booking Received ✅</h1>
                 <p style="margin:6px 0 0;opacity:.9">${event.title}</p>
               </div>
               <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
                 <p>Hi ${vendor?.name || "there"},</p>
                 <p>Your booking for <strong>${event.title}</strong> has been
-                  <strong>accepted</strong> and your payment details have been
+                  <strong>received</strong> and your payment details have been
                   submitted.</p>
                 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin:14px 0">
                   <p style="margin:0 0 6px"><strong>Spaces:</strong> ${tableNames || "—"}</p>
@@ -547,7 +600,7 @@ export class StallsService {
             </div>`;
           await this.mailService.sendEmail({
             to: vendorEmail,
-            subject: `Booking accepted — awaiting payment approval for ${event.title}`,
+            subject: `Booking received — awaiting payment approval for ${event.title}`,
             html,
             senderConfig,
           });
@@ -722,6 +775,15 @@ export class StallsService {
       const organizerDoc = await this.organizerModel.findById(orgId);
       const country = organizerDoc?.country || "IN";
 
+      // Persist the coupon assignment now so the confirm response returns
+      // immediately. The ticket PDF render (headless Chromium) + email/WhatsApp
+      // delivery then run OUT-OF-BAND below: in production they were slow enough
+      // to exceed the request/gateway timeout, and when delivery threw the error
+      // was swallowed — which is why the organizer had to "Resend". Background
+      // delivery failures are logged; "Resend ticket" remains the fallback.
+      await stall.save();
+
+      const deliverStallTicket = async () => {
       const pdfBuffer = await this.generateStallTicketPDF(
         stall,
         qrCodeBase64,
@@ -804,15 +866,25 @@ export class StallsService {
           }`,
         );
       }
+      };
+
+      // Fire-and-forget: never block the confirm response on PDF + delivery.
+      void deliverStallTicket().catch((err) =>
+        this.logger.error(
+          `Background stall ticket delivery failed for stall ${stallId}: ${
+            (err as any)?.message || err
+          }`,
+        ),
+      );
 
       this.logger.log(
-        `Payment confirmed and stall ticket sent for stall ${stallId}`,
+        `Payment confirmed for stall ${stallId}; ticket delivery started in background`,
       );
 
       return {
         success: true,
         message:
-          "Payment confirmed and stall ticket sent to the vendor (email + WhatsApp)",
+          "Payment confirmed. The stall ticket is being generated and sent to the vendor.",
         data: stall,
       };
     } catch (error) {
@@ -1001,7 +1073,7 @@ export class StallsService {
       <body>
         <div class="container">
           <div class="header">
-            <h1>EVENTSH STALL CONFIRMATION</h1>
+            <h1>${organizer.organizationName || organizer.name || "EventSH"}</h1>
             <p>Your stall has been successfully booked</p>
           </div>
 
@@ -1138,7 +1210,7 @@ export class StallsService {
           }
 
           <div class="footer">
-            © ${new Date().getFullYear()} Eventsh. All rights reserved.
+            Powered by EventSH
           </div>
         </div>
       </body>
@@ -1166,7 +1238,7 @@ export class StallsService {
     });
 
     const page = await browser.newPage();
-    await page.setContent(await html, { waitUntil: "networkidle0" });
+    await page.setContent(await html, { waitUntil: "networkidle0", timeout: 20000 });
 
     const uint8arrayBuffer = await page.pdf({
       format: "A4",
@@ -1566,6 +1638,53 @@ Thank you for choosing Eventsh! 🎊`;
           const eventDate = event?.startDate
             ? new Date(event.startDate).toLocaleDateString()
             : "TBA";
+
+          // Preferred space types the vendor selected, each with its price in
+          // the organizer's currency (there can be several).
+          const fullEvent: any = event?._id
+            ? await this.eventModel
+                .findById(event._id)
+                .lean()
+                .catch(() => null)
+            : null;
+          const templates: any[] =
+            fullEvent?.tableTemplates || event?.tableTemplates || [];
+          const tplById: Record<string, any> = {};
+          templates.forEach((t: any) => {
+            if (t?.id) tplById[t.id] = t;
+          });
+          const organizerForCur: any = await this.organizerModel
+            .findById(stall.organizerId)
+            .lean()
+            .catch(() => null);
+          const curCountry = organizerForCur?.country || "IN";
+          const prefIds: string[] =
+            Array.isArray(stall.preferredTemplateIds) &&
+            stall.preferredTemplateIds.length
+              ? stall.preferredTemplateIds
+              : stall.preferredTemplateId
+                ? [stall.preferredTemplateId]
+                : [];
+          // Inline "Name (price)" per selected type, e.g. "Small Space (₹10)".
+          const prefInline = prefIds
+            .map((id: string, i: number) => {
+              const t = tplById[id];
+              const nm =
+                t?.name ||
+                (stall.preferredTemplateNames &&
+                  stall.preferredTemplateNames[i]) ||
+                "Space";
+              const price = t?.tablePrice ?? t?.bookingPrice;
+              const priceStr =
+                price != null && !isNaN(Number(price))
+                  ? formatCurrency(Number(price), curCountry)
+                  : null;
+              const qty = Number(stall.preferredTemplateQuantities?.[i]) || 1;
+              const label = qty > 1 ? `${nm} × ${qty}` : nm;
+              return priceStr ? `${label} (${priceStr})` : label;
+            })
+            .join(", ");
+
           const html = `
             <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
               <div style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:24px;text-align:center">
@@ -1581,6 +1700,11 @@ Thank you for choosing Eventsh! 🎊`;
                   <tr><td style="padding:4px 14px 4px 0;color:#64748b">Date</td><td style="padding:4px 0;font-weight:600">${eventDate}</td></tr>
                   <tr><td style="padding:4px 14px 4px 0;color:#64748b">Status</td><td style="padding:4px 0;font-weight:600">Pending approval</td></tr>
                 </table>
+                ${
+                  prefInline
+                    ? `<p style="margin:14px 0"><strong>Preferred space types selected:</strong> ${prefInline}</p>`
+                    : ""
+                }
                 <p>We'll email you as soon as the organizer approves or rejects your request.</p>
                 <p style="color:#64748b;font-size:12px;margin-top:16px">Thank you for registering!</p>
               </div>
@@ -2603,10 +2727,16 @@ Thank you for choosing Eventsh! 🎊`;
         (s.selectedTables || []).map((t) => t.positionId),
       );
 
-      const tablesWithStatus = event.venueTables.map((table) => ({
-        ...table,
-        isBooked: bookedPositionIds.includes(table.positionId),
-      }));
+      // Use toObject() so the FULL stall data (color, dimensions, template id,
+      // …) is copied — spreading a Mongoose subdocument directly drops the data
+      // fields, which stripped `color` and made every space render green.
+      const tablesWithStatus = event.venueTables.map((table: any) => {
+        const t = table?.toObject ? table.toObject() : table;
+        return {
+          ...t,
+          isBooked: bookedPositionIds.includes(t.positionId),
+        };
+      });
 
       const availableTables = tablesWithStatus.filter((t) => !t.isBooked);
       const bookedTables = tablesWithStatus.filter((t) => t.isBooked);

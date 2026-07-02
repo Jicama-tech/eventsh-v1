@@ -302,6 +302,11 @@ export class EventsService {
         },
         image: createEventDto.image,
         gallery: createEventDto.gallery || [],
+        sponsors: createEventDto.sponsors || [],
+        maxSpacesPerVendor:
+          createEventDto.maxSpacesPerVendor != null
+            ? Number(createEventDto.maxSpacesPerVendor)
+            : 1,
         tableTemplates: createEventDto.tableTemplates || [],
         termsAndConditionsforStalls:
           createEventDto.termsAndConditionsforStalls || [],
@@ -352,6 +357,10 @@ export class EventsService {
           createEventDto.organizerId,
           createEventDto.tableTemplates,
         )
+        .catch(() => {});
+      // Also snapshot each venue as a reusable layout template.
+      this.templatesService
+        .captureVenueLayoutTemplates(createEventDto.organizerId, createEventDto)
         .catch(() => {});
 
       return savedEvent;
@@ -488,6 +497,11 @@ export class EventsService {
         (updatedEvent as any)?.tableTemplates;
       this.templatesService
         .captureSpaceTemplates(orgId, tplSource)
+        .catch(() => {});
+      // Snapshot each venue as a reusable layout template (uses the fully
+      // merged saved doc so config + placed stalls are current).
+      this.templatesService
+        .captureVenueLayoutTemplates(orgId, updatedEvent)
         .catch(() => {});
 
       return updatedEvent;

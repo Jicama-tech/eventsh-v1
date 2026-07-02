@@ -166,6 +166,13 @@ export class AddOnItemDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  @IsNumber()
+  @IsOptional()
+  maxPerSpace?: number;
+
+  @IsOptional()
+  maxPerTemplate?: Record<string, number>;
 }
 
 // Venue configs (now array, includes venueConfigId)
@@ -210,6 +217,9 @@ export class VenueConfigDto {
   @IsBoolean() @IsOptional() cropped?: boolean;
   @IsNumber() @IsOptional() cropWidth?: number;
   @IsNumber() @IsOptional() cropHeight?: number;
+  // Public visibility — false hides this venue from the eventfront + vendor
+  // selection tabs. Defaults to true when unset.
+  @IsBoolean() @IsOptional() published?: boolean;
 }
 
 export class SpeakerSlotTemplateDto {
@@ -532,6 +542,17 @@ export class CreateEventDto {
   @IsString({ each: true })
   @IsOptional()
   gallery?: string[];
+
+  // Event sponsor logo URLs — shown as a moving carousel on the eventfront.
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  sponsors?: string[];
+
+  // Max total spaces a single vendor may request/book. Default 1.
+  @IsNumber()
+  @IsOptional()
+  maxSpacesPerVendor?: number;
 
   // Instagram reel URLs — capped client-side at 10; surfaced as a
   // reel carousel on the eventfront. Loose string validation here so

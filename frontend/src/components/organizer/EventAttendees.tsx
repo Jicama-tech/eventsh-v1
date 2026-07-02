@@ -946,6 +946,28 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       if (stallRequest.registrationNumber) {
         labelValue("Registration Number", stallRequest.registrationNumber);
       }
+      {
+        const sr = stallRequest as any;
+        const prefNames: string[] =
+          Array.isArray(sr.preferredTemplateNames) &&
+          sr.preferredTemplateNames.length
+            ? sr.preferredTemplateNames
+            : sr.preferredTemplateName
+              ? [sr.preferredTemplateName]
+              : [];
+        if (prefNames.length) {
+          const qtys: any[] = Array.isArray(sr.preferredTemplateQuantities)
+            ? sr.preferredTemplateQuantities
+            : [];
+          const pref = prefNames
+            .map((n, i) => {
+              const q = Number(qtys[i]) || 1;
+              return q > 1 ? `${n} x ${q}` : n;
+            })
+            .join(", ");
+          labelValue("Preferred Space Type(s)", pref);
+        }
+      }
       labelValue("Business Address", stallRequest.shopkeeperId?.address);
       if (stallRequest.refundPaymentDescription) {
         labelValue(
@@ -2246,7 +2268,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 value={detailTab}
                 onValueChange={(v) => setDetailTab(v as any)}
               >
-                <TabsList className={`grid w-full ${colsClass}`}>
+                <TabsList
+                  className={`flex w-full justify-start overflow-x-auto md:grid ${colsClass} [&>button]:shrink-0 [&>button]:whitespace-nowrap`}
+                >
                   {sections.visitors && (
                     <TabsTrigger value="visitors">Visitors</TabsTrigger>
                   )}

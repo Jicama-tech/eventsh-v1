@@ -11,6 +11,7 @@ import {
   UploadedFile,
   UseInterceptors,
   UploadedFiles,
+  BadRequestException,
 } from "@nestjs/common";
 import { OrganizerStoresService } from "./organizer-stores.service";
 import { CreateOrganizerStoreDto } from "./dto/create-organizer-store.dto";
@@ -62,6 +63,28 @@ export class OrganizerStoresController {
     } catch (error) {
       throw error;
     }
+  }
+
+  // Upload a single sponsor logo (drag-and-drop from the storefront
+  // customizer). Stores it alongside the other storefront images and returns
+  // its URL, which the customizer saves into settings.design.sponsors[].
+  @Post("upload-sponsor-logo")
+  @UseGuards(AuthGuard("jwt"))
+  @UseInterceptors(
+    FileInterceptor("logo", {
+      storage,
+      fileFilter: (req, file, cb) => {
+        if (file.mimetype.startsWith("image/")) cb(null, true);
+        else cb(new Error("Only image files allowed"), false);
+      },
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  uploadSponsorLogo(@UploadedFile(WebpValidationPipe) file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException("No logo file uploaded");
+    }
+    return { url: `/uploads/banners/${file.filename}` };
   }
 
   @Get()
