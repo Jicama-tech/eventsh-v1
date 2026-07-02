@@ -1073,7 +1073,7 @@ export class StallsService {
       <body>
         <div class="container">
           <div class="header">
-            <h1>${organizer.organizationName || organizer.name || "EventSH"}</h1>
+            <h1>${organizer.organizationName || organizer.name || "EventSH"} Stall Confirmation</h1>
             <p>Your stall has been successfully booked</p>
           </div>
 
