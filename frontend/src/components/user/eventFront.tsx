@@ -3071,6 +3071,20 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       return;
     }
     if (totalPreferredSpaces >= maxSpacesPerVendor) {
+      // Single-space events behave like a radio group: clicking a different
+      // type SWITCHES the preference (the vendor hasn't submitted yet), instead
+      // of being blocked and forced to deselect the current one first.
+      if (maxSpacesPerVendor === 1) {
+        setShopkeeperDetails((prev) => ({
+          ...prev,
+          preferredTemplateIds: [template.id],
+          preferredTemplateNames: [template.name],
+          preferredTemplateQuantities: [1],
+          preferredTemplateId: template.id,
+          preferredTemplateName: template.name,
+        }));
+        return;
+      }
       toast({
         duration: 3000,
         title: "Space limit reached",
@@ -4053,7 +4067,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 : image
             }
             alt={title}
-            className="block w-full h-56 object-cover sm:h-auto"
+            className="block w-full h-auto min-h-[200px] object-contain bg-gray-100 sm:min-h-0 sm:bg-transparent"
             onError={(e) => {
               e.currentTarget.style.display = "none";
             }}
