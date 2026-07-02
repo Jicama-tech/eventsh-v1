@@ -789,10 +789,22 @@ const TablePaymentPage = () => {
                           <div>
                             <p className="font-semibold text-sm">
                               {addon.name}
+                              {(addon.quantity || 1) > 1 && (
+                                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                                  × {addon.quantity}
+                                </span>
+                              )}
                             </p>
+                            {(addon.quantity || 1) > 1 && (
+                              <p className="text-xs text-muted-foreground">
+                                {formatPrice(addon.price)} each
+                              </p>
+                            )}
                           </div>
                           <p className="font-bold">
-                            {formatPrice(addon.price)}
+                            {formatPrice(
+                              (addon.price || 0) * (addon.quantity || 1),
+                            )}
                           </p>
                         </div>
                       ),
