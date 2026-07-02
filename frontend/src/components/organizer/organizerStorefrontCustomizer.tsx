@@ -140,6 +140,13 @@ export function OrganizerStorefrontCustomizer({
         "https://images.unsplash.com/photo-1441986300917-64674bd600d8",
       showBanner: true,
       bannerHeight: "large",
+      // Event/organizer sponsors shown as a logo strip in the hero.
+      sponsors: [] as {
+        id: string;
+        name: string;
+        imageUrl: string;
+        link?: string;
+      }[],
     },
     features: {
       showSearch: true,
@@ -556,6 +563,87 @@ export function OrganizerStorefrontCustomizer({
       [section]: {
         ...prev[section as keyof typeof prev],
         [field]: value,
+      },
+    }));
+  };
+
+  // ---- Sponsor logo strip helpers ----
+  const [uploadingSponsor, setUploadingSponsor] = useState<string | null>(null);
+  const uploadSponsorLogo = async (
+    idx: number,
+    sponsorId: string,
+    file: File,
+  ) => {
+    if (!file.type.startsWith("image/")) {
+      toast({
+        duration: 4000,
+        title: "Invalid file",
+        description: "Please drop an image file.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      setUploadingSponsor(sponsorId);
+      const token = sessionStorage.getItem("token");
+      const fd = new FormData();
+      fd.append("logo", file);
+      const res = await fetch(`${apiUrl}/organizer-stores/upload-sponsor-logo`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: fd,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      const url = data?.url || data?.data?.url;
+      if (url) updateSponsor(idx, "imageUrl", url);
+    } catch (e: any) {
+      toast({
+        duration: 4000,
+        title: "Upload failed",
+        description: e?.message || "Could not upload logo",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingSponsor(null);
+    }
+  };
+  const addSponsor = () => {
+    setSettings((prev) => ({
+      ...prev,
+      design: {
+        ...prev.design,
+        sponsors: [
+          ...(((prev.design as any).sponsors as any[]) || []),
+          {
+            id: Math.random().toString(36).slice(2, 10),
+            name: "",
+            imageUrl: "",
+            link: "",
+          },
+        ],
+      },
+    }));
+  };
+  const updateSponsor = (index: number, field: string, value: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      design: {
+        ...prev.design,
+        sponsors: (((prev.design as any).sponsors as any[]) || []).map(
+          (s: any, i: number) => (i === index ? { ...s, [field]: value } : s),
+        ),
+      },
+    }));
+  };
+  const removeSponsor = (index: number) => {
+    setSettings((prev) => ({
+      ...prev,
+      design: {
+        ...prev.design,
+        sponsors: (((prev.design as any).sponsors as any[]) || []).filter(
+          (_: any, i: number) => i !== index,
+        ),
       },
     }));
   };
@@ -2179,6 +2267,100 @@ export function OrganizerStorefrontCustomizer({
                   </div>
 
                   {/* HERO DESIGN */}
+                </CardContent>
+              </Card>
+
+              {/* Sponsors */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Sponsors</CardTitle>
+                  <CardDescription>
+                    Shown as a logo strip in your storefront hero. Add each
+                    sponsor's logo image URL and an optional website link.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {(((settings.design as any).sponsors as any[]) || []).map(
+                    (sp: any, idx: number) => (
+                      <div
+                        key={sp.id || idx}
+                        className="grid items-end gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_1.4fr_1.4fr_auto]"
+                      >
+                        <div>
+                          <Label className="text-xs">Name</Label>
+                          <Input
+                            value={sp.name || ""}
+                            onChange={(e) =>
+                              updateSponsor(idx, "name", e.target.value)
+                            }
+                            placeholder="Acme Co."
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Logo</Label>
+                          <div
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              const f = e.dataTransfer.files?.[0];
+                              if (f) uploadSponsorLogo(idx, sp.id, f);
+                            }}
+                            className="mt-1 flex items-center gap-3 rounded-lg border-2 border-dashed border-gray-300 p-2"
+                          >
+                            {sp.imageUrl ? (
+                              <img
+                                src={getBannerSrc(sp.imageUrl)}
+                                alt={sp.name || "Sponsor logo"}
+                                className="h-10 w-auto max-w-[120px] object-contain"
+                              />
+                            ) : (
+                              <span className="text-xs text-gray-400">
+                                Drag &amp; drop a logo
+                              </span>
+                            )}
+                            <label className="ml-auto cursor-pointer whitespace-nowrap text-xs font-medium text-indigo-600 hover:underline">
+                              {uploadingSponsor === sp.id
+                                ? "Uploading…"
+                                : sp.imageUrl
+                                  ? "Change"
+                                  : "Browse"}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) uploadSponsorLogo(idx, sp.id, f);
+                                }}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Website (optional)</Label>
+                          <Input
+                            value={sp.link || ""}
+                            onChange={(e) =>
+                              updateSponsor(idx, "link", e.target.value)
+                            }
+                            placeholder="https://acme.com"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => removeSponsor(idx)}
+                          className="text-red-600"
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ),
+                  )}
+                  <Button type="button" variant="outline" onClick={addSponsor}>
+                    + Add sponsor
+                  </Button>
                 </CardContent>
               </Card>
               </ModuleGate>

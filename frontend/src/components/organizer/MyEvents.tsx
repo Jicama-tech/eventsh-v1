@@ -1171,7 +1171,7 @@ const MyEvents: React.FC = () => {
                       {/* Action Buttons — past events get Duplicate instead
                           of Edit (the original event is read-only once it has
                           ended; you can only spin up a new copy from it). */}
-                      <div className="flex gap-2 w-full lg:w-auto">
+                      <div className="flex flex-wrap gap-2 w-full lg:w-auto">
                         {isEventPast(event) ? (
                           <Button
                             variant="buttonOutline"

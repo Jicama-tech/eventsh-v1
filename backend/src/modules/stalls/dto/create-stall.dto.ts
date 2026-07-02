@@ -89,6 +89,11 @@ export class CreateStallDto {
   @IsString()
   preferredTemplateNames?: string;
 
+  // JSON array of requested quantities, parallel to preferredTemplateIds.
+  @IsOptional()
+  @IsString()
+  preferredTemplateQuantities?: string;
+
   @IsOptional()
   @IsString()
   businessDescription?: string;

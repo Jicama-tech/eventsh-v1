@@ -100,6 +100,12 @@ export class Stall {
   @Prop({ type: [String], default: [] })
   preferredTemplateNames: string[];
 
+  // Requested quantity per preferred template, parallel to
+  // preferredTemplateIds (e.g. [2] = 2 of one type, [1,1] = 1 each of two).
+  // Sum is capped by the event's maxSpacesPerVendor.
+  @Prop({ type: [Number], default: [] })
+  preferredTemplateQuantities: number[];
+
   // Payment verification
   @Prop({ default: null })
   transactionId: string;

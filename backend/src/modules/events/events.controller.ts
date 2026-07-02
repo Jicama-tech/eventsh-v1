@@ -89,6 +89,44 @@ export class EventsController {
     private readonly organizerStoreModel: Model<any>,
   ) {}
 
+  // Merge event sponsor logos from the client's `sponsorManifest`: "existing"
+  // entries keep their stored URL, "new" entries consume the next uploaded
+  // file in order. Falls back to just the uploaded files when no manifest is
+  // sent. Returns undefined only when there's nothing at all (no manifest, no
+  // files) so callers can decide whether to leave the field untouched. Always
+  // deletes the helper `sponsorManifest` off the body.
+  private rebuildSponsors(
+    body: any,
+    files: Express.Multer.File[] | undefined,
+  ): string[] | undefined {
+    let manifest: any[] | null = null;
+    if (typeof body?.sponsorManifest === "string") {
+      try {
+        manifest = JSON.parse(body.sponsorManifest);
+      } catch {
+        manifest = null;
+      }
+    }
+    delete body.sponsorManifest;
+    const uploaded = files || [];
+    if (Array.isArray(manifest)) {
+      let idx = 0;
+      return manifest
+        .map((item: any) => {
+          if (item?.type === "new") {
+            const f = uploaded[idx++];
+            return f ? `/uploads/events/${f.filename}` : null;
+          }
+          return item?.url || null;
+        })
+        .filter((u: string | null): u is string => !!u);
+    }
+    if (uploaded.length > 0) {
+      return uploaded.map((f) => `/uploads/events/${f.filename}`);
+    }
+    return undefined;
+  }
+
   // Build a slug from organizationName that mirrors what the public
   // storefront route expects (lowercase, alphanum + dashes only). Falls
   // back to a stable token derived from the org's _id so the URL always
@@ -240,6 +278,7 @@ export class EventsController {
       [
         { name: "banner", maxCount: 1 },
         { name: "gallery", maxCount: 5 },
+        { name: "sponsorLogos", maxCount: 50 },
         { name: "addOnImages", maxCount: 100 },
         { name: "speakerImages", maxCount: 20 },
       ],
@@ -265,6 +304,7 @@ export class EventsController {
     files: {
       banner?: Express.Multer.File[];
       gallery?: Express.Multer.File[];
+      sponsorLogos?: Express.Multer.File[];
       addOnImages?: Express.Multer.File[];
       speakerImages?: Express.Multer.File[];
     },
@@ -391,6 +431,10 @@ export class EventsController {
           (file) => `/uploads/events/${file.filename}`,
         );
       }
+
+      // Sponsor logos — rebuild from the manifest so existing URLs (on edit)
+      // and freshly uploaded files combine in the order the organizer arranged.
+      body.sponsors = this.rebuildSponsors(body, files.sponsorLogos) ?? [];
 
       if (
         files.addOnImages &&
@@ -634,6 +678,7 @@ export class EventsController {
       [
         { name: "banner", maxCount: 1 },
         { name: "gallery", maxCount: 5 },
+        { name: "sponsorLogos", maxCount: 50 },
         { name: "addOnImages", maxCount: 100 },
         { name: "speakerImages", maxCount: 20 },
       ],
@@ -658,6 +703,7 @@ export class EventsController {
     files: {
       banner?: Express.Multer.File[];
       gallery?: Express.Multer.File[];
+      sponsorLogos?: Express.Multer.File[];
       addOnImages?: Express.Multer.File[];
       speakerImages?: Express.Multer.File[];
     },
@@ -779,6 +825,16 @@ export class EventsController {
       }
       // Never persist the helper manifest onto the event document.
       delete body.galleryManifest;
+
+      // Sponsors — merge existing + new via the manifest. Only touch the field
+      // when the client actually sent sponsor data, so an unrelated update
+      // never wipes existing sponsor logos.
+      const rebuiltSponsors = this.rebuildSponsors(body, files.sponsorLogos);
+      if (rebuiltSponsors !== undefined) {
+        body.sponsors = rebuiltSponsors;
+      } else {
+        delete body.sponsors;
+      }
 
       // 3. Handle Add-On Images (Mapping new files to correct items)
       if (

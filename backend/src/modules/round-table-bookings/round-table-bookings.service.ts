@@ -689,6 +689,7 @@ export class RoundTableBookingsService {
     event: any,
     qrBase64: string,
     country: string,
+    orgName?: string,
   ): string {
     const eventDate = new Date(event.startDate).toLocaleDateString();
     const chairList =
@@ -730,7 +731,7 @@ export class RoundTableBookingsService {
       <body>
         <div class="container">
           <div class="header">
-            <h1>EVENTSH ROUND TABLE CONFIRMATION</h1>
+            <h1>${orgName || "EventSH"}</h1>
             <p>Booking Confirmation</p>
           </div>
 
@@ -772,7 +773,7 @@ export class RoundTableBookingsService {
           </div>
 
           <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} Eventsh. All rights reserved.</p>
+            <p>Powered by EventSH</p>
           </div>
         </div>
       </body>
@@ -789,7 +790,10 @@ export class RoundTableBookingsService {
     qrBase64: string,
     country: string,
   ): Promise<Buffer> {
-    const html = this.generateTicketHTML(booking, event, qrBase64, country);
+    const org = await this.organizerModel.findById(booking.organizerId);
+    const orgName =
+      (org as any)?.organizationName || (org as any)?.name || "EventSH";
+    const html = this.generateTicketHTML(booking, event, qrBase64, country, orgName);
 
     const browser = await puppeteer.launch({
       headless: true,
@@ -798,7 +802,7 @@ export class RoundTableBookingsService {
 
     try {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle0" });
+      await page.setContent(html, { waitUntil: "networkidle0", timeout: 20000 });
       const pdfBuffer = await page.pdf({
         format: "A4",
         printBackground: true,
@@ -816,6 +820,7 @@ export class RoundTableBookingsService {
     guest: { chairIndex: number; name: string; whatsApp?: string; email?: string },
     qrBase64: string,
     country: string,
+    orgName?: string,
   ): string {
     const eventDate = new Date(event.startDate).toLocaleDateString();
     return `<!DOCTYPE html><html><head><style>
@@ -839,7 +844,7 @@ export class RoundTableBookingsService {
     </style></head><body>
     <div class="container">
       <div class="header">
-        <h1>SEAT TICKET</h1>
+        <h1>${escapeHtml(orgName || "EventSH")}</h1>
         <p>${escapeHtml(event.title)}</p>
       </div>
       <div class="seat-badge">
@@ -857,7 +862,7 @@ export class RoundTableBookingsService {
         <img src="${qrBase64}" alt="QR Code" />
         <p>Show this QR at the event entrance</p>
       </div>
-      <div class="footer">&copy; ${new Date().getFullYear()} Eventsh. All rights reserved.</div>
+      <div class="footer">Powered by EventSH</div>
     </div>
     </body></html>`;
   }
@@ -869,14 +874,17 @@ export class RoundTableBookingsService {
     qrBase64: string,
     country: string,
   ): Promise<Buffer> {
-    const html = this.generateSeatTicketHTML(booking, event, guest, qrBase64, country);
+    const org = await this.organizerModel.findById(booking.organizerId);
+    const orgName =
+      (org as any)?.organizationName || (org as any)?.name || "EventSH";
+    const html = this.generateSeatTicketHTML(booking, event, guest, qrBase64, country, orgName);
     const browser = await puppeteer.launch({
       headless: true,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
     try {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle0" });
+      await page.setContent(html, { waitUntil: "networkidle0", timeout: 20000 });
       const pdfBuffer = await page.pdf({
         format: "A5",
         printBackground: true,

@@ -56,6 +56,8 @@ export interface StorefrontSettings {
     bannerImage?: string;
     showBanner: boolean;
     bannerHeight: string;
+    // Sponsor logos shown as a strip in the storefront hero.
+    sponsors?: { id: string; name: string; imageUrl: string; link?: string }[];
   };
   features: {
     showSearch: boolean;

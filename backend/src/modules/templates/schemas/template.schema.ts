@@ -7,6 +7,10 @@ export enum TemplateType {
   SPACE = "space",
   ROUND_TABLE = "roundTable",
   SPEAKER = "speaker",
+  // A whole venue layout — one venue's config + the stall types it uses +
+  // the placed stalls. Payload shape: { venueConfig, tableTemplates,
+  // venueTables }. Lets an organizer re-import a past venue design.
+  VENUE_LAYOUT = "venueLayout",
 }
 
 // Generic template store. `payload` carries the type-specific shape so we can
