@@ -784,71 +784,94 @@ export class StallsService {
       await stall.save();
 
       const deliverStallTicket = async () => {
-      const pdfBuffer = await this.generateStallTicketPDF(
-        stall,
-        qrCodeBase64,
-        coupon,
-        country,
-      );
-
-      const pdfDir = path.join(process.cwd(), "uploads", "stallTickets");
-      if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
-
-      const pdfFileName = `stall_ticket_${stallId}.pdf`;
-      const pdfPath = path.join(pdfDir, pdfFileName);
-
-      await fs.promises.writeFile(pdfPath, pdfBuffer);
-
-      // Store path in database
-      stall.qrCodePath = `/uploads/stallTickets/${pdfFileName}`;
-      stall.qrCodeData = JSON.stringify(qrPayload);
-      await stall.save();
-
-      // ===== DELIVER THE STALL TICKET =====
-      // Email is the primary channel and is ALWAYS sent (it no longer depends
-      // on the vendor having a WhatsApp number). WhatsApp is an extra channel,
-      // sent only when a number is on file and the integration is enabled.
       const vendorWhatsApp = vendor.whatsAppNumber || vendor.whatsappNumber;
       const vendorEmail = this.vendorEmailRecipients(vendor);
+      const eventObj = stall.eventId as any;
+      const eventDate = eventObj?.startDate
+        ? new Date(eventObj.startDate).toLocaleDateString()
+        : "TBA";
+      const message =
+        `🎉 *Your Stall Confirmation is Ready!*\n\n` +
+        `🎪 *Event:* ${eventObj?.title || "Event"}\n` +
+        `👤 *Business:* ${vendor.businessName || vendor.shopName || vendor.brandName || stall.brandName || vendor.name || "—"}\n` +
+        `📅 *Date:* ${eventDate}\n` +
+        `📍 *Venue:* ${eventObj?.location || "TBA"}\n\n` +
+        `📊 *Booking Summary:*\n` +
+        `• Tables: ${stall.selectedTables.length}\n` +
+        `• Add-ons: ${stall.selectedAddOns?.length || 0}\n` +
+        `• Total: ${formatCurrency(stall.grandTotal, country)}\n` +
+        (coupon ? `\n🎟️ *Coupon:* ${coupon.code} (${stall.noOfOperators} free entries)\n` : "") +
+        `\n⚠️ Your stall ticket PDF is attached. Present the QR code at the event entrance.`;
+
+      // Render the ticket PDF. If headless Chromium fails (common on
+      // constrained production hosts), DON'T abort delivery — fall back to a
+      // plain confirmation email below so the vendor is still notified.
+      let pdfPath: string | null = null;
       try {
-        const eventObj = stall.eventId as any;
-        const eventDate = eventObj?.startDate
-          ? new Date(eventObj.startDate).toLocaleDateString()
-          : "TBA";
+        const pdfBuffer = await this.generateStallTicketPDF(
+          stall,
+          qrCodeBase64,
+          coupon,
+          country,
+        );
+        const pdfDir = path.join(process.cwd(), "uploads", "stallTickets");
+        if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
+        const pdfFileName = `stall_ticket_${stallId}.pdf`;
+        pdfPath = path.join(pdfDir, pdfFileName);
+        await fs.promises.writeFile(pdfPath, pdfBuffer);
+        stall.qrCodePath = `/uploads/stallTickets/${pdfFileName}`;
+        stall.qrCodeData = JSON.stringify(qrPayload);
+        await stall.save();
+      } catch (pdfErr) {
+        pdfPath = null;
+        this.logger.error(
+          `Stall ticket PDF generation failed for stall ${stallId}: ${
+            (pdfErr as any)?.message || pdfErr
+          }. Sending a plain confirmation instead.`,
+        );
+      }
 
-        const message =
-          `🎉 *Your Stall Confirmation is Ready!*\n\n` +
-          `🎪 *Event:* ${eventObj?.title || "Event"}\n` +
-          `👤 *Business:* ${vendor.businessName || vendor.shopName || vendor.brandName || stall.brandName || vendor.name || "—"}\n` +
-          `📅 *Date:* ${eventDate}\n` +
-          `📍 *Venue:* ${eventObj?.location || "TBA"}\n\n` +
-          `📊 *Booking Summary:*\n` +
-          `• Tables: ${stall.selectedTables.length}\n` +
-          `• Add-ons: ${stall.selectedAddOns?.length || 0}\n` +
-          `• Total: ${formatCurrency(stall.grandTotal, country)}\n` +
-          (coupon ? `\n🎟️ *Coupon:* ${coupon.code} (${stall.noOfOperators} free entries)\n` : "") +
-          `\n⚠️ Your stall ticket PDF is attached. Present the QR code at the event entrance.`;
-
+      try {
         // WhatsApp text notification only when a number is on file.
         if (vendorWhatsApp) {
           await this.otpService.sendWhatsAppMessage(vendorWhatsApp, message);
         }
 
-        // Deliver the ticket PDF: sendMediaMessage emails first (independent of
-        // WhatsApp) and only attempts WhatsApp when a number is present.
-        await this.otpService.sendMediaMessage(
-          vendorWhatsApp || "",
-          pdfPath,
-          `Stall Ticket - ${eventObj?.title || "Event"}`,
-          "stall-ticket.pdf",
-          {
+        if (pdfPath) {
+          // Deliver the ticket PDF: sendMediaMessage emails first (independent
+          // of WhatsApp) and only attempts WhatsApp when a number is present.
+          await this.otpService.sendMediaMessage(
+            vendorWhatsApp || "",
+            pdfPath,
+            `Stall Ticket - ${eventObj?.title || "Event"}`,
+            "stall-ticket.pdf",
+            {
+              to: vendorEmail,
+              subject: `Your stall ticket for ${eventObj?.title || "Event"}`,
+              heading: "Your Stall Confirmation is Ready!",
+              message,
+              senderConfig: (organizerDoc as any)?.emailConfig,
+            },
+          );
+        } else if (vendorEmail) {
+          // PDF render failed — still email a text confirmation so the vendor
+          // knows their payment is confirmed. "Resend ticket" re-generates and
+          // attaches the PDF once the render issue is resolved.
+          await this.mailService.sendEmail({
             to: vendorEmail,
-            subject: `Your stall ticket for ${eventObj?.title || "Event"}`,
-            heading: "Your Stall Confirmation is Ready!",
-            message,
+            subject: `Your stall is confirmed for ${eventObj?.title || "Event"}`,
+            html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+                <div style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:24px;text-align:center">
+                  <h1 style="margin:0;font-size:20px">Your Stall Confirmation is Ready!</h1>
+                </div>
+                <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+                  <p>${message.replace(/\*/g, "").replace(/\n/g, "<br/>")}</p>
+                  <p style="color:#64748b;font-size:12px;margin-top:16px">Your ticket PDF will follow shortly.</p>
+                </div>
+              </div>`,
             senderConfig: (organizerDoc as any)?.emailConfig,
-          },
-        );
+          });
+        }
 
         if (!vendorEmail && !vendorWhatsApp) {
           this.logger.warn(
