@@ -767,7 +767,26 @@ export class StallsService {
         appliesTo: "ORGANIZER",
       };
 
-      const coupon = await this.couponService.create(couponPayload);
+      let coupon: any;
+      try {
+        coupon = await this.couponService.create(couponPayload);
+      } catch (couponErr: any) {
+        // A coupon with this deterministic code already exists (e.g. the payment
+        // was confirmed before, or the same vendor/event regenerates the same
+        // code). Reuse the existing code instead of failing the entire
+        // confirmation with an E11000 duplicate-key error.
+        const isDuplicate =
+          couponErr?.code === 11000 ||
+          /E11000|duplicate key/i.test(String(couponErr?.message || couponErr));
+        if (isDuplicate) {
+          this.logger.warn(
+            `Coupon "${couponName}" already exists — reusing it for stall ${stallId}.`,
+          );
+          coupon = { code: couponName };
+        } else {
+          throw couponErr;
+        }
+      }
 
       stall.couponCodeAssigned = coupon.code;
 
@@ -832,9 +851,19 @@ export class StallsService {
       }
 
       try {
-        // WhatsApp text notification only when a number is on file.
+        // WhatsApp text notification only when a number is on file. Isolated in
+        // its own try/catch so a logged-out / dead WhatsApp session
+        // ("Connection Closed") can NEVER abort the email that follows.
         if (vendorWhatsApp) {
-          await this.otpService.sendWhatsAppMessage(vendorWhatsApp, message);
+          try {
+            await this.otpService.sendWhatsAppMessage(vendorWhatsApp, message);
+          } catch (waErr) {
+            this.logger.warn(
+              `WhatsApp text failed for stall ${stallId} (continuing to email): ${
+                (waErr as any)?.message || waErr
+              }`,
+            );
+          }
         }
 
         if (pdfPath) {
