@@ -2720,7 +2720,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         0,
       );
       const addOnsTotal = selectedAddOns.reduce(
-        (sum, addon) => sum + (addon.price || 0),
+        (sum, addon: any) =>
+          sum + (Number(addon.price) || 0) * (Number(addon.quantity) || 1),
         0,
       );
       const grandTotal = tablesTotal + depositTotal + addOnsTotal;
@@ -2763,11 +2764,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           height: table.height,
           rotation: table.rotation,
         })),
-        selectedAddOns: selectedAddOns.map((addon) => ({
-          id: addon.id,
+        selectedAddOns: selectedAddOns.map((addon: any) => ({
+          id: addon.addOnId || addon.id,
+          addOnId: addon.addOnId || addon.id,
           name: addon.name,
           description: addon.description,
           price: addon.price,
+          quantity: Number(addon.quantity) || 1,
         })),
         minimumPayment: bookingPrice + depositInOption1Total,
         // Offer the minimum-payment plan only when every selected space allows
@@ -3958,8 +3961,39 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     });
   };
 
-  // Increase quantity
+  // Increase quantity — respects the organizer's per-space add-on cap: the
+  // vendor may pick up to the per-template limit (maxPerTemplate) for EACH
+  // booked space of that template, otherwise the general maxPerSpace. The total
+  // cap is the sum across all selected spaces. 0 / unset = unlimited.
   const handleIncreaseQuantity = (addonId: string) => {
+    const item = (eventData?.addOnItems || []).find(
+      (x: any) => x.id === addonId,
+    );
+    const perTemplate: Record<string, any> = item?.maxPerTemplate || {};
+    const general = Number(item?.maxPerSpace);
+    const generalCap =
+      Number.isFinite(general) && general > 0 ? general : Infinity;
+    const spaces = selectedTables.length ? selectedTables : [null];
+    let cap = 0;
+    for (const t of spaces) {
+      const tId = (t as any)?.tableId ?? (t as any)?.id;
+      const tplRaw = tId != null ? Number(perTemplate[tId]) : NaN;
+      const perCap =
+        Number.isFinite(tplRaw) && tplRaw > 0 ? tplRaw : generalCap;
+      cap += perCap;
+      if (!Number.isFinite(cap)) break;
+    }
+    const current =
+      selectedAddOns.find((a) => a.id === addonId)?.quantity || 0;
+    if (Number.isFinite(cap) && current + 1 > cap) {
+      toast({
+        duration: 3500,
+        title: "Add-on limit reached",
+        description: `You can add at most ${cap} "${item?.name}" for your selected space${selectedTables.length === 1 ? "" : "s"}.`,
+        variant: "destructive",
+      });
+      return;
+    }
     setSelectedAddOns((prev) =>
       prev.map((a) =>
         a.id === addonId ? { ...a, quantity: a.quantity + 1 } : a,
