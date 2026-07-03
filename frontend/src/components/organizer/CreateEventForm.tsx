@@ -2898,13 +2898,17 @@ const TableManagement = ({
                           general limit for that template):
                         </Label>
                         <div className="mt-1.5 space-y-1.5">
-                          {tableTemplates.length === 0 && (
+                          {tableTemplates.filter(
+                            (tpl) => (tpl as any).forSale !== false,
+                          ).length === 0 && (
                             <p className="text-xs text-muted-foreground">
-                              Add space templates first to set per-template
-                              limits.
+                              Add sellable space templates first to set
+                              per-template limits.
                             </p>
                           )}
-                          {tableTemplates.map((tpl) => (
+                          {tableTemplates
+                            .filter((tpl) => (tpl as any).forSale !== false)
+                            .map((tpl) => (
                             <div
                               key={tpl.id}
                               className="flex items-center gap-2"

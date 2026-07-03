@@ -2589,7 +2589,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     const spaces = selectedTables.length ? selectedTables : [null];
     let cap = 0;
     for (const t of spaces) {
-      const tId = (t as any)?.id;
+      // Selected spaces store the source template id as `tableId` (not `id`),
+      // so the per-template add-on override is keyed by that. Without this the
+      // override never matched and the general cap was always used.
+      const tId = (t as any)?.tableId ?? (t as any)?.id;
       const tplRaw = tId != null ? Number(perTemplate[tId]) : NaN;
       const perCap =
         Number.isFinite(tplRaw) && tplRaw > 0 ? tplRaw : generalCap;
