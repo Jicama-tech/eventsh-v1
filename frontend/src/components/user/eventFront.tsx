@@ -4067,7 +4067,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 : image
             }
             alt={title}
-            className="block w-full h-48 object-cover object-center sm:h-auto"
+            className="block w-full h-auto"
             onError={(e) => {
               e.currentTarget.style.display = "none";
             }}

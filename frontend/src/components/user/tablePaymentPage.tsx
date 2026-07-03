@@ -1113,27 +1113,16 @@ const TablePaymentPage = () => {
                                 <p className="font-bold text-lg text-green-700">
                                   📱 Scan with any Payment App
                                 </p>
-                                {mobileId && !uenId && (
-                                  <div>
-                                    <p className="font-semibold text-lg text-green-700">
-                                      If the QR code fails, Pay Directly to
-                                      Mobile Number:
-                                      {mobileId}.
-                                    </p>
-
-                                    <p className="text-sm text-gray-600">
-                                      WhatsAppNumber:{" "}
-                                      <span className="font-medium">
-                                        {orderData?.whatsAppNumber}
-                                      </span>
-                                    </p>
-                                  </div>
-                                )}
-                                {uenId && mobileId === null && (
+                                {/* Prefer the organizer's registered business UEN
+                                    for the manual-payment fallback — never expose
+                                    a personal mobile number when a UEN is on file.
+                                    Falls back to the UEN read from the PayNow QR,
+                                    and only then to the mobile number. */}
+                                {(organizer as any)?.UENNumber || uenId ? (
                                   <div>
                                     <p className="font-semibold text-lg text-green-700">
                                       If the QR code fails, Pay Directly to UEN:{" "}
-                                      {uenId}.
+                                      {(organizer as any)?.UENNumber || uenId}.
                                     </p>
 
                                     <p className="text-sm text-gray-600">
@@ -1143,7 +1132,21 @@ const TablePaymentPage = () => {
                                       </span>
                                     </p>
                                   </div>
-                                )}
+                                ) : mobileId ? (
+                                  <div>
+                                    <p className="font-semibold text-lg text-green-700">
+                                      If the QR code fails, Pay Directly to Mobile
+                                      Number: {mobileId}.
+                                    </p>
+
+                                    <p className="text-sm text-gray-600">
+                                      WhatsAppNumber:{" "}
+                                      <span className="font-medium">
+                                        {orderData?.whatsAppNumber}
+                                      </span>
+                                    </p>
+                                  </div>
+                                ) : null}
                               </div>
                             </div>
                           ) : (
