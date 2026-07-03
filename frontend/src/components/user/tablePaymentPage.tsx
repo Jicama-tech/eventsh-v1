@@ -776,7 +776,12 @@ const TablePaymentPage = () => {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Plus className="h-5 w-5" />
-                      Add-ons ({orderData.selectedAddOns.length})
+                      Add-ons (
+                      {orderData.selectedAddOns.reduce(
+                        (s: number, a: any) => s + (Number(a.quantity) || 1),
+                        0,
+                      )}{" "}
+                      total)
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
