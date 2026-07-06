@@ -687,26 +687,180 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     const [min, max] = phoneNationalLength(country.countryCode);
     return min === max ? `${min} digits` : `${min}–${max} digits`;
   };
-  // Registration-number rules driven by the selected Residency: Singapore uses
-  // a 10-char UEN, India a 15-char GST. Both alphanumeric. Other residencies
-  // fall back to a generic alphanumeric field with no fixed length.
+  // Registration-number rules driven by the selected Residency. Singapore UENs
+  // are 9 OR 10 characters (older ACRA business numbers are 9 chars, e.g.
+  // 53464793J; companies and other entities are 10, e.g. 201812345A). India
+  // GST is always 15. Both alphanumeric. Other residencies have no fixed length.
   const regConfig = (() => {
     const res = String(shopkeeperDetails.residency || "").toLowerCase();
     if (res === "singapore")
       return {
         label: "UEN",
-        length: 10,
-        example: "UEN — 10 characters, e.g. 201812345A or T18LL1234A",
+        minLength: 9,
+        maxLength: 10,
+        example: "UEN — 9 or 10 characters, e.g. 53464793J or 201812345A",
       };
     if (res === "india")
       return {
         label: "GST",
-        length: 15,
+        minLength: 15,
+        maxLength: 15,
         example: "GST — 15 characters, e.g. 27AAPFU0939F1ZV",
       };
-    return { label: "UEN/GST", length: 0, example: "" };
+    return { label: "UEN/GST", minLength: 0, maxLength: 0, example: "" };
   })();
+
+  // A recognizable placeholder for vendors who don't have a GST/UEN. It passes
+  // the field's format/length check so they can still submit, but it is NOT a
+  // real registration — it deliberately fails the verification APIs. The
+  // organizer sees it, reaches out to the vendor, and decides whether to
+  // approve. Lengths match each type's requirement (GST 15, UEN 10).
+  const dummyRegNumber =
+    regConfig.label === "GST"
+      ? "NOGSTPROVIDED00"
+      : regConfig.label === "UEN"
+        ? "NOUENGIVEN"
+        : "NOTPROVIDED";
+  const isDummyReg = shopkeeperDetails.registrationNumber === dummyRegNumber;
+
   const { toast } = useToast();
+
+  // --- GST verification (India stalls) via AppyFlow, ported from KiosCart ---
+  const APPYFLOW_KEY = import.meta.env.VITE_APPYFLOW_KEY_SECRET;
+  const [gstVerifying, setGstVerifying] = useState(false);
+  const [gstVerified, setGstVerified] = useState(false);
+  const [gstError, setGstError] = useState("");
+  // Trimmed, display-ready GST registry details — saved to the vendor and
+  // shown to the organizer. Kept so a returning vendor isn't re-verified.
+  const [gstDetails, setGstDetails] = useState<any>(null);
+  // UEN verification (Singapore) via ACRA's FREE open-data registry
+  // (data.gov.sg) — no API key or per-call cost, unlike the GST provider.
+  const [uenVerifying, setUenVerifying] = useState(false);
+  const [uenVerified, setUenVerified] = useState(false);
+  const [uenError, setUenError] = useState("");
+  const [uenDetails, setUenDetails] = useState<any>(null);
+
+  const handleVerifyGST = async (raw: string) => {
+    const gstin = (raw || "").trim().toUpperCase();
+    setGstError("");
+    if (!gstin) {
+      setGstError("Enter the GST number first.");
+      return;
+    }
+    if (!APPYFLOW_KEY) {
+      setGstError("GST verification isn't configured. Contact support.");
+      return;
+    }
+    setGstVerifying(true);
+    try {
+      const url = `https://appyflow.in/api/verifyGST?gstNo=${encodeURIComponent(
+        gstin,
+      )}&key_secret=${encodeURIComponent(APPYFLOW_KEY)}`;
+      const res = await fetch(url);
+      const data = await res.json().catch(() => ({}));
+      const valid =
+        data?.taxpayerInfo?.sts === "Active" || data?.is_gst_valid === true;
+      if (!res.ok || !valid) {
+        setGstVerified(false);
+        setGstError(
+          data?.message ||
+            data?.error ||
+            "This GST number couldn't be verified. Please check and try again.",
+        );
+        return;
+      }
+      setGstVerified(true);
+      // Build a clean, display-ready subset (the raw AppyFlow payload is large
+      // and noisy). This is what we save on the vendor + show the organizer.
+      const addr = data?.taxpayerInfo?.pradr?.addr || data?.pradr?.addr || {};
+      const details = {
+        gstin,
+        legalName: data?.taxpayerInfo?.lgnm || data?.taxablePersonName || "",
+        tradeName: data?.taxpayerInfo?.tradeNam || "",
+        status: data?.taxpayerInfo?.sts || "Active",
+        registrationDate: data?.taxpayerInfo?.rgdt || "",
+        constitution: data?.taxpayerInfo?.ctb || "",
+        address: [
+          addr?.bnm,
+          addr?.flno,
+          addr?.st,
+          addr?.loc,
+          addr?.dst,
+          addr?.stcd,
+          addr?.pncd,
+        ]
+          .filter(Boolean)
+          .join(", "),
+        state: addr?.stcd || "",
+        verifiedAt: new Date().toISOString(),
+      };
+      setGstDetails(details);
+      const name = details.legalName || details.tradeName || gstin;
+      toast({
+        duration: 5000,
+        title: "GST verified ✓",
+        description: `Registered: ${name}`,
+      });
+    } catch {
+      setGstVerified(false);
+      setGstError("Couldn't reach the verification service. Try again.");
+    } finally {
+      setGstVerifying(false);
+    }
+  };
+
+  // --- UEN verification (Singapore) via ACRA open data (data.gov.sg) ---
+  // Free government registry — no key, no cost. Returns entity name, status,
+  // type and address for a given UEN.
+  const UEN_ACRA_RESOURCE = "d_3f960c10fed6145404ca7b821f263b87";
+  const handleVerifyUEN = async (raw: string) => {
+    const uen = (raw || "").trim().toUpperCase();
+    setUenError("");
+    if (!uen) {
+      setUenError("Enter the UEN first.");
+      return;
+    }
+    setUenVerifying(true);
+    try {
+      const filters = encodeURIComponent(JSON.stringify({ uen }));
+      const url = `https://data.gov.sg/api/action/datastore_search?resource_id=${UEN_ACRA_RESOURCE}&filters=${filters}&limit=1`;
+      const res = await fetch(url);
+      const data = await res.json().catch(() => ({}));
+      const rec = data?.result?.records?.[0];
+      if (!res.ok || !rec) {
+        setUenVerified(false);
+        setUenError(
+          "This UEN isn't in the ACRA registry. If it's a newly registered entity it may not appear yet — the organizer can double-check it on the official registry.",
+        );
+        return;
+      }
+      setUenVerified(true);
+      const details = {
+        uen: rec.uen || uen,
+        entityName: rec.entity_name || "",
+        status: rec.uen_status_desc || "",
+        entityType: rec.entity_type_desc || "",
+        issueDate: rec.uen_issue_date || "",
+        agency: rec.issuance_agency_desc || "ACRA",
+        address: [rec.reg_street_name, rec.reg_postal_code]
+          .filter(Boolean)
+          .join(", "),
+        verifiedAt: new Date().toISOString(),
+      };
+      setUenDetails(details);
+      toast({
+        duration: 5000,
+        title: "UEN verified ✓",
+        description: `Registered: ${details.entityName || uen}`,
+      });
+    } catch {
+      setUenVerified(false);
+      setUenError("Couldn't reach the verification service. Try again.");
+    } finally {
+      setUenVerifying(false);
+    }
+  };
+
   // Country dial codes come from a single shared hook (local data, no network).
   const { countries, loading: loadingCountries } = useCountryCodes();
   const [settings, setSettings] = useState<OrganizerStore | null>(null);
@@ -1346,6 +1500,26 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       preferredTemplateQuantities: [] as number[],
     });
     setEmailVerified(true); // Assume verified if exists
+
+    // Returning vendor whose GST was already verified — restore that state so
+    // we don't spend another external GST-API call re-verifying the same
+    // number. The cached registry details also stay visible to the organizer.
+    if (shopData.isGSTVerified) {
+      setGstVerified(true);
+      setGstDetails(shopData.gstDetails || null);
+      setGstError("");
+    } else {
+      setGstVerified(false);
+      setGstDetails(null);
+    }
+    if (shopData.isUENVerified) {
+      setUenVerified(true);
+      setUenDetails(shopData.uenDetails || null);
+      setUenError("");
+    } else {
+      setUenVerified(false);
+      setUenDetails(null);
+    }
 
     // Load any stored brand assets as previews so the (now mandatory) image
     // fields are satisfied without forcing a returning vendor to re-upload.
@@ -3289,9 +3463,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     const regNo = String(d.registrationNumber || "").trim();
     if (regNo && !/^[A-Za-z0-9]+$/.test(regNo)) {
       invalid.push("Registration Number must be letters and numbers only");
-    } else if (regNo && regConfig.length > 0 && regNo.length !== regConfig.length) {
+    } else if (
+      regNo &&
+      regConfig.maxLength > 0 &&
+      (regNo.length < regConfig.minLength ||
+        regNo.length > regConfig.maxLength)
+    ) {
       invalid.push(
-        `${regConfig.label} must be exactly ${regConfig.length} alphanumeric characters`,
+        regConfig.minLength === regConfig.maxLength
+          ? `${regConfig.label} must be exactly ${regConfig.maxLength} alphanumeric characters`
+          : `${regConfig.label} must be ${regConfig.minLength}–${regConfig.maxLength} alphanumeric characters`,
       );
     }
     if (invalid.length) {
@@ -3355,6 +3536,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         shopkeeperDetails.registrationNumber,
       );
       formData.append("residency", shopkeeperDetails.residency);
+      // GST verification result — cached on the vendor so returning exhibitors
+      // aren't re-verified (saves the external API call) and shown to the
+      // organizer in the stall details dialog for easy approval.
+      formData.append("isGSTVerified", gstVerified ? "true" : "false");
+      if (gstDetails)
+        formData.append("gstDetails", JSON.stringify(gstDetails));
+      formData.append("isUENVerified", uenVerified ? "true" : "false");
+      if (uenDetails)
+        formData.append("uenDetails", JSON.stringify(uenDetails));
       formData.append(
         "refundPaymentDescription",
         shopkeeperDetails.refundPaymentDescription,
@@ -11161,41 +11351,216 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     required
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-3">
                   <Label>
                     Registration Number ({regConfig.label}){" "}
                     <span className="text-red-500">*</span>
                   </Label>
-                  <Input
-                    name="registrationNumber"
-                    value={shopkeeperDetails.registrationNumber}
-                    onChange={(e) => {
-                      // Alphanumeric only, uppercased, and capped to the length
-                      // required by the residency (UEN 10 / GST 15).
-                      let v = e.target.value
-                        .replace(/[^a-zA-Z0-9]/g, "")
-                        .toUpperCase();
-                      if (regConfig.length > 0)
-                        v = v.slice(0, regConfig.length);
-                      setShopkeeperDetails((prev) => ({
-                        ...prev,
-                        registrationNumber: v,
-                      }));
-                    }}
-                    maxLength={regConfig.length || undefined}
-                    placeholder={
-                      regConfig.label === "UEN"
-                        ? "e.g. 201812345A"
-                        : regConfig.label === "GST"
-                          ? "e.g. 27AAPFU0939F1ZV"
-                          : "e.g. UEN / GST No."
-                    }
-                    disabled={isStallApproved}
-                    required
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      name="registrationNumber"
+                      value={shopkeeperDetails.registrationNumber}
+                      onChange={(e) => {
+                        // Alphanumeric only, uppercased, and capped to the length
+                        // required by the residency (UEN 10 / GST 15).
+                        let v = e.target.value
+                          .replace(/[^a-zA-Z0-9]/g, "")
+                          .toUpperCase();
+                        if (regConfig.maxLength > 0)
+                          v = v.slice(0, regConfig.maxLength);
+                        setShopkeeperDetails((prev) => ({
+                          ...prev,
+                          registrationNumber: v,
+                        }));
+                        // Editing the number invalidates any prior verification.
+                        setGstVerified(false);
+                        setGstError("");
+                        setUenVerified(false);
+                        setUenError("");
+                      }}
+                      maxLength={regConfig.maxLength || undefined}
+                      placeholder={
+                        regConfig.label === "UEN"
+                          ? "e.g. 201812345A"
+                          : regConfig.label === "GST"
+                            ? "e.g. 27AAPFU0939F1ZV"
+                            : "e.g. UEN / GST No."
+                      }
+                      disabled={isStallApproved || gstVerified || uenVerified}
+                      required
+                      className="flex-1"
+                    />
+                    {/* India GST is verified against the government registry
+                        (AppyFlow) as soon as it's filled in. */}
+                    {regConfig.label === "GST" &&
+                      !isStallApproved &&
+                      !isDummyReg && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                          handleVerifyGST(shopkeeperDetails.registrationNumber)
+                        }
+                        disabled={
+                          !shopkeeperDetails.registrationNumber ||
+                          gstVerifying ||
+                          gstVerified
+                        }
+                        className="whitespace-nowrap"
+                      >
+                        {gstVerifying
+                          ? "Verifying…"
+                          : gstVerified
+                            ? "Verified ✓"
+                            : "Verify"}
+                      </Button>
+                    )}
+                    {/* Singapore UEN is verified against ACRA's free open-data
+                        registry (data.gov.sg) — no cost per check. */}
+                    {regConfig.label === "UEN" &&
+                      !isStallApproved &&
+                      !isDummyReg && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                          handleVerifyUEN(shopkeeperDetails.registrationNumber)
+                        }
+                        disabled={
+                          !shopkeeperDetails.registrationNumber ||
+                          uenVerifying ||
+                          uenVerified
+                        }
+                        className="whitespace-nowrap"
+                      >
+                        {uenVerifying
+                          ? "Verifying…"
+                          : uenVerified
+                            ? "Verified ✓"
+                            : "Verify"}
+                      </Button>
+                    )}
+                  </div>
+                  {regConfig.label === "GST" && gstError && (
+                    <p className="text-[11px] text-red-600">{gstError}</p>
+                  )}
+                  {regConfig.label === "GST" && gstVerified && gstDetails && (
+                    <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                      <p className="mb-2 text-sm font-semibold text-green-700">
+                        ✓ GST Verified — details from the government registry
+                      </p>
+                      <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
+                        {(
+                          [
+                            ["GSTIN", gstDetails.gstin],
+                            ["Legal name", gstDetails.legalName],
+                            ["Trade name", gstDetails.tradeName],
+                            ["Status", gstDetails.status],
+                            ["Registered", gstDetails.registrationDate],
+                            ["Type", gstDetails.constitution],
+                            ["State", gstDetails.state],
+                            ["Address", gstDetails.address],
+                          ] as [string, string][]
+                        )
+                          .filter(([, v]) => !!v)
+                          .map(([label, value]) => (
+                            <div
+                              key={label}
+                              className={
+                                label === "Address" ? "sm:col-span-2" : ""
+                              }
+                            >
+                              <span className="text-[11px] uppercase tracking-wide text-green-700/70">
+                                {label}
+                              </span>
+                              <div className="font-medium text-green-900">
+                                {value}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                  {regConfig.label === "UEN" && uenError && (
+                    <p className="text-[11px] text-red-600">{uenError}</p>
+                  )}
+                  {regConfig.label === "UEN" && uenVerified && uenDetails && (
+                    <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                      <p className="mb-2 text-sm font-semibold text-green-700">
+                        ✓ UEN Verified — details from ACRA registry
+                      </p>
+                      <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
+                        {(
+                          [
+                            ["UEN", uenDetails.uen],
+                            ["Entity name", uenDetails.entityName],
+                            ["Status", uenDetails.status],
+                            ["Entity type", uenDetails.entityType],
+                            ["Issued", uenDetails.issueDate],
+                            ["Agency", uenDetails.agency],
+                            ["Address", uenDetails.address],
+                          ] as [string, string][]
+                        )
+                          .filter(([, v]) => !!v)
+                          .map(([label, value]) => (
+                            <div
+                              key={label}
+                              className={
+                                label === "Address" ? "sm:col-span-2" : ""
+                              }
+                            >
+                              <span className="text-[11px] uppercase tracking-wide text-green-700/70">
+                                {label}
+                              </span>
+                              <div className="font-medium text-green-900">
+                                {value}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
                   {regConfig.example && (
                     <p className="text-[11px] text-muted-foreground">
                       {regConfig.example}
+                    </p>
+                  )}
+                  {/* Vendors without a GST/UEN can drop in a placeholder so the
+                      required field is satisfied and they can still submit. It
+                      won't verify (it isn't a real registration), so the
+                      organizer knows to contact them and confirm before
+                      approving. */}
+                  {!isStallApproved && !isDummyReg && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Don't have a{" "}
+                      {regConfig.label === "UEN/GST"
+                        ? "GST/UEN"
+                        : regConfig.label}
+                      ?{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShopkeeperDetails((prev) => ({
+                            ...prev,
+                            registrationNumber: dummyRegNumber,
+                          }));
+                          setGstVerified(false);
+                          setGstError("");
+                          setUenVerified(false);
+                          setUenError("");
+                        }}
+                        className="font-medium text-blue-600 underline hover:text-blue-700"
+                      >
+                        Use a placeholder &amp; submit
+                      </button>{" "}
+                      — the organizer will contact you to confirm.
+                    </p>
+                  )}
+                  {isDummyReg && !isStallApproved && (
+                    <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">
+                      Placeholder entered — this isn't a real {regConfig.label}.
+                      The organizer will reach out to verify your details before
+                      approving.
                     </p>
                   )}
                 </div>

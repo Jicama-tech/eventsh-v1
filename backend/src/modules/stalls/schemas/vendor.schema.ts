@@ -138,6 +138,31 @@ export class Vendor {
 
   @Prop({ default: false })
   approved: boolean;
+
+  // GST verification (India), cached on the vendor so a returning exhibitor
+  // never has to re-verify — this saves the external GST-API calls. `gstDetails`
+  // holds the trimmed, display-ready registry data (legal/trade name, status,
+  // address, etc.) shown to the organizer in the stall details dialog.
+  @Prop({ default: false })
+  isGSTVerified: boolean;
+
+  @Prop({ type: Object })
+  gstDetails?: Record<string, any>;
+
+  @Prop()
+  gstVerifiedAt?: Date;
+
+  // UEN verification (Singapore), auto-checked against ACRA's free open-data
+  // registry (data.gov.sg). Cached the same way as GST so returning exhibitors
+  // aren't re-checked, and the details show in the organizer's stall dialog.
+  @Prop({ default: false })
+  isUENVerified: boolean;
+
+  @Prop({ type: Object })
+  uenDetails?: Record<string, any>;
+
+  @Prop()
+  uenVerifiedAt?: Date;
 }
 
 export const VendorSchema = SchemaFactory.createForClass(Vendor);
