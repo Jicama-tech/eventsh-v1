@@ -713,11 +713,200 @@ export function ExhibitorDetailDialog({
                     <Label className="text-muted-foreground">
                       Registration Number
                     </Label>
-                    <p className="font-medium">
-                      {stallRequest.registrationNumber}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium">
+                        {stallRequest.registrationNumber}
+                      </p>
+                      {/^(NOGST|NOUEN|NOTPROV)/i.test(
+                        String(stallRequest.registrationNumber || ""),
+                      ) && (
+                        <Badge
+                          variant="outline"
+                          className="border-amber-300 bg-amber-50 text-amber-700"
+                        >
+                          ⚠ Placeholder — no registration provided, contact
+                          vendor
+                        </Badge>
+                      )}
+                      {/* Singapore UEN has no free auto-verify API like India's
+                          GST, so give the organizer a one-click Verify: it
+                          copies the UEN and opens the official UEN registry —
+                          paste it in and hit Search to see the details. */}
+                      {!/^(NOGST|NOUEN|NOTPROV)/i.test(
+                        String(stallRequest.registrationNumber || ""),
+                      ) &&
+                        (/singapore/i.test(
+                          String(
+                            stallRequest.residency ||
+                              stallRequest.shopkeeperId?.residency ||
+                              "",
+                          ),
+                        ) ||
+                          stallRequest.shopkeeperId?.country === "SG") && (
+                        <a
+                          href="https://www.bizfile.gov.sg/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => {
+                            const uen = String(
+                              stallRequest.registrationNumber || "",
+                            ).trim();
+                            try {
+                              navigator.clipboard?.writeText(uen);
+                            } catch {
+                              /* clipboard blocked — the site still opens */
+                            }
+                            toast({
+                              title: "UEN copied",
+                              description:
+                                "In BizFile, open the Entity search, paste the UEN and click Search.",
+                            });
+                          }}
+                          className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                          title="Copy the UEN and open the official ACRA BizFile registry"
+                        >
+                          Verify ↗
+                        </a>
+                      )}
+                      {/* India GST — let the organizer verify the GSTIN on the
+                          official government portal too (useful when the vendor
+                          didn't verify it themselves at registration). */}
+                      {!/^(NOGST|NOUEN|NOTPROV)/i.test(
+                        String(stallRequest.registrationNumber || ""),
+                      ) &&
+                        (/india/i.test(
+                          String(
+                            stallRequest.residency ||
+                              stallRequest.shopkeeperId?.residency ||
+                              "",
+                          ),
+                        ) ||
+                          stallRequest.shopkeeperId?.country === "IN") && (
+                        <a
+                          href="https://services.gst.gov.in/services/searchtp"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => {
+                            const gstin = String(
+                              stallRequest.registrationNumber || "",
+                            ).trim();
+                            try {
+                              navigator.clipboard?.writeText(gstin);
+                            } catch {
+                              /* clipboard blocked — the site still opens */
+                            }
+                            toast({
+                              title: "GSTIN copied",
+                              description:
+                                "On the GST portal, paste the GSTIN, enter the captcha and click Search.",
+                            });
+                          }}
+                          className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                          title="Copy the GSTIN and open the official GST portal (Search Taxpayer)"
+                        >
+                          Verify ↗
+                        </a>
+                      )}
+                    </div>
                   </div>
                 )}
+
+                {/* GST verified against the government registry (AppyFlow) at
+                    registration — shown so the organizer can approve with
+                    confidence without re-checking. */}
+                {stallRequest.shopkeeperId?.isGSTVerified &&
+                  stallRequest.shopkeeperId?.gstDetails && (
+                    <div className="col-span-2 pt-2 border-t">
+                      <div className="mb-2 flex items-center gap-2">
+                        <Label className="text-muted-foreground">
+                          GST Verification
+                        </Label>
+                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+                          ✓ Verified
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2 rounded-md border bg-muted/30 p-3 text-sm sm:grid-cols-2">
+                        {(() => {
+                          const g = stallRequest.shopkeeperId.gstDetails as any;
+                          const rows: [string, string][] = [
+                            ["GSTIN", g?.gstin],
+                            ["Legal name", g?.legalName],
+                            ["Trade name", g?.tradeName],
+                            ["Status", g?.status],
+                            ["Registered", g?.registrationDate],
+                            ["Constitution", g?.constitution],
+                            ["State", g?.state],
+                            ["Registered address", g?.address],
+                          ].filter(([, v]) => !!v) as [string, string][];
+                          return rows.map(([label, value]) => (
+                            <div
+                              key={label}
+                              className={
+                                label === "Registered address"
+                                  ? "sm:col-span-2"
+                                  : ""
+                              }
+                            >
+                              <div className="text-xs text-muted-foreground">
+                                {label}
+                              </div>
+                              <div className="font-medium">{value}</div>
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
+                {/* Singapore UEN verified against ACRA's free open-data
+                    registry at registration. If a brand-new entity wasn't found
+                    there, the organizer can still use the "Verify" link above to
+                    check the official registry. */}
+                {stallRequest.shopkeeperId?.isUENVerified &&
+                  stallRequest.shopkeeperId?.uenDetails && (
+                    <div className="col-span-2 pt-2 border-t">
+                      <div className="mb-2 flex items-center gap-2">
+                        <Label className="text-muted-foreground">
+                          UEN Verification
+                        </Label>
+                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+                          ✓ Verified
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground">
+                          via ACRA
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2 rounded-md border bg-muted/30 p-3 text-sm sm:grid-cols-2">
+                        {(() => {
+                          const u = stallRequest.shopkeeperId.uenDetails as any;
+                          const rows: [string, string][] = [
+                            ["UEN", u?.uen],
+                            ["Entity name", u?.entityName],
+                            ["Status", u?.status],
+                            ["Entity type", u?.entityType],
+                            ["Issued", u?.issueDate],
+                            ["Agency", u?.agency],
+                            ["Registered address", u?.address],
+                          ].filter(([, v]) => !!v) as [string, string][];
+                          return rows.map(([label, value]) => (
+                            <div
+                              key={label}
+                              className={
+                                label === "Registered address"
+                                  ? "sm:col-span-2"
+                                  : ""
+                              }
+                            >
+                              <div className="text-xs text-muted-foreground">
+                                {label}
+                              </div>
+                              <div className="font-medium">{value}</div>
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    </div>
+                  )}
 
                 {/* Vendor's preferred space type(s), with requested quantity. */}
                 {(() => {

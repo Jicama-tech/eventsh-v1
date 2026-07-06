@@ -169,4 +169,22 @@ export class CreateStallDto {
   @IsOptional()
   @IsString()
   productImage?: string[];
+
+  // GST verification result (India). Cached on the vendor so returning
+  // exhibitors aren't re-verified. `gstDetails` is a JSON string (multipart).
+  @IsOptional()
+  isGSTVerified?: boolean | string;
+
+  @IsOptional()
+  @IsString()
+  gstDetails?: string;
+
+  // UEN verification result (Singapore). Cached on the vendor; uenDetails is a
+  // JSON string (multipart).
+  @IsOptional()
+  isUENVerified?: boolean | string;
+
+  @IsOptional()
+  @IsString()
+  uenDetails?: string;
 }

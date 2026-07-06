@@ -88,6 +88,39 @@ export class StallsService {
         throw new NotFoundException("Event not found");
       }
 
+      // GST verification (India) — cached on the vendor so returning exhibitors
+      // aren't re-verified. gstDetails arrives JSON-encoded via multipart.
+      const gstVerified =
+        (createStallDto as any).isGSTVerified === true ||
+        (createStallDto as any).isGSTVerified === "true";
+      let gstDetailsObj: Record<string, any> | undefined;
+      if (createStallDto.gstDetails) {
+        try {
+          gstDetailsObj =
+            typeof createStallDto.gstDetails === "string"
+              ? JSON.parse(createStallDto.gstDetails)
+              : (createStallDto.gstDetails as any);
+        } catch {
+          gstDetailsObj = undefined;
+        }
+      }
+
+      // UEN verification (Singapore) — same caching pattern as GST.
+      const uenVerified =
+        (createStallDto as any).isUENVerified === true ||
+        (createStallDto as any).isUENVerified === "true";
+      let uenDetailsObj: Record<string, any> | undefined;
+      if (createStallDto.uenDetails) {
+        try {
+          uenDetailsObj =
+            typeof createStallDto.uenDetails === "string"
+              ? JSON.parse(createStallDto.uenDetails)
+              : (createStallDto.uenDetails as any);
+        } catch {
+          uenDetailsObj = undefined;
+        }
+      }
+
       let shopkeeperId: Types.ObjectId;
 
       if (createStallDto.shopkeeperId) {
@@ -160,6 +193,18 @@ export class StallsService {
           updateFields.organizerId = new Types.ObjectId(
             createStallDto.organizerId,
           );
+        }
+        // Cache a fresh GST verification onto the vendor. Never clear an
+        // already-verified GST if this submission didn't re-verify.
+        if (gstVerified) {
+          updateFields.isGSTVerified = true;
+          if (gstDetailsObj) updateFields.gstDetails = gstDetailsObj;
+          updateFields.gstVerifiedAt = new Date();
+        }
+        if (uenVerified) {
+          updateFields.isUENVerified = true;
+          if (uenDetailsObj) updateFields.uenDetails = uenDetailsObj;
+          updateFields.uenVerifiedAt = new Date();
         }
 
         if (Object.keys(updateFields).length > 0) {
@@ -244,6 +289,12 @@ export class StallsService {
             refundPaymentDescription: createStallDto.refundPaymentDescription,
             noOfOperators: createStallDto.noOfOperators,
             isActive: true,
+            isGSTVerified: gstVerified,
+            gstDetails: gstDetailsObj,
+            gstVerifiedAt: gstVerified ? new Date() : undefined,
+            isUENVerified: uenVerified,
+            uenDetails: uenDetailsObj,
+            uenVerifiedAt: uenVerified ? new Date() : undefined,
           });
 
           shopkeeperId = new Types.ObjectId(newVendor._id);
