@@ -13,10 +13,12 @@ import {
   UploadedFile,
   UploadedFiles,
   Req,
+  Res,
   ParseIntPipe,
   ValidationPipe,
   ForbiddenException,
 } from "@nestjs/common";
+import { Response } from "express";
 import {
   FileInterceptor,
   FilesInterceptor,
@@ -86,6 +88,44 @@ export class EventsController {
     @InjectModel("OrganizerStore")
     private readonly organizerStoreModel: Model<any>,
   ) {}
+
+  // Merge event sponsor logos from the client's `sponsorManifest`: "existing"
+  // entries keep their stored URL, "new" entries consume the next uploaded
+  // file in order. Falls back to just the uploaded files when no manifest is
+  // sent. Returns undefined only when there's nothing at all (no manifest, no
+  // files) so callers can decide whether to leave the field untouched. Always
+  // deletes the helper `sponsorManifest` off the body.
+  private rebuildSponsors(
+    body: any,
+    files: Express.Multer.File[] | undefined,
+  ): string[] | undefined {
+    let manifest: any[] | null = null;
+    if (typeof body?.sponsorManifest === "string") {
+      try {
+        manifest = JSON.parse(body.sponsorManifest);
+      } catch {
+        manifest = null;
+      }
+    }
+    delete body.sponsorManifest;
+    const uploaded = files || [];
+    if (Array.isArray(manifest)) {
+      let idx = 0;
+      return manifest
+        .map((item: any) => {
+          if (item?.type === "new") {
+            const f = uploaded[idx++];
+            return f ? `/uploads/events/${f.filename}` : null;
+          }
+          return item?.url || null;
+        })
+        .filter((u: string | null): u is string => !!u);
+    }
+    if (uploaded.length > 0) {
+      return uploaded.map((f) => `/uploads/events/${f.filename}`);
+    }
+    return undefined;
+  }
 
   // Build a slug from organizationName that mirrors what the public
   // storefront route expects (lowercase, alphanum + dashes only). Falls
@@ -279,7 +319,8 @@ export class EventsController {
     FileFieldsInterceptor(
       [
         { name: "banner", maxCount: 1 },
-        { name: "gallery", maxCount: 10 },
+        { name: "gallery", maxCount: 5 },
+        { name: "sponsorLogos", maxCount: 50 },
         { name: "addOnImages", maxCount: 100 },
         { name: "speakerImages", maxCount: 20 },
       ],
@@ -305,6 +346,7 @@ export class EventsController {
     files: {
       banner?: Express.Multer.File[];
       gallery?: Express.Multer.File[];
+      sponsorLogos?: Express.Multer.File[];
       addOnImages?: Express.Multer.File[];
       speakerImages?: Express.Multer.File[];
     },
@@ -441,6 +483,10 @@ export class EventsController {
       }
       delete body.galleryManifest;
 
+      // Sponsor logos — rebuild from the manifest so existing URLs (on edit)
+      // and freshly uploaded files combine in the order the organizer arranged.
+      body.sponsors = this.rebuildSponsors(body, files.sponsorLogos) ?? [];
+
       if (
         files.addOnImages &&
         files.addOnImages.length > 0 &&
@@ -546,6 +592,62 @@ export class EventsController {
     }
   }
 
+  // ── Volunteer Google sign-in (redirect flow) ──────────────────────────────
+  // Step 1: kick off the OAuth redirect. The eventId rides along in `state` so
+  // the callback knows which event's volunteer allow-list to check.
+  // NOTE: declared BEFORE @Get(":id") so "volunteer-google" isn't swallowed as
+  // an :id param.
+  @Get("volunteer-google")
+  async volunteerGoogleStart(
+    @Query("eventId") eventId: string,
+    @Res() res: Response,
+  ) {
+    const base = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
+    try {
+      const url = this.eventsService.buildVolunteerGoogleAuthUrl(eventId);
+      return res.redirect(url);
+    } catch (e: any) {
+      return res.redirect(
+        `${base}/events/${eventId || ""}/scan-tickets?verror=${encodeURIComponent(
+          e?.message || "Volunteer sign-in is unavailable.",
+        )}`,
+      );
+    }
+  }
+
+  // Step 2: Google redirects back here with ?code & ?state(eventId). Verify the
+  // id_token, confirm the Gmail is on the event's volunteer list, mint a
+  // volunteer JWT, then bounce back to the scanner page with the token (or an
+  // error message) in the query string.
+  @Get("volunteer-google/redirect")
+  async volunteerGoogleRedirect(
+    @Query("code") code: string,
+    @Query("state") state: string,
+    @Res() res: Response,
+  ) {
+    const base = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
+    const eventId = state || "";
+    try {
+      const result = await this.eventsService.handleVolunteerGoogleRedirect(
+        code,
+        state,
+      );
+      return res.redirect(
+        `${base}/events/${result.eventId}/scan-tickets?vtoken=${encodeURIComponent(
+          result.token,
+        )}`,
+      );
+    } catch (e: any) {
+      const msg =
+        e?.message === "not_on_list"
+          ? "This Google account isn't on the volunteer list for this event."
+          : e?.message || "Google sign-in failed.";
+      return res.redirect(
+        `${base}/events/${eventId}/scan-tickets?verror=${encodeURIComponent(msg)}`,
+      );
+    }
+  }
+
   @Get(":id")
   async getEventById(@Param("id") id: string) {
     try {
@@ -609,13 +711,25 @@ export class EventsController {
     return this.eventsService.verifyVolunteerOtp(id, body?.email, body?.otp);
   }
 
+  // Google-Auth volunteer sign-in: verify the Google id_token and confirm the
+  // Gmail is on the event's volunteer allow-list. Public — gating is on the
+  // verified email being in event.volunteers.
+  @Post(":id/verify-volunteer-google")
+  async verifyVolunteerGoogle(
+    @Param("id") id: string,
+    @Body() body: { credential: string },
+  ) {
+    return this.eventsService.verifyVolunteerGoogle(id, body?.credential);
+  }
+
   @Put(":id")
   @UseGuards(AuthGuard("jwt"))
   @UseInterceptors(
     FileFieldsInterceptor(
       [
         { name: "banner", maxCount: 1 },
-        { name: "gallery", maxCount: 10 },
+        { name: "gallery", maxCount: 5 },
+        { name: "sponsorLogos", maxCount: 50 },
         { name: "addOnImages", maxCount: 100 },
         { name: "speakerImages", maxCount: 20 },
       ],
@@ -640,6 +754,7 @@ export class EventsController {
     files: {
       banner?: Express.Multer.File[];
       gallery?: Express.Multer.File[];
+      sponsorLogos?: Express.Multer.File[];
       addOnImages?: Express.Multer.File[];
       speakerImages?: Express.Multer.File[];
     },
@@ -731,17 +846,51 @@ export class EventsController {
         body.image = `/uploads/events/${files.banner[0].filename}`;
       }
 
-      // Rebuild the gallery from the manifest: keep existing images, append
-      // new uploads (in order). Only overwrite when the manifest or new files
-      // are present — otherwise leave the stored gallery untouched.
-      {
-        const resolvedGallery = this.resolveGalleryFromManifest(
-          body.galleryManifest,
-          files.gallery,
-        );
-        if (resolvedGallery !== undefined) body.gallery = resolvedGallery;
+      // Rebuild the gallery from the manifest so editing an event MERGES the
+      // images the organizer kept with any newly uploaded ones — instead of
+      // replacing the whole gallery with just the new files (which dropped the
+      // existing images). The manifest lists every image to keep, in order;
+      // each "new" entry consumes the next uploaded file, in the same order the
+      // client appended them under the "gallery" field.
+      let galleryManifest: any[] | null = null;
+      if (typeof body.galleryManifest === "string") {
+        try {
+          galleryManifest = JSON.parse(body.galleryManifest);
+        } catch {
+          galleryManifest = null;
+        }
       }
+      if (Array.isArray(galleryManifest)) {
+        const newGalleryFiles = files.gallery || [];
+        let newFileIdx = 0;
+        body.gallery = galleryManifest
+          .map((item: any) => {
+            if (item?.type === "new") {
+              const file = newGalleryFiles[newFileIdx++];
+              return file ? `/uploads/events/${file.filename}` : null;
+            }
+            // "existing" — keep the previously stored URL as-is.
+            return item?.url || null;
+          })
+          .filter((url: string | null): url is string => !!url);
+      } else if (files.gallery && files.gallery.length > 0) {
+        // Legacy clients that don't send a manifest: keep the old behaviour.
+        body.gallery = files.gallery.map(
+          (file) => `/uploads/events/${file.filename}`,
+        );
+      }
+      // Never persist the helper manifest onto the event document.
       delete body.galleryManifest;
+
+      // Sponsors — merge existing + new via the manifest. Only touch the field
+      // when the client actually sent sponsor data, so an unrelated update
+      // never wipes existing sponsor logos.
+      const rebuiltSponsors = this.rebuildSponsors(body, files.sponsorLogos);
+      if (rebuiltSponsors !== undefined) {
+        body.sponsors = rebuiltSponsors;
+      } else {
+        delete body.sponsors;
+      }
 
       // 3. Handle Add-On Images (Mapping new files to correct items)
       if (

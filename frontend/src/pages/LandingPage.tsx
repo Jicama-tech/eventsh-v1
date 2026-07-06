@@ -391,10 +391,10 @@ const LandingPage = () => {
         <div className="container mx-auto px-4 relative z-10 pt-32 pb-20">
           <div className=" mx-auto text-center">
             <ScrollReveal>
-              <h1 className="text-6xl md:text-8xl font-bold text-white mb-8 tracking-tight">
-                EventsHub <span className="bg-gradient-to-r from-primary via-blue-400 to-cyan-400 bg-clip-text text-transparent text-7xl"> <br></br>Where People Connect</span>
+              <h1 className="text-4xl sm:text-5xl md:text-8xl font-bold text-white mb-6 sm:mb-8 tracking-tight">
+                EventsHub <span className="bg-gradient-to-r from-primary via-blue-400 to-cyan-400 bg-clip-text text-transparent text-4xl sm:text-5xl md:text-7xl"> <br></br>Where People Connect</span>
               </h1>
-              <p className="text-xl md:text-2xl text-slate-400 mb-12 leading-relaxed max-w-2xl mx-auto">
+              <p className="text-base sm:text-xl md:text-2xl text-slate-400 mb-10 sm:mb-12 leading-relaxed max-w-2xl mx-auto px-2">
                 EventsHub: Master organizer, exhibitor, and visitors in one seamless move. 
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-6">

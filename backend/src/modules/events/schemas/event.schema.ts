@@ -27,6 +27,12 @@ class VenueConfig {
 
   @Prop()
   totalRows?: number;
+
+  // When false, this venue is hidden from the public eventfront and the
+  // vendor/round-table selection tabs. Undefined = published (legacy venues
+  // stay visible).
+  @Prop({ default: true })
+  published?: boolean;
 }
 
 class SpeakerSlotTemplate {
@@ -397,6 +403,11 @@ export class Event {
   @Prop([String])
   gallery?: string[];
 
+  // Event sponsor logo image URLs. Shown on the eventfront below the banner as
+  // a moving logo carousel. No fixed limit.
+  @Prop({ type: [String], default: [] })
+  sponsors?: string[];
+
   // Instagram reel URLs (e.g. https://www.instagram.com/reel/<id>/).
   // Surfaced as a carousel on the eventfront; clicking a tile opens
   // the official Instagram /embed iframe inside a dialog so the reel
@@ -438,6 +449,12 @@ export class Event {
     twitter?: string;
     linkedin?: string;
   };
+
+  // Max total spaces a single vendor may request/book across all space types.
+  // Drives the quantity-based preferred-space picker on the stall form and the
+  // total cap when the vendor selects real spaces on the layout. Default 1.
+  @Prop({ type: Number, default: 1 })
+  maxSpacesPerVendor?: number;
 
   // Exhibition/Venue fields with ROW-BASED PRICING
   @Prop({ type: Array, default: [] })
@@ -517,6 +534,12 @@ export class Event {
     /** Hex color used to mark the add-on on the venue layout (one dot per
      *  purchased add-on on each booked stall). Defaults to a neutral grey. */
     color?: string;
+    /** Cap on how many of this add-on a vendor may pick per booked space.
+     *  Undefined / 0 = unlimited. */
+    maxPerSpace?: number;
+    /** Per-space-template caps: templateId → max count. Overrides maxPerSpace
+     *  for that template. */
+    maxPerTemplate?: Record<string, number>;
   }[];
 
   @Prop({

@@ -533,7 +533,9 @@ export class MembershipsService {
         orClauses.push({ exhibitorWhatsapp: { $in: candidates } });
     }
     if (orClauses.length === 0) return null;
-    return this.membershipModel
+
+    // 1) Platform-purchased membership — the rich record with a plan.
+    const platform: any = await this.membershipModel
       .findOne({
         organizerId: orgObjId,
         status: "active",
@@ -543,6 +545,61 @@ export class MembershipsService {
       // card (name, color, perks list, validity, prices).
       .populate("planId", "name color perks price currency durationDays description")
       .lean();
+    if (platform) return platform;
+
+    // 2) Fallback: a membership the organizer added MANUALLY in the CRM. That
+    //    lives only as a flag on the vendor record (isMember + membershipEndDate)
+    //    with no ExhibitorMembership document — so there's no plan name. Surface
+    //    it anyway so the eventfront shows "Membership Activated" + the expiry
+    //    date the organizer set. Scoped to this organizer (or legacy vendors
+    //    with no owning organizer) so one organizer's member doesn't leak onto
+    //    another's event.
+    const vendorOr: any[] = [];
+    if (email) vendorOr.push({ email });
+    if (exhibitorWhatsapp) {
+      const digits = exhibitorWhatsapp.replace(/\D/g, "");
+      const candidates: string[] = [exhibitorWhatsapp];
+      if (digits) {
+        candidates.push(digits);
+        if (!exhibitorWhatsapp.startsWith("+")) candidates.push(`+${digits}`);
+      }
+      vendorOr.push({ whatsAppNumber: { $in: candidates } });
+    }
+    if (vendorOr.length === 0) return null;
+
+    const vendor: any = await this.vendorModel
+      .findOne({
+        isMember: true,
+        $and: [
+          { $or: vendorOr },
+          {
+            $or: [
+              { organizerId: orgObjId },
+              { organizerId: { $exists: false } },
+              { organizerId: null },
+            ],
+          },
+        ],
+      })
+      .lean();
+    if (!vendor) return null;
+
+    // Synthetic membership shaped like the real one, minus the plan, so the
+    // frontend renders it with its existing optional-chaining logic.
+    return {
+      _id: vendor._id,
+      source: "crm",
+      status: "active",
+      organizerId: orgObjId,
+      exhibitorEmail: vendor.email || email,
+      exhibitorName: vendor.name || vendor.businessName,
+      exhibitorWhatsapp: vendor.whatsAppNumber,
+      startDate: null,
+      endDate: vendor.membershipEndDate || null,
+      amountPaid: 0,
+      currency: "",
+      planId: null,
+    };
   }
 
   // Cron-friendly worker — sweeps active rows whose endDate has passed and

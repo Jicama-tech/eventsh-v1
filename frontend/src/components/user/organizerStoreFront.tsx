@@ -1383,6 +1383,42 @@ export function OrganizerStorefront({
           </section>
         )}
 
+        {/* Sponsor strip — logos configured in the storefront customizer. */}
+        {Array.isArray((design as any).sponsors) &&
+          (design as any).sponsors.length > 0 && (
+            <section className="border-b border-gray-100 bg-white/70 py-8 sm:py-10">
+              <div className="mx-auto max-w-6xl px-4">
+                <p className="mb-5 text-center text-xs font-semibold uppercase tracking-[0.2em] text-gray-500 sm:text-sm">
+                  Our Sponsors
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10">
+                  {(design as any).sponsors.map((s: any) => {
+                    const img = (
+                      <img
+                        src={getImageUrl(s.imageUrl)}
+                        alt={s.name || "Sponsor"}
+                        title={s.name}
+                        className="h-9 w-auto object-contain opacity-80 grayscale transition hover:opacity-100 hover:grayscale-0 sm:h-12"
+                      />
+                    );
+                    return s.link ? (
+                      <a
+                        key={s.id}
+                        href={s.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {img}
+                      </a>
+                    ) : (
+                      <div key={s.id}>{img}</div>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+          )}
+
         {settings?.settings?.design.layout.visibleStatisticsSection && (
           <section className="py-10 sm:py-14 lg:py-20">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

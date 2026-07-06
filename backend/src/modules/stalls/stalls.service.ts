@@ -3,6 +3,7 @@ import {
   BadRequestException,
   NotFoundException,
   ConflictException,
+  InternalServerErrorException,
   Logger,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
@@ -21,6 +22,22 @@ import { CouponService } from "../coupon/coupon.service";
 import { CreateCouponDto } from "../coupon/dto/create-coupon.dto";
 import { FeedbackService } from "../feedback/feedback.service";
 import { MailService } from "../roles/mail.service";
+
+// Parse a JSON-encoded string[] (multipart sends arrays as a string). Falls
+// back to a single legacy value when the array form isn't present, so older
+// single-preference clients keep working.
+function parsePreferredArray(json?: string, legacy?: string): string[] {
+  if (json) {
+    try {
+      const a = JSON.parse(json);
+      if (Array.isArray(a)) return a.map((x) => String(x)).filter(Boolean);
+    } catch {
+      // not JSON — fall through and treat as a single bare value
+    }
+    return [String(json)].filter(Boolean);
+  }
+  return legacy ? [String(legacy)] : [];
+}
 
 function formatCurrency(amount: number, country?: string): string {
   if (country === "IN") {
@@ -156,9 +173,17 @@ export class StallsService {
       } else {
         let vendor = null;
 
+        // "Register a new request" (linked accounts) forces a brand-new vendor
+        // even when one with the same email/WhatsApp exists — so the reuse
+        // lookup is skipped. Multipart sends the flag as a string, so coerce.
+        const forceNew =
+          (createStallDto as any).forceNewVendor === true ||
+          (createStallDto as any).forceNewVendor === "true";
+
         if (
-          createStallDto.shopkeeperWhatsAppNumber ||
-          createStallDto.shopkeeperEmail
+          !forceNew &&
+          (createStallDto.shopkeeperWhatsAppNumber ||
+            createStallDto.shopkeeperEmail)
         ) {
           vendor = await this.vendorModel.findOne({
             $or: [
@@ -283,6 +308,26 @@ export class StallsService {
             : vendorImages?.productImage || [],
         preferredTemplateId: createStallDto.preferredTemplateId || null,
         preferredTemplateName: createStallDto.preferredTemplateName || null,
+        preferredTemplateIds: parsePreferredArray(
+          createStallDto.preferredTemplateIds,
+          createStallDto.preferredTemplateId,
+        ),
+        preferredTemplateNames: parsePreferredArray(
+          createStallDto.preferredTemplateNames,
+          createStallDto.preferredTemplateName,
+        ),
+        preferredTemplateQuantities: (() => {
+          try {
+            const q = JSON.parse(
+              createStallDto.preferredTemplateQuantities || "[]",
+            );
+            return Array.isArray(q)
+              ? q.map((n: any) => Math.max(1, Math.floor(Number(n) || 1)))
+              : [];
+          } catch {
+            return [];
+          }
+        })(),
       });
 
       const populatedStall = await newStall.populate([
@@ -389,6 +434,47 @@ export class StallsService {
         );
       }
 
+      // Enforce the organizer's per-space-type booking cap (maxPerBooking on
+      // each stall template, e.g. max 1 large + 2 small). Resolve each
+      // selected position to its source template, count per template, and
+      // reject if any type exceeds its cap. Blank / 0 = unlimited.
+      const templatesById: Record<string, any> = {};
+      (event.tableTemplates || []).forEach((tpl: any) => {
+        if (tpl?.id) templatesById[tpl.id] = tpl;
+      });
+      const posToTemplateId: Record<string, string> = {};
+      allTables.forEach((t: any) => {
+        if (t?.positionId) posToTemplateId[t.positionId] = t.id;
+      });
+      const countByTemplate: Record<string, number> = {};
+      for (const sel of selectDto.selectedTables) {
+        const tplId = posToTemplateId[sel.positionId] || (sel as any).tableId;
+        if (!tplId) continue;
+        countByTemplate[tplId] = (countByTemplate[tplId] || 0) + 1;
+      }
+      for (const [tplId, count] of Object.entries(countByTemplate)) {
+        const max = Number(templatesById[tplId]?.maxPerBooking);
+        if (Number.isFinite(max) && max > 0 && count > max) {
+          const name = templatesById[tplId]?.name || "this type";
+          throw new BadRequestException(
+            `You can select at most ${max} "${name}" space${max === 1 ? "" : "s"} per booking.`,
+          );
+        }
+      }
+
+      // Event-level total cap: a vendor can't book more spaces than
+      // maxSpacesPerVendor across all types.
+      const maxTotal = Number(event.maxSpacesPerVendor);
+      if (
+        Number.isFinite(maxTotal) &&
+        maxTotal > 0 &&
+        selectDto.selectedTables.length > maxTotal
+      ) {
+        throw new BadRequestException(
+          `You can book at most ${maxTotal} space${maxTotal === 1 ? "" : "s"} for this event.`,
+        );
+      }
+
       const tablesTotal = selectDto.selectedTables.reduce(
         (sum, table) => sum + table.price,
         0,
@@ -490,13 +576,13 @@ export class StallsService {
           const html = `
             <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
               <div style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:24px;text-align:center">
-                <h1 style="margin:0;font-size:20px">Booking Accepted ✅</h1>
+                <h1 style="margin:0;font-size:20px">Booking Received ✅</h1>
                 <p style="margin:6px 0 0;opacity:.9">${event.title}</p>
               </div>
               <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
                 <p>Hi ${vendor?.name || "there"},</p>
                 <p>Your booking for <strong>${event.title}</strong> has been
-                  <strong>accepted</strong> and your payment details have been
+                  <strong>received</strong> and your payment details have been
                   submitted.</p>
                 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin:14px 0">
                   <p style="margin:0 0 6px"><strong>Spaces:</strong> ${tableNames || "—"}</p>
@@ -514,7 +600,7 @@ export class StallsService {
             </div>`;
           await this.mailService.sendEmail({
             to: vendorEmail,
-            subject: `Booking accepted — awaiting payment approval for ${event.title}`,
+            subject: `Booking received — awaiting payment approval for ${event.title}`,
             html,
             senderConfig,
           });
@@ -681,7 +767,26 @@ export class StallsService {
         appliesTo: "ORGANIZER",
       };
 
-      const coupon = await this.couponService.create(couponPayload);
+      let coupon: any;
+      try {
+        coupon = await this.couponService.create(couponPayload);
+      } catch (couponErr: any) {
+        // A coupon with this deterministic code already exists (e.g. the payment
+        // was confirmed before, or the same vendor/event regenerates the same
+        // code). Reuse the existing code instead of failing the entire
+        // confirmation with an E11000 duplicate-key error.
+        const isDuplicate =
+          couponErr?.code === 11000 ||
+          /E11000|duplicate key/i.test(String(couponErr?.message || couponErr));
+        if (isDuplicate) {
+          this.logger.warn(
+            `Coupon "${couponName}" already exists — reusing it for stall ${stallId}.`,
+          );
+          coupon = { code: couponName };
+        } else {
+          throw couponErr;
+        }
+      }
 
       stall.couponCodeAssigned = coupon.code;
 
@@ -689,71 +794,113 @@ export class StallsService {
       const organizerDoc = await this.organizerModel.findById(orgId);
       const country = organizerDoc?.country || "IN";
 
-      const pdfBuffer = await this.generateStallTicketPDF(
-        stall,
-        qrCodeBase64,
-        coupon,
-        country,
-      );
-
-      const pdfDir = path.join(process.cwd(), "uploads", "stallTickets");
-      if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
-
-      const pdfFileName = `stall_ticket_${stallId}.pdf`;
-      const pdfPath = path.join(pdfDir, pdfFileName);
-
-      await fs.promises.writeFile(pdfPath, pdfBuffer);
-
-      // Store path in database
-      stall.qrCodePath = `/uploads/stallTickets/${pdfFileName}`;
-      stall.qrCodeData = JSON.stringify(qrPayload);
+      // Persist the coupon assignment now so the confirm response returns
+      // immediately. The ticket PDF render (headless Chromium) + email/WhatsApp
+      // delivery then run OUT-OF-BAND below: in production they were slow enough
+      // to exceed the request/gateway timeout, and when delivery threw the error
+      // was swallowed — which is why the organizer had to "Resend". Background
+      // delivery failures are logged; "Resend ticket" remains the fallback.
       await stall.save();
 
-      // ===== DELIVER THE STALL TICKET =====
-      // Email is the primary channel and is ALWAYS sent (it no longer depends
-      // on the vendor having a WhatsApp number). WhatsApp is an extra channel,
-      // sent only when a number is on file and the integration is enabled.
+      const deliverStallTicket = async () => {
       const vendorWhatsApp = vendor.whatsAppNumber || vendor.whatsappNumber;
       const vendorEmail = this.vendorEmailRecipients(vendor);
+      const eventObj = stall.eventId as any;
+      const eventDate = eventObj?.startDate
+        ? new Date(eventObj.startDate).toLocaleDateString()
+        : "TBA";
+      const message =
+        `🎉 *Your Stall Confirmation is Ready!*\n\n` +
+        `🎪 *Event:* ${eventObj?.title || "Event"}\n` +
+        `👤 *Business:* ${vendor.businessName || vendor.shopName || vendor.brandName || stall.brandName || vendor.name || "—"}\n` +
+        `📅 *Date:* ${eventDate}\n` +
+        `📍 *Venue:* ${eventObj?.location || "TBA"}\n\n` +
+        `📊 *Booking Summary:*\n` +
+        `• Tables: ${stall.selectedTables.length}\n` +
+        `• Add-ons: ${stall.selectedAddOns?.length || 0}\n` +
+        `• Total: ${formatCurrency(stall.grandTotal, country)}\n` +
+        (coupon ? `\n🎟️ *Coupon:* ${coupon.code} (${stall.noOfOperators} free entries)\n` : "") +
+        `\n⚠️ Your stall ticket PDF is attached. Present the QR code at the event entrance.`;
+
+      // Render the ticket PDF. If headless Chromium fails (common on
+      // constrained production hosts), DON'T abort delivery — fall back to a
+      // plain confirmation email below so the vendor is still notified.
+      let pdfPath: string | null = null;
       try {
-        const eventObj = stall.eventId as any;
-        const eventDate = eventObj?.startDate
-          ? new Date(eventObj.startDate).toLocaleDateString()
-          : "TBA";
+        const pdfBuffer = await this.generateStallTicketPDF(
+          stall,
+          qrCodeBase64,
+          coupon,
+          country,
+        );
+        const pdfDir = path.join(process.cwd(), "uploads", "stallTickets");
+        if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
+        const pdfFileName = `stall_ticket_${stallId}.pdf`;
+        pdfPath = path.join(pdfDir, pdfFileName);
+        await fs.promises.writeFile(pdfPath, pdfBuffer);
+        stall.qrCodePath = `/uploads/stallTickets/${pdfFileName}`;
+        stall.qrCodeData = JSON.stringify(qrPayload);
+        await stall.save();
+      } catch (pdfErr) {
+        pdfPath = null;
+        this.logger.error(
+          `Stall ticket PDF generation failed for stall ${stallId}: ${
+            (pdfErr as any)?.message || pdfErr
+          }. Sending a plain confirmation instead.`,
+        );
+      }
 
-        const message =
-          `🎉 *Your Stall Confirmation is Ready!*\n\n` +
-          `🎪 *Event:* ${eventObj?.title || "Event"}\n` +
-          `👤 *Business:* ${vendor.businessName || vendor.shopName || vendor.brandName || stall.brandName || vendor.name || "—"}\n` +
-          `📅 *Date:* ${eventDate}\n` +
-          `📍 *Venue:* ${eventObj?.location || "TBA"}\n\n` +
-          `📊 *Booking Summary:*\n` +
-          `• Tables: ${stall.selectedTables.length}\n` +
-          `• Add-ons: ${stall.selectedAddOns?.length || 0}\n` +
-          `• Total: ${formatCurrency(stall.grandTotal, country)}\n` +
-          (coupon ? `\n🎟️ *Coupon:* ${coupon.code} (${stall.noOfOperators} free entries)\n` : "") +
-          `\n⚠️ Your stall ticket PDF is attached. Present the QR code at the event entrance.`;
-
-        // WhatsApp text notification only when a number is on file.
+      try {
+        // WhatsApp text notification only when a number is on file. Isolated in
+        // its own try/catch so a logged-out / dead WhatsApp session
+        // ("Connection Closed") can NEVER abort the email that follows.
         if (vendorWhatsApp) {
-          await this.otpService.sendWhatsAppMessage(vendorWhatsApp, message);
+          try {
+            await this.otpService.sendWhatsAppMessage(vendorWhatsApp, message);
+          } catch (waErr) {
+            this.logger.warn(
+              `WhatsApp text failed for stall ${stallId} (continuing to email): ${
+                (waErr as any)?.message || waErr
+              }`,
+            );
+          }
         }
 
-        // Deliver the ticket PDF: sendMediaMessage emails first (independent of
-        // WhatsApp) and only attempts WhatsApp when a number is present.
-        await this.otpService.sendMediaMessage(
-          vendorWhatsApp || "",
-          pdfPath,
-          `Stall Ticket - ${eventObj?.title || "Event"}`,
-          "stall-ticket.pdf",
-          {
+        if (pdfPath) {
+          // Deliver the ticket PDF: sendMediaMessage emails first (independent
+          // of WhatsApp) and only attempts WhatsApp when a number is present.
+          await this.otpService.sendMediaMessage(
+            vendorWhatsApp || "",
+            pdfPath,
+            `Stall Ticket - ${eventObj?.title || "Event"}`,
+            "stall-ticket.pdf",
+            {
+              to: vendorEmail,
+              subject: `Your stall ticket for ${eventObj?.title || "Event"}`,
+              heading: "Your Stall Confirmation is Ready!",
+              message,
+              senderConfig: (organizerDoc as any)?.emailConfig,
+            },
+          );
+        } else if (vendorEmail) {
+          // PDF render failed — still email a text confirmation so the vendor
+          // knows their payment is confirmed. "Resend ticket" re-generates and
+          // attaches the PDF once the render issue is resolved.
+          await this.mailService.sendEmail({
             to: vendorEmail,
-            subject: `Your stall ticket for ${eventObj?.title || "Event"}`,
-            heading: "Your Stall Confirmation is Ready!",
-            message,
+            subject: `Your stall is confirmed for ${eventObj?.title || "Event"}`,
+            html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+                <div style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:24px;text-align:center">
+                  <h1 style="margin:0;font-size:20px">Your Stall Confirmation is Ready!</h1>
+                </div>
+                <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+                  <p>${message.replace(/\*/g, "").replace(/\n/g, "<br/>")}</p>
+                  <p style="color:#64748b;font-size:12px;margin-top:16px">Your ticket PDF will follow shortly.</p>
+                </div>
+              </div>`,
             senderConfig: (organizerDoc as any)?.emailConfig,
-          },
-        );
+          });
+        }
 
         if (!vendorEmail && !vendorWhatsApp) {
           this.logger.warn(
@@ -761,17 +908,35 @@ export class StallsService {
           );
         }
       } catch (sendError) {
-        this.logger.warn("Failed to send stall ticket", sendError);
+        // Make the real cause visible in production logs (SMTP timeout, auth
+        // failure, blocked port, bad organizer email config, …) instead of
+        // swallowing it as a vague warning. The organizer can re-deliver via
+        // the "Resend ticket" action once the underlying issue is fixed.
+        this.logger.error(
+          `Failed to send stall ticket for stall ${stallId}: ${
+            (sendError as any)?.message || sendError
+          }`,
+        );
       }
+      };
+
+      // Fire-and-forget: never block the confirm response on PDF + delivery.
+      void deliverStallTicket().catch((err) =>
+        this.logger.error(
+          `Background stall ticket delivery failed for stall ${stallId}: ${
+            (err as any)?.message || err
+          }`,
+        ),
+      );
 
       this.logger.log(
-        `Payment confirmed and stall ticket sent for stall ${stallId}`,
+        `Payment confirmed for stall ${stallId}; ticket delivery started in background`,
       );
 
       return {
         success: true,
         message:
-          "Payment confirmed and stall ticket sent to the vendor (email + WhatsApp)",
+          "Payment confirmed. The stall ticket is being generated and sent to the vendor.",
         data: stall,
       };
     } catch (error) {
@@ -960,7 +1125,7 @@ export class StallsService {
       <body>
         <div class="container">
           <div class="header">
-            <h1>EVENTSH STALL CONFIRMATION</h1>
+            <h1>${organizer.organizationName || organizer.name || "EventSH"} Stall Confirmation</h1>
             <p>Your stall has been successfully booked</p>
           </div>
 
@@ -1097,7 +1262,7 @@ export class StallsService {
           }
 
           <div class="footer">
-            © ${new Date().getFullYear()} Eventsh. All rights reserved.
+            Powered by EventSH
           </div>
         </div>
       </body>
@@ -1125,7 +1290,7 @@ export class StallsService {
     });
 
     const page = await browser.newPage();
-    await page.setContent(await html, { waitUntil: "networkidle0" });
+    await page.setContent(await html, { waitUntil: "networkidle0", timeout: 20000 });
 
     const uint8arrayBuffer = await page.pdf({
       format: "A4",
@@ -1525,6 +1690,53 @@ Thank you for choosing Eventsh! 🎊`;
           const eventDate = event?.startDate
             ? new Date(event.startDate).toLocaleDateString()
             : "TBA";
+
+          // Preferred space types the vendor selected, each with its price in
+          // the organizer's currency (there can be several).
+          const fullEvent: any = event?._id
+            ? await this.eventModel
+                .findById(event._id)
+                .lean()
+                .catch(() => null)
+            : null;
+          const templates: any[] =
+            fullEvent?.tableTemplates || event?.tableTemplates || [];
+          const tplById: Record<string, any> = {};
+          templates.forEach((t: any) => {
+            if (t?.id) tplById[t.id] = t;
+          });
+          const organizerForCur: any = await this.organizerModel
+            .findById(stall.organizerId)
+            .lean()
+            .catch(() => null);
+          const curCountry = organizerForCur?.country || "IN";
+          const prefIds: string[] =
+            Array.isArray(stall.preferredTemplateIds) &&
+            stall.preferredTemplateIds.length
+              ? stall.preferredTemplateIds
+              : stall.preferredTemplateId
+                ? [stall.preferredTemplateId]
+                : [];
+          // Inline "Name (price)" per selected type, e.g. "Small Space (₹10)".
+          const prefInline = prefIds
+            .map((id: string, i: number) => {
+              const t = tplById[id];
+              const nm =
+                t?.name ||
+                (stall.preferredTemplateNames &&
+                  stall.preferredTemplateNames[i]) ||
+                "Space";
+              const price = t?.tablePrice ?? t?.bookingPrice;
+              const priceStr =
+                price != null && !isNaN(Number(price))
+                  ? formatCurrency(Number(price), curCountry)
+                  : null;
+              const qty = Number(stall.preferredTemplateQuantities?.[i]) || 1;
+              const label = qty > 1 ? `${nm} × ${qty}` : nm;
+              return priceStr ? `${label} (${priceStr})` : label;
+            })
+            .join(", ");
+
           const html = `
             <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
               <div style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:24px;text-align:center">
@@ -1540,6 +1752,11 @@ Thank you for choosing Eventsh! 🎊`;
                   <tr><td style="padding:4px 14px 4px 0;color:#64748b">Date</td><td style="padding:4px 0;font-weight:600">${eventDate}</td></tr>
                   <tr><td style="padding:4px 14px 4px 0;color:#64748b">Status</td><td style="padding:4px 0;font-weight:600">Pending approval</td></tr>
                 </table>
+                ${
+                  prefInline
+                    ? `<p style="margin:14px 0"><strong>Preferred space types selected:</strong> ${prefInline}</p>`
+                    : ""
+                }
                 <p>We'll email you as soon as the organizer approves or rejects your request.</p>
                 <p style="color:#64748b;font-size:12px;margin-top:16px">Thank you for registering!</p>
               </div>
@@ -2263,6 +2480,23 @@ Thank you for choosing Eventsh! 🎊`;
     return { success: true, data: vendor };
   }
 
+  // ALL vendor profiles registered under an email (or businessEmail). Powers
+  // the eventfront "linked accounts" picker: one authenticated email can own
+  // several vendor profiles, and the booker chooses which one to register
+  // with (or adds a new one). Returns [] when none — never 404s.
+  async findVendorsByEmail(email: string) {
+    const normalized = String(email || "").trim();
+    if (!normalized) return { success: true, data: [] };
+    const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const emailRegex = new RegExp(`^${escaped}$`, "i");
+    const vendors = await this.vendorModel
+      .find({ $or: [{ email: emailRegex }, { businessEmail: emailRegex }] })
+      .sort({ createdAt: 1 })
+      .lean()
+      .exec();
+    return { success: true, data: vendors };
+  }
+
   async findAll() {
     try {
       const stalls = await this.stallModel
@@ -2545,10 +2779,16 @@ Thank you for choosing Eventsh! 🎊`;
         (s.selectedTables || []).map((t) => t.positionId),
       );
 
-      const tablesWithStatus = event.venueTables.map((table) => ({
-        ...table,
-        isBooked: bookedPositionIds.includes(table.positionId),
-      }));
+      // Use toObject() so the FULL stall data (color, dimensions, template id,
+      // …) is copied — spreading a Mongoose subdocument directly drops the data
+      // fields, which stripped `color` and made every space render green.
+      const tablesWithStatus = event.venueTables.map((table: any) => {
+        const t = table?.toObject ? table.toObject() : table;
+        return {
+          ...t,
+          isBooked: bookedPositionIds.includes(t.positionId),
+        };
+      });
 
       const availableTables = tablesWithStatus.filter((t) => !t.isBooked);
       const bookedTables = tablesWithStatus.filter((t) => t.isBooked);
@@ -2727,5 +2967,103 @@ Thank you for choosing Eventsh! 🎊`;
       );
       throw error;
     }
+  }
+
+  // ============ RESEND STALL TICKET (QR) EMAIL ============
+  // Re-deliver the QR stall ticket for an already-Paid stall. Unlike the
+  // best-effort send inside confirmPayment, this SURFACES the real failure
+  // (SMTP timeout / auth / blocked port / bad organizer email config) so the
+  // organizer sees exactly why it didn't go out — and can retry once fixed.
+  async resendStallTicket(stallId: string) {
+    if (!Types.ObjectId.isValid(stallId)) {
+      throw new BadRequestException("Invalid stall ID format");
+    }
+
+    // Reuse the canonical PDF path: returns the saved ticket, or regenerates it
+    // on the fly, and enforces the "Paid" precondition.
+    const { buffer } = await this.downloadStallTicket(stallId);
+
+    const stall: any = await this.stallModel
+      .findById(stallId)
+      .populate("shopkeeperId")
+      .populate("eventId")
+      .populate("organizerId");
+    if (!stall) {
+      throw new NotFoundException("Stall not found");
+    }
+
+    const vendorObj = stall.shopkeeperId as any;
+    const vendorEmail = this.vendorEmailRecipients(vendorObj);
+    if (!vendorEmail) {
+      throw new BadRequestException(
+        "This vendor has no email on file, so the ticket can't be emailed.",
+      );
+    }
+
+    const eventObj = stall.eventId as any;
+    const orgId = (stall.organizerId as any)?._id || stall.organizerId;
+    const orgDoc = await this.organizerModel.findById(orgId).lean();
+    const senderConfig = (orgDoc as any)?.emailConfig;
+
+    const eventTitle = eventObj?.title || "Event";
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+        <div style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:24px;text-align:center">
+          <h1 style="margin:0;font-size:20px">Your Stall Ticket</h1>
+        </div>
+        <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+          <p>Hello ${vendorObj?.businessName || vendorObj?.shopName || vendorObj?.name || "there"},</p>
+          <p>Here is your stall ticket for <strong>${eventTitle}</strong>. Your QR code is attached as a PDF — present it at the event entrance.</p>
+          <p style="color:#64748b;font-size:12px;margin-top:20px">The QR code can only be scanned with the official Eventsh app.</p>
+        </div>
+      </div>`;
+
+    try {
+      await this.mailService.sendEmail({
+        to: vendorEmail,
+        subject: `Your stall ticket for ${eventTitle}`,
+        html,
+        attachments: [{ filename: "stall-ticket.pdf", content: buffer }],
+        senderConfig,
+      });
+    } catch (err: any) {
+      this.logger.error(
+        `Resend stall ticket email failed for ${stallId}: ${err?.message || err}`,
+      );
+      throw new InternalServerErrorException(
+        `Couldn't email the ticket: ${err?.message || "mail server error"}`,
+      );
+    }
+
+    // Best-effort WhatsApp mirror (never fails the resend).
+    const wa = vendorObj?.whatsAppNumber || vendorObj?.whatsappNumber;
+    if (wa) {
+      try {
+        const pdfPath = path.join(
+          process.cwd(),
+          "uploads",
+          "stallTickets",
+          `stall_ticket_${stallId}.pdf`,
+        );
+        await this.otpService.sendMediaMessage(
+          wa,
+          pdfPath,
+          `Stall Ticket - ${eventTitle}`,
+          "stall-ticket.pdf",
+        );
+      } catch (waErr) {
+        this.logger.warn(
+          `Resend: WhatsApp mirror failed for ${stallId}: ${
+            (waErr as any)?.message || waErr
+          }`,
+        );
+      }
+    }
+
+    this.logger.log(`Stall ticket re-sent for ${stallId} to ${vendorEmail}`);
+    return {
+      success: true,
+      message: `Stall ticket re-sent to ${vendorEmail}`,
+    };
   }
 }

@@ -72,6 +72,8 @@ import { FaUtensilSpoon, FaWhatsapp } from "react-icons/fa";
 import { useToast } from "@/hooks/use-toast";
 
 import { useCountryCodes } from "@/hooks/useCountryCodes";
+import { phoneNationalLength } from "@/data/countries";
+import SponsorMarquee from "@/components/ui/SponsorMarquee";
 
 interface Country {
   name: string;
@@ -184,6 +186,9 @@ interface Organizer {
   whatsAppNumber: string;
   address: string;
   bio: string;
+  // "Description" the organizer enters in Settings → shown in the About
+  // Organizer section on the public event page.
+  description?: string;
   approved: boolean;
   rejected: boolean;
   createdAt: string;
@@ -311,6 +316,54 @@ interface FetchedEvent {
 interface EventDetailPageProps {
   eventId: string;
   onBack: () => void;
+}
+
+/**
+ * Collapsible info card — same open/close disclosure the Venue Layout
+ * uses (clickable header row + chevron that flips). Used to wrap the
+ * event's info sections (Terms, Refund Policy, etc.) and the Add-On
+ * Items list so each can be expanded/collapsed independently. Defaults
+ * closed, matching the Venue Layout.
+ */
+function CollapsibleCard({
+  title,
+  headingColor,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  headingColor?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="w-full px-5 sm:px-6 py-4 flex items-center gap-2 hover:bg-gray-50 transition-colors"
+      >
+        <p
+          className="text-sm sm:text-lg font-bold tracking-widest uppercase text-left"
+          style={{ color: headingColor }}
+        >
+          {title}
+        </p>
+        <span className="ml-auto">
+          {open ? (
+            <ChevronUp className="h-4 w-4 text-gray-500" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-gray-500" />
+          )}
+        </span>
+      </button>
+      {open && (
+        <div className="px-5 sm:px-6 pb-5 sm:pb-6">{children}</div>
+      )}
+    </div>
+  );
 }
 
 export function EventFront({ eventId, onBack }: EventDetailPageProps) {
@@ -464,6 +517,23 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [existingStallRequest, setExistingStallRequest] = useState<any>(null);
   const [showTableSelection, setShowTableSelection] = useState(false);
   const [shopkeeperId, setShopkeeperId] = useState<string | null>(null);
+  // Linked-accounts (multi-vendor) state for the Google "Rent a Stall" flow.
+  // One authenticated email can own several vendor profiles; the booker picks
+  // which one to register with, or registers a brand-new one.
+  const [linkedVendors, setLinkedVendors] = useState<any[]>([]);
+  const [authedEmail, setAuthedEmail] = useState("");
+  const [showAccountChooser, setShowAccountChooser] = useState(false);
+  // Shown when the chosen vendor has already COMPLETED (paid) a stall for this
+  // event: preview the existing booking, or register a new request.
+  const [showCompletedChoice, setShowCompletedChoice] = useState(false);
+  // Second step inside the completed-choice dialog: after the booker clicks
+  // "Register a new request" we reveal two paths — register again under THIS
+  // same vendor profile (for yourself), or spin up a brand-new linked vendor.
+  const [showRegisterTargetChoice, setShowRegisterTargetChoice] =
+    useState(false);
+  // When true the rent form is blank (except the locked authenticated email)
+  // and submit force-creates a new vendor profile.
+  const [registerNewMode, setRegisterNewMode] = useState(false);
   // Controls the new Google-verified Member dialog mounted under the
   // Rent-a-Stall card. Replaces the old storefront-only entry point.
   const [showMemberDialog, setShowMemberDialog] = useState(false);
@@ -501,6 +571,22 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   }>({});
   const [loadingTables, setLoadingTables] = useState(false);
   const [currentLayoutIndex, setCurrentLayoutIndex] = useState(0);
+
+  // Keep the viewed venue on a PUBLISHED one. If the current index lands on an
+  // unpublished venue (e.g. default index 0 is hidden), jump to the first
+  // published venue so visitors never see a hidden hall.
+  useEffect(() => {
+    const vc = (eventData as any)?.venueConfig;
+    if (!Array.isArray(vc) || vc.length === 0) return;
+    const cur = vc[currentLayoutIndex];
+    if (cur && cur.published === false) {
+      const firstPub = vc.findIndex((v: any) => v?.published !== false);
+      if (firstPub >= 0 && firstPub !== currentLayoutIndex) {
+        setCurrentLayoutIndex(firstPub);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventData, currentLayoutIndex]);
 
   const venueContainerRef = useRef<HTMLDivElement>(null);
   const [dynamicScale, setDynamicScale] = useState(1);
@@ -547,7 +633,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     whatsappNumber: "",
     taxPercentage: 0,
     businessCategory: "",
-    noOfOperators: 0,
+    noOfOperators: 1,
     brandName: "",
     nameOfApplicant: "",
     businessOwnerNationality: "",
@@ -559,6 +645,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     faceBookLink: "",
     preferredTemplateId: "",
     preferredTemplateName: "",
+    preferredTemplateIds: [] as string[],
+    preferredTemplateNames: [] as string[],
+    // Requested quantity per preferred template, parallel to
+    // preferredTemplateIds. Sum is capped by event.maxSpacesPerVendor.
+    preferredTemplateQuantities: [] as number[],
   };
 
   const [regImageFile, setRegImageFile] = useState<File | null>(null);
@@ -582,6 +673,39 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [cropQueue, setCropQueue] = useState<File[]>([]);
 
   const [shopkeeperDetails, setShopkeeperDetails] = useState(initialForm);
+  // The country picked in each phone field's flag dropdown (from
+  // react-phone-input-2's onChange). Drives the per-country digit-length
+  // check on submit (India 10, Singapore 8, …).
+  const [whatsappCountry, setWhatsappCountry] = useState<any>(null);
+  const [phoneCountry, setPhoneCountry] = useState<any>(null);
+  // Once the vendor's stall request is Approved, their identity fields
+  // (WhatsApp, Phone, Registration Number) are locked — they can't be changed.
+  const isStallApproved = existingStallRequest?.status === "Approved";
+  // Short "N digits" hint for the country picked in a phone field.
+  const phoneHint = (country: any) => {
+    if (!country) return null;
+    const [min, max] = phoneNationalLength(country.countryCode);
+    return min === max ? `${min} digits` : `${min}–${max} digits`;
+  };
+  // Registration-number rules driven by the selected Residency: Singapore uses
+  // a 10-char UEN, India a 15-char GST. Both alphanumeric. Other residencies
+  // fall back to a generic alphanumeric field with no fixed length.
+  const regConfig = (() => {
+    const res = String(shopkeeperDetails.residency || "").toLowerCase();
+    if (res === "singapore")
+      return {
+        label: "UEN",
+        length: 10,
+        example: "UEN — 10 characters, e.g. 201812345A or T18LL1234A",
+      };
+    if (res === "india")
+      return {
+        label: "GST",
+        length: 15,
+        example: "GST — 15 characters, e.g. 27AAPFU0939F1ZV",
+      };
+    return { label: "UEN/GST", length: 0, example: "" };
+  })();
   const { toast } = useToast();
   // Country dial codes come from a single shared hook (local data, no network).
   const { countries, loading: loadingCountries } = useCountryCodes();
@@ -1177,6 +1301,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // `fallbackWhatsApp` keeps the verified WhatsApp number when the vendor
   // doc itself doesn't carry one (e.g. matched only by email).
   const applyVendorRecord = async (shopData: any, fallbackWhatsApp?: string) => {
+    // Applying an existing profile is never a "register new" flow.
+    setRegisterNewMode(false);
     setShopkeeperExists(true);
     setShopkeeperId(shopData._id);
     // Denormalised member flag — set by the memberships pipeline
@@ -1215,6 +1341,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       refundPaymentDescription: shopData.refundPaymentDescription || "",
       preferredTemplateId: "",
       preferredTemplateName: "",
+      preferredTemplateIds: [] as string[],
+      preferredTemplateNames: [] as string[],
+      preferredTemplateQuantities: [] as number[],
     });
     setEmailVerified(true); // Assume verified if exists
 
@@ -1324,7 +1453,94 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     setStallGoogleLoading(true);
   };
 
-  // Look up a returning vendor by the Google email and continue the flow.
+  // Load the membership card for a vendor (after a profile is chosen).
+  const resolveStallMembership = async (vendor: any, email: string) => {
+    if (!vendor?.isMember) {
+      setStallMembership(null);
+      return;
+    }
+    let planName = "Member";
+    let endDate: string | undefined = vendor.membershipEndDate;
+    let color: string | undefined;
+    try {
+      const orgId = eventData?.organizer?._id;
+      if (orgId) {
+        const mRes = await fetch(
+          `${apiURL}/exhibitor-memberships/by-email/${encodeURIComponent(
+            email,
+          )}?organizerId=${orgId}`,
+        );
+        const txt = await mRes.text();
+        const m = txt ? JSON.parse(txt) : null;
+        if (m) {
+          planName = m.planId?.name || planName;
+          endDate = m.endDate || endDate;
+          color = m.planId?.color;
+        }
+      }
+    } catch {
+      // non-fatal — fall back to the vendor's denormalised fields
+    }
+    setStallMembership({ planName, endDate, color });
+  };
+
+  // Open a BLANK rent form for a NEW vendor profile under the authenticated
+  // email. The email stays locked (emailVerified); submit force-creates a new
+  // vendor so this email can own multiple linked profiles.
+  const startRegisterNew = (email: string) => {
+    setRegisterNewMode(true);
+    setShopkeeperExists(false);
+    setShopkeeperId(null);
+    setStallMembership(null);
+    setShopkeeperDetails({
+      ...initialForm,
+      email,
+      businessEmail: email,
+    });
+    setEmailVerified(true); // Google-verified — keep the primary email locked
+    setRegImageFile(null);
+    setRegImagePreview("");
+    setLogoFile(null);
+    setLogoPreview("");
+    setProductFiles([]);
+    setProductPreviews([]);
+    setExistingProductImages([]);
+    setShowAccountChooser(false);
+    setShowCompletedChoice(false);
+    setShowRegisterTargetChoice(false);
+    setShowWhatsAppDialog(false);
+    setShowRentForm(true);
+  };
+
+  // Open the rent form to register ANOTHER request under the SAME vendor
+  // profile the booker just previewed. The profile is already prefilled (we got
+  // here via continueWithVendor → applyVendorRecord), so we keep shopkeeperId /
+  // shopkeeperExists intact and ensure registerNewMode is off — submit then
+  // passes the existing shopkeeperId (no forceNewVendor), and the backend's
+  // existing-request guard ignores Completed bookings, so a fresh Pending stall
+  // is created under this same vendor.
+  const startRegisterForSelf = () => {
+    setRegisterNewMode(false);
+    setShowRegisterTargetChoice(false);
+    setShowCompletedChoice(false);
+    setShowAccountChooser(false);
+    setShowWhatsAppDialog(false);
+    setShowRentForm(true);
+  };
+
+  // Continue with a specific existing vendor profile: prefill, then route by
+  // that vendor's request status for this event (applyVendorRecord →
+  // fetchExistingRequest). A completed cycle opens the preview/register choice.
+  const continueWithVendor = async (vendor: any, email: string) => {
+    setRegisterNewMode(false);
+    setShowAccountChooser(false);
+    await resolveStallMembership(vendor, email);
+    await applyVendorRecord(vendor);
+  };
+
+  // Google sign-in result handler. Looks up ALL vendor profiles for the email
+  // (linked accounts) and branches: 0 → fresh registration, 1 → continue,
+  // 2+ → account chooser.
   const lookupVendorByEmail = async (email: string) => {
     const clean = String(email || "").trim().toLowerCase();
     if (!clean) {
@@ -1337,75 +1553,33 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       });
       return;
     }
+    setAuthedEmail(clean);
     try {
       const res = await fetch(
-        `${apiURL}/stalls/vendor/by-email/${encodeURIComponent(clean)}`,
+        `${apiURL}/stalls/vendors/by-email/${encodeURIComponent(clean)}`,
       );
-      if (res.ok) {
-        const data = await res.json();
-        const shopData = data.data || data;
-        if (shopData && (shopData.name || shopData.businessName)) {
-          // Active member → load the membership details so the rent form can
-          // show a small card. We don't pause here; the registration form
-          // opens with the card on top.
-          if (shopData.isMember) {
-            let planName = "Member";
-            let endDate: string | undefined = shopData.membershipEndDate;
-            let color: string | undefined;
-            try {
-              const orgId = eventData?.organizer?._id;
-              if (orgId) {
-                const mRes = await fetch(
-                  `${apiURL}/exhibitor-memberships/by-email/${encodeURIComponent(
-                    clean,
-                  )}?organizerId=${orgId}`,
-                );
-                const txt = await mRes.text();
-                const m = txt ? JSON.parse(txt) : null;
-                if (m) {
-                  planName = m.planId?.name || planName;
-                  endDate = m.endDate || endDate;
-                  color = m.planId?.color;
-                }
-              }
-            } catch {
-              // non-fatal — fall back to vendor's denormalised fields
-            }
-            setStallMembership({ planName, endDate, color });
-          } else {
-            setStallMembership(null);
-          }
-          setStallGoogleLoading(false);
-          await applyVendorRecord(shopData);
-          return;
-        }
-      }
-      // No vendor on this email — open a fresh form pre-filled with it.
+      const json = res.ok ? await res.json() : { data: [] };
+      const list: any[] = Array.isArray(json?.data) ? json.data : [];
+      setLinkedVendors(list);
       setStallGoogleLoading(false);
-      setShopkeeperExists(false);
-      setShopkeeperDetails({
-        ...initialForm,
-        email: clean,
-        businessEmail: clean,
-      });
-      setShowWhatsAppDialog(false);
-      setShowRentForm(true);
-      toast({
-        duration: 5000,
-        title: "Let's get you set up",
-        description: "No saved profile found — please fill in your details.",
-      });
+      if (list.length === 0) {
+        startRegisterNew(clean);
+        toast({
+          duration: 5000,
+          title: "Let's get you set up",
+          description: "No saved profile found — please fill in your details.",
+        });
+      } else if (list.length === 1) {
+        await continueWithVendor(list[0], clean);
+      } else {
+        // Multiple linked profiles on this email → let the booker pick one.
+        setShowWhatsAppDialog(false);
+        setShowAccountChooser(true);
+      }
     } catch (error) {
       console.error("Vendor email lookup failed:", error);
       setStallGoogleLoading(false);
-      setShopkeeperExists(false);
-      setShopkeeperDetails({
-        ...initialForm,
-        email: clean,
-        businessEmail: clean,
-      });
-      setShowWhatsAppDialog(false);
-      setShowRentForm(true);
+      startRegisterNew(clean);
     }
   };
 
@@ -1625,21 +1799,28 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       };
 
       // ── Header ───────────────────────────────────────────────
+      // Organizer's organization name brands the top of the receipt (falls
+      // back to the organizer's name, then "EventSH").
+      const orgName =
+        (eventData as any)?.organizer?.organizationName ||
+        (eventData as any)?.organizer?.name ||
+        "EventSH";
       pdf.setFillColor(30, 64, 175);
-      pdf.rect(0, 0, pageWidth, 16, "F");
+      pdf.rect(0, 0, pageWidth, 18, "F");
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(14);
+      pdf.setFontSize(13);
       pdf.setTextColor(255, 255, 255);
-      pdf.text("Stall Booking Details", margin, 11);
-      pdf.setFontSize(9);
+      pdf.text(orgName, margin, 8);
       pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9);
+      pdf.text("Stall Booking Details", margin, 14);
       pdf.text(
         `Generated: ${new Date().toLocaleString()}`,
         pageWidth - margin,
-        11,
+        8,
         { align: "right" },
       );
-      y = 24;
+      y = 26;
 
       // ── Status Row ───────────────────────────────────────────
       pdf.setFontSize(9);
@@ -2001,7 +2182,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         pdf.setFont("helvetica", "normal");
         pdf.setFontSize(8);
         pdf.setTextColor(120, 120, 120);
-        pdf.text("EventSH — Stall Booking Report", margin, pageHeight - 3.5);
+        pdf.text("Powered by EventSH", margin, pageHeight - 3.5);
         pdf.text(
           `Page ${i} of ${totalPages}`,
           pageWidth - margin,
@@ -2284,13 +2465,25 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       return;
     }
 
-    // Check if vendor has a preferred template and this table doesn't match
-    const preferredId = existingStallRequest?.preferredTemplateId;
-    if (preferredId && table.id !== preferredId) {
+    // Check if vendor has preferred template(s) and this table doesn't match
+    // any of them (combination preferences allow several types).
+    const preferredIds: string[] =
+      Array.isArray(existingStallRequest?.preferredTemplateIds) &&
+      existingStallRequest.preferredTemplateIds.length
+        ? existingStallRequest.preferredTemplateIds
+        : existingStallRequest?.preferredTemplateId
+          ? [existingStallRequest.preferredTemplateId]
+          : [];
+    if (preferredIds.length > 0 && !preferredIds.includes(table.id)) {
+      const label =
+        (Array.isArray(existingStallRequest?.preferredTemplateNames) &&
+          existingStallRequest.preferredTemplateNames.join(", ")) ||
+        existingStallRequest?.preferredTemplateName ||
+        "your selected";
       toast({
         duration: 5000,
         title: "Not Available for Your Category",
-        description: `You registered for "${existingStallRequest?.preferredTemplateName}" spaces only. This space belongs to a different category.`,
+        description: `You registered for "${label}" spaces only. This space belongs to a different category.`,
         variant: "destructive",
       });
       return;
@@ -2320,6 +2513,61 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       const sourceTemplate = (eventData?.tableTemplates || []).find(
         (tpl: any) => tpl?.id === table.id,
       );
+
+      // How many of THIS type the vendor may select: the smaller of the
+      // organizer's per-type cap (maxPerBooking) and the quantity the vendor
+      // registered for this preferred type on the stall form. Block once that
+      // many of the type are already selected.
+      const prefQtys: number[] = Array.isArray(
+        existingStallRequest?.preferredTemplateQuantities,
+      )
+        ? existingStallRequest.preferredTemplateQuantities
+        : [];
+      const prefIdx = preferredIds.indexOf(table.id);
+      const registeredForType =
+        prefIdx >= 0 ? Math.max(1, Number(prefQtys[prefIdx]) || 1) : Infinity;
+      const orgMax = Number(sourceTemplate?.maxPerBooking);
+      const orgMaxCap =
+        Number.isFinite(orgMax) && orgMax > 0 ? orgMax : Infinity;
+      const typeCap = Math.min(registeredForType, orgMaxCap);
+      const alreadyOfType = selectedTables.filter(
+        (t) => t.tableId === table.id,
+      ).length;
+      if (Number.isFinite(typeCap) && alreadyOfType >= typeCap) {
+        toast({
+          duration: 5000,
+          title: "Limit reached",
+          description: `You can select at most ${typeCap} "${table.name}" space${typeCap === 1 ? "" : "s"}.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Total cap across all types: the vendor's registered total preferred
+      // quantity (already capped at the event's maxSpacesPerVendor), falling
+      // back to the event cap when no explicit quantities were registered.
+      const eventCap = Math.max(
+        1,
+        Number((eventData as any)?.maxSpacesPerVendor) || 1,
+      );
+      const registeredTotal =
+        preferredIds.length > 0
+          ? preferredIds.reduce(
+              (s, _id, i) => s + (Number(prefQtys[i]) || 1),
+              0,
+            )
+          : eventCap;
+      const totalCap = Math.min(registeredTotal, eventCap);
+      if (selectedTables.length >= totalCap) {
+        toast({
+          duration: 5000,
+          title: "Space limit reached",
+          description: `You can select at most ${totalCap} space${totalCap === 1 ? "" : "s"} in total.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
       const spaceAllowsMinimum =
         table.minimumPaymentEnabled !== false &&
         sourceTemplate?.minimumPaymentEnabled !== false;
@@ -2370,11 +2618,50 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }
   };
 
-  // NEW: Handle add-on quantity change
+  // NEW: Handle add-on quantity change. Respects the organizer's per-space cap
+  // (maxPerSpace on the add-on): the vendor may pick up to maxPerSpace of this
+  // add-on for EACH booked space, so the total cap scales with the number of
+  // selected spaces. 0 / unset = unlimited.
   const handleAddOnQuantityChange = (addOnId: string, quantity: number) => {
+    const item = (eventData?.addOnItems || []).find(
+      (x: any) => x.id === addOnId,
+    );
+    const perTemplate: Record<string, any> = item?.maxPerTemplate || {};
+    const general = Number(item?.maxPerSpace);
+    const generalCap =
+      Number.isFinite(general) && general > 0 ? general : Infinity;
+
+    // Sum the per-space cap across every selected space. Each space uses its
+    // template's override when set, otherwise the general cap. Any space with
+    // no cap makes the whole add-on unlimited. No spaces picked yet → treat as
+    // a single space so the limit still guides the vendor.
+    const spaces = selectedTables.length ? selectedTables : [null];
+    let cap = 0;
+    for (const t of spaces) {
+      // Selected spaces store the source template id as `tableId` (not `id`),
+      // so the per-template add-on override is keyed by that. Without this the
+      // override never matched and the general cap was always used.
+      const tId = (t as any)?.tableId ?? (t as any)?.id;
+      const tplRaw = tId != null ? Number(perTemplate[tId]) : NaN;
+      const perCap =
+        Number.isFinite(tplRaw) && tplRaw > 0 ? tplRaw : generalCap;
+      cap += perCap;
+      if (!Number.isFinite(cap)) break;
+    }
+
+    let q = Math.max(1, quantity);
+    if (Number.isFinite(cap) && q > cap) {
+      q = cap;
+      toast({
+        duration: 3500,
+        title: "Add-on limit reached",
+        description: `You can add at most ${cap} "${item?.name}" for your selected space${selectedTables.length === 1 ? "" : "s"}.`,
+        variant: "destructive",
+      });
+    }
     setSelectedAddOns(
       selectedAddOns.map((a) =>
-        a.addOnId === addOnId ? { ...a, quantity: Math.max(1, quantity) } : a,
+        a.addOnId === addOnId ? { ...a, quantity: q } : a,
       ),
     );
   };
@@ -2482,7 +2769,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         0,
       );
       const addOnsTotal = selectedAddOns.reduce(
-        (sum, addon) => sum + (addon.price || 0),
+        (sum, addon: any) =>
+          sum + (Number(addon.price) || 0) * (Number(addon.quantity) || 1),
         0,
       );
       const grandTotal = tablesTotal + depositTotal + addOnsTotal;
@@ -2525,11 +2813,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           height: table.height,
           rotation: table.rotation,
         })),
-        selectedAddOns: selectedAddOns.map((addon) => ({
-          id: addon.id,
+        selectedAddOns: selectedAddOns.map((addon: any) => ({
+          id: addon.addOnId || addon.id,
+          addOnId: addon.addOnId || addon.id,
           name: addon.name,
           description: addon.description,
           price: addon.price,
+          quantity: Number(addon.quantity) || 1,
         })),
         minimumPayment: bookingPrice + depositInOption1Total,
         // Offer the minimum-payment plan only when every selected space allows
@@ -2644,14 +2934,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             description: "Your tables are selected. Please complete payment.",
           });
         } else if (result.data.status === "Completed") {
-          // Booking completed
+          // Booking completed (paid). Offer: preview the existing booking, or
+          // register a NEW request (a different vendor under the same email).
           setShowWhatsAppDialog(false);
           setShowRentForm(false);
-          toast({
-            duration: 5000,
-            title: "Booking Completed",
-            description: "Your stall booking is confirmed and paid",
-          });
+          setShowAccountChooser(false);
+          setShowRegisterTargetChoice(false);
+          setShowCompletedChoice(true);
         } else if (result.data.status === "Approved") {
           // Request approved - go directly to space/table selection
           setShowWhatsAppDialog(false);
@@ -2795,6 +3084,114 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     setShopkeeperDetails((prev) => ({ ...prev, [name]: value }));
   };
 
+  // ── Preferred space types WITH quantity ──────────────────────────────
+  // Max total spaces the organizer allows this vendor (default 1).
+  const maxSpacesPerVendor = Math.max(
+    1,
+    Number((eventData as any)?.maxSpacesPerVendor) || 1,
+  );
+  // Total quantity currently requested across all selected preferred types.
+  const totalPreferredSpaces = (
+    shopkeeperDetails.preferredTemplateIds || []
+  ).reduce(
+    (sum, _id, i) =>
+      sum +
+      (Number(shopkeeperDetails.preferredTemplateQuantities?.[i]) || 1),
+    0,
+  );
+  // Per-type ceiling: the template's own maxPerBooking if set, else the cap.
+  const perTypeMax = (template: any) => {
+    const m = Number(template?.maxPerBooking);
+    return Number.isFinite(m) && m > 0 ? m : maxSpacesPerVendor;
+  };
+  // Add / remove a preferred type. Adds with quantity 1 (blocked at the cap).
+  const togglePreferredType = (template: any) => {
+    const ids = shopkeeperDetails.preferredTemplateIds || [];
+    const names = shopkeeperDetails.preferredTemplateNames || [];
+    const qtys = shopkeeperDetails.preferredTemplateQuantities || [];
+    const idx = ids.indexOf(template.id);
+    if (idx >= 0) {
+      const keep = (_: any, i: number) => i !== idx;
+      const nIds = ids.filter(keep);
+      const nNames = names.filter(keep);
+      const nQtys = qtys.filter(keep);
+      setShopkeeperDetails((prev) => ({
+        ...prev,
+        preferredTemplateIds: nIds,
+        preferredTemplateNames: nNames,
+        preferredTemplateQuantities: nQtys,
+        preferredTemplateId: nIds[0] || "",
+        preferredTemplateName: nNames.join(", "),
+      }));
+      return;
+    }
+    if (totalPreferredSpaces >= maxSpacesPerVendor) {
+      // Single-space events behave like a radio group: clicking a different
+      // type SWITCHES the preference (the vendor hasn't submitted yet), instead
+      // of being blocked and forced to deselect the current one first.
+      if (maxSpacesPerVendor === 1) {
+        setShopkeeperDetails((prev) => ({
+          ...prev,
+          preferredTemplateIds: [template.id],
+          preferredTemplateNames: [template.name],
+          preferredTemplateQuantities: [1],
+          preferredTemplateId: template.id,
+          preferredTemplateName: template.name,
+        }));
+        return;
+      }
+      toast({
+        duration: 3000,
+        title: "Space limit reached",
+        description: `You can request at most ${maxSpacesPerVendor} space${maxSpacesPerVendor === 1 ? "" : "s"} in total.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    setShopkeeperDetails((prev) => ({
+      ...prev,
+      preferredTemplateIds: [...ids, template.id],
+      preferredTemplateNames: [...names, template.name],
+      preferredTemplateQuantities: [...qtys, 1],
+      preferredTemplateId: ids[0] || template.id,
+      preferredTemplateName: [...names, template.name].join(", "),
+    }));
+  };
+  // Bump a selected type's quantity, respecting its per-type ceiling and the
+  // overall cap.
+  const changePreferredQty = (template: any, delta: number) => {
+    const ids = shopkeeperDetails.preferredTemplateIds || [];
+    const idx = ids.indexOf(template.id);
+    if (idx < 0) return;
+    const qtys = [...(shopkeeperDetails.preferredTemplateQuantities || [])];
+    const cur = Number(qtys[idx]) || 1;
+    if (delta > 0) {
+      if (totalPreferredSpaces + 1 > maxSpacesPerVendor) {
+        toast({
+          duration: 3000,
+          title: "Space limit reached",
+          description: `Total is capped at ${maxSpacesPerVendor}.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      if (cur + 1 > perTypeMax(template)) {
+        toast({
+          duration: 3000,
+          title: "Type limit reached",
+          description: `At most ${perTypeMax(template)} of "${template.name}".`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    qtys[idx] = Math.max(1, cur + delta);
+    setShopkeeperDetails((prev) => ({
+      ...prev,
+      preferredTemplateQuantities: qtys,
+    }));
+  };
+
   // Handle form submission - UPDATED FOR NEW WORKFLOW
   const handleRentFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2855,7 +3252,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     const sellableTemplates =
       eventData?.tableTemplates?.filter((t: any) => t.forSale !== false) || [];
     if (sellableTemplates.length > 0) {
-      req(blank(d.preferredTemplateId), "Preferred Space Type");
+      req(
+        !(d.preferredTemplateIds && d.preferredTemplateIds.length > 0),
+        "Preferred Space Type",
+      );
     }
 
     if (missing.length) {
@@ -2863,6 +3263,42 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         duration: 6000,
         title: "Missing required fields",
         description: `Please complete: ${missing.join(", ")}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Format checks — run only once all required fields are present.
+    const invalid: string[] = [];
+    const checkPhoneLen = (value: string, country: any, label: string) => {
+      const digits = String(value || "").replace(/\D/g, "");
+      if (!digits) return;
+      const dial = String(country?.dialCode || "").replace(/\D/g, "");
+      const national =
+        dial && digits.startsWith(dial) ? digits.slice(dial.length) : digits;
+      const [min, max] = phoneNationalLength(country?.countryCode);
+      if (national.length < min || national.length > max) {
+        const need = min === max ? `${min} digits` : `${min}–${max} digits`;
+        invalid.push(
+          `${label} must be ${need} for ${country?.name || "the selected country"}`,
+        );
+      }
+    };
+    checkPhoneLen(d.whatsappNumber, whatsappCountry, "WhatsApp Number");
+    checkPhoneLen(d.phone, phoneCountry, "Phone Number");
+    const regNo = String(d.registrationNumber || "").trim();
+    if (regNo && !/^[A-Za-z0-9]+$/.test(regNo)) {
+      invalid.push("Registration Number must be letters and numbers only");
+    } else if (regNo && regConfig.length > 0 && regNo.length !== regConfig.length) {
+      invalid.push(
+        `${regConfig.label} must be exactly ${regConfig.length} alphanumeric characters`,
+      );
+    }
+    if (invalid.length) {
+      toast({
+        duration: 6000,
+        title: "Please check these fields",
+        description: invalid.join(". ") + ".",
         variant: "destructive",
       });
       return;
@@ -2881,6 +3317,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       // edits made on the form persist back to the vendors collection.
       if (shopkeeperExists && shopkeeperId) {
         formData.append("shopkeeperId", shopkeeperId);
+      }
+      // "Register a new request": force a brand-new vendor profile even though
+      // the authenticated email already belongs to one or more vendors.
+      if (registerNewMode) {
+        formData.append("forceNewVendor", "true");
       }
       formData.append("shopkeeperName", shopkeeperDetails.name);
       formData.append("shopkeeperEmail", shopkeeperDetails.email);
@@ -2929,10 +3370,38 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         formData.append("faceBookLink", shopkeeperDetails.faceBookLink);
       if (shopkeeperDetails.instagramLink)
         formData.append("instagramLink", shopkeeperDetails.instagramLink);
-      if (shopkeeperDetails.preferredTemplateId)
-        formData.append("preferredTemplateId", shopkeeperDetails.preferredTemplateId);
-      if (shopkeeperDetails.preferredTemplateName)
-        formData.append("preferredTemplateName", shopkeeperDetails.preferredTemplateName);
+      // Multiple preferred space types (combination). Sent as JSON; the legacy
+      // singular fields are kept in sync (first selection) for older paths.
+      const prefIds: string[] = shopkeeperDetails.preferredTemplateIds || [];
+      const prefNames: string[] = shopkeeperDetails.preferredTemplateNames || [];
+      if (prefIds.length > 0) {
+        // Quantities parallel to prefIds — default 1 for any missing entry.
+        const prefQtys = prefIds.map(
+          (_id, i) =>
+            Math.max(
+              1,
+              Number(shopkeeperDetails.preferredTemplateQuantities?.[i]) || 1,
+            ),
+        );
+        formData.append("preferredTemplateIds", JSON.stringify(prefIds));
+        formData.append("preferredTemplateNames", JSON.stringify(prefNames));
+        formData.append(
+          "preferredTemplateQuantities",
+          JSON.stringify(prefQtys),
+        );
+        formData.append("preferredTemplateId", prefIds[0]);
+        formData.append("preferredTemplateName", prefNames.join(", "));
+      } else if (shopkeeperDetails.preferredTemplateId) {
+        formData.append(
+          "preferredTemplateId",
+          shopkeeperDetails.preferredTemplateId,
+        );
+        if (shopkeeperDetails.preferredTemplateName)
+          formData.append(
+            "preferredTemplateName",
+            shopkeeperDetails.preferredTemplateName,
+          );
+      }
 
       // Append Files
       if (regImageFile) formData.append("registrationImage", regImageFile);
@@ -3421,6 +3890,22 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const layoutIds = venueConfig?.map((config) => config.id) || [];
   const currentLayoutId = layoutIds[currentLayoutIndex] || "default";
 
+  // Template id → colour, from the event's stall templates. Used as a fallback
+  // when a placed space's own `color` is missing (e.g. the available-tables
+  // API response or a re-fetch drops it) so both the inline AND maximized
+  // venue maps always paint each space its template colour — never all-green.
+  const templateColorById: Record<string, string> = {};
+  (eventData?.tableTemplates || []).forEach((t: any) => {
+    if (t?.id && t?.color) templateColorById[t.id] = t.color;
+  });
+
+  // How many venues the organizer marked published — drives whether the
+  // public venue switcher is shown (a lone published venue needs no switcher)
+  // and lets us hide unpublished halls from the switcher options below.
+  const publishedVenueCount = (venueConfig || []).filter(
+    (v: any) => v?.published !== false,
+  ).length;
+
   // Decide whether an item (round table / door / annotation) tagged with a
   // venueConfigId belongs to the hall currently being viewed. A real tag must
   // match the active layout exactly. Legacy/untagged items ("" or "default")
@@ -3537,8 +4022,39 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     });
   };
 
-  // Increase quantity
+  // Increase quantity — respects the organizer's per-space add-on cap: the
+  // vendor may pick up to the per-template limit (maxPerTemplate) for EACH
+  // booked space of that template, otherwise the general maxPerSpace. The total
+  // cap is the sum across all selected spaces. 0 / unset = unlimited.
   const handleIncreaseQuantity = (addonId: string) => {
+    const item = (eventData?.addOnItems || []).find(
+      (x: any) => x.id === addonId,
+    );
+    const perTemplate: Record<string, any> = item?.maxPerTemplate || {};
+    const general = Number(item?.maxPerSpace);
+    const generalCap =
+      Number.isFinite(general) && general > 0 ? general : Infinity;
+    const spaces = selectedTables.length ? selectedTables : [null];
+    let cap = 0;
+    for (const t of spaces) {
+      const tId = (t as any)?.tableId ?? (t as any)?.id;
+      const tplRaw = tId != null ? Number(perTemplate[tId]) : NaN;
+      const perCap =
+        Number.isFinite(tplRaw) && tplRaw > 0 ? tplRaw : generalCap;
+      cap += perCap;
+      if (!Number.isFinite(cap)) break;
+    }
+    const current =
+      selectedAddOns.find((a) => a.id === addonId)?.quantity || 0;
+    if (Number.isFinite(cap) && current + 1 > cap) {
+      toast({
+        duration: 3500,
+        title: "Add-on limit reached",
+        description: `You can add at most ${cap} "${item?.name}" for your selected space${selectedTables.length === 1 ? "" : "s"}.`,
+        variant: "destructive",
+      });
+      return;
+    }
     setSelectedAddOns((prev) =>
       prev.map((a) =>
         a.id === addonId ? { ...a, quantity: a.quantity + 1 } : a,
@@ -3666,8 +4182,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             </div>
           </div>
         )}
-        {/* Subtle dark scrim for text legibility */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/40" />
+        {/* Subtle dark scrim for text legibility — only where the overlay text
+            shows (sm+). On mobile the text is hidden, so no scrim keeps the
+            image clear. */}
+        <div className="absolute inset-0 hidden bg-gradient-to-b from-black/20 via-transparent to-black/40 sm:block" />
 
         {/* Floating Share button — the old sticky header (which had
             the share action) was removed, so this overlay button is
@@ -3689,8 +4207,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             arrow button in the sticky top nav (handleBack → navigate(-1))
             still lets visitors return to whatever page they came from. */}
 
-        {/* Hero bottom content */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 lg:p-8">
+        {/* Hero bottom content — hidden on mobile so the banner image shows
+            clearly (the title/date still appear in the info section below).
+            Shown as an overlay on sm+ as before. */}
+        <div className="absolute bottom-0 left-0 right-0 hidden p-4 sm:block sm:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto">
             <div className="flex flex-wrap items-center gap-2 mb-2 sm:mb-3">
               <span
@@ -3709,7 +4229,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               </span>
             </div>
             <h1
-              className="text-white font-black text-2xl sm:text-4xl lg:text-5xl xl:text-6xl leading-tight drop-shadow-sm"
+              className="text-white font-black text-xl sm:text-4xl lg:text-5xl xl:text-6xl leading-tight drop-shadow-sm"
               style={{ fontFamily: design?.fontFamily }}
             >
               {title}
@@ -3717,6 +4237,26 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           </div>
         </div>
       </div>
+
+      {/* ── Sponsors marquee — below the banner, left-to-right ── */}
+      {(() => {
+        const sponsors: string[] = Array.isArray((eventData as any)?.sponsors)
+          ? (eventData as any).sponsors
+          : [];
+        if (sponsors.length === 0) return null;
+        const resolveSrc = (u: string) =>
+          /^https?:\/\//.test(u) || u.startsWith("blob:")
+            ? u
+            : `${apiURL}${u}`;
+        return (
+          <div className="border-b border-gray-100 bg-white py-4">
+            <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+              Our Sponsors
+            </p>
+            <SponsorMarquee logos={sponsors.map(resolveSrc)} />
+          </div>
+        );
+      })()}
 
       {/* ── Info Cards Row ── */}
       <div className="bg-[#f5f5f5] border-b border-gray-200 mt-6 sm:mt-8">
@@ -3737,7 +4277,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 Date &amp; Time
               </p>
               {startDate && (
-                <p className="text-gray-900 font-bold text-sm sm:text-base">
+                <p className="text-gray-900 font-bold text-xs sm:text-base">
                   {new Date(startDate).toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
@@ -3745,7 +4285,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   })}
                 </p>
               )}
-              <p className="text-gray-900 font-bold text-sm sm:text-base">
+              <p className="text-gray-900 font-bold text-xs sm:text-base">
                 {time}
                 {endTime ? ` - ${endTime}` : ""}
               </p>
@@ -3778,7 +4318,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               <p className="text-gray-400 text-xs font-medium uppercase tracking-widest">
                 Location
               </p>
-              <p className="text-gray-900 font-bold text-sm sm:text-base leading-snug">
+              <p className="text-gray-900 font-bold text-xs sm:text-base leading-snug">
                 {location}
               </p>
               {address && <p className="text-gray-400 text-xs">{address}</p>}
@@ -3815,7 +4355,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               <p className="text-gray-400 text-xs font-medium uppercase tracking-widest">
                 Organized by
               </p>
-              <p className="text-gray-900 font-bold text-sm sm:text-base">
+              <p className="text-gray-900 font-bold text-xs sm:text-base">
                 {organizer.organizationName}
               </p>
               <span
@@ -3848,7 +4388,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 <p className="text-gray-400 text-xs font-medium uppercase tracking-widest">
                   Venue Layout
                 </p>
-                <p className="text-gray-900 font-bold text-sm sm:text-base">
+                <p className="text-gray-900 font-bold text-xs sm:text-base">
                   View floor plan
                 </p>
                 <span
@@ -3890,7 +4430,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     <p className="text-gray-400 text-xs font-medium uppercase tracking-widest">
                       Event Date
                     </p>
-                    <p className="text-gray-900 font-bold text-sm sm:text-base">
+                    <p className="text-gray-900 font-bold text-xs sm:text-base">
                       {new Date(startDate).toLocaleDateString("en-US", {
                         month: "short",
                         day: "numeric",
@@ -3912,7 +4452,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           <div className="flex-1 min-w-0 space-y-8 anim-fade-up order-2 lg:order-1">
             {/* About Section */}
             <section>
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">
+              <h2 className="text-lg sm:text-2xl font-bold text-gray-900 mb-3">
                 About This Event
               </h2>
               <p className="text-gray-600 leading-relaxed text-sm sm:text-base">
@@ -3920,9 +4460,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               </p>
             </section>
 
-            {/* Tags */}
+            {/* Tags — hidden on mobile (shown sm+ only) at user request */}
             {tags && tags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
+              <div className="hidden sm:flex flex-wrap gap-2">
                 {tags.map((tag, index) => (
                   <span
                     key={index}
@@ -3942,7 +4482,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             {/* Gallery */}
             {gallery && gallery.length > 0 && (
               <section>
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
+                <h2 className="text-lg sm:text-2xl font-bold text-gray-900 mb-4">
                   Event Gallery
                 </h2>
                 {/* The frame has a definite, screen-relative height so it
@@ -4008,7 +4548,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             {/* Speaker Carousel */}
             {eventData?.speakers && eventData.speakers.length > 0 && (
               <section>
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
+                <h2 className="text-lg sm:text-2xl font-bold text-gray-900 mb-4">
                   Speakers
                 </h2>
                 <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide">
@@ -4111,7 +4651,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             {/* Visitor Types */}
             {visitorTypes && visitorTypes.length > 0 && (
               <section>
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
+                <h2 className="text-lg sm:text-2xl font-bold text-gray-900 mb-4">
                   Ticket Types
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -4587,7 +5127,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
                   <div className="px-5 pt-5 pb-4">
                     <p
-                      className="text-lg font-bold tracking-widest uppercase mb-4"
+                      className="text-sm sm:text-lg font-bold tracking-widest uppercase mb-4"
                       style={{ color: design?.primaryColor }}
                     >
                       Contact Organizer
@@ -4714,7 +5254,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm mt-4">
                       <div className="px-5 pt-5 pb-4">
                         <p
-                          className="text-lg font-bold tracking-widest uppercase mb-4"
+                          className="text-sm sm:text-lg font-bold tracking-widest uppercase mb-4"
                           style={{ color: design?.primaryColor }}
                         >
                           Follow Us
@@ -4823,7 +5363,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             ).flat();
             return (
               <section className="mt-10">
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
+                <h2 className="text-lg sm:text-2xl font-bold text-gray-900 mb-4">
                   History
                 </h2>
                 <div className="w-full rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
@@ -4979,7 +5519,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
                     <p
-                      className="text-lg font-bold tracking-widest uppercase"
+                      className="text-sm sm:text-lg font-bold tracking-widest uppercase"
                       style={{ color: design?.primaryColor }}
                     >
                       Reels Carousel
@@ -5035,7 +5575,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           <TabsContent value="organizer" className="mt-4 space-y-4">
             <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
               <p
-                className="text-lg font-bold tracking-widest uppercase mb-5"
+                className="text-sm sm:text-lg font-bold tracking-widest uppercase mb-5"
                 style={{ color: design?.primaryColor }}
               >
                 About Organizer
@@ -5052,9 +5592,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     {organizer.organizationName}
                   </h3>
                   <p className="text-gray-500 text-sm">{organizer.name}</p>
-                  <p className="text-gray-400 text-sm mt-2 leading-relaxed">
-                    {organizer.bio}
-                  </p>
+                  {(organizer.description || organizer.bio) && (
+                    <p className="text-gray-400 text-sm mt-2 leading-relaxed whitespace-pre-line">
+                      {organizer.description || organizer.bio}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -5111,11 +5653,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   | Record<string, boolean>
                   | undefined) || {};
               const shown = (k: string) => secVis[k] !== false;
-              const headingStyle = { color: design?.primaryColor };
-              const cardCls =
-                "rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm";
-              const titleCls =
-                "text-lg font-bold tracking-widest uppercase mb-3";
               const htmlCls =
                 "text-gray-600 prose prose-sm max-w-none [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4";
               const customs = Array.isArray((eventData as any)?.customSections)
@@ -5124,10 +5661,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               return (
                 <>
                   {shown("ageDress") && (ageRestriction || dresscode) && (
-                    <div className={cardCls}>
-                      <p className={titleCls} style={headingStyle}>
-                        Age Restriction &amp; Dress Code
-                      </p>
+                    <CollapsibleCard
+                      title="Age Restriction & Dress Code"
+                      headingColor={design?.primaryColor}
+                    >
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {ageRestriction && (
                           <div>
@@ -5150,44 +5687,44 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           </div>
                         )}
                       </div>
-                    </div>
+                    </CollapsibleCard>
                   )}
                   {shown("specialInstructions") && specialInstructions && (
-                    <div className={cardCls}>
-                      <p className={titleCls} style={headingStyle}>
-                        Special Instructions
-                      </p>
+                    <CollapsibleCard
+                      title="Special Instructions"
+                      headingColor={design?.primaryColor}
+                    >
                       <div
                         className={htmlCls}
                         dangerouslySetInnerHTML={{
                           __html: specialInstructions,
                         }}
                       />
-                    </div>
+                    </CollapsibleCard>
                   )}
                   {shown("refundPolicy") && refundPolicy && (
-                    <div className={cardCls}>
-                      <p className={titleCls} style={headingStyle}>
-                        Refund Policy
-                      </p>
+                    <CollapsibleCard
+                      title="Refund Policy"
+                      headingColor={design?.primaryColor}
+                    >
                       <div
                         className={htmlCls}
                         dangerouslySetInnerHTML={{ __html: refundPolicy }}
                       />
-                    </div>
+                    </CollapsibleCard>
                   )}
                   {shown("termsAndConditions") && termsAndConditions && (
-                    <div className={cardCls}>
-                      <p className={titleCls} style={headingStyle}>
-                        Terms &amp; Conditions
-                      </p>
+                    <CollapsibleCard
+                      title="Terms & Conditions"
+                      headingColor={design?.primaryColor}
+                    >
                       <div
                         className={htmlCls}
                         dangerouslySetInnerHTML={{
                           __html: termsAndConditions,
                         }}
                       />
-                    </div>
+                    </CollapsibleCard>
                   )}
                   {customs
                     .filter(
@@ -5197,19 +5734,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         shown(s?.id),
                     )
                     .map((s: any) => (
-                      <div key={s.id || s.heading} className={cardCls}>
-                        {(s.heading || "").trim() && (
-                          <p className={titleCls} style={headingStyle}>
-                            {s.heading}
-                          </p>
-                        )}
+                      <CollapsibleCard
+                        key={s.id || s.heading}
+                        title={(s.heading || "").trim() || "More Information"}
+                        headingColor={design?.primaryColor}
+                      >
                         {(s.content || "").trim() && (
                           <div
                             className={htmlCls}
                             dangerouslySetInnerHTML={{ __html: s.content }}
                           />
                         )}
-                      </div>
+                      </CollapsibleCard>
                     ))}
                 </>
               );
@@ -5221,7 +5757,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             {eventData?.speakers && eventData.speakers.length > 0 && (
               <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
                 <p
-                  className="text-lg font-bold tracking-widest uppercase mb-6"
+                  className="text-sm sm:text-lg font-bold tracking-widest uppercase mb-6"
                   style={{ color: design?.primaryColor }}
                 >
                   Speaker Lineup
@@ -5422,43 +5958,42 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             {(venueTables && Object.keys(venueTables).length > 0) ||
             roundTableData.length > 0 ? (
               <div className="space-y-5">
-                {/* Layout Selector */}
-                {venueConfig && venueConfig.length > 1 && (
+                {/* Layout Selector — only published venues are offered */}
+                {venueConfig && publishedVenueCount > 1 && (
                   <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
                         <MapIcon className="h-4 w-4 text-gray-400" />
                         <p
-                          className="text-lg font-bold tracking-widest uppercase"
+                          className="text-sm sm:text-lg font-bold tracking-widest uppercase"
                           style={{ color: design?.primaryColor }}
                         >
                           Venue Layouts
                         </p>
                       </div>
-                      <span className="text-xs text-gray-400 font-medium">
-                        {currentLayoutIndex + 1} of {venueConfig.length}
-                      </span>
                     </div>
                     <div className="flex gap-2 overflow-x-auto pb-1">
-                      {venueConfig.map((layout, index) => (
-                        <button
-                          key={layout.id}
-                          onClick={() => setCurrentLayoutIndex(index)}
-                          className={`shrink-0 whitespace-nowrap px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
-                            currentLayoutIndex === index
-                              ? "text-white"
-                              : "border border-gray-200 text-gray-500 bg-gray-50 hover:bg-gray-100"
-                          }`}
-                          style={
-                            currentLayoutIndex === index
-                              ? { backgroundColor: design?.primaryColor }
-                              : {}
-                          }
-                        >
-                          <MapIcon className="h-3.5 w-3.5" />
-                          {layout.name}
-                        </button>
-                      ))}
+                      {venueConfig.map((layout, index) =>
+                        layout?.published === false ? null : (
+                          <button
+                            key={layout.id}
+                            onClick={() => setCurrentLayoutIndex(index)}
+                            className={`shrink-0 whitespace-nowrap px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
+                              currentLayoutIndex === index
+                                ? "text-white"
+                                : "border border-gray-200 text-gray-500 bg-gray-50 hover:bg-gray-100"
+                            }`}
+                            style={
+                              currentLayoutIndex === index
+                                ? { backgroundColor: design?.primaryColor }
+                                : {}
+                            }
+                          >
+                            <MapIcon className="h-3.5 w-3.5" />
+                            {layout.name}
+                          </button>
+                        ),
+                      )}
                     </div>
                   </div>
                 )}
@@ -5477,7 +6012,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     >
                       <TableIcon className="h-4 w-4 text-gray-400" />
                       <p
-                        className="text-lg font-bold tracking-widest uppercase text-left"
+                        className="text-sm sm:text-lg font-bold tracking-widest uppercase text-left"
                         style={{ color: design?.primaryColor }}
                       >
                         {venueConfig[currentLayoutIndex].name} — Table
@@ -5545,7 +6080,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               return (
                                 <div
                                   key={table.positionId}
-                                  className={`absolute border flex items-center justify-center transition-all group hover:z-50 ${
+                                  className={`absolute border flex items-center justify-center transition-all group z-[5] hover:z-[100] ${
                                     table.type === "Round"
                                       ? "rounded-full"
                                       : table.type === "Corner"
@@ -5562,7 +6097,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     height: `${(table as any).displayHeight ?? table.height}px`,
                                     transform: `rotate(${table.rotation || 0}deg)`,
                                     transformOrigin: "center center",
-                                    zIndex: 5,
+                                    // z-index is driven by the class above so
+                                    // `hover:z-[100]` can lift the hovered space
+                                    // (and its tooltip) above its neighbours —
+                                    // an inline zIndex would override the class
+                                    // and the tooltip would render under the
+                                    // adjacent spaces.
                                     // Darker tint of the template colour with a
                                     // solid coloured border; bold dark label so
                                     // it stays clearly readable. Booked stays
@@ -5615,9 +6155,47 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                           <div className="text-gray-300 whitespace-nowrap">
                                             {table.width * 10}×{table.height * 10}cm
                                           </div>
-                                          <div className="text-green-400 font-semibold whitespace-nowrap">
-                                            {formatPrice(table.tablePrice)}
-                                          </div>
+                                          {(() => {
+                                            // Show BOTH the member price and the
+                                            // regular price whenever the space
+                                            // has a member price (resolved from
+                                            // the placed space or its template),
+                                            // so any visitor sees both tiers.
+                                            const tpls = Array.isArray(
+                                              (eventData as any)?.tableTemplates,
+                                            )
+                                              ? (eventData as any).tableTemplates
+                                              : [];
+                                            const tpl =
+                                              (table as any).id != null
+                                                ? tpls.find(
+                                                    (t: any) =>
+                                                      t?.id === (table as any).id,
+                                                  )
+                                                : null;
+                                            const member =
+                                              (table as any).memberPrice != null
+                                                ? (table as any).memberPrice
+                                                : tpl?.memberPrice ?? null;
+                                            const regular = table.tablePrice ?? 0;
+                                            const hasMember =
+                                              member != null &&
+                                              Number(member) !== Number(regular);
+                                            return hasMember ? (
+                                              <>
+                                                <div className="text-emerald-400 font-semibold whitespace-nowrap">
+                                                  Member {formatPrice(member)}
+                                                </div>
+                                                <div className="text-gray-400 whitespace-nowrap text-[11px]">
+                                                  Regular {formatPrice(regular)}
+                                                </div>
+                                              </>
+                                            ) : (
+                                              <div className="text-green-400 font-semibold whitespace-nowrap">
+                                                {formatPrice(regular)}
+                                              </div>
+                                            );
+                                          })()}
                                         </div>
 
                                         {/* Arrow tail */}
@@ -5866,15 +6444,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
                 )}
 
-                {/* Add-On Items */}
+                {/* Add-On Items — collapsible, same disclosure as the
+                    info sections and the Venue Layout. */}
                 {addOnItems && addOnItems.length > 0 && (
-                  <div className="space-y-3">
-                    <p
-                      className="text-lg font-bold tracking-widest uppercase"
-                      style={{ color: design?.primaryColor }}
-                    >
-                      Add-On Items
-                    </p>
+                  <CollapsibleCard
+                    title="Add-On Items"
+                    headingColor={design?.primaryColor}
+                  >
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {addOnItems.map((item) => (
                         <div
@@ -5894,13 +6470,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               className="font-bold text-base"
                               style={{ color: design?.secondaryColor }}
                             >
-                              {item.price}
+                              {formatPrice(item.price || 0)}
                             </p>
                           </div>
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </CollapsibleCard>
                 )}
               </div>
             ) : (
@@ -5912,8 +6488,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             )}
             {/* Round-table seat booking — lives inside the Venue tab,
                 below the layout map (the map above now shows the round
-                tables alongside the Spaces). */}
-            {roundTableData.length > 0 && (
+                tables alongside the Spaces). Only shown when at least one
+                round table is actually sellable; "not for sale" round tables
+                are layout references only, so the box is hidden for them. */}
+            {roundTableData.some((rt: any) => rt.forSale !== false) && (
               <div className="space-y-5">
                 {/* Header */}
                 <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
@@ -8047,6 +8625,155 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         </DialogContent>
       </Dialog>
 
+      {/* Linked-accounts picker: this email owns multiple vendor profiles. */}
+      <Dialog open={showAccountChooser} onOpenChange={setShowAccountChooser}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Store className="h-5 w-5 text-blue-600" />
+              Choose a vendor profile
+            </DialogTitle>
+            <DialogDescription>
+              <span className="font-medium">{authedEmail}</span> has{" "}
+              {linkedVendors.length} linked profiles. Pick the one you want to
+              register with, or add a new one.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2 max-h-[50vh] overflow-y-auto">
+            {linkedVendors.map((v) => (
+              <button
+                key={v._id}
+                type="button"
+                onClick={() => continueWithVendor(v, authedEmail)}
+                className="w-full text-left rounded-lg border border-gray-200 p-3 hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
+              >
+                <p className="font-semibold text-sm text-gray-900">
+                  {v.businessName || v.shopName || v.name || "Vendor"}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {v.name}
+                  {v.whatsAppNumber ? ` · ${v.whatsAppNumber}` : ""}
+                </p>
+              </button>
+            ))}
+          </div>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => startRegisterNew(authedEmail)}
+          >
+            + Register a new profile
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* Completed cycle: preview the existing booking, or register a new one. */}
+      <Dialog
+        open={showCompletedChoice}
+        onOpenChange={(open) => {
+          setShowCompletedChoice(open);
+          if (!open) setShowRegisterTargetChoice(false);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Store className="h-5 w-5 text-green-600" />
+              You've already booked this event
+            </DialogTitle>
+            <DialogDescription>
+              This profile has a completed, paid stall for{" "}
+              <span className="font-medium">{eventData?.title}</span>. Preview
+              it below, or register a new request for a different vendor.
+            </DialogDescription>
+          </DialogHeader>
+          {existingStallRequest && (
+            <div className="rounded-lg border border-green-200 bg-green-50/50 p-3 text-sm space-y-1">
+              <div className="flex justify-between gap-3">
+                <span className="text-gray-500">Vendor</span>
+                <span className="font-medium text-right">
+                  {existingStallRequest.shopkeeperId?.businessName ||
+                    existingStallRequest.businessName ||
+                    existingStallRequest.shopkeeperId?.name ||
+                    "—"}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-gray-500">Status</span>
+                <span className="font-medium text-green-700">
+                  Paid · Completed
+                </span>
+              </div>
+              {typeof existingStallRequest.grandTotal === "number" && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500">Total</span>
+                  <span className="font-medium">
+                    {formatPrice(existingStallRequest.grandTotal)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+          {!showRegisterTargetChoice ? (
+            // Step 1 — preview the existing booking, or start a new request.
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowCompletedChoice(false)}
+              >
+                Close
+              </Button>
+              <Button onClick={() => setShowRegisterTargetChoice(true)}>
+                Register a new request
+              </Button>
+            </div>
+          ) : (
+            // Step 2 — who is this new request for? Reuse THIS profile, or
+            // create a brand-new linked vendor account under the same email.
+            <div className="space-y-2 pt-2">
+              <p className="text-sm font-medium text-gray-700">
+                Who is this new request for?
+              </p>
+              <button
+                type="button"
+                onClick={startRegisterForSelf}
+                className="w-full text-left rounded-lg border border-gray-200 p-3 hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
+              >
+                <p className="font-semibold text-sm text-gray-900">
+                  Register for yourself
+                </p>
+                <p className="text-xs text-gray-500">
+                  Book again using this same vendor profile.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  startRegisterNew(authedEmail || shopkeeperDetails.email)
+                }
+                className="w-full text-left rounded-lg border border-gray-200 p-3 hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
+              >
+                <p className="font-semibold text-sm text-gray-900">
+                  Register for a new vendor
+                </p>
+                <p className="text-xs text-gray-500">
+                  Create a separate vendor account under{" "}
+                  {authedEmail || shopkeeperDetails.email}. You'll be able to
+                  pick between your accounts next time.
+                </p>
+              </button>
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => setShowRegisterTargetChoice(false)}
+              >
+                Back
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Table Selection Dialog - NEW */}
       {/* ============================================================ */}
       {/* TABLE SELECTION DIALOG                                        */}
@@ -8054,8 +8781,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       <Dialog open={showTableSelection} onOpenChange={setShowTableSelection}>
         <DialogContent className="max-w-7xl w-full max-h-[95vh] overflow-hidden p-0 flex flex-col">
           {/* Fixed header — stays put; only the body below scrolls. */}
-          <div className="shrink-0 z-10 bg-white border-b px-6 py-4">
-            <DialogTitle className="text-xl font-bold">
+          <div className="shrink-0 z-10 bg-white border-b px-4 sm:px-6 py-3 sm:py-4">
+            <DialogTitle className="text-lg sm:text-xl font-bold">
               Select Your Stall
             </DialogTitle>
             <DialogDescription className="text-sm text-gray-500">
@@ -8067,7 +8794,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           {/* Scrollable body — the dialog frame + header stay fixed. */}
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-0">
             {/* ── MAIN CONTENT AREA ── */}
-            <div className="px-6 py-4 space-y-6">
+            <div className="px-4 sm:px-6 py-4 space-y-6">
               {/* Legend */}
               <div className="flex flex-wrap gap-4 text-sm">
                 <div className="flex items-center gap-2">
@@ -8085,41 +8812,48 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               </div>
 
               {/* Layout Selector — only if multiple halls */}
-              {venueConfig && venueConfig.length > 1 && (
+              {venueConfig && publishedVenueCount > 1 && (
                 <div className="flex gap-2 overflow-x-auto pb-1">
-                  {venueConfig.map((layout, index) => (
-                    <Button
-                      key={layout.id}
-                      size="sm"
-                      onClick={() => setCurrentLayoutIndex(index)}
-                      variant={
-                        currentLayoutIndex === index ? "default" : "outline"
-                      }
-                      className={`shrink-0 whitespace-nowrap ${
-                        currentLayoutIndex === index
-                          ? "bg-blue-600 text-white"
-                          : "border-gray-300"
-                      }`}
-                    >
-                      <MapIcon className="h-4 w-4 mr-1" />
-                      {layout.name}
-                    </Button>
-                  ))}
+                  {venueConfig.map((layout, index) =>
+                    layout?.published === false ? null : (
+                      <Button
+                        key={layout.id}
+                        size="sm"
+                        onClick={() => setCurrentLayoutIndex(index)}
+                        variant={
+                          currentLayoutIndex === index ? "default" : "outline"
+                        }
+                        className={`shrink-0 whitespace-nowrap ${
+                          currentLayoutIndex === index
+                            ? "bg-blue-600 text-white"
+                            : "border-gray-300"
+                        }`}
+                      >
+                        <MapIcon className="h-4 w-4 mr-1" />
+                        {layout.name}
+                      </Button>
+                    ),
+                  )}
                 </div>
               )}
 
               {/* ── VENUE LAYOUT — full width ── */}
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <TableIcon className="h-4 w-4 text-blue-600" />
-                    Venue Layout — Click a table to select it
+                <CardHeader className="flex flex-col gap-2 pb-3 sm:flex-row sm:items-center sm:justify-between">
+                  <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                    <TableIcon className="h-4 w-4 shrink-0 text-blue-600" />
+                    <span>
+                      Venue Layout{" "}
+                      <span className="hidden sm:inline">
+                        — Click a table to select it
+                      </span>
+                    </span>
                   </CardTitle>
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => setVenueMaximized(true)}
-                    className="text-xs"
+                    className="w-full shrink-0 text-xs sm:w-auto"
                   >
                     ⛶ Maximize
                   </Button>
@@ -8183,34 +8917,68 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 (t) => t.positionId === table.positionId,
                               );
                               const isBooked = table.isBooked;
-                              const preferredId = existingStallRequest?.preferredTemplateId;
-                              const isWrongTemplate = preferredId && table.id !== preferredId;
+                              const preferredIds: string[] =
+                                Array.isArray(
+                                  existingStallRequest?.preferredTemplateIds,
+                                ) &&
+                                existingStallRequest.preferredTemplateIds.length
+                                  ? existingStallRequest.preferredTemplateIds
+                                  : existingStallRequest?.preferredTemplateId
+                                    ? [existingStallRequest.preferredTemplateId]
+                                    : [];
+                              const isWrongTemplate =
+                                preferredIds.length > 0 &&
+                                !preferredIds.includes(table.id);
                               const isWrongCategory = !isCategoryAllowed(table);
                               const isNotForSale = table.forSale === false;
 
-                              let bgColor = "bg-green-200/80";
-                              let borderColor = "border-green-600";
+                              // EventFront colour rule: available spaces show
+                              // their own template colour; booked/disabled grey
+                              // out; not-for-sale shows an amber hatch; the
+                              // selected space keeps its colour + a blue ring.
+                              // Falls back to the template palette colour when
+                              // the placed space's own colour is missing.
+                              const tpl =
+                                (table as any).color ||
+                                templateColorById[table.id] ||
+                                templateColorById[(table as any).tableId] ||
+                                (isNotForSale ? "#f59e0b" : "#22c55e");
+                              let fillStyle: any = {
+                                backgroundColor: tpl + "80",
+                                borderColor: tpl,
+                              };
                               let cursor =
                                 "cursor-pointer hover:shadow-xl hover:ring-2 hover:ring-blue-400";
 
                               if (isNotForSale) {
-                                bgColor = "bg-amber-100/50";
-                                borderColor = "border-amber-300";
-                                cursor = "cursor-default opacity-60";
+                                fillStyle = {
+                                  backgroundColor: tpl + "59",
+                                  borderColor: tpl,
+                                  backgroundImage:
+                                    "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.05) 3px, rgba(0,0,0,0.05) 6px)",
+                                };
+                                cursor = "cursor-default opacity-80";
                               } else if (isBooked) {
-                                // Sold — clearly visible dark grey, not selectable.
-                                bgColor = "bg-gray-500/90";
-                                borderColor = "border-gray-700";
+                                // Sold — grey, not selectable.
+                                fillStyle = {
+                                  backgroundColor: "#9ca3af80",
+                                  borderColor: "#6b7280",
+                                };
                                 cursor = "cursor-not-allowed";
                               } else if (isWrongTemplate || isWrongCategory) {
-                                // Not allowed for this exhibitor — darker grey
-                                // so it's visible but obviously disabled.
-                                bgColor = "bg-gray-400/80";
-                                borderColor = "border-gray-500";
+                                // Not allowed for this exhibitor — grey.
+                                fillStyle = {
+                                  backgroundColor: "#9ca3af66",
+                                  borderColor: "#9ca3af",
+                                };
                                 cursor = "cursor-not-allowed opacity-90";
                               } else if (isSelected) {
-                                bgColor = "bg-blue-300";
-                                borderColor = "border-blue-600";
+                                // Selected — solid blue background (regardless
+                                // of the space's own template colour).
+                                fillStyle = {
+                                  backgroundColor: "#93c5fd", // blue-300
+                                  borderColor: "#2563eb", // blue-600
+                                };
                                 cursor =
                                   "cursor-pointer shadow-lg ring-2 ring-blue-500";
                               }
@@ -8218,7 +8986,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               return (
                                 <div
                                   key={table.positionId}
-                                  className={`absolute border flex items-center justify-center transition-all group hover:z-50 ${bgColor} ${borderColor} ${cursor} ${
+                                  className={`absolute border flex items-center justify-center transition-all group hover:!z-[999] ${cursor} ${
                                     table.type === "Round"
                                       ? "rounded-full"
                                       : table.type === "Corner"
@@ -8233,6 +9001,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     transform: `rotate(${table.rotation || 0}deg)`,
                                     transformOrigin: "center center",
                                     zIndex: isSelected ? 10 : 5,
+                                    ...fillStyle,
                                   }}
                                   onClick={() => {
                                     // Sold / not-allowed / not-for-sale stalls
@@ -8363,8 +9132,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       Add-Ons
                     </CardTitle>
                     <p className="text-sm text-gray-500">
-                      Select any extras for your stall (single selection per
-                      item)
+                      Add any extras for your stall — pick several and set the
+                      quantity of each in the summary.
                     </p>
                   </CardHeader>
                   <CardContent>
@@ -8500,7 +9269,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               {/* Member banner — surfaces the active membership and how
                   much the exhibitor's saved across selected spaces. */}
               {isMember && (
-                <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+                <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2 text-sm">
                   <div className="flex items-center gap-2 text-emerald-800">
                     <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
                     <span>
@@ -8560,10 +9329,25 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             </p>
                           </div>
                           <div className="text-right">
-                            <p className="font-bold text-gray-900">
-                              {formatPrice(table.tablePrice)}
-                            </p>
-                            <p className="text-gray-500">
+                            {table.appliedTier === "member" &&
+                            table.memberSaved > 0 ? (
+                              <>
+                                <p className="font-bold text-emerald-700">
+                                  {formatPrice(table.tablePrice)}
+                                </p>
+                                <p className="text-[10px] text-gray-400 line-through leading-none">
+                                  {formatPrice(table.regularPrice)}
+                                </p>
+                                <span className="inline-block mt-0.5 rounded bg-emerald-100 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-emerald-700">
+                                  Member
+                                </span>
+                              </>
+                            ) : (
+                              <p className="font-bold text-gray-900">
+                                {formatPrice(table.tablePrice)}
+                              </p>
+                            )}
+                            <p className="text-gray-500 mt-0.5">
                               Dep: {formatPrice(table.depositPrice)}
                             </p>
                           </div>
@@ -8589,13 +9373,35 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       selectedAddOns.map((addon) => (
                         <div
                           key={addon.id}
-                          className="flex justify-between text-xs py-1 border-b last:border-0"
+                          className="flex items-center gap-2 text-xs py-1.5 border-b last:border-0"
                         >
-                          <span className="text-gray-700 truncate flex-1 mr-2">
+                          <span className="text-gray-700 truncate flex-1">
                             {addon.name}
                           </span>
-                          <span className="font-semibold text-blue-600 flex-shrink-0">
-                            {formatPrice(addon.price)}
+                          {/* Quantity stepper — pick more than one of each */}
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAddOn(addon.id)}
+                              aria-label={`Decrease ${addon.name}`}
+                              className="h-6 w-6 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100"
+                            >
+                              −
+                            </button>
+                            <span className="w-5 text-center font-semibold text-gray-800">
+                              {addon.quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleIncreaseQuantity(addon.id)}
+                              aria-label={`Increase ${addon.name}`}
+                              className="h-6 w-6 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100"
+                            >
+                              +
+                            </button>
+                          </div>
+                          <span className="font-semibold text-blue-600 flex-shrink-0 w-16 text-right">
+                            {formatPrice(addon.price * addon.quantity)}
                           </span>
                         </div>
                       ))
@@ -8746,17 +9552,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       {/* ============================================================ */}
       <Dialog open={venueMaximized} onOpenChange={setVenueMaximized}>
         <DialogContent className="max-w-[98vw] w-full max-h-[98vh] p-0 overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b bg-white">
-            <DialogTitle className="text-base font-bold">
+          {/* Header — sticky so the "back" button is always reachable,
+              including on mobile where the layout scrolls. */}
+          <div className="sticky top-0 z-20 flex items-center justify-between gap-2 px-4 py-3 border-b bg-white">
+            <DialogTitle className="text-sm sm:text-base font-bold truncate">
               Venue Layout — {venueConfig?.[currentLayoutIndex]?.name}
             </DialogTitle>
             <Button
               size="sm"
-              variant="outline"
               onClick={() => setVenueMaximized(false)}
+              className="shrink-0 gap-1"
             >
-              ✕ Close
+              <ArrowLeft className="h-4 w-4" /> Back to normal view
             </Button>
           </div>
 
@@ -8800,9 +9607,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 transform: `scale(${maximizedScale})`,
                 transformOrigin: "top left",
                 backgroundImage:
-                  "linear-gradient(to right, #cbd5e1 1px, transparent 1px), linear-gradient(to bottom, #cbd5e1 1px, transparent 1px)",
+                  "linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)",
                 backgroundSize: `${eventData?.venueConfig?.[currentLayoutIndex]?.gridSize || 40}px ${eventData?.venueConfig?.[currentLayoutIndex]?.gridSize || 40}px`,
-                backgroundColor: "#f1f5f9",
+                backgroundColor: "#ffffff",
               }}
             >
               {/* Main Stage */}
@@ -8830,43 +9637,91 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   (t) => t.positionId === table.positionId,
                 );
                 const isBooked = table.isBooked;
+                const preferredIds: string[] =
+                  Array.isArray(
+                    existingStallRequest?.preferredTemplateIds,
+                  ) && existingStallRequest.preferredTemplateIds.length
+                    ? existingStallRequest.preferredTemplateIds
+                    : existingStallRequest?.preferredTemplateId
+                      ? [existingStallRequest.preferredTemplateId]
+                      : [];
+                const isWrongTemplate =
+                  preferredIds.length > 0 && !preferredIds.includes(table.id);
                 const isWrongCategory = !isCategoryAllowed(table);
+                const isNotForSale = table.forSale === false;
 
-                let bg = "bg-green-200/80";
-                let border = "border-green-600";
-                let cur = "cursor-pointer hover:ring-2 hover:ring-blue-400";
+                // Identical colour rule to the inline view so the layout looks
+                // the same maximised: available spaces use their template
+                // colour; booked/disabled grey out; not-for-sale hatches;
+                // selected turns solid blue. Same template-palette fallback as
+                // the inline view so a missing space colour never reads green.
+                const tpl =
+                  (table as any).color ||
+                  templateColorById[table.id] ||
+                  templateColorById[(table as any).tableId] ||
+                  (isNotForSale ? "#f59e0b" : "#22c55e");
+                let fillStyle: any = {
+                  backgroundColor: tpl + "80",
+                  borderColor: tpl,
+                };
+                let cursor =
+                  "cursor-pointer hover:shadow-xl hover:ring-2 hover:ring-blue-400";
 
-                if (isBooked) {
-                  bg = "bg-gray-500/90";
-                  border = "border-gray-700";
-                  cur = "cursor-not-allowed";
-                } else if (isWrongCategory) {
-                  bg = "bg-gray-400/80";
-                  border = "border-gray-500";
-                  cur = "cursor-not-allowed opacity-90";
+                if (isNotForSale) {
+                  fillStyle = {
+                    backgroundColor: tpl + "59",
+                    borderColor: tpl,
+                    backgroundImage:
+                      "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.05) 3px, rgba(0,0,0,0.05) 6px)",
+                  };
+                  cursor = "cursor-default opacity-80";
+                } else if (isBooked) {
+                  fillStyle = {
+                    backgroundColor: "#9ca3af80",
+                    borderColor: "#6b7280",
+                  };
+                  cursor = "cursor-not-allowed";
+                } else if (isWrongTemplate || isWrongCategory) {
+                  fillStyle = {
+                    backgroundColor: "#9ca3af66",
+                    borderColor: "#9ca3af",
+                  };
+                  cursor = "cursor-not-allowed opacity-90";
                 } else if (isSelected) {
-                  bg = "bg-blue-300";
-                  border = "border-blue-600";
+                  fillStyle = {
+                    backgroundColor: "#93c5fd",
+                    borderColor: "#2563eb",
+                  };
+                  cursor = "cursor-pointer shadow-lg ring-2 ring-blue-500";
                 }
 
                 return (
                   <div
                     key={table.positionId}
-                    className={`absolute border-2 flex items-center justify-center transition-all group ${bg} ${border} ${cur} ${
-                      table.type === "Round" ? "rounded-full" : "rounded-sm"
+                    className={`absolute border flex items-center justify-center transition-all group hover:!z-[999] ${cursor} ${
+                      table.type === "Round"
+                        ? "rounded-full"
+                        : table.type === "Corner"
+                          ? "rounded-lg"
+                          : "rounded-sm"
                     }`}
                     style={{
                       left: table.x,
                       top: table.y,
-                      width:
-                        (table as any).displayWidth ?? table.width,
-                      height:
-                        (table as any).displayHeight ?? table.height,
+                      width: (table as any).displayWidth ?? table.width,
+                      height: (table as any).displayHeight ?? table.height,
                       transform: `rotate(${table.rotation || 0}deg)`,
                       zIndex: isSelected ? 10 : 5,
+                      ...fillStyle,
                     }}
                     onClick={() => {
-                      if (isBooked || isWrongCategory) return;
+                      if (
+                        isBooked ||
+                        isWrongTemplate ||
+                        isWrongCategory ||
+                        isNotForSale
+                      )
+                        return;
                       handleTableClick(table);
                     }}
                   >
@@ -8882,7 +9737,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             <div className="text-red-400 font-bold whitespace-nowrap">
                               Sold
                             </div>
-                          ) : isWrongCategory ? (
+                          ) : isWrongTemplate ||
+                            isWrongCategory ||
+                            isNotForSale ? (
                             <div className="text-amber-300 font-bold whitespace-nowrap">
                               Reserved
                             </div>
@@ -10206,19 +11063,27 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </Label>
                   <PhoneInput
                     value={shopkeeperDetails.whatsappNumber}
-                    onChange={(whatsappNumber) =>
+                    onChange={(whatsappNumber, country) => {
+                      setWhatsappCountry(country);
                       setShopkeeperDetails((prev) => ({
                         ...prev,
                         whatsappNumber,
-                      }))
-                    }
+                      }));
+                    }}
                     countryCodeEditable={false}
+                    disabled={isStallApproved}
                     inputStyle={{
                       width: "100%",
                       height: "36px",
                       borderRadius: "6px",
                     }}
                   />
+                  {whatsappCountry && !isStallApproved && (
+                    <p className="text-[11px] text-gray-400">
+                      Enter {phoneHint(whatsappCountry)} for{" "}
+                      {whatsappCountry.name}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -10227,16 +11092,23 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </Label>
                   <PhoneInput
                     value={shopkeeperDetails.phone}
-                    onChange={(phone) =>
-                      setShopkeeperDetails((prev) => ({ ...prev, phone }))
-                    }
+                    onChange={(phone, country) => {
+                      setPhoneCountry(country);
+                      setShopkeeperDetails((prev) => ({ ...prev, phone }));
+                    }}
                     countryCodeEditable={false}
+                    disabled={isStallApproved}
                     inputStyle={{
                       width: "100%",
                       height: "36px",
                       borderRadius: "6px",
                     }}
                   />
+                  {phoneCountry && !isStallApproved && (
+                    <p className="text-[11px] text-gray-400">
+                      Enter {phoneHint(phoneCountry)} for {phoneCountry.name}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -10269,25 +11141,63 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </Label>
                   <Input
                     type="number"
-                    min="1"
+                    min={1}
+                    max={10}
+                    step={1}
                     name="noOfOperators"
                     value={shopkeeperDetails.noOfOperators}
-                    onChange={handleRentFormChange}
+                    onChange={(e) => {
+                      // Clamp to 1–10 — blank/invalid or below snaps to 1,
+                      // anything above 10 caps at 10.
+                      const n = parseInt(e.target.value, 10);
+                      const clamped = !Number.isFinite(n)
+                        ? 1
+                        : Math.min(10, Math.max(1, n));
+                      setShopkeeperDetails((prev) => ({
+                        ...prev,
+                        noOfOperators: clamped,
+                      }));
+                    }}
                     required
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>
-                    Registration Number{" "}
+                    Registration Number ({regConfig.label}){" "}
                     <span className="text-red-500">*</span>
                   </Label>
                   <Input
                     name="registrationNumber"
                     value={shopkeeperDetails.registrationNumber}
-                    onChange={handleRentFormChange}
-                    placeholder="Registration Number"
+                    onChange={(e) => {
+                      // Alphanumeric only, uppercased, and capped to the length
+                      // required by the residency (UEN 10 / GST 15).
+                      let v = e.target.value
+                        .replace(/[^a-zA-Z0-9]/g, "")
+                        .toUpperCase();
+                      if (regConfig.length > 0)
+                        v = v.slice(0, regConfig.length);
+                      setShopkeeperDetails((prev) => ({
+                        ...prev,
+                        registrationNumber: v,
+                      }));
+                    }}
+                    maxLength={regConfig.length || undefined}
+                    placeholder={
+                      regConfig.label === "UEN"
+                        ? "e.g. 201812345A"
+                        : regConfig.label === "GST"
+                          ? "e.g. 27AAPFU0939F1ZV"
+                          : "e.g. UEN / GST No."
+                    }
+                    disabled={isStallApproved}
                     required
                   />
+                  {regConfig.example && (
+                    <p className="text-[11px] text-muted-foreground">
+                      {regConfig.example}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -10506,40 +11416,155 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 />
               </div>
 
-              {/* Preferred Space Template */}
-              {eventData?.tableTemplates && eventData.tableTemplates.filter((t: any) => t.forSale !== false).length > 0 && (
-                <div className="space-y-2 border-t pt-4">
-                  <Label>Preferred Space Type <span className="text-red-500">*</span></Label>
-                  <p className="text-[11px] text-gray-400 mb-2">Select the type of space you're interested in. You'll only be able to book spaces of this type.</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {eventData.tableTemplates.filter((t: any) => t.forSale !== false).map((template: any) => {
-                      const isSelected = shopkeeperDetails.preferredTemplateId === template.id;
-                      return (
-                        <button
-                          key={template.id}
-                          type="button"
-                          onClick={() => setShopkeeperDetails({
-                            ...shopkeeperDetails,
-                            preferredTemplateId: template.id,
-                            preferredTemplateName: template.name,
-                          })}
-                          className={`text-left p-3 rounded-xl border-2 transition-all ${isSelected ? "shadow-md" : "border-gray-200 hover:border-gray-300"}`}
-                          style={isSelected ? { borderColor: template.color || "#3b82f6", backgroundColor: (template.color || "#3b82f6") + "08" } : {}}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: template.color || "#6b7280" }} />
-                            <span className="font-semibold text-sm text-gray-800">{template.name}</span>
-                            {isSelected && <span className="ml-auto text-xs font-medium" style={{ color: template.color || "#3b82f6" }}>Selected</span>}
-                          </div>
-                          <div className="text-[11px] text-gray-500">
-                            {template.width}x{template.height}cm &middot; {formatPrice(template.tablePrice)}
-                          </div>
-                        </button>
-                      );
-                    })}
+              {/* Preferred Space Types — with quantity, total capped at the
+                  organizer's maxSpacesPerVendor. */}
+              {eventData?.tableTemplates &&
+                eventData.tableTemplates.filter((t: any) => t.forSale !== false)
+                  .length > 0 && (
+                  <div className="space-y-2 border-t pt-4">
+                    <div className="flex items-center justify-between">
+                      <Label>
+                        Preferred Space Type(s){" "}
+                        <span className="text-red-500">*</span>
+                      </Label>
+                      <span className="text-xs font-medium text-gray-500">
+                        {totalPreferredSpaces} of {maxSpacesPerVendor} space
+                        {maxSpacesPerVendor === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <p className="mb-2 text-[11px] text-gray-400">
+                      Pick the space types you want and set how many of each — up
+                      to {maxSpacesPerVendor} total. You'll only be able to book
+                      spaces of the selected type(s).
+                    </p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {eventData.tableTemplates
+                        .filter((t: any) => t.forSale !== false)
+                        .map((template: any) => {
+                          const ids: string[] =
+                            shopkeeperDetails.preferredTemplateIds || [];
+                          const qtys: number[] =
+                            shopkeeperDetails.preferredTemplateQuantities || [];
+                          const idx = ids.indexOf(template.id);
+                          const isSelected = idx >= 0;
+                          const qty = isSelected ? Number(qtys[idx]) || 1 : 0;
+                          const atCap =
+                            totalPreferredSpaces >= maxSpacesPerVendor;
+                          const priceEl = (() => {
+                            const hasMember =
+                              isMember &&
+                              template.memberPrice != null &&
+                              Number(template.memberPrice) !==
+                                Number(template.tablePrice);
+                            if (hasMember) {
+                              return (
+                                <>
+                                  <span className="font-semibold text-emerald-600">
+                                    {formatPrice(template.memberPrice)}
+                                  </span>{" "}
+                                  <span className="text-gray-400 line-through">
+                                    {formatPrice(template.tablePrice)}
+                                  </span>
+                                </>
+                              );
+                            }
+                            return formatPrice(
+                              isMember && template.memberPrice != null
+                                ? template.memberPrice
+                                : template.tablePrice,
+                            );
+                          })();
+                          return (
+                            <div
+                              key={template.id}
+                              className={`rounded-xl border-2 p-3 transition-all ${
+                                isSelected ? "shadow-md" : "border-gray-200"
+                              }`}
+                              style={
+                                isSelected
+                                  ? {
+                                      borderColor: template.color || "#3b82f6",
+                                      backgroundColor:
+                                        (template.color || "#3b82f6") + "08",
+                                    }
+                                  : {}
+                              }
+                            >
+                              <button
+                                type="button"
+                                onClick={() => togglePreferredType(template)}
+                                disabled={
+                                  !isSelected && atCap && maxSpacesPerVendor > 1
+                                }
+                                className="w-full text-left disabled:opacity-50"
+                              >
+                                <div className="mb-1 flex items-center gap-2">
+                                  <div
+                                    className="h-3 w-3 rounded-sm"
+                                    style={{
+                                      backgroundColor:
+                                        template.color || "#6b7280",
+                                    }}
+                                  />
+                                  <span className="text-sm font-semibold text-gray-800">
+                                    {template.name}
+                                  </span>
+                                  {isSelected && (
+                                    <span
+                                      className="ml-auto text-xs font-medium"
+                                      style={{
+                                        color: template.color || "#3b82f6",
+                                      }}
+                                    >
+                                      Selected
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-gray-500">
+                                  {template.width}x{template.height}cm &middot;{" "}
+                                  {priceEl}
+                                </div>
+                              </button>
+                              {isSelected && (
+                                <div className="mt-2 flex items-center gap-2 border-t pt-2">
+                                  <span className="text-[11px] text-gray-500">
+                                    Quantity
+                                  </span>
+                                  <div className="ml-auto flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        changePreferredQty(template, -1)
+                                      }
+                                      disabled={qty <= 1}
+                                      className="h-6 w-6 rounded border text-sm font-bold text-gray-600 disabled:opacity-40"
+                                    >
+                                      −
+                                    </button>
+                                    <span className="w-6 text-center text-sm font-semibold">
+                                      {qty}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        changePreferredQty(template, +1)
+                                      }
+                                      disabled={
+                                        atCap || qty >= perTypeMax(template)
+                                      }
+                                      className="h-6 w-6 rounded border text-sm font-bold text-gray-600 disabled:opacity-40"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
               <CardFooter className="flex justify-end gap-3 p-0 pt-4 border-t">
                 <Button
@@ -10579,6 +11604,27 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           )}
         </div>
       )}
+
+      {/* ── Footer: organizer credit + EventSH branding ── */}
+      <footer className="border-t border-gray-200 bg-white py-6 text-center">
+        <p className="text-sm text-gray-600">
+          Organized by{" "}
+          <span className="font-semibold text-gray-800">
+            {organizer?.organizationName || "the organizer"}
+          </span>
+        </p>
+        <p className="mt-1 text-xs text-gray-500">
+          Powered by{" "}
+          <a
+            href="https://eventsh.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-blue-600 hover:underline"
+          >
+            EventSH.com
+          </a>
+        </p>
+      </footer>
     </div>
   );
 }

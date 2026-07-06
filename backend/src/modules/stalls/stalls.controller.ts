@@ -172,6 +172,17 @@ export class StallsController {
   }
 
   /**
+   * List ALL vendor profiles registered under an email (linked accounts) so
+   * the eventfront can show an account picker. Returns [] (never 404) so the
+   * frontend can treat 0/1/2+ uniformly.
+   * GET /stalls/vendors/by-email/:email
+   */
+  @Get("vendors/by-email/:email")
+  async findVendorsByEmail(@Param("email") email: string) {
+    return await this.stallsService.findVendorsByEmail(email);
+  }
+
+  /**
    * Check if vendor has existing request for event
    * GET /stalls/check-request/:eventId/:vendorId
    */
@@ -307,6 +318,17 @@ export class StallsController {
 
     // Send the buffer to the client
     res.end(buffer);
+  }
+
+  /**
+   * Re-send the QR stall ticket email for an already-Paid stall. Returns a
+   * clear error (e.g. SMTP failure) when delivery fails, instead of the
+   * silent best-effort send used during payment confirmation.
+   * POST /stalls/:id/resend-ticket
+   */
+  @Post(":id/resend-ticket")
+  async resendTicket(@Param("id") id: string) {
+    return await this.stallsService.resendStallTicket(id);
   }
 
   /**

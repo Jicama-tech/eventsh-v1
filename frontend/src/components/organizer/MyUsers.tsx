@@ -195,6 +195,7 @@ interface ProcessedExhibitor {
 }
 
 import { useCountryCodes } from "@/hooks/useCountryCodes";
+import { phoneNationalLength } from "@/data/countries";
 
 interface Country {
   name: string;
@@ -980,7 +981,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">
             Relationship Management
           </h2>
           <p className="text-muted-foreground">
@@ -1100,7 +1101,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
         {/* Visitors Tab Content */}
         <TabsContent value="visitors">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <CardTitle>Visitor Management</CardTitle>
                 <CardDescription>
@@ -1276,7 +1277,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
         {/* Exhibitors Tab Content */}
         <TabsContent value="exhibitors">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <CardTitle>Exhibitor Management</CardTitle>
                 <CardDescription>
@@ -3297,11 +3298,42 @@ export function AddExhibitorDialog({
     if (!formData.firstName.trim())
       newErrors.firstName = "First name is required";
     if (!formData.lastName.trim()) newErrors.lastName = "Last name is required";
-    if (!formData.whatsappNumber.trim())
+    // ISO code of the chosen country → drives the per-country digit length
+    // (India 10, Singapore 8, …).
+    const isoCode =
+      SUPPORTED_COUNTRIES.find((c) => c.dialCode === formData.dialCode)?.code ||
+      SUPPORTED_COUNTRIES.find((c) => c.name === formData.country)?.code;
+    const countryLabel = formData.country || "the selected country";
+
+    const wa = formData.whatsappNumber.trim();
+    if (!wa) {
       newErrors.whatsappNumber = "WhatsApp required";
+    } else if (!/^\d+$/.test(wa)) {
+      newErrors.whatsappNumber = "Digits only — no letters or symbols";
+    } else {
+      const [min, max] = phoneNationalLength(isoCode);
+      if (wa.length < min || wa.length > max) {
+        const need = min === max ? `${min} digits` : `${min}–${max} digits`;
+        newErrors.whatsappNumber = `Enter ${need} for ${countryLabel}`;
+      }
+    }
+
     if (!formData.shopName.trim())
       newErrors.firstName = "Shop name is required";
-    if (!formData.phone.trim()) newErrors.phone = "Phone required";
+
+    const ph = formData.phone.trim();
+    if (!ph) {
+      newErrors.phone = "Phone required";
+    } else if (!/^\d+$/.test(ph)) {
+      newErrors.phone = "Digits only — no letters or symbols";
+    } else {
+      const [pmin, pmax] = phoneNationalLength(isoCode);
+      if (ph.length < pmin || ph.length > pmax) {
+        const need =
+          pmin === pmax ? `${pmin} digits` : `${pmin}–${pmax} digits`;
+        newErrors.phone = `Enter ${need} for ${countryLabel}`;
+      }
+    }
     if (!formData.address.trim()) newErrors.address = "Address is required";
     if (!formData.businessCategory)
       newErrors.businessCategory = "Category required";
@@ -3555,6 +3587,19 @@ export function AddExhibitorDialog({
                   }
                 />
               </div>
+              {errors.whatsappNumber ? (
+                <p className="text-red-500 text-xs">{errors.whatsappNumber}</p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  {(() => {
+                    const iso = SUPPORTED_COUNTRIES.find(
+                      (c) => c.dialCode === formData.dialCode,
+                    )?.code;
+                    const [min, max] = phoneNationalLength(iso);
+                    return `Enter ${min === max ? `${min} digits` : `${min}–${max} digits`} for ${formData.country || "the selected country"}`;
+                  })()}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Phone Number*</Label>
@@ -3573,6 +3618,9 @@ export function AddExhibitorDialog({
                   }
                 />
               </div>
+              {errors.phone && (
+                <p className="text-red-500 text-xs">{errors.phone}</p>
+              )}
             </div>
           </div>
 

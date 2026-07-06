@@ -5,6 +5,54 @@ export interface Country {
   flag: string;
 }
 
+// Expected national subscriber-number length (digits AFTER the dial code),
+// keyed by ISO-2 code, as [min, max]. Used to harden phone/WhatsApp inputs so
+// e.g. India requires 10 digits and Singapore 8. Countries not listed fall
+// back to a lenient range so uncommon locales aren't blocked.
+export const PHONE_NATIONAL_LENGTH: Record<string, [number, number]> = {
+  IN: [10, 10],
+  SG: [8, 8],
+  US: [10, 10],
+  CA: [10, 10],
+  GB: [10, 10],
+  AE: [9, 9],
+  AU: [9, 9],
+  MY: [9, 10],
+  ID: [9, 12],
+  PH: [10, 10],
+  CN: [11, 11],
+  HK: [8, 8],
+  NZ: [8, 10],
+  SA: [9, 9],
+  QA: [8, 8],
+  PK: [10, 10],
+  BD: [10, 10],
+  LK: [9, 9],
+  TH: [9, 9],
+  VN: [9, 10],
+  JP: [10, 10],
+  KR: [9, 10],
+  DE: [10, 11],
+  FR: [9, 9],
+  IT: [9, 10],
+  ES: [9, 9],
+  NL: [9, 9],
+  ZA: [9, 9],
+  NG: [10, 10],
+  KE: [9, 9],
+  BR: [10, 11],
+  MX: [10, 10],
+  EG: [10, 10],
+  TR: [10, 10],
+};
+
+// [min, max] national-number length for an ISO-2 code (case-insensitive).
+// Falls back to a lenient 6–15 when the country isn't in the map above.
+export function phoneNationalLength(iso?: string): [number, number] {
+  if (!iso) return [6, 15];
+  return PHONE_NATIONAL_LENGTH[iso.toUpperCase()] || [6, 15];
+}
+
 export const COUNTRIES: Country[] = [
   { name: "Afghanistan", code: "AF", dialCode: "+93", flag: "" },
   { name: "Albania", code: "AL", dialCode: "+355", flag: "" },

@@ -1,5 +1,6 @@
 import { forwardRef, Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
+import { JwtModule } from "@nestjs/jwt";
 import { EventsService } from "./events.service";
 import { EventsController } from "./events.controller";
 import { EventImportService } from "./event-import.service";
@@ -22,6 +23,12 @@ import {
       // /events/{id} link.
       { name: OrganizerStore.name, schema: OrganizerStoreSchema },
     ]),
+    // Volunteer Google sign-in mints a short-lived volunteer JWT so the
+    // scanner session survives a page refresh.
+    JwtModule.register({
+      secret: process.env.JWT_ACCESS_SECRET || "secret",
+      signOptions: { expiresIn: "12h" },
+    }),
     TemplatesModule,
     OtpModule,
     // OrganizersModule exports the Organizer + Plan models so the events

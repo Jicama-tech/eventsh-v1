@@ -25,6 +25,13 @@ export class CreateStallDto {
   @IsMongoId()
   shopkeeperId?: Types.ObjectId;
 
+  // When true, always create a NEW vendor profile even if a vendor with the
+  // same email/WhatsApp already exists. Used by the eventfront "Register a new
+  // request" flow so one authenticated email can own multiple vendor profiles
+  // (linked accounts). Coerced in the service (multipart sends it as a string).
+  @IsOptional()
+  forceNewVendor?: boolean | string;
+
   // Vendor details (if creating new vendor)
   @IsOptional()
   @IsString()
@@ -71,6 +78,21 @@ export class CreateStallDto {
   @IsOptional()
   @IsString()
   preferredTemplateName?: string;
+
+  // JSON-encoded string[] (multipart form sends arrays as a string). Lets the
+  // vendor pick a COMBINATION of preferred space types.
+  @IsOptional()
+  @IsString()
+  preferredTemplateIds?: string;
+
+  @IsOptional()
+  @IsString()
+  preferredTemplateNames?: string;
+
+  // JSON array of requested quantities, parallel to preferredTemplateIds.
+  @IsOptional()
+  @IsString()
+  preferredTemplateQuantities?: string;
 
   @IsOptional()
   @IsString()

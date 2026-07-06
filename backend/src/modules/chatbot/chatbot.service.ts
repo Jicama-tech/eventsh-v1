@@ -3,6 +3,14 @@ import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import OpenAI from "openai";
 import { buildDefaultStorefrontSettings } from "../organizer-stores/default-settings";
+import {
+  GUIDE_INTRO,
+  ORGANIZER_GUIDE_TOPICS,
+  buildFullGuideMarkdown,
+  getGuideCatalog,
+  getGuideTopic,
+} from "./organizer-guide.content";
+import { renderGuidePdf } from "./guide-pdf.util";
 
 // Personal event sub-types offered to Individual accounts in the chatbot
 // "create event" picker. Mirrors EVENT_TYPE_GROUPS.personal in
@@ -2351,6 +2359,12 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     operatorAccessTabs?: string[] | null;
     message: string;
   }) {
+    // Deterministic short-circuit: the "Guide" pill / any "guide" request.
+    // Static content, so it works even when AI isn't configured — answer it
+    // before the API-key gate and before any LLM routing.
+    const guide = this.maybeGuide(message);
+    if (guide) return guide;
+
     if (!this.hasApiKey()) {
       return {
         text:
@@ -2504,6 +2518,117 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
         text: `Sorry — I hit an error: ${err?.message || "unknown"}. Try again in a sec.`,
       };
     }
+  }
+
+  // Deterministic "Guide" intent. Returns the organizer guide as inline text
+  // plus a structured `guide` payload (catalog + per-topic + full PDF links)
+  // the frontend renders with Download buttons. Returns null when the message
+  // isn't a guide request so the normal pipeline runs.
+  private maybeGuide(message: string): {
+    text: string;
+    guide: {
+      intro: string;
+      topics: Array<{ slug: string; title: string; summary: string }>;
+      pdfBasePath: string;
+    };
+  } | null {
+    const m = message.toLowerCase().trim();
+    const isGuide =
+      /\b(guide|how (do i|to) (manage|handle|run|organi[sz]e)|user manual|handbook|getting started|walk ?through|how does (this|the platform) work)\b/.test(
+        m,
+      );
+
+    // Topic-specific routing — the booking pills and natural "how do visitors
+    // book a ticket" style questions jump straight to one topic (full content
+    // inline + that topic's PDF). Gated by guide-ish phrasing so plain data
+    // queries ("show round table bookings") don't get hijacked.
+    const guideish =
+      isGuide ||
+      /\bhow (do|does|can|to)\b/.test(m) ||
+      /\bbooking guide\b/.test(m);
+    const topicMatchers: Array<{ slug: string; re: RegExp }> = [
+      {
+        slug: "book-tickets",
+        re: /\b(visitor|attendee|guest)s?\b.{0,40}\b(book|buy|purchas|booking)|\bhow\b.{0,30}\b(book|buy)\b.{0,20}\bticket/,
+      },
+      {
+        slug: "book-stall",
+        re: /\b(vendor|exhibitor)s?\b.{0,40}\b(book|rent|renting|booking)|\bhow\b.{0,30}\b(rent|book)\b.{0,20}\bstall/,
+      },
+      {
+        slug: "book-round-tables",
+        re: /\breserve (your )?seats?\b|\b(round[- ]?table)s?\b.{0,30}\b(reserve|book|seat|guide)|\bhow\b.{0,30}\b(reserve|book)\b.{0,20}\b(round[- ]?table|seat)/,
+      },
+      {
+        slug: "apply-speaker",
+        re: /\b(speaker)s?\b.{0,30}\bappl|\bhow\b.{0,30}\bapply\b.{0,20}\bspeak|\bapply\b.{0,15}\bto speak/,
+      },
+    ];
+
+    if (guideish) {
+      for (const tm of topicMatchers) {
+        if (tm.re.test(m)) {
+          const topic = getGuideTopic(tm.slug)!;
+          return {
+            text: topic.markdown,
+            guide: {
+              intro: GUIDE_INTRO,
+              topics: [
+                {
+                  slug: topic.slug,
+                  title: topic.title,
+                  summary: topic.summary,
+                },
+              ],
+              pdfBasePath: "/chatbot/guide/pdf",
+            },
+          };
+        }
+      }
+    }
+
+    if (!isGuide) return null;
+
+    const lines = [
+      GUIDE_INTRO,
+      "",
+      ...ORGANIZER_GUIDE_TOPICS.map(
+        (t) => `**${t.title}** — ${t.summary}`,
+      ),
+      "",
+      "Tap a topic below to download it as a PDF, or grab the complete guide.",
+    ];
+
+    return {
+      text: lines.join("\n"),
+      guide: {
+        intro: GUIDE_INTRO,
+        topics: getGuideCatalog(),
+        // Frontend builds `${apiURL}${pdfBasePath}?slug=<slug|all>`.
+        pdfBasePath: "/chatbot/guide/pdf",
+      },
+    };
+  }
+
+  // Build a guide PDF: a single topic by slug, or the full guide when slug is
+  // missing / "all". Returns the buffer plus a friendly download filename.
+  async generateGuidePdf(
+    slug?: string,
+  ): Promise<{ buffer: Buffer; filename: string }> {
+    const wantFull = !slug || slug === "all" || slug === "full";
+    if (wantFull) {
+      const buffer = await renderGuidePdf(
+        "Organizer Guide",
+        buildFullGuideMarkdown(),
+      );
+      return { buffer, filename: "eventsh-organizer-guide.pdf" };
+    }
+    const topic = getGuideTopic(slug);
+    if (!topic) {
+      throw new Error(`Unknown guide topic: ${slug}`);
+    }
+    const buffer = await renderGuidePdf(topic.title, topic.markdown);
+    return { buffer, filename: `eventsh-guide-${topic.slug}.pdf` };
   }
 
   // Cheap classifier

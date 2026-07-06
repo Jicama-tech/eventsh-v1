@@ -108,6 +108,12 @@ export class TicketsService {
       // 3.5 Get organizer country for currency formatting
       const organizer = await this.organizerModel.findById(createTicketDto.organizerId);
       const country = organizer?.country || "IN";
+      // Organization name brands the ticket/receipt (top of the PDF/email);
+      // "Powered by EventSH" sits at the bottom.
+      const orgName =
+        (organizer as any)?.organizationName ||
+        (organizer as any)?.name ||
+        "EventSH";
 
       // 4. Create the ticket document
       const ticket = new this.ticketModel({
@@ -156,7 +162,8 @@ export class TicketsService {
             savedTicket,
             qrCodeBase64,
             whatsAppNumber,
-            country
+            country,
+            orgName
           );
         } catch (error) {
           console.error("Ticket WhatsApp delivery failed:", error);
@@ -169,6 +176,7 @@ export class TicketsService {
             qrCodeBase64,
             country,
             (organizer as any)?.emailConfig,
+            orgName,
           );
         } catch (error) {
           console.error("Ticket email delivery failed:", error);
@@ -184,7 +192,7 @@ export class TicketsService {
   }
 
   // --- Puppeteer PDF Generation ---
-  private generateTicketHTML(ticket: Ticket, qrBase64: string, country?: string): string {
+  private generateTicketHTML(ticket: Ticket, qrBase64: string, country?: string, orgName?: string): string {
     const eventDate = new Date(ticket.eventDate).toLocaleDateString();
     return `<!DOCTYPE html>
     <html lang="en">
@@ -192,8 +200,10 @@ export class TicketsService {
       <meta charset="UTF-8">
       <title>Eventsh Ticket</title>
       <style>
-        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
-        body { font-family: 'Roboto', Arial, sans-serif; margin:0;background:#fff;color:#18181b; }
+        /* No external @import: fetching Google Fonts made page.setContent hang
+           on networkidle0 in production (blocked/slow outbound), so ticket PDFs
+           were slow or timed out. Use a self-contained system font stack. */
+        body { font-family: Arial, Helvetica, "Segoe UI", Roboto, sans-serif; margin:0;background:#fff;color:#18181b; }
         .header { background:#3b82f6; color:white; text-align:center; padding:36px 24px 22px;}
         .header h1 { margin:0; font-size:32px; }
         .header .subtitle { margin:7px 0 0 0; font-size:19px; opacity:0.93; }
@@ -214,7 +224,7 @@ export class TicketsService {
     <body>
       <div class="container">
         <div class="header">
-          <h1>EVENTSH TICKET</h1>
+          <h1>${orgName || "EventSH"}</h1>
           <div class="subtitle">${ticket.eventTitle}</div>
         </div>
         <div class="details">
@@ -236,7 +246,7 @@ export class TicketsService {
             <span>This QR code can ONLY be scanned using the official Eventsh app. Normal camera scanners will not work.</span>
           </div>
         </div>
-        <div class="footer">© ${new Date().getFullYear()} Eventsh. All rights reserved.</div>
+        <div class="footer">Powered by EventSH</div>
       </div>
     </body>
     </html>`;
@@ -245,15 +255,16 @@ export class TicketsService {
   private async generateTicketPDF(
     ticket: Ticket,
     qrBase64: string,
-    country?: string
+    country?: string,
+    orgName?: string
   ): Promise<Buffer> {
-    const html = this.generateTicketHTML(ticket, qrBase64, country);
+    const html = this.generateTicketHTML(ticket, qrBase64, country, orgName);
     const browser = await puppeteer.launch({
       headless: true,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.setContent(html, { waitUntil: "networkidle0", timeout: 20000 });
     const uint8arrayBuffer = await page.pdf({
       format: "A4",
       printBackground: true,
@@ -268,10 +279,11 @@ export class TicketsService {
     ticket: Ticket,
     qrBase64: string,
     whatsappNumber: string,
-    country?: string
+    country?: string,
+    orgName?: string
   ): Promise<void> {
     try {
-      const pdfBuffer = await this.generateTicketPDF(ticket, qrBase64, country);
+      const pdfBuffer = await this.generateTicketPDF(ticket, qrBase64, country, orgName);
       const pdfDir = path.join(process.cwd(), "uploads", "tickets");
       if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
       const pdfFileName = `ticket_${ticket.ticketId}.pdf`;
@@ -310,14 +322,15 @@ Thank you for choosing Eventsh! 🎊`;
     country?: string,
     // Organizer's custom-sender config — attendee tickets go out from the
     // organizer's address when their "Personal Email" toggle is on.
-    senderConfig?: any
+    senderConfig?: any,
+    orgName?: string
   ): Promise<void> {
     try {
       const eventDate = new Date(ticket.eventDate).toLocaleDateString();
       const html = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
           <div style="background: linear-gradient(135deg, #3b82f6, #6366f1); color: white; padding: 30px; text-align: center;">
-            <h1 style="margin: 0; font-size: 24px;">EVENTSH TICKET</h1>
+            <h1 style="margin: 0; font-size: 24px;">${orgName || "EventSH"}</h1>
             <p style="margin: 8px 0 0 0; opacity: 0.9;">${ticket.eventTitle}</p>
           </div>
           <div style="padding: 25px;">
@@ -342,13 +355,13 @@ Thank you for choosing Eventsh! 🎊`;
             </div>
           </div>
           <div style="background: #f1f5f9; padding: 15px; text-align: center; font-size: 12px; color: #64748b;">
-            <p style="margin: 0;">© ${new Date().getFullYear()} Eventsh. All rights reserved.</p>
+            <p style="margin: 0;">Powered by EventSH</p>
           </div>
         </div>`;
       // Attach the full ticket PDF (same one sent over WhatsApp) so the
       // recipient can download / forward it. The inline PNG stays for the
       // QR preview inside the email body.
-      const pdfBuffer = await this.generateTicketPDF(ticket, qrBase64, country);
+      const pdfBuffer = await this.generateTicketPDF(ticket, qrBase64, country, orgName);
       await this.mailService.sendEmail({
         to: ticket.customerEmail,
         subject: `🎟️ Your Eventsh Ticket - ${ticket.eventTitle}`,
