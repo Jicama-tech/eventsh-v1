@@ -390,6 +390,11 @@ export class EventsController {
       if (Array.isArray(body.categories) && body.categories.length > 0) {
         body.category = body.categories[0];
       }
+      // eventType is an enum ("commercial" | "personal"). Legacy events (and
+      // any form that leaves it blank) send "" — which Mongoose rejects as an
+      // invalid enum value. Drop it so the field just stays unset rather than
+      // failing the whole save.
+      if (!body.eventType) delete body.eventType;
       if (typeof body.features === "string")
         body.features = JSON.parse(body.features);
       if (typeof body.socialMedia === "string")
@@ -771,6 +776,10 @@ export class EventsController {
       if (Array.isArray(body.categories) && body.categories.length > 0) {
         body.category = body.categories[0];
       }
+      // Never overwrite the enum-constrained eventType with a blank value on
+      // update — legacy events have none stored and the form sends "". Dropping
+      // it leaves the field untouched instead of failing enum validation.
+      if (!body.eventType) delete body.eventType;
       if (typeof body.features === "string")
         body.features = JSON.parse(body.features);
       if (typeof body.socialMedia === "string")
