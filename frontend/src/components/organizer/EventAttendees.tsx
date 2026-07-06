@@ -1,6 +1,7 @@
 // File: src/components/DashboardTabs/EventAttendees.tsx
 
 import React, { useState, useEffect, useMemo } from "react";
+import EventRsvpPanel from "./EventRsvpPanel";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -2132,6 +2133,16 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
           {selectedEvent && (
             <div className="space-y-6">
+              {/* Personal / Marriage events are RSVP-based — surface the guest
+                  list up top instead of the ticket/stall participant views. */}
+              {((selectedEvent as any).eventType === "personal" ||
+                (selectedEvent as any).category === "Marriage Function") && (
+                <EventRsvpPanel
+                  eventId={selectedEvent._id}
+                  eventTitle={(selectedEvent as any).title}
+                />
+              )}
+
               {/* Event Info — full event details + per-section counts */}
               <Card>
                 <CardHeader>

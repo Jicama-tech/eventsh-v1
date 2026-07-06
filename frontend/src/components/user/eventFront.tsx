@@ -111,6 +111,7 @@ import {
 import AnnouncementBar from "@/components/ui/AnnouncementBar";
 import { Checkbox } from "@radix-ui/react-checkbox";
 import { OrganizerStore } from "./organizerStoreFront";
+import MarriageEventFront from "./MarriageEventFront";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import ImageCropModal from "../ui/imageCropModal";
 import { StatusHistoryEntry } from "../organizer/EventAttendees";
@@ -315,6 +316,54 @@ interface FetchedEvent {
 interface EventDetailPageProps {
   eventId: string;
   onBack: () => void;
+}
+
+/**
+ * Collapsible info card — same open/close disclosure the Venue Layout
+ * uses (clickable header row + chevron that flips). Used to wrap the
+ * event's info sections (Terms, Refund Policy, etc.) and the Add-On
+ * Items list so each can be expanded/collapsed independently. Defaults
+ * closed, matching the Venue Layout.
+ */
+function CollapsibleCard({
+  title,
+  headingColor,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  headingColor?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="w-full px-5 sm:px-6 py-4 flex items-center gap-2 hover:bg-gray-50 transition-colors"
+      >
+        <p
+          className="text-sm sm:text-lg font-bold tracking-widest uppercase text-left"
+          style={{ color: headingColor }}
+        >
+          {title}
+        </p>
+        <span className="ml-auto">
+          {open ? (
+            <ChevronUp className="h-4 w-4 text-gray-500" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-gray-500" />
+          )}
+        </span>
+      </button>
+      {open && (
+        <div className="px-5 sm:px-6 pb-5 sm:pb-6">{children}</div>
+      )}
+    </div>
+  );
 }
 
 export function EventFront({ eventId, onBack }: EventDetailPageProps) {
@@ -3702,6 +3751,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     );
   }
 
+  // Personal/Marriage events get a dedicated, wedding-themed public page
+  // instead of the commercial ticketing layout. Branch after the loading/
+  // error/publish gates so it reuses the same fetch + access rules.
+  const _isMarriageFront =
+    (eventData as any).eventType === "personal" &&
+    ((eventData as any).category === "Marriage Function" ||
+      (Array.isArray((eventData as any).categories) &&
+        (eventData as any).categories.includes("Marriage Function")));
+  if (_isMarriageFront) {
+    return <MarriageEventFront eventData={eventData} />;
+  }
+
   const {
     title,
     description,
@@ -4399,9 +4460,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               </p>
             </section>
 
-            {/* Tags */}
+            {/* Tags — hidden on mobile (shown sm+ only) at user request */}
             {tags && tags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
+              <div className="hidden sm:flex flex-wrap gap-2">
                 {tags.map((tag, index) => (
                   <span
                     key={index}
@@ -5592,11 +5653,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   | Record<string, boolean>
                   | undefined) || {};
               const shown = (k: string) => secVis[k] !== false;
-              const headingStyle = { color: design?.primaryColor };
-              const cardCls =
-                "rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm";
-              const titleCls =
-                "text-sm sm:text-lg font-bold tracking-widest uppercase mb-3";
               const htmlCls =
                 "text-gray-600 prose prose-sm max-w-none [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4";
               const customs = Array.isArray((eventData as any)?.customSections)
@@ -5605,10 +5661,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               return (
                 <>
                   {shown("ageDress") && (ageRestriction || dresscode) && (
-                    <div className={cardCls}>
-                      <p className={titleCls} style={headingStyle}>
-                        Age Restriction &amp; Dress Code
-                      </p>
+                    <CollapsibleCard
+                      title="Age Restriction & Dress Code"
+                      headingColor={design?.primaryColor}
+                    >
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {ageRestriction && (
                           <div>
@@ -5631,44 +5687,44 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           </div>
                         )}
                       </div>
-                    </div>
+                    </CollapsibleCard>
                   )}
                   {shown("specialInstructions") && specialInstructions && (
-                    <div className={cardCls}>
-                      <p className={titleCls} style={headingStyle}>
-                        Special Instructions
-                      </p>
+                    <CollapsibleCard
+                      title="Special Instructions"
+                      headingColor={design?.primaryColor}
+                    >
                       <div
                         className={htmlCls}
                         dangerouslySetInnerHTML={{
                           __html: specialInstructions,
                         }}
                       />
-                    </div>
+                    </CollapsibleCard>
                   )}
                   {shown("refundPolicy") && refundPolicy && (
-                    <div className={cardCls}>
-                      <p className={titleCls} style={headingStyle}>
-                        Refund Policy
-                      </p>
+                    <CollapsibleCard
+                      title="Refund Policy"
+                      headingColor={design?.primaryColor}
+                    >
                       <div
                         className={htmlCls}
                         dangerouslySetInnerHTML={{ __html: refundPolicy }}
                       />
-                    </div>
+                    </CollapsibleCard>
                   )}
                   {shown("termsAndConditions") && termsAndConditions && (
-                    <div className={cardCls}>
-                      <p className={titleCls} style={headingStyle}>
-                        Terms &amp; Conditions
-                      </p>
+                    <CollapsibleCard
+                      title="Terms & Conditions"
+                      headingColor={design?.primaryColor}
+                    >
                       <div
                         className={htmlCls}
                         dangerouslySetInnerHTML={{
                           __html: termsAndConditions,
                         }}
                       />
-                    </div>
+                    </CollapsibleCard>
                   )}
                   {customs
                     .filter(
@@ -5678,19 +5734,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         shown(s?.id),
                     )
                     .map((s: any) => (
-                      <div key={s.id || s.heading} className={cardCls}>
-                        {(s.heading || "").trim() && (
-                          <p className={titleCls} style={headingStyle}>
-                            {s.heading}
-                          </p>
-                        )}
+                      <CollapsibleCard
+                        key={s.id || s.heading}
+                        title={(s.heading || "").trim() || "More Information"}
+                        headingColor={design?.primaryColor}
+                      >
                         {(s.content || "").trim() && (
                           <div
                             className={htmlCls}
                             dangerouslySetInnerHTML={{ __html: s.content }}
                           />
                         )}
-                      </div>
+                      </CollapsibleCard>
                     ))}
                 </>
               );
@@ -6389,15 +6444,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
                 )}
 
-                {/* Add-On Items */}
+                {/* Add-On Items — collapsible, same disclosure as the
+                    info sections and the Venue Layout. */}
                 {addOnItems && addOnItems.length > 0 && (
-                  <div className="space-y-3">
-                    <p
-                      className="text-sm sm:text-lg font-bold tracking-widest uppercase"
-                      style={{ color: design?.primaryColor }}
-                    >
-                      Add-On Items
-                    </p>
+                  <CollapsibleCard
+                    title="Add-On Items"
+                    headingColor={design?.primaryColor}
+                  >
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {addOnItems.map((item) => (
                         <div
@@ -6423,7 +6476,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </CollapsibleCard>
                 )}
               </div>
             ) : (
@@ -11551,6 +11604,27 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           )}
         </div>
       )}
+
+      {/* ── Footer: organizer credit + EventSH branding ── */}
+      <footer className="border-t border-gray-200 bg-white py-6 text-center">
+        <p className="text-sm text-gray-600">
+          Organized by{" "}
+          <span className="font-semibold text-gray-800">
+            {organizer?.organizationName || "the organizer"}
+          </span>
+        </p>
+        <p className="mt-1 text-xs text-gray-500">
+          Powered by{" "}
+          <a
+            href="https://eventsh.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-blue-600 hover:underline"
+          >
+            EventSH.com
+          </a>
+        </p>
+      </footer>
     </div>
   );
 }

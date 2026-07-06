@@ -418,6 +418,76 @@ export class VolunteerDto {
   phoneNumber?: string;
 }
 
+// A single ceremony within a Personal/Marriage event.
+export class FunctionDto {
+  @IsString() @IsOptional() id?: string;
+  @IsString() @IsOptional() name?: string;
+  @IsString() @IsOptional() date?: string;
+  @IsString() @IsOptional() time?: string;
+  @IsString() @IsOptional() endTime?: string;
+  @IsString() @IsOptional() venueName?: string;
+  @IsString() @IsOptional() address?: string;
+  @IsString() @IsOptional() dressCode?: string;
+  @IsString() @IsOptional() notes?: string;
+  @IsString() @IsOptional() accommodation?: string;
+  @IsBoolean() @IsOptional() isLive?: boolean;
+  @IsString() @IsOptional() announcedAt?: string;
+}
+
+// Eventfront "Site Settings" — design controls for the public wedding page.
+// Mirrors the frontend MarriageTheme (frontend/src/lib/marriageThemes.ts).
+export class MarriageThemeDto {
+  @IsString() @IsOptional() preset?: string;
+  @IsString() @IsOptional() primaryColor?: string;
+  @IsString() @IsOptional() accentColor?: string;
+  @IsString() @IsOptional() bgColor?: string;
+  @IsString() @IsOptional() textColor?: string;
+  @IsString() @IsOptional() headingFont?: string;
+  @IsNumber() @IsOptional() heroOverlay?: number;
+  @IsString() @IsOptional() cornerStyle?: string;
+  // Expanded design controls.
+  @IsString() @IsOptional() heroHeight?: string;
+  @IsString() @IsOptional() heroLayout?: string;
+  @IsString() @IsOptional() heroTagline?: string;
+  @IsBoolean() @IsOptional() showMonogram?: boolean;
+  @IsString() @IsOptional() monogramStyle?: string;
+  @IsString() @IsOptional() topMotif?: string;
+  @IsString() @IsOptional() floralAccents?: string;
+  @IsString() @IsOptional() headingStyle?: string;
+  @IsString() @IsOptional() backgroundPattern?: string;
+  @IsString() @IsOptional() fontScale?: string;
+  @IsString() @IsOptional() galleryLayout?: string;
+  @IsBoolean() @IsOptional() animations?: boolean;
+  // Per-section visibility map ({ countdown, welcome, story, ... }).
+  @IsObject() @IsOptional() sections?: Record<string, boolean>;
+}
+
+// Couple + story details specific to a Marriage event.
+export class MarriageDetailsDto {
+  @IsString() @IsOptional() partner1Name?: string;
+  @IsString() @IsOptional() partner2Name?: string;
+  @IsString() @IsOptional() hostNames?: string;
+  @IsString() @IsOptional() contactName?: string;
+  @IsString() @IsOptional() contactPhone?: string;
+  @IsString() @IsOptional() contactEmail?: string;
+  @IsString() @IsOptional() ourStory?: string;
+  @IsString() @IsOptional() howWeMet?: string;
+  // Lodging suggestions (hotels, room blocks, etc.) shown to guests and
+  // included in the RSVP confirmation email.
+  @IsString() @IsOptional() accommodations?: string;
+  // Any other logistics for guests — travel, gifts, parking, etc.
+  @IsString() @IsOptional() additionalInfo?: string;
+  // "Function has started" announcement-bar customization.
+  @IsString() @IsOptional() adBarBgColor?: string;
+  @IsString() @IsOptional() adBarTextColor?: string;
+  @IsString() @IsOptional() adBarMessage?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MarriageThemeDto)
+  theme?: MarriageThemeDto;
+}
+
 export class CreateEventDto {
   @IsString()
   title: string;
@@ -425,6 +495,11 @@ export class CreateEventDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  // "commercial" | "personal" — top-level grouping from the create pre-step.
+  @IsString()
+  @IsOptional()
+  eventType?: string;
 
   @IsString()
   @IsOptional()
@@ -648,6 +723,17 @@ export class CreateEventDto {
   @IsOptional()
   @Type(() => VolunteerDto)
   volunteers?: VolunteerDto[];
+
+  // Marriage/Personal ceremonies + couple details.
+  @ValidateNested({ each: true })
+  @IsOptional()
+  @Type(() => FunctionDto)
+  functions?: FunctionDto[];
+
+  @ValidateNested()
+  @IsOptional()
+  @Type(() => MarriageDetailsDto)
+  marriage?: MarriageDetailsDto;
 
   @IsEnum(EventStatus)
   @IsOptional()

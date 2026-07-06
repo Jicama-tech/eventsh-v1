@@ -32,8 +32,11 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { CreateEventForm } from "./CreateEventForm";
+import { MarriageEventForm } from "./MarriageEventForm";
+import { EventTypeChooser } from "./EventTypeChooser";
 import { CouponsManager } from "./CouponsManager";
 import { EventFeedbackDialog } from "./EventFeedbackDialog";
+import type { EventTypeKey } from "@/lib/eventTypes";
 import {
   Plus,
   Edit,
@@ -171,6 +174,15 @@ const MyEvents: React.FC = () => {
   // match the latest slug even after it's changed in storefront settings.
   const [organizerSlug, setOrganizerSlug] = useState<string>("");
   const [showDialog, setShowDialog] = useState(false);
+  // Pre-step "what type of event" chooser shown before the create form. Once
+  // the organizer picks a type + sub-type we stash the defaults below and open
+  // the real form. Edit/duplicate skip the chooser entirely.
+  const [showTypeChooser, setShowTypeChooser] = useState(false);
+  const [newEventDefaults, setNewEventDefaults] = useState<{
+    eventType: EventTypeKey;
+    category: string;
+    categories: string[];
+  } | null>(null);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   // When set, the dialog opens in "duplicate" mode: form pre-fills with this
   // event's data but submits as a NEW event (POST, not PUT). Original is
@@ -502,15 +514,39 @@ const MyEvents: React.FC = () => {
   }, []);
 
   // Event handlers
+  // "Create Event" no longer opens the form directly — it first asks what
+  // type of event this is (Commercial vs Personal + a sub-type). The form
+  // opens from handleTypeChosen once that pick is made.
   const handleCreateEvent = () => {
     setEditingEvent(null);
     setDuplicatingFrom(null);
+    setNewEventDefaults(null);
+    setShowTypeChooser(true);
+  };
+
+  // Called by the EventTypeChooser once a type + sub-type is selected. The
+  // sub-type fills `category` (so existing reads/filters keep working) while
+  // the group is carried on `eventType`.
+  const handleTypeChosen = ({
+    eventType,
+    subtype,
+  }: {
+    eventType: EventTypeKey;
+    subtype: string;
+  }) => {
+    setNewEventDefaults({
+      eventType,
+      category: subtype,
+      categories: [subtype],
+    });
+    setShowTypeChooser(false);
     setShowDialog(true);
   };
 
   const handleEditEvent = (event: Event) => {
     setEditingEvent(event);
     setDuplicatingFrom(null);
+    setNewEventDefaults(null);
     setShowDialog(true);
   };
 
@@ -568,6 +604,7 @@ const MyEvents: React.FC = () => {
 
     setDuplicatingFrom(cloned as Event);
     setEditingEvent(null);
+    setNewEventDefaults(null);
     setShowDialog(true);
   };
 
@@ -575,6 +612,7 @@ const MyEvents: React.FC = () => {
     setShowDialog(false);
     setEditingEvent(null);
     setDuplicatingFrom(null);
+    setNewEventDefaults(null);
   };
 
   /**
@@ -1283,6 +1321,13 @@ const MyEvents: React.FC = () => {
         </TabsContent>
       </Tabs>
 
+      {/* Pre-step: ask what type of event before opening the form */}
+      <EventTypeChooser
+        open={showTypeChooser}
+        onOpenChange={setShowTypeChooser}
+        onConfirm={handleTypeChosen}
+      />
+
       {/* Create/Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden p-0">
@@ -1294,13 +1339,30 @@ const MyEvents: React.FC = () => {
             </DialogTitle> */}
           </DialogHeader>
           <div className="overflow-y-auto max-h-[calc(90vh-80px)]">
-            <CreateEventForm
-              onClose={handleCloseDialog}
-              onSave={handleSaveEvent}
-              editMode={!!editingEvent}
-              duplicateMode={!!duplicatingFrom}
-              initialData={editingEvent ?? duplicatingFrom}
-            />
+            {(() => {
+              const activeInitial =
+                editingEvent ?? duplicatingFrom ?? newEventDefaults;
+              // Personal → "Marriage Function" events use the dedicated
+              // wedding form; everything else uses the commercial form.
+              const isMarriage =
+                activeInitial?.eventType === "personal" &&
+                ((activeInitial as any)?.category === "Marriage Function" ||
+                  (activeInitial as any)?.categories?.includes?.(
+                    "Marriage Function",
+                  ));
+              const FormComponent = isMarriage
+                ? MarriageEventForm
+                : CreateEventForm;
+              return (
+                <FormComponent
+                  onClose={handleCloseDialog}
+                  onSave={handleSaveEvent}
+                  editMode={!!editingEvent}
+                  duplicateMode={!!duplicatingFrom}
+                  initialData={activeInitial}
+                />
+              );
+            })()}
           </div>
         </DialogContent>
       </Dialog>

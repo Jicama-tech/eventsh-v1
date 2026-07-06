@@ -12,6 +12,28 @@ import {
 } from "./organizer-guide.content";
 import { renderGuidePdf } from "./guide-pdf.util";
 
+// Personal event sub-types offered to Individual accounts in the chatbot
+// "create event" picker. Mirrors EVENT_TYPE_GROUPS.personal in
+// frontend/src/lib/eventTypes.ts — keep the two lists in sync. The `keywords`
+// let a user pick by typing naturally ("plan a wedding") as well as by tapping
+// a pill ("Create a Marriage Function event").
+const PERSONAL_EVENT_TYPES: Array<{ category: string; keywords: string[] }> = [
+  { category: "Birthday Party", keywords: ["birthday", "bday"] },
+  {
+    category: "Housewarming Party",
+    keywords: ["housewarming", "house warming", "griha pravesh"],
+  },
+  {
+    category: "Marriage Function",
+    keywords: ["marriage", "wedding", "shaadi", "nikah", "vivah"],
+  },
+  { category: "Engagement Ceremony", keywords: ["engagement", "roka"] },
+  { category: "Anniversary", keywords: ["anniversary"] },
+  { category: "Baby Shower", keywords: ["baby shower", "godh bharai"] },
+  { category: "Reunion", keywords: ["reunion"] },
+  { category: "Farewell Party", keywords: ["farewell", "send off", "send-off"] },
+];
+
 type ConvEntry = {
   role: "user" | "assistant" | "tool" | "system";
   content: string;
@@ -341,6 +363,7 @@ export class ChatbotService {
     private roundTableBookingModel: Model<any>,
     @InjectModel("Template") private templateModel: Model<any>,
     @InjectModel("User") private userModel: Model<any>,
+    @InjectModel("Rsvp") private rsvpModel: Model<any>,
     @InjectModel("OrganizerStore") private organizerStoreModel: Model<any>,
   ) {
     const useQwen = !!process.env.QWEN_API_KEY;
@@ -1438,6 +1461,19 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
   // Slug helpers — kept here (rather than imported from events.controller)
   // so the storefront-backfill path inside handleIndividualMessage is
   // self-contained.
+  // True for Personal / Marriage events, which are RSVP-based rather than
+  // ticketed. Used to switch the Individual "participants" + event-count
+  // flows over to the RSVP collection.
+  private isPersonalEvent(ev: any): boolean {
+    if (!ev) return false;
+    return (
+      ev.eventType === "personal" ||
+      ev.category === "Marriage Function" ||
+      (Array.isArray(ev.categories) &&
+        ev.categories.includes("Marriage Function"))
+    );
+  }
+
   private slugifyForStore(name: string, fallback: string): string {
     const cleaned = (name || "")
       .toLowerCase()
@@ -1902,7 +1938,7 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     text: string;
     quickActions?: Array<{ label: string; action: string }>;
     botAction?:
-      | { type: "openCreateEvent" }
+      | { type: "openCreateEvent"; eventType?: string; category?: string }
       | { type: "openOrganizerRegister" }
       | { type: "viewEvent"; eventId: string };
     events?: Array<{
@@ -1954,6 +1990,11 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
       /\b(participant|participants|attendee|attendees|guests?|who.{0,15}coming|who.{0,15}registered)\b/.test(
         m,
       );
+    // A specific personal event type named (by pill or natural phrasing) →
+    // jump straight into the pre-filled Create Event form for that type.
+    const chosenPersonalType = PERSONAL_EVENT_TYPES.find((t) =>
+      t.keywords.some((k) => m.includes(k)),
+    );
 
     // Resolve the backing Organizer record (lazy-created on first event
     // publish — see events.controller.ensureIndividualOrganizer). If
@@ -2067,6 +2108,27 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
             count?: number;
             revenue?: number;
           };
+
+          // Marriage / Personal events have no tickets — their "participants"
+          // are RSVP guests. Count attending RSVPs so the card shows a real
+          // number, and flag it so the UI labels it "RSVPs" not "sold".
+          const isRsvp = this.isPersonalEvent(ev);
+          let participantCount = stats.count || 0;
+          if (isRsvp) {
+            const rsvpStats = await this.rsvpModel
+              .aggregate([
+                {
+                  $match: {
+                    eventId: String(ev._id),
+                    attending: { $ne: false },
+                  },
+                },
+                { $group: { _id: null, responses: { $sum: 1 } } },
+              ])
+              .catch(() => []);
+            participantCount = (rsvpStats[0]?.responses as number) || 0;
+          }
+
           const visitorTypes: any[] = Array.isArray(ev.visitorTypes)
             ? ev.visitorTypes
             : [];
@@ -2088,7 +2150,8 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
             // `ev.published` is unset, so the old `ev.published ?` check
             // always tagged events as "draft" even after publish.
             status: ev.status || (ev.published ? "published" : "draft"),
-            ticketCount: stats.count || 0,
+            ticketCount: participantCount,
+            isRsvp,
             revenue: stats.revenue || 0,
             currency: backingOrg.country
               ? COUNTRY_CURRENCY[backingOrg.country]?.symbol || "$"
@@ -2133,6 +2196,47 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
           ],
         };
       }
+      const eventTitle = (latestEvent as any).title || "your event";
+
+      // Personal / Marriage events are RSVP-based — guests respond on the
+      // public wedding page rather than buying tickets. Count those RSVPs as
+      // participants (mirrors the organizer's Participants → RSVP panel).
+      if (this.isPersonalEvent(latestEvent)) {
+        const rsvps = await this.rsvpModel
+          .find({ eventId: String(latestEvent._id) })
+          .sort({ createdAt: -1 })
+          .limit(25)
+          .lean();
+        const attending = rsvps.filter((r: any) => r.attending !== false);
+        const totalGuests = attending.reduce(
+          (sum: number, r: any) => sum + (Number(r.guestCount) || 0),
+          0,
+        );
+        const participants = rsvps.map((r: any) => {
+          const isAttending = r.attending !== false;
+          const guests = Number(r.guestCount) || 1;
+          return {
+            id: String(r._id),
+            name: r.name || "Guest",
+            email: r.email,
+            ticketType: isAttending
+              ? `${guests} guest${guests === 1 ? "" : "s"}`
+              : undefined,
+            used: isAttending,
+            statusLabel: isAttending ? "Attending" : "Declined",
+            statusOk: isAttending,
+          };
+        });
+        return {
+          text:
+            rsvps.length === 0
+              ? `No RSVPs yet for **${eventTitle}**. Share the wedding page link so guests can respond.`
+              : `**${rsvps.length}** RSVP${rsvps.length === 1 ? "" : "s"} for **${eventTitle}** — **${attending.length}** attending, **${totalGuests}** total guest${totalGuests === 1 ? "" : "s"}:`,
+          participants,
+          quickActions: [{ label: "My events", action: "Show my events" }],
+        };
+      }
+
       const tickets = await this.ticketModel
         .find({ eventId: latestEvent._id })
         .limit(25)
@@ -2147,8 +2251,8 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
       return {
         text:
           participants.length === 0
-            ? `No participants yet for **${(latestEvent as any).title || "your event"}**. Share the event link to start selling tickets.`
-            : `Here are the ${participants.length === 25 ? "first 25 " : ""}participants for **${(latestEvent as any).title || "your event"}**:`,
+            ? `No participants yet for **${eventTitle}**. Share the event link to start selling tickets.`
+            : `Here are the ${participants.length === 25 ? "first 25 " : ""}participants for **${eventTitle}**:`,
         participants,
         quickActions: [
           { label: "My events", action: "Show my events" },
@@ -2166,25 +2270,42 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
         ],
       };
     }
+    // A specific personal type was chosen → open the Create Event form
+    // pre-filled with it (eventType "personal" + the matching category, which
+    // surfaces the type-specific fields, e.g. the Marriage functions).
+    if (chosenPersonalType) {
+      return {
+        text: `Great choice — opening the Create Event form for your **${chosenPersonalType.category}**. As an Individual you can publish one free event; share the public link with your guests once it's live.`,
+        botAction: {
+          type: "openCreateEvent",
+          eventType: "personal",
+          category: chosenPersonalType.category,
+        },
+        quickActions: [
+          { label: "Pick a different type", action: "I want to create an event" },
+          {
+            label: "Professional event instead",
+            action: "Register my organization for professional events",
+          },
+        ],
+      };
+    }
+    // Generic "create an event" → show the Personal Event List to pick from.
+    // Each pill re-enters this handler with a specific type (handled above).
     if (wantsCreateEvent) {
       return {
         text:
-          "Opening the Create Event form. As an Individual you can publish one event — share the public link with your guests once it's live.",
-        botAction: { type: "openCreateEvent" },
-        quickActions: backingOrg
-          ? [
-              { label: "My events", action: "Show my events" },
-              {
-                label: "Become an organizer",
-                action: "I want to register as an organizer",
-              },
-            ]
-          : [
-              {
-                label: "Become an organizer",
-                action: "I want to register as an organizer",
-              },
-            ],
+          "What are you celebrating? Pick the kind of personal event and I'll open the form ready for it. Planning something professional with ticketing, stalls or exhibitors instead? Register an organization.",
+        quickActions: [
+          ...PERSONAL_EVENT_TYPES.map((t) => ({
+            label: t.category,
+            action: `Create a ${t.category} event`,
+          })),
+          {
+            label: "Professional event (register org)",
+            action: "Register my organization for professional events",
+          },
+        ],
       };
     }
 

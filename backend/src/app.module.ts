@@ -34,6 +34,7 @@ import { AppFeedbackModule } from "./modules/app-feedback/app-feedback.module";
 import { SubscriptionsModule } from "./modules/subscriptions/subscriptions.module";
 import { BillingPaymentsModule } from "./modules/billing-payments/billing-payments.module";
 import { MembershipsModule } from "./modules/memberships/memberships.module";
+import { RsvpModule } from "./modules/rsvp/rsvp.module";
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { MembershipsModule } from "./modules/memberships/memberships.module";
     WebsiteContentModule,
     FeedbackModule,
     AppFeedbackModule,
+    RsvpModule,
     MembershipsModule,
   ],
 })
