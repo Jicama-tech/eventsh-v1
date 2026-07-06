@@ -925,7 +925,12 @@ export class OrganizersService {
     // Plan gate: Customize Email is a subscription-plan feature. Mirrors the
     // frontend's isModuleEnabled logic (plan modules → default-plan fallback;
     // plans with no module config at all stay permissive for legacy data).
-    if (next.enabled) {
+    // Individual accounts (personal wedding/party hosts) are exempt — they run
+    // a single event and can always send from their own address.
+    const isIndividualAccount =
+      (organizer as any).organizerType === "individual" ||
+      (organizer as any).accountType === "Individual";
+    if (next.enabled && !isIndividualAccount) {
       let plan: any = (organizer as any).planId
         ? await this.planModel.findById((organizer as any).planId).lean()
         : null;

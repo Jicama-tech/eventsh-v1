@@ -8,6 +8,7 @@ import VenuePreview from "./VenuePreview";
 import SponsorMarquee from "@/components/ui/SponsorMarquee";
 import { useCountry } from "@/hooks/useCountry";
 import { useSubscription } from "@/hooks/useSubscription";
+import { subtypesFor, eventTypeLabel } from "@/lib/eventTypes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -382,7 +383,7 @@ interface VenueLayout {
   image: string;
 }
 
-interface GalleryImage {
+export interface GalleryImage {
   id: string;
   file: File;
   preview: string;
@@ -398,7 +399,7 @@ interface SponsorLogo {
 }
 
 // Event Banner Component
-const EventBanner = ({
+export const EventBanner = ({
   bannerFile,
   setBannerFile,
   bannerPreview,
@@ -527,12 +528,15 @@ const EventBanner = ({
 };
 
 // Gallery Component with Navigation
-const EventGallery = ({
+export const EventGallery = ({
   galleryImages,
   setGalleryImages,
+  maxImages = 5,
 }: {
   galleryImages: GalleryImage[];
   setGalleryImages: (images: GalleryImage[]) => void;
+  // Upload cap. Commercial events default to 5; the marriage form raises it.
+  maxImages?: number;
 }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
@@ -565,8 +569,8 @@ const EventGallery = ({
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    if (galleryImages.length + files.length > 5) {
-      alert("Maximum 5 images allowed");
+    if (galleryImages.length + files.length > maxImages) {
+      alert(`Maximum ${maxImages} images allowed`);
       return;
     }
 
@@ -644,10 +648,10 @@ const EventGallery = ({
   return (
     <div className="space-y-4">
       <Label className="text-base font-semibold">
-        Event Gallery ({galleryImages.length}/5)
+        Event Gallery ({galleryImages.length}/{maxImages})
       </Label>
 
-      {galleryImages.length < 5 && (
+      {galleryImages.length < maxImages && (
         <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
           <input
             type="file"
@@ -6902,6 +6906,10 @@ export function CreateEventForm({
 
   const [formData, setFormData] = useState({
     title: initialData?.title ?? "",
+    // Top-level event grouping ("commercial" | "personal") chosen in the
+    // pre-step before the form opens. Empty for legacy events created before
+    // this field existed — those fall back to the free-form category picker.
+    eventType: initialData?.eventType ?? "",
     category: initialData?.category ?? "",
     categories:
       Array.isArray(initialData?.categories) &&
@@ -8551,7 +8559,17 @@ export function CreateEventForm({
                       />
                     </div>
                     <div>
-                      <Label>Category *</Label>
+                      <div className="flex items-center gap-2">
+                        <Label>Category *</Label>
+                        {/* Event type chosen in the "Create Event" pre-step.
+                            Read-only here — to switch Commercial/Personal the
+                            organizer restarts from the chooser. */}
+                        {formData.eventType && (
+                          <Badge variant="secondary" className="font-normal">
+                            {eventTypeLabel(formData.eventType)}
+                          </Badge>
+                        )}
+                      </div>
                       {/* Single-select category — the previous popover
                         let organizers pick multiple, but the product
                         decision is one event = one category. Writes
@@ -8599,7 +8617,13 @@ export function CreateEventForm({
                               e.stopPropagation();
                             }}
                           >
-                            {categoryOptions.map((cat) => {
+                            {/* When an event type was picked in the pre-step,
+                                the list is locked to that type's fixed
+                                sub-types; otherwise it uses the shared pool. */}
+                            {(formData.eventType
+                              ? subtypesFor(formData.eventType)
+                              : categoryOptions
+                            ).map((cat) => {
                               const active = formData.category === cat;
                               return (
                                 <button
@@ -8629,7 +8653,10 @@ export function CreateEventForm({
                             })}
                           </div>
                           {/* Add custom category — persisted to /categories so
-                            every organizer/exhibitor sees it next time. */}
+                            every organizer/exhibitor sees it next time. Hidden
+                            when an event type is set: those sub-types are a
+                            fixed list, not the free-form shared pool. */}
+                          {!formData.eventType && (
                           <div className="border-t p-2 flex gap-2 bg-muted/30">
                             <Input
                               value={newCategoryInput}
@@ -8659,6 +8686,7 @@ export function CreateEventForm({
                               Add
                             </Button>
                           </div>
+                          )}
                         </PopoverContent>
                       </Popover>
                     </div>

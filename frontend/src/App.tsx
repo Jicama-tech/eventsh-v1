@@ -58,6 +58,7 @@ const AgentDashboard = lazy(() => import("./pages/agent/AgentDashboard").then(m 
 const OrganizerDashboard = lazy(() => import("./pages/organizer/OrganizerDashboard").then(m => ({ default: m.OrganizerDashboard })));
 const UserDashboard = lazy(() => import("./pages/user/UserDashboard").then(m => ({ default: m.UserDashboard })));
 const QRTicketScanner = lazy(() => import("./components/organizer/ORCodeScanner"));
+const WeddingRoomTicket = lazy(() => import("./pages/WeddingRoomTicket"));
 
 // Loading screen while validating token
 function LoadingScreen() {
@@ -267,6 +268,7 @@ function AppContent() {
             path="/events/:eventId/scan-tickets"
             element={<QRTicketScanner />}
           />
+          <Route path="/wedding-room/:token" element={<WeddingRoomTicket />} />
           <Route path="/ticket-payment" element={<TicketPaymentPage />} />
           <Route path="/table-payment" element={<TablePaymentPage />} />
           <Route path="/speaker-payment" element={<SpeakerPaymentPage />} />

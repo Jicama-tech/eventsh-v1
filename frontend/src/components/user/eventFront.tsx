@@ -111,6 +111,7 @@ import {
 import AnnouncementBar from "@/components/ui/AnnouncementBar";
 import { Checkbox } from "@radix-ui/react-checkbox";
 import { OrganizerStore } from "./organizerStoreFront";
+import MarriageEventFront from "./MarriageEventFront";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import ImageCropModal from "../ui/imageCropModal";
 import { StatusHistoryEntry } from "../organizer/EventAttendees";
@@ -3748,6 +3749,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         </div>
       </div>
     );
+  }
+
+  // Personal/Marriage events get a dedicated, wedding-themed public page
+  // instead of the commercial ticketing layout. Branch after the loading/
+  // error/publish gates so it reuses the same fetch + access rules.
+  const _isMarriageFront =
+    (eventData as any).eventType === "personal" &&
+    ((eventData as any).category === "Marriage Function" ||
+      (Array.isArray((eventData as any).categories) &&
+        (eventData as any).categories.includes("Marriage Function")));
+  if (_isMarriageFront) {
+    return <MarriageEventFront eventData={eventData} />;
   }
 
   const {
