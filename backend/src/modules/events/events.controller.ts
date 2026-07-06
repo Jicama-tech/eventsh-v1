@@ -231,13 +231,55 @@ export class EventsController {
     return this.eventImportService.importFromUrl({ url: body?.url });
   }
 
+  // Rebuild an event's gallery from the form's `galleryManifest` so EXISTING
+  // images are kept and newly-uploaded files are appended in the organizer's
+  // order. The manifest lists every slot — { type:"existing", url } or
+  // { type:"new", filename } — and new files arrive (under "gallery") in that
+  // same order, so we walk the manifest and pull the next uploaded file for
+  // each "new" slot. Without this, editing an event and adding a photo would
+  // replace the whole gallery with just the new file(s).
+  //
+  // Returns the ordered URL list, or `undefined` when there's nothing to apply
+  // (no manifest and no new files) so the caller leaves the stored gallery
+  // untouched.
+  private resolveGalleryFromManifest(
+    manifestRaw: unknown,
+    galleryFiles: Express.Multer.File[] | undefined,
+  ): string[] | undefined {
+    const files = galleryFiles || [];
+    if (typeof manifestRaw === "string" && manifestRaw.trim()) {
+      try {
+        const manifest = JSON.parse(manifestRaw);
+        if (Array.isArray(manifest)) {
+          let fi = 0;
+          return manifest
+            .map((e: any) => {
+              if (e && e.type === "new") {
+                const f = files[fi++];
+                return f ? `/uploads/events/${f.filename}` : null;
+              }
+              return e && typeof e.url === "string" ? e.url : null;
+            })
+            .filter((u): u is string => Boolean(u));
+        }
+      } catch {
+        // Malformed manifest — fall back to the file-only behaviour below.
+      }
+    }
+    // No usable manifest: treat the uploaded files as the whole gallery.
+    if (files.length > 0) {
+      return files.map((f) => `/uploads/events/${f.filename}`);
+    }
+    return undefined;
+  }
+
   @Post("create-event")
   @UseGuards(AuthGuard("jwt"))
   @UseInterceptors(
     FileFieldsInterceptor(
       [
         { name: "banner", maxCount: 1 },
-        { name: "gallery", maxCount: 5 },
+        { name: "gallery", maxCount: 10 },
         { name: "addOnImages", maxCount: 100 },
         { name: "speakerImages", maxCount: 20 },
       ],
@@ -358,6 +400,11 @@ export class EventsController {
         body.venueDoors = JSON.parse(body.venueDoors);
       if (typeof body.volunteers === "string")
         body.volunteers = JSON.parse(body.volunteers);
+      // Marriage/Personal ceremonies + couple details travel as JSON strings.
+      if (typeof body.functions === "string")
+        body.functions = JSON.parse(body.functions);
+      if (typeof body.marriage === "string")
+        body.marriage = JSON.parse(body.marriage);
       // Instagram reel URLs travel as a JSON-stringified array because
       // multipart can't carry a native array — unwrap the same way the
       // other list fields above do.
@@ -383,12 +430,16 @@ export class EventsController {
         body.image = `/uploads/events/${files.banner[0].filename}`;
       }
 
-      // Handle gallery images
-      if (files.gallery && files.gallery.length > 0) {
-        body.gallery = files.gallery.map(
-          (file) => `/uploads/events/${file.filename}`,
+      // Build the gallery from the manifest (keeps duplicated events' existing
+      // image URLs and orders new uploads correctly).
+      {
+        const resolvedGallery = this.resolveGalleryFromManifest(
+          body.galleryManifest,
+          files.gallery,
         );
+        if (resolvedGallery !== undefined) body.gallery = resolvedGallery;
       }
+      delete body.galleryManifest;
 
       if (
         files.addOnImages &&
@@ -564,7 +615,7 @@ export class EventsController {
     FileFieldsInterceptor(
       [
         { name: "banner", maxCount: 1 },
-        { name: "gallery", maxCount: 5 },
+        { name: "gallery", maxCount: 10 },
         { name: "addOnImages", maxCount: 100 },
         { name: "speakerImages", maxCount: 20 },
       ],
@@ -653,6 +704,11 @@ export class EventsController {
         body.venueDoors = JSON.parse(body.venueDoors);
       if (typeof body.volunteers === "string")
         body.volunteers = JSON.parse(body.volunteers);
+      // Marriage/Personal ceremonies + couple details travel as JSON strings.
+      if (typeof body.functions === "string")
+        body.functions = JSON.parse(body.functions);
+      if (typeof body.marriage === "string")
+        body.marriage = JSON.parse(body.marriage);
       // Instagram reel URLs — same unwrap as the create path.
       if (typeof body.reelLinks === "string")
         body.reelLinks = JSON.parse(body.reelLinks);
@@ -675,12 +731,17 @@ export class EventsController {
         body.image = `/uploads/events/${files.banner[0].filename}`;
       }
 
-      // Handle new gallery images
-      if (files.gallery && files.gallery.length > 0) {
-        body.gallery = files.gallery.map(
-          (file) => `/uploads/events/${file.filename}`,
+      // Rebuild the gallery from the manifest: keep existing images, append
+      // new uploads (in order). Only overwrite when the manifest or new files
+      // are present — otherwise leave the stored gallery untouched.
+      {
+        const resolvedGallery = this.resolveGalleryFromManifest(
+          body.galleryManifest,
+          files.gallery,
         );
+        if (resolvedGallery !== undefined) body.gallery = resolvedGallery;
       }
+      delete body.galleryManifest;
 
       // 3. Handle Add-On Images (Mapping new files to correct items)
       if (

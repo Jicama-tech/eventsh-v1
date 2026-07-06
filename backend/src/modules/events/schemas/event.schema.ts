@@ -204,6 +204,57 @@ class Volunteer {
   @Prop() phoneNumber?: string;
 }
 
+// A single ceremony within a Personal/Marriage event (e.g. Mehndi, Sangeet,
+// Wedding, Reception). Each carries its own schedule, venue and dress code.
+// Dates/times are kept as plain strings (the form derives the event-level
+// startDate/endDate from these).
+class MarriageFunction {
+  @Prop() id: string;
+  @Prop() name: string;
+  @Prop() date?: string;
+  @Prop() time?: string;
+  @Prop() endTime?: string;
+  @Prop() venueName?: string;
+  @Prop() address?: string;
+  @Prop() dressCode?: string;
+  @Prop() notes?: string;
+  // Lodging info specific to THIS ceremony's location — for weddings where
+  // functions are on different dates/cities (e.g. a Roka elsewhere). Falls
+  // back to the event-level marriage.accommodations when empty.
+  @Prop() accommodation?: string;
+  // Set true when the organizer announces this ceremony has started — drives
+  // the "live" announcement bar on the public wedding page.
+  @Prop({ default: false }) isLive?: boolean;
+  // ISO timestamp of the most recent "has started" announcement.
+  @Prop() announcedAt?: string;
+}
+
+// Couple + story details specific to a Marriage event.
+class MarriageDetails {
+  @Prop() partner1Name?: string;
+  @Prop() partner2Name?: string;
+  @Prop() hostNames?: string;
+  @Prop() contactName?: string;
+  @Prop() contactPhone?: string;
+  @Prop() contactEmail?: string;
+  @Prop() ourStory?: string;
+  @Prop() howWeMet?: string;
+  // Lodging suggestions shown to guests + included in the RSVP email.
+  @Prop() accommodations?: string;
+  // Other guest logistics (travel, gifts, parking, etc.).
+  @Prop() additionalInfo?: string;
+  // Customization for the "function has started" announcement bar on the
+  // public wedding page. Colors fall back to the theme; message is an optional
+  // override (supports {function} / {venue} / {time} placeholders).
+  @Prop() adBarBgColor?: string;
+  @Prop() adBarTextColor?: string;
+  @Prop() adBarMessage?: string;
+  // Eventfront "Site Settings" — colors/font/hero chosen by the organizer to
+  // personalize the public wedding page. Free-form object; shape mirrors the
+  // frontend MarriageTheme (see frontend/src/lib/marriageThemes.ts).
+  @Prop({ type: Object }) theme?: Record<string, any>;
+}
+
 @Schema({ timestamps: true })
 export class Event {
   @Prop({ required: true })
@@ -211,6 +262,22 @@ export class Event {
 
   @Prop()
   description?: string;
+
+  // Top-level event grouping picked in the "Create Event" pre-step. The
+  // chosen sub-type is stored in `category`; this records which family it
+  // belongs to. Optional/loosely enumerated so events created before this
+  // field existed stay valid.
+  @Prop({ enum: ["commercial", "personal"] })
+  eventType?: string;
+
+  // Ceremonies for a Personal/Marriage event. Generic top-level array so other
+  // multi-part personal events can reuse it later. Empty for commercial events.
+  @Prop({ type: [Object], default: [] })
+  functions?: MarriageFunction[];
+
+  // Wedding-only couple/story details. Undefined for non-marriage events.
+  @Prop({ type: Object, default: undefined })
+  marriage?: MarriageDetails;
 
   @Prop()
   category?: string;

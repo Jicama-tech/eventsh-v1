@@ -13,6 +13,7 @@ import { SpeakerRequestSchema } from "../speaker-requests/entities/speaker-reque
 import { RoundTableBookingSchema } from "../round-table-bookings/entities/round-table-booking.entity";
 import { TemplateSchema } from "../templates/schemas/template.schema";
 import { UserSchema } from "../users/schemas/user.schema";
+import { RsvpSchema } from "../rsvp/schemas/rsvp.schema";
 import {
   OrganizerStore,
   OrganizerStoreSchema,
@@ -32,6 +33,9 @@ import {
       { name: "RoundTableBooking", schema: RoundTableBookingSchema },
       { name: "Template", schema: TemplateSchema },
       { name: "User", schema: UserSchema },
+      // Guest RSVPs for Personal / Marriage events — so the Individual
+      // "participants" chatbot flow can count wedding guests, not just tickets.
+      { name: "Rsvp", schema: RsvpSchema },
       // For producing store-scoped public URLs (/{slug}/events/{id}) in
       // the Individual "My events" chatbot responses.
       { name: OrganizerStore.name, schema: OrganizerStoreSchema },

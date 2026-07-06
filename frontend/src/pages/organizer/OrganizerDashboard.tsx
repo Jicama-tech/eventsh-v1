@@ -57,6 +57,14 @@ const CreateEventForm = lazy(() =>
     default: m.CreateEventForm,
   })),
 );
+// Personal → "Marriage Function" events use a dedicated wedding form instead
+// of the commercial CreateEventForm. The chatbot (Individual flow) and the
+// Events tab both route marriage picks here.
+const MarriageEventForm = lazy(() =>
+  import("@/components/organizer/MarriageEventForm").then((m) => ({
+    default: m.MarriageEventForm,
+  })),
+);
 const ShopkeeperRequestForm = lazy(() =>
   import("@/components/organizer/ShopkeeperRequestForm").then((m) => ({
     default: m.ShopkeeperRequestForm,
@@ -357,6 +365,9 @@ export function OrganizerDashboard({
   const [showShopkeeperForm, setShowShopkeeperForm] = useState(false);
   const [showQRCode, setShowQRCode] = useState<any>(null);
   const [editingEvent, setEditingEvent] = useState<any>(null);
+  // Pre-fill seed for a brand-new event when the chatbot picked a personal
+  // event type (e.g. { eventType: "personal", category: "Marriage Function" }).
+  const [createDefaults, setCreateDefaults] = useState<any>(null);
   const [showAddUser, setShowAddUser] = useState(false);
   const [showUserDetail, setShowUserDetail] = useState<any>(null);
   const [editingUser, setEditingUser] = useState<any>(null);
@@ -788,12 +799,28 @@ export function OrganizerDashboard({
 
   const handleOpenEventForm = async (
     mode: "create" | "edit",
-    payload?: { eventId: string; eventTitle?: string },
+    payload?: {
+      eventId?: string;
+      eventTitle?: string;
+      eventType?: string;
+      category?: string;
+    },
   ) => {
     // eslint-disable-next-line no-console
     console.log("[dashboard] handleOpenEventForm called:", mode, payload);
     if (mode === "create") {
       setEditingEvent(null);
+      // When the chatbot picked a personal event type, seed the form with it
+      // (eventType "personal" + the chosen category) so it opens pre-filled.
+      setCreateDefaults(
+        payload?.eventType || payload?.category
+          ? {
+              eventType: payload?.eventType,
+              category: payload?.category,
+              categories: payload?.category ? [payload.category] : [],
+            }
+          : null,
+      );
       // Individuals have no events-module access — switching to the Events
       // tab would surface the ModuleGate's "Upgrade Plan" lock card behind
       // the modal, and they'd be stranded there after closing (no sidebar
@@ -1451,19 +1478,37 @@ export function OrganizerDashboard({
         >
           <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden p-0">
             <div className="overflow-y-auto max-h-[90vh]">
-              {showCreateEvent && (
-                <CreateEventForm
-                  onClose={() => {
-                    setShowCreateEvent(false);
-                    setEditingEvent(null);
-                  }}
-                  onSave={
-                    editingEvent ? handleUpdateEvent : handleCreateEvent
-                  }
-                  editMode={!!editingEvent}
-                  initialData={editingEvent}
-                />
-              )}
+              {showCreateEvent &&
+                (() => {
+                  const activeInitial = editingEvent ?? createDefaults;
+                  // Personal → "Marriage Function" events use the dedicated
+                  // wedding form; everything else uses the commercial form.
+                  // Mirrors the switch in MyEvents.tsx so the Individual
+                  // (chatbot) flow gets the same marriage experience.
+                  const isMarriage =
+                    activeInitial?.eventType === "personal" &&
+                    (activeInitial?.category === "Marriage Function" ||
+                      activeInitial?.categories?.includes?.(
+                        "Marriage Function",
+                      ));
+                  const FormComponent = isMarriage
+                    ? MarriageEventForm
+                    : CreateEventForm;
+                  return (
+                    <FormComponent
+                      onClose={() => {
+                        setShowCreateEvent(false);
+                        setEditingEvent(null);
+                        setCreateDefaults(null);
+                      }}
+                      onSave={
+                        editingEvent ? handleUpdateEvent : handleCreateEvent
+                      }
+                      editMode={!!editingEvent}
+                      initialData={activeInitial}
+                    />
+                  );
+                })()}
             </div>
           </DialogContent>
         </Dialog>

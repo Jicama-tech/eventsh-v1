@@ -9,6 +9,14 @@ import {
   InlinePlatformFeeForm,
   type PlatformFeeFormPayload,
 } from "./InlinePlatformFeeForm";
+import EventRsvpPanel from "./EventRsvpPanel";
+import EmailSenderSettings from "./EmailSenderSettings";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -110,7 +118,7 @@ interface WalkinFormPayload {
 
 type BotAction =
   | { type: "navigate"; tab: string }
-  | { type: "openCreateEvent" }
+  | { type: "openCreateEvent"; eventType?: string; category?: string }
   | { type: "openEditEvent"; eventId: string; eventTitle?: string }
   | { type: "openAddVisitor" }
   | { type: "openAddExhibitor" }
@@ -131,6 +139,9 @@ interface IndividualEventCard {
   capacityTotal?: number;
   publicUrl?: string;
   storeUrl?: string;
+  // Marriage / Personal events are RSVP-based — the count is attending RSVPs,
+  // not tickets sold, so the card labels it differently.
+  isRsvp?: boolean;
 }
 
 interface IndividualParticipant {
@@ -139,6 +150,10 @@ interface IndividualParticipant {
   email?: string;
   ticketType?: string;
   used?: boolean;
+  // RSVP guests carry an explicit "Attending"/"Declined" label instead of the
+  // ticket "Checked in"/"Pending" status.
+  statusLabel?: string;
+  statusOk?: boolean;
 }
 
 interface Message {
@@ -164,11 +179,17 @@ interface NavItem {
 
 interface ChatbotWidgetProps {
   onNavigate?: (tab: string) => void;
-  /** Open the event editor in the dashboard. Mode "create" → blank form;
-   *  mode "edit" → pre-filled with the given eventId. */
+  /** Open the event editor in the dashboard. Mode "create" → blank form (or
+   *  pre-filled with an eventType/category when the chatbot picked a personal
+   *  event type); mode "edit" → pre-filled with the given eventId. */
   onOpenEventForm?: (
     mode: "create" | "edit",
-    payload?: { eventId: string; eventTitle?: string },
+    payload?: {
+      eventId?: string;
+      eventTitle?: string;
+      eventType?: string;
+      category?: string;
+    },
   ) => void;
   /** Open the Add Visitor (user) form in the Users tab. */
   onOpenAddVisitor?: () => void;
@@ -897,6 +918,15 @@ export function ChatbotWidget({
   const isPage = mode === "page";
   const { toast } = useToast();
   const [open, setOpen] = useState(isPage);
+  // Individual (Marriage) flow — the event whose RSVP guest-list dialog is
+  // open. Only marriage / personal (RSVP-based) event cards open this; ticketed
+  // events keep their existing chat-based participants view untouched.
+  const [rsvpEvent, setRsvpEvent] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
+  // Individual "send from my own email" settings dialog.
+  const [emailSettingsOpen, setEmailSettingsOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>(() => {
     // Restore previous chat history for this organizer (per-tab session).
@@ -929,7 +959,10 @@ export function ChatbotWidget({
   }, [messages]);
   const [loading, setLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [showAnalytics, setShowAnalytics] = useState(true);
+  // Individuals get a stripped-down view — hide the analytics strip by
+  // default (they can still toggle it on via the Stats button). Organizers
+  // keep it expanded.
+  const [showAnalytics, setShowAnalytics] = useState(!isIndividual);
   const [showPromptPanel, setShowPromptPanel] = useState(false);
   const [analytics, setAnalytics] = useState<AnalyticsCard[] | null>(null);
   const [orgInfo, setOrgInfo] = useState<{
@@ -1189,10 +1222,16 @@ export function ChatbotWidget({
           setTimeout(() => onNavigate(ba.tab), 800);
         } else if (ba?.type === "openCreateEvent") {
           if (onOpenEventForm) {
+            // Carry the chatbot-picked personal event type/category through so
+            // the Create Event form opens pre-filled for that celebration.
+            const preset =
+              ba.eventType || ba.category
+                ? { eventType: ba.eventType, category: ba.category }
+                : undefined;
             setTimeout(() => {
               // eslint-disable-next-line no-console
-              console.log("[chatbot] firing onOpenEventForm(create)");
-              onOpenEventForm("create");
+              console.log("[chatbot] firing onOpenEventForm(create)", preset);
+              onOpenEventForm("create", preset);
             }, 800);
           } else {
             // eslint-disable-next-line no-console
@@ -1368,6 +1407,22 @@ export function ChatbotWidget({
               </div>
             </div>
             <div className="flex items-center gap-1">
+              {/* Individuals have no settings sidebar — surface "send from my
+                  own email" here so they can configure a custom sender. */}
+              {isIndividual && (
+                <button
+                  onClick={() => setEmailSettingsOpen(true)}
+                  className={
+                    isPage
+                      ? "text-xs text-slate-600 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1"
+                      : "text-[11px] hover:bg-white/10 px-2 py-1 rounded flex items-center gap-1"
+                  }
+                  title="Send guest emails from your own address"
+                >
+                  <SettingsIcon className="h-3 w-3" />
+                  Email
+                </button>
+              )}
               {analytics && (
                 <button
                   onClick={() => setShowAnalytics((v) => !v)}
@@ -1793,11 +1848,17 @@ export function ChatbotWidget({
                         )}
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-700">
                           <div className="flex items-center gap-1">
-                            <Ticket className="h-3 w-3 text-blue-500" />
+                            {ev.isRsvp ? (
+                              <Users className="h-3 w-3 text-rose-500" />
+                            ) : (
+                              <Ticket className="h-3 w-3 text-blue-500" />
+                            )}
                             <span className="font-medium">
                               {ev.ticketCount ?? 0}
                             </span>
-                            <span className="text-slate-400">sold</span>
+                            <span className="text-slate-400">
+                              {ev.isRsvp ? "RSVPs" : "sold"}
+                            </span>
                           </div>
                           {(ev.ticketTypeCount ?? 0) > 0 && (
                             <div
@@ -1861,15 +1922,41 @@ export function ChatbotWidget({
                             <Pencil className="h-3 w-3" />
                             Edit
                           </button>
-                          <button
-                            onClick={() =>
-                              sendMessage(`Show me participants for ${ev.title}`)
-                            }
-                            disabled={loading}
-                            className="text-[11px] px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium disabled:opacity-50"
-                          >
-                            Participants
-                          </button>
+                          {/* Ticketed events keep the in-chat participants
+                              view; RSVP (marriage) events use the richer Guest
+                              List dialog below instead, so Participants is
+                              hidden for them to avoid a redundant button. */}
+                          {!ev.isRsvp && (
+                            <button
+                              onClick={() =>
+                                sendMessage(
+                                  `Show me participants for ${ev.title}`,
+                                )
+                              }
+                              disabled={loading}
+                              className="text-[11px] px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium disabled:opacity-50"
+                            >
+                              Participants
+                            </button>
+                          )}
+                          {/* Marriage / RSVP events get a richer guest-list
+                              dialog (headcount totals, contacts, messages,
+                              attending/declined split, CSV export) that the
+                              lightweight in-chat "Participants" list can't
+                              show. Ticketed events are unaffected. */}
+                          {ev.isRsvp && (
+                            <button
+                              onClick={() =>
+                                setRsvpEvent({ id: ev.id, title: ev.title })
+                              }
+                              disabled={loading}
+                              className="text-[11px] px-2 py-1 rounded border border-rose-200 hover:bg-rose-100 text-rose-700 bg-rose-50 font-medium disabled:opacity-50 flex items-center gap-1"
+                              title="View RSVP guest list, total headcount and export"
+                            >
+                              <Users className="h-3 w-3" />
+                              Guest List
+                            </button>
+                          )}
                           {ev.publicUrl && (
                             <>
                               <a
@@ -1954,12 +2041,16 @@ export function ChatbotWidget({
                             )}
                             <span
                               className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded font-medium ${
-                                p.used
+                                (p.statusLabel ? p.statusOk : p.used)
                                   ? "bg-emerald-100 text-emerald-700"
                                   : "bg-slate-100 text-slate-500"
                               }`}
                             >
-                              {p.used ? "Checked in" : "Pending"}
+                              {p.statusLabel
+                                ? p.statusLabel
+                                : p.used
+                                  ? "Checked in"
+                                  : "Pending"}
                             </span>
                           </div>
                         </div>
@@ -2232,6 +2323,42 @@ export function ChatbotWidget({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Marriage RSVP guest-list dialog — reuses the same EventRsvpPanel the
+          organizer Participants tab uses, so Individuals (who have no sidebar)
+          can still manage their wedding guest list, headcount and CSV export
+          straight from the chatbot event card. */}
+      <Dialog
+        open={!!rsvpEvent}
+        onOpenChange={(o) => !o && setRsvpEvent(null)}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
+          <DialogHeader>
+            <DialogTitle className="text-base">
+              {rsvpEvent?.title
+                ? `Guest list — ${rsvpEvent.title}`
+                : "Guest list"}
+            </DialogTitle>
+          </DialogHeader>
+          {rsvpEvent && (
+            <EventRsvpPanel
+              eventId={rsvpEvent.id}
+              eventTitle={rsvpEvent.title}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Individual custom sender email settings — the only place Individuals
+          can reach this (they have no settings sidebar). */}
+      <Dialog open={emailSettingsOpen} onOpenChange={setEmailSettingsOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-base">Email settings</DialogTitle>
+          </DialogHeader>
+          <EmailSenderSettings />
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

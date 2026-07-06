@@ -98,6 +98,7 @@ export class EventsService {
       const event = new this.eventModel({
         title: createEventDto.title,
         description: createEventDto.description,
+        eventType: createEventDto.eventType,
         category: createEventDto.category,
         startDate,
         time: createEventDto.time,
@@ -172,6 +173,9 @@ export class EventsService {
           email: (v.email || "").toLowerCase(),
           phoneNumber: v.phoneNumber,
         })),
+
+        functions: createEventDto.functions || [],
+        marriage: createEventDto.marriage || undefined,
 
         status: createEventDto.status || "draft",
         featured: createEventDto.featured || false,

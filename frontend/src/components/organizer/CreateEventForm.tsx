@@ -7,6 +7,7 @@ import VenueAnnotationLayer, {
 import VenuePreview from "./VenuePreview";
 import { useCountry } from "@/hooks/useCountry";
 import { useSubscription } from "@/hooks/useSubscription";
+import { subtypesFor, eventTypeLabel } from "@/lib/eventTypes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -371,7 +372,7 @@ interface VenueLayout {
   image: string;
 }
 
-interface GalleryImage {
+export interface GalleryImage {
   id: string;
   file: File;
   preview: string;
@@ -379,7 +380,7 @@ interface GalleryImage {
 }
 
 // Event Banner Component
-const EventBanner = ({
+export const EventBanner = ({
   bannerFile,
   setBannerFile,
   bannerPreview,
@@ -508,12 +509,15 @@ const EventBanner = ({
 };
 
 // Gallery Component with Navigation
-const EventGallery = ({
+export const EventGallery = ({
   galleryImages,
   setGalleryImages,
+  maxImages = 5,
 }: {
   galleryImages: GalleryImage[];
   setGalleryImages: (images: GalleryImage[]) => void;
+  // Upload cap. Commercial events default to 5; the marriage form raises it.
+  maxImages?: number;
 }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
@@ -546,8 +550,8 @@ const EventGallery = ({
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    if (galleryImages.length + files.length > 5) {
-      alert("Maximum 5 images allowed");
+    if (galleryImages.length + files.length > maxImages) {
+      alert(`Maximum ${maxImages} images allowed`);
       return;
     }
 
@@ -625,10 +629,10 @@ const EventGallery = ({
   return (
     <div className="space-y-4">
       <Label className="text-base font-semibold">
-        Event Gallery ({galleryImages.length}/5)
+        Event Gallery ({galleryImages.length}/{maxImages})
       </Label>
 
-      {galleryImages.length < 5 && (
+      {galleryImages.length < maxImages && (
         <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
           <input
             type="file"
@@ -6327,6 +6331,10 @@ export function CreateEventForm({
 
   const [formData, setFormData] = useState({
     title: initialData?.title ?? "",
+    // Top-level event grouping ("commercial" | "personal") chosen in the
+    // pre-step before the form opens. Empty for legacy events created before
+    // this field existed — those fall back to the free-form category picker.
+    eventType: initialData?.eventType ?? "",
     category: initialData?.category ?? "",
     categories:
       Array.isArray(initialData?.categories) && initialData.categories.length > 0
@@ -7939,16 +7947,23 @@ export function CreateEventForm({
                     />
                   </div>
                   <div>
-                    <Label>Category *</Label>
-                    {/* Single-select category — the previous popover
-                        let organizers pick multiple, but the product
-                        decision is one event = one category. Writes
-                        both `category` (string, primary) and
-                        `categories` (one-element array for
-                        backward-compat with reads that already
-                        switched to the array). "Add new" stays
-                        inline so organizers can still extend the
-                        shared /categories pool from here. */}
+                    <div className="flex items-center gap-2">
+                      <Label>Category *</Label>
+                      {/* Event type chosen in the pre-step. Read-only here —
+                          to switch between Commercial/Personal the organizer
+                          restarts from "Create Event". */}
+                      {formData.eventType && (
+                        <Badge variant="secondary" className="font-normal">
+                          {eventTypeLabel(formData.eventType)}
+                        </Badge>
+                      )}
+                    </div>
+                    {/* Single-select category. When an event type was chosen
+                        in the pre-step, the list is locked to that type's fixed
+                        sub-types (no free-form add). Legacy events with no
+                        eventType keep the old shared-pool picker + "Add new".
+                        Writes both `category` (string, primary) and
+                        `categories` (one-element array for backward-compat). */}
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button
@@ -7987,7 +8002,10 @@ export function CreateEventForm({
                             e.stopPropagation();
                           }}
                         >
-                          {categoryOptions.map((cat) => {
+                          {(formData.eventType
+                            ? subtypesFor(formData.eventType)
+                            : categoryOptions
+                          ).map((cat) => {
                             const active = formData.category === cat;
                             return (
                               <button
@@ -8015,7 +8033,10 @@ export function CreateEventForm({
                           })}
                         </div>
                         {/* Add custom category — persisted to /categories so
-                            every organizer/exhibitor sees it next time. */}
+                            every organizer/exhibitor sees it next time. Hidden
+                            when an event type is set: those sub-types are a
+                            fixed list, not the free-form shared pool. */}
+                        {!formData.eventType && (
                         <div className="border-t p-2 flex gap-2 bg-muted/30">
                           <Input
                             value={newCategoryInput}
@@ -8045,6 +8066,7 @@ export function CreateEventForm({
                             Add
                           </Button>
                         </div>
+                        )}
                       </PopoverContent>
                     </Popover>
                   </div>
