@@ -349,6 +349,14 @@ export class EventsService {
 
         status: createEventDto.status || "draft",
         featured: createEventDto.featured || false,
+        // Public Eventfront chatbot config. Explicitly included here (unlike
+        // adBar/reelLinks) so the toggle + name persist on CREATE, not just on
+        // edit. Defaults keep the widget off for events that don't send it.
+        chatbot: createEventDto.chatbot || {
+          enabled: false,
+          name: "Event Assistant",
+          accentColor: "#2563eb",
+        },
       });
 
       const savedEvent = await event.save();

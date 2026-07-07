@@ -8,6 +8,10 @@ import {
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
+import {
+  eventHasEnded,
+  EVENT_ENDED_MESSAGE,
+} from "../../common/event-timing.util";
 import * as QRCode from "qrcode";
 import * as fs from "fs";
 import * as path from "path";
@@ -86,6 +90,10 @@ export class StallsService {
       const event = await this.eventModel.findById(createStallDto.eventId);
       if (!event) {
         throw new NotFoundException("Event not found");
+      }
+      // Past events accept no new stall bookings.
+      if (eventHasEnded(event)) {
+        throw new BadRequestException(EVENT_ENDED_MESSAGE);
       }
 
       // GST verification (India) — cached on the vendor so returning exhibitors

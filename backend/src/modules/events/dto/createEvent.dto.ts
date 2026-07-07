@@ -742,4 +742,16 @@ export class CreateEventDto {
   @IsBoolean()
   @IsOptional()
   featured?: boolean;
+
+  // Public Eventfront chatbot settings — loose object validation (small,
+  // stable shape) mirroring `adBar`. `enabled` shows/hides the widget on the
+  // public event page; `name` is its display name (falls back to
+  // "Event Assistant").
+  @IsOptional()
+  @IsObject()
+  chatbot?: {
+    enabled?: boolean;
+    name?: string;
+    accentColor?: string;
+  };
 }

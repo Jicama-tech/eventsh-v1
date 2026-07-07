@@ -3,9 +3,14 @@ import {
   NotFoundException,
   InternalServerErrorException,
   BadRequestException,
+  HttpException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
+import {
+  eventHasEnded,
+  EVENT_ENDED_MESSAGE,
+} from "../../common/event-timing.util";
 import { CreateTicketDto } from "./dto/create-ticket.dto";
 import { UpdateTicketDto } from "./dto/update-ticket.dto";
 import { Ticket, TicketDocument, TicketStatus } from "./entities/ticket.entity";
@@ -46,6 +51,17 @@ export class TicketsService {
 
   async create(createTicketDto: CreateTicketDto): Promise<Ticket> {
     try {
+      // 0. Refuse ticket purchases once the event is over.
+      if (createTicketDto.eventId) {
+        const ev = await this.eventModel
+          .findById(createTicketDto.eventId)
+          .select("startDate endDate")
+          .lean();
+        if (eventHasEnded(ev)) {
+          throw new BadRequestException(EVENT_ENDED_MESSAGE);
+        }
+      }
+
       // 1. Find or create user by WhatsApp number
       let user = await this.userModel
         .findOne({
@@ -185,6 +201,9 @@ export class TicketsService {
 
       return savedTicket;
     } catch (error) {
+      // Preserve intentional HTTP errors (e.g. the past-event guard's 400)
+      // instead of masking them as a generic 500.
+      if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         `Failed to create ticket: ${error.message}`
       );
