@@ -99,6 +99,17 @@ export class ChatbotController {
     return this.chatbot.handlePublicMessage({ message });
   }
 
+  // Public, per-event assistant shown on the eventfront. Anonymous (no JWT) —
+  // visitors/vendors/speakers/round-table guests ask questions grounded in a
+  // single event's data. Gated inside the service by the event's
+  // chatbot.enabled toggle + published kill-switch.
+  @Post("event-message")
+  async eventMessage(@Body() body: { eventId: string; message: string }) {
+    const eventId = String(body?.eventId || "");
+    const message = String(body?.message || "").slice(0, 1000);
+    return this.chatbot.handleEventMessage({ eventId, message });
+  }
+
   @Get("health")
   health() {
     return { ok: true, provider: this.chatbot.activeProvider };

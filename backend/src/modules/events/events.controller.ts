@@ -461,6 +461,10 @@ export class EventsController {
       // through multipart same as the other nested settings.
       if (typeof body.adBar === "string")
         body.adBar = JSON.parse(body.adBar);
+      // Eventfront chatbot config ({ enabled, name }) — small object, sent
+      // JSON-stringified same as adBar.
+      if (typeof body.chatbot === "string")
+        body.chatbot = JSON.parse(body.chatbot);
       // Custom Basic-Info sections (each: id + heading + content) —
       // sent JSON-stringified.
       if (typeof body.customSections === "string")
@@ -839,6 +843,9 @@ export class EventsController {
       // Announcement / Ad Bar — same unwrap as the create path.
       if (typeof body.adBar === "string")
         body.adBar = JSON.parse(body.adBar);
+      // Eventfront chatbot config — same unwrap as the create path.
+      if (typeof body.chatbot === "string")
+        body.chatbot = JSON.parse(body.chatbot);
       // Custom Basic-Info sections — same unwrap as the create path.
       if (typeof body.customSections === "string")
         body.customSections = JSON.parse(body.customSections);

@@ -112,6 +112,7 @@ import AnnouncementBar from "@/components/ui/AnnouncementBar";
 import { Checkbox } from "@radix-ui/react-checkbox";
 import { OrganizerStore } from "./organizerStoreFront";
 import MarriageEventFront from "./MarriageEventFront";
+import { EventChatbot } from "./EventChatbot";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import ImageCropModal from "../ui/imageCropModal";
 import { StatusHistoryEntry } from "../organizer/EventAttendees";
@@ -311,6 +312,14 @@ interface FetchedEvent {
     termsAndConditionsforStalls: string;
     isMandatory: boolean;
   }[];
+  // Public eventfront AI assistant — organizer toggles it on, names it and
+  // picks its theme colour in the Create/Edit Event form. Absent/disabled = no
+  // widget.
+  chatbot?: {
+    enabled?: boolean;
+    name?: string;
+    accentColor?: string;
+  };
 }
 
 interface EventDetailPageProps {
@@ -364,6 +373,92 @@ function CollapsibleCard({
       )}
     </div>
   );
+}
+
+/**
+ * True once the event's end (its end date, or start date when no end date is
+ * set, taken to the END of that calendar day) is in the past. Mirrors the
+ * backend `eventHasEnded` guard so the UI and the server agree on when
+ * bookings/purchases close.
+ */
+function isEventOver(
+  ev?: { startDate?: string; endDate?: string } | null,
+): boolean {
+  const end = ev?.endDate || ev?.startDate;
+  if (!end) return false;
+  const d = new Date(end);
+  if (isNaN(d.getTime())) return false;
+  d.setHours(23, 59, 59, 999);
+  return d.getTime() < Date.now();
+}
+
+/**
+ * Build the Event Assistant's opening quick-reply pills purely from the
+ * event's own data — mirrors the backend's eventQuickActions so the greeting
+ * never offers something the event doesn't have (e.g. no "Ticket prices" pill
+ * when there are no visitor tickets). Past events drop all "book / buy /
+ * apply" prompts.
+ */
+type ChatbotIntent =
+  | "book_stall"
+  | "buy_ticket"
+  | "apply_speaker"
+  | "book_round_table";
+type ChatbotPill = { label: string; action: string; intent?: ChatbotIntent };
+
+function buildEventChatbotGreeting(ev: FetchedEvent): ChatbotPill[] {
+  const isPast = isEventOver(ev);
+  const hasTickets =
+    (ev.visitorTypes?.length || 0) > 0 || ev.ticketPrice != null;
+  const hasStalls = (ev.tableTemplates?.length || 0) > 0;
+  const hasSpeakers =
+    (ev.speakers?.length || 0) > 0 ||
+    (ev.speakerSlotTemplates?.length || 0) > 0;
+  const hasRoundTables = (ev.venueRoundTables?.length || 0) > 0;
+
+  const pills: ChatbotPill[] = [
+    { label: "When & where?", action: "When and where is this event?" },
+  ];
+  if (isPast) {
+    // Past event — informational only, no booking intents.
+    if (hasTickets)
+      pills.push({
+        label: "Ticket info",
+        action: "What were the tickets for this event?",
+      });
+    if (hasSpeakers)
+      pills.push({ label: "Speakers", action: "Who spoke at this event?" });
+  } else {
+    if (hasTickets)
+      pills.push({
+        label: "Buy tickets",
+        action: "I want to buy tickets",
+        intent: "buy_ticket",
+      });
+    if (hasStalls)
+      pills.push({
+        label: "Book a stall",
+        action: "How do I book a stall as a vendor?",
+        intent: "book_stall",
+      });
+    if (hasSpeakers)
+      pills.push({
+        label: "Apply as speaker",
+        action: "How can I apply to speak at this event?",
+        intent: "apply_speaker",
+      });
+    if (hasRoundTables)
+      pills.push({
+        label: "Book a round table",
+        action: "How do I book a round-table seat?",
+        intent: "book_round_table",
+      });
+  }
+  pills.push({
+    label: "About the organizer",
+    action: "Tell me about the organizer.",
+  });
+  return pills.slice(0, 6);
 }
 
 export function EventFront({ eventId, onBack }: EventDetailPageProps) {
@@ -3370,6 +3465,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const handleRentFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (isEventOver(eventData)) {
+      toast({
+        title: "This event has ended",
+        description: "Stall bookings are closed for this event.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!emailVerified && !shopkeeperExists) {
       toast({
         duration: 5000,
@@ -3667,15 +3771,29 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }
   };
 
-  const handleGetTickets = async () => {
+  const handleGetTickets = async (typeIndexOverride?: number) => {
     if (!eventData || !eventData.organizer) return;
+    if (isEventOver(eventData)) {
+      toast({
+        title: "This event has ended",
+        description: "Ticket sales are closed for this event.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     const { visitorTypes } = eventData;
+    // Allow a caller (e.g. the chatbot ticket picker) to choose the visitor
+    // type directly; otherwise use the sidebar's selected type.
+    const chosenTypeIndex =
+      typeof typeIndexOverride === "number"
+        ? typeIndexOverride
+        : selectedVisitorType;
     let cartItems: any[] = [];
 
     if (visitorTypes && visitorTypes.length > 0) {
       // Single selected visitor type
-      const vt = visitorTypes[selectedVisitorType];
+      const vt = visitorTypes[chosenTypeIndex];
       if (!vt) return;
 
       cartItems = [
@@ -4012,6 +4130,40 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }, 80);
   };
 
+  // Guard shared by the chatbot booking shortcuts — a past event accepts no
+  // new bookings (the backend also refuses).
+  const guardEventOpen = (what: string): boolean => {
+    if (isEventOver(eventData)) {
+      toast({
+        title: "This event has ended",
+        description: `${what} are closed for this event.`,
+        variant: "destructive",
+      });
+      return false;
+    }
+    return true;
+  };
+
+  // Open the "Apply to Speak" dialog (same as the on-page "Apply to Speak"
+  // button). Reused by the chatbot "Apply as speaker" pill.
+  const openSpeakerApply = () => {
+    if (!guardEventOpen("Speaker applications")) return;
+    setShowSpeakerDialog(true);
+    setSpeakerStep("whatsapp");
+    setSpeakerWhatsApp("");
+    setSpeakerOtp("");
+    setSpeakerOtpSent(false);
+    setSpeakerVerified(false);
+    setExistingSpeakerRequest(null);
+  };
+
+  // Open the round-table booking flow: jump to the Venue tab and reveal the
+  // layout so the visitor can pick seats. Reused by the chatbot pill.
+  const openRoundTableBooking = () => {
+    if (!guardEventOpen("Round-table bookings")) return;
+    goToTab("venue", true);
+  };
+
   // ── "Add to Google Calendar" + "View on Google Maps" links for the
   // top info cards. Built from the event's date/time/venue. ──
   const toCalDate = (d: string, t?: string) => {
@@ -4284,6 +4436,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     // (the Ad bar) actually works. Using `overflow-x-hidden`
     // here is what made the bar stop sticking on scroll.
     <div className="min-h-screen bg-[#f5f5f5] overflow-x-clip">
+      {/* Past-event notice — once the event is over, all purchases and
+          bookings (tickets, stalls, speakers, round tables) are closed.
+          The submit handlers and the backend enforce this too; this bar
+          just makes it visible up front. */}
+      {isEventOver(eventData) && (
+        <div className="w-full bg-gray-800 px-4 py-2.5 text-center text-sm font-medium text-white">
+          This event has ended — ticket sales, stall bookings, speaker
+          applications and round-table reservations are now closed.
+        </div>
+      )}
       {/* (Ad bar moved into the sticky top-strip wrapper just above
           the header so it stays pinned at the top of the viewport
           while the page scrolls.) */}
@@ -5085,18 +5247,26 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       </>
                     )}
 
-                    {/* Buy Tickets CTA — only if visitorTypes exist */}
+                    {/* Buy Tickets CTA — only if visitorTypes exist. Once the
+                        event is over, sales close: the button is replaced with
+                        an "ended" notice (the handler + backend also refuse). */}
                     {visitorTypes && visitorTypes.length > 0 && (
-                      <button
-                        onClick={handleGetTickets}
-                        className="w-full h-12 sm:h-14 rounded-xl font-bold text-base text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 shadow-md hover:shadow-lg mb-3"
-                        style={{
-                          background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
-                        }}
-                      >
-                        <Ticket className="h-5 w-5" />
-                        Buy Tickets
-                      </button>
+                      isEventOver(eventData) ? (
+                        <div className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 mb-3 text-center text-sm font-medium text-gray-500">
+                          This event has ended — ticket sales are closed.
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleGetTickets()}
+                          className="w-full h-12 sm:h-14 rounded-xl font-bold text-base text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 shadow-md hover:shadow-lg mb-3"
+                          style={{
+                            background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                          }}
+                        >
+                          <Ticket className="h-5 w-5" />
+                          Buy Tickets
+                        </button>
+                      )
                     )}
 
                     {/* Share */}
@@ -5251,15 +5421,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       this event.
                     </p>
                     <button
-                      onClick={() => {
-                        setShowSpeakerDialog(true);
-                        setSpeakerStep("whatsapp");
-                        setSpeakerWhatsApp("");
-                        setSpeakerOtp("");
-                        setSpeakerOtpSent(false);
-                        setSpeakerVerified(false);
-                        setExistingSpeakerRequest(null);
-                      }}
+                      onClick={openSpeakerApply}
                       className="w-full h-11 rounded-xl border-2 font-semibold text-sm transition-all hover:opacity-90"
                       style={{
                         borderColor: design?.primaryColor || "#6366f1",
@@ -7560,6 +7722,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           !rtVisitorInfo.phone
                         }
                         onClick={async () => {
+                          if (isEventOver(eventData)) {
+                            toast({
+                              title: "This event has ended",
+                              description:
+                                "Round-table bookings are closed for this event.",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
                           setRtBookingLoading(true);
                           try {
                             const organizerId = eventData?.organizer?._id;
@@ -8598,6 +8769,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         !speakerFormData.sessionTopic
                       }
                       onClick={async () => {
+                        if (isEventOver(eventData)) {
+                          toast({
+                            title: "This event has ended",
+                            description:
+                              "Speaker applications are closed for this event.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
                         setSpeakerSubmitting(true);
                         try {
                           let res;
@@ -11990,6 +12170,42 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           </a>
         </p>
       </footer>
+
+      {/* Public AI assistant — only when the organizer enabled it for this
+          event. Answers questions grounded in this event's own data. */}
+      {eventData?.chatbot?.enabled && (
+        <EventChatbot
+          eventId={eventData._id}
+          chatbotName={eventData.chatbot.name}
+          accentColor={
+            eventData.chatbot.accentColor ||
+            design?.primaryColor ||
+            "#2563eb"
+          }
+          greetingActions={buildEventChatbotGreeting(eventData)}
+          ticketTypes={(eventData.visitorTypes || [])
+            .filter((vt: any) => vt && vt.isActive !== false)
+            .map((vt: any) => ({
+              name: vt.name,
+              priceLabel:
+                Number(vt.price) === 0 ? "Free" : formatPrice(vt.price),
+            }))}
+          onBookStall={() => {
+            // "Book a stall" pill → same as clicking the on-page
+            // "Rent a Stall / Preview Request" button (opens the WhatsApp /
+            // Google verification dialog, then the normal flow follows).
+            if (!guardEventOpen("Stall bookings")) return;
+            handleRentStallClick();
+          }}
+          onSelectTicket={(index) => {
+            // Ticket picker → straight to the ticket cart with the chosen type.
+            if (!guardEventOpen("Ticket sales")) return;
+            handleGetTickets(index);
+          }}
+          onApplySpeaker={openSpeakerApply}
+          onBookRoundTable={openRoundTableBooking}
+        />
+      )}
     </div>
   );
 }

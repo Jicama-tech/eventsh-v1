@@ -571,6 +571,24 @@ export class Event {
   @Prop({ default: false })
   featured: boolean;
 
+  // Public Eventfront AI assistant. When `enabled`, a floating chat widget
+  // appears on the event's public page so visitors, vendors, speakers and
+  // round-table guests can ask questions grounded in THIS event's data. The
+  // organizer toggles it on/off and picks a display `name` in the Create/Edit
+  // Event form. Undefined (legacy events) is treated as disabled.
+  @Prop({
+    type: Object,
+    default: { enabled: false, name: "Event Assistant", accentColor: "#2563eb" },
+  })
+  chatbot?: {
+    enabled?: boolean;
+    name?: string;
+    // Theme colour for the widget (header, launcher bubble, user messages,
+    // send button). Falls back to the storefront primary colour, then a
+    // default blue, when unset.
+    accentColor?: string;
+  };
+
   @Prop({ type: [Object], default: [] })
   speakerSlotTemplates: SpeakerSlotTemplate[];
 
