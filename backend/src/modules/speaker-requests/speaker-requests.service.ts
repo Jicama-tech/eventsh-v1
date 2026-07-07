@@ -7,6 +7,10 @@ import {
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
+import {
+  eventHasEnded,
+  EVENT_ENDED_MESSAGE,
+} from "../../common/event-timing.util";
 import * as QRCode from "qrcode";
 import * as fs from "fs";
 import * as path from "path";
@@ -46,6 +50,10 @@ export class SpeakerRequestsService {
     try {
       const event = await this.eventModel.findById(dto.eventId);
       if (!event) throw new NotFoundException("Event not found");
+      // Past events accept no new speaker applications.
+      if (eventHasEnded(event)) {
+        throw new BadRequestException(EVENT_ENDED_MESSAGE);
+      }
 
       if (dto.email) {
         const existing = await this.speakerRequestModel.findOne({

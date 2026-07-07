@@ -282,7 +282,9 @@ export default function TicketCart() {
 
   const handleBackToStore = () => {
     setIsNavigating(true);
-    navigate(`/${slug}`);
+    // Go back to wherever the user came from (e.g. the event page / chatbot
+    // ticket flow) rather than forcing them to the store root.
+    navigate(-1);
   };
 
   useEffect(() => {
