@@ -43,6 +43,69 @@ class SelectedAddOn {
   quantity: number;
 }
 
+// A pending "Edit Request" amendment on an already-Completed booking. The
+// vendor may raise the operator count and add/increase add-ons (never reduce);
+// any add-on price increase is paid as a top-up. The live booking stays intact
+// until the organizer confirms, at which point the amendment is applied, the
+// coupon max-usage is bumped and the QR ticket re-issued.
+class PendingAmendment {
+  // Proposed operator count (free — only resizes the coupon / QR).
+  @Prop({ default: "0" })
+  noOfOperators: string;
+
+  // Proposed FULL add-on list (existing + added), each >= its current quantity.
+  @Prop({ type: [SelectedAddOn], default: [] })
+  selectedAddOns: SelectedAddOn[];
+
+  // Proposed add-on total and the extra amount owed (newAddOnsTotal - old).
+  @Prop({ default: 0 })
+  addOnsTotal: number;
+
+  @Prop({ default: 0 })
+  amountDue: number;
+
+  // awaiting_payment -> vendor must pay the difference;
+  // paid_pending_confirm -> paid (or nothing owed), awaiting organizer;
+  // confirmed -> applied (cleared once done).
+  @Prop({
+    type: String,
+    enum: ["awaiting_payment", "paid_pending_confirm", "confirmed"],
+    default: "awaiting_payment",
+  })
+  status: string;
+
+  // Top-up payment proof for the difference (mirrors the main payment fields).
+  @Prop() transactionId?: string;
+  @Prop() transactionScreenshot?: string;
+  @Prop() paymentMethod?: string;
+
+  @Prop({ default: Date.now }) requestedAt: Date;
+  @Prop() paidAt?: Date;
+  @Prop() confirmedAt?: Date;
+}
+
+// A vendor-initiated request to cancel/delete a booking. The vendor gives a
+// reason; the organizer approves (frees the space, kills the QR, emails the
+// vendor a refund note) or rejects. Stays pending until the organizer decides.
+class PendingCancellation {
+  @Prop({ default: "" })
+  reason: string;
+
+  @Prop({
+    type: String,
+    enum: ["requested", "approved", "rejected"],
+    default: "requested",
+  })
+  status: string;
+
+  // Organizer's note to the vendor (e.g. when/how the refund will be returned).
+  @Prop({ default: "" })
+  organizerNote: string;
+
+  @Prop({ default: Date.now }) requestedAt: Date;
+  @Prop() resolvedAt?: Date;
+}
+
 export enum StallStatusEnum {
   Pending = "Pending",
   Approved = "Approved",
@@ -273,6 +336,16 @@ export class Stall {
 
   @Prop({ default: Date.now })
   updatedAt: Date;
+
+  // Present only while an "Edit Request" amendment is in flight; cleared when
+  // the organizer confirms it. Undefined for bookings with no pending edit.
+  @Prop({ type: PendingAmendment, default: undefined })
+  pendingAmendment?: PendingAmendment;
+
+  // Present only while a cancellation/deletion request awaits the organizer's
+  // decision; cleared/resolved once they approve or reject.
+  @Prop({ type: PendingCancellation, default: undefined })
+  pendingCancellation?: PendingCancellation;
 }
 
 export const StallSchema = SchemaFactory.createForClass(Stall);

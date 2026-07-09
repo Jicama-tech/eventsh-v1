@@ -9,10 +9,10 @@ import {
   Loader2,
   QrCode,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import QRCode from "react-qr-code";
+import PaymentFeedbackDialog from "./PaymentFeedbackDialog";
 import jsQR from "jsqr";
 import { buildPayNowQrUrl } from "@/lib/paynowQr";
 
@@ -31,6 +31,7 @@ const RoundTablePaymentPage = () => {
 
   const [confirming, setConfirming] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const [confirmedBookings, setConfirmedBookings] = useState<any[]>([]);
 
   // Payment QR states
@@ -205,6 +206,7 @@ const RoundTablePaymentPage = () => {
         setConfirmed(true);
         setConfirmedBookings(successful.map((r) => r.data));
         toast({ title: "Payment Submitted!", description: "The organizer will review and confirm your payment. Your ticket will be sent via WhatsApp.", duration: 8000 });
+        setShowFeedback(true);
       }
     } catch (err: any) {
       toast({ title: "Submission failed", description: err.message, variant: "destructive", duration: 5000 });
@@ -478,6 +480,16 @@ const RoundTablePaymentPage = () => {
           </Card>
         )}
       </div>
+
+      <PaymentFeedbackDialog
+        open={showFeedback}
+        onOpenChange={setShowFeedback}
+        paymentType="round_table"
+        organizerId={state?.organizerId}
+        eventTitle={state?.eventTitle}
+        bookingId={confirmedBookings?.[0]?._id || state?.bookings?.[0]?._id}
+        amount={state?.totalAmount}
+      />
     </div>
   );
 };

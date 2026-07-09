@@ -124,6 +124,24 @@ export class CouponService {
     return coupon;
   }
 
+  /**
+   * Update a coupon's max-usage in place, matched by its (deterministic) code
+   * within an organizer. Used by the stall "Edit Request" flow when the vendor
+   * changes the operator count (the coupon grants one free entry per operator).
+   * Best-effort — returns null if the coupon isn't found rather than throwing.
+   */
+  async setMaxUsageByCode(
+    organizerId: string,
+    code: string,
+    maxUsage: number,
+  ): Promise<CouponDocument | null> {
+    return this.couponModel.findOneAndUpdate(
+      { organizerId, code: (code || "").toUpperCase(), isDeleted: { $ne: true } },
+      { $set: { maxUsage: Math.max(1, Number(maxUsage) || 1) } },
+      { new: true },
+    );
+  }
+
   /* ================= UPDATE COUPON ================= */
   async update(id: string, dto: UpdateCouponDto) {
     // 1️⃣ Validate expiry date

@@ -58,6 +58,7 @@ import {
   ParkingCircle,
   Wifi,
   Trash2,
+  Pencil,
 } from "lucide-react";
 import {
   FaFacebook,
@@ -290,6 +291,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     null,
   );
   const [showStallDetailsDialog, setShowStallDetailsDialog] = useState(false);
+  const [showAmendConfirmDialog, setShowAmendConfirmDialog] = useState(false);
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [eventTicketsMap, setEventTicketsMap] = useState<
     Record<string, TicketCustomer[]>
@@ -1581,6 +1583,97 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         setShowPaymentDialog(false);
         setActionNotes("");
         await fetchStallTickets(selectedEvent._id);
+      } else throw new Error(result.message);
+    } catch (error: any) {
+      toast({
+        duration: 5000,
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Confirm a vendor's "Edit Request" amendment → applies it + re-issues the QR.
+  const handleConfirmAmendment = async () => {
+    if (!selectedRequest || !selectedEvent) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(
+        `${apiURL}/stalls/${selectedRequest._id}/amend-confirm`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ changedBy: "Organizer" }),
+        },
+      );
+      const result = await response.json();
+      if (result.success) {
+        toast({
+          duration: 5000,
+          title: "Amendment confirmed",
+          description:
+            "Booking updated and a new QR ticket is being re-issued to the vendor.",
+        });
+        const confirmedId = selectedRequest._id;
+        setSelectedRequest(null);
+        await fetchStallTickets(selectedEvent._id);
+        // If the detail dialog is open on this stall, refresh it so the
+        // amendment card clears and the updated add-ons/QR show.
+        if (stallRequest?._id === confirmedId) await fetchStall(confirmedId);
+      } else throw new Error(result.message);
+    } catch (error: any) {
+      toast({
+        duration: 5000,
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Approve/reject a vendor's cancellation request. On approve the backend
+  // frees the space, invalidates the QR, and emails the vendor the note.
+  const handleDecideCancellation = async (
+    stall: StallRequest,
+    approve: boolean,
+    note: string,
+  ) => {
+    if (!selectedEvent) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(
+        `${apiURL}/stalls/${stall._id}/cancellation-decision`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            approve,
+            organizerNote: note,
+            changedBy: "Organizer",
+          }),
+        },
+      );
+      const result = await response.json();
+      if (result.success) {
+        toast({
+          duration: 5000,
+          title: approve ? "Booking deleted" : "Cancellation rejected",
+          description: approve
+            ? "The stall was deleted, the space freed, and the vendor emailed. It no longer appears in the list."
+            : "The vendor was emailed that their request wasn't approved.",
+        });
+        await fetchStallTickets(selectedEvent._id);
+        if (approve) {
+          // The stall is gone — close the detail dialog rather than refetch it.
+          if (stallRequest?._id === stall._id) closeStallDialog();
+        } else if (stallRequest?._id === stall._id) {
+          await fetchStall(stall._id);
+        }
       } else throw new Error(result.message);
     } catch (error: any) {
       toast({
@@ -2979,6 +3072,18 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                 {stall.status}
                               </span>
                             </div>
+                            {(stall as any).pendingAmendment?.status ===
+                              "paid_pending_confirm" && (
+                              <Badge className="mt-1 bg-amber-100 text-amber-700">
+                                Edit pending
+                              </Badge>
+                            )}
+                            {(stall as any).pendingCancellation?.status ===
+                              "requested" && (
+                              <Badge className="mt-1 bg-red-100 text-red-700">
+                                Cancel requested
+                              </Badge>
+                            )}
                           </TableCell>
                           <TableCell className="font-bold">
                             {formatPrice(stall.grandTotal)}
@@ -2994,6 +3099,21 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                               >
                                 <Eye className="h-3 w-3" />
                               </Button>
+
+                              {(stall as any).pendingAmendment?.status ===
+                                "paid_pending_confirm" && (
+                                <Button
+                                  size="sm"
+                                  className="bg-amber-600 hover:bg-amber-700"
+                                  title="Confirm edit request & re-issue QR"
+                                  onClick={() => {
+                                    setSelectedRequest(stall);
+                                    setShowAmendConfirmDialog(true);
+                                  }}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                              )}
 
                               {canManageStallDeletion && canDeleteStall(stall) && (
                                 <Button
@@ -3249,6 +3369,11 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           setSelectedRequest(stall);
           setShowPaymentDialog(true);
         }}
+        onConfirmAmendment={(stall) => {
+          setSelectedRequest(stall);
+          setShowAmendConfirmDialog(true);
+        }}
+        onDecideCancellation={handleDecideCancellation}
         onReturnDeposit={(stall) => {
           setReturnDepositStallId(stall._id);
           setShowReturnDepositDialog(true);
@@ -3548,6 +3673,79 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Edit-Request (amendment) Dialog */}
+      <Dialog
+        open={showAmendConfirmDialog}
+        onOpenChange={setShowAmendConfirmDialog}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-amber-600" />
+              Confirm edit request
+            </DialogTitle>
+            <DialogDescription>
+              The vendor edited their booking. Review the changes and confirm to
+              apply them and re-issue the QR ticket.
+            </DialogDescription>
+          </DialogHeader>
+          {(() => {
+            const pa: any = (selectedRequest as any)?.pendingAmendment;
+            if (!pa) return null;
+            return (
+              <div className="space-y-2 rounded-lg border bg-slate-50 p-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Operators</span>
+                  <span className="font-medium">
+                    {(selectedRequest as any)?.noOfOperators} → {pa.noOfOperators}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Updated add-ons</span>
+                  <ul className="mt-1 space-y-0.5">
+                    {(pa.selectedAddOns || []).map((a: any, i: number) => (
+                      <li key={i} className="flex justify-between">
+                        <span>
+                          {a.name} × {a.quantity}
+                        </span>
+                        <span className="font-medium">
+                          {formatPrice((a.price || 0) * (a.quantity || 0))}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="flex justify-between border-t pt-2">
+                  <span className="text-gray-500">Difference paid</span>
+                  <span className="font-bold text-green-700">
+                    {formatPrice(pa.amountDue || 0)}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+          <div className="grid grid-cols-2 gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowAmendConfirmDialog(false)}
+              disabled={isSubmitting}
+            >
+              Close
+            </Button>
+            <Button
+              className="bg-amber-600 hover:bg-amber-700"
+              onClick={async () => {
+                await handleConfirmAmendment();
+                setShowAmendConfirmDialog(false);
+              }}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Confirming…" : "Confirm & re-issue QR"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
