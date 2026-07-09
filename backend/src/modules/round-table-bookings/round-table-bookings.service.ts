@@ -196,6 +196,12 @@ export class RoundTableBookingsService {
     const booking = await this.bookingModel.findById(bookingId);
     if (!booking) throw new NotFoundException("Booking not found");
 
+    // Past events accept no payments.
+    const bookingEvent = await this.eventModel.findById(booking.eventId);
+    if (eventHasEnded(bookingEvent as any)) {
+      throw new BadRequestException(EVENT_ENDED_MESSAGE);
+    }
+
     if (booking.paymentStatus !== RoundTablePaymentStatus.Pending) {
       throw new BadRequestException(
         `Cannot submit payment. Current status: ${booking.paymentStatus}`,

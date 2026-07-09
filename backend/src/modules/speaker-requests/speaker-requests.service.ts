@@ -607,6 +607,11 @@ export class SpeakerRequestsService {
     if (!request) throw new NotFoundException("Speaker request not found");
 
     if (paymentStatus === "Paid") {
+      // No speaker payments once the event has ended.
+      const ev = await this.eventModel.findById(request.eventId);
+      if (eventHasEnded(ev as any)) {
+        throw new BadRequestException(EVENT_ENDED_MESSAGE);
+      }
       return this.confirmPayment(id, notes);
     }
 

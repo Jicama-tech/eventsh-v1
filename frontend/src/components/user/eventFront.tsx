@@ -1,6 +1,6 @@
 // File: EventDetailPage.tsx
 
-import React, { useState, useEffect, useRef, CSSProperties } from "react";
+import React, { useState, useEffect, useRef, useMemo, CSSProperties } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -66,6 +66,8 @@ import {
   Clock12,
   Upload,
   Loader2,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { FaUtensilSpoon, FaWhatsapp } from "react-icons/fa";
@@ -112,6 +114,8 @@ import AnnouncementBar from "@/components/ui/AnnouncementBar";
 import { Checkbox } from "@radix-ui/react-checkbox";
 import { OrganizerStore } from "./organizerStoreFront";
 import MarriageEventFront from "./MarriageEventFront";
+import StallPaymentPanel from "./StallPaymentPanel";
+import PaymentFeedbackDialog from "./PaymentFeedbackDialog";
 import { EventChatbot } from "./EventChatbot";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import ImageCropModal from "../ui/imageCropModal";
@@ -441,6 +445,14 @@ function buildEventChatbotGreeting(ev: FetchedEvent): ChatbotPill[] {
         action: "How do I book a stall as a vendor?",
         intent: "book_stall",
       });
+    if (hasStalls)
+      // Reuses the stall sign-in flow → lands on the vendor's existing-booking
+      // dialog, where they can edit OR cancel/delete their request.
+      pills.push({
+        label: "Cancel my stall",
+        action: "I want to cancel or delete my stall booking",
+        intent: "book_stall",
+      });
     if (hasSpeakers)
       pills.push({
         label: "Apply as speaker",
@@ -656,6 +668,49 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // NEW: Table Selection States
   const [selectedTables, setSelectedTables] = useState<any[]>([]);
   const [selectedAddOns, setSelectedAddOns] = useState<any[]>([]);
+
+  // ── Edit Request (amendment) states ──
+  // amendMode locks the Selection tab to add-ons-only editing of an existing
+  // completed booking (spaces stay blue + locked). amendFloor holds the
+  // original add-on quantities so the vendor can only add / increase.
+  const [amendMode, setAmendMode] = useState(false);
+  const [showAmendOperators, setShowAmendOperators] = useState(false);
+  const [amendOperators, setAmendOperators] = useState(1);
+  const [amendFloor, setAmendFloor] = useState<Record<string, number>>({});
+  const [amendAmountDue, setAmendAmountDue] = useState(0);
+  const [showAmendPayment, setShowAmendPayment] = useState(false);
+  const [amendTxnId, setAmendTxnId] = useState("");
+  const [amendScreenshot, setAmendScreenshot] = useState<File | null>(null);
+  const [amendSubmitting, setAmendSubmitting] = useState(false);
+  // Post-payment feedback (shown after the stall-edit difference is paid).
+  const [showPaymentFeedback, setShowPaymentFeedback] = useState(false);
+  const [feedbackAmount, setFeedbackAmount] = useState(0);
+  // Cancellation/delete request (vendor asks, organizer approves).
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
+  // positionIds of THIS vendor's own booked spaces — rendered blue + locked.
+  const ownBookedPositionIds = useMemo(
+    () =>
+      new Set<string>(
+        (existingStallRequest?.selectedTables || []).map(
+          (t: any) => t.positionId,
+        ),
+      ),
+    [existingStallRequest],
+  );
+  // Extra owed for the edit = new add-on total − original add-on total (>= 0).
+  // Declared with the other hooks (above the component's early returns) so the
+  // hook order stays stable across renders.
+  const amendExtra = useMemo(() => {
+    if (!amendMode) return 0;
+    const newTotal = selectedAddOns.reduce(
+      (s, a) => s + (Number(a.price) || 0) * (Number(a.quantity) || 0),
+      0,
+    );
+    const oldTotal = Number(existingStallRequest?.addOnsTotal) || 0;
+    return Math.max(0, newTotal - oldTotal);
+  }, [amendMode, selectedAddOns, existingStallRequest]);
   // T&C for stalls
   const [stallTermsChecked, setStallTermsChecked] = useState<
     Record<number, boolean>
@@ -4351,6 +4406,17 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     });
 
   const handleAddOnSelect = (addon: any) => {
+    // In Edit-Request (amend) mode add-ons are add-only: an originally-booked
+    // add-on can't be toggled off.
+    if (amendMode && (amendFloor[addon.id] || 0) > 0) {
+      toast({
+        duration: 3000,
+        title: "Can't remove this add-on",
+        description: "In an edit you can only add or increase add-ons.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSelectedAddOns((prev) => {
       const exists = prev.find((a) => a.id === addon.id);
       if (exists) {
@@ -4404,17 +4470,221 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     );
   };
 
-  // Decrease/Remove quantity
+  // Decrease/Remove quantity. In amend mode the quantity can't drop below the
+  // originally-booked floor (add-only edits).
   const handleRemoveAddOn = (addonId: string) => {
+    const floor = amendMode ? amendFloor[addonId] || 0 : 0;
     setSelectedAddOns((prev) => {
       return prev
         .map((a) =>
           a.id === addonId
-            ? { ...a, quantity: Math.max(0, a.quantity - 1) }
+            ? { ...a, quantity: Math.max(floor, a.quantity - 1) }
             : a,
         )
         .filter((a) => a.quantity > 0);
     });
+  };
+
+  // ── Edit Request (amendment) handlers ──
+  // Seed the Selection tab from the existing completed booking, then open the
+  // operator-edit step. Spaces are seeded so they render blue + locked.
+  const startEditRequest = () => {
+    const req = existingStallRequest;
+    if (!req) return;
+    // Past events accept no edits/transactions.
+    if (isEventOver(eventData)) {
+      toast({
+        duration: 4000,
+        title: "This event has ended",
+        description: "Bookings and edits are closed for this event.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setAmendOperators(
+      Math.min(10, Math.max(1, Number(req.noOfOperators) || 1)),
+    );
+    setSelectedTables(
+      (req.selectedTables || []).map((t: any) => ({
+        tableId: t.tableId,
+        positionId: t.positionId,
+        name: t.name,
+        tableType: t.tableType,
+        layoutName: t.layoutName,
+        rowNumber: t.rowNumber,
+        width: t.width,
+        height: t.height,
+        price: Number(t.price) || 0,
+        depositAmount: Number(t.depositAmount) || 0,
+        // Fields the "Selected Tables" summary reads for the read-only price
+        // display (these aren't stored on the booking, so derive from price).
+        tablePrice: Number(t.price) || 0,
+        regularPrice: Number(t.price) || 0,
+        bookingPrice: Number(t.price) || 0,
+        depositPrice: Number(t.depositAmount) || 0,
+        appliedTier: "regular",
+        memberSaved: 0,
+      })),
+    );
+    const seeded = (req.selectedAddOns || []).map((a: any) => ({
+      id: a.addOnId,
+      name: a.name,
+      price: Number(a.price) || 0,
+      quantity: Number(a.quantity) || 1,
+    }));
+    setSelectedAddOns(seeded);
+    const floor: Record<string, number> = {};
+    seeded.forEach((a: any) => {
+      floor[a.id] = a.quantity;
+    });
+    setAmendFloor(floor);
+    setAmendMode(true);
+    setShowCompletedChoice(false);
+    setShowAmendOperators(true);
+  };
+
+  const proceedAmendToSelection = () => {
+    setShowAmendOperators(false);
+    fetchAvailableTables();
+    setShowTableSelection(true);
+  };
+
+  // Vendor submits a cancellation/delete request (goes to the organizer).
+  const handleRequestCancellation = async () => {
+    if (!existingStallRequest?._id) return;
+    if (!cancelReason.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Add a reason",
+        description: "Tell the organizer why you're cancelling.",
+      });
+      return;
+    }
+    setCancelSubmitting(true);
+    try {
+      const res = await fetch(
+        `${apiURL}/stalls/${existingStallRequest._id}/request-cancellation`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: cancelReason.trim() }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok || data?.success === false)
+        throw new Error(data?.message || "Couldn't send the request.");
+      toast({
+        title: "Cancellation requested",
+        description:
+          "Your request was sent to the organizer. They'll review it and email you (with any refund details).",
+      });
+      setShowCancelDialog(false);
+      setCancelReason("");
+      setShowCompletedChoice(false);
+    } catch (e: any) {
+      toast({
+        variant: "destructive",
+        title: "Couldn't send request",
+        description: e?.message || "Please try again.",
+      });
+    } finally {
+      setCancelSubmitting(false);
+    }
+  };
+
+  const resetAmend = () => {
+    setAmendMode(false);
+    setShowAmendOperators(false);
+    setShowAmendPayment(false);
+    setShowTableSelection(false);
+    setAmendFloor({});
+    setAmendAmountDue(0);
+    setAmendTxnId("");
+    setAmendScreenshot(null);
+    setSelectedTables([]);
+    setSelectedAddOns([]);
+  };
+
+  const handleAmendmentSubmit = async () => {
+    if (!existingStallRequest?._id) return;
+    setAmendSubmitting(true);
+    try {
+      const res = await fetch(
+        `${apiURL}/stalls/${existingStallRequest._id}/amend`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            noOfOperators: String(amendOperators),
+            selectedAddOns: selectedAddOns.map((a) => ({
+              addOnId: a.id,
+              name: a.name,
+              price: a.price,
+              quantity: a.quantity,
+            })),
+          }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Couldn't save the edit.");
+      const due = Number(data?.data?.amountDue) || 0;
+      setShowTableSelection(false);
+      if (due > 0) {
+        setAmendAmountDue(due);
+        setShowAmendPayment(true);
+      } else {
+        toast({
+          title: "Edit submitted",
+          description:
+            "Awaiting organizer confirmation — your updated QR will follow once approved.",
+        });
+        resetAmend();
+      }
+    } catch (e: any) {
+      toast({
+        variant: "destructive",
+        title: "Couldn't save edit",
+        description: e?.message || "Please try again.",
+      });
+    } finally {
+      setAmendSubmitting(false);
+    }
+  };
+
+  const submitAmendPayment = async () => {
+    if (!existingStallRequest?._id) return;
+    setAmendSubmitting(true);
+    try {
+      const fd = new FormData();
+      if (amendTxnId) fd.append("transactionId", amendTxnId);
+      fd.append("paymentMethod", "qr");
+      if (amendScreenshot) fd.append("screenshot", amendScreenshot);
+      const res = await fetch(
+        `${apiURL}/stalls/${existingStallRequest._id}/amend-payment`,
+        { method: "POST", body: fd },
+      );
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(data?.message || "Couldn't record the payment.");
+      toast({
+        title: "Payment recorded",
+        description:
+          "Awaiting organizer confirmation — your updated QR will follow once approved.",
+      });
+      // Capture the paid difference before resetAmend() clears it, then prompt
+      // for feedback on the edit-payment experience.
+      setFeedbackAmount(amendAmountDue);
+      resetAmend();
+      setShowPaymentFeedback(true);
+    } catch (e: any) {
+      toast({
+        variant: "destructive",
+        title: "Payment failed",
+        description: e?.message || "Please try again.",
+      });
+    } finally {
+      setAmendSubmitting(false);
+    }
   };
 
   const infoBadgeStyle = {
@@ -9085,17 +9355,57 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             </div>
           )}
           {!showRegisterTargetChoice ? (
-            // Step 1 — preview the existing booking, or start a new request.
-            <div className="grid grid-cols-2 gap-2 pt-2">
-              <Button
-                variant="outline"
-                onClick={() => setShowCompletedChoice(false)}
-              >
-                Close
-              </Button>
-              <Button onClick={() => setShowRegisterTargetChoice(true)}>
-                Register a new request
-              </Button>
+            // Step 1 — edit this booking, or start a fresh request.
+            <div className="space-y-2 pt-2">
+              {/* Edit the existing booking: operators + add-ons only. Hidden
+                  once the event has ended — no more edits/transactions. */}
+              {!isEventOver(eventData) && (
+                <Button
+                  className="w-full"
+                  style={{
+                    backgroundColor: design?.primaryColor || "#2563eb",
+                  }}
+                  onClick={startEditRequest}
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit request (operators &amp; add-ons)
+                </Button>
+              )}
+              {/* Ask the organizer to cancel/delete this booking (frees the
+                  space + refund handled by the organizer). Hidden if a request
+                  is already pending. */}
+              {existingStallRequest?.pendingCancellation?.status ===
+              "requested" ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-center text-xs text-amber-700">
+                  Cancellation request pending organizer review.
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  className="w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                  onClick={() => {
+                    setCancelReason("");
+                    setShowCancelDialog(true);
+                  }}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Cancel / delete this booking
+                </Button>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowCompletedChoice(false)}
+                >
+                  Close
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowRegisterTargetChoice(true)}
+                >
+                  Register a new request
+                </Button>
+              </div>
             </div>
           ) : (
             // Step 2 — who is this new request for? Reuse THIS profile, or
@@ -9143,6 +9453,214 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ============================================================ */}
+      {/* CANCEL / DELETE REQUEST — vendor gives a reason               */}
+      {/* ============================================================ */}
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-600" />
+              Cancel this stall booking
+            </DialogTitle>
+            <DialogDescription>
+              Tell the organizer why you'd like to cancel. They'll review it,
+              free up your space, and email you with any refund details.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-1">
+            <Label className="text-sm">Reason for cancellation</Label>
+            <Textarea
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="e.g. Can no longer attend, double-booked, change of plans…"
+              rows={4}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowCancelDialog(false)}
+              disabled={cancelSubmitting}
+            >
+              Back
+            </Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700"
+              onClick={handleRequestCancellation}
+              disabled={cancelSubmitting || !cancelReason.trim()}
+            >
+              {cancelSubmitting ? "Sending…" : "Send cancellation request"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ============================================================ */}
+      {/* EDIT REQUEST — Step 1: adjust operator count                  */}
+      {/* ============================================================ */}
+      <Dialog
+        open={showAmendOperators}
+        onOpenChange={(o) => {
+          setShowAmendOperators(o);
+          if (!o) setAmendMode(false);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-blue-600" />
+              Edit your booking
+            </DialogTitle>
+            <DialogDescription>
+              Update the number of operators, then continue to adjust your
+              add-ons. Your booked spaces stay the same.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label>Number of operators</Label>
+            <div className="flex items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() =>
+                  setAmendOperators((n) => Math.max(1, n - 1))
+                }
+                disabled={amendOperators <= 1}
+              >
+                −
+              </Button>
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                value={amendOperators}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  setAmendOperators(
+                    !Number.isFinite(n) ? 1 : Math.min(10, Math.max(1, n)),
+                  );
+                }}
+                className="w-24 text-center"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() =>
+                  setAmendOperators((n) => Math.min(10, n + 1))
+                }
+                disabled={amendOperators >= 10}
+              >
+                +
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Each operator gets one free entry. Changing this is free — it just
+              re-issues your QR and updates your entry pass.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" onClick={resetAmend}>
+              Cancel
+            </Button>
+            <Button
+              onClick={proceedAmendToSelection}
+              style={{ backgroundColor: design?.primaryColor || "#2563eb" }}
+            >
+              Continue to add-ons
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ============================================================ */}
+      {/* EDIT REQUEST — pay the add-on difference                      */}
+      {/* ============================================================ */}
+      <Dialog
+        open={showAmendPayment}
+        onOpenChange={(o) => {
+          if (!o) resetAmend();
+          setShowAmendPayment(o);
+        }}
+      >
+        <DialogContent className="max-w-lg w-full max-h-[92vh] overflow-hidden p-0 flex flex-col">
+          <div className="shrink-0 border-b px-5 py-4">
+            <DialogTitle>Pay the difference</DialogTitle>
+            <DialogDescription>
+              Your edited add-ons cost more than before. Pay the difference
+              below, then submit your payment proof — the organizer will confirm
+              and re-issue your QR with the updated add-ons.
+            </DialogDescription>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
+            {showAmendPayment && (
+              <StallPaymentPanel
+                organizerId={
+                  (eventData as any)?.organizer?._id ||
+                  existingStallRequest?.organizerId?._id ||
+                  existingStallRequest?.organizerId
+                }
+                amount={amendAmountDue}
+                reference={existingStallRequest?._id}
+                whatsAppNumber={
+                  existingStallRequest?.shopkeeperId?.whatsappNumber ||
+                  shopkeeperDetails?.whatsappNumber
+                }
+                transactionId={amendTxnId}
+                onTransactionIdChange={setAmendTxnId}
+                screenshot={amendScreenshot}
+                onScreenshotChange={setAmendScreenshot}
+              />
+            )}
+          </div>
+          <div className="shrink-0 grid grid-cols-2 gap-2 border-t px-5 py-4">
+            <Button
+              variant="outline"
+              onClick={resetAmend}
+              disabled={amendSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={submitAmendPayment}
+              disabled={
+                amendSubmitting || (!amendTxnId.trim() && !amendScreenshot)
+              }
+              style={{ backgroundColor: design?.primaryColor || "#2563eb" }}
+            >
+              {amendSubmitting
+                ? "Submitting…"
+                : "I've paid — Submit for verification"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Post-payment feedback for the stall-edit difference payment. */}
+      <PaymentFeedbackDialog
+        open={showPaymentFeedback}
+        onOpenChange={setShowPaymentFeedback}
+        paymentType="stall_edit"
+        organizerId={
+          (eventData as any)?.organizer?._id ||
+          existingStallRequest?.organizerId?._id ||
+          existingStallRequest?.organizerId
+        }
+        eventId={
+          existingStallRequest?.eventId?._id || existingStallRequest?.eventId
+        }
+        eventTitle={existingStallRequest?.eventId?.title || eventData?.title}
+        payerName={
+          existingStallRequest?.shopkeeperId?.name ||
+          existingStallRequest?.nameOfApplicant
+        }
+        payerEmail={existingStallRequest?.shopkeeperId?.businessEmail}
+        bookingId={existingStallRequest?._id}
+        amount={feedbackAmount}
+      />
 
       {/* Table Selection Dialog - NEW */}
       {/* ============================================================ */}
@@ -9301,6 +9819,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 !preferredIds.includes(table.id);
                               const isWrongCategory = !isCategoryAllowed(table);
                               const isNotForSale = table.forSale === false;
+                              // In Edit-Request mode the vendor's OWN booked
+                              // spaces stay blue but locked (can't be changed).
+                              const isOwnBooked =
+                                amendMode &&
+                                ownBookedPositionIds.has(table.positionId);
 
                               // EventFront colour rule: available spaces show
                               // their own template colour; booked/disabled grey
@@ -9320,7 +9843,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               let cursor =
                                 "cursor-pointer hover:shadow-xl hover:ring-2 hover:ring-blue-400";
 
-                              if (isNotForSale) {
+                              if (isOwnBooked) {
+                                // Your booked space — solid blue, locked.
+                                fillStyle = {
+                                  backgroundColor: "#93c5fd",
+                                  borderColor: "#2563eb",
+                                };
+                                cursor =
+                                  "cursor-not-allowed ring-2 ring-blue-500";
+                              } else if (isNotForSale) {
                                 fillStyle = {
                                   backgroundColor: tpl + "59",
                                   borderColor: tpl,
@@ -9374,6 +9905,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     ...fillStyle,
                                   }}
                                   onClick={() => {
+                                    // Editing an existing request → spaces are
+                                    // locked; only add-ons can change.
+                                    if (amendMode) return;
                                     // Sold / not-allowed / not-for-sale stalls
                                     // are visible but not selectable.
                                     if (
@@ -9692,11 +10226,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               {table.name}
                             </p>
                             <p className="text-gray-500">
-                              Row {table.rowNumber} • {table.tableType}
+                              {table.rowNumber ? `Row ${table.rowNumber} • ` : ""}
+                              {table.tableType}
                             </p>
-                            <p className="text-gray-400">
-                              {table.width * 10}cm × {table.height * 10}cm
-                            </p>
+                            {Number.isFinite(table.width) &&
+                              Number.isFinite(table.height) && (
+                                <p className="text-gray-400">
+                                  {table.width * 10}cm × {table.height * 10}cm
+                                </p>
+                              )}
                           </div>
                           <div className="text-right">
                             {table.appliedTier === "member" &&
@@ -9883,29 +10421,64 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 </Card>
               </div>
 
+              {/* In an edit, show the extra owed for the changed add-ons. */}
+              {amendMode && (
+                <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-center">
+                  <span className="text-sm text-gray-600">
+                    Additional to pay for edited add-ons:{" "}
+                  </span>
+                  <span className="text-lg font-bold text-blue-700">
+                    {formatPrice(amendExtra)}
+                  </span>
+                  {amendExtra === 0 && (
+                    <p className="text-xs text-gray-500">
+                      No extra charge — awaits organizer confirmation.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-3 items-center">
+                {amendMode ? (
+                  <Button
+                    onClick={handleAmendmentSubmit}
+                    disabled={amendSubmitting}
+                    className="w-full sm:w-auto sm:px-10"
+                    size="lg"
+                    style={{ backgroundColor: design?.primaryColor || "#2563eb" }}
+                  >
+                    {amendSubmitting
+                      ? "Submitting…"
+                      : amendExtra > 0
+                        ? "Submit & pay difference"
+                        : "Submit changes"}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleTableSelectionSubmit}
+                    disabled={
+                      loading ||
+                      selectedTables.length === 0 ||
+                      !allMandatoryTermsAccepted()
+                    }
+                    className="w-full sm:w-auto sm:px-10"
+                    size="lg"
+                  >
+                    {loading ? "Processing..." : "Proceed to Payment"}
+                  </Button>
+                )}
                 <Button
-                  onClick={handleTableSelectionSubmit}
-                  disabled={
-                    loading ||
-                    selectedTables.length === 0 ||
-                    !allMandatoryTermsAccepted()
+                  onClick={() =>
+                    amendMode ? resetAmend() : setShowTableSelection(false)
                   }
-                  className="w-full sm:w-auto sm:px-10"
-                  size="lg"
-                >
-                  {loading ? "Processing..." : "Proceed to Payment"}
-                </Button>
-                <Button
-                  onClick={() => setShowTableSelection(false)}
                   variant="outline"
                   className="w-full sm:w-auto"
-                  disabled={loading}
+                  disabled={loading || amendSubmitting}
                 >
                   Cancel
                 </Button>
-                {!allMandatoryTermsAccepted() && (
+                {!amendMode && !allMandatoryTermsAccepted() && (
                   <p className="text-xs text-red-500 flex items-center gap-1">
                     <AlertCircle className="h-3 w-3" />
                     Accept all mandatory terms first

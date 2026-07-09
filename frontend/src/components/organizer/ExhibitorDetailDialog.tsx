@@ -132,6 +132,17 @@ export interface ExhibitorDetailDialogProps {
   /** When provided, shows the "Confirm Payment" action bar (organizer only).
    * Receives the current stall so the caller can open its payment dialog. */
   onConfirmPayment?: (stall: StallRequest) => void;
+  /** When provided AND the stall has a paid, pending "Edit Request", shows the
+   * amendment-approval card (organizer only). Receives the current stall. */
+  onConfirmAmendment?: (stall: StallRequest) => void;
+  /** When provided AND the stall has a pending cancellation request, shows the
+   * approve/reject card (organizer only). Receives the stall, the decision, and
+   * the organizer's note (e.g. refund details). */
+  onDecideCancellation?: (
+    stall: StallRequest,
+    approve: boolean,
+    note: string,
+  ) => void;
   /** When provided, shows the "Deposit Returned" button after checkout
    * (organizer only — volunteers can view but not return deposits). */
   onReturnDeposit?: (stall: StallRequest) => void;
@@ -153,6 +164,8 @@ export function ExhibitorDetailDialog({
   stallRequest,
   detailRef,
   onConfirmPayment,
+  onConfirmAmendment,
+  onDecideCancellation,
   onReturnDeposit,
   onSharePDF,
   isGeneratingPDF,
@@ -166,6 +179,8 @@ export function ExhibitorDetailDialog({
   const [noteFormOpen, setNoteFormOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [isAddingNote, setIsAddingNote] = useState(false);
+  // Organizer's note (refund details) for a cancellation decision.
+  const [cancelNote, setCancelNote] = useState("");
 
   // Fallback "addedBy" derived from JWT (email + first role). Callers can
   // override via `currentUserDisplay` when they have richer info.
@@ -346,6 +361,175 @@ export function ExhibitorDetailDialog({
                         <CreditCard className="h-3.5 w-3.5 mr-1.5" />
                         Confirm Payment
                       </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+            {/* Edit Request (amendment) approval — organizer only, shown when
+                the vendor edited a completed booking and paid any difference. */}
+            {onConfirmAmendment &&
+              (stallRequest as any).pendingAmendment?.status ===
+                "paid_pending_confirm" &&
+              (() => {
+                const pa: any = (stallRequest as any).pendingAmendment;
+                return (
+                  <Card className="border-amber-300 bg-amber-50">
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 text-amber-700" />
+                        <p className="font-semibold text-sm text-amber-900">
+                          Vendor edited this request
+                        </p>
+                        <Badge className="bg-amber-200 text-amber-800">
+                          Approval needed
+                        </Badge>
+                      </div>
+                      <div className="rounded-lg border border-amber-200 bg-white p-3 text-sm space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Operators</span>
+                          <span className="font-medium">
+                            {(stallRequest as any).noOfOperators || "—"} →{" "}
+                            <span className="text-amber-700 font-bold">
+                              {pa.noOfOperators}
+                            </span>
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Updated add-ons</span>
+                          <ul className="mt-1 space-y-0.5">
+                            {(pa.selectedAddOns || []).map(
+                              (a: any, i: number) => (
+                                <li
+                                  key={i}
+                                  className="flex justify-between text-gray-700"
+                                >
+                                  <span>
+                                    {a.name} × {a.quantity}
+                                  </span>
+                                  <span className="font-medium">
+                                    {formatPrice(
+                                      (a.price || 0) * (a.quantity || 0),
+                                    )}
+                                  </span>
+                                </li>
+                              ),
+                            )}
+                          </ul>
+                        </div>
+                        <div className="flex justify-between border-t border-amber-100 pt-2">
+                          <span className="text-gray-500">
+                            Difference paid by vendor
+                          </span>
+                          <span className="font-bold text-green-700">
+                            {formatPrice(pa.amountDue || 0)}
+                          </span>
+                        </div>
+                        {pa.transactionId && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Transaction ID</span>
+                            <span className="font-mono text-xs">
+                              {pa.transactionId}
+                            </span>
+                          </div>
+                        )}
+                        {pa.transactionScreenshot && (
+                          <a
+                            href={`${apiURL.replace(/\/$/, "")}${pa.transactionScreenshot}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-blue-600 underline"
+                          >
+                            View payment screenshot
+                          </a>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs text-amber-700">
+                          Approving applies the changes, re-issues a new QR to the
+                          vendor by email, and invalidates the old QR.
+                        </p>
+                        <Button
+                          size="sm"
+                          className="bg-amber-600 hover:bg-amber-700 shrink-0"
+                          onClick={() => onConfirmAmendment(stallRequest)}
+                        >
+                          <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
+                          Approve &amp; re-issue QR
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+            {/* Cancellation / delete request — organizer approves (frees the
+                space, kills the QR, emails the vendor a refund note) or rejects. */}
+            {onDecideCancellation &&
+              (stallRequest as any).pendingCancellation?.status ===
+                "requested" && (
+                <Card className="border-red-300 bg-red-50">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 text-red-700" />
+                      <p className="font-semibold text-sm text-red-900">
+                        Vendor requested cancellation
+                      </p>
+                      <Badge className="bg-red-200 text-red-800">
+                        Decision needed
+                      </Badge>
+                    </div>
+                    <div className="rounded-lg border border-red-200 bg-white p-3 text-sm">
+                      <p className="text-xs text-gray-500">Reason</p>
+                      <p className="text-gray-800">
+                        {(stallRequest as any).pendingCancellation?.reason ||
+                          "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-600">
+                        Note to vendor (e.g. when the refund will be returned) —
+                        emailed to them
+                      </Label>
+                      <Textarea
+                        value={cancelNote}
+                        onChange={(e) => setCancelNote(e.target.value)}
+                        placeholder="e.g. Your deposit will be refunded within 5–7 business days to your original payment method."
+                        rows={3}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-red-700">
+                        Approving frees the space and invalidates the QR.
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            onDecideCancellation(
+                              stallRequest,
+                              false,
+                              cancelNote,
+                            );
+                            setCancelNote("");
+                          }}
+                        >
+                          Reject
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="bg-red-600 hover:bg-red-700"
+                          onClick={() => {
+                            onDecideCancellation(stallRequest, true, cancelNote);
+                            setCancelNote("");
+                          }}
+                        >
+                          <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
+                          Approve &amp; free space
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

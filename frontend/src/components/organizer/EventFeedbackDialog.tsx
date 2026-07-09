@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Star, RefreshCcw, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscription } from "@/hooks/useSubscription";
+import PaymentFeedbackPanel from "./PaymentFeedbackPanel";
 
 const apiURL = __API_URL__;
 
@@ -82,11 +83,13 @@ function Stars({ value }: { value: number }) {
 export function EventFeedbackDialog({
   eventId,
   eventTitle,
+  organizerId,
   open,
   onOpenChange,
 }: {
   eventId: string | null;
   eventTitle?: string;
+  organizerId?: string;
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
@@ -316,6 +319,18 @@ export function EventFeedbackDialog({
               );
             })}
           </Tabs>
+        )}
+
+        {/* Post-payment feedback for THIS event (rated by payers at checkout).
+            Independent of the event-feedback plan gating above. */}
+        {organizerId && (eventId || eventTitle) && (
+          <div className="mt-4">
+            <PaymentFeedbackPanel
+              organizerId={organizerId}
+              eventId={eventId || undefined}
+              eventTitle={eventTitle}
+            />
+          </div>
         )}
       </DialogContent>
     </Dialog>
