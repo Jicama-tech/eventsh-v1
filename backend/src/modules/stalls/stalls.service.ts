@@ -751,7 +751,7 @@ export class StallsService {
   /**
    * Confirm payment - Generate QR Code and Stall Ticket PDF (Same as tickets.service.ts)
    */
-  async confirmPayment(stallId: string, notes?: string) {
+  async confirmPayment(stallId: string, notes?: string, changedBy?: string) {
     try {
       if (!Types.ObjectId.isValid(stallId)) {
         throw new BadRequestException("Invalid stall ID format");
@@ -798,7 +798,9 @@ export class StallsService {
         status: "Completed" as any,
         note: notes || "Payment confirmed. Stall completed.",
         changedAt: new Date(),
-        changedBy: "System",
+        // Actor comes from the caller (resolved from their JWT): operator name
+        // or "Organizer". Falls back to Organizer when not supplied.
+        changedBy: changedBy || "Organizer",
       });
 
       await stall.save();
@@ -1470,9 +1472,10 @@ export class StallsService {
         }
       }
 
-      // Free the space back to the layout, then DELETE the booking entirely so
-      // it disappears from the exhibitor/participants list (same as the manual
-      // "Delete stall" action). The QR dies with the record — a scan now 404s.
+      // Free the space back to the layout, then SOFT-cancel the booking (keep
+      // the record). The organizer still needs to see it to settle the refund /
+      // deposit, so it stays in the exhibitor/participants list marked
+      // Cancelled. Its QR is void via the Cancelled-status guard in scanStallQR.
       await this.releaseStallTables(stall);
 
       // Email the vendor BEFORE deleting (we still have their details on hand):
@@ -1503,13 +1506,27 @@ export class StallsService {
         }
       }
 
-      await this.stallModel.findByIdAndDelete(stall._id);
+      const actor = (dto.changedBy || "").trim() || "Organizer";
+      stall.status = "Cancelled" as any;
+      pc.status = "approved";
+      pc.organizerNote = note;
+      pc.resolvedAt = new Date();
+      stall.statusHistory.push({
+        status: "Cancelled" as any,
+        note: `Cancellation approved by ${actor} — booking cancelled & space freed. Kept in the list for refund/records.${
+          note ? ` Organizer note: ${note}` : ""
+        }`,
+        changedAt: new Date(),
+        changedBy: actor,
+      });
+      stall.markModified("pendingCancellation");
+      await stall.save();
 
       return {
         success: true,
         message:
-          "Cancellation approved. Booking deleted, space freed, vendor notified.",
-        data: null,
+          "Cancellation approved. Booking cancelled (kept in list), space freed, vendor notified.",
+        data: stall,
       };
     }
 
@@ -2801,8 +2818,12 @@ Thank you for choosing Eventsh! 🎊`;
         );
       }
 
-      const existingRequest = await this.stallModel
-        .findOne({
+      // Fetch ALL requests this vendor has for this event (newest first). A
+      // vendor can legitimately hold several — e.g. a Completed booking plus a
+      // freshly registered Pending one — and the storefront needs the full list
+      // so none stays hidden behind the most-recent one.
+      const allRequests = await this.stallModel
+        .find({
           shopkeeperId: new Types.ObjectId(shopkeeperId),
           eventId: new Types.ObjectId(eventId),
         })
@@ -2815,13 +2836,16 @@ Thank you for choosing Eventsh! 🎊`;
           },
           { path: "organizerId" },
         ])
-        .sort({ createdAt: -1 }); // Get most recent request
+        .sort({ createdAt: -1 });
+
+      const existingRequest = allRequests[0] || null;
 
       if (!existingRequest) {
         return {
           success: true,
           message: "No existing request found",
           data: null,
+          requests: [],
         };
       }
 
@@ -2834,6 +2858,7 @@ Thank you for choosing Eventsh! 🎊`;
           status: existingRequest.status,
           message: `Existing request is ${existingRequest.status}`,
           data: existingRequest,
+          requests: allRequests,
         };
       }
 
@@ -2841,6 +2866,7 @@ Thank you for choosing Eventsh! 🎊`;
         success: true,
         message: "Existing request found",
         data: existingRequest,
+        requests: allRequests,
       };
     } catch (error) {
       return {
@@ -3296,7 +3322,7 @@ Thank you for choosing Eventsh! 🎊`;
     return this.stallModel.findByIdAndUpdate(stallId, updateData, { new: true });
   }
 
-  async remove(id: string) {
+  async remove(id: string, changedBy?: string) {
     try {
       if (!Types.ObjectId.isValid(id)) {
         throw new BadRequestException("Invalid stall ID format");
@@ -3314,12 +3340,24 @@ Thank you for choosing Eventsh! 🎊`;
       // map / availability immediately.
       await this.releaseStallTables(stall);
 
-      await this.stallModel.findByIdAndDelete(id);
+      // SOFT delete — the organizer often needs to still see a "deleted" stall
+      // to settle its refund/deposit. Mark it Cancelled and keep the record so
+      // it stays in the Participants list (its QR is already void via the
+      // Cancelled-status guard in scanStallQR). We do NOT drop it from the DB.
+      const actor = (changedBy || "").trim() || "Organizer";
+      stall.status = "Cancelled" as any;
+      stall.statusHistory.push({
+        status: "Cancelled" as any,
+        note: `Stall deleted by ${actor} — space freed. Kept in the list for refund/records.`,
+        changedAt: new Date(),
+        changedBy: actor,
+      });
+      await stall.save();
 
       return {
         success: true,
-        message: "Stall deleted successfully",
-        data: null,
+        message: "Stall deleted (kept in list for records) and space freed.",
+        data: stall,
       };
     } catch (error) {
       return {
@@ -3466,7 +3504,7 @@ Thank you for choosing Eventsh! 🎊`;
     }
   }
 
-  async returnedDeposit(stallId: string, notes: string) {
+  async returnedDeposit(stallId: string, notes: string, changedBy?: string) {
     try {
       const stall = await this.stallModel.findById(stallId);
 
@@ -3479,7 +3517,7 @@ Thank you for choosing Eventsh! 🎊`;
           status: "Returned" as any,
           note: notes,
           changedAt: now,
-          changedBy: "organizer",
+          changedBy: changedBy || "Organizer",
         });
 
         await stall.save();

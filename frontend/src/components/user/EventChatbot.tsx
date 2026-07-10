@@ -83,7 +83,7 @@ export function EventChatbot({
     {
       role: "assistant",
       ts: Date.now(),
-      content: `Hi! I'm **${name}**. Ask me anything about this event — timings, details, the organizer, or how to get in touch.`,
+      content: `Hi, welcome! 👋 I'm **${name}**, here to help you with anything about this event. Tap an option below, or just ask me and I'll help you out.`,
       quickActions:
         greetingActions && greetingActions.length
           ? greetingActions

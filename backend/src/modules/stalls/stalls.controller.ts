@@ -5,6 +5,7 @@ import {
   Body,
   Patch,
   Param,
+  Query,
   Delete,
   HttpCode,
   HttpStatus,
@@ -232,6 +233,7 @@ export class StallsController {
     return await this.stallsService.confirmPayment(
       confirmPaymentDto.stallId,
       confirmPaymentDto.notes,
+      confirmPaymentDto.changedBy,
     );
   }
 
@@ -454,9 +456,12 @@ export class StallsController {
    * DELETE /stalls/:id
    */
   @Delete(":id")
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@Param("id") id: string) {
-    return await this.stallsService.remove(id);
+  @HttpCode(HttpStatus.OK)
+  async remove(
+    @Param("id") id: string,
+    @Query("changedBy") changedBy?: string,
+  ) {
+    return await this.stallsService.remove(id, changedBy);
   }
 
   /**
@@ -475,7 +480,11 @@ export class StallsController {
 
   @Patch(":id/return-deposit")
   @HttpCode(HttpStatus.OK)
-  async returnDeposit(@Param("id") id: string, @Body("notes") notes: string) {
-    return await this.stallsService.returnedDeposit(id, notes);
+  async returnDeposit(
+    @Param("id") id: string,
+    @Body("notes") notes: string,
+    @Body("changedBy") changedBy: string,
+  ) {
+    return await this.stallsService.returnedDeposit(id, notes, changedBy);
   }
 }
