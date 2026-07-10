@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { jwtDecode } from "jwt-decode";
 import { useCountry } from "@/hooks/useCountry";
-import { useSubscription } from "@/hooks/useSubscription";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InlineWalkinForm } from "./InlineWalkinForm";
@@ -37,6 +36,7 @@ import {
   Loader2,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
   TrendingUp,
   Ticket,
   Calendar,
@@ -1215,7 +1215,6 @@ export function ChatbotWidget({
   //   2. useCountry() context (set by OrganizerDashboard from /organizers/profile)
   //   3. fallback to "US"
   const { country: ctxCountry } = useCountry();
-  const { subscription } = useSubscription();
   const effectiveCountry = (
     orgInfo?.country ||
     ctxCountry ||
@@ -1652,29 +1651,37 @@ export function ChatbotWidget({
             </div>
           </div>
 
-          {/* SUBSCRIPTION MARQUEE — quiet scrolling status bar. White
-              background so it stays out of the way; blue text + faint pill
-              fills so the info is legible without competing with chat. */}
-          {subscription && subscription.subscribed && (
+          {/* PENDING-REQUESTS MARQUEE — quiet scrolling status bar showing how
+              many exhibitor requests need attention (approval / payment /
+              update / deletion). White background so it stays out of the way. */}
+          {pendApproval.length +
+            pendPayment.length +
+            pendEdit.length +
+            pendCancel.length >
+            0 && (
             <div
-              className="relative overflow-hidden border-b border-slate-200 bg-white text-blue-700 px-2 py-2 flex-shrink-0"
+              className="relative overflow-hidden border-b border-slate-200 bg-white px-2 py-2 flex-shrink-0"
               role="status"
-              aria-label={`Subscription: ${subscription.planName}, ${
-                subscription.fullyLapsed
-                  ? "expired"
-                  : `${subscription.daysLeft} days left`
-              }`}
+              aria-label="Pending requests"
             >
               <div className="flex w-max animate-marquee whitespace-nowrap hover:[animation-play-state:paused]">
-                <SubscriptionMarqueeRow
-                  subscription={subscription}
-                  country={ctxCountry}
+                <PendingMarqueeRow
+                  pending={{
+                    approval: pendApproval.length,
+                    payment: pendPayment.length,
+                    edit: pendEdit.length,
+                    cancel: pendCancel.length,
+                  }}
                 />
                 {/* second copy — required by the -50% keyframe so the loop
                     feels seamless instead of snapping back */}
-                <SubscriptionMarqueeRow
-                  subscription={subscription}
-                  country={ctxCountry}
+                <PendingMarqueeRow
+                  pending={{
+                    approval: pendApproval.length,
+                    payment: pendPayment.length,
+                    edit: pendEdit.length,
+                    cancel: pendCancel.length,
+                  }}
                   ariaHidden
                 />
               </div>
@@ -2748,56 +2755,18 @@ function EventPickerForm({
 }
 
 /**
- * One pass of the scrolling subscription banner. We render two copies inside
- * the marquee container so the -50% translateX loop feels seamless.
+ * One pass of the scrolling pending-requests banner. Shows how many exhibitor
+ * requests need attention, colour-keyed to the greeting pills. Two copies are
+ * rendered inside the marquee container so the -50% translateX loop is seamless.
  */
-function SubscriptionMarqueeRow({
-  subscription,
-  country,
+function PendingMarqueeRow({
+  pending,
   ariaHidden,
 }: {
-  subscription: {
-    planName: string | null;
-    pricePaid: string | null;
-    planExpiryDate: string | null;
-    daysLeft: number;
-    fullyLapsed: boolean;
-    inGracePeriod: boolean;
-    graceDaysLeft: number;
-  };
-  country?: string;
+  /** Live pending-request counts. */
+  pending: { approval: number; payment: number; edit: number; cancel: number };
   ariaHidden?: boolean;
 }) {
-  const symbol = country === "IN" ? "₹" : country === "SG" ? "SG$" : "$";
-  const validTill = subscription.planExpiryDate
-    ? new Date(subscription.planExpiryDate).toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })
-    : "—";
-
-  // Status pill — color + label vary with the lifecycle stage so a renewal
-  // nudge is loud when the plan is expiring.
-  let statusIcon = <Clock className="h-3.5 w-3.5" />;
-  let statusLabel = `${subscription.daysLeft} day${
-    subscription.daysLeft === 1 ? "" : "s"
-  } left`;
-  let statusTint = "bg-blue-50 text-blue-700";
-  if (subscription.fullyLapsed) {
-    statusIcon = <AlertTriangle className="h-3.5 w-3.5" />;
-    statusLabel = "Plan expired — renew now";
-    statusTint = "bg-rose-50 text-rose-700";
-  } else if (subscription.inGracePeriod) {
-    statusIcon = <AlertTriangle className="h-3.5 w-3.5" />;
-    statusLabel = `Grace period — ${subscription.graceDaysLeft} day${
-      subscription.graceDaysLeft === 1 ? "" : "s"
-    } to renew`;
-    statusTint = "bg-amber-50 text-amber-700";
-  } else if (subscription.daysLeft <= 7) {
-    statusTint = "bg-amber-50 text-amber-700";
-  }
-
   const Item = ({
     icon,
     children,
@@ -2822,21 +2791,50 @@ function SubscriptionMarqueeRow({
       className="flex items-center gap-3 pr-8 shrink-0"
       aria-hidden={ariaHidden}
     >
-      <Item icon={<Crown className="h-3.5 w-3.5" />}>
-        {subscription.planName || "—"}
+      <Item
+        icon={<Clock className="h-3.5 w-3.5" />}
+        tint="bg-slate-100 text-slate-600"
+      >
+        Pending requests
       </Item>
-      {subscription.pricePaid ? (
-        <Item icon={<Zap className="h-3.5 w-3.5" />}>
-          {symbol}
-          {subscription.pricePaid} paid
+      {/* Counts — same colour key as the greeting pills:
+          Yellow=approval, Green=payment, Blue=update/edit, Red=deletion. */}
+      {pending.approval > 0 && (
+        <Item
+          icon={<span className="w-2 h-2 rounded-full bg-amber-500" />}
+          tint="bg-amber-50 text-amber-700"
+        >
+          {pending.approval} pending approval
+          {pending.approval === 1 ? "" : "s"}
         </Item>
-      ) : null}
-      <Item icon={statusIcon} tint={statusTint}>
-        {statusLabel}
-      </Item>
-      <Item icon={<CalendarCheck className="h-3.5 w-3.5" />}>
-        Valid till {validTill}
-      </Item>
+      )}
+      {pending.payment > 0 && (
+        <Item
+          icon={<span className="w-2 h-2 rounded-full bg-emerald-500" />}
+          tint="bg-emerald-50 text-emerald-700"
+        >
+          {pending.payment} pending payment
+          {pending.payment === 1 ? "" : "s"}
+        </Item>
+      )}
+      {pending.edit > 0 && (
+        <Item
+          icon={<span className="w-2 h-2 rounded-full bg-blue-500" />}
+          tint="bg-blue-50 text-blue-700"
+        >
+          {pending.edit} pending update
+          {pending.edit === 1 ? "" : "s"}
+        </Item>
+      )}
+      {pending.cancel > 0 && (
+        <Item
+          icon={<span className="w-2 h-2 rounded-full bg-rose-500" />}
+          tint="bg-rose-50 text-rose-700"
+        >
+          {pending.cancel} pending deletion
+          {pending.cancel === 1 ? "" : "s"}
+        </Item>
+      )}
       <span className="text-slate-300">•</span>
     </div>
   );

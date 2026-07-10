@@ -3074,6 +3074,27 @@ ${context}
       return picker;
     }
 
+    // Deterministic short-circuit: pending exhibitor queues (approval /
+    // payment / edit / cancellation). The LLM was unreliable here — it would
+    // answer counts from conversation history WITHOUT re-calling the tool, so
+    // the tappable records never came through, and sometimes reported stale or
+    // wrong counts. Running the tool directly guarantees fresh counts AND the
+    // record rows for ANY phrasing the organizer types.
+    const pendingQueue = await this.maybePendingQueue(
+      message,
+      organizerId,
+      currency,
+    );
+    if (pendingQueue) {
+      history.push({
+        role: "assistant",
+        content: pendingQueue.text,
+        ts: Date.now(),
+      });
+      this.trimHistory(organizerId);
+      return pendingQueue;
+    }
+
     // Deterministic short-circuit: org-wide list intents (visitors,
     // exhibitors, space templates). Bypasses the LLM completely so 100+
     // rows render in ~100ms (Mongo query + string format) instead of
@@ -3862,6 +3883,114 @@ ${context}
    *  return a deterministic event picker payload. Frontend renders a
    *  dropdown form so the user picks the event explicitly — avoids the
    *  LLM guessing "latest". */
+  /** Pending exhibitor queues (approval / payment / edit / cancellation) as a
+   *  deterministic intent. Matches ANY phrasing the organizer might type —
+   *  "pending vendor requests", "pending exhibitor payment", "stall deletion
+   *  requests", "edit requests from vendors", etc. — runs the matching tool
+   *  and returns fresh counts PLUS the tappable record rows every time. */
+  private async maybePendingQueue(
+    message: string,
+    organizerId: string,
+    currency: { symbol: string; code: string; locale: string },
+  ): Promise<{
+    text: string;
+    records?: any[];
+    quickActions?: Array<{ label: string; action: string }>;
+  } | null> {
+    const m = (message || "").toLowerCase().trim();
+    if (!m) return null;
+
+    // Must reference the exhibitor/stall domain OR a bare "request(s)" so we
+    // don't hijack unrelated "pending" talk (e.g. "pending events").
+    const domain =
+      /\b(vendor|vendors|exhibitor|exhibitors|stall|stalls|booth|booths|booking|bookings|request|requests)\b/.test(
+        m,
+      );
+
+    const isCancel =
+      /\b(cancellation|cancellations|deletion|deletions)\b/.test(m) ||
+      (/\b(cancel|delete)\b/.test(m) && domain);
+    const isEdit =
+      /\b(amendment|amendments|amend)\b/.test(m) ||
+      (/\b(edit|edits|update|updates|updated|modify|modification)\b/.test(m) &&
+        domain);
+    const isPending =
+      /\bpending\b/.test(m) ||
+      /\bawaiting\b/.test(m) ||
+      /\bneeds?\s+(my\s+)?attention\b/.test(m) ||
+      (/\b(approval|approvals|approve|payment|payments|pay|confirm|unconfirmed)\b/.test(
+        m,
+      ) &&
+        domain);
+
+    // Every branch needs at least a hint of the exhibitor domain to fire.
+    if (!domain && !/\bpending\b|\bawaiting\b/.test(m)) return null;
+
+    const stallPills = [
+      { label: "Stall analytics", action: "Show stall analytics" },
+      { label: "List exhibitors", action: "List my exhibitors" },
+    ];
+
+    // Priority: cancellation > edit > pending, so "pending cancellation" routes
+    // to the cancellation queue rather than the generic pending one.
+    if (isCancel) {
+      const r: any = await this.runTool(
+        "list_stall_cancellations",
+        {},
+        organizerId,
+        currency,
+      );
+      const records = Array.isArray(r?.records) ? r.records : [];
+      return {
+        text: records.length
+          ? `**${records.length} cancellation / deletion request${
+              records.length === 1 ? "" : "s"
+            }** — tap any below to review.`
+          : "**No pending cancellation / deletion requests.**",
+        ...(records.length ? { records } : {}),
+        quickActions: stallPills,
+      };
+    }
+    if (isEdit) {
+      const r: any = await this.runTool(
+        "list_stall_edit_requests",
+        {},
+        organizerId,
+        currency,
+      );
+      const records = Array.isArray(r?.records) ? r.records : [];
+      return {
+        text: records.length
+          ? `**${records.length} edit / update request${
+              records.length === 1 ? "" : "s"
+            }** — tap any below to review.`
+          : "**No pending edit / update requests.**",
+        ...(records.length ? { records } : {}),
+        quickActions: stallPills,
+      };
+    }
+    if (isPending) {
+      const r: any = await this.runTool(
+        "list_exhibitor_pending",
+        {},
+        organizerId,
+        currency,
+      );
+      const records = Array.isArray(r?.records) ? r.records : [];
+      const a = Number(r?.approvalsCount || 0);
+      const p = Number(r?.paymentsCount || 0);
+      return {
+        text:
+          a + p > 0
+            ? `**${a} awaiting approval, ${p} awaiting payment — tap any below to open it.**`
+            : "**No exhibitor bookings need your attention right now.**",
+        ...(records.length ? { records } : {}),
+        quickActions: stallPills,
+      };
+    }
+    return null;
+  }
+
   /** Org-wide list intents (visitors / exhibitors / space templates) — pure
    *  data → markdown render. Skips the LLM entirely so 100+ rows return in
    *  ~100ms instead of 5-15s. */
