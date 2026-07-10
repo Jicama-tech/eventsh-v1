@@ -48,6 +48,7 @@ import {
   Ticket,
   Mail,
   Phone,
+  Globe,
   Calendar,
   MapPin,
   Clock,
@@ -1406,6 +1407,12 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                                 <Phone className="h-3 w-3" />
                                 {exhibitor.whatsapp || exhibitor.phone || "—"}
                               </span>
+                              {exhibitor.country && (
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Globe className="h-3 w-3" />
+                                  {exhibitor.country}
+                                </span>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell>
