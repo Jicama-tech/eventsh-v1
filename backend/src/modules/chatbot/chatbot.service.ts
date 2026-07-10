@@ -3,6 +3,7 @@ import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import OpenAI from "openai";
 import { buildDefaultStorefrontSettings } from "../organizer-stores/default-settings";
+import { StallsService } from "../stalls/stalls.service";
 import {
   GUIDE_INTRO,
   ORGANIZER_GUIDE_TOPICS,
@@ -365,6 +366,7 @@ export class ChatbotService {
     @InjectModel("User") private userModel: Model<any>,
     @InjectModel("Rsvp") private rsvpModel: Model<any>,
     @InjectModel("OrganizerStore") private organizerStoreModel: Model<any>,
+    private readonly stallsService: StallsService,
   ) {
     const useQwen = !!process.env.QWEN_API_KEY;
     const apiKey = useQwen
@@ -1073,6 +1075,109 @@ export class ChatbotService {
       },
     },
 
+    // Exhibitor operations — pending queues + one-click actions
+    {
+      type: "function",
+      function: {
+        name: "list_exhibitor_pending",
+        description:
+          "Return exhibitor/stall bookings that need the organizer's attention: those awaiting APPROVAL (vendor registered, not yet approved) and those awaiting PAYMENT confirmation (vendor submitted payment, not yet confirmed). Use for 'pending approvals', 'stalls waiting for approval', 'pending payments', 'which exhibitors are pending', 'what needs my attention for exhibitors'. Each row includes a short `ref` used by the action tools.",
+        parameters: { type: "object", properties: {}, required: [] },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "list_stall_edit_requests",
+        description:
+          "Return stall bookings with a pending 'Edit Request' (amendment) awaiting the organizer's approval — the vendor changed operators/add-ons and paid any difference. Use for 'pending edit requests', 'stall amendments to approve', 'which stalls were edited'. Each row includes a short `ref`.",
+        parameters: { type: "object", properties: {}, required: [] },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "list_stall_cancellations",
+        description:
+          "Return stall bookings with a pending cancellation/deletion request awaiting the organizer's decision, with the vendor's reason. Use for 'cancellation requests', 'stalls asking to cancel', 'pending cancellations'. Each row includes a short `ref`.",
+        parameters: { type: "object", properties: {}, required: [] },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_event_feedback",
+        description:
+          "Return ratings and comments left for an event, across visitors, exhibitors, speakers and round-table guests, plus post-payment feedback. Use for 'feedback for event X', 'ratings for X', 'what did people say about X'.",
+        parameters: {
+          type: "object",
+          properties: {
+            event_name: { type: "string", description: "The event title (or part of it)." },
+          },
+          required: ["event_name"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "confirm_stall_payment",
+        description:
+          "Confirm a stall/exhibitor payment — issues the QR booth ticket + free-entry coupon and emails the vendor. ONLY call when the organizer explicitly asks to confirm/approve a specific stall's payment. `ref` is the short reference from list_exhibitor_pending.",
+        parameters: {
+          type: "object",
+          properties: { ref: { type: "string", description: "Short stall reference from a pending list." } },
+          required: ["ref"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "approve_stall_amendment",
+        description:
+          "Approve a stall's pending Edit Request (amendment) — applies the operator/add-on changes and re-issues the QR (the old QR stops working). ONLY call when the organizer explicitly asks to approve a specific stall's edit. `ref` from list_stall_edit_requests.",
+        parameters: {
+          type: "object",
+          properties: { ref: { type: "string", description: "Short stall reference." } },
+          required: ["ref"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "resolve_stall_cancellation",
+        description:
+          "Approve or reject a stall's cancellation request. On approve the booking is deleted, the space freed and the QR killed; the vendor is emailed the note. ONLY call when the organizer explicitly decides on a specific stall. `ref` from list_stall_cancellations.",
+        parameters: {
+          type: "object",
+          properties: {
+            ref: { type: "string", description: "Short stall reference." },
+            approve: { type: "boolean", description: "true = approve & delete, false = reject & keep." },
+            note: { type: "string", description: "Note to the vendor, e.g. refund timing. Optional." },
+          },
+          required: ["ref", "approve"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "return_stall_deposit",
+        description:
+          "Mark a stall's security deposit as returned to the vendor (records it and notifies them). ONLY call when the organizer explicitly asks to return/refund a specific stall's deposit. `ref` from a pending/stall list.",
+        parameters: {
+          type: "object",
+          properties: {
+            ref: { type: "string", description: "Short stall reference." },
+            notes: { type: "string", description: "Optional note for the vendor." },
+          },
+          required: ["ref"],
+        },
+      },
+    },
+
     // UI driver
     {
       type: "function",
@@ -1110,6 +1215,7 @@ export class ChatbotService {
       "get_revenue_trend",
       "get_top_events",
       "get_pending_approvals",
+      "list_exhibitor_pending",
       "get_events_breakdown",
       "get_stalls_analytics",
       "get_speakers_analytics",
@@ -1156,6 +1262,14 @@ export class ChatbotService {
       "list_stalls",
       "get_stalls_analytics",
       "list_exhibitors",
+      "list_exhibitor_pending",
+      "list_stall_edit_requests",
+      "list_stall_cancellations",
+      "get_event_feedback",
+      "confirm_stall_payment",
+      "approve_stall_amendment",
+      "resolve_stall_cancellation",
+      "return_stall_deposit",
       "navigate_to",
     ],
     speakers: [
@@ -1187,7 +1301,7 @@ export class ChatbotService {
     // Feedback: same pattern — explain + navigate. List events so the bot
     // can answer "show feedback for event X" by sending the user to the
     // right place.
-    feedback: ["list_events", "navigate_to"],
+    feedback: ["list_events", "get_event_feedback", "navigate_to"],
     general: [
       "get_dashboard_stats",
       "get_organizer_info",
@@ -1207,6 +1321,14 @@ export class ChatbotService {
       "list_space_templates",
       "list_visitors",
       "list_exhibitors",
+      "list_exhibitor_pending",
+      "list_stall_edit_requests",
+      "list_stall_cancellations",
+      "get_event_feedback",
+      "confirm_stall_payment",
+      "approve_stall_amendment",
+      "resolve_stall_cancellation",
+      "return_stall_deposit",
       "navigate_to",
     ],
   };
@@ -1350,7 +1472,22 @@ Focus: vendor registrations + stall analytics.
 - "All approved stalls" → list_stalls(status=approved).
 - "Show stalls for <event>" / "stalls for <event>" → list_stalls(event_name=<event>). Render this EXACT table: | Vendor | Business | Status | Payment | Total | Paid |. Use the per-event tool result fields.
 - "Stall analytics" / "stall stats" / "stall revenue" / "stall breakdown" / "how many stalls do I have" → get_stalls_analytics. Render: a "By Status" table, a "By Payment Status" table, a small totals table (Total Stalls / Booking Value / Collected), then a "Top Events by Stall Count" table.
-- For approving/rejecting an individual stall, call navigate_to(users) (tell user "Open Exhibitors/Visitors tab to approve").
+
+PENDING QUEUES (exhibitors that need your attention):
+IMPORTANT: for the three pending-queue tools below the INTERFACE renders each item as a tappable row the organizer can click to open it in Participants. So DO NOT draw a markdown table for these — reply with a SHORT one-line count summary ONLY (the tappable rows appear beneath your text automatically).
+- "Pending approvals" / "stalls waiting for approval" / "pending payments" / "which exhibitors are pending" / "what needs my attention" → list_exhibitor_pending. Reply with ONE line of counts, e.g. "**2 awaiting approval, 1 awaiting payment — tap any below to open it.**". If both counts are 0, say "**No exhibitor bookings need your attention.**". No table.
+- "Pending edit requests" / "stall amendments to approve" / "which stalls were edited" → list_stall_edit_requests. Reply with ONE line, e.g. "**3 edit requests — tap any to review.**" (or "**No pending edit requests.**"). No table.
+- "Cancellation requests" / "stalls asking to cancel" / "pending cancellations" → list_stall_cancellations. Reply with ONE line, e.g. "**2 cancellation requests — tap any to review.**" (or "**No pending cancellation requests.**"). No table.
+- "Feedback for <event>" / "ratings for <event>" → get_event_feedback(event_name). Lead with "**{avg}★ from {count}**", then a table | From | Rating | Comment |.
+
+ACTIONS (only on an EXPLICIT request that names a Ref from a list above):
+- "Confirm payment for <ref>" → confirm_stall_payment(ref).
+- "Approve the edit for <ref>" → approve_stall_amendment(ref).
+- "Approve cancellation for <ref>" / "Reject cancellation for <ref>" → resolve_stall_cancellation(ref, approve, note). approve=true to approve, false to reject.
+- NOTE on deleted stalls: approving a cancellation (or deleting a stall) does NOT erase it — the booking is marked **Cancelled**, its space is freed and its QR voided, but it STAYS in the list so the organizer can still settle the refund/deposit. If asked "where did the deleted stall go", explain it's kept and shows as Cancelled.
+- "Return the deposit for <ref>" → return_stall_deposit(ref).
+- After the tool returns, report its "message" verbatim. NEVER perform an action without a Ref the user explicitly gave — if they say "confirm the payment" with no ref, first call list_exhibitor_pending and ask WHICH one (by Ref).
+- For editing a stall's fields, call navigate_to(users) ("Open Exhibitors/Visitors tab").
 
 EMPTY RESULTS:
 - If list_stalls returns an empty array, render this exact reply and STOP:
@@ -1406,8 +1543,9 @@ Common questions:
 - "What is feedback?" / "Show me feedback" / "View feedback" → Brief 2-line explanation, then call navigate_to({tab:"feedback"}).
 - "Feedback for event X" / "Ratings for event X" → call list_events to confirm the event exists, then call navigate_to({tab:"feedback"}) — the tab opens the per-event feedback dialog.
 - "Open feedback" / "Go to feedback" → call navigate_to({tab:"feedback"}).
+- "Feedback for <event>" / "ratings for <event>" / "what did people say about <event>" → get_event_feedback(event_name=<event>). Lead with "**{avg}★ from {count}**", then a table | From | Rating | Comment |. This covers visitors, exhibitors, speakers, round-table guests AND post-payment feedback. If count is 0, say "**No feedback yet for {event}.**".
 - "Why can't I see Visitors feedback?" / "Why is the X audience missing?" → Explain: the plan's Feedback module controls per-audience access (Visitors / Exhibitors / Speakers / Round Tables). If an audience is missing, the active plan didn't include it — direct the user to Settings → Subscription to upgrade. Then optionally navigate_to({tab:"settings"}).
-- Never invent ratings or counts — feedback data isn't exposed via tools yet; always send the user to the tab to view it.`,
+- Never invent ratings or counts — always read them with get_event_feedback, or send the user to the tab.`,
 
     general: `You are the EventSH AI assistant for "{ORG}".
 You help organizers with events, tickets, attendees, vendors, speakers, plans, settings, platform fees, and feedback.
@@ -2217,7 +2355,11 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     const qa: Array<{ label: string; action: string; intent?: string }> = [
       { label: "When & where?", action: "When and where is this event?" },
     ];
-    const hasTickets = (ev.visitorTypes || []).length > 0 || !!ev.ticketPrice;
+    // Visitor/ticketing is gated SOLELY on visitor types — that's exactly what
+    // the eventfront page uses to render its ticket-buying UI. A stray
+    // ticketPrice value must NOT surface a "Buy tickets" pill when the event has
+    // no visitor types (no purchase UI exists for it).
+    const hasTickets = (ev.visitorTypes || []).length > 0;
     const hasStalls = (ev.tableTemplates || []).length > 0;
     const hasSpeakers =
       (ev.speakers || []).length > 0 ||
@@ -2374,8 +2516,8 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     }
 
     const orgLabel = org?.organizationName || org?.name || "the organizer";
-    const system = `You are "${botName}", a friendly assistant embedded on the public page of a single event hosted by ${orgLabel} on EventSH.
-Your audience is the general public visiting this page: potential VISITORS (ticket buyers), VENDORS/EXHIBITORS (stall bookers), SPEAKERS (applicants), and ROUND-TABLE guests.
+    const system = `You are "${botName}", the official event assistant speaking ON BEHALF OF ${orgLabel}, the host of this event, to the guests on its public page.
+Speak as the host's own representative — warm, welcoming and personal, exactly as if ${orgLabel} were greeting the guest themselves. Use first person for the organizer ("we", "our event", "we'd love to host you") and address the guest directly as "you". Your audience is the general public visiting this page: potential VISITORS (ticket buyers), VENDORS/EXHIBITORS (stall bookers), SPEAKERS (applicants), and ROUND-TABLE guests — welcome whichever they are and guide them like a gracious host.
 
 STRICT RULES:
 1. SCOPE — Answer ONLY questions about THIS event or its organizer (${orgLabel}). If the question is about anything else — general knowledge, other companies/events, weather, news, math, coding, writing/jokes, personal advice, or anything not covered by the EVENT CONTEXT below — do NOT answer it, even if you know the answer. Reply in ONE short sentence: "I can only help with questions about this event and its organizer." Then stop.
@@ -2932,6 +3074,27 @@ ${context}
       return picker;
     }
 
+    // Deterministic short-circuit: pending exhibitor queues (approval /
+    // payment / edit / cancellation). The LLM was unreliable here — it would
+    // answer counts from conversation history WITHOUT re-calling the tool, so
+    // the tappable records never came through, and sometimes reported stale or
+    // wrong counts. Running the tool directly guarantees fresh counts AND the
+    // record rows for ANY phrasing the organizer types.
+    const pendingQueue = await this.maybePendingQueue(
+      message,
+      organizerId,
+      currency,
+    );
+    if (pendingQueue) {
+      history.push({
+        role: "assistant",
+        content: pendingQueue.text,
+        ts: Date.now(),
+      });
+      this.trimHistory(organizerId);
+      return pendingQueue;
+    }
+
     // Deterministic short-circuit: org-wide list intents (visitors,
     // exhibitors, space templates). Bypasses the LLM completely so 100+
     // rows render in ~100ms (Mongo query + string format) instead of
@@ -3057,6 +3220,14 @@ ${context}
       {
         slug: "apply-speaker",
         re: /\b(speaker)s?\b.{0,30}\bappl|\bhow\b.{0,30}\bapply\b.{0,20}\bspeak|\bapply\b.{0,15}\bto speak/,
+      },
+      {
+        slug: "for-volunteers",
+        re: /\bvolunteer/,
+      },
+      {
+        slug: "for-operators",
+        re: /\boperator/,
       },
     ];
 
@@ -3250,6 +3421,7 @@ ${context}
   }): Promise<{
     text: string;
     botAction?: any;
+    records?: any[];
     quickActions?: Array<{ label: string; action: string }>;
   }> {
     const tabPrompt = (
@@ -3293,6 +3465,11 @@ ${context}
     ];
 
     let botAction: any = undefined;
+    // Deep-linkable rows (pending approvals/payments/edits/cancellations). The
+    // widget renders each as a tappable record that opens Participants on that
+    // event. Held separately and stripped from the model's view so the ids
+    // never bleed into the rendered text.
+    let records: any[] | undefined = undefined;
 
     // Iterative agent loop. Allow up to N tool calls so legitimate chains
     // (e.g. list_events → list_tickets) work, then force tool_choice:"none"
@@ -3386,10 +3563,21 @@ ${context}
           if (r?.botAction) {
             botAction = r.botAction;
           }
-          const annotated =
+          // Capture deep-linkable records, then hide them from the model so it
+          // renders a clean summary (the widget draws the tappable rows).
+          const base =
             r && typeof r === "object" && !Array.isArray(r)
-              ? { ...r, _currency: currency.symbol, _currencyCode: currency.code }
-              : { result: r, _currency: currency.symbol, _currencyCode: currency.code };
+              ? { ...r }
+              : { result: r };
+          if (Array.isArray((base as any).records)) {
+            records = (base as any).records;
+            delete (base as any).records;
+          }
+          const annotated = {
+            ...base,
+            _currency: currency.symbol,
+            _currencyCode: currency.code,
+          };
           toolResult = JSON.stringify(annotated);
         } catch (e: any) {
           toolResult = JSON.stringify({ error: e?.message || "tool failed" });
@@ -3427,6 +3615,7 @@ ${context}
     return {
       text,
       botAction,
+      ...(records?.length ? { records } : {}),
       ...(quickActions.length ? { quickActions } : {}),
     };
   }
@@ -3694,6 +3883,114 @@ ${context}
    *  return a deterministic event picker payload. Frontend renders a
    *  dropdown form so the user picks the event explicitly — avoids the
    *  LLM guessing "latest". */
+  /** Pending exhibitor queues (approval / payment / edit / cancellation) as a
+   *  deterministic intent. Matches ANY phrasing the organizer might type —
+   *  "pending vendor requests", "pending exhibitor payment", "stall deletion
+   *  requests", "edit requests from vendors", etc. — runs the matching tool
+   *  and returns fresh counts PLUS the tappable record rows every time. */
+  private async maybePendingQueue(
+    message: string,
+    organizerId: string,
+    currency: { symbol: string; code: string; locale: string },
+  ): Promise<{
+    text: string;
+    records?: any[];
+    quickActions?: Array<{ label: string; action: string }>;
+  } | null> {
+    const m = (message || "").toLowerCase().trim();
+    if (!m) return null;
+
+    // Must reference the exhibitor/stall domain OR a bare "request(s)" so we
+    // don't hijack unrelated "pending" talk (e.g. "pending events").
+    const domain =
+      /\b(vendor|vendors|exhibitor|exhibitors|stall|stalls|booth|booths|booking|bookings|request|requests)\b/.test(
+        m,
+      );
+
+    const isCancel =
+      /\b(cancellation|cancellations|deletion|deletions)\b/.test(m) ||
+      (/\b(cancel|delete)\b/.test(m) && domain);
+    const isEdit =
+      /\b(amendment|amendments|amend)\b/.test(m) ||
+      (/\b(edit|edits|update|updates|updated|modify|modification)\b/.test(m) &&
+        domain);
+    const isPending =
+      /\bpending\b/.test(m) ||
+      /\bawaiting\b/.test(m) ||
+      /\bneeds?\s+(my\s+)?attention\b/.test(m) ||
+      (/\b(approval|approvals|approve|payment|payments|pay|confirm|unconfirmed)\b/.test(
+        m,
+      ) &&
+        domain);
+
+    // Every branch needs at least a hint of the exhibitor domain to fire.
+    if (!domain && !/\bpending\b|\bawaiting\b/.test(m)) return null;
+
+    const stallPills = [
+      { label: "Stall analytics", action: "Show stall analytics" },
+      { label: "List exhibitors", action: "List my exhibitors" },
+    ];
+
+    // Priority: cancellation > edit > pending, so "pending cancellation" routes
+    // to the cancellation queue rather than the generic pending one.
+    if (isCancel) {
+      const r: any = await this.runTool(
+        "list_stall_cancellations",
+        {},
+        organizerId,
+        currency,
+      );
+      const records = Array.isArray(r?.records) ? r.records : [];
+      return {
+        text: records.length
+          ? `**${records.length} cancellation / deletion request${
+              records.length === 1 ? "" : "s"
+            }** — tap any below to review.`
+          : "**No pending cancellation / deletion requests.**",
+        ...(records.length ? { records } : {}),
+        quickActions: stallPills,
+      };
+    }
+    if (isEdit) {
+      const r: any = await this.runTool(
+        "list_stall_edit_requests",
+        {},
+        organizerId,
+        currency,
+      );
+      const records = Array.isArray(r?.records) ? r.records : [];
+      return {
+        text: records.length
+          ? `**${records.length} edit / update request${
+              records.length === 1 ? "" : "s"
+            }** — tap any below to review.`
+          : "**No pending edit / update requests.**",
+        ...(records.length ? { records } : {}),
+        quickActions: stallPills,
+      };
+    }
+    if (isPending) {
+      const r: any = await this.runTool(
+        "list_exhibitor_pending",
+        {},
+        organizerId,
+        currency,
+      );
+      const records = Array.isArray(r?.records) ? r.records : [];
+      const a = Number(r?.approvalsCount || 0);
+      const p = Number(r?.paymentsCount || 0);
+      return {
+        text:
+          a + p > 0
+            ? `**${a} awaiting approval, ${p} awaiting payment — tap any below to open it.**`
+            : "**No exhibitor bookings need your attention right now.**",
+        ...(records.length ? { records } : {}),
+        quickActions: stallPills,
+      };
+    }
+    return null;
+  }
+
   /** Org-wide list intents (visitors / exhibitors / space templates) — pure
    *  data → markdown render. Skips the LLM entirely so 100+ rows return in
    *  ~100ms instead of 5-15s. */
@@ -4147,6 +4444,43 @@ ${context}
   // ============================================================
   // TOOL IMPLEMENTATIONS
   // ============================================================
+
+  /** Mongo filter that matches this organizer's records (ObjectId OR string). */
+  private orgScope(organizerId: string): any {
+    const orgObjId = Types.ObjectId.isValid(organizerId)
+      ? new Types.ObjectId(organizerId)
+      : null;
+    return orgObjId ? { $in: [orgObjId, String(organizerId)] } : String(organizerId);
+  }
+
+  /**
+   * Resolve a short stall reference (last 6 chars of the _id, as shown by the
+   * pending-list tools) to a full stall id — SCOPED to this organizer so an
+   * action can never touch another organizer's booking. Returns an error
+   * string if nothing matches or the reference is ambiguous.
+   */
+  private async resolveOrgStall(
+    ref: string,
+    organizerId: string,
+  ): Promise<{ id: string } | { error: string }> {
+    const r = String(ref || "").trim().toLowerCase().replace(/^#/, "");
+    if (!r) return { error: "No stall reference was provided." };
+    const stalls = await this.stallModel
+      .find({ organizerId: this.orgScope(organizerId) }, { _id: 1 })
+      .lean();
+    const matches = stalls.filter(
+      (s: any) => String(s._id).slice(-6).toLowerCase() === r,
+    );
+    if (matches.length === 1) return { id: String(matches[0]._id) };
+    if (matches.length === 0)
+      return {
+        error: `No exhibitor booking with reference "${ref}" was found in your account.`,
+      };
+    return {
+      error: `Reference "${ref}" matches more than one booking — please pick from the list.`,
+    };
+  }
+
   private async runTool(
     name: string,
     args: any,
@@ -4517,7 +4851,13 @@ ${context}
             };
           });
         }
-        const filter: any = {};
+        // Scope to THIS organizer's vendors only — never return other
+        // organizers' vendors (data-isolation fix).
+        const filter: any = {
+          organizerId: orgObjId
+            ? { $in: [orgObjId, String(organizerId)] as any[] }
+            : String(organizerId),
+        };
         if (args.status === "pending") filter.approved = false;
         else if (args.status === "approved") filter.approved = true;
         const vendors = await this.vendorModel
@@ -5418,6 +5758,241 @@ ${context}
             category: v.businessCategory || "",
             country: v.country || "",
           })),
+        };
+      }
+
+      case "list_exhibitor_pending": {
+        const stalls = await this.stallModel
+          .find({
+            organizerId: this.orgScope(organizerId),
+            status: { $in: ["Pending", "Processing"] },
+          })
+          .populate("eventId", "title")
+          .populate("shopkeeperId", "name businessName shopName")
+          .sort({ createdAt: -1 })
+          .limit(200)
+          .lean();
+        const row = (s: any) => ({
+          ref: String(s._id).slice(-6),
+          vendor:
+            (s.shopkeeperId as any)?.businessName ||
+            (s.shopkeeperId as any)?.shopName ||
+            (s.shopkeeperId as any)?.name ||
+            s.brandName ||
+            "—",
+          event: (s.eventId as any)?.title || "—",
+          amount: s.grandTotal || 0,
+          amountFormatted: fmt(s.grandTotal || 0),
+        });
+        // Records carry the ids the widget needs to deep-link a tapped row to
+        // Participants. Kept in a separate array (stripped before the LLM sees
+        // the result) so ids never leak into the rendered text.
+        const rec = (s: any, category: string) => ({
+          ...row(s),
+          stallId: String(s._id),
+          eventId: String((s.eventId as any)?._id || s.eventId || ""),
+          category,
+        });
+        const pendingApprovals = stalls
+          .filter((s: any) => s.status === "Pending")
+          .map(row);
+        const pendingPayments = stalls
+          .filter((s: any) => s.status === "Processing")
+          .map(row);
+        const records = [
+          ...stalls
+            .filter((s: any) => s.status === "Pending")
+            .map((s: any) => rec(s, "approval")),
+          ...stalls
+            .filter((s: any) => s.status === "Processing")
+            .map((s: any) => rec(s, "payment")),
+        ];
+        return {
+          pendingApprovals,
+          pendingPayments,
+          approvalsCount: pendingApprovals.length,
+          paymentsCount: pendingPayments.length,
+          records,
+        };
+      }
+
+      case "list_stall_edit_requests": {
+        const stalls = await this.stallModel
+          .find({
+            organizerId: this.orgScope(organizerId),
+            "pendingAmendment.status": "paid_pending_confirm",
+          })
+          .populate("eventId", "title")
+          .populate("shopkeeperId", "name businessName shopName")
+          .lean();
+        return {
+          total: stalls.length,
+          editRequests: stalls.map((s: any) => ({
+            ref: String(s._id).slice(-6),
+            vendor:
+              (s.shopkeeperId as any)?.businessName ||
+              (s.shopkeeperId as any)?.shopName ||
+              (s.shopkeeperId as any)?.name ||
+              "—",
+            event: (s.eventId as any)?.title || "—",
+            operators: s.pendingAmendment?.noOfOperators,
+            amountToPay: s.pendingAmendment?.amountDue || 0,
+            amountToPayFormatted: fmt(s.pendingAmendment?.amountDue || 0),
+          })),
+          records: stalls.map((s: any) => ({
+            ref: String(s._id).slice(-6),
+            vendor:
+              (s.shopkeeperId as any)?.businessName ||
+              (s.shopkeeperId as any)?.shopName ||
+              (s.shopkeeperId as any)?.name ||
+              "—",
+            event: (s.eventId as any)?.title || "—",
+            amountFormatted: fmt(s.pendingAmendment?.amountDue || 0),
+            stallId: String(s._id),
+            eventId: String((s.eventId as any)?._id || s.eventId || ""),
+            category: "edit",
+          })),
+        };
+      }
+
+      case "list_stall_cancellations": {
+        const stalls = await this.stallModel
+          .find({
+            organizerId: this.orgScope(organizerId),
+            "pendingCancellation.status": "requested",
+          })
+          .populate("eventId", "title")
+          .populate("shopkeeperId", "name businessName shopName")
+          .lean();
+        return {
+          total: stalls.length,
+          cancellations: stalls.map((s: any) => ({
+            ref: String(s._id).slice(-6),
+            vendor:
+              (s.shopkeeperId as any)?.businessName ||
+              (s.shopkeeperId as any)?.shopName ||
+              (s.shopkeeperId as any)?.name ||
+              "—",
+            event: (s.eventId as any)?.title || "—",
+            reason: s.pendingCancellation?.reason || "—",
+          })),
+          records: stalls.map((s: any) => ({
+            ref: String(s._id).slice(-6),
+            vendor:
+              (s.shopkeeperId as any)?.businessName ||
+              (s.shopkeeperId as any)?.shopName ||
+              (s.shopkeeperId as any)?.name ||
+              "—",
+            event: (s.eventId as any)?.title || "—",
+            reason: s.pendingCancellation?.reason || "—",
+            stallId: String(s._id),
+            eventId: String((s.eventId as any)?._id || s.eventId || ""),
+            category: "cancel",
+          })),
+        };
+      }
+
+      case "get_event_feedback": {
+        const ev = await this.eventModel
+          .findOne({
+            organizer: this.orgScope(organizerId),
+            title: { $regex: args.event_name, $options: "i" },
+          })
+          .lean();
+        if (!ev) return { error: `No event matching "${args.event_name}"` };
+        const evId = (ev as any)._id;
+        const db = this.stallModel.db;
+        const [fb, pf] = await Promise.all([
+          db.collection("feedbacks").find({ eventId: evId }).limit(200).toArray(),
+          db
+            .collection("paymentfeedbacks")
+            .find({ $or: [{ eventId: evId }, { eventTitle: (ev as any).title }] })
+            .limit(200)
+            .toArray(),
+        ]);
+        const items = [
+          ...fb.map((f: any) => ({
+            from: f.audience || "visitor",
+            rating: f.rating,
+            comment: f.comment || "",
+            email: f.email || "",
+          })),
+          ...pf.map((f: any) => ({
+            from: `payment · ${f.paymentType || "—"}`,
+            rating: f.rating,
+            comment: f.comment || "",
+            email: f.payerEmail || "",
+          })),
+        ];
+        const count = items.length;
+        const avg = count
+          ? Math.round(
+              (items.reduce((s, x) => s + (x.rating || 0), 0) / count) * 10,
+            ) / 10
+          : 0;
+        return { event: (ev as any).title, count, avg, feedback: items };
+      }
+
+      case "confirm_stall_payment": {
+        const res = await this.resolveOrgStall(args.ref, organizerId);
+        if ("error" in res) return res;
+        const out = await this.stallsService.confirmPayment(
+          res.id,
+          "Confirmed via assistant.",
+          "Organizer (assistant)",
+        );
+        return {
+          success: (out as any)?.success !== false,
+          message:
+            (out as any)?.message ||
+            "Payment confirmed — the QR booth ticket is being issued to the vendor.",
+        };
+      }
+
+      case "approve_stall_amendment": {
+        const res = await this.resolveOrgStall(args.ref, organizerId);
+        if ("error" in res) return res;
+        const out = await this.stallsService.confirmAmendment(res.id, {
+          changedBy: "Organizer (assistant)",
+        } as any);
+        return {
+          success: true,
+          message:
+            (out as any)?.message ||
+            "Edit approved — the updated QR is being re-issued; the old one is now invalid.",
+        };
+      }
+
+      case "resolve_stall_cancellation": {
+        const res = await this.resolveOrgStall(args.ref, organizerId);
+        if ("error" in res) return res;
+        const out = await this.stallsService.decideCancellation(res.id, {
+          approve: !!args.approve,
+          organizerNote: args.note || "",
+          changedBy: "Organizer (assistant)",
+        } as any);
+        return {
+          success: true,
+          message:
+            (out as any)?.message ||
+            (args.approve
+              ? "Cancellation approved — space freed and vendor notified."
+              : "Cancellation rejected — the vendor was notified."),
+        };
+      }
+
+      case "return_stall_deposit": {
+        const res = await this.resolveOrgStall(args.ref, organizerId);
+        if ("error" in res) return res;
+        const out = await this.stallsService.returnedDeposit(
+          res.id,
+          args.notes || "",
+          "Organizer (assistant)",
+        );
+        return {
+          success: (out as any)?.success !== false,
+          message:
+            (out as any)?.message || "Deposit marked as returned to the vendor.",
         };
       }
 

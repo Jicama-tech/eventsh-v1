@@ -1,6 +1,6 @@
 // File: src/components/DashboardTabs/EventAttendees.tsx
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import EventRsvpPanel from "./EventRsvpPanel";
 import { Button } from "@/components/ui/button";
 import {
@@ -284,6 +284,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   // Add this state to manage which tab is currently active
   const [activeTab, setActiveTab] = useState("user");
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  // Stalls deep-linked from the chatbot pending-pills get a brief pulse ring so
+  // the operator's eye lands on the exact exhibitor that needs action.
+  const [highlightStallIds, setHighlightStallIds] = useState<string[]>([]);
   const [eventTickets, setEventTickets] = useState<TicketCustomer[]>([]);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
   const [showStallDetailDialog, setShowStallDetailDialog] = useState(false);
@@ -708,7 +711,10 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ notes: returnDepositNotes }),
+          body: JSON.stringify({
+            notes: returnDepositNotes,
+            changedBy: getActorLabel(),
+          }),
         },
       );
 
@@ -1409,6 +1415,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           body: JSON.stringify({
             status: "Confirmed",
             notes: actionNotes,
+            changedBy: getActorLabel(),
           }),
         },
       );
@@ -1456,6 +1463,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
             status: "Cancelled",
             cancellationReason: cancellationReason,
             notes: actionNotes,
+            changedBy: getActorLabel(),
           }),
         },
       );
@@ -1494,11 +1502,14 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     if (deleteConfirmText !== DELETE_CONFIRM_PHRASE) return;
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${apiURL}/stalls/${selectedRequest._id}`, {
-        method: "DELETE",
-      });
-      // The endpoint replies 204 No Content (empty body), so don't parse JSON —
-      // rely on the HTTP status.
+      const response = await fetch(
+        `${apiURL}/stalls/${selectedRequest._id}?changedBy=${encodeURIComponent(
+          getActorLabel(),
+        )}`,
+        {
+          method: "DELETE",
+        },
+      );
       if (!response.ok) {
         let msg = "Failed to delete stall";
         try {
@@ -1513,7 +1524,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         duration: 5000,
         title: "Stall deleted",
         description:
-          "The exhibitor's stall was removed and its space freed. The vendor's profile was kept.",
+          "The stall was cancelled and its space freed. It stays in the list (marked Cancelled) so you can still settle any refund.",
       });
       setShowDeleteStallDialog(false);
       setSelectedRequest(null);
@@ -1538,6 +1549,27 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     const eventPassed = end ? new Date(end).getTime() < Date.now() : false;
     const fullyPaid = stall?.paymentStatus === "Paid";
     return !(fullyPaid && eventPassed);
+  };
+
+  // Who is performing an action, for the stall timeline. Resolved from the JWT:
+  // an operator account → the operator's name; the organizer → "Organizer".
+  // Sent as `changedBy` so every timeline entry shows who did it.
+  const getActorLabel = (): string => {
+    try {
+      const token = sessionStorage.getItem("token");
+      if (!token) return "Organizer";
+      const d: any = jwtDecode(token);
+      if (d?.operatorId) {
+        return (
+          (d.name && String(d.name).trim()) ||
+          (d.email && String(d.email).trim()) ||
+          "Operator"
+        );
+      }
+      return "Organizer";
+    } catch {
+      return "Organizer";
+    }
   };
 
   // Operator permission gate for deleting stalls. The organizer (no
@@ -1570,6 +1602,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           body: JSON.stringify({
             paymentStatus: paymentStatusUpdate,
             notes: actionNotes,
+            changedBy: getActorLabel(),
           }),
         },
       );
@@ -1606,7 +1639,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ changedBy: "Organizer" }),
+          body: JSON.stringify({ changedBy: getActorLabel() }),
         },
       );
       const result = await response.json();
@@ -1654,7 +1687,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           body: JSON.stringify({
             approve,
             organizerNote: note,
-            changedBy: "Organizer",
+            changedBy: getActorLabel(),
           }),
         },
       );
@@ -1938,6 +1971,79 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     setShowStallDetailsDialog(true);
     await fetchStallTickets(event._id);
   };
+
+  // Lighter-shade row tint by an exhibitor's pending state, mirroring the
+  // chatbot pill colors so organizers/operators differentiate at a glance:
+  //   Red  = cancellation request   (most urgent — destructive)
+  //   Blue = edit / update request
+  //   Green= payment awaiting confirm
+  //   Yellow= awaiting approval
+  // `emphasized` adds a pulsing ring for the stall a pill deep-linked to.
+  const stallRowClass = (s: any, emphasized = false): string => {
+    let base = "";
+    let ring = "ring-slate-400";
+    if (s?.pendingCancellation?.status === "requested") {
+      base = "bg-rose-50 border-l-4 border-rose-400";
+      ring = "ring-rose-400";
+    } else if (s?.pendingAmendment?.status === "paid_pending_confirm") {
+      base = "bg-blue-50 border-l-4 border-blue-400";
+      ring = "ring-blue-400";
+    } else if (s?.status === "Processing") {
+      base = "bg-emerald-50 border-l-4 border-emerald-400";
+      ring = "ring-emerald-400";
+    } else if (s?.status === "Pending") {
+      base = "bg-amber-50 border-l-4 border-amber-400";
+      ring = "ring-amber-400";
+    } else if (s?.status === "Cancelled" || s?.status === "Returned") {
+      // Soft-deleted / settled — kept in the list for refund/records but shown
+      // muted so it reads as inactive.
+      base = "bg-slate-50 text-slate-400 border-l-4 border-slate-300";
+      ring = "ring-slate-400";
+    }
+    const emph = emphasized ? `ring-2 ring-offset-1 ${ring} animate-pulse` : "";
+    return `${base} ${emph}`.trim();
+  };
+
+  // Deep-link from the chatbot pending pills: sessionStorage carries the target
+  // event + stall ids; we open that event's attendance dialog on the exhibitors
+  // tab and pulse the matching rows. A ref keeps the handler on latest closures
+  // (events/handleViewAttendance) without re-binding the window listener.
+  const deepLinkRef = useRef<() => void>(() => {});
+  deepLinkRef.current = async () => {
+    let raw: string | null = null;
+    try {
+      raw = sessionStorage.getItem("eventsh:openParticipant");
+    } catch {
+      /* storage blocked */
+    }
+    if (!raw) return;
+    try {
+      sessionStorage.removeItem("eventsh:openParticipant");
+      const t = JSON.parse(raw);
+      if (!t?.eventId) return;
+      // Ignore a stale payload (e.g. set then abandoned) so a later, unrelated
+      // visit to Participants doesn't spuriously auto-open an event.
+      if (t.ts && Date.now() - t.ts > 20000) return;
+      const ev =
+        events.find((e) => e._id === t.eventId) || ({ _id: t.eventId } as any);
+      await handleViewAttendance(ev);
+      setDetailTab("exhibitors");
+      if (Array.isArray(t.stallIds) && t.stallIds.length) {
+        setHighlightStallIds(t.stallIds.map(String));
+        setTimeout(() => setHighlightStallIds([]), 6000);
+      }
+    } catch {
+      /* malformed payload — ignore */
+    }
+  };
+  useEffect(() => {
+    // Run once on mount to catch the lazy-load case (widget dispatched the
+    // event before this component finished importing), then listen live.
+    deepLinkRef.current();
+    const h = () => deepLinkRef.current();
+    window.addEventListener("open-participant-event", h);
+    return () => window.removeEventListener("open-participant-event", h);
+  }, []);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -2558,7 +2664,13 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                           </TableHeader>
                           <TableBody>
                             {stalls.map((s: any) => (
-                              <TableRow key={s._id}>
+                              <TableRow
+                                key={s._id}
+                                className={stallRowClass(
+                                  s,
+                                  highlightStallIds.includes(String(s._id)),
+                                )}
+                              >
                                 <TableCell className="font-medium">
                                   {s.shopkeeperId?.name ||
                                     s.nameOfApplicant ||
@@ -3015,7 +3127,13 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     </TableHeader>
                     <TableBody>
                       {stalls.map((stall) => (
-                        <TableRow key={stall._id}>
+                        <TableRow
+                          key={stall._id}
+                          className={stallRowClass(
+                            stall,
+                            highlightStallIds.includes(String(stall._id)),
+                          )}
+                        >
                           <TableCell>
                             <div className="font-bold text-sm">
                               {stall.shopkeeperId?.name || stall.nameOfApplicant || "—"}

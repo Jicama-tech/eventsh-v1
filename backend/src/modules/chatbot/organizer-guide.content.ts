@@ -812,6 +812,118 @@ You'll see: *"Application submitted! The organizer will review your application.
 - **Can't pick a time?** Your application may still be pending — approval comes first.
 - **Lost your pass?** Re-open the flow after verifying your WhatsApp and download it again.`,
   },
+  {
+    slug: "for-volunteers",
+    title: "For Volunteers: Event-Day Check-In Helpers",
+    summary: "How you add a volunteer, share the scanner link, and how the volunteer signs in and scans people in.",
+    markdown: `# For Volunteers: Event-Day Check-In Helpers
+
+**Volunteers** are event-day helpers who scan attendees in at the door. They're **scoped to one event** and can only use the ticket **scanner** and a **read-only venue map** — they never see your dashboard and can't edit anything.
+
+You add them by **email**; they sign in on the scanner page with the **Google (Gmail) account** you entered. Nothing is emailed automatically — **you share the scanner link with them**.
+
+---
+
+## Part A — Organizer: add a volunteer
+
+1. Open **Events/Coupons** → **Edit** the event (or create a new one).
+2. Go to the **Volunteers** tab.
+3. Click **Add Volunteer** and fill the row:
+   - **Name** — e.g. "Jane Doe".
+   - **Email (Google sign-in address)** — the **Gmail** they'll sign in with. It must match **exactly**.
+   - **Phone** — optional.
+4. Add as many volunteers as you need (one row each; the trash icon removes a row).
+5. Click **Update Event** (or **Create Event**) to save.
+
+> The emails you enter are the allow-list — only those Gmail addresses can sign in for this event.
+
+## Part B — Organizer: send them the link
+
+There is **no automatic invite email** — you share the link yourself:
+
+1. On the event card in **Events/Coupons**, click **Scanner** (the QR-scanner action) — that's the volunteer scanner page for this event.
+2. Its web address ends in **\`/events/<your-event-id>/scan-tickets\`**.
+3. **Copy that link** and send it to your volunteer (WhatsApp, email — however you like).
+
+## Part C — Volunteer: sign in
+
+1. Open the **scanner link** the organizer sent you.
+2. Click **Continue with Google**.
+3. Sign in with the **exact Gmail** the organizer added to the volunteer list.
+   - A different account shows *"This Google account isn't on the volunteer list for this event."* — switch to the right Gmail.
+4. You stay signed in on that device across refreshes until you sign out.
+
+## Part D — Volunteer: what you can do
+
+The scanner page has two tabs:
+
+- **Scan** — point the camera at an attendee's **QR pass** (ticket, booth, speaker or round-table) to **check them in**; scan again to check out. Runs in the browser — **no app to install**.
+- **Venue** — a **read-only** map of the venue layout, to help guests find their booth or table.
+
+You **cannot** open the dashboard, edit the event, or change settings — a volunteer can only scan and view the venue, for this one event.
+
+## Troubleshooting
+
+- **"Not on the volunteer list"** → the Gmail you used doesn't match what the organizer entered. Confirm the exact address or switch Google accounts.
+- **No link?** → the organizer must share the **Scanner** page link; it isn't emailed automatically.
+- **Camera won't scan?** → allow camera access in the browser and make sure the QR is well lit.`,
+  },
+  {
+    slug: "for-operators",
+    title: "For Operators: Scoped Staff Access",
+    summary: "How you create an operator, choose which tabs they can use, and how they sign in with Google.",
+    markdown: `# For Operators: Scoped Staff Access
+
+**Operators** are staff who help run your organization from the dashboard — with **only the tabs you allow**. Unlike volunteers (scan-only, one event), an operator works across your events inside a **scoped version of your organizer dashboard**.
+
+They sign in with **Google** using the Gmail you enter — **no password, no invite email**; you just tell them which Google account to use.
+
+---
+
+## Part A — Organizer: create an operator
+
+1. Go to **Settings** → the **Operator** tab (*"Create and manage your shop operators here"*).
+2. Click **Add Operator**.
+3. Fill the dialog:
+   - **Operator Name** — required.
+   - **WhatsApp** — optional (country code + number).
+   - **Operator Email** — enter **only the Gmail ID name** (the part before @gmail.com); the system appends **@gmail.com**. This is the account they sign in with.
+   - **Company Email** — optional (can also receive progress emails).
+   - **Allow Emails** — turn on to send this operator notification emails.
+4. Under **Tab Access**, pick which dashboard tabs they may use:
+   - **Leave everything unchecked = full access** (they see all tabs).
+   - Check specific tabs to **restrict** — e.g. only **In-Person Booking** for a door/kiosk operator, or **Participants** + **Exhibitors/Visitors** for a front-desk operator.
+   - Tabs: **Chatbot, Analytics, In-Person Booking, Participants, Platform Fees, Exhibitors/Visitors, Events/Coupons, Feedback, Membership, Support, Eventfront, Settings**. Fine-grained extras (e.g. **Allow deleting exhibitor stalls**, delete events) appear under a tab once you grant it.
+5. Click **Save**. Edit or delete the operator later from the same tab.
+
+## Part B — Organizer: give them access
+
+Creating an operator **only saves the record** — **no email, password or link is sent**. Access **is** the Gmail you entered:
+
+- Tell the operator to open the **login page** and **sign in with Google** using **that Gmail**.
+
+## Part C — Operator: sign in
+
+1. Open the **organizer login page** (\`/organizer/login\`) — operators use the **same login as organizers**.
+2. Click **Continue with Google** and choose the **Gmail the organizer added**.
+3. If that account is linked to more than one role/org, pick your entry — labeled **"<Organization> (Operator: <your name>)"**.
+
+## Part D — Operator: what you can do
+
+You land on the **organizer dashboard**, but the **sidebar shows only the tabs you were granted** (all tabs if Tab Access was left empty). Within those tabs you work exactly as the organizer would:
+
+- **In-Person Booking** → run the **kiosk** to sell tickets to walk-ins and scan people in.
+- **Participants / Exhibitors-Visitors** → manage attendees, exhibitors and stalls (including deleting stalls, if that permission was granted).
+- **Chatbot** → the AI assistant works too, with its tools **scoped to your tabs**.
+
+Any tab you weren't granted simply isn't shown, and you can't change organization-level **Settings** unless that tab was granted.
+
+## Troubleshooting
+
+- **Can't see a tab?** → the organizer didn't grant it. Ask them to tick it under **Settings → Operator → Tab Access**.
+- **Google won't recognize you?** → use the **exact Gmail** the organizer entered (only the ID name is stored, then @gmail.com).
+- **Wrong account after sign-in?** → if the picker appears, choose the entry marked **(Operator: <your name>)**.`,
+  },
 ];
 
 export function getGuideTopic(slug: string): GuideTopic | undefined {

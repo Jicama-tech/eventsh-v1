@@ -18,9 +18,13 @@ import {
   OrganizerStore,
   OrganizerStoreSchema,
 } from "../organizer-stores/entities/organizer-store.entity";
+import { StallsModule } from "../stalls/stalls.module";
 
 @Module({
   imports: [
+    // Reuse the real stall actions (confirm payment, approve amendment,
+    // resolve cancellation, return deposit) from the chatbot's action tools.
+    StallsModule,
     MongooseModule.forFeature([
       { name: "Organizer", schema: OrganizerSchema },
       { name: "Event", schema: EventSchema },

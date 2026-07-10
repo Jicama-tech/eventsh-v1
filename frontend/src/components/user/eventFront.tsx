@@ -412,8 +412,10 @@ type ChatbotPill = { label: string; action: string; intent?: ChatbotIntent };
 
 function buildEventChatbotGreeting(ev: FetchedEvent): ChatbotPill[] {
   const isPast = isEventOver(ev);
-  const hasTickets =
-    (ev.visitorTypes?.length || 0) > 0 || ev.ticketPrice != null;
+  // Only show ticket pills when the event actually has visitor types — that's
+  // the same gate the page uses to render its ticket-buying UI. A stray
+  // ticketPrice must not surface a phantom "Buy tickets" pill.
+  const hasTickets = (ev.visitorTypes?.length || 0) > 0;
   const hasStalls = (ev.tableTemplates?.length || 0) > 0;
   const hasSpeakers =
     (ev.speakers?.length || 0) > 0 ||
@@ -630,6 +632,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [linkedVendors, setLinkedVendors] = useState<any[]>([]);
   const [authedEmail, setAuthedEmail] = useState("");
   const [showAccountChooser, setShowAccountChooser] = useState(false);
+  // Shown when the chosen vendor holds MORE THAN ONE request for this event
+  // (e.g. a Completed booking + a new Pending one). Lists every request with
+  // its status + date so the vendor can pick which to manage, register another,
+  // or act on any of them — instead of only ever seeing the newest.
+  const [showRequestListChoice, setShowRequestListChoice] = useState(false);
+  const [requestList, setRequestList] = useState<any[]>([]);
+  // Second step inside the request-list dialog: the "register a new request"
+  // who-for choice (same two paths as the completed-choice dialog).
+  const [listRegisterStep, setListRegisterStep] = useState(false);
   // Shown when the chosen vendor has already COMPLETED (paid) a stall for this
   // event: preview the existing booking, or register a new request.
   const [showCompletedChoice, setShowCompletedChoice] = useState(false);
@@ -3214,6 +3225,96 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     fontFamily: design?.fontFamily,
   } as CSSProperties;
 
+  // Route the UI for a single stall request by its status. Extracted so both
+  // the single-request path and the multi-request list chooser reuse it.
+  const routeExistingRequest = async (data: any) => {
+    setExistingStallRequest(data);
+    if (data.status === "Confirmed") {
+      setShowWhatsAppDialog(false);
+      setShowRentForm(false);
+      setShowTableSelection(true);
+      await fetchAvailableTables();
+      toast({
+        duration: 5000,
+        title: "Request Confirmed",
+        description: "Please select your tables and add-ons",
+      });
+    } else if (data.status === "Pending") {
+      // Request is pending
+      setShowWhatsAppDialog(false);
+      setShowRentForm(false);
+      toast({
+        duration: 5000,
+        title: "Request Pending",
+        description: "Your stall request is awaiting organizer approval",
+      });
+    } else if (data.status === "Processing") {
+      // Tables already selected, awaiting payment
+      setShowWhatsAppDialog(false);
+      setShowRentForm(false);
+      toast({
+        duration: 5000,
+        title: "Proceed to Payment",
+        description: "Your tables are selected. Please complete payment.",
+      });
+    } else if (data.status === "Completed") {
+      // Booking completed (paid). Offer: preview the existing booking, or
+      // register a NEW request (a different vendor under the same email).
+      setShowWhatsAppDialog(false);
+      setShowRentForm(false);
+      setShowAccountChooser(false);
+      setShowRegisterTargetChoice(false);
+      setShowCompletedChoice(true);
+    } else if (data.status === "Approved") {
+      // Request approved - go directly to space/table selection
+      setShowWhatsAppDialog(false);
+      setShowRentForm(false);
+      setShowTableSelection(true);
+      await fetchAvailableTables();
+      toast({
+        duration: 5000,
+        title: "Request Approved",
+        description: "Please select your tables and add-ons",
+      });
+    } else if (data.status === "Cancelled") {
+      // Request cancelled - allow new request
+      setShowWhatsAppDialog(false);
+      setShowRentForm(true);
+      toast({
+        duration: 5000,
+        title: "Previous Request Cancelled",
+        description: "You can submit a new stall request",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Pick one request from the multi-request list chooser and route to it.
+  const selectRequestFromList = async (req: any) => {
+    setShowRequestListChoice(false);
+    setListRegisterStep(false);
+    await routeExistingRequest(req);
+  };
+
+  // Badge colour per request status, matching the organizer-side pill palette.
+  const requestStatusBadgeClass = (status: string): string => {
+    switch (status) {
+      case "Completed":
+        return "bg-green-100 text-green-700";
+      case "Confirmed":
+      case "Approved":
+        return "bg-blue-100 text-blue-700";
+      case "Processing":
+        return "bg-amber-100 text-amber-700";
+      case "Pending":
+        return "bg-yellow-100 text-yellow-700";
+      case "Cancelled":
+        return "bg-red-100 text-red-700";
+      default:
+        return "bg-gray-100 text-gray-700";
+    }
+  };
+
   // NEW: Fetch existing request
   const fetchExistingRequest = async (
     shopkeeperId: string,
@@ -3226,67 +3327,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       const result = await response.json();
 
       if (result.success && result.data) {
-        setExistingStallRequest(result.data);
-
-        // Handle different request statuses
-        if (result.data.status === "Confirmed") {
-          setShowWhatsAppDialog(false);
-          setShowRentForm(false);
-          setShowTableSelection(true);
-          await fetchAvailableTables();
-          toast({
-            duration: 5000,
-            title: "Request Confirmed",
-            description: "Please select your tables and add-ons",
-          });
-        } else if (result.data.status === "Pending") {
-          // Request is pending
-          setShowWhatsAppDialog(false);
-          setShowRentForm(false);
-          toast({
-            duration: 5000,
-            title: "Request Pending",
-            description: "Your stall request is awaiting organizer approval",
-          });
-        } else if (result.data.status === "Processing") {
-          // Tables already selected, awaiting payment
-          setShowWhatsAppDialog(false);
-          setShowRentForm(false);
-          toast({
-            duration: 5000,
-            title: "Proceed to Payment",
-            description: "Your tables are selected. Please complete payment.",
-          });
-        } else if (result.data.status === "Completed") {
-          // Booking completed (paid). Offer: preview the existing booking, or
-          // register a NEW request (a different vendor under the same email).
+        // More than one request for this vendor+event → let them pick which to
+        // manage (or register another) instead of auto-routing to the newest.
+        if (Array.isArray(result.requests) && result.requests.length > 1) {
+          setRequestList(result.requests);
+          setListRegisterStep(false);
           setShowWhatsAppDialog(false);
           setShowRentForm(false);
           setShowAccountChooser(false);
-          setShowRegisterTargetChoice(false);
-          setShowCompletedChoice(true);
-        } else if (result.data.status === "Approved") {
-          // Request approved - go directly to space/table selection
-          setShowWhatsAppDialog(false);
-          setShowRentForm(false);
-          setShowTableSelection(true);
-          await fetchAvailableTables();
-          toast({
-            duration: 5000,
-            title: "Request Approved",
-            description: "Please select your tables and add-ons",
-          });
-        } else if (result.data.status === "Cancelled") {
-          // Request cancelled - allow new request
-          setShowWhatsAppDialog(false);
-          setShowRentForm(true);
-          toast({
-            duration: 5000,
-            title: "Previous Request Cancelled",
-            description: "You can submit a new stall request",
-            variant: "destructive",
-          });
+          setShowRequestListChoice(true);
+          return;
         }
+        await routeExistingRequest(result.data);
       } else {
         // No existing request - show rent form
         setShowWhatsAppDialog(false);
@@ -9304,6 +9356,139 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           >
             + Register a new profile
           </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* Multiple requests for the same vendor + event: list them all (status +
+          date) so the vendor can pick which to manage, or register another. */}
+      <Dialog
+        open={showRequestListChoice}
+        onOpenChange={(open) => {
+          setShowRequestListChoice(open);
+          if (!open) setListRegisterStep(false);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Store className="h-5 w-5 text-blue-600" />
+              You have {requestList.length} requests for this event
+            </DialogTitle>
+            <DialogDescription>
+              This vendor has more than one stall request for{" "}
+              <span className="font-medium">{eventData?.title}</span>. Pick one
+              to view or manage it, or register a new request.
+            </DialogDescription>
+          </DialogHeader>
+
+          {!listRegisterStep ? (
+            <div className="space-y-2 pt-1 max-h-[55vh] overflow-y-auto">
+              {requestList.map((req: any) => (
+                <button
+                  key={req._id}
+                  type="button"
+                  onClick={() => selectRequestFromList(req)}
+                  className="w-full text-left rounded-lg border border-gray-200 p-3 hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${requestStatusBadgeClass(
+                        req.status,
+                      )}`}
+                    >
+                      {req.status || "Pending"}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {req.createdAt
+                        ? new Date(req.createdAt).toLocaleDateString("en-US", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-gray-900 truncate">
+                      {req.shopkeeperId?.businessName ||
+                        req.businessName ||
+                        req.shopkeeperId?.shopName ||
+                        req.shopkeeperId?.name ||
+                        "Stall request"}
+                    </span>
+                    {typeof req.grandTotal === "number" && (
+                      <span className="text-sm font-semibold shrink-0">
+                        {formatPrice(req.grandTotal)}
+                      </span>
+                    )}
+                  </div>
+                  {Array.isArray(req.selectedTables) &&
+                    req.selectedTables.length > 0 && (
+                      <div className="mt-0.5 text-xs text-gray-500">
+                        {req.selectedTables.length}{" "}
+                        {req.selectedTables.length === 1 ? "space" : "spaces"} ·{" "}
+                        {req.selectedTables
+                          .map((t: any) => t.tableName)
+                          .filter(Boolean)
+                          .join(", ")}
+                      </div>
+                    )}
+                </button>
+              ))}
+              <Button
+                variant="outline"
+                className="w-full mt-1"
+                onClick={() => setListRegisterStep(true)}
+              >
+                + Register a new request
+              </Button>
+            </div>
+          ) : (
+            // Register-new who-for step (same paths as the completed-choice one).
+            <div className="space-y-2 pt-2">
+              <p className="text-sm font-medium text-gray-700">
+                Who is this new request for?
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRequestListChoice(false);
+                  startRegisterForSelf();
+                }}
+                className="w-full text-left rounded-lg border border-gray-200 p-3 hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
+              >
+                <p className="font-semibold text-sm text-gray-900">
+                  Register for yourself
+                </p>
+                <p className="text-xs text-gray-500">
+                  Book again using this same vendor profile.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRequestListChoice(false);
+                  startRegisterNew(authedEmail || shopkeeperDetails.email);
+                }}
+                className="w-full text-left rounded-lg border border-gray-200 p-3 hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
+              >
+                <p className="font-semibold text-sm text-gray-900">
+                  Register for a new vendor
+                </p>
+                <p className="text-xs text-gray-500">
+                  Create a separate vendor account under{" "}
+                  {authedEmail || shopkeeperDetails.email}.
+                </p>
+              </button>
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => setListRegisterStep(false)}
+              >
+                Back
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
