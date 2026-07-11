@@ -323,6 +323,7 @@ export class EventsController {
         { name: "sponsorLogos", maxCount: 50 },
         { name: "addOnImages", maxCount: 100 },
         { name: "speakerImages", maxCount: 20 },
+        { name: "storyImages", maxCount: 50 },
       ],
       {
         storage: diskStorage({
@@ -349,6 +350,7 @@ export class EventsController {
       sponsorLogos?: Express.Multer.File[];
       addOnImages?: Express.Multer.File[];
       speakerImages?: Express.Multer.File[];
+      storyImages?: Express.Multer.File[];
     },
     @Body() body: any,
     @Req() req: any,
@@ -526,6 +528,21 @@ export class EventsController {
           }
           delete speaker.hasNewImage;
           return speaker;
+        });
+      }
+
+      // Handle "Our Story" timeline images (marriage events). Each moment
+      // flagged hasNewImage claims the next uploaded storyImages file, in order.
+      if (body.marriage && Array.isArray(body.marriage.storyTimeline)) {
+        const storyImgs = files.storyImages || [];
+        let sIdx = 0;
+        body.marriage.storyTimeline = body.marriage.storyTimeline.map((mom) => {
+          if (mom.hasNewImage && sIdx < storyImgs.length) {
+            mom.image = `/uploads/events/${storyImgs[sIdx].filename}`;
+            sIdx++;
+          }
+          delete mom.hasNewImage;
+          return mom;
         });
       }
 
@@ -741,6 +758,7 @@ export class EventsController {
         { name: "sponsorLogos", maxCount: 50 },
         { name: "addOnImages", maxCount: 100 },
         { name: "speakerImages", maxCount: 20 },
+        { name: "storyImages", maxCount: 50 },
       ],
       {
         storage: diskStorage({
@@ -766,6 +784,7 @@ export class EventsController {
       sponsorLogos?: Express.Multer.File[];
       addOnImages?: Express.Multer.File[];
       speakerImages?: Express.Multer.File[];
+      storyImages?: Express.Multer.File[];
     },
     @Body() body: any,
     @Req() req: any,
@@ -942,6 +961,21 @@ export class EventsController {
           }
           delete speaker.hasNewImage;
           return speaker;
+        });
+      }
+
+      // Handle "Our Story" timeline images (marriage events) — same stitching
+      // as the create path.
+      if (body.marriage && Array.isArray(body.marriage.storyTimeline)) {
+        const storyImgs = files.storyImages || [];
+        let sIdx = 0;
+        body.marriage.storyTimeline = body.marriage.storyTimeline.map((mom) => {
+          if (mom.hasNewImage && sIdx < storyImgs.length) {
+            mom.image = `/uploads/events/${storyImgs[sIdx].filename}`;
+            sIdx++;
+          }
+          delete mom.hasNewImage;
+          return mom;
         });
       }
 

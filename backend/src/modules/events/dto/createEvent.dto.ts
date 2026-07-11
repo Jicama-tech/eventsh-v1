@@ -457,9 +457,23 @@ export class MarriageThemeDto {
   @IsString() @IsOptional() backgroundPattern?: string;
   @IsString() @IsOptional() fontScale?: string;
   @IsString() @IsOptional() galleryLayout?: string;
+  @IsString() @IsOptional() storyLayout?: string;
   @IsBoolean() @IsOptional() animations?: boolean;
   // Per-section visibility map ({ countdown, welcome, story, ... }).
   @IsObject() @IsOptional() sections?: Record<string, boolean>;
+}
+
+// One moment in the "Our Story" image timeline. `content` is Quill HTML;
+// `image` is an already-resolved /uploads URL (or empty when the moment has no
+// photo). `hasNewImage` is a transient flag the controller uses to stitch in a
+// freshly-uploaded file — it is not persisted.
+export class StoryMomentDto {
+  @IsString() @IsOptional() id?: string;
+  @IsString() @IsOptional() title?: string;
+  @IsString() @IsOptional() date?: string;
+  @IsString() @IsOptional() content?: string;
+  @IsString() @IsOptional() image?: string;
+  @IsBoolean() @IsOptional() hasNewImage?: boolean;
 }
 
 // Couple + story details specific to a Marriage event.
@@ -472,6 +486,13 @@ export class MarriageDetailsDto {
   @IsString() @IsOptional() contactEmail?: string;
   @IsString() @IsOptional() ourStory?: string;
   @IsString() @IsOptional() howWeMet?: string;
+  // "Our Story" image timeline — unlimited moments (title + date + Quill HTML +
+  // optional image). Replaces the single ourStory string.
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => StoryMomentDto)
+  storyTimeline?: StoryMomentDto[];
   // Lodging suggestions (hotels, room blocks, etc.) shown to guests and
   // included in the RSVP confirmation email.
   @IsString() @IsOptional() accommodations?: string;
