@@ -416,11 +416,24 @@ function buildEventChatbotGreeting(ev: FetchedEvent): ChatbotPill[] {
   // the same gate the page uses to render its ticket-buying UI. A stray
   // ticketPrice must not surface a phantom "Buy tickets" pill.
   const hasTickets = (ev.visitorTypes?.length || 0) > 0;
-  const hasStalls = (ev.tableTemplates?.length || 0) > 0;
+  // A booking pill only shows when at least one space of that type is actually
+  // FOR SALE. "Not for sale" spaces are layout-only references (decoration), so
+  // a type made up entirely of them gets no "Book …" pill — e.g. round tables
+  // placed purely as references show no "Book a round table" pill.
+  const flat = (v: any): any[] =>
+    Array.isArray(v)
+      ? v
+      : v && typeof v === "object"
+        ? Object.values(v).flat()
+        : [];
+  const anyForSale = (arr: any): boolean =>
+    Array.isArray(arr) && arr.some((t: any) => t?.forSale !== false);
+  const hasStalls =
+    anyForSale(ev.tableTemplates) || anyForSale(flat(ev.venueTables));
   const hasSpeakers =
     (ev.speakers?.length || 0) > 0 ||
     (ev.speakerSlotTemplates?.length || 0) > 0;
-  const hasRoundTables = (ev.venueRoundTables?.length || 0) > 0;
+  const hasRoundTables = anyForSale(flat(ev.venueRoundTables));
 
   const pills: ChatbotPill[] = [
     { label: "When & where?", action: "When and where is this event?" },
@@ -6811,6 +6824,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                         {table.name}
                                       </span>
                                     </div>
+                                    {/* Not-for-sale spaces are layout-only
+                                        references (decoration / standing
+                                        tables) — no price, not bookable — so
+                                        they get NO hover tooltip. */}
+                                    {!notForSale && (
                                     <div
                                       className="pointer-events-none absolute bottom-full left-1/2 z-[100] mb-3 w-max opacity-0 transition-opacity group-hover:opacity-100"
                                       style={{
@@ -6876,6 +6894,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                         <div className="absolute left-1/2 top-full -mt-1 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 border-b border-r border-gray-700"></div>
                                       </div>
                                     </div>
+                                    )}
                                   </div>
                                 </div>
                               );
@@ -6991,11 +7010,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                         )
                                           handleChairClick(0);
                                       }}
-                                      title={
-                                        isReference
-                                          ? `${rt.name} — Not for sale`
-                                          : rt.name
-                                      }
+                                      title={isReference ? undefined : rt.name}
                                       className="rounded-full flex flex-col items-center justify-center"
                                       style={{
                                         position: "absolute",
@@ -7086,7 +7101,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                               : "scale(1)",
                                             zIndex: sl ? 12 : 7,
                                           }}
-                                          title={`Seat ${i + 1} — ${bk ? "Taken" : sl ? "Selected" : "Available"}${rt.sellingMode === "chair" && !isReference ? ` · ${formatPrice(rtChairPrice(rt))}` : ""}`}
+                                          title={isReference ? undefined : `Seat ${i + 1} — ${bk ? "Taken" : sl ? "Selected" : "Available"}${rt.sellingMode === "chair" ? ` · ${formatPrice(rtChairPrice(rt))}` : ""}`}
                                         >
                                           {i + 1}
                                         </button>

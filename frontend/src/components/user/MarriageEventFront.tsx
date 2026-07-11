@@ -12,6 +12,7 @@ import {
   MARRIAGE_FONTS_HREF,
   type MarriageHeadingStyle,
   type MarriageGalleryLayout,
+  type MarriageStoryLayout,
 } from "@/lib/marriageThemes";
 import {
   Heart,
@@ -215,8 +216,19 @@ export default function MarriageEventFront({
   const showMonogram =
     theme.showMonogram && Boolean(partner1.trim() || partner2.trim());
 
+  const storyTimeline = Array.isArray((marriage as any).storyTimeline)
+    ? ((marriage as any).storyTimeline as Array<{
+        id?: string;
+        title?: string;
+        date?: string;
+        content?: string;
+        image?: string;
+      }>)
+    : [];
   const hasStory =
-    (marriage.howWeMet || "").trim() || (marriage.ourStory || "").trim();
+    (marriage.howWeMet || "").trim() ||
+    (marriage.ourStory || "").trim() ||
+    storyTimeline.length > 0;
   const hasContact =
     (marriage.contactName || "").trim() ||
     (marriage.contactPhone || "").trim() ||
@@ -527,25 +539,33 @@ export default function MarriageEventFront({
               "linear-gradient(to bottom, var(--w-primary-soft), transparent)",
           }}
         >
-          <div className="mx-auto max-w-3xl px-6">
+          <div className="mx-auto max-w-4xl px-6">
             <SectionHeading
               icon={<Heart className="h-5 w-5" />}
               label="Our Story"
               variant={theme.headingStyle}
             />
-            <div className="mt-10 space-y-8">
-              {(marriage.howWeMet || "").trim() && (
-                <div className="text-center">
-                  <h3 style={headingStyle} className="mb-3 text-2xl">
-                    How we met
-                  </h3>
-                  <p className="whitespace-pre-line text-lg font-light leading-relaxed opacity-90">
-                    {marriage.howWeMet}
-                  </p>
-                </div>
-              )}
-              {(marriage.ourStory || "").trim() && (
-                <div className="text-center">
+
+            {(marriage.howWeMet || "").trim() && (
+              <div className="mx-auto mt-10 max-w-2xl text-center">
+                <h3 style={headingStyle} className="mb-3 text-2xl">
+                  How we met
+                </h3>
+                <p className="whitespace-pre-line text-lg font-light leading-relaxed opacity-90">
+                  {marriage.howWeMet}
+                </p>
+              </div>
+            )}
+
+            {storyTimeline.length > 0 ? (
+              <StoryTimeline
+                moments={storyTimeline as StoryMomentView[]}
+                layout={theme.storyLayout}
+              />
+            ) : (
+              // ── Legacy single "Our journey" paragraph ──
+              (marriage.ourStory || "").trim() && (
+                <div className="mx-auto mt-10 max-w-2xl text-center">
                   <h3 style={headingStyle} className="mb-3 text-2xl">
                     Our journey
                   </h3>
@@ -553,8 +573,8 @@ export default function MarriageEventFront({
                     {marriage.ourStory}
                   </p>
                 </div>
-              )}
-            </div>
+              )
+            )}
           </div>
         </section>
       )}
@@ -942,6 +962,210 @@ function Ornament({
         />
         <circle cx="100" cy="10" r="1.4" fill="currentColor" />
       </svg>
+    </div>
+  );
+}
+
+type StoryMomentView = {
+  id?: string;
+  image?: string;
+  date?: string;
+  title?: string;
+  content?: string;
+};
+
+// Rich-text formatting Tailwind's reset strips from the story body HTML.
+const STORY_HTML_CSS = `
+  .wedding-story-html p { margin: 0 0 .5rem; }
+  .wedding-story-html p:last-child { margin-bottom: 0; }
+  .wedding-story-html ul { list-style: disc; padding-left: 1.25rem; margin: .25rem 0; }
+  .wedding-story-html ol { list-style: decimal; padding-left: 1.25rem; margin: .25rem 0; }
+  .wedding-story-html a { color: var(--w-primary); text-decoration: underline; }
+  .wedding-story-html strong { font-weight: 600; }
+  .wedding-story-html h2, .wedding-story-html h3 { font-family: var(--w-heading-font); margin: .5rem 0 .25rem; }
+`;
+
+// The date / title / body of one story moment — shared by every layout.
+function StoryMomentText({ m }: { m: StoryMomentView }) {
+  return (
+    <>
+      {(m.date || "").trim() && (
+        <div
+          className="text-sm font-semibold uppercase tracking-wide"
+          style={{ color: "var(--w-primary)" }}
+        >
+          {m.date}
+        </div>
+      )}
+      {(m.title || "").trim() && (
+        <h3
+          style={{ fontFamily: "var(--w-heading-font)" }}
+          className="mt-1 text-xl sm:text-2xl"
+        >
+          {m.title}
+        </h3>
+      )}
+      {(m.content || "").trim() && (
+        <div
+          className="wedding-story-html mt-3 text-[15px] font-light leading-relaxed opacity-90"
+          dangerouslySetInnerHTML={{ __html: m.content }}
+        />
+      )}
+    </>
+  );
+}
+
+// "Our Story" moments, arranged per the organizer's chosen template:
+//   spine   — alternating cards on a vertical timeline (default)
+//   cards   — centered stack of image cards
+//   feature — large alternating side-by-side image/text blocks
+function StoryTimeline({
+  moments,
+  layout,
+}: {
+  moments: StoryMomentView[];
+  layout: MarriageStoryLayout;
+}) {
+  // ── Stacked cards ──
+  if (layout === "cards") {
+    return (
+      <div className="mt-14">
+        <style>{STORY_HTML_CSS}</style>
+        <div className="mx-auto max-w-xl space-y-10">
+          {moments.map((m, i) => (
+            <div
+              key={m.id || i}
+              className="overflow-hidden rounded-2xl text-center"
+              style={{
+                background: "var(--w-surface)",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+              }}
+            >
+              {m.image && (
+                <img
+                  src={toAbs(m.image)}
+                  alt={m.title || "Our story"}
+                  className="max-h-80 w-full object-cover"
+                  loading="lazy"
+                />
+              )}
+              <div className="p-6 sm:p-8">
+                <StoryMomentText m={m} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Feature (large, alternating side-by-side) ──
+  if (layout === "feature") {
+    return (
+      <div className="mt-14">
+        <style>{STORY_HTML_CSS}</style>
+        <div className="space-y-16 sm:space-y-24">
+          {moments.map((m, i) => {
+            const left = i % 2 === 0;
+            return (
+              <div
+                key={m.id || i}
+                className={`flex flex-col gap-6 sm:flex-row sm:items-center sm:gap-10 ${
+                  left ? "" : "sm:flex-row-reverse"
+                }`}
+              >
+                {m.image && (
+                  <div className="sm:w-3/5">
+                    <img
+                      src={toAbs(m.image)}
+                      alt={m.title || "Our story"}
+                      className="max-h-[26rem] w-full rounded-2xl object-cover"
+                      style={{ boxShadow: "0 20px 45px rgba(0,0,0,0.12)" }}
+                      loading="lazy"
+                    />
+                  </div>
+                )}
+                <div className={m.image ? "sm:w-2/5" : "w-full"}>
+                  <StoryMomentText m={m} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Timeline / spine (default) ──
+  // The line runs down the CENTRE; for each moment the image sits on one side
+  // and the text on the other, alternating every row (image-left/text-right,
+  // then text-left/image-right, …). On mobile it collapses to a single column
+  // with the line on the left.
+  return (
+    <div className="relative mt-14">
+      <style>{STORY_HTML_CSS}</style>
+      {/* vertical spine — centre on desktop, left edge on mobile. Position
+          lives in classes (not inline) so `sm:left-1/2` can actually centre
+          it — an inline `left` would override the class at every breakpoint. */}
+      <div
+        className="absolute bottom-0 top-0 left-4 w-px -translate-x-1/2 sm:left-1/2"
+        style={{ background: "var(--w-primary)", opacity: 0.3 }}
+      />
+      <div className="space-y-12 sm:space-y-16">
+        {moments.map((m, i) => {
+          const even = i % 2 === 0;
+          const image = m.image ? (
+            <div
+              className="overflow-hidden rounded-2xl"
+              style={{
+                background: "var(--w-surface)",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+              }}
+            >
+              <img
+                src={toAbs(m.image)}
+                alt={m.title || "Our story"}
+                className="max-h-72 w-full object-cover"
+                loading="lazy"
+              />
+            </div>
+          ) : null;
+          return (
+            <div
+              key={m.id || i}
+              className="relative flex flex-col gap-4 sm:flex-row sm:items-center"
+            >
+              {/* node dot on the centre line — position via classes so the dot
+                  centres on desktop instead of being pinned left by inline CSS */}
+              <div
+                className="absolute top-1 left-4 z-10 h-3.5 w-3.5 -translate-x-1/2 rounded-full sm:left-1/2 sm:top-1/2 sm:-translate-y-1/2"
+                style={{
+                  background: "var(--w-primary)",
+                  boxShadow: "0 0 0 4px var(--w-primary-soft)",
+                }}
+              />
+              {/* image column — swaps side each row via flex order */}
+              <div
+                className={`pl-10 sm:w-1/2 sm:pl-0 ${
+                  even ? "sm:order-1 sm:pr-10" : "sm:order-2 sm:pl-10"
+                }`}
+              >
+                {image}
+              </div>
+              {/* text column — opposite side, aligned toward the line */}
+              <div
+                className={`pl-10 sm:w-1/2 sm:pl-0 ${
+                  even
+                    ? "sm:order-2 sm:pl-10 sm:text-left"
+                    : "sm:order-1 sm:pr-10 sm:text-right"
+                }`}
+              >
+                <StoryMomentText m={m} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

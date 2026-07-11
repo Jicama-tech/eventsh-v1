@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, lazy, Suspense } from "react";
+import "react-quill/dist/quill.snow.css";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,7 +26,35 @@ import {
   Bell,
   Loader2,
   Megaphone,
+  ImagePlus,
+  ArrowUp,
+  ArrowDown,
+  X,
 } from "lucide-react";
+
+// Rich-text editor for "Our Story" timeline moments — same react-quill setup
+// as the commercial CreateEventForm (lazy-loaded, shared toolbar).
+const ReactQuill = lazy(() => import("react-quill"));
+const storyQuillModules = {
+  toolbar: [
+    [{ header: [2, 3, false] }],
+    ["bold", "italic", "underline"],
+    [{ list: "ordered" }, { list: "bullet" }],
+    ["link", "clean"],
+  ],
+};
+
+// One "Our Story" timeline moment in the form's local state. `image` is a
+// preview URL (existing /uploads URL or a local object URL); `file` is set only
+// for a freshly-picked image awaiting upload.
+type StoryMoment = {
+  id: string;
+  title: string;
+  date: string;
+  content: string;
+  image: string;
+  file: File | null;
+};
 import {
   EventBanner,
   EventGallery,
@@ -40,6 +69,7 @@ import {
   BACKGROUND_PATTERNS,
   FONT_SCALES,
   GALLERY_LAYOUTS,
+  STORY_LAYOUTS,
   MONOGRAM_STYLES,
   TOP_MOTIFS,
   FLORAL_ACCENTS,
@@ -176,6 +206,87 @@ function MiniGalleryPreview({
   );
 }
 
+// A compact placeholder of the chosen "Our Story" layout for the Design-tab
+// preview — so switching templates visibly updates before publishing.
+function MiniStoryPreview({
+  layout,
+}: {
+  layout: MarriageTheme["storyLayout"];
+}) {
+  const img: React.CSSProperties = {
+    background: "var(--w-primary-soft)",
+    borderRadius: "var(--w-radius)",
+  };
+  const line: React.CSSProperties = {
+    background: "var(--w-accent-soft)",
+    borderRadius: "var(--w-radius)",
+    height: 6,
+  };
+
+  if (layout === "cards") {
+    // Centered stack of image cards.
+    return (
+      <div className="mx-auto flex max-w-[72%] flex-col gap-1.5">
+        {[0, 1].map((i) => (
+          <div key={i} className="overflow-hidden" style={img}>
+            <div style={{ height: 20 }} />
+            <div className="space-y-1 p-1.5">
+              <div style={{ ...line, width: "60%", margin: "0 auto" }} />
+              <div style={{ ...line, width: "85%", margin: "0 auto" }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (layout === "feature") {
+    // Large alternating image beside text.
+    return (
+      <div className="flex flex-col gap-2">
+        {[0, 1].map((i) => (
+          <div
+            key={i}
+            className={`flex items-center gap-2 ${
+              i % 2 ? "flex-row-reverse" : ""
+            }`}
+          >
+            <div className="h-7 w-3/5" style={img} />
+            <div className="flex-1 space-y-1">
+              <div style={{ ...line, width: "90%" }} />
+              <div style={{ ...line, width: "60%" }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  // spine — image on one side of a centre line, text on the other, alternating.
+  return (
+    <div className="relative py-0.5">
+      <div
+        className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2"
+        style={{ background: "var(--w-accent-soft)" }}
+      />
+      <div className="space-y-2">
+        {[0, 1].map((i) => (
+          <div
+            key={i}
+            className={`flex items-center gap-2 ${
+              i % 2 ? "flex-row-reverse" : ""
+            }`}
+          >
+            <div className="h-7 w-[45%]" style={img} />
+            <div className="w-[45%] space-y-1">
+              <div style={{ ...line, width: "85%" }} />
+              <div style={{ ...line, width: "55%" }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const newFunctionId = () => `fn-${Math.random().toString(36).slice(2, 9)}`;
 
 const emptyFunction = (name = ""): MarriageFunctionItem => ({
@@ -262,6 +373,59 @@ export function MarriageEventForm({
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [bannerPreview, setBannerPreview] = useState("");
   const [gallery, setGallery] = useState<GalleryImage[]>([]);
+
+  // "Our Story" image timeline — unlimited moments, hydrated from an existing
+  // event. Each stored image URL is prefixed with the API host for preview.
+  const [storyTimeline, setStoryTimeline] = useState<StoryMoment[]>(() =>
+    Array.isArray(initialData?.marriage?.storyTimeline)
+      ? initialData.marriage.storyTimeline.map((m: any) => ({
+          id: m.id || `sm-${Math.random().toString(36).slice(2, 9)}`,
+          title: m.title || "",
+          date: m.date || "",
+          content: m.content || "",
+          image: m.image
+            ? m.image.startsWith("http")
+              ? m.image
+              : `${__API_URL__}${m.image}`
+            : "",
+          file: null,
+        }))
+      : [],
+  );
+  const addStoryMoment = () =>
+    setStoryTimeline((prev) => [
+      ...prev,
+      {
+        id: `sm-${Math.random().toString(36).slice(2, 9)}`,
+        title: "",
+        date: "",
+        content: "",
+        image: "",
+        file: null,
+      },
+    ]);
+  const updateStoryMoment = (
+    id: string,
+    patch: Partial<StoryMoment>,
+  ) =>
+    setStoryTimeline((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+    );
+  const removeStoryMoment = (id: string) =>
+    setStoryTimeline((prev) => prev.filter((m) => m.id !== id));
+  const moveStoryMoment = (id: string, dir: -1 | 1) =>
+    setStoryTimeline((prev) => {
+      const i = prev.findIndex((m) => m.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  const pickStoryImage = (id: string, file: File | null) => {
+    if (!file) return;
+    updateStoryMoment(id, { file, image: URL.createObjectURL(file) });
+  };
 
   // Eventfront "Site Settings" — colors/font/hero for the public wedding page.
   // Hydrated from the stored theme (or Classic Rose defaults for new events).
@@ -530,6 +694,21 @@ export function MarriageEventForm({
           contactEmail: form.contactEmail.trim(),
           ourStory: form.ourStory.trim(),
           howWeMet: form.howWeMet.trim(),
+          // Our Story timeline — new files carry hasNewImage (the backend
+          // stitches the uploaded storyImages in order); existing moments keep
+          // their stored /uploads URL (strip the API host we added for preview).
+          storyTimeline: storyTimeline
+            .map((m) => ({
+              id: m.id,
+              title: (m.title || "").trim(),
+              date: (m.date || "").trim(),
+              content: (m.content || "").trim(),
+              image: m.file
+                ? undefined
+                : (m.image || "").replace(__API_URL__, ""),
+              hasNewImage: !!m.file,
+            }))
+            .filter((m) => m.title || m.content || m.image || m.hasNewImage),
           accommodations: form.accommodations.trim(),
           additionalInfo: form.additionalInfo.trim(),
           adBarBgColor: form.adBarBgColor.trim(),
@@ -551,6 +730,12 @@ export function MarriageEventForm({
       data.append("galleryManifest", JSON.stringify(galleryManifest));
       gallery.forEach((img) => {
         if (img.file) data.append("gallery", img.file);
+      });
+
+      // Our Story timeline images — appended in the same order as the moments
+      // flagged hasNewImage above, so the backend can stitch them back in.
+      storyTimeline.forEach((m) => {
+        if (m.file) data.append("storyImages", m.file);
       });
 
       await onSave(data);
@@ -1072,15 +1257,172 @@ export function MarriageEventForm({
                     placeholder="The short version of where it all began…"
                     rows={3}
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    A short intro shown above your story timeline.
+                  </p>
                 </div>
-                <div>
-                  <Label>Our story</Label>
-                  <Textarea
-                    value={form.ourStory}
-                    onChange={(e) => setField("ourStory", e.target.value)}
-                    placeholder="Tell your guests your journey together…"
-                    rows={6}
-                  />
+
+                {/* ── Our Story timeline builder ── */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Our Story timeline</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Add as many moments as you like — each with a title,
+                        date, rich text and an optional photo. They render as a
+                        beautiful timeline on your wedding page.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="buttonOutline"
+                      size="sm"
+                      onClick={addStoryMoment}
+                    >
+                      <Plus className="mr-1 h-4 w-4" /> Add moment
+                    </Button>
+                  </div>
+
+                  {storyTimeline.length === 0 && (
+                    <div className="rounded-lg border border-dashed bg-slate-50 p-6 text-center text-sm text-muted-foreground">
+                      No moments yet. Click <strong>Add moment</strong> to start
+                      your story timeline.
+                    </div>
+                  )}
+
+                  {storyTimeline.map((m, idx) => (
+                    <div
+                      key={m.id}
+                      className="rounded-lg border bg-white p-4 space-y-3"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-rose-100 text-xs font-semibold text-rose-600">
+                          {idx + 1}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={idx === 0}
+                            onClick={() => moveStoryMoment(m.id, -1)}
+                            title="Move up"
+                          >
+                            <ArrowUp className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={idx === storyTimeline.length - 1}
+                            onClick={() => moveStoryMoment(m.id, 1)}
+                            title="Move down"
+                          >
+                            <ArrowDown className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-red-500 hover:text-red-600"
+                            onClick={() => removeStoryMoment(m.id)}
+                            title="Remove moment"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="sm:col-span-2">
+                          <Label className="text-xs">Title</Label>
+                          <Input
+                            value={m.title}
+                            onChange={(e) =>
+                              updateStoryMoment(m.id, { title: e.target.value })
+                            }
+                            placeholder="e.g. The day we met"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Date / label</Label>
+                          <Input
+                            value={m.date}
+                            onChange={(e) =>
+                              updateStoryMoment(m.id, { date: e.target.value })
+                            }
+                            placeholder="e.g. June 2019"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label className="text-xs">Story</Label>
+                        <div className="rounded-md bg-white">
+                          <Suspense
+                            fallback={
+                              <div className="h-[150px] animate-pulse rounded-md border bg-muted" />
+                            }
+                          >
+                            <ReactQuill
+                              theme="snow"
+                              value={m.content}
+                              modules={storyQuillModules}
+                              onChange={(content) =>
+                                updateStoryMoment(m.id, { content })
+                              }
+                              placeholder="Tell this part of your journey…"
+                              className="[&_.ql-editor]:min-h-[130px]"
+                            />
+                          </Suspense>
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label className="text-xs">Photo (optional)</Label>
+                        {m.image ? (
+                          <div className="relative mt-1 w-full max-w-xs overflow-hidden rounded-md border">
+                            <img
+                              src={m.image}
+                              alt={m.title || "Story moment"}
+                              className="h-40 w-full object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateStoryMoment(m.id, {
+                                  image: "",
+                                  file: null,
+                                })
+                              }
+                              className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white hover:bg-black/80"
+                              title="Remove photo"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="mt-1 flex h-24 w-full max-w-xs cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed bg-slate-50 text-sm text-muted-foreground hover:bg-slate-100">
+                            <ImagePlus className="h-5 w-5" />
+                            Add a photo
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) =>
+                                pickStoryImage(
+                                  m.id,
+                                  e.target.files?.[0] || null,
+                                )
+                              }
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
@@ -1581,6 +1923,33 @@ export function MarriageEventForm({
                         wedding page.
                       </p>
                     </div>
+                    <div>
+                      <Label className="text-sm">Our Story layout</Label>
+                      <Select
+                        value={theme.storyLayout}
+                        onValueChange={(v) =>
+                          patchTheme({
+                            storyLayout: v as MarriageTheme["storyLayout"],
+                            preset: theme.preset,
+                          })
+                        }
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STORY_LAYOUTS.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>
+                              {o.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        How your "Our Story" moments are arranged on the
+                        wedding page.
+                      </p>
+                    </div>
                     <div className="flex items-center justify-between rounded-lg border p-3">
                       <div>
                         <Label className="text-sm">Animations</Label>
@@ -1708,6 +2077,14 @@ export function MarriageEventForm({
                         Photos · {theme.galleryLayout}
                       </p>
                       <MiniGalleryPreview layout={theme.galleryLayout} />
+                    </div>
+
+                    {/* Our Story layout preview */}
+                    <div className="mt-6 text-left">
+                      <p className="mb-1.5 text-[10px] uppercase tracking-[0.25em] opacity-60">
+                        Our Story · {theme.storyLayout}
+                      </p>
+                      <MiniStoryPreview layout={theme.storyLayout} />
                     </div>
                   </div>
                 </div>

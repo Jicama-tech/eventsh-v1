@@ -36,6 +36,10 @@ interface RoomAllotment {
   notes?: string;
   checkedIn?: boolean;
   checkedInAt?: string;
+  // Shared room across multiple RSVPs (same roomKey; sharedRsvpIds = others).
+  roomKey?: string;
+  capacity?: number;
+  sharedRsvpIds?: string[];
 }
 
 interface RsvpRow {
@@ -424,6 +428,17 @@ export default function EventRsvpPanel({
                             <span className="inline-flex items-center gap-0.5">
                               <BedDouble className="h-3 w-3" />
                               {r.roomAllotments.length}
+                              {r.roomAllotments.some(
+                                (a) =>
+                                  a.sharedRsvpIds && a.sharedRsvpIds.length > 0,
+                              ) && (
+                                <span
+                                  className="ml-0.5 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-700"
+                                  title="Includes a room shared with another party"
+                                >
+                                  <Users className="h-2.5 w-2.5" /> shared
+                                </span>
+                              )}
                             </span>
                           ) : (
                             "Allot"
@@ -524,6 +539,13 @@ export default function EventRsvpPanel({
                           r.roomAllotments.length === 1 ? "" : "s"
                         } allotted`
                       : "View & allot rooms"}
+                    {r.roomAllotments?.some(
+                      (a) => a.sharedRsvpIds && a.sharedRsvpIds.length > 0,
+                    ) && (
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-700">
+                        <Users className="h-2.5 w-2.5" /> shared
+                      </span>
+                    )}
                   </button>
                 </div>
               ))}
@@ -535,10 +557,12 @@ export default function EventRsvpPanel({
 
     <GuestRoomDialog
       eventId={eventId}
-      guest={allotGuest}
+      guest={allotGuest as any}
+      allGuests={rows as any}
       open={!!allotGuest}
       onOpenChange={(o) => !o && setAllotGuest(null)}
       onSaved={(allotments) => {
+        // Optimistic patch for the edited guest…
         setRows((old) =>
           old.map((r) =>
             r._id === allotGuest?._id
@@ -546,6 +570,8 @@ export default function EventRsvpPanel({
               : r,
           ),
         );
+        // …then refetch, since sharing also changes the OTHER party's rooms.
+        load();
       }}
     />
     </>

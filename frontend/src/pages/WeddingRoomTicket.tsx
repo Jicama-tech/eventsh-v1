@@ -12,6 +12,7 @@ interface RoomPass {
   roomType: string;
   roomTypeLabel: string;
   roomName: string;
+  shared?: boolean;
   occupants: number;
   occupantNames: string[];
   notes: string;
@@ -105,6 +106,11 @@ export default function WeddingRoomTicket() {
                 <div className="mt-1 text-2xl font-bold text-rose-800">
                   {data.roomName}
                 </div>
+                {data.shared && (
+                  <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                    <Users className="h-3 w-3" /> Shared room
+                  </div>
+                )}
                 <div className="mt-1 flex items-center justify-center gap-1.5 text-sm text-stone-500">
                   <BedDouble className="h-4 w-4" />
                   {data.roomTypeLabel} · {data.occupants} occupant

@@ -245,6 +245,18 @@ class MarriageDetails {
   @Prop() contactEmail?: string;
   @Prop() ourStory?: string;
   @Prop() howWeMet?: string;
+  // "Our Story" rendered as an image timeline on the public wedding page. Each
+  // moment carries a title, an optional date, rich-text (Quill HTML) content
+  // and an optional image URL. Organizers can add unlimited moments. Replaces
+  // the single `ourStory` string (which stays as a legacy fallback).
+  @Prop({ type: [Object], default: undefined })
+  storyTimeline?: {
+    id: string;
+    title?: string;
+    date?: string;
+    content?: string;
+    image?: string;
+  }[];
   // Lodging suggestions shown to guests + included in the RSVP email.
   @Prop() accommodations?: string;
   // Other guest logistics (travel, gifts, parking, etc.).
