@@ -663,40 +663,79 @@ export default function GuestRoomDialog({
                           </SelectContent>
                         </Select>
                       </div>
-                      {shareTarget && (
-                        <div>
-                          <Label className="text-xs">Who from that party?</Label>
-                          <div className="mt-1 flex flex-wrap gap-1.5">
-                            {(guestById.get(shareTarget)?.attendees || [])
-                              .map((a) => a.name)
-                              .filter(Boolean)
-                              .map((n) => {
-                                const on = shareNames.includes(n);
-                                return (
-                                  <button
-                                    key={n}
-                                    type="button"
-                                    onClick={() =>
-                                      setShareNames((old) =>
-                                        on
-                                          ? old.filter((x) => x !== n)
-                                          : [...old, n],
-                                      )
-                                    }
-                                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition ${
-                                      on
-                                        ? "border-amber-400 bg-amber-500 text-white"
-                                        : "border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
-                                    }`}
-                                  >
-                                    {on && <Check className="h-3 w-3" />}
-                                    {n}
-                                  </button>
-                                );
-                              })}
-                          </div>
-                        </div>
-                      )}
+                      {shareTarget &&
+                        (() => {
+                          // Only offer that party's guests who AREN'T already in
+                          // a room — plus anyone already in THIS shared room (so
+                          // a re-share can still toggle them) or currently picked.
+                          const target = guestById.get(shareTarget);
+                          const targetAllots = target?.roomAllotments || [];
+                          const alreadyPlaced = new Set(
+                            targetAllots.flatMap((a) => a.occupantNames || []),
+                          );
+                          const inThisRoom = new Set(
+                            targetAllots
+                              .filter(
+                                (a) =>
+                                  a.roomKey &&
+                                  r.roomKey &&
+                                  a.roomKey === r.roomKey,
+                              )
+                              .flatMap((a) => a.occupantNames || []),
+                          );
+                          const remaining = (target?.attendees || [])
+                            .map((a) => a.name)
+                            .filter(Boolean)
+                            .filter(
+                              (n) =>
+                                shareNames.includes(n) ||
+                                inThisRoom.has(n) ||
+                                !alreadyPlaced.has(n),
+                            );
+                          return (
+                            <div>
+                              <Label className="text-xs">
+                                Who from that party?{" "}
+                                <span className="text-muted-foreground">
+                                  (unallotted only)
+                                </span>
+                              </Label>
+                              {remaining.length > 0 ? (
+                                <div className="mt-1 flex flex-wrap gap-1.5">
+                                  {remaining.map((n) => {
+                                    const on = shareNames.includes(n);
+                                    return (
+                                      <button
+                                        key={n}
+                                        type="button"
+                                        onClick={() =>
+                                          setShareNames((old) =>
+                                            on
+                                              ? old.filter((x) => x !== n)
+                                              : [...old, n],
+                                          )
+                                        }
+                                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition ${
+                                          on
+                                            ? "border-amber-400 bg-amber-500 text-white"
+                                            : "border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
+                                        }`}
+                                      >
+                                        {on && <Check className="h-3 w-3" />}
+                                        {n}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  Everyone in that party is already allotted a
+                                  room.
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
                       <div className="flex justify-end gap-2">
                         <Button
                           type="button"
