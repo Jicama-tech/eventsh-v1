@@ -31,6 +31,7 @@ import { TemplatesModule } from "./modules/templates/templates.module";
 import { WebsiteContentModule } from "./modules/website-content/website-content.module";
 import { FeedbackModule } from "./modules/feedback/feedback.module";
 import { AppFeedbackModule } from "./modules/app-feedback/app-feedback.module";
+import { PaymentFeedbackModule } from "./modules/payment-feedback/payment-feedback.module";
 import { SubscriptionsModule } from "./modules/subscriptions/subscriptions.module";
 import { BillingPaymentsModule } from "./modules/billing-payments/billing-payments.module";
 import { MembershipsModule } from "./modules/memberships/memberships.module";
@@ -80,6 +81,7 @@ import { RsvpModule } from "./modules/rsvp/rsvp.module";
     WebsiteContentModule,
     FeedbackModule,
     AppFeedbackModule,
+    PaymentFeedbackModule,
     RsvpModule,
     MembershipsModule,
   ],

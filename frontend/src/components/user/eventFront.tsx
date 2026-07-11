@@ -1,6 +1,6 @@
 // File: EventDetailPage.tsx
 
-import React, { useState, useEffect, useRef, CSSProperties } from "react";
+import React, { useState, useEffect, useRef, useMemo, CSSProperties } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -66,6 +66,8 @@ import {
   Clock12,
   Upload,
   Loader2,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { FaUtensilSpoon, FaWhatsapp } from "react-icons/fa";
@@ -112,6 +114,9 @@ import AnnouncementBar from "@/components/ui/AnnouncementBar";
 import { Checkbox } from "@radix-ui/react-checkbox";
 import { OrganizerStore } from "./organizerStoreFront";
 import MarriageEventFront from "./MarriageEventFront";
+import StallPaymentPanel from "./StallPaymentPanel";
+import PaymentFeedbackDialog from "./PaymentFeedbackDialog";
+import { EventChatbot } from "./EventChatbot";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import ImageCropModal from "../ui/imageCropModal";
 import { StatusHistoryEntry } from "../organizer/EventAttendees";
@@ -311,6 +316,14 @@ interface FetchedEvent {
     termsAndConditionsforStalls: string;
     isMandatory: boolean;
   }[];
+  // Public eventfront AI assistant — organizer toggles it on, names it and
+  // picks its theme colour in the Create/Edit Event form. Absent/disabled = no
+  // widget.
+  chatbot?: {
+    enabled?: boolean;
+    name?: string;
+    accentColor?: string;
+  };
 }
 
 interface EventDetailPageProps {
@@ -364,6 +377,115 @@ function CollapsibleCard({
       )}
     </div>
   );
+}
+
+/**
+ * True once the event's end (its end date, or start date when no end date is
+ * set, taken to the END of that calendar day) is in the past. Mirrors the
+ * backend `eventHasEnded` guard so the UI and the server agree on when
+ * bookings/purchases close.
+ */
+function isEventOver(
+  ev?: { startDate?: string; endDate?: string } | null,
+): boolean {
+  const end = ev?.endDate || ev?.startDate;
+  if (!end) return false;
+  const d = new Date(end);
+  if (isNaN(d.getTime())) return false;
+  d.setHours(23, 59, 59, 999);
+  return d.getTime() < Date.now();
+}
+
+/**
+ * Build the Event Assistant's opening quick-reply pills purely from the
+ * event's own data — mirrors the backend's eventQuickActions so the greeting
+ * never offers something the event doesn't have (e.g. no "Ticket prices" pill
+ * when there are no visitor tickets). Past events drop all "book / buy /
+ * apply" prompts.
+ */
+type ChatbotIntent =
+  | "book_stall"
+  | "buy_ticket"
+  | "apply_speaker"
+  | "book_round_table";
+type ChatbotPill = { label: string; action: string; intent?: ChatbotIntent };
+
+function buildEventChatbotGreeting(ev: FetchedEvent): ChatbotPill[] {
+  const isPast = isEventOver(ev);
+  // Only show ticket pills when the event actually has visitor types — that's
+  // the same gate the page uses to render its ticket-buying UI. A stray
+  // ticketPrice must not surface a phantom "Buy tickets" pill.
+  const hasTickets = (ev.visitorTypes?.length || 0) > 0;
+  // A booking pill only shows when at least one space of that type is actually
+  // FOR SALE. "Not for sale" spaces are layout-only references (decoration), so
+  // a type made up entirely of them gets no "Book …" pill — e.g. round tables
+  // placed purely as references show no "Book a round table" pill.
+  const flat = (v: any): any[] =>
+    Array.isArray(v)
+      ? v
+      : v && typeof v === "object"
+        ? Object.values(v).flat()
+        : [];
+  const anyForSale = (arr: any): boolean =>
+    Array.isArray(arr) && arr.some((t: any) => t?.forSale !== false);
+  const hasStalls =
+    anyForSale(ev.tableTemplates) || anyForSale(flat(ev.venueTables));
+  const hasSpeakers =
+    (ev.speakers?.length || 0) > 0 ||
+    (ev.speakerSlotTemplates?.length || 0) > 0;
+  const hasRoundTables = anyForSale(flat(ev.venueRoundTables));
+
+  const pills: ChatbotPill[] = [
+    { label: "When & where?", action: "When and where is this event?" },
+  ];
+  if (isPast) {
+    // Past event — informational only, no booking intents.
+    if (hasTickets)
+      pills.push({
+        label: "Ticket info",
+        action: "What were the tickets for this event?",
+      });
+    if (hasSpeakers)
+      pills.push({ label: "Speakers", action: "Who spoke at this event?" });
+  } else {
+    if (hasTickets)
+      pills.push({
+        label: "Buy tickets",
+        action: "I want to buy tickets",
+        intent: "buy_ticket",
+      });
+    if (hasStalls)
+      pills.push({
+        label: "Book a stall",
+        action: "How do I book a stall as a vendor?",
+        intent: "book_stall",
+      });
+    if (hasStalls)
+      // Reuses the stall sign-in flow → lands on the vendor's existing-booking
+      // dialog, where they can edit OR cancel/delete their request.
+      pills.push({
+        label: "Cancel my stall",
+        action: "I want to cancel or delete my stall booking",
+        intent: "book_stall",
+      });
+    if (hasSpeakers)
+      pills.push({
+        label: "Apply as speaker",
+        action: "How can I apply to speak at this event?",
+        intent: "apply_speaker",
+      });
+    if (hasRoundTables)
+      pills.push({
+        label: "Book a round table",
+        action: "How do I book a round-table seat?",
+        intent: "book_round_table",
+      });
+  }
+  pills.push({
+    label: "About the organizer",
+    action: "Tell me about the organizer.",
+  });
+  return pills.slice(0, 6);
 }
 
 export function EventFront({ eventId, onBack }: EventDetailPageProps) {
@@ -523,6 +645,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [linkedVendors, setLinkedVendors] = useState<any[]>([]);
   const [authedEmail, setAuthedEmail] = useState("");
   const [showAccountChooser, setShowAccountChooser] = useState(false);
+  // Shown when the chosen vendor holds MORE THAN ONE request for this event
+  // (e.g. a Completed booking + a new Pending one). Lists every request with
+  // its status + date so the vendor can pick which to manage, register another,
+  // or act on any of them — instead of only ever seeing the newest.
+  const [showRequestListChoice, setShowRequestListChoice] = useState(false);
+  const [requestList, setRequestList] = useState<any[]>([]);
+  // Second step inside the request-list dialog: the "register a new request"
+  // who-for choice (same two paths as the completed-choice dialog).
+  const [listRegisterStep, setListRegisterStep] = useState(false);
   // Shown when the chosen vendor has already COMPLETED (paid) a stall for this
   // event: preview the existing booking, or register a new request.
   const [showCompletedChoice, setShowCompletedChoice] = useState(false);
@@ -561,6 +692,49 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // NEW: Table Selection States
   const [selectedTables, setSelectedTables] = useState<any[]>([]);
   const [selectedAddOns, setSelectedAddOns] = useState<any[]>([]);
+
+  // ── Edit Request (amendment) states ──
+  // amendMode locks the Selection tab to add-ons-only editing of an existing
+  // completed booking (spaces stay blue + locked). amendFloor holds the
+  // original add-on quantities so the vendor can only add / increase.
+  const [amendMode, setAmendMode] = useState(false);
+  const [showAmendOperators, setShowAmendOperators] = useState(false);
+  const [amendOperators, setAmendOperators] = useState(1);
+  const [amendFloor, setAmendFloor] = useState<Record<string, number>>({});
+  const [amendAmountDue, setAmendAmountDue] = useState(0);
+  const [showAmendPayment, setShowAmendPayment] = useState(false);
+  const [amendTxnId, setAmendTxnId] = useState("");
+  const [amendScreenshot, setAmendScreenshot] = useState<File | null>(null);
+  const [amendSubmitting, setAmendSubmitting] = useState(false);
+  // Post-payment feedback (shown after the stall-edit difference is paid).
+  const [showPaymentFeedback, setShowPaymentFeedback] = useState(false);
+  const [feedbackAmount, setFeedbackAmount] = useState(0);
+  // Cancellation/delete request (vendor asks, organizer approves).
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
+  // positionIds of THIS vendor's own booked spaces — rendered blue + locked.
+  const ownBookedPositionIds = useMemo(
+    () =>
+      new Set<string>(
+        (existingStallRequest?.selectedTables || []).map(
+          (t: any) => t.positionId,
+        ),
+      ),
+    [existingStallRequest],
+  );
+  // Extra owed for the edit = new add-on total − original add-on total (>= 0).
+  // Declared with the other hooks (above the component's early returns) so the
+  // hook order stays stable across renders.
+  const amendExtra = useMemo(() => {
+    if (!amendMode) return 0;
+    const newTotal = selectedAddOns.reduce(
+      (s, a) => s + (Number(a.price) || 0) * (Number(a.quantity) || 0),
+      0,
+    );
+    const oldTotal = Number(existingStallRequest?.addOnsTotal) || 0;
+    return Math.max(0, newTotal - oldTotal);
+  }, [amendMode, selectedAddOns, existingStallRequest]);
   // T&C for stalls
   const [stallTermsChecked, setStallTermsChecked] = useState<
     Record<number, boolean>
@@ -687,26 +861,180 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     const [min, max] = phoneNationalLength(country.countryCode);
     return min === max ? `${min} digits` : `${min}–${max} digits`;
   };
-  // Registration-number rules driven by the selected Residency: Singapore uses
-  // a 10-char UEN, India a 15-char GST. Both alphanumeric. Other residencies
-  // fall back to a generic alphanumeric field with no fixed length.
+  // Registration-number rules driven by the selected Residency. Singapore UENs
+  // are 9 OR 10 characters (older ACRA business numbers are 9 chars, e.g.
+  // 53464793J; companies and other entities are 10, e.g. 201812345A). India
+  // GST is always 15. Both alphanumeric. Other residencies have no fixed length.
   const regConfig = (() => {
     const res = String(shopkeeperDetails.residency || "").toLowerCase();
     if (res === "singapore")
       return {
         label: "UEN",
-        length: 10,
-        example: "UEN — 10 characters, e.g. 201812345A or T18LL1234A",
+        minLength: 9,
+        maxLength: 10,
+        example: "UEN — 9 or 10 characters, e.g. 53464793J or 201812345A",
       };
     if (res === "india")
       return {
         label: "GST",
-        length: 15,
+        minLength: 15,
+        maxLength: 15,
         example: "GST — 15 characters, e.g. 27AAPFU0939F1ZV",
       };
-    return { label: "UEN/GST", length: 0, example: "" };
+    return { label: "UEN/GST", minLength: 0, maxLength: 0, example: "" };
   })();
+
+  // A recognizable placeholder for vendors who don't have a GST/UEN. It passes
+  // the field's format/length check so they can still submit, but it is NOT a
+  // real registration — it deliberately fails the verification APIs. The
+  // organizer sees it, reaches out to the vendor, and decides whether to
+  // approve. Lengths match each type's requirement (GST 15, UEN 10).
+  const dummyRegNumber =
+    regConfig.label === "GST"
+      ? "NOGSTPROVIDED00"
+      : regConfig.label === "UEN"
+        ? "NOUENGIVEN"
+        : "NOTPROVIDED";
+  const isDummyReg = shopkeeperDetails.registrationNumber === dummyRegNumber;
+
   const { toast } = useToast();
+
+  // --- GST verification (India stalls) via AppyFlow, ported from KiosCart ---
+  const APPYFLOW_KEY = import.meta.env.VITE_APPYFLOW_KEY_SECRET;
+  const [gstVerifying, setGstVerifying] = useState(false);
+  const [gstVerified, setGstVerified] = useState(false);
+  const [gstError, setGstError] = useState("");
+  // Trimmed, display-ready GST registry details — saved to the vendor and
+  // shown to the organizer. Kept so a returning vendor isn't re-verified.
+  const [gstDetails, setGstDetails] = useState<any>(null);
+  // UEN verification (Singapore) via ACRA's FREE open-data registry
+  // (data.gov.sg) — no API key or per-call cost, unlike the GST provider.
+  const [uenVerifying, setUenVerifying] = useState(false);
+  const [uenVerified, setUenVerified] = useState(false);
+  const [uenError, setUenError] = useState("");
+  const [uenDetails, setUenDetails] = useState<any>(null);
+
+  const handleVerifyGST = async (raw: string) => {
+    const gstin = (raw || "").trim().toUpperCase();
+    setGstError("");
+    if (!gstin) {
+      setGstError("Enter the GST number first.");
+      return;
+    }
+    if (!APPYFLOW_KEY) {
+      setGstError("GST verification isn't configured. Contact support.");
+      return;
+    }
+    setGstVerifying(true);
+    try {
+      const url = `https://appyflow.in/api/verifyGST?gstNo=${encodeURIComponent(
+        gstin,
+      )}&key_secret=${encodeURIComponent(APPYFLOW_KEY)}`;
+      const res = await fetch(url);
+      const data = await res.json().catch(() => ({}));
+      const valid =
+        data?.taxpayerInfo?.sts === "Active" || data?.is_gst_valid === true;
+      if (!res.ok || !valid) {
+        setGstVerified(false);
+        setGstError(
+          data?.message ||
+            data?.error ||
+            "This GST number couldn't be verified. Please check and try again.",
+        );
+        return;
+      }
+      setGstVerified(true);
+      // Build a clean, display-ready subset (the raw AppyFlow payload is large
+      // and noisy). This is what we save on the vendor + show the organizer.
+      const addr = data?.taxpayerInfo?.pradr?.addr || data?.pradr?.addr || {};
+      const details = {
+        gstin,
+        legalName: data?.taxpayerInfo?.lgnm || data?.taxablePersonName || "",
+        tradeName: data?.taxpayerInfo?.tradeNam || "",
+        status: data?.taxpayerInfo?.sts || "Active",
+        registrationDate: data?.taxpayerInfo?.rgdt || "",
+        constitution: data?.taxpayerInfo?.ctb || "",
+        address: [
+          addr?.bnm,
+          addr?.flno,
+          addr?.st,
+          addr?.loc,
+          addr?.dst,
+          addr?.stcd,
+          addr?.pncd,
+        ]
+          .filter(Boolean)
+          .join(", "),
+        state: addr?.stcd || "",
+        verifiedAt: new Date().toISOString(),
+      };
+      setGstDetails(details);
+      const name = details.legalName || details.tradeName || gstin;
+      toast({
+        duration: 5000,
+        title: "GST verified ✓",
+        description: `Registered: ${name}`,
+      });
+    } catch {
+      setGstVerified(false);
+      setGstError("Couldn't reach the verification service. Try again.");
+    } finally {
+      setGstVerifying(false);
+    }
+  };
+
+  // --- UEN verification (Singapore) via ACRA open data (data.gov.sg) ---
+  // Free government registry — no key, no cost. Returns entity name, status,
+  // type and address for a given UEN.
+  const UEN_ACRA_RESOURCE = "d_3f960c10fed6145404ca7b821f263b87";
+  const handleVerifyUEN = async (raw: string) => {
+    const uen = (raw || "").trim().toUpperCase();
+    setUenError("");
+    if (!uen) {
+      setUenError("Enter the UEN first.");
+      return;
+    }
+    setUenVerifying(true);
+    try {
+      const filters = encodeURIComponent(JSON.stringify({ uen }));
+      const url = `https://data.gov.sg/api/action/datastore_search?resource_id=${UEN_ACRA_RESOURCE}&filters=${filters}&limit=1`;
+      const res = await fetch(url);
+      const data = await res.json().catch(() => ({}));
+      const rec = data?.result?.records?.[0];
+      if (!res.ok || !rec) {
+        setUenVerified(false);
+        setUenError(
+          "This UEN isn't in the ACRA registry. If it's a newly registered entity it may not appear yet — the organizer can double-check it on the official registry.",
+        );
+        return;
+      }
+      setUenVerified(true);
+      const details = {
+        uen: rec.uen || uen,
+        entityName: rec.entity_name || "",
+        status: rec.uen_status_desc || "",
+        entityType: rec.entity_type_desc || "",
+        issueDate: rec.uen_issue_date || "",
+        agency: rec.issuance_agency_desc || "ACRA",
+        address: [rec.reg_street_name, rec.reg_postal_code]
+          .filter(Boolean)
+          .join(", "),
+        verifiedAt: new Date().toISOString(),
+      };
+      setUenDetails(details);
+      toast({
+        duration: 5000,
+        title: "UEN verified ✓",
+        description: `Registered: ${details.entityName || uen}`,
+      });
+    } catch {
+      setUenVerified(false);
+      setUenError("Couldn't reach the verification service. Try again.");
+    } finally {
+      setUenVerifying(false);
+    }
+  };
+
   // Country dial codes come from a single shared hook (local data, no network).
   const { countries, loading: loadingCountries } = useCountryCodes();
   const [settings, setSettings] = useState<OrganizerStore | null>(null);
@@ -1346,6 +1674,26 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       preferredTemplateQuantities: [] as number[],
     });
     setEmailVerified(true); // Assume verified if exists
+
+    // Returning vendor whose GST was already verified — restore that state so
+    // we don't spend another external GST-API call re-verifying the same
+    // number. The cached registry details also stay visible to the organizer.
+    if (shopData.isGSTVerified) {
+      setGstVerified(true);
+      setGstDetails(shopData.gstDetails || null);
+      setGstError("");
+    } else {
+      setGstVerified(false);
+      setGstDetails(null);
+    }
+    if (shopData.isUENVerified) {
+      setUenVerified(true);
+      setUenDetails(shopData.uenDetails || null);
+      setUenError("");
+    } else {
+      setUenVerified(false);
+      setUenDetails(null);
+    }
 
     // Load any stored brand assets as previews so the (now mandatory) image
     // fields are satisfied without forcing a returning vendor to re-upload.
@@ -2890,6 +3238,96 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     fontFamily: design?.fontFamily,
   } as CSSProperties;
 
+  // Route the UI for a single stall request by its status. Extracted so both
+  // the single-request path and the multi-request list chooser reuse it.
+  const routeExistingRequest = async (data: any) => {
+    setExistingStallRequest(data);
+    if (data.status === "Confirmed") {
+      setShowWhatsAppDialog(false);
+      setShowRentForm(false);
+      setShowTableSelection(true);
+      await fetchAvailableTables();
+      toast({
+        duration: 5000,
+        title: "Request Confirmed",
+        description: "Please select your tables and add-ons",
+      });
+    } else if (data.status === "Pending") {
+      // Request is pending
+      setShowWhatsAppDialog(false);
+      setShowRentForm(false);
+      toast({
+        duration: 5000,
+        title: "Request Pending",
+        description: "Your stall request is awaiting organizer approval",
+      });
+    } else if (data.status === "Processing") {
+      // Tables already selected, awaiting payment
+      setShowWhatsAppDialog(false);
+      setShowRentForm(false);
+      toast({
+        duration: 5000,
+        title: "Proceed to Payment",
+        description: "Your tables are selected. Please complete payment.",
+      });
+    } else if (data.status === "Completed") {
+      // Booking completed (paid). Offer: preview the existing booking, or
+      // register a NEW request (a different vendor under the same email).
+      setShowWhatsAppDialog(false);
+      setShowRentForm(false);
+      setShowAccountChooser(false);
+      setShowRegisterTargetChoice(false);
+      setShowCompletedChoice(true);
+    } else if (data.status === "Approved") {
+      // Request approved - go directly to space/table selection
+      setShowWhatsAppDialog(false);
+      setShowRentForm(false);
+      setShowTableSelection(true);
+      await fetchAvailableTables();
+      toast({
+        duration: 5000,
+        title: "Request Approved",
+        description: "Please select your tables and add-ons",
+      });
+    } else if (data.status === "Cancelled") {
+      // Request cancelled - allow new request
+      setShowWhatsAppDialog(false);
+      setShowRentForm(true);
+      toast({
+        duration: 5000,
+        title: "Previous Request Cancelled",
+        description: "You can submit a new stall request",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Pick one request from the multi-request list chooser and route to it.
+  const selectRequestFromList = async (req: any) => {
+    setShowRequestListChoice(false);
+    setListRegisterStep(false);
+    await routeExistingRequest(req);
+  };
+
+  // Badge colour per request status, matching the organizer-side pill palette.
+  const requestStatusBadgeClass = (status: string): string => {
+    switch (status) {
+      case "Completed":
+        return "bg-green-100 text-green-700";
+      case "Confirmed":
+      case "Approved":
+        return "bg-blue-100 text-blue-700";
+      case "Processing":
+        return "bg-amber-100 text-amber-700";
+      case "Pending":
+        return "bg-yellow-100 text-yellow-700";
+      case "Cancelled":
+        return "bg-red-100 text-red-700";
+      default:
+        return "bg-gray-100 text-gray-700";
+    }
+  };
+
   // NEW: Fetch existing request
   const fetchExistingRequest = async (
     shopkeeperId: string,
@@ -2902,67 +3340,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       const result = await response.json();
 
       if (result.success && result.data) {
-        setExistingStallRequest(result.data);
-
-        // Handle different request statuses
-        if (result.data.status === "Confirmed") {
-          setShowWhatsAppDialog(false);
-          setShowRentForm(false);
-          setShowTableSelection(true);
-          await fetchAvailableTables();
-          toast({
-            duration: 5000,
-            title: "Request Confirmed",
-            description: "Please select your tables and add-ons",
-          });
-        } else if (result.data.status === "Pending") {
-          // Request is pending
-          setShowWhatsAppDialog(false);
-          setShowRentForm(false);
-          toast({
-            duration: 5000,
-            title: "Request Pending",
-            description: "Your stall request is awaiting organizer approval",
-          });
-        } else if (result.data.status === "Processing") {
-          // Tables already selected, awaiting payment
-          setShowWhatsAppDialog(false);
-          setShowRentForm(false);
-          toast({
-            duration: 5000,
-            title: "Proceed to Payment",
-            description: "Your tables are selected. Please complete payment.",
-          });
-        } else if (result.data.status === "Completed") {
-          // Booking completed (paid). Offer: preview the existing booking, or
-          // register a NEW request (a different vendor under the same email).
+        // More than one request for this vendor+event → let them pick which to
+        // manage (or register another) instead of auto-routing to the newest.
+        if (Array.isArray(result.requests) && result.requests.length > 1) {
+          setRequestList(result.requests);
+          setListRegisterStep(false);
           setShowWhatsAppDialog(false);
           setShowRentForm(false);
           setShowAccountChooser(false);
-          setShowRegisterTargetChoice(false);
-          setShowCompletedChoice(true);
-        } else if (result.data.status === "Approved") {
-          // Request approved - go directly to space/table selection
-          setShowWhatsAppDialog(false);
-          setShowRentForm(false);
-          setShowTableSelection(true);
-          await fetchAvailableTables();
-          toast({
-            duration: 5000,
-            title: "Request Approved",
-            description: "Please select your tables and add-ons",
-          });
-        } else if (result.data.status === "Cancelled") {
-          // Request cancelled - allow new request
-          setShowWhatsAppDialog(false);
-          setShowRentForm(true);
-          toast({
-            duration: 5000,
-            title: "Previous Request Cancelled",
-            description: "You can submit a new stall request",
-            variant: "destructive",
-          });
+          setShowRequestListChoice(true);
+          return;
         }
+        await routeExistingRequest(result.data);
       } else {
         // No existing request - show rent form
         setShowWhatsAppDialog(false);
@@ -3196,6 +3585,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const handleRentFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (isEventOver(eventData)) {
+      toast({
+        title: "This event has ended",
+        description: "Stall bookings are closed for this event.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!emailVerified && !shopkeeperExists) {
       toast({
         duration: 5000,
@@ -3289,9 +3687,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     const regNo = String(d.registrationNumber || "").trim();
     if (regNo && !/^[A-Za-z0-9]+$/.test(regNo)) {
       invalid.push("Registration Number must be letters and numbers only");
-    } else if (regNo && regConfig.length > 0 && regNo.length !== regConfig.length) {
+    } else if (
+      regNo &&
+      regConfig.maxLength > 0 &&
+      (regNo.length < regConfig.minLength ||
+        regNo.length > regConfig.maxLength)
+    ) {
       invalid.push(
-        `${regConfig.label} must be exactly ${regConfig.length} alphanumeric characters`,
+        regConfig.minLength === regConfig.maxLength
+          ? `${regConfig.label} must be exactly ${regConfig.maxLength} alphanumeric characters`
+          : `${regConfig.label} must be ${regConfig.minLength}–${regConfig.maxLength} alphanumeric characters`,
       );
     }
     if (invalid.length) {
@@ -3355,6 +3760,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         shopkeeperDetails.registrationNumber,
       );
       formData.append("residency", shopkeeperDetails.residency);
+      // GST verification result — cached on the vendor so returning exhibitors
+      // aren't re-verified (saves the external API call) and shown to the
+      // organizer in the stall details dialog for easy approval.
+      formData.append("isGSTVerified", gstVerified ? "true" : "false");
+      if (gstDetails)
+        formData.append("gstDetails", JSON.stringify(gstDetails));
+      formData.append("isUENVerified", uenVerified ? "true" : "false");
+      if (uenDetails)
+        formData.append("uenDetails", JSON.stringify(uenDetails));
       formData.append(
         "refundPaymentDescription",
         shopkeeperDetails.refundPaymentDescription,
@@ -3477,15 +3891,29 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }
   };
 
-  const handleGetTickets = async () => {
+  const handleGetTickets = async (typeIndexOverride?: number) => {
     if (!eventData || !eventData.organizer) return;
+    if (isEventOver(eventData)) {
+      toast({
+        title: "This event has ended",
+        description: "Ticket sales are closed for this event.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     const { visitorTypes } = eventData;
+    // Allow a caller (e.g. the chatbot ticket picker) to choose the visitor
+    // type directly; otherwise use the sidebar's selected type.
+    const chosenTypeIndex =
+      typeof typeIndexOverride === "number"
+        ? typeIndexOverride
+        : selectedVisitorType;
     let cartItems: any[] = [];
 
     if (visitorTypes && visitorTypes.length > 0) {
       // Single selected visitor type
-      const vt = visitorTypes[selectedVisitorType];
+      const vt = visitorTypes[chosenTypeIndex];
       if (!vt) return;
 
       cartItems = [
@@ -3822,6 +4250,40 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }, 80);
   };
 
+  // Guard shared by the chatbot booking shortcuts — a past event accepts no
+  // new bookings (the backend also refuses).
+  const guardEventOpen = (what: string): boolean => {
+    if (isEventOver(eventData)) {
+      toast({
+        title: "This event has ended",
+        description: `${what} are closed for this event.`,
+        variant: "destructive",
+      });
+      return false;
+    }
+    return true;
+  };
+
+  // Open the "Apply to Speak" dialog (same as the on-page "Apply to Speak"
+  // button). Reused by the chatbot "Apply as speaker" pill.
+  const openSpeakerApply = () => {
+    if (!guardEventOpen("Speaker applications")) return;
+    setShowSpeakerDialog(true);
+    setSpeakerStep("whatsapp");
+    setSpeakerWhatsApp("");
+    setSpeakerOtp("");
+    setSpeakerOtpSent(false);
+    setSpeakerVerified(false);
+    setExistingSpeakerRequest(null);
+  };
+
+  // Open the round-table booking flow: jump to the Venue tab and reveal the
+  // layout so the visitor can pick seats. Reused by the chatbot pill.
+  const openRoundTableBooking = () => {
+    if (!guardEventOpen("Round-table bookings")) return;
+    goToTab("venue", true);
+  };
+
   // ── "Add to Google Calendar" + "View on Google Maps" links for the
   // top info cards. Built from the event's date/time/venue. ──
   const toCalDate = (d: string, t?: string) => {
@@ -4009,6 +4471,17 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     });
 
   const handleAddOnSelect = (addon: any) => {
+    // In Edit-Request (amend) mode add-ons are add-only: an originally-booked
+    // add-on can't be toggled off.
+    if (amendMode && (amendFloor[addon.id] || 0) > 0) {
+      toast({
+        duration: 3000,
+        title: "Can't remove this add-on",
+        description: "In an edit you can only add or increase add-ons.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSelectedAddOns((prev) => {
       const exists = prev.find((a) => a.id === addon.id);
       if (exists) {
@@ -4062,17 +4535,221 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     );
   };
 
-  // Decrease/Remove quantity
+  // Decrease/Remove quantity. In amend mode the quantity can't drop below the
+  // originally-booked floor (add-only edits).
   const handleRemoveAddOn = (addonId: string) => {
+    const floor = amendMode ? amendFloor[addonId] || 0 : 0;
     setSelectedAddOns((prev) => {
       return prev
         .map((a) =>
           a.id === addonId
-            ? { ...a, quantity: Math.max(0, a.quantity - 1) }
+            ? { ...a, quantity: Math.max(floor, a.quantity - 1) }
             : a,
         )
         .filter((a) => a.quantity > 0);
     });
+  };
+
+  // ── Edit Request (amendment) handlers ──
+  // Seed the Selection tab from the existing completed booking, then open the
+  // operator-edit step. Spaces are seeded so they render blue + locked.
+  const startEditRequest = () => {
+    const req = existingStallRequest;
+    if (!req) return;
+    // Past events accept no edits/transactions.
+    if (isEventOver(eventData)) {
+      toast({
+        duration: 4000,
+        title: "This event has ended",
+        description: "Bookings and edits are closed for this event.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setAmendOperators(
+      Math.min(10, Math.max(1, Number(req.noOfOperators) || 1)),
+    );
+    setSelectedTables(
+      (req.selectedTables || []).map((t: any) => ({
+        tableId: t.tableId,
+        positionId: t.positionId,
+        name: t.name,
+        tableType: t.tableType,
+        layoutName: t.layoutName,
+        rowNumber: t.rowNumber,
+        width: t.width,
+        height: t.height,
+        price: Number(t.price) || 0,
+        depositAmount: Number(t.depositAmount) || 0,
+        // Fields the "Selected Tables" summary reads for the read-only price
+        // display (these aren't stored on the booking, so derive from price).
+        tablePrice: Number(t.price) || 0,
+        regularPrice: Number(t.price) || 0,
+        bookingPrice: Number(t.price) || 0,
+        depositPrice: Number(t.depositAmount) || 0,
+        appliedTier: "regular",
+        memberSaved: 0,
+      })),
+    );
+    const seeded = (req.selectedAddOns || []).map((a: any) => ({
+      id: a.addOnId,
+      name: a.name,
+      price: Number(a.price) || 0,
+      quantity: Number(a.quantity) || 1,
+    }));
+    setSelectedAddOns(seeded);
+    const floor: Record<string, number> = {};
+    seeded.forEach((a: any) => {
+      floor[a.id] = a.quantity;
+    });
+    setAmendFloor(floor);
+    setAmendMode(true);
+    setShowCompletedChoice(false);
+    setShowAmendOperators(true);
+  };
+
+  const proceedAmendToSelection = () => {
+    setShowAmendOperators(false);
+    fetchAvailableTables();
+    setShowTableSelection(true);
+  };
+
+  // Vendor submits a cancellation/delete request (goes to the organizer).
+  const handleRequestCancellation = async () => {
+    if (!existingStallRequest?._id) return;
+    if (!cancelReason.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Add a reason",
+        description: "Tell the organizer why you're cancelling.",
+      });
+      return;
+    }
+    setCancelSubmitting(true);
+    try {
+      const res = await fetch(
+        `${apiURL}/stalls/${existingStallRequest._id}/request-cancellation`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: cancelReason.trim() }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok || data?.success === false)
+        throw new Error(data?.message || "Couldn't send the request.");
+      toast({
+        title: "Cancellation requested",
+        description:
+          "Your request was sent to the organizer. They'll review it and email you (with any refund details).",
+      });
+      setShowCancelDialog(false);
+      setCancelReason("");
+      setShowCompletedChoice(false);
+    } catch (e: any) {
+      toast({
+        variant: "destructive",
+        title: "Couldn't send request",
+        description: e?.message || "Please try again.",
+      });
+    } finally {
+      setCancelSubmitting(false);
+    }
+  };
+
+  const resetAmend = () => {
+    setAmendMode(false);
+    setShowAmendOperators(false);
+    setShowAmendPayment(false);
+    setShowTableSelection(false);
+    setAmendFloor({});
+    setAmendAmountDue(0);
+    setAmendTxnId("");
+    setAmendScreenshot(null);
+    setSelectedTables([]);
+    setSelectedAddOns([]);
+  };
+
+  const handleAmendmentSubmit = async () => {
+    if (!existingStallRequest?._id) return;
+    setAmendSubmitting(true);
+    try {
+      const res = await fetch(
+        `${apiURL}/stalls/${existingStallRequest._id}/amend`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            noOfOperators: String(amendOperators),
+            selectedAddOns: selectedAddOns.map((a) => ({
+              addOnId: a.id,
+              name: a.name,
+              price: a.price,
+              quantity: a.quantity,
+            })),
+          }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Couldn't save the edit.");
+      const due = Number(data?.data?.amountDue) || 0;
+      setShowTableSelection(false);
+      if (due > 0) {
+        setAmendAmountDue(due);
+        setShowAmendPayment(true);
+      } else {
+        toast({
+          title: "Edit submitted",
+          description:
+            "Awaiting organizer confirmation — your updated QR will follow once approved.",
+        });
+        resetAmend();
+      }
+    } catch (e: any) {
+      toast({
+        variant: "destructive",
+        title: "Couldn't save edit",
+        description: e?.message || "Please try again.",
+      });
+    } finally {
+      setAmendSubmitting(false);
+    }
+  };
+
+  const submitAmendPayment = async () => {
+    if (!existingStallRequest?._id) return;
+    setAmendSubmitting(true);
+    try {
+      const fd = new FormData();
+      if (amendTxnId) fd.append("transactionId", amendTxnId);
+      fd.append("paymentMethod", "qr");
+      if (amendScreenshot) fd.append("screenshot", amendScreenshot);
+      const res = await fetch(
+        `${apiURL}/stalls/${existingStallRequest._id}/amend-payment`,
+        { method: "POST", body: fd },
+      );
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(data?.message || "Couldn't record the payment.");
+      toast({
+        title: "Payment recorded",
+        description:
+          "Awaiting organizer confirmation — your updated QR will follow once approved.",
+      });
+      // Capture the paid difference before resetAmend() clears it, then prompt
+      // for feedback on the edit-payment experience.
+      setFeedbackAmount(amendAmountDue);
+      resetAmend();
+      setShowPaymentFeedback(true);
+    } catch (e: any) {
+      toast({
+        variant: "destructive",
+        title: "Payment failed",
+        description: e?.message || "Please try again.",
+      });
+    } finally {
+      setAmendSubmitting(false);
+    }
   };
 
   const infoBadgeStyle = {
@@ -4094,6 +4771,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     // (the Ad bar) actually works. Using `overflow-x-hidden`
     // here is what made the bar stop sticking on scroll.
     <div className="min-h-screen bg-[#f5f5f5] overflow-x-clip">
+      {/* Past-event notice — once the event is over, all purchases and
+          bookings (tickets, stalls, speakers, round tables) are closed.
+          The submit handlers and the backend enforce this too; this bar
+          just makes it visible up front. */}
+      {isEventOver(eventData) && (
+        <div className="w-full bg-gray-800 px-4 py-2.5 text-center text-sm font-medium text-white">
+          This event has ended — ticket sales, stall bookings, speaker
+          applications and round-table reservations are now closed.
+        </div>
+      )}
       {/* (Ad bar moved into the sticky top-strip wrapper just above
           the header so it stays pinned at the top of the viewport
           while the page scrolls.) */}
@@ -4895,18 +5582,26 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       </>
                     )}
 
-                    {/* Buy Tickets CTA — only if visitorTypes exist */}
+                    {/* Buy Tickets CTA — only if visitorTypes exist. Once the
+                        event is over, sales close: the button is replaced with
+                        an "ended" notice (the handler + backend also refuse). */}
                     {visitorTypes && visitorTypes.length > 0 && (
-                      <button
-                        onClick={handleGetTickets}
-                        className="w-full h-12 sm:h-14 rounded-xl font-bold text-base text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 shadow-md hover:shadow-lg mb-3"
-                        style={{
-                          background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
-                        }}
-                      >
-                        <Ticket className="h-5 w-5" />
-                        Buy Tickets
-                      </button>
+                      isEventOver(eventData) ? (
+                        <div className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 mb-3 text-center text-sm font-medium text-gray-500">
+                          This event has ended — ticket sales are closed.
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleGetTickets()}
+                          className="w-full h-12 sm:h-14 rounded-xl font-bold text-base text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 shadow-md hover:shadow-lg mb-3"
+                          style={{
+                            background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                          }}
+                        >
+                          <Ticket className="h-5 w-5" />
+                          Buy Tickets
+                        </button>
+                      )
                     )}
 
                     {/* Share */}
@@ -5061,15 +5756,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       this event.
                     </p>
                     <button
-                      onClick={() => {
-                        setShowSpeakerDialog(true);
-                        setSpeakerStep("whatsapp");
-                        setSpeakerWhatsApp("");
-                        setSpeakerOtp("");
-                        setSpeakerOtpSent(false);
-                        setSpeakerVerified(false);
-                        setExistingSpeakerRequest(null);
-                      }}
+                      onClick={openSpeakerApply}
                       className="w-full h-11 rounded-xl border-2 font-semibold text-sm transition-all hover:opacity-90"
                       style={{
                         borderColor: design?.primaryColor || "#6366f1",
@@ -6137,6 +6824,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                         {table.name}
                                       </span>
                                     </div>
+                                    {/* Not-for-sale spaces are layout-only
+                                        references (decoration / standing
+                                        tables) — no price, not bookable — so
+                                        they get NO hover tooltip. */}
+                                    {!notForSale && (
                                     <div
                                       className="pointer-events-none absolute bottom-full left-1/2 z-[100] mb-3 w-max opacity-0 transition-opacity group-hover:opacity-100"
                                       style={{
@@ -6202,6 +6894,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                         <div className="absolute left-1/2 top-full -mt-1 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 border-b border-r border-gray-700"></div>
                                       </div>
                                     </div>
+                                    )}
                                   </div>
                                 </div>
                               );
@@ -6317,11 +7010,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                         )
                                           handleChairClick(0);
                                       }}
-                                      title={
-                                        isReference
-                                          ? `${rt.name} — Not for sale`
-                                          : rt.name
-                                      }
+                                      title={isReference ? undefined : rt.name}
                                       className="rounded-full flex flex-col items-center justify-center"
                                       style={{
                                         position: "absolute",
@@ -6412,7 +7101,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                               : "scale(1)",
                                             zIndex: sl ? 12 : 7,
                                           }}
-                                          title={`Seat ${i + 1} — ${bk ? "Taken" : sl ? "Selected" : "Available"}${rt.sellingMode === "chair" && !isReference ? ` · ${formatPrice(rtChairPrice(rt))}` : ""}`}
+                                          title={isReference ? undefined : `Seat ${i + 1} — ${bk ? "Taken" : sl ? "Selected" : "Available"}${rt.sellingMode === "chair" ? ` · ${formatPrice(rtChairPrice(rt))}` : ""}`}
                                         >
                                           {i + 1}
                                         </button>
@@ -7370,6 +8059,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           !rtVisitorInfo.phone
                         }
                         onClick={async () => {
+                          if (isEventOver(eventData)) {
+                            toast({
+                              title: "This event has ended",
+                              description:
+                                "Round-table bookings are closed for this event.",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
                           setRtBookingLoading(true);
                           try {
                             const organizerId = eventData?.organizer?._id;
@@ -8408,6 +9106,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         !speakerFormData.sessionTopic
                       }
                       onClick={async () => {
+                        if (isEventOver(eventData)) {
+                          toast({
+                            title: "This event has ended",
+                            description:
+                              "Speaker applications are closed for this event.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
                         setSpeakerSubmitting(true);
                         try {
                           let res;
@@ -8667,6 +9374,139 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         </DialogContent>
       </Dialog>
 
+      {/* Multiple requests for the same vendor + event: list them all (status +
+          date) so the vendor can pick which to manage, or register another. */}
+      <Dialog
+        open={showRequestListChoice}
+        onOpenChange={(open) => {
+          setShowRequestListChoice(open);
+          if (!open) setListRegisterStep(false);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Store className="h-5 w-5 text-blue-600" />
+              You have {requestList.length} requests for this event
+            </DialogTitle>
+            <DialogDescription>
+              This vendor has more than one stall request for{" "}
+              <span className="font-medium">{eventData?.title}</span>. Pick one
+              to view or manage it, or register a new request.
+            </DialogDescription>
+          </DialogHeader>
+
+          {!listRegisterStep ? (
+            <div className="space-y-2 pt-1 max-h-[55vh] overflow-y-auto">
+              {requestList.map((req: any) => (
+                <button
+                  key={req._id}
+                  type="button"
+                  onClick={() => selectRequestFromList(req)}
+                  className="w-full text-left rounded-lg border border-gray-200 p-3 hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${requestStatusBadgeClass(
+                        req.status,
+                      )}`}
+                    >
+                      {req.status || "Pending"}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {req.createdAt
+                        ? new Date(req.createdAt).toLocaleDateString("en-US", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-gray-900 truncate">
+                      {req.shopkeeperId?.businessName ||
+                        req.businessName ||
+                        req.shopkeeperId?.shopName ||
+                        req.shopkeeperId?.name ||
+                        "Stall request"}
+                    </span>
+                    {typeof req.grandTotal === "number" && (
+                      <span className="text-sm font-semibold shrink-0">
+                        {formatPrice(req.grandTotal)}
+                      </span>
+                    )}
+                  </div>
+                  {Array.isArray(req.selectedTables) &&
+                    req.selectedTables.length > 0 && (
+                      <div className="mt-0.5 text-xs text-gray-500">
+                        {req.selectedTables.length}{" "}
+                        {req.selectedTables.length === 1 ? "space" : "spaces"} ·{" "}
+                        {req.selectedTables
+                          .map((t: any) => t.tableName)
+                          .filter(Boolean)
+                          .join(", ")}
+                      </div>
+                    )}
+                </button>
+              ))}
+              <Button
+                variant="outline"
+                className="w-full mt-1"
+                onClick={() => setListRegisterStep(true)}
+              >
+                + Register a new request
+              </Button>
+            </div>
+          ) : (
+            // Register-new who-for step (same paths as the completed-choice one).
+            <div className="space-y-2 pt-2">
+              <p className="text-sm font-medium text-gray-700">
+                Who is this new request for?
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRequestListChoice(false);
+                  startRegisterForSelf();
+                }}
+                className="w-full text-left rounded-lg border border-gray-200 p-3 hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
+              >
+                <p className="font-semibold text-sm text-gray-900">
+                  Register for yourself
+                </p>
+                <p className="text-xs text-gray-500">
+                  Book again using this same vendor profile.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRequestListChoice(false);
+                  startRegisterNew(authedEmail || shopkeeperDetails.email);
+                }}
+                className="w-full text-left rounded-lg border border-gray-200 p-3 hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
+              >
+                <p className="font-semibold text-sm text-gray-900">
+                  Register for a new vendor
+                </p>
+                <p className="text-xs text-gray-500">
+                  Create a separate vendor account under{" "}
+                  {authedEmail || shopkeeperDetails.email}.
+                </p>
+              </button>
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => setListRegisterStep(false)}
+              >
+                Back
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Completed cycle: preview the existing booking, or register a new one. */}
       <Dialog
         open={showCompletedChoice}
@@ -8715,17 +9555,57 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             </div>
           )}
           {!showRegisterTargetChoice ? (
-            // Step 1 — preview the existing booking, or start a new request.
-            <div className="grid grid-cols-2 gap-2 pt-2">
-              <Button
-                variant="outline"
-                onClick={() => setShowCompletedChoice(false)}
-              >
-                Close
-              </Button>
-              <Button onClick={() => setShowRegisterTargetChoice(true)}>
-                Register a new request
-              </Button>
+            // Step 1 — edit this booking, or start a fresh request.
+            <div className="space-y-2 pt-2">
+              {/* Edit the existing booking: operators + add-ons only. Hidden
+                  once the event has ended — no more edits/transactions. */}
+              {!isEventOver(eventData) && (
+                <Button
+                  className="w-full"
+                  style={{
+                    backgroundColor: design?.primaryColor || "#2563eb",
+                  }}
+                  onClick={startEditRequest}
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit request (operators &amp; add-ons)
+                </Button>
+              )}
+              {/* Ask the organizer to cancel/delete this booking (frees the
+                  space + refund handled by the organizer). Hidden if a request
+                  is already pending. */}
+              {existingStallRequest?.pendingCancellation?.status ===
+              "requested" ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-center text-xs text-amber-700">
+                  Cancellation request pending organizer review.
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  className="w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                  onClick={() => {
+                    setCancelReason("");
+                    setShowCancelDialog(true);
+                  }}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Cancel / delete this booking
+                </Button>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowCompletedChoice(false)}
+                >
+                  Close
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowRegisterTargetChoice(true)}
+                >
+                  Register a new request
+                </Button>
+              </div>
             </div>
           ) : (
             // Step 2 — who is this new request for? Reuse THIS profile, or
@@ -8773,6 +9653,214 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ============================================================ */}
+      {/* CANCEL / DELETE REQUEST — vendor gives a reason               */}
+      {/* ============================================================ */}
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-600" />
+              Cancel this stall booking
+            </DialogTitle>
+            <DialogDescription>
+              Tell the organizer why you'd like to cancel. They'll review it,
+              free up your space, and email you with any refund details.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-1">
+            <Label className="text-sm">Reason for cancellation</Label>
+            <Textarea
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="e.g. Can no longer attend, double-booked, change of plans…"
+              rows={4}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowCancelDialog(false)}
+              disabled={cancelSubmitting}
+            >
+              Back
+            </Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700"
+              onClick={handleRequestCancellation}
+              disabled={cancelSubmitting || !cancelReason.trim()}
+            >
+              {cancelSubmitting ? "Sending…" : "Send cancellation request"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ============================================================ */}
+      {/* EDIT REQUEST — Step 1: adjust operator count                  */}
+      {/* ============================================================ */}
+      <Dialog
+        open={showAmendOperators}
+        onOpenChange={(o) => {
+          setShowAmendOperators(o);
+          if (!o) setAmendMode(false);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-blue-600" />
+              Edit your booking
+            </DialogTitle>
+            <DialogDescription>
+              Update the number of operators, then continue to adjust your
+              add-ons. Your booked spaces stay the same.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label>Number of operators</Label>
+            <div className="flex items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() =>
+                  setAmendOperators((n) => Math.max(1, n - 1))
+                }
+                disabled={amendOperators <= 1}
+              >
+                −
+              </Button>
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                value={amendOperators}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  setAmendOperators(
+                    !Number.isFinite(n) ? 1 : Math.min(10, Math.max(1, n)),
+                  );
+                }}
+                className="w-24 text-center"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() =>
+                  setAmendOperators((n) => Math.min(10, n + 1))
+                }
+                disabled={amendOperators >= 10}
+              >
+                +
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Each operator gets one free entry. Changing this is free — it just
+              re-issues your QR and updates your entry pass.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" onClick={resetAmend}>
+              Cancel
+            </Button>
+            <Button
+              onClick={proceedAmendToSelection}
+              style={{ backgroundColor: design?.primaryColor || "#2563eb" }}
+            >
+              Continue to add-ons
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ============================================================ */}
+      {/* EDIT REQUEST — pay the add-on difference                      */}
+      {/* ============================================================ */}
+      <Dialog
+        open={showAmendPayment}
+        onOpenChange={(o) => {
+          if (!o) resetAmend();
+          setShowAmendPayment(o);
+        }}
+      >
+        <DialogContent className="max-w-lg w-full max-h-[92vh] overflow-hidden p-0 flex flex-col">
+          <div className="shrink-0 border-b px-5 py-4">
+            <DialogTitle>Pay the difference</DialogTitle>
+            <DialogDescription>
+              Your edited add-ons cost more than before. Pay the difference
+              below, then submit your payment proof — the organizer will confirm
+              and re-issue your QR with the updated add-ons.
+            </DialogDescription>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
+            {showAmendPayment && (
+              <StallPaymentPanel
+                organizerId={
+                  (eventData as any)?.organizer?._id ||
+                  existingStallRequest?.organizerId?._id ||
+                  existingStallRequest?.organizerId
+                }
+                amount={amendAmountDue}
+                reference={existingStallRequest?._id}
+                whatsAppNumber={
+                  existingStallRequest?.shopkeeperId?.whatsappNumber ||
+                  shopkeeperDetails?.whatsappNumber
+                }
+                transactionId={amendTxnId}
+                onTransactionIdChange={setAmendTxnId}
+                screenshot={amendScreenshot}
+                onScreenshotChange={setAmendScreenshot}
+              />
+            )}
+          </div>
+          <div className="shrink-0 grid grid-cols-2 gap-2 border-t px-5 py-4">
+            <Button
+              variant="outline"
+              onClick={resetAmend}
+              disabled={amendSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={submitAmendPayment}
+              disabled={
+                amendSubmitting || (!amendTxnId.trim() && !amendScreenshot)
+              }
+              style={{ backgroundColor: design?.primaryColor || "#2563eb" }}
+            >
+              {amendSubmitting
+                ? "Submitting…"
+                : "I've paid — Submit for verification"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Post-payment feedback for the stall-edit difference payment. */}
+      <PaymentFeedbackDialog
+        open={showPaymentFeedback}
+        onOpenChange={setShowPaymentFeedback}
+        paymentType="stall_edit"
+        organizerId={
+          (eventData as any)?.organizer?._id ||
+          existingStallRequest?.organizerId?._id ||
+          existingStallRequest?.organizerId
+        }
+        eventId={
+          existingStallRequest?.eventId?._id || existingStallRequest?.eventId
+        }
+        eventTitle={existingStallRequest?.eventId?.title || eventData?.title}
+        payerName={
+          existingStallRequest?.shopkeeperId?.name ||
+          existingStallRequest?.nameOfApplicant
+        }
+        payerEmail={existingStallRequest?.shopkeeperId?.businessEmail}
+        bookingId={existingStallRequest?._id}
+        amount={feedbackAmount}
+      />
 
       {/* Table Selection Dialog - NEW */}
       {/* ============================================================ */}
@@ -8931,6 +10019,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 !preferredIds.includes(table.id);
                               const isWrongCategory = !isCategoryAllowed(table);
                               const isNotForSale = table.forSale === false;
+                              // In Edit-Request mode the vendor's OWN booked
+                              // spaces stay blue but locked (can't be changed).
+                              const isOwnBooked =
+                                amendMode &&
+                                ownBookedPositionIds.has(table.positionId);
 
                               // EventFront colour rule: available spaces show
                               // their own template colour; booked/disabled grey
@@ -8950,7 +10043,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               let cursor =
                                 "cursor-pointer hover:shadow-xl hover:ring-2 hover:ring-blue-400";
 
-                              if (isNotForSale) {
+                              if (isOwnBooked) {
+                                // Your booked space — solid blue, locked.
+                                fillStyle = {
+                                  backgroundColor: "#93c5fd",
+                                  borderColor: "#2563eb",
+                                };
+                                cursor =
+                                  "cursor-not-allowed ring-2 ring-blue-500";
+                              } else if (isNotForSale) {
                                 fillStyle = {
                                   backgroundColor: tpl + "59",
                                   borderColor: tpl,
@@ -9004,6 +10105,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     ...fillStyle,
                                   }}
                                   onClick={() => {
+                                    // Editing an existing request → spaces are
+                                    // locked; only add-ons can change.
+                                    if (amendMode) return;
                                     // Sold / not-allowed / not-for-sale stalls
                                     // are visible but not selectable.
                                     if (
@@ -9322,11 +10426,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               {table.name}
                             </p>
                             <p className="text-gray-500">
-                              Row {table.rowNumber} • {table.tableType}
+                              {table.rowNumber ? `Row ${table.rowNumber} • ` : ""}
+                              {table.tableType}
                             </p>
-                            <p className="text-gray-400">
-                              {table.width * 10}cm × {table.height * 10}cm
-                            </p>
+                            {Number.isFinite(table.width) &&
+                              Number.isFinite(table.height) && (
+                                <p className="text-gray-400">
+                                  {table.width * 10}cm × {table.height * 10}cm
+                                </p>
+                              )}
                           </div>
                           <div className="text-right">
                             {table.appliedTier === "member" &&
@@ -9513,29 +10621,64 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 </Card>
               </div>
 
+              {/* In an edit, show the extra owed for the changed add-ons. */}
+              {amendMode && (
+                <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-center">
+                  <span className="text-sm text-gray-600">
+                    Additional to pay for edited add-ons:{" "}
+                  </span>
+                  <span className="text-lg font-bold text-blue-700">
+                    {formatPrice(amendExtra)}
+                  </span>
+                  {amendExtra === 0 && (
+                    <p className="text-xs text-gray-500">
+                      No extra charge — awaits organizer confirmation.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-3 items-center">
+                {amendMode ? (
+                  <Button
+                    onClick={handleAmendmentSubmit}
+                    disabled={amendSubmitting}
+                    className="w-full sm:w-auto sm:px-10"
+                    size="lg"
+                    style={{ backgroundColor: design?.primaryColor || "#2563eb" }}
+                  >
+                    {amendSubmitting
+                      ? "Submitting…"
+                      : amendExtra > 0
+                        ? "Submit & pay difference"
+                        : "Submit changes"}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleTableSelectionSubmit}
+                    disabled={
+                      loading ||
+                      selectedTables.length === 0 ||
+                      !allMandatoryTermsAccepted()
+                    }
+                    className="w-full sm:w-auto sm:px-10"
+                    size="lg"
+                  >
+                    {loading ? "Processing..." : "Proceed to Payment"}
+                  </Button>
+                )}
                 <Button
-                  onClick={handleTableSelectionSubmit}
-                  disabled={
-                    loading ||
-                    selectedTables.length === 0 ||
-                    !allMandatoryTermsAccepted()
+                  onClick={() =>
+                    amendMode ? resetAmend() : setShowTableSelection(false)
                   }
-                  className="w-full sm:w-auto sm:px-10"
-                  size="lg"
-                >
-                  {loading ? "Processing..." : "Proceed to Payment"}
-                </Button>
-                <Button
-                  onClick={() => setShowTableSelection(false)}
                   variant="outline"
                   className="w-full sm:w-auto"
-                  disabled={loading}
+                  disabled={loading || amendSubmitting}
                 >
                   Cancel
                 </Button>
-                {!allMandatoryTermsAccepted() && (
+                {!amendMode && !allMandatoryTermsAccepted() && (
                   <p className="text-xs text-red-500 flex items-center gap-1">
                     <AlertCircle className="h-3 w-3" />
                     Accept all mandatory terms first
@@ -11161,41 +12304,216 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     required
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-3">
                   <Label>
                     Registration Number ({regConfig.label}){" "}
                     <span className="text-red-500">*</span>
                   </Label>
-                  <Input
-                    name="registrationNumber"
-                    value={shopkeeperDetails.registrationNumber}
-                    onChange={(e) => {
-                      // Alphanumeric only, uppercased, and capped to the length
-                      // required by the residency (UEN 10 / GST 15).
-                      let v = e.target.value
-                        .replace(/[^a-zA-Z0-9]/g, "")
-                        .toUpperCase();
-                      if (regConfig.length > 0)
-                        v = v.slice(0, regConfig.length);
-                      setShopkeeperDetails((prev) => ({
-                        ...prev,
-                        registrationNumber: v,
-                      }));
-                    }}
-                    maxLength={regConfig.length || undefined}
-                    placeholder={
-                      regConfig.label === "UEN"
-                        ? "e.g. 201812345A"
-                        : regConfig.label === "GST"
-                          ? "e.g. 27AAPFU0939F1ZV"
-                          : "e.g. UEN / GST No."
-                    }
-                    disabled={isStallApproved}
-                    required
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      name="registrationNumber"
+                      value={shopkeeperDetails.registrationNumber}
+                      onChange={(e) => {
+                        // Alphanumeric only, uppercased, and capped to the length
+                        // required by the residency (UEN 10 / GST 15).
+                        let v = e.target.value
+                          .replace(/[^a-zA-Z0-9]/g, "")
+                          .toUpperCase();
+                        if (regConfig.maxLength > 0)
+                          v = v.slice(0, regConfig.maxLength);
+                        setShopkeeperDetails((prev) => ({
+                          ...prev,
+                          registrationNumber: v,
+                        }));
+                        // Editing the number invalidates any prior verification.
+                        setGstVerified(false);
+                        setGstError("");
+                        setUenVerified(false);
+                        setUenError("");
+                      }}
+                      maxLength={regConfig.maxLength || undefined}
+                      placeholder={
+                        regConfig.label === "UEN"
+                          ? "e.g. 201812345A"
+                          : regConfig.label === "GST"
+                            ? "e.g. 27AAPFU0939F1ZV"
+                            : "e.g. UEN / GST No."
+                      }
+                      disabled={isStallApproved || gstVerified || uenVerified}
+                      required
+                      className="flex-1"
+                    />
+                    {/* India GST is verified against the government registry
+                        (AppyFlow) as soon as it's filled in. */}
+                    {regConfig.label === "GST" &&
+                      !isStallApproved &&
+                      !isDummyReg && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                          handleVerifyGST(shopkeeperDetails.registrationNumber)
+                        }
+                        disabled={
+                          !shopkeeperDetails.registrationNumber ||
+                          gstVerifying ||
+                          gstVerified
+                        }
+                        className="whitespace-nowrap"
+                      >
+                        {gstVerifying
+                          ? "Verifying…"
+                          : gstVerified
+                            ? "Verified ✓"
+                            : "Verify"}
+                      </Button>
+                    )}
+                    {/* Singapore UEN is verified against ACRA's free open-data
+                        registry (data.gov.sg) — no cost per check. */}
+                    {regConfig.label === "UEN" &&
+                      !isStallApproved &&
+                      !isDummyReg && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                          handleVerifyUEN(shopkeeperDetails.registrationNumber)
+                        }
+                        disabled={
+                          !shopkeeperDetails.registrationNumber ||
+                          uenVerifying ||
+                          uenVerified
+                        }
+                        className="whitespace-nowrap"
+                      >
+                        {uenVerifying
+                          ? "Verifying…"
+                          : uenVerified
+                            ? "Verified ✓"
+                            : "Verify"}
+                      </Button>
+                    )}
+                  </div>
+                  {regConfig.label === "GST" && gstError && (
+                    <p className="text-[11px] text-red-600">{gstError}</p>
+                  )}
+                  {regConfig.label === "GST" && gstVerified && gstDetails && (
+                    <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                      <p className="mb-2 text-sm font-semibold text-green-700">
+                        ✓ GST Verified — details from the government registry
+                      </p>
+                      <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
+                        {(
+                          [
+                            ["GSTIN", gstDetails.gstin],
+                            ["Legal name", gstDetails.legalName],
+                            ["Trade name", gstDetails.tradeName],
+                            ["Status", gstDetails.status],
+                            ["Registered", gstDetails.registrationDate],
+                            ["Type", gstDetails.constitution],
+                            ["State", gstDetails.state],
+                            ["Address", gstDetails.address],
+                          ] as [string, string][]
+                        )
+                          .filter(([, v]) => !!v)
+                          .map(([label, value]) => (
+                            <div
+                              key={label}
+                              className={
+                                label === "Address" ? "sm:col-span-2" : ""
+                              }
+                            >
+                              <span className="text-[11px] uppercase tracking-wide text-green-700/70">
+                                {label}
+                              </span>
+                              <div className="font-medium text-green-900">
+                                {value}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                  {regConfig.label === "UEN" && uenError && (
+                    <p className="text-[11px] text-red-600">{uenError}</p>
+                  )}
+                  {regConfig.label === "UEN" && uenVerified && uenDetails && (
+                    <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                      <p className="mb-2 text-sm font-semibold text-green-700">
+                        ✓ UEN Verified — details from ACRA registry
+                      </p>
+                      <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
+                        {(
+                          [
+                            ["UEN", uenDetails.uen],
+                            ["Entity name", uenDetails.entityName],
+                            ["Status", uenDetails.status],
+                            ["Entity type", uenDetails.entityType],
+                            ["Issued", uenDetails.issueDate],
+                            ["Agency", uenDetails.agency],
+                            ["Address", uenDetails.address],
+                          ] as [string, string][]
+                        )
+                          .filter(([, v]) => !!v)
+                          .map(([label, value]) => (
+                            <div
+                              key={label}
+                              className={
+                                label === "Address" ? "sm:col-span-2" : ""
+                              }
+                            >
+                              <span className="text-[11px] uppercase tracking-wide text-green-700/70">
+                                {label}
+                              </span>
+                              <div className="font-medium text-green-900">
+                                {value}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
                   {regConfig.example && (
                     <p className="text-[11px] text-muted-foreground">
                       {regConfig.example}
+                    </p>
+                  )}
+                  {/* Vendors without a GST/UEN can drop in a placeholder so the
+                      required field is satisfied and they can still submit. It
+                      won't verify (it isn't a real registration), so the
+                      organizer knows to contact them and confirm before
+                      approving. */}
+                  {!isStallApproved && !isDummyReg && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Don't have a{" "}
+                      {regConfig.label === "UEN/GST"
+                        ? "GST/UEN"
+                        : regConfig.label}
+                      ?{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShopkeeperDetails((prev) => ({
+                            ...prev,
+                            registrationNumber: dummyRegNumber,
+                          }));
+                          setGstVerified(false);
+                          setGstError("");
+                          setUenVerified(false);
+                          setUenError("");
+                        }}
+                        className="font-medium text-blue-600 underline hover:text-blue-700"
+                      >
+                        Use a placeholder &amp; submit
+                      </button>{" "}
+                      — the organizer will contact you to confirm.
+                    </p>
+                  )}
+                  {isDummyReg && !isStallApproved && (
+                    <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">
+                      Placeholder entered — this isn't a real {regConfig.label}.
+                      The organizer will reach out to verify your details before
+                      approving.
                     </p>
                   )}
                 </div>
@@ -11625,6 +12943,42 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           </a>
         </p>
       </footer>
+
+      {/* Public AI assistant — only when the organizer enabled it for this
+          event. Answers questions grounded in this event's own data. */}
+      {eventData?.chatbot?.enabled && (
+        <EventChatbot
+          eventId={eventData._id}
+          chatbotName={eventData.chatbot.name}
+          accentColor={
+            eventData.chatbot.accentColor ||
+            design?.primaryColor ||
+            "#2563eb"
+          }
+          greetingActions={buildEventChatbotGreeting(eventData)}
+          ticketTypes={(eventData.visitorTypes || [])
+            .filter((vt: any) => vt && vt.isActive !== false)
+            .map((vt: any) => ({
+              name: vt.name,
+              priceLabel:
+                Number(vt.price) === 0 ? "Free" : formatPrice(vt.price),
+            }))}
+          onBookStall={() => {
+            // "Book a stall" pill → same as clicking the on-page
+            // "Rent a Stall / Preview Request" button (opens the WhatsApp /
+            // Google verification dialog, then the normal flow follows).
+            if (!guardEventOpen("Stall bookings")) return;
+            handleRentStallClick();
+          }}
+          onSelectTicket={(index) => {
+            // Ticket picker → straight to the ticket cart with the chosen type.
+            if (!guardEventOpen("Ticket sales")) return;
+            handleGetTickets(index);
+          }}
+          onApplySpeaker={openSpeakerApply}
+          onBookRoundTable={openRoundTableBooking}
+        />
+      )}
     </div>
   );
 }

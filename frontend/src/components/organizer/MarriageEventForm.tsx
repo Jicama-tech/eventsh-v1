@@ -56,17 +56,6 @@ import MarriageMonogram from "@/components/user/MarriageMonogram";
 import MarriageMotif from "@/components/user/MarriageMotif";
 import MarriageFloral from "@/components/user/MarriageFloral";
 
-// Quick-add ceremony names — organizers can still type any custom name.
-const CEREMONY_PRESETS = [
-  "Mehndi",
-  "Haldi",
-  "Sangeet",
-  "Wedding",
-  "Reception",
-  "Engagement",
-  "Tilak",
-];
-
 interface MarriageFunctionItem {
   id: string;
   name: string;
@@ -761,22 +750,6 @@ export function MarriageEventForm({
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium">Quick add:</span>
-                  {CEREMONY_PRESETS.map((preset) => (
-                    <Button
-                      key={preset}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => addFunction(preset)}
-                    >
-                      <Plus className="mr-1 h-3 w-3" />
-                      {preset}
-                    </Button>
-                  ))}
-                </div>
-
                 {functions.map((fn, idx) => (
                   <div
                     key={fn.id}
@@ -855,7 +828,7 @@ export function MarriageEventForm({
                           onChange={(e) =>
                             updateFunction(fn.id, { name: e.target.value })
                           }
-                          placeholder="e.g., Mehndi, Sangeet, Wedding"
+                          placeholder="e.g., Ceremony, Reception, Dinner"
                         />
                       </div>
                       <div>
@@ -1039,10 +1012,10 @@ export function MarriageEventForm({
                 {(() => {
                   const previewText = (form.adBarMessage || "").trim()
                     ? form.adBarMessage
-                        .replace(/\{function\}/gi, "Sangeet")
+                        .replace(/\{function\}/gi, "Reception")
                         .replace(/\{venue\}/gi, "Grand Palace")
                         .replace(/\{time\}/gi, "6:00 PM")
-                    : "Sangeet has started!";
+                    : "Reception has started!";
                   const line = `🎉 ${previewText}     ·     6:00 PM  ·  Grand Palace`;
                   return (
                     <div

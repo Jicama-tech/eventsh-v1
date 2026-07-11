@@ -65,6 +65,9 @@ const AppFeedbackCuration = lazy(() =>
     default: m.AppFeedbackCuration,
   })),
 );
+const PaymentFeedbackPanel = lazy(
+  () => import("@/components/organizer/PaymentFeedbackPanel"),
+);
 const PricingPage = lazy(() =>
   import("./PricingPage").then((m) => ({ default: m.PricingPage })),
 );
@@ -354,6 +357,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     },
     { id: "billing-rates", label: "Billing Rates", icon: Receipt },
     { id: "app-feedback", label: "App Feedback", icon: MessageSquare },
+    { id: "payment-feedback", label: "Payment Feedback", icon: MessageSquare },
     { id: "settings", label: "Settings", icon: SettingsIcon },
   ];
 
@@ -860,6 +864,12 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
               <TabsContent value="app-feedback" className="mt-0">
                 <Suspense fallback={<TabLoader />}>
                   <AppFeedbackCuration />
+                </Suspense>
+              </TabsContent>
+
+              <TabsContent value="payment-feedback" className="mt-0">
+                <Suspense fallback={<TabLoader />}>
+                  <PaymentFeedbackPanel admin />
                 </Suspense>
               </TabsContent>
 

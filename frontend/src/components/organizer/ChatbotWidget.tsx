@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { jwtDecode } from "jwt-decode";
 import { useCountry } from "@/hooks/useCountry";
-import { useSubscription } from "@/hooks/useSubscription";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InlineWalkinForm } from "./InlineWalkinForm";
@@ -37,6 +36,7 @@ import {
   Loader2,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
   TrendingUp,
   Ticket,
   Calendar,
@@ -186,7 +186,21 @@ interface Message {
   participants?: IndividualParticipant[];
   // Organizer guide: topic catalog + downloadable PDF links (Guide pill).
   guide?: GuidePayload;
+  // Deep-linkable pending rows (approvals/payments/edit/cancel). Each renders
+  // as a tappable record that opens Participants on its event + pulses the row.
+  records?: PendingRecord[];
   ts: number;
+}
+
+interface PendingRecord {
+  ref?: string;
+  vendor?: string;
+  event?: string;
+  amountFormatted?: string;
+  reason?: string;
+  stallId: string;
+  eventId: string;
+  category: "approval" | "payment" | "edit" | "cancel";
 }
 
 interface NavItem {
@@ -1074,8 +1088,14 @@ export function ChatbotWidget({
   } | null>(null);
   // Counts of exhibitor stalls awaiting organizer action — surfaced as
   // flickering pills under the greeting so the team can act on priority.
-  const [pendingRequests, setPendingRequests] = useState(0);
-  const [pendingPayments, setPendingPayments] = useState(0);
+  // Pending exhibitor queues, split by the action they need. Each item carries
+  // its stall + event id so clicking a pill deep-links straight to that event's
+  // Participants dialog and pulses the exact exhibitor rows.
+  type PendItem = { stallId: string; eventId: string };
+  const [pendApproval, setPendApproval] = useState<PendItem[]>([]);
+  const [pendPayment, setPendPayment] = useState<PendItem[]>([]);
+  const [pendEdit, setPendEdit] = useState<PendItem[]>([]);
+  const [pendCancel, setPendCancel] = useState<PendItem[]>([]);
 
   useEffect(() => {
     if (isIndividual) return;
@@ -1092,13 +1112,33 @@ export function ChatbotWidget({
           .then((j) => {
             if (cancelled) return;
             const stalls: any[] = Array.isArray(j) ? j : j?.data || [];
-            // Pending requests = awaiting approve/reject. Pending payments =
-            // payment submitted, awaiting the organizer's verification.
-            setPendingRequests(
-              stalls.filter((s) => s?.status === "Pending").length,
+            const toItem = (s: any): PendItem => ({
+              stallId: String(s?._id || ""),
+              eventId: String(s?.eventId?._id || s?.eventId || ""),
+            });
+            // Yellow = awaiting approve/reject. Green = payment submitted,
+            // awaiting the organizer's verification. Blue = edit/update request
+            // awaiting confirm. Red = cancellation/delete request.
+            setPendApproval(
+              stalls.filter((s) => s?.status === "Pending").map(toItem),
             );
-            setPendingPayments(
-              stalls.filter((s) => s?.status === "Processing").length,
+            setPendPayment(
+              stalls.filter((s) => s?.status === "Processing").map(toItem),
+            );
+            setPendEdit(
+              stalls
+                .filter(
+                  (s) =>
+                    s?.pendingAmendment?.status === "paid_pending_confirm",
+                )
+                .map(toItem),
+            );
+            setPendCancel(
+              stalls
+                .filter(
+                  (s) => s?.pendingCancellation?.status === "requested",
+                )
+                .map(toItem),
             );
           })
           .catch(() => {});
@@ -1115,12 +1155,66 @@ export function ChatbotWidget({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isIndividual]);
+
+  // Clicking a pending pill jumps to Participants and opens the event of the
+  // first pending item, pulsing every exhibitor of that event in the same
+  // category. sessionStorage survives the lazy-load of EventAttendees; the
+  // window event handles the already-mounted case.
+  const openPending = (items: PendItem[]) => {
+    const withEvent = items.filter((i) => i.eventId);
+    if (!withEvent.length) return;
+    const eventId = withEvent[0].eventId;
+    const stallIds = withEvent
+      .filter((i) => i.eventId === eventId)
+      .map((i) => i.stallId);
+    try {
+      sessionStorage.setItem(
+        "eventsh:openParticipant",
+        JSON.stringify({ eventId, stallIds, ts: Date.now() }),
+      );
+    } catch {
+      /* storage blocked */
+    }
+    onNavigate?.("eventAttendees");
+    setTimeout(() => {
+      try {
+        window.dispatchEvent(new CustomEvent("open-participant-event"));
+      } catch {
+        /* no-op */
+      }
+    }, 150);
+  };
+
+  // Tapping a single pending record (from a chatbot list) opens that exact
+  // exhibitor's event in Participants and pulses its row.
+  const openRecord = (rec: PendingRecord) => {
+    if (!rec?.eventId) return;
+    try {
+      sessionStorage.setItem(
+        "eventsh:openParticipant",
+        JSON.stringify({
+          eventId: rec.eventId,
+          stallIds: rec.stallId ? [rec.stallId] : [],
+          ts: Date.now(),
+        }),
+      );
+    } catch {
+      /* storage blocked */
+    }
+    onNavigate?.("eventAttendees");
+    setTimeout(() => {
+      try {
+        window.dispatchEvent(new CustomEvent("open-participant-event"));
+      } catch {
+        /* no-op */
+      }
+    }, 150);
+  };
   // Country resolution priority:
   //   1. orgInfo.country from JWT (newest source after login)
   //   2. useCountry() context (set by OrganizerDashboard from /organizers/profile)
   //   3. fallback to "US"
   const { country: ctxCountry } = useCountry();
-  const { subscription } = useSubscription();
   const effectiveCountry = (
     orgInfo?.country ||
     ctxCountry ||
@@ -1313,6 +1407,7 @@ export function ChatbotWidget({
           events: data.events,
           participants: data.participants,
           guide: data.guide,
+          records: data.records,
           ts: Date.now(),
         };
         setMessages((prev) => [...prev, botMsg]);
@@ -1556,29 +1651,37 @@ export function ChatbotWidget({
             </div>
           </div>
 
-          {/* SUBSCRIPTION MARQUEE — quiet scrolling status bar. White
-              background so it stays out of the way; blue text + faint pill
-              fills so the info is legible without competing with chat. */}
-          {subscription && subscription.subscribed && (
+          {/* PENDING-REQUESTS MARQUEE — quiet scrolling status bar showing how
+              many exhibitor requests need attention (approval / payment /
+              update / deletion). White background so it stays out of the way. */}
+          {pendApproval.length +
+            pendPayment.length +
+            pendEdit.length +
+            pendCancel.length >
+            0 && (
             <div
-              className="relative overflow-hidden border-b border-slate-200 bg-white text-blue-700 px-2 py-2 flex-shrink-0"
+              className="relative overflow-hidden border-b border-slate-200 bg-white px-2 py-2 flex-shrink-0"
               role="status"
-              aria-label={`Subscription: ${subscription.planName}, ${
-                subscription.fullyLapsed
-                  ? "expired"
-                  : `${subscription.daysLeft} days left`
-              }`}
+              aria-label="Pending requests"
             >
               <div className="flex w-max animate-marquee whitespace-nowrap hover:[animation-play-state:paused]">
-                <SubscriptionMarqueeRow
-                  subscription={subscription}
-                  country={ctxCountry}
+                <PendingMarqueeRow
+                  pending={{
+                    approval: pendApproval.length,
+                    payment: pendPayment.length,
+                    edit: pendEdit.length,
+                    cancel: pendCancel.length,
+                  }}
                 />
                 {/* second copy — required by the -50% keyframe so the loop
                     feels seamless instead of snapping back */}
-                <SubscriptionMarqueeRow
-                  subscription={subscription}
-                  country={ctxCountry}
+                <PendingMarqueeRow
+                  pending={{
+                    approval: pendApproval.length,
+                    payment: pendPayment.length,
+                    edit: pendEdit.length,
+                    cancel: pendCancel.length,
+                  }}
                   ariaHidden
                 />
               </div>
@@ -1702,35 +1805,63 @@ export function ChatbotWidget({
                       )}
                     </div>
 
-                    {/* Action pills — pending exhibitor requests & payments.
-                        They flicker to draw attention; clicking jumps straight
-                        to Participants so the team can approve/verify fast. */}
+                    {/* Action pills — pending exhibitor queues, colour-coded by
+                        the action they need (Yellow=approval, Green=payment,
+                        Blue=edit request, Red=cancel request). They flicker to
+                        draw attention; clicking jumps straight to Participants,
+                        opens the pending event and pulses that exhibitor. */}
                     {!isIndividual &&
-                      (pendingRequests > 0 || pendingPayments > 0) && (
+                      (pendApproval.length > 0 ||
+                        pendPayment.length > 0 ||
+                        pendEdit.length > 0 ||
+                        pendCancel.length > 0) && (
                         <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                          {pendingRequests > 0 && (
+                          {pendApproval.length > 0 && (
                             <button
                               type="button"
-                              onClick={() => onNavigate?.("eventAttendees")}
+                              onClick={() => openPending(pendApproval)}
                               className="animate-flicker inline-flex items-center gap-1.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1 text-xs font-semibold hover:bg-amber-200 transition"
-                              title="Approve or reject exhibitor requests"
+                              title="Open the event & approve/reject these exhibitors"
                             >
                               <span className="w-2 h-2 rounded-full bg-amber-500" />
-                              {pendingRequests} Pending Request
-                              {pendingRequests === 1 ? "" : "s"} — Approve /
-                              Reject
+                              {pendApproval.length} Pending Approval
+                              {pendApproval.length === 1 ? "" : "s"}
                             </button>
                           )}
-                          {pendingPayments > 0 && (
+                          {pendPayment.length > 0 && (
                             <button
                               type="button"
-                              onClick={() => onNavigate?.("eventAttendees")}
+                              onClick={() => openPending(pendPayment)}
+                              className="animate-flicker inline-flex items-center gap-1.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1 text-xs font-semibold hover:bg-emerald-200 transition"
+                              title="Open the event & confirm these payments"
+                            >
+                              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                              {pendPayment.length} Pending Payment
+                              {pendPayment.length === 1 ? "" : "s"}
+                            </button>
+                          )}
+                          {pendEdit.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => openPending(pendEdit)}
+                              className="animate-flicker inline-flex items-center gap-1.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300 px-3 py-1 text-xs font-semibold hover:bg-blue-200 transition"
+                              title="Open the event & review these edit requests"
+                            >
+                              <span className="w-2 h-2 rounded-full bg-blue-500" />
+                              {pendEdit.length} Edit Request
+                              {pendEdit.length === 1 ? "" : "s"}
+                            </button>
+                          )}
+                          {pendCancel.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => openPending(pendCancel)}
                               className="animate-flicker inline-flex items-center gap-1.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 px-3 py-1 text-xs font-semibold hover:bg-rose-200 transition"
-                              title="Verify pending exhibitor payments"
+                              title="Open the event & review these cancellation requests"
                             >
                               <span className="w-2 h-2 rounded-full bg-rose-500" />
-                              {pendingPayments} Pending Payment
-                              {pendingPayments === 1 ? "" : "s"}
+                              {pendCancel.length} Cancel Request
+                              {pendCancel.length === 1 ? "" : "s"}
                             </button>
                           )}
                         </div>
@@ -1782,6 +1913,69 @@ export function ChatbotWidget({
                     )}
                   </div>
                 </div>
+                {/* Pending records — tap one to open Participants on that
+                    event with the exhibitor row highlighted. */}
+                {m.role === "assistant" &&
+                  m.records &&
+                  m.records.length > 0 && (
+                    <div className="ml-9 mt-2 space-y-1.5">
+                      {m.records.map((rec, idx) => {
+                        const palette: Record<
+                          PendingRecord["category"],
+                          { dot: string; label: string; border: string }
+                        > = {
+                          approval: {
+                            dot: "bg-amber-500",
+                            label: "Approval",
+                            border: "border-l-amber-400",
+                          },
+                          payment: {
+                            dot: "bg-emerald-500",
+                            label: "Payment",
+                            border: "border-l-emerald-400",
+                          },
+                          edit: {
+                            dot: "bg-blue-500",
+                            label: "Edit",
+                            border: "border-l-blue-400",
+                          },
+                          cancel: {
+                            dot: "bg-rose-500",
+                            label: "Cancel",
+                            border: "border-l-rose-400",
+                          },
+                        };
+                        const p = palette[rec.category] || palette.approval;
+                        return (
+                          <button
+                            key={`${rec.stallId}-${idx}`}
+                            type="button"
+                            onClick={() => openRecord(rec)}
+                            title="Open this exhibitor in Participants"
+                            className={`w-full text-left flex items-center gap-2 rounded-lg border border-slate-200 border-l-4 ${p.border} bg-white px-3 py-2 hover:bg-slate-50 transition`}
+                          >
+                            <span
+                              className={`w-2 h-2 rounded-full shrink-0 ${p.dot}`}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-sm font-medium text-slate-800 truncate">
+                                {rec.vendor || "Exhibitor"}
+                              </span>
+                              <span className="block text-xs text-slate-500 truncate">
+                                {p.label} · {rec.event || "—"}
+                                {rec.ref ? ` · #${rec.ref}` : ""}
+                                {rec.amountFormatted
+                                  ? ` · ${rec.amountFormatted}`
+                                  : ""}
+                                {rec.reason ? ` · ${rec.reason}` : ""}
+                              </span>
+                            </span>
+                            <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 {/* Quick actions inline */}
                 {m.role === "assistant" &&
                   m.quickActions &&
@@ -2561,56 +2755,18 @@ function EventPickerForm({
 }
 
 /**
- * One pass of the scrolling subscription banner. We render two copies inside
- * the marquee container so the -50% translateX loop feels seamless.
+ * One pass of the scrolling pending-requests banner. Shows how many exhibitor
+ * requests need attention, colour-keyed to the greeting pills. Two copies are
+ * rendered inside the marquee container so the -50% translateX loop is seamless.
  */
-function SubscriptionMarqueeRow({
-  subscription,
-  country,
+function PendingMarqueeRow({
+  pending,
   ariaHidden,
 }: {
-  subscription: {
-    planName: string | null;
-    pricePaid: string | null;
-    planExpiryDate: string | null;
-    daysLeft: number;
-    fullyLapsed: boolean;
-    inGracePeriod: boolean;
-    graceDaysLeft: number;
-  };
-  country?: string;
+  /** Live pending-request counts. */
+  pending: { approval: number; payment: number; edit: number; cancel: number };
   ariaHidden?: boolean;
 }) {
-  const symbol = country === "IN" ? "₹" : country === "SG" ? "SG$" : "$";
-  const validTill = subscription.planExpiryDate
-    ? new Date(subscription.planExpiryDate).toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })
-    : "—";
-
-  // Status pill — color + label vary with the lifecycle stage so a renewal
-  // nudge is loud when the plan is expiring.
-  let statusIcon = <Clock className="h-3.5 w-3.5" />;
-  let statusLabel = `${subscription.daysLeft} day${
-    subscription.daysLeft === 1 ? "" : "s"
-  } left`;
-  let statusTint = "bg-blue-50 text-blue-700";
-  if (subscription.fullyLapsed) {
-    statusIcon = <AlertTriangle className="h-3.5 w-3.5" />;
-    statusLabel = "Plan expired — renew now";
-    statusTint = "bg-rose-50 text-rose-700";
-  } else if (subscription.inGracePeriod) {
-    statusIcon = <AlertTriangle className="h-3.5 w-3.5" />;
-    statusLabel = `Grace period — ${subscription.graceDaysLeft} day${
-      subscription.graceDaysLeft === 1 ? "" : "s"
-    } to renew`;
-    statusTint = "bg-amber-50 text-amber-700";
-  } else if (subscription.daysLeft <= 7) {
-    statusTint = "bg-amber-50 text-amber-700";
-  }
-
   const Item = ({
     icon,
     children,
@@ -2635,21 +2791,50 @@ function SubscriptionMarqueeRow({
       className="flex items-center gap-3 pr-8 shrink-0"
       aria-hidden={ariaHidden}
     >
-      <Item icon={<Crown className="h-3.5 w-3.5" />}>
-        {subscription.planName || "—"}
+      <Item
+        icon={<Clock className="h-3.5 w-3.5" />}
+        tint="bg-slate-100 text-slate-600"
+      >
+        Pending requests
       </Item>
-      {subscription.pricePaid ? (
-        <Item icon={<Zap className="h-3.5 w-3.5" />}>
-          {symbol}
-          {subscription.pricePaid} paid
+      {/* Counts — same colour key as the greeting pills:
+          Yellow=approval, Green=payment, Blue=update/edit, Red=deletion. */}
+      {pending.approval > 0 && (
+        <Item
+          icon={<span className="w-2 h-2 rounded-full bg-amber-500" />}
+          tint="bg-amber-50 text-amber-700"
+        >
+          {pending.approval} pending approval
+          {pending.approval === 1 ? "" : "s"}
         </Item>
-      ) : null}
-      <Item icon={statusIcon} tint={statusTint}>
-        {statusLabel}
-      </Item>
-      <Item icon={<CalendarCheck className="h-3.5 w-3.5" />}>
-        Valid till {validTill}
-      </Item>
+      )}
+      {pending.payment > 0 && (
+        <Item
+          icon={<span className="w-2 h-2 rounded-full bg-emerald-500" />}
+          tint="bg-emerald-50 text-emerald-700"
+        >
+          {pending.payment} pending payment
+          {pending.payment === 1 ? "" : "s"}
+        </Item>
+      )}
+      {pending.edit > 0 && (
+        <Item
+          icon={<span className="w-2 h-2 rounded-full bg-blue-500" />}
+          tint="bg-blue-50 text-blue-700"
+        >
+          {pending.edit} pending update
+          {pending.edit === 1 ? "" : "s"}
+        </Item>
+      )}
+      {pending.cancel > 0 && (
+        <Item
+          icon={<span className="w-2 h-2 rounded-full bg-rose-500" />}
+          tint="bg-rose-50 text-rose-700"
+        >
+          {pending.cancel} pending deletion
+          {pending.cancel === 1 ? "" : "s"}
+        </Item>
+      )}
       <span className="text-slate-300">•</span>
     </div>
   );

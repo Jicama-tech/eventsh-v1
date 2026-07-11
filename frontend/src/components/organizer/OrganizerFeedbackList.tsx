@@ -41,6 +41,7 @@ export function OrganizerFeedbackList() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<EventRow | null>(null);
+  const [organizerId, setOrganizerId] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +53,7 @@ export function OrganizerFeedbackList() {
         const decoded: any = jwtDecode(token);
         const organizerId = decoded?.sub;
         if (!organizerId) throw new Error("Token missing organizer id");
+        if (!cancelled) setOrganizerId(organizerId);
         const res = await fetch(
           `${apiURL}/events/organizer/${organizerId}`,
           { headers: { Authorization: `Bearer ${token}` } },
@@ -163,8 +165,17 @@ export function OrganizerFeedbackList() {
                           Ended
                         </Badge>
                       )}
-                      {event.status && event.status !== "published" && (
-                        <Badge variant="outline">{event.status}</Badge>
+                      {/* Only "cancelled" is a meaningful, explicitly-set state.
+                          The `status` field defaults to "draft" and is never
+                          flipped to "published", so a Draft badge would show on
+                          every event — misleading noise, so we don't render it. */}
+                      {event.status === "cancelled" && (
+                        <Badge
+                          variant="outline"
+                          className="bg-red-50 text-red-700"
+                        >
+                          Cancelled
+                        </Badge>
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
@@ -192,6 +203,7 @@ export function OrganizerFeedbackList() {
       <EventFeedbackDialog
         eventId={selected?._id ?? null}
         eventTitle={selected?.title}
+        organizerId={organizerId}
         open={!!selected}
         onOpenChange={(o) => !o && setSelected(null)}
       />

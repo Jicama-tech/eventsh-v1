@@ -8,12 +8,22 @@ import {
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
+import {
+  eventHasEnded,
+  EVENT_ENDED_MESSAGE,
+} from "../../common/event-timing.util";
 import * as QRCode from "qrcode";
 import * as fs from "fs";
 import * as path from "path";
 import * as puppeteer from "puppeteer";
 import { CreateStallDto } from "./dto/create-stall.dto";
 import { SelectTablesAndAddOnsDto } from "./dto/tableSelect.dto";
+import {
+  AmendStallDto,
+  AmendPaymentDto,
+  ConfirmAmendmentDto,
+  CancellationDecisionDto,
+} from "./dto/amend-stall.dto";
 import { UpdatePaymentStatusDto } from "./dto/paymentStatus.dto";
 import { UpdateStatusDto } from "./dto/updateStatus.dto";
 import { Stall, StallDocument } from "./entities/stall.entity";
@@ -86,6 +96,43 @@ export class StallsService {
       const event = await this.eventModel.findById(createStallDto.eventId);
       if (!event) {
         throw new NotFoundException("Event not found");
+      }
+      // Past events accept no new stall bookings.
+      if (eventHasEnded(event)) {
+        throw new BadRequestException(EVENT_ENDED_MESSAGE);
+      }
+
+      // GST verification (India) — cached on the vendor so returning exhibitors
+      // aren't re-verified. gstDetails arrives JSON-encoded via multipart.
+      const gstVerified =
+        (createStallDto as any).isGSTVerified === true ||
+        (createStallDto as any).isGSTVerified === "true";
+      let gstDetailsObj: Record<string, any> | undefined;
+      if (createStallDto.gstDetails) {
+        try {
+          gstDetailsObj =
+            typeof createStallDto.gstDetails === "string"
+              ? JSON.parse(createStallDto.gstDetails)
+              : (createStallDto.gstDetails as any);
+        } catch {
+          gstDetailsObj = undefined;
+        }
+      }
+
+      // UEN verification (Singapore) — same caching pattern as GST.
+      const uenVerified =
+        (createStallDto as any).isUENVerified === true ||
+        (createStallDto as any).isUENVerified === "true";
+      let uenDetailsObj: Record<string, any> | undefined;
+      if (createStallDto.uenDetails) {
+        try {
+          uenDetailsObj =
+            typeof createStallDto.uenDetails === "string"
+              ? JSON.parse(createStallDto.uenDetails)
+              : (createStallDto.uenDetails as any);
+        } catch {
+          uenDetailsObj = undefined;
+        }
       }
 
       let shopkeeperId: Types.ObjectId;
@@ -160,6 +207,18 @@ export class StallsService {
           updateFields.organizerId = new Types.ObjectId(
             createStallDto.organizerId,
           );
+        }
+        // Cache a fresh GST verification onto the vendor. Never clear an
+        // already-verified GST if this submission didn't re-verify.
+        if (gstVerified) {
+          updateFields.isGSTVerified = true;
+          if (gstDetailsObj) updateFields.gstDetails = gstDetailsObj;
+          updateFields.gstVerifiedAt = new Date();
+        }
+        if (uenVerified) {
+          updateFields.isUENVerified = true;
+          if (uenDetailsObj) updateFields.uenDetails = uenDetailsObj;
+          updateFields.uenVerifiedAt = new Date();
         }
 
         if (Object.keys(updateFields).length > 0) {
@@ -244,6 +303,12 @@ export class StallsService {
             refundPaymentDescription: createStallDto.refundPaymentDescription,
             noOfOperators: createStallDto.noOfOperators,
             isActive: true,
+            isGSTVerified: gstVerified,
+            gstDetails: gstDetailsObj,
+            gstVerifiedAt: gstVerified ? new Date() : undefined,
+            isUENVerified: uenVerified,
+            uenDetails: uenDetailsObj,
+            uenVerifiedAt: uenVerified ? new Date() : undefined,
           });
 
           shopkeeperId = new Types.ObjectId(newVendor._id);
@@ -377,6 +442,11 @@ export class StallsService {
       const stall = await this.stallModel.findById(stallId).populate("eventId");
       if (!stall) {
         throw new NotFoundException("Stall request not found");
+      }
+
+      // Past events accept no payments/bookings.
+      if (eventHasEnded(stall.eventId as any)) {
+        throw new BadRequestException(EVENT_ENDED_MESSAGE);
       }
 
       if (stall.status !== "Confirmed" && stall.status !== "Approved") {
@@ -681,7 +751,7 @@ export class StallsService {
   /**
    * Confirm payment - Generate QR Code and Stall Ticket PDF (Same as tickets.service.ts)
    */
-  async confirmPayment(stallId: string, notes?: string) {
+  async confirmPayment(stallId: string, notes?: string, changedBy?: string) {
     try {
       if (!Types.ObjectId.isValid(stallId)) {
         throw new BadRequestException("Invalid stall ID format");
@@ -728,7 +798,9 @@ export class StallsService {
         status: "Completed" as any,
         note: notes || "Payment confirmed. Stall completed.",
         changedAt: new Date(),
-        changedBy: "System",
+        // Actor comes from the caller (resolved from their JWT): operator name
+        // or "Organizer". Falls back to Organizer when not supplied.
+        changedBy: changedBy || "Organizer",
       });
 
       await stall.save();
@@ -802,126 +874,14 @@ export class StallsService {
       // delivery failures are logged; "Resend ticket" remains the fallback.
       await stall.save();
 
-      const deliverStallTicket = async () => {
-      const vendorWhatsApp = vendor.whatsAppNumber || vendor.whatsappNumber;
-      const vendorEmail = this.vendorEmailRecipients(vendor);
-      const eventObj = stall.eventId as any;
-      const eventDate = eventObj?.startDate
-        ? new Date(eventObj.startDate).toLocaleDateString()
-        : "TBA";
-      const message =
-        `🎉 *Your Stall Confirmation is Ready!*\n\n` +
-        `🎪 *Event:* ${eventObj?.title || "Event"}\n` +
-        `👤 *Business:* ${vendor.businessName || vendor.shopName || vendor.brandName || stall.brandName || vendor.name || "—"}\n` +
-        `📅 *Date:* ${eventDate}\n` +
-        `📍 *Venue:* ${eventObj?.location || "TBA"}\n\n` +
-        `📊 *Booking Summary:*\n` +
-        `• Tables: ${stall.selectedTables.length}\n` +
-        `• Add-ons: ${stall.selectedAddOns?.length || 0}\n` +
-        `• Total: ${formatCurrency(stall.grandTotal, country)}\n` +
-        (coupon ? `\n🎟️ *Coupon:* ${coupon.code} (${stall.noOfOperators} free entries)\n` : "") +
-        `\n⚠️ Your stall ticket PDF is attached. Present the QR code at the event entrance.`;
-
-      // Render the ticket PDF. If headless Chromium fails (common on
-      // constrained production hosts), DON'T abort delivery — fall back to a
-      // plain confirmation email below so the vendor is still notified.
-      let pdfPath: string | null = null;
-      try {
-        const pdfBuffer = await this.generateStallTicketPDF(
-          stall,
-          qrCodeBase64,
-          coupon,
-          country,
-        );
-        const pdfDir = path.join(process.cwd(), "uploads", "stallTickets");
-        if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
-        const pdfFileName = `stall_ticket_${stallId}.pdf`;
-        pdfPath = path.join(pdfDir, pdfFileName);
-        await fs.promises.writeFile(pdfPath, pdfBuffer);
-        stall.qrCodePath = `/uploads/stallTickets/${pdfFileName}`;
-        stall.qrCodeData = JSON.stringify(qrPayload);
-        await stall.save();
-      } catch (pdfErr) {
-        pdfPath = null;
-        this.logger.error(
-          `Stall ticket PDF generation failed for stall ${stallId}: ${
-            (pdfErr as any)?.message || pdfErr
-          }. Sending a plain confirmation instead.`,
-        );
-      }
-
-      try {
-        // WhatsApp text notification only when a number is on file. Isolated in
-        // its own try/catch so a logged-out / dead WhatsApp session
-        // ("Connection Closed") can NEVER abort the email that follows.
-        if (vendorWhatsApp) {
-          try {
-            await this.otpService.sendWhatsAppMessage(vendorWhatsApp, message);
-          } catch (waErr) {
-            this.logger.warn(
-              `WhatsApp text failed for stall ${stallId} (continuing to email): ${
-                (waErr as any)?.message || waErr
-              }`,
-            );
-          }
-        }
-
-        if (pdfPath) {
-          // Deliver the ticket PDF: sendMediaMessage emails first (independent
-          // of WhatsApp) and only attempts WhatsApp when a number is present.
-          await this.otpService.sendMediaMessage(
-            vendorWhatsApp || "",
-            pdfPath,
-            `Stall Ticket - ${eventObj?.title || "Event"}`,
-            "stall-ticket.pdf",
-            {
-              to: vendorEmail,
-              subject: `Your stall ticket for ${eventObj?.title || "Event"}`,
-              heading: "Your Stall Confirmation is Ready!",
-              message,
-              senderConfig: (organizerDoc as any)?.emailConfig,
-            },
-          );
-        } else if (vendorEmail) {
-          // PDF render failed — still email a text confirmation so the vendor
-          // knows their payment is confirmed. "Resend ticket" re-generates and
-          // attaches the PDF once the render issue is resolved.
-          await this.mailService.sendEmail({
-            to: vendorEmail,
-            subject: `Your stall is confirmed for ${eventObj?.title || "Event"}`,
-            html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-                <div style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:24px;text-align:center">
-                  <h1 style="margin:0;font-size:20px">Your Stall Confirmation is Ready!</h1>
-                </div>
-                <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-                  <p>${message.replace(/\*/g, "").replace(/\n/g, "<br/>")}</p>
-                  <p style="color:#64748b;font-size:12px;margin-top:16px">Your ticket PDF will follow shortly.</p>
-                </div>
-              </div>`,
-            senderConfig: (organizerDoc as any)?.emailConfig,
-          });
-        }
-
-        if (!vendorEmail && !vendorWhatsApp) {
-          this.logger.warn(
-            `Vendor ${vendorId} has no email or WhatsApp — stall ticket not delivered`,
-          );
-        }
-      } catch (sendError) {
-        // Make the real cause visible in production logs (SMTP timeout, auth
-        // failure, blocked port, bad organizer email config, …) instead of
-        // swallowing it as a vague warning. The organizer can re-deliver via
-        // the "Resend ticket" action once the underlying issue is fixed.
-        this.logger.error(
-          `Failed to send stall ticket for stall ${stallId}: ${
-            (sendError as any)?.message || sendError
-          }`,
-        );
-      }
-      };
-
       // Fire-and-forget: never block the confirm response on PDF + delivery.
-      void deliverStallTicket().catch((err) =>
+      void this.deliverStallTicketPdf(
+        stall,
+        qrCodeBase64,
+        qrPayload,
+        coupon,
+        country,
+      ).catch((err) =>
         this.logger.error(
           `Background stall ticket delivery failed for stall ${stallId}: ${
             (err as any)?.message || err
@@ -943,6 +903,672 @@ export class StallsService {
       this.logger.error("Error confirming payment:", error);
       throw error;
     }
+  }
+
+  /**
+   * Render the stall ticket PDF and deliver it (WhatsApp text + email/WhatsApp
+   * attachment), falling back to a plain email when the PDF render fails. Also
+   * persists qrCodePath (the PDF url) + qrCodeData on the stall. Self-contained
+   * so both initial payment confirmation and an amendment re-issue can call it.
+   * Best-effort — never throws to the caller (run fire-and-forget).
+   */
+  private async deliverStallTicketPdf(
+    stall: any,
+    qrCodeBase64: string,
+    qrPayload: any,
+    coupon: any,
+    country: string,
+    opts?: { reissue?: boolean },
+  ) {
+    const isReissue = !!opts?.reissue;
+    const headingText = isReissue
+      ? "Your Updated Stall Ticket is Ready!"
+      : "Your Stall Confirmation is Ready!";
+    const stallId = String(stall._id);
+    const vendorId = (stall.shopkeeperId as any)?._id || stall.shopkeeperId;
+    const vendor = await this.vendorModel.findById(vendorId);
+    if (!vendor) {
+      this.logger.error(
+        `Vendor not found for stall ${stallId} — cannot deliver ticket`,
+      );
+      return;
+    }
+    const orgId = (stall.organizerId as any)?._id || stall.organizerId;
+    const organizerDoc = await this.organizerModel.findById(orgId);
+    const vendorWhatsApp = vendor.whatsAppNumber || vendor.whatsappNumber;
+    const vendorEmail = this.vendorEmailRecipients(vendor);
+    const eventObj = stall.eventId as any;
+    const eventDate = eventObj?.startDate
+      ? new Date(eventObj.startDate).toLocaleDateString()
+      : "TBA";
+    const message =
+      `🎉 *${headingText}*\n\n` +
+      (isReissue
+        ? `✏️ Your booking was updated and approved — here's your *new* ticket.\n\n`
+        : "") +
+      `🎪 *Event:* ${eventObj?.title || "Event"}\n` +
+      `👤 *Business:* ${vendor.businessName || vendor.shopName || vendor.brandName || stall.brandName || vendor.name || "—"}\n` +
+      `📅 *Date:* ${eventDate}\n` +
+      `📍 *Venue:* ${eventObj?.location || "TBA"}\n\n` +
+      `📊 *Booking Summary:*\n` +
+      `• Tables: ${stall.selectedTables.length}\n` +
+      `• Add-ons: ${stall.selectedAddOns?.length || 0}\n` +
+      `• Total: ${formatCurrency(stall.grandTotal, country)}\n` +
+      (coupon
+        ? `\n🎟️ *Coupon:* ${coupon.code} (${stall.noOfOperators} free entries)\n`
+        : "") +
+      (isReissue
+        ? `\n⚠️ This new QR replaces your previous one — the *old QR is no longer valid*.`
+        : `\n⚠️ Your stall ticket PDF is attached. Present the QR code at the event entrance.`);
+
+    // Render the ticket PDF. If headless Chromium fails (common on constrained
+    // production hosts), DON'T abort delivery — fall back to a plain email.
+    let pdfPath: string | null = null;
+    try {
+      const pdfBuffer = await this.generateStallTicketPDF(
+        stall,
+        qrCodeBase64,
+        coupon,
+        country,
+      );
+      const pdfDir = path.join(process.cwd(), "uploads", "stallTickets");
+      if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
+      const pdfFileName = `stall_ticket_${stallId}.pdf`;
+      pdfPath = path.join(pdfDir, pdfFileName);
+      await fs.promises.writeFile(pdfPath, pdfBuffer);
+      stall.qrCodePath = `/uploads/stallTickets/${pdfFileName}`;
+      stall.qrCodeData = JSON.stringify(qrPayload);
+      await stall.save();
+    } catch (pdfErr) {
+      pdfPath = null;
+      this.logger.error(
+        `Stall ticket PDF generation failed for stall ${stallId}: ${
+          (pdfErr as any)?.message || pdfErr
+        }. Sending a plain confirmation instead.`,
+      );
+    }
+
+    try {
+      if (vendorWhatsApp) {
+        try {
+          await this.otpService.sendWhatsAppMessage(vendorWhatsApp, message);
+        } catch (waErr) {
+          this.logger.warn(
+            `WhatsApp text failed for stall ${stallId} (continuing to email): ${
+              (waErr as any)?.message || waErr
+            }`,
+          );
+        }
+      }
+
+      if (pdfPath) {
+        await this.otpService.sendMediaMessage(
+          vendorWhatsApp || "",
+          pdfPath,
+          `Stall Ticket - ${eventObj?.title || "Event"}`,
+          "stall-ticket.pdf",
+          {
+            to: vendorEmail,
+            subject: isReissue
+              ? `Your updated stall ticket for ${eventObj?.title || "Event"}`
+              : `Your stall ticket for ${eventObj?.title || "Event"}`,
+            heading: headingText,
+            message,
+            senderConfig: (organizerDoc as any)?.emailConfig,
+          },
+        );
+      } else if (vendorEmail) {
+        await this.mailService.sendEmail({
+          to: vendorEmail,
+          subject: isReissue
+            ? `Your stall ticket was updated for ${eventObj?.title || "Event"}`
+            : `Your stall is confirmed for ${eventObj?.title || "Event"}`,
+          html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+              <div style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:24px;text-align:center">
+                <h1 style="margin:0;font-size:20px">${headingText}</h1>
+              </div>
+              <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+                <p>${message.replace(/\*/g, "").replace(/\n/g, "<br/>")}</p>
+                <p style="color:#64748b;font-size:12px;margin-top:16px">Your ticket PDF will follow shortly.</p>
+              </div>
+            </div>`,
+          senderConfig: (organizerDoc as any)?.emailConfig,
+        });
+      }
+
+      if (!vendorEmail && !vendorWhatsApp) {
+        this.logger.warn(
+          `Vendor ${vendorId} has no email or WhatsApp — stall ticket not delivered`,
+        );
+      }
+    } catch (sendError) {
+      this.logger.error(
+        `Failed to send stall ticket for stall ${stallId}: ${
+          (sendError as any)?.message || sendError
+        }`,
+      );
+    }
+  }
+
+  // ============================================================
+  // EDIT REQUEST (AMENDMENT) — operators (free) + add-ons (add-only)
+  // ============================================================
+
+  /**
+   * Vendor raises an "Edit Request" on a Completed/Paid booking: change the
+   * operator count (free — only resizes the coupon/QR) and/or add or increase
+   * add-ons (ADD-ONLY — never remove or reduce). Re-prices add-ons against the
+   * event catalogue and records the extra amount owed. The live booking is
+   * untouched until the organizer confirms.
+   */
+  async amendRequest(stallId: string, dto: AmendStallDto) {
+    if (!Types.ObjectId.isValid(stallId)) {
+      throw new BadRequestException("Invalid stall ID format");
+    }
+    const stall = await this.stallModel.findById(stallId).populate("eventId");
+    if (!stall) throw new NotFoundException("Stall request not found");
+    // No edits/transactions once the event has ended.
+    if (eventHasEnded(stall.eventId as any)) {
+      throw new BadRequestException(EVENT_ENDED_MESSAGE);
+    }
+    if (stall.status !== "Completed" || stall.paymentStatus !== "Paid") {
+      throw new BadRequestException(
+        "Only a completed & paid booking can be edited.",
+      );
+    }
+    if ((stall.pendingAmendment as any)?.status === "paid_pending_confirm") {
+      throw new BadRequestException(
+        "An amendment is already awaiting organizer confirmation.",
+      );
+    }
+
+    const eventDoc: any = stall.eventId;
+    const event = eventDoc?.toObject ? eventDoc.toObject() : eventDoc || {};
+    const catalogue: any[] = Array.isArray(event.addOnItems)
+      ? event.addOnItems
+      : [];
+    const byId = new Map(catalogue.map((a) => [String(a.id), a]));
+
+    // Current add-on quantities form the add-only floor.
+    const currentQty = new Map<string, number>();
+    (stall.selectedAddOns || []).forEach((a: any) =>
+      currentQty.set(String(a.addOnId), Number(a.quantity) || 0),
+    );
+
+    const bookedTables = stall.selectedTables || [];
+    const proposed = Array.isArray(dto.selectedAddOns) ? dto.selectedAddOns : [];
+    const seen = new Set<string>();
+    const normalized: any[] = [];
+
+    for (const item of proposed) {
+      const cat = byId.get(String(item.addOnId));
+      if (!cat) {
+        throw new BadRequestException(
+          `Unknown add-on: ${item.name || item.addOnId}`,
+        );
+      }
+      const qty = Math.floor(Number(item.quantity) || 0);
+      if (qty < 1) continue;
+      seen.add(String(item.addOnId));
+
+      // Add-only: never below the currently booked quantity.
+      const floor = currentQty.get(String(item.addOnId)) || 0;
+      if (qty < floor) {
+        throw new BadRequestException(
+          `"${cat.name}" can only be increased — not reduced below ${floor}.`,
+        );
+      }
+
+      // Cap: maxPerTemplate overrides maxPerSpace; 0/undefined = unlimited.
+      let cap = 0;
+      let unlimited = false;
+      for (const t of bookedTables as any[]) {
+        const per =
+          (cat.maxPerTemplate && cat.maxPerTemplate[String(t.tableId)]) ??
+          cat.maxPerSpace;
+        if (per === undefined || per === null || Number(per) === 0) {
+          unlimited = true;
+          break;
+        }
+        cap += Number(per) || 0;
+      }
+      if (!unlimited && cap > 0 && qty > cap) {
+        throw new BadRequestException(
+          `"${cat.name}" is capped at ${cap} for your booked spaces.`,
+        );
+      }
+
+      normalized.push({
+        addOnId: String(item.addOnId),
+        name: cat.name,
+        price: Number(cat.price) || 0, // event price is authoritative
+        quantity: qty,
+      });
+    }
+
+    // Reject removal of any existing add-on (add-only).
+    for (const [id, floor] of currentQty.entries()) {
+      if (floor > 0 && !seen.has(id)) {
+        const nm = byId.get(id)?.name || id;
+        throw new BadRequestException(
+          `"${nm}" can't be removed — add-ons can only be added.`,
+        );
+      }
+    }
+
+    const newAddOnsTotal = normalized.reduce(
+      (s, a) => s + a.price * a.quantity,
+      0,
+    );
+    const amountDue = Math.max(0, newAddOnsTotal - (stall.addOnsTotal || 0));
+    const ops = String(
+      Math.min(10, Math.max(1, Math.floor(Number(dto.noOfOperators) || 1))),
+    );
+
+    stall.pendingAmendment = {
+      noOfOperators: ops,
+      selectedAddOns: normalized,
+      addOnsTotal: newAddOnsTotal,
+      amountDue,
+      status: amountDue > 0 ? "awaiting_payment" : "paid_pending_confirm",
+      requestedAt: new Date(),
+    } as any;
+    stall.markModified("pendingAmendment");
+    await stall.save();
+
+    return {
+      success: true,
+      message:
+        amountDue > 0
+          ? "Amendment saved — pay the difference to proceed."
+          : "Amendment saved — awaiting organizer confirmation.",
+      data: { amountDue, pendingAmendment: stall.pendingAmendment },
+    };
+  }
+
+  /** Vendor records the top-up transaction for the amendment difference. */
+  async amendPayment(
+    stallId: string,
+    dto: AmendPaymentDto,
+    screenshotUrl?: string,
+  ) {
+    if (!Types.ObjectId.isValid(stallId)) {
+      throw new BadRequestException("Invalid stall ID format");
+    }
+    const stall = await this.stallModel
+      .findById(stallId)
+      .populate("eventId")
+      .populate("organizerId");
+    if (!stall) throw new NotFoundException("Stall request not found");
+    // No edit-difference payments once the event has ended.
+    if (eventHasEnded(stall.eventId as any)) {
+      throw new BadRequestException(EVENT_ENDED_MESSAGE);
+    }
+    const pa: any = stall.pendingAmendment;
+    if (!pa || pa.status !== "awaiting_payment") {
+      throw new BadRequestException("No amendment awaiting payment.");
+    }
+    pa.transactionId = dto.transactionId || pa.transactionId;
+    if (screenshotUrl) pa.transactionScreenshot = screenshotUrl;
+    else if (dto.transactionScreenshot)
+      pa.transactionScreenshot = dto.transactionScreenshot;
+    pa.paymentMethod = dto.paymentMethod || pa.paymentMethod;
+    pa.status = "paid_pending_confirm";
+    pa.paidAt = new Date();
+    stall.markModified("pendingAmendment");
+    await stall.save();
+
+    // Alert organizer reviewers that a top-up awaits confirmation.
+    try {
+      await this.notifyReviewersOfPayment(
+        stall,
+        stall.eventId,
+        pa.amountDue || 0,
+      );
+    } catch {
+      /* non-fatal */
+    }
+
+    return {
+      success: true,
+      message: "Payment recorded — awaiting organizer confirmation.",
+      data: stall,
+    };
+  }
+
+  /**
+   * Organizer confirms a paid/no-cost amendment: apply the new operators +
+   * add-ons to the live booking, bump the free-entry coupon's max-usage in
+   * place, re-issue the QR ticket, and clear the pending amendment.
+   */
+  async confirmAmendment(stallId: string, dto: ConfirmAmendmentDto) {
+    if (!Types.ObjectId.isValid(stallId)) {
+      throw new BadRequestException("Invalid stall ID format");
+    }
+    const stall = await this.stallModel
+      .findById(stallId)
+      .populate("shopkeeperId")
+      .populate("eventId")
+      .populate("organizerId");
+    if (!stall) throw new NotFoundException("Stall request not found");
+    const pa: any = stall.pendingAmendment;
+    if (!pa || pa.status !== "paid_pending_confirm") {
+      throw new BadRequestException("No amendment awaiting confirmation.");
+    }
+
+    // Apply to the live booking.
+    stall.noOfOperators = pa.noOfOperators;
+    stall.selectedAddOns = (pa.selectedAddOns || []).map((a: any) => ({
+      addOnId: a.addOnId,
+      name: a.name,
+      price: a.price,
+      quantity: a.quantity,
+    })) as any;
+    stall.addOnsTotal = pa.addOnsTotal || 0;
+    stall.grandTotal =
+      (stall.tablesTotal || 0) +
+      (stall.depositTotal || 0) +
+      (pa.addOnsTotal || 0);
+    stall.paidAmount = (stall.paidAmount || 0) + (pa.amountDue || 0);
+    stall.remainingAmount = 0;
+    stall.statusHistory.push({
+      status: "Completed" as any,
+      note:
+        dto.note ||
+        `Edit Request confirmed — operators: ${pa.noOfOperators}, add-ons updated${
+          pa.amountDue > 0 ? `, +${pa.amountDue} paid` : ""
+        }.`,
+      changedAt: new Date(),
+      changedBy: dto.changedBy || "Organizer",
+    });
+
+    // Bump the free-entry coupon (one per operator), keeping the same code.
+    const orgId = (stall.organizerId as any)?._id || stall.organizerId;
+    const coupon: any = stall.couponCodeAssigned
+      ? { code: stall.couponCodeAssigned }
+      : null;
+    if (stall.couponCodeAssigned) {
+      try {
+        await this.couponService.setMaxUsageByCode(
+          String(orgId),
+          stall.couponCodeAssigned,
+          Number(pa.noOfOperators) || 1,
+        );
+      } catch (e) {
+        this.logger.warn(
+          `Coupon max-usage update failed for stall ${stallId}: ${
+            (e as any)?.message || e
+          }`,
+        );
+      }
+    }
+
+    // Re-issue the QR (ids unchanged; re-stamp issuedAt).
+    const qrPayload = {
+      warning:
+        "❌ Normal scanners not allowed. Please use the Eventsh app to scan this stall QR.",
+      type: "eventsh-stall-checkin",
+      stallId: String(stall._id),
+      shopkeeperId: String(
+        (stall.shopkeeperId as any)?._id || stall.shopkeeperId,
+      ),
+      eventId: String((stall.eventId as any)?._id || stall.eventId),
+      issuedAt: new Date().toISOString(),
+    };
+    const qrCodeBase64 = await QRCode.toDataURL(JSON.stringify(qrPayload), {
+      width: 200,
+      margin: 2,
+    });
+    await this.saveQRToDisk(qrCodeBase64, String(stall._id));
+    stall.qrCodePath = qrCodeBase64;
+    stall.qrCodeData = JSON.stringify(qrPayload);
+    await stall.save();
+
+    // Clear the pending amendment reliably.
+    await this.stallModel.updateOne(
+      { _id: stall._id },
+      { $unset: { pendingAmendment: "" } },
+    );
+    (stall as any).pendingAmendment = undefined;
+
+    const organizerDoc = await this.organizerModel.findById(orgId);
+    const country = organizerDoc?.country || "IN";
+
+    // Re-generate + re-deliver the updated ticket in the background.
+    void this.deliverStallTicketPdf(
+      stall,
+      qrCodeBase64,
+      qrPayload,
+      coupon,
+      country,
+      { reissue: true },
+    ).catch((err) =>
+      this.logger.error(
+        `Amendment ticket re-delivery failed for stall ${stallId}: ${
+          (err as any)?.message || err
+        }`,
+      ),
+    );
+
+    return {
+      success: true,
+      message: "Amendment confirmed. Updated stall ticket is being re-issued.",
+      data: stall,
+    };
+  }
+
+  // ============================================================
+  // CANCELLATION / DELETE REQUEST (vendor-initiated, organizer-approved)
+  // ============================================================
+
+  /**
+   * Vendor asks to cancel/delete their booking, with a reason. Creates a
+   * pending request for the organizer to decide on; the live booking + space
+   * stay intact until then.
+   */
+  async requestCancellation(stallId: string, reason: string) {
+    if (!Types.ObjectId.isValid(stallId)) {
+      throw new BadRequestException("Invalid stall ID format");
+    }
+    const stall = await this.stallModel
+      .findById(stallId)
+      .populate("eventId")
+      .populate("organizerId");
+    if (!stall) throw new NotFoundException("Stall request not found");
+    if (stall.status === "Cancelled") {
+      throw new BadRequestException("This booking is already cancelled.");
+    }
+    if ((stall.pendingCancellation as any)?.status === "requested") {
+      throw new BadRequestException(
+        "A cancellation request is already awaiting the organizer.",
+      );
+    }
+
+    stall.pendingCancellation = {
+      reason: (reason || "").trim(),
+      status: "requested",
+      organizerNote: "",
+      requestedAt: new Date(),
+    } as any;
+    stall.markModified("pendingCancellation");
+    await stall.save();
+
+    // Best-effort: let the organizer know a cancellation was requested.
+    try {
+      const org: any = stall.organizerId;
+      const orgEmail = org?.email;
+      const eventObj: any = stall.eventId;
+      if (orgEmail) {
+        await this.mailService.sendEmail({
+          to: orgEmail,
+          subject: `Stall cancellation requested — ${eventObj?.title || "your event"}`,
+          html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+              <h2 style="color:#b45309">Cancellation requested</h2>
+              <p>A vendor has requested to cancel their stall for
+              <b>${eventObj?.title || "your event"}</b>.</p>
+              <p><b>Reason:</b> ${(reason || "—").replace(/</g, "&lt;")}</p>
+              <p>Open your dashboard to approve (frees the space, re-issues nothing,
+              and lets you add a refund note) or reject it.</p>
+            </div>`,
+        });
+      }
+    } catch (e) {
+      this.logger.warn(
+        `Cancellation-request organizer notice failed for stall ${stallId}: ${
+          (e as any)?.message || e
+        }`,
+      );
+    }
+
+    return {
+      success: true,
+      message: "Cancellation request sent to the organizer.",
+      data: stall.pendingCancellation,
+    };
+  }
+
+  /**
+   * Organizer decides on a cancellation request. On approve: free the space,
+   * cancel the booking, invalidate the QR + coupon, and email the vendor the
+   * organizer's note (e.g. refund timing). On reject: email the vendor why.
+   */
+  async decideCancellation(
+    stallId: string,
+    dto: CancellationDecisionDto,
+  ) {
+    if (!Types.ObjectId.isValid(stallId)) {
+      throw new BadRequestException("Invalid stall ID format");
+    }
+    const stall = await this.stallModel
+      .findById(stallId)
+      .populate("shopkeeperId")
+      .populate("eventId")
+      .populate("organizerId");
+    if (!stall) throw new NotFoundException("Stall request not found");
+    const pc: any = stall.pendingCancellation;
+    if (!pc || pc.status !== "requested") {
+      throw new BadRequestException("No cancellation request is pending.");
+    }
+
+    const note = (dto.organizerNote || "").trim();
+    const orgId = (stall.organizerId as any)?._id || stall.organizerId;
+    const organizerDoc = await this.organizerModel.findById(orgId);
+    const vendorId = (stall.shopkeeperId as any)?._id || stall.shopkeeperId;
+    const vendor = await this.vendorModel.findById(vendorId);
+    const vendorEmail = vendor ? this.vendorEmailRecipients(vendor) : "";
+    const eventObj: any = stall.eventId;
+
+    if (dto.approve) {
+      // Kill the free-entry coupon (no more free entries for a deleted stall).
+      if (stall.couponCodeAssigned) {
+        try {
+          await this.couponService.setMaxUsageByCode(
+            String(orgId),
+            stall.couponCodeAssigned,
+            0,
+          );
+        } catch {
+          /* non-fatal */
+        }
+      }
+
+      // Free the space back to the layout, then SOFT-cancel the booking (keep
+      // the record). The organizer still needs to see it to settle the refund /
+      // deposit, so it stays in the exhibitor/participants list marked
+      // Cancelled. Its QR is void via the Cancelled-status guard in scanStallQR.
+      await this.releaseStallTables(stall);
+
+      // Email the vendor BEFORE deleting (we still have their details on hand):
+      // cancellation confirmed + refund note.
+      if (vendorEmail) {
+        try {
+          await this.mailService.sendEmail({
+            to: vendorEmail,
+            subject: `Your stall booking was cancelled — ${eventObj?.title || "Event"}`,
+            html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+                <div style="background:#dc2626;color:#fff;padding:20px;text-align:center">
+                  <h1 style="margin:0;font-size:20px">Booking Cancelled</h1>
+                </div>
+                <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+                  <p>Your stall booking for <b>${eventObj?.title || "the event"}</b> has been cancelled and your space released.</p>
+                  <p>Your previous QR code is <b>no longer valid</b>.</p>
+                  ${note ? `<div style="margin-top:12px;padding:12px;background:#f8fafc;border-left:4px solid #dc2626;border-radius:4px"><b>Note from the organizer:</b><br/>${note.replace(/</g, "&lt;").replace(/\n/g, "<br/>")}</div>` : ""}
+                </div>
+              </div>`,
+            senderConfig: (organizerDoc as any)?.emailConfig,
+          });
+        } catch (e) {
+          this.logger.warn(
+            `Cancellation email failed for stall ${stallId}: ${
+              (e as any)?.message || e
+            }`,
+          );
+        }
+      }
+
+      const actor = (dto.changedBy || "").trim() || "Organizer";
+      stall.status = "Cancelled" as any;
+      pc.status = "approved";
+      pc.organizerNote = note;
+      pc.resolvedAt = new Date();
+      stall.statusHistory.push({
+        status: "Cancelled" as any,
+        note: `Cancellation approved by ${actor} — booking cancelled & space freed. Kept in the list for refund/records.${
+          note ? ` Organizer note: ${note}` : ""
+        }`,
+        changedAt: new Date(),
+        changedBy: actor,
+      });
+      stall.markModified("pendingCancellation");
+      await stall.save();
+
+      return {
+        success: true,
+        message:
+          "Cancellation approved. Booking cancelled (kept in list), space freed, vendor notified.",
+        data: stall,
+      };
+    }
+
+    // Rejected — keep the booking, record + email why.
+    stall.statusHistory.push({
+      status: stall.status as any,
+      note: `Cancellation request rejected.${note ? ` Organizer note: ${note}` : ""}`,
+      changedAt: new Date(),
+      changedBy: dto.changedBy || "Organizer",
+    });
+    pc.status = "rejected";
+    pc.organizerNote = note;
+    pc.resolvedAt = new Date();
+    stall.markModified("pendingCancellation");
+    await stall.save();
+
+    if (vendorEmail) {
+      try {
+        await this.mailService.sendEmail({
+          to: vendorEmail,
+          subject: `Update on your stall cancellation request — ${eventObj?.title || "Event"}`,
+          html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+              <div style="background:#334155;color:#fff;padding:20px;text-align:center">
+                <h1 style="margin:0;font-size:20px">Cancellation Not Approved</h1>
+              </div>
+              <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+                <p>Your request to cancel your stall for <b>${eventObj?.title || "the event"}</b> was not approved. Your booking remains active.</p>
+                ${note ? `<div style="margin-top:12px;padding:12px;background:#f8fafc;border-left:4px solid #334155;border-radius:4px"><b>Note from the organizer:</b><br/>${note.replace(/</g, "&lt;").replace(/\n/g, "<br/>")}</div>` : ""}
+              </div>
+            </div>`,
+          senderConfig: (organizerDoc as any)?.emailConfig,
+        });
+      } catch {
+        /* non-fatal */
+      }
+    }
+
+    return {
+      success: true,
+      message: "Cancellation request rejected and vendor notified.",
+      data: stall,
+    };
   }
 
   // ===== STALL TICKET HTML GENERATION (Adapted from tickets.service.ts) =====
@@ -1426,13 +2052,29 @@ Thank you for choosing Eventsh! 🎊`;
         throw new NotFoundException("Stall not found");
       }
 
-      // Verify QR code matches
+      // A cancelled booking's QR is dead.
+      if (stall.status === "Cancelled") {
+        throw new BadRequestException(
+          "This booking was cancelled — the QR is no longer valid.",
+        );
+      }
+
+      // Verify QR code matches. issuedAt is part of the match so that when a
+      // ticket is re-issued (e.g. after an approved "Edit Request"), the stall's
+      // stored issuedAt changes and any previously-issued QR stops validating —
+      // only the latest QR works. Resend/download reuse the stored payload, so
+      // they keep the same issuedAt and remain valid.
       const storedQrData = JSON.parse(stall.qrCodeData || "{}");
       if (
         storedQrData.stallId !== qrData.stallId ||
         storedQrData.shopkeeperId !== qrData.shopkeeperId
       ) {
         throw new BadRequestException("Invalid QR code");
+      }
+      if (storedQrData.issuedAt && qrData.issuedAt !== storedQrData.issuedAt) {
+        throw new BadRequestException(
+          "This QR code has been superseded by an updated ticket. Please use the latest QR emailed to the vendor.",
+        );
       }
 
       const vendor = await this.vendorModel.findById(stall.shopkeeperId);
@@ -2176,8 +2818,12 @@ Thank you for choosing Eventsh! 🎊`;
         );
       }
 
-      const existingRequest = await this.stallModel
-        .findOne({
+      // Fetch ALL requests this vendor has for this event (newest first). A
+      // vendor can legitimately hold several — e.g. a Completed booking plus a
+      // freshly registered Pending one — and the storefront needs the full list
+      // so none stays hidden behind the most-recent one.
+      const allRequests = await this.stallModel
+        .find({
           shopkeeperId: new Types.ObjectId(shopkeeperId),
           eventId: new Types.ObjectId(eventId),
         })
@@ -2190,13 +2836,16 @@ Thank you for choosing Eventsh! 🎊`;
           },
           { path: "organizerId" },
         ])
-        .sort({ createdAt: -1 }); // Get most recent request
+        .sort({ createdAt: -1 });
+
+      const existingRequest = allRequests[0] || null;
 
       if (!existingRequest) {
         return {
           success: true,
           message: "No existing request found",
           data: null,
+          requests: [],
         };
       }
 
@@ -2209,6 +2858,7 @@ Thank you for choosing Eventsh! 🎊`;
           status: existingRequest.status,
           message: `Existing request is ${existingRequest.status}`,
           data: existingRequest,
+          requests: allRequests,
         };
       }
 
@@ -2216,6 +2866,7 @@ Thank you for choosing Eventsh! 🎊`;
         success: true,
         message: "Existing request found",
         data: existingRequest,
+        requests: allRequests,
       };
     } catch (error) {
       return {
@@ -2671,7 +3322,7 @@ Thank you for choosing Eventsh! 🎊`;
     return this.stallModel.findByIdAndUpdate(stallId, updateData, { new: true });
   }
 
-  async remove(id: string) {
+  async remove(id: string, changedBy?: string) {
     try {
       if (!Types.ObjectId.isValid(id)) {
         throw new BadRequestException("Invalid stall ID format");
@@ -2689,12 +3340,24 @@ Thank you for choosing Eventsh! 🎊`;
       // map / availability immediately.
       await this.releaseStallTables(stall);
 
-      await this.stallModel.findByIdAndDelete(id);
+      // SOFT delete — the organizer often needs to still see a "deleted" stall
+      // to settle its refund/deposit. Mark it Cancelled and keep the record so
+      // it stays in the Participants list (its QR is already void via the
+      // Cancelled-status guard in scanStallQR). We do NOT drop it from the DB.
+      const actor = (changedBy || "").trim() || "Organizer";
+      stall.status = "Cancelled" as any;
+      stall.statusHistory.push({
+        status: "Cancelled" as any,
+        note: `Stall deleted by ${actor} — space freed. Kept in the list for refund/records.`,
+        changedAt: new Date(),
+        changedBy: actor,
+      });
+      await stall.save();
 
       return {
         success: true,
-        message: "Stall deleted successfully",
-        data: null,
+        message: "Stall deleted (kept in list for records) and space freed.",
+        data: stall,
       };
     } catch (error) {
       return {
@@ -2841,7 +3504,7 @@ Thank you for choosing Eventsh! 🎊`;
     }
   }
 
-  async returnedDeposit(stallId: string, notes: string) {
+  async returnedDeposit(stallId: string, notes: string, changedBy?: string) {
     try {
       const stall = await this.stallModel.findById(stallId);
 
@@ -2854,7 +3517,7 @@ Thank you for choosing Eventsh! 🎊`;
           status: "Returned" as any,
           note: notes,
           changedAt: now,
-          changedBy: "organizer",
+          changedBy: changedBy || "Organizer",
         });
 
         await stall.save();

@@ -9,6 +9,7 @@ import { Model, Types } from "mongoose";
 import OpenAI from "openai";
 import * as XLSX from "xlsx";
 import * as ExcelJS from "exceljs";
+import { normalizePhone, dialCodeFor } from "../../common/country-phone.util";
 
 // Canonical field schemas. Anything mapped to "ignore" is dropped.
 const VISITOR_FIELDS = [
@@ -525,11 +526,22 @@ Return ONLY this JSON shape, nothing else:
     put("businessEmail", String(mapped.businessEmail || "").trim().toLowerCase());
     put("shopName", mapped.shopName);
     put("businessCategory", mapped.businessCategory);
-    put("country", mapped.country);
-    put("phone", mapped.phone);
+
+    // Country from the sheet is saved as-is, and drives the dial code used to
+    // complete phone / WhatsApp numbers that were entered without one.
+    const country = String(mapped.country || "").trim();
+    put("country", country);
+    const dial = dialCodeFor(country);
+    if (dial) set.countryCode = dial; // e.g. "+65" — shown alongside the number
+
+    // Attach the country's dial code when a number omits it (e.g. Singapore
+    // "91234567" -> "+6591234567"). Numbers that already carry a "+" / "00"
+    // code are kept as-is. Unknown countries leave the number untouched.
+    const phone = normalizePhone(mapped.phone, country);
+    if (phone) set.phone = phone;
     put("address", mapped.address);
 
-    const wa = String(mapped.whatsAppNumber || "").trim();
+    const wa = normalizePhone(mapped.whatsAppNumber, country);
     if (wa) {
       set.whatsAppNumber = wa;
       set.whatsappNumber = wa;
@@ -830,6 +842,15 @@ Return ONLY this JSON shape, nothing else:
     info.addRow(["• Required: First Name + (WhatsApp Number OR Email)."]);
     info.addRow([
       "• Column headers can be renamed — AI will map common variants.",
+    ]);
+    info.addRow([
+      "• Country: a name or ISO code (e.g. Singapore / SG, India / IN).",
+    ]);
+    info.addRow([
+      "• If WhatsApp / Phone has no country code, it's added automatically",
+    ]);
+    info.addRow([
+      "  from Country (e.g. Country 'SG' + '91234567' -> '+6591234567').",
     ]);
     info.addRow([
       "• Update existing exhibitors: export the current list, edit the cells,",

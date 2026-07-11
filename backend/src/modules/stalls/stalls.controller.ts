@@ -5,6 +5,7 @@ import {
   Body,
   Patch,
   Param,
+  Query,
   Delete,
   HttpCode,
   HttpStatus,
@@ -18,6 +19,13 @@ import { StallPaymentSchedulerService } from "./stall-payment-scheduler.service"
 import { StallsService } from "./stalls.service";
 import { CreateStallDto } from "./dto/create-stall.dto";
 import { SelectTablesAndAddOnsDto } from "./dto/tableSelect.dto";
+import {
+  AmendStallDto,
+  AmendPaymentDto,
+  ConfirmAmendmentDto,
+  RequestCancellationDto,
+  CancellationDecisionDto,
+} from "./dto/amend-stall.dto";
 import { UpdatePaymentStatusDto } from "./dto/paymentStatus.dto";
 import { UpdateStatusDto } from "./dto/updateStatus.dto";
 import { ConfirmPaymentDto } from "./dto/confirm-Payment.dto";
@@ -225,6 +233,7 @@ export class StallsController {
     return await this.stallsService.confirmPayment(
       confirmPaymentDto.stallId,
       confirmPaymentDto.notes,
+      confirmPaymentDto.changedBy,
     );
   }
 
@@ -269,6 +278,90 @@ export class StallsController {
     @Body() updateDto: UpdateStatusDto,
   ) {
     return await this.stallsService.updateStatus(id, updateDto);
+  }
+
+  // ============ EDIT REQUEST (AMENDMENT) ============
+
+  /**
+   * Vendor raises an amendment on a Completed/Paid booking (operators + add-ons,
+   * add-only). Returns the extra amount owed.
+   * PATCH /stalls/:id/amend
+   */
+  @Patch(":id/amend")
+  async amendRequest(
+    @Param("id") id: string,
+    @Body() amendDto: AmendStallDto,
+  ) {
+    return await this.stallsService.amendRequest(id, amendDto);
+  }
+
+  /**
+   * Vendor records the top-up transaction for the amendment difference.
+   * POST /stalls/:id/amend-payment  (multipart: optional "screenshot")
+   */
+  @Post(":id/amend-payment")
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(
+    FileInterceptor("screenshot", {
+      storage: diskStorage({
+        destination: "./uploads/stalls",
+        filename: generateFileName,
+      }),
+      fileFilter: imageFilter,
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  async amendPayment(
+    @Param("id") id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: AmendPaymentDto,
+  ) {
+    const screenshotPath = file
+      ? `/uploads/stalls/${(file as any).filename}`
+      : undefined;
+    return await this.stallsService.amendPayment(id, body, screenshotPath);
+  }
+
+  /**
+   * Organizer confirms a paid/no-cost amendment → apply + re-issue QR.
+   * POST /stalls/:id/amend-confirm
+   */
+  @Post(":id/amend-confirm")
+  @HttpCode(HttpStatus.OK)
+  async confirmAmendment(
+    @Param("id") id: string,
+    @Body() body: ConfirmAmendmentDto,
+  ) {
+    return await this.stallsService.confirmAmendment(id, body);
+  }
+
+  // ============ CANCELLATION / DELETE REQUEST ============
+
+  /**
+   * Vendor requests to cancel/delete their booking, with a reason.
+   * POST /stalls/:id/request-cancellation
+   */
+  @Post(":id/request-cancellation")
+  @HttpCode(HttpStatus.OK)
+  async requestCancellation(
+    @Param("id") id: string,
+    @Body() body: RequestCancellationDto,
+  ) {
+    return await this.stallsService.requestCancellation(id, body.reason);
+  }
+
+  /**
+   * Organizer approves/rejects a cancellation request (frees space + kills QR
+   * + emails the vendor a refund note on approval).
+   * POST /stalls/:id/cancellation-decision
+   */
+  @Post(":id/cancellation-decision")
+  @HttpCode(HttpStatus.OK)
+  async decideCancellation(
+    @Param("id") id: string,
+    @Body() body: CancellationDecisionDto,
+  ) {
+    return await this.stallsService.decideCancellation(id, body);
   }
 
   /**
@@ -363,9 +456,12 @@ export class StallsController {
    * DELETE /stalls/:id
    */
   @Delete(":id")
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@Param("id") id: string) {
-    return await this.stallsService.remove(id);
+  @HttpCode(HttpStatus.OK)
+  async remove(
+    @Param("id") id: string,
+    @Query("changedBy") changedBy?: string,
+  ) {
+    return await this.stallsService.remove(id, changedBy);
   }
 
   /**
@@ -384,7 +480,11 @@ export class StallsController {
 
   @Patch(":id/return-deposit")
   @HttpCode(HttpStatus.OK)
-  async returnDeposit(@Param("id") id: string, @Body("notes") notes: string) {
-    return await this.stallsService.returnedDeposit(id, notes);
+  async returnDeposit(
+    @Param("id") id: string,
+    @Body("notes") notes: string,
+    @Body("changedBy") changedBy: string,
+  ) {
+    return await this.stallsService.returnedDeposit(id, notes, changedBy);
   }
 }

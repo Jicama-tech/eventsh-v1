@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import jsPDF from "jspdf";
 import { useLocation, useNavigate } from "react-router-dom";
+import PaymentFeedbackDialog from "./PaymentFeedbackDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -54,6 +55,7 @@ export default function TicketPaymentPage() {
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const [paymentSubmitted, setPaymentSubmitted] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentURL, setPaymentURL] = useState("");
   const [showPaymentQR, setShowPaymentQR] = useState(true);
@@ -457,6 +459,7 @@ export default function TicketPaymentPage() {
       setTicketIdForQR(actualTicketId);
       setShowPaymentQR(false);
       setPaymentSubmitted(true);
+      setShowFeedback(true);
       const token = sessionStorage.getItem("token");
       if (token) {
         const decode = jwtDecode<OrganizerToken>(token);
@@ -1441,6 +1444,23 @@ Please confirm my ticket booking. Thank you!`,
           </div>
         </div>
       </div>
+
+      <PaymentFeedbackDialog
+        open={showFeedback}
+        onOpenChange={setShowFeedback}
+        paymentType="visitor"
+        organizerId={state?.organizerId || state?.eventInfo?.organizerId}
+        eventId={state?.eventId || state?.eventInfo?.id}
+        eventTitle={state?.eventInfo?.title}
+        payerName={
+          state?.customerDetails
+            ? `${state.customerDetails.firstName || ""} ${state.customerDetails.lastName || ""}`.trim()
+            : undefined
+        }
+        payerEmail={state?.customerDetails?.email}
+        bookingId={state?.ticketId}
+        amount={state?.total}
+      />
     </div>
   );
 }

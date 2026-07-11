@@ -6503,6 +6503,19 @@ export function CreateEventForm({
     bgColor: initialData?.adBar?.bgColor || "#000000",
     textColor: initialData?.adBar?.textColor || "#ffffff",
   });
+  // Public Eventfront AI assistant. When enabled, a floating chat widget
+  // shows on the event's public page so visitors/vendors/speakers/round-table
+  // guests can ask questions grounded in this event's data. Persisted as
+  // `event.chatbot = { enabled, name }`.
+  const [chatbot, setChatbot] = useState<{
+    enabled: boolean;
+    name: string;
+    accentColor: string;
+  }>({
+    enabled: !!initialData?.chatbot?.enabled,
+    name: initialData?.chatbot?.name || "Event Assistant",
+    accentColor: initialData?.chatbot?.accentColor || "#2563eb",
+  });
   const [stallTerms, setStallTerms] = useState<StallTermsCondition[]>(
     initialData?.termsAndConditionsforStalls?.map((t: any, i: number) => ({
       id: `term-${i}`,
@@ -8271,6 +8284,18 @@ export function CreateEventForm({
         }),
       );
 
+      // Eventfront chatbot ({ enabled, name }) — always send the whole object
+      // so the toggle + name persist atomically. Name falls back to the
+      // default so the widget never renders nameless.
+      data.append(
+        "chatbot",
+        JSON.stringify({
+          enabled: !!chatbot.enabled,
+          name: (chatbot.name || "").trim() || "Event Assistant",
+          accentColor: chatbot.accentColor || "#2563eb",
+        }),
+      );
+
       // Custom Basic-Info sections — drop entries with both an
       // empty heading and an empty body so half-typed rows don't
       // get persisted.
@@ -9291,6 +9316,93 @@ export function CreateEventForm({
                 </CardContent>
               </Card>
             </ModuleGate>
+
+            {/* ── Eventfront AI assistant ── */}
+            <div className="rounded-lg border bg-slate-50 p-4 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label className="text-sm font-medium">
+                    Event assistant chatbot
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {chatbot.enabled
+                      ? "A floating AI chat appears on your public event page — it answers visitor, vendor, speaker and round-table questions using this event's details."
+                      : "Turn on a floating AI chat on your public event page that answers questions about this event."}
+                  </p>
+                </div>
+                <Switch
+                  id="event-chatbot-enabled"
+                  checked={chatbot.enabled}
+                  onCheckedChange={(checked) =>
+                    setChatbot((p) => ({ ...p, enabled: !!checked }))
+                  }
+                />
+              </div>
+
+              {chatbot.enabled && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="event-chatbot-name" className="text-sm">
+                    Chatbot name
+                  </Label>
+                  <Input
+                    id="event-chatbot-name"
+                    value={chatbot.name}
+                    maxLength={40}
+                    placeholder="Event Assistant"
+                    onChange={(e) =>
+                      setChatbot((p) => ({ ...p, name: e.target.value }))
+                    }
+                    className="bg-white"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Shown as the chat's title and in its greeting (e.g. "Ravi's
+                    Wedding Helper"). Defaults to "Event Assistant".
+                  </p>
+
+                  <div className="pt-1 space-y-1.5">
+                    <Label htmlFor="event-chatbot-color" className="text-sm">
+                      Theme colour
+                    </Label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        id="event-chatbot-color"
+                        type="color"
+                        value={chatbot.accentColor}
+                        onChange={(e) =>
+                          setChatbot((p) => ({
+                            ...p,
+                            accentColor: e.target.value,
+                          }))
+                        }
+                        className="h-9 w-14 cursor-pointer rounded border bg-white p-0.5"
+                      />
+                      <Input
+                        value={chatbot.accentColor}
+                        onChange={(e) =>
+                          setChatbot((p) => ({
+                            ...p,
+                            accentColor: e.target.value,
+                          }))
+                        }
+                        placeholder="#2563eb"
+                        className="w-32 bg-white font-mono text-sm"
+                      />
+                      {/* Live preview chip */}
+                      <span
+                        className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-white"
+                        style={{ backgroundColor: chatbot.accentColor }}
+                      >
+                        Preview
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Colours the chat header, launcher button and visitor
+                      messages on your public event page.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
           </TabsContent>
 
           {/* VOLUNTEERS TAB — allow-listed Google accounts that can sign in to

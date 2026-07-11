@@ -28,6 +28,7 @@ import QRCode from "react-qr-code";
 import jsQR from "jsqr";
 import { Input } from "../ui/input";
 import { buildPayNowQrUrl } from "@/lib/paynowQr";
+import PaymentFeedbackDialog from "./PaymentFeedbackDialog";
 
 const TablePaymentPage = () => {
   const location = useLocation();
@@ -79,6 +80,7 @@ const TablePaymentPage = () => {
   const [transactionId, setTransactionId] = useState("");
   const [transactionScreenshot, setTransactionScreenshot] = useState<File | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState("");
+  const [showFeedback, setShowFeedback] = useState(false);
 
   const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const isAndroid = /Android/i.test(navigator.userAgent);
@@ -383,6 +385,7 @@ const TablePaymentPage = () => {
       if (result.success) {
         setPaymentStatus("success");
         setBookingId(result.data?._id);
+        setShowFeedback(true);
 
         // Upload transaction screenshot if provided
         if (transactionScreenshot && result.data?._id) {
@@ -1546,6 +1549,19 @@ const TablePaymentPage = () => {
           </div>
         </div>
       </div>
+
+      <PaymentFeedbackDialog
+        open={showFeedback}
+        onOpenChange={setShowFeedback}
+        paymentType="vendor"
+        organizerId={orderData?.eventInfo?.organizerId}
+        eventId={orderData?.eventId || orderData?.eventInfo?.id}
+        eventTitle={orderData?.eventInfo?.title}
+        payerName={orderData?.shopkeeperDetails?.name}
+        payerEmail={orderData?.shopkeeperDetails?.email}
+        bookingId={orderData?.stallRequestId}
+        amount={AmountToBePaid}
+      />
     </div>
   );
 };

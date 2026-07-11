@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";
 import QRCode from "react-qr-code";
+import PaymentFeedbackDialog from "./PaymentFeedbackDialog";
 
 const SpeakerPaymentPage = () => {
   const location = useLocation();
@@ -30,6 +31,7 @@ const SpeakerPaymentPage = () => {
   const orderData = location.state;
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const [paymentQRCode, setPaymentQRCode] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<"loading" | "ready" | "success" | "failed">("loading");
   const [showQR, setShowQR] = useState(false);
@@ -128,7 +130,8 @@ const SpeakerPaymentPage = () => {
       if (data.success) {
         setPaymentStatus("success");
         toast({ title: "Payment Submitted!", description: "The organizer will verify and issue your speaker pass." });
-        setTimeout(() => navigate(-1), 2000);
+        // Ask for feedback; navigate back once the dialog is dismissed.
+        setShowFeedback(true);
       } else {
         throw new Error(data.message);
       }
@@ -351,6 +354,18 @@ const SpeakerPaymentPage = () => {
           </>
         )}
       </div>
+
+      <PaymentFeedbackDialog
+        open={showFeedback}
+        onOpenChange={setShowFeedback}
+        paymentType="speaker"
+        organizerId={orderData?.organizerId}
+        eventTitle={orderData?.eventTitle}
+        payerName={orderData?.speakerName}
+        bookingId={orderData?.speakerRequestId}
+        amount={orderData?.fee}
+        onDone={() => navigate(-1)}
+      />
     </div>
   );
 };

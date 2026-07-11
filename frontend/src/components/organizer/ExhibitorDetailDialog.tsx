@@ -132,6 +132,17 @@ export interface ExhibitorDetailDialogProps {
   /** When provided, shows the "Confirm Payment" action bar (organizer only).
    * Receives the current stall so the caller can open its payment dialog. */
   onConfirmPayment?: (stall: StallRequest) => void;
+  /** When provided AND the stall has a paid, pending "Edit Request", shows the
+   * amendment-approval card (organizer only). Receives the current stall. */
+  onConfirmAmendment?: (stall: StallRequest) => void;
+  /** When provided AND the stall has a pending cancellation request, shows the
+   * approve/reject card (organizer only). Receives the stall, the decision, and
+   * the organizer's note (e.g. refund details). */
+  onDecideCancellation?: (
+    stall: StallRequest,
+    approve: boolean,
+    note: string,
+  ) => void;
   /** When provided, shows the "Deposit Returned" button after checkout
    * (organizer only — volunteers can view but not return deposits). */
   onReturnDeposit?: (stall: StallRequest) => void;
@@ -153,6 +164,8 @@ export function ExhibitorDetailDialog({
   stallRequest,
   detailRef,
   onConfirmPayment,
+  onConfirmAmendment,
+  onDecideCancellation,
   onReturnDeposit,
   onSharePDF,
   isGeneratingPDF,
@@ -166,6 +179,8 @@ export function ExhibitorDetailDialog({
   const [noteFormOpen, setNoteFormOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [isAddingNote, setIsAddingNote] = useState(false);
+  // Organizer's note (refund details) for a cancellation decision.
+  const [cancelNote, setCancelNote] = useState("");
 
   // Fallback "addedBy" derived from JWT (email + first role). Callers can
   // override via `currentUserDisplay` when they have richer info.
@@ -346,6 +361,175 @@ export function ExhibitorDetailDialog({
                         <CreditCard className="h-3.5 w-3.5 mr-1.5" />
                         Confirm Payment
                       </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+            {/* Edit Request (amendment) approval — organizer only, shown when
+                the vendor edited a completed booking and paid any difference. */}
+            {onConfirmAmendment &&
+              (stallRequest as any).pendingAmendment?.status ===
+                "paid_pending_confirm" &&
+              (() => {
+                const pa: any = (stallRequest as any).pendingAmendment;
+                return (
+                  <Card className="border-amber-300 bg-amber-50">
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 text-amber-700" />
+                        <p className="font-semibold text-sm text-amber-900">
+                          Vendor edited this request
+                        </p>
+                        <Badge className="bg-amber-200 text-amber-800">
+                          Approval needed
+                        </Badge>
+                      </div>
+                      <div className="rounded-lg border border-amber-200 bg-white p-3 text-sm space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Operators</span>
+                          <span className="font-medium">
+                            {(stallRequest as any).noOfOperators || "—"} →{" "}
+                            <span className="text-amber-700 font-bold">
+                              {pa.noOfOperators}
+                            </span>
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Updated add-ons</span>
+                          <ul className="mt-1 space-y-0.5">
+                            {(pa.selectedAddOns || []).map(
+                              (a: any, i: number) => (
+                                <li
+                                  key={i}
+                                  className="flex justify-between text-gray-700"
+                                >
+                                  <span>
+                                    {a.name} × {a.quantity}
+                                  </span>
+                                  <span className="font-medium">
+                                    {formatPrice(
+                                      (a.price || 0) * (a.quantity || 0),
+                                    )}
+                                  </span>
+                                </li>
+                              ),
+                            )}
+                          </ul>
+                        </div>
+                        <div className="flex justify-between border-t border-amber-100 pt-2">
+                          <span className="text-gray-500">
+                            Difference paid by vendor
+                          </span>
+                          <span className="font-bold text-green-700">
+                            {formatPrice(pa.amountDue || 0)}
+                          </span>
+                        </div>
+                        {pa.transactionId && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Transaction ID</span>
+                            <span className="font-mono text-xs">
+                              {pa.transactionId}
+                            </span>
+                          </div>
+                        )}
+                        {pa.transactionScreenshot && (
+                          <a
+                            href={`${apiURL.replace(/\/$/, "")}${pa.transactionScreenshot}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-blue-600 underline"
+                          >
+                            View payment screenshot
+                          </a>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs text-amber-700">
+                          Approving applies the changes, re-issues a new QR to the
+                          vendor by email, and invalidates the old QR.
+                        </p>
+                        <Button
+                          size="sm"
+                          className="bg-amber-600 hover:bg-amber-700 shrink-0"
+                          onClick={() => onConfirmAmendment(stallRequest)}
+                        >
+                          <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
+                          Approve &amp; re-issue QR
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+            {/* Cancellation / delete request — organizer approves (frees the
+                space, kills the QR, emails the vendor a refund note) or rejects. */}
+            {onDecideCancellation &&
+              (stallRequest as any).pendingCancellation?.status ===
+                "requested" && (
+                <Card className="border-red-300 bg-red-50">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 text-red-700" />
+                      <p className="font-semibold text-sm text-red-900">
+                        Vendor requested cancellation
+                      </p>
+                      <Badge className="bg-red-200 text-red-800">
+                        Decision needed
+                      </Badge>
+                    </div>
+                    <div className="rounded-lg border border-red-200 bg-white p-3 text-sm">
+                      <p className="text-xs text-gray-500">Reason</p>
+                      <p className="text-gray-800">
+                        {(stallRequest as any).pendingCancellation?.reason ||
+                          "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-600">
+                        Note to vendor (e.g. when the refund will be returned) —
+                        emailed to them
+                      </Label>
+                      <Textarea
+                        value={cancelNote}
+                        onChange={(e) => setCancelNote(e.target.value)}
+                        placeholder="e.g. Your deposit will be refunded within 5–7 business days to your original payment method."
+                        rows={3}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-red-700">
+                        Approving frees the space and invalidates the QR.
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            onDecideCancellation(
+                              stallRequest,
+                              false,
+                              cancelNote,
+                            );
+                            setCancelNote("");
+                          }}
+                        >
+                          Reject
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="bg-red-600 hover:bg-red-700"
+                          onClick={() => {
+                            onDecideCancellation(stallRequest, true, cancelNote);
+                            setCancelNote("");
+                          }}
+                        >
+                          <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
+                          Approve &amp; free space
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -713,11 +897,200 @@ export function ExhibitorDetailDialog({
                     <Label className="text-muted-foreground">
                       Registration Number
                     </Label>
-                    <p className="font-medium">
-                      {stallRequest.registrationNumber}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium">
+                        {stallRequest.registrationNumber}
+                      </p>
+                      {/^(NOGST|NOUEN|NOTPROV)/i.test(
+                        String(stallRequest.registrationNumber || ""),
+                      ) && (
+                        <Badge
+                          variant="outline"
+                          className="border-amber-300 bg-amber-50 text-amber-700"
+                        >
+                          ⚠ Placeholder — no registration provided, contact
+                          vendor
+                        </Badge>
+                      )}
+                      {/* Singapore UEN has no free auto-verify API like India's
+                          GST, so give the organizer a one-click Verify: it
+                          copies the UEN and opens the official UEN registry —
+                          paste it in and hit Search to see the details. */}
+                      {!/^(NOGST|NOUEN|NOTPROV)/i.test(
+                        String(stallRequest.registrationNumber || ""),
+                      ) &&
+                        (/singapore/i.test(
+                          String(
+                            stallRequest.residency ||
+                              stallRequest.shopkeeperId?.residency ||
+                              "",
+                          ),
+                        ) ||
+                          stallRequest.shopkeeperId?.country === "SG") && (
+                        <a
+                          href="https://www.bizfile.gov.sg/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => {
+                            const uen = String(
+                              stallRequest.registrationNumber || "",
+                            ).trim();
+                            try {
+                              navigator.clipboard?.writeText(uen);
+                            } catch {
+                              /* clipboard blocked — the site still opens */
+                            }
+                            toast({
+                              title: "UEN copied",
+                              description:
+                                "In BizFile, open the Entity search, paste the UEN and click Search.",
+                            });
+                          }}
+                          className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                          title="Copy the UEN and open the official ACRA BizFile registry"
+                        >
+                          Verify ↗
+                        </a>
+                      )}
+                      {/* India GST — let the organizer verify the GSTIN on the
+                          official government portal too (useful when the vendor
+                          didn't verify it themselves at registration). */}
+                      {!/^(NOGST|NOUEN|NOTPROV)/i.test(
+                        String(stallRequest.registrationNumber || ""),
+                      ) &&
+                        (/india/i.test(
+                          String(
+                            stallRequest.residency ||
+                              stallRequest.shopkeeperId?.residency ||
+                              "",
+                          ),
+                        ) ||
+                          stallRequest.shopkeeperId?.country === "IN") && (
+                        <a
+                          href="https://services.gst.gov.in/services/searchtp"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => {
+                            const gstin = String(
+                              stallRequest.registrationNumber || "",
+                            ).trim();
+                            try {
+                              navigator.clipboard?.writeText(gstin);
+                            } catch {
+                              /* clipboard blocked — the site still opens */
+                            }
+                            toast({
+                              title: "GSTIN copied",
+                              description:
+                                "On the GST portal, paste the GSTIN, enter the captcha and click Search.",
+                            });
+                          }}
+                          className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                          title="Copy the GSTIN and open the official GST portal (Search Taxpayer)"
+                        >
+                          Verify ↗
+                        </a>
+                      )}
+                    </div>
                   </div>
                 )}
+
+                {/* GST verified against the government registry (AppyFlow) at
+                    registration — shown so the organizer can approve with
+                    confidence without re-checking. */}
+                {stallRequest.shopkeeperId?.isGSTVerified &&
+                  stallRequest.shopkeeperId?.gstDetails && (
+                    <div className="col-span-2 pt-2 border-t">
+                      <div className="mb-2 flex items-center gap-2">
+                        <Label className="text-muted-foreground">
+                          GST Verification
+                        </Label>
+                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+                          ✓ Verified
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2 rounded-md border bg-muted/30 p-3 text-sm sm:grid-cols-2">
+                        {(() => {
+                          const g = stallRequest.shopkeeperId.gstDetails as any;
+                          const rows: [string, string][] = [
+                            ["GSTIN", g?.gstin],
+                            ["Legal name", g?.legalName],
+                            ["Trade name", g?.tradeName],
+                            ["Status", g?.status],
+                            ["Registered", g?.registrationDate],
+                            ["Constitution", g?.constitution],
+                            ["State", g?.state],
+                            ["Registered address", g?.address],
+                          ].filter(([, v]) => !!v) as [string, string][];
+                          return rows.map(([label, value]) => (
+                            <div
+                              key={label}
+                              className={
+                                label === "Registered address"
+                                  ? "sm:col-span-2"
+                                  : ""
+                              }
+                            >
+                              <div className="text-xs text-muted-foreground">
+                                {label}
+                              </div>
+                              <div className="font-medium">{value}</div>
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
+                {/* Singapore UEN verified against ACRA's free open-data
+                    registry at registration. If a brand-new entity wasn't found
+                    there, the organizer can still use the "Verify" link above to
+                    check the official registry. */}
+                {stallRequest.shopkeeperId?.isUENVerified &&
+                  stallRequest.shopkeeperId?.uenDetails && (
+                    <div className="col-span-2 pt-2 border-t">
+                      <div className="mb-2 flex items-center gap-2">
+                        <Label className="text-muted-foreground">
+                          UEN Verification
+                        </Label>
+                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+                          ✓ Verified
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground">
+                          via ACRA
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2 rounded-md border bg-muted/30 p-3 text-sm sm:grid-cols-2">
+                        {(() => {
+                          const u = stallRequest.shopkeeperId.uenDetails as any;
+                          const rows: [string, string][] = [
+                            ["UEN", u?.uen],
+                            ["Entity name", u?.entityName],
+                            ["Status", u?.status],
+                            ["Entity type", u?.entityType],
+                            ["Issued", u?.issueDate],
+                            ["Agency", u?.agency],
+                            ["Registered address", u?.address],
+                          ].filter(([, v]) => !!v) as [string, string][];
+                          return rows.map(([label, value]) => (
+                            <div
+                              key={label}
+                              className={
+                                label === "Registered address"
+                                  ? "sm:col-span-2"
+                                  : ""
+                              }
+                            >
+                              <div className="text-xs text-muted-foreground">
+                                {label}
+                              </div>
+                              <div className="font-medium">{value}</div>
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    </div>
+                  )}
 
                 {/* Vendor's preferred space type(s), with requested quantity. */}
                 {(() => {
