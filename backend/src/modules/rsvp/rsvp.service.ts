@@ -208,11 +208,12 @@ export class RsvpService {
       .map((a) => {
         const id = a?.id && prevById.has(a.id) ? a.id : uuidv4();
         const prev = prevById.get(id);
+        const rt = allowed.includes(a?.roomType) ? a.roomType : "dual";
         return {
           id,
           functionId: String(a?.functionId || ""),
           functionName: String(a?.functionName || ""),
-          roomType: allowed.includes(a?.roomType) ? a.roomType : "dual",
+          roomType: rt,
           roomName: String(a?.roomName || "").trim(),
           occupants:
             Number(a?.occupants) > 0 ? Math.floor(Number(a.occupants)) : 1,
@@ -223,10 +224,32 @@ export class RsvpService {
           // Check-in is set only by a QR scan — never trust the client for it.
           checkedIn: prev?.checkedIn || false,
           checkedInAt: prev?.checkedInAt,
-        };
+          // Shared-room linkage is owned by shareRoom / reconcileSharedRooms —
+          // preserve it across a normal edit; derive capacity from the type.
+          ...(prev?.roomKey ? { roomKey: prev.roomKey } : {}),
+          capacity: prev?.capacity || this.roomCapacity(rt),
+          ...(prev?.sharedRsvpIds ? { sharedRsvpIds: prev.sharedRsvpIds } : {}),
+        } as any;
       })
       // Keep only rows the organizer actually filled in.
       .filter((a) => a.roomName || a.notes || a.occupantNames.length);
+
+    // Combined-capacity guard: for any shared room, this RSVP's new occupants
+    // plus everyone already in the room (other parties) must fit the capacity.
+    for (const row of clean) {
+      if (!row.roomKey) continue;
+      const occ = await this.getRoomOccupancy(eventId, row.roomKey);
+      const others = occ.rsvps
+        .filter((x) => x.rsvpId !== String(rsvpId))
+        .reduce((s, x) => s + x.occupants, 0);
+      const projected = others + (row.occupants || row.occupantNames.length);
+      const cap = row.capacity || this.roomCapacity(row.roomType);
+      if (projected > cap) {
+        throw new BadRequestException(
+          `Room "${row.roomName}" holds ${cap}, but that would make ${projected} occupants across the shared parties.`,
+        );
+      }
+    }
 
     const doc = await this.rsvpModel
       .findOneAndUpdate(
@@ -236,7 +259,246 @@ export class RsvpService {
       )
       .lean();
     if (!doc) throw new NotFoundException("Guest RSVP not found");
+
+    // Reconcile shared linkage for every room this save touched — a shared row
+    // removed here must be dropped from the other parties' share lists (and a
+    // room left with a single party reverts to a normal, unshared room).
+    const touchedKeys = [
+      ...Array.from(prevById.values()).map((a: any) => a?.roomKey),
+      ...clean.map((a: any) => a.roomKey),
+    ].filter(Boolean) as string[];
+    if (touchedKeys.length) await this.reconcileSharedRooms(eventId, touchedKeys);
+
     return doc as Rsvp;
+  }
+
+  // Physical capacity of a room by type. Group rooms are flexible, so they
+  // carry a generous ceiling rather than a hard 1/2/3.
+  private roomCapacity(roomType?: string): number {
+    const m: Record<string, number> = {
+      single: 1,
+      dual: 2,
+      triple: 3,
+      group: 99,
+    };
+    return m[roomType || ""] || 2;
+  }
+
+  // Combined occupancy of one physical (shared) room — every RSVP in this event
+  // whose allotment carries the same roomKey. Used for capacity guards and the
+  // combined occupant list on the panel / room ticket.
+  async getRoomOccupancy(
+    eventId: string,
+    roomKey: string,
+  ): Promise<{
+    roomKey: string;
+    capacity: number;
+    totalOccupants: number;
+    occupantNames: string[];
+    rsvps: {
+      rsvpId: string;
+      name: string;
+      occupantNames: string[];
+      occupants: number;
+    }[];
+  }> {
+    const rsvps: any[] = await this.rsvpModel
+      .find({ eventId, "roomAllotments.roomKey": roomKey })
+      .lean();
+    let capacity = 0;
+    const rows: {
+      rsvpId: string;
+      name: string;
+      occupantNames: string[];
+      occupants: number;
+    }[] = [];
+    const names: string[] = [];
+    for (const r of rsvps) {
+      const a = (r.roomAllotments || []).find(
+        (x: any) => x?.roomKey === roomKey,
+      );
+      if (!a) continue;
+      capacity = Math.max(
+        capacity,
+        Number(a.capacity) || this.roomCapacity(a.roomType),
+      );
+      const occNames = Array.isArray(a.occupantNames) ? a.occupantNames : [];
+      rows.push({
+        rsvpId: String(r._id),
+        name: String(r.name || ""),
+        occupantNames: occNames,
+        occupants: Number(a.occupants) || occNames.length,
+      });
+      names.push(...occNames);
+    }
+    return {
+      roomKey,
+      capacity: capacity || this.roomCapacity(),
+      totalOccupants: rows.reduce((s, x) => s + (x.occupants || 0), 0),
+      occupantNames: names,
+      rsvps: rows,
+    };
+  }
+
+  // Recompute sharedRsvpIds for a set of roomKeys — the single source of truth
+  // for shared state. A key held by ≤1 RSVP reverts to a normal room (its
+  // roomKey / sharedRsvpIds are stripped).
+  private async reconcileSharedRooms(
+    eventId: string,
+    roomKeys: string[],
+  ): Promise<void> {
+    const keys = Array.from(new Set((roomKeys || []).filter(Boolean)));
+    for (const key of keys) {
+      const rsvps: any[] = await this.rsvpModel
+        .find({ eventId, "roomAllotments.roomKey": key })
+        .lean();
+      const ids = rsvps.map((r) => String(r._id));
+      for (const r of rsvps) {
+        const allots = (r.roomAllotments || []).map((a: any) => {
+          if (a?.roomKey !== key) return a;
+          if (ids.length <= 1) {
+            // No longer shared — strip the linkage back to a normal room.
+            const { roomKey, sharedRsvpIds, ...rest } = a;
+            return rest;
+          }
+          return { ...a, sharedRsvpIds: ids.filter((x) => x !== String(r._id)) };
+        });
+        await this.rsvpModel.updateOne(
+          { _id: r._id, eventId },
+          { $set: { roomAllotments: allots } },
+        );
+      }
+    }
+  }
+
+  // Organizer: share a source RSVP's room with another RSVP — the same physical
+  // room, split across both parties (combined occupants under one capacity).
+  async shareRoom(
+    eventId: string,
+    sourceRsvpId: string,
+    allotmentId: string,
+    targetRsvpId: string,
+    occupantNames: string[],
+  ): Promise<{ roomKey: string; occupancy: any }> {
+    if (
+      ![eventId, sourceRsvpId, targetRsvpId].every((x) =>
+        Types.ObjectId.isValid(x),
+      )
+    ) {
+      throw new NotFoundException("RSVP not found");
+    }
+    if (String(sourceRsvpId) === String(targetRsvpId)) {
+      throw new BadRequestException("Pick a different RSVP to share with.");
+    }
+    const [src, tgt]: any[] = await Promise.all([
+      this.rsvpModel.findOne({ _id: sourceRsvpId, eventId }).lean(),
+      this.rsvpModel.findOne({ _id: targetRsvpId, eventId }).lean(),
+    ]);
+    if (!src) throw new NotFoundException("Source RSVP not found");
+    if (!tgt) throw new NotFoundException("Guest to share with not found");
+
+    const srcAllot = (src.roomAllotments || []).find(
+      (a: any) => a?.id === allotmentId,
+    );
+    if (!srcAllot || !srcAllot.roomName) {
+      throw new BadRequestException("Room to share not found.");
+    }
+    const names = (Array.isArray(occupantNames) ? occupantNames : [])
+      .map((n) => String(n).trim())
+      .filter(Boolean);
+    if (names.length === 0) {
+      throw new BadRequestException(
+        "Pick at least one guest from the other party to add to the room.",
+      );
+    }
+
+    const roomKey = srcAllot.roomKey || srcAllot.id;
+    const capacity =
+      Number(srcAllot.capacity) || this.roomCapacity(srcAllot.roomType);
+
+    // Combined-capacity check: source + any existing sharers (excluding the
+    // target, whose share we're replacing) + the target's new occupants.
+    const occ = await this.getRoomOccupancy(eventId, roomKey);
+    const othersTotal = occ.rsvps
+      .filter(
+        (x) =>
+          x.rsvpId !== String(sourceRsvpId) && x.rsvpId !== String(targetRsvpId),
+      )
+      .reduce((s, x) => s + x.occupants, 0);
+    const sourceOcc =
+      Number(srcAllot.occupants) || (srcAllot.occupantNames?.length ?? 0);
+    const projected = othersTotal + sourceOcc + names.length;
+    if (projected > capacity) {
+      throw new BadRequestException(
+        `This room holds ${capacity}. Sharing these ${names.length} would make ${projected} occupants.`,
+      );
+    }
+
+    // Stamp the shared key/capacity on the source row.
+    const srcAllots = (src.roomAllotments || []).map((a: any) =>
+      a?.id === allotmentId ? { ...a, roomKey, capacity } : a,
+    );
+    // Upsert the linked row on the target RSVP.
+    const tgtAllots = [...(tgt.roomAllotments || [])];
+    const idx = tgtAllots.findIndex((a: any) => a?.roomKey === roomKey);
+    const linked = {
+      functionId: srcAllot.functionId,
+      functionName: srcAllot.functionName,
+      roomType: srcAllot.roomType,
+      roomName: srcAllot.roomName,
+      occupants: names.length,
+      occupantNames: names,
+      roomKey,
+      capacity,
+    };
+    if (idx >= 0) {
+      tgtAllots[idx] = { ...tgtAllots[idx], ...linked };
+    } else {
+      tgtAllots.push({
+        id: uuidv4(),
+        notes: "",
+        checkedIn: false,
+        ...linked,
+      });
+    }
+
+    await Promise.all([
+      this.rsvpModel.updateOne(
+        { _id: sourceRsvpId, eventId },
+        { $set: { roomAllotments: srcAllots } },
+      ),
+      this.rsvpModel.updateOne(
+        { _id: targetRsvpId, eventId },
+        { $set: { roomAllotments: tgtAllots } },
+      ),
+    ]);
+    await this.reconcileSharedRooms(eventId, [roomKey]);
+    return { roomKey, occupancy: await this.getRoomOccupancy(eventId, roomKey) };
+  }
+
+  // Organizer: remove one RSVP from a shared room. If only one party is left,
+  // reconcile reverts it to a normal room.
+  async unshareRoom(
+    eventId: string,
+    roomKey: string,
+    rsvpId: string,
+  ): Promise<{ roomKey: string; occupancy: any }> {
+    if (!Types.ObjectId.isValid(eventId) || !Types.ObjectId.isValid(rsvpId)) {
+      throw new NotFoundException("RSVP not found");
+    }
+    const rsvp: any = await this.rsvpModel
+      .findOne({ _id: rsvpId, eventId })
+      .lean();
+    if (!rsvp) throw new NotFoundException("RSVP not found");
+    const allots = (rsvp.roomAllotments || []).filter(
+      (a: any) => a?.roomKey !== roomKey,
+    );
+    await this.rsvpModel.updateOne(
+      { _id: rsvpId, eventId },
+      { $set: { roomAllotments: allots } },
+    );
+    await this.reconcileSharedRooms(eventId, [roomKey]);
+    return { roomKey, occupancy: await this.getRoomOccupancy(eventId, roomKey) };
   }
 
   private roomTypeLabelSrv(v?: string): string {
@@ -269,6 +531,17 @@ export class RsvpService {
       throw new BadRequestException(
         "Assign a room (with a room name) before sending the pass.",
       );
+    }
+    // Shared rooms: surface the COMBINED occupant list (everyone from every
+    // party in the room), not just this RSVP's slice, on the pass.
+    for (const r of rooms as any[]) {
+      if (!r.roomKey) continue;
+      const occ = await this.getRoomOccupancy(eventId, r.roomKey);
+      if (occ.rsvps.length > 1) {
+        r._shared = true;
+        r._combinedNames = occ.occupantNames;
+        r._combinedCount = occ.totalOccupants;
+      }
     }
     const event: any = await this.eventModel
       .findById(eventId)
@@ -354,10 +627,15 @@ export class RsvpService {
         </div>
         <div style="padding:18px;text-align:center;">
           <div style="font-size:22px;font-weight:700;color:#9f1239;">${this.esc(r.roomName)}</div>
-          <div style="font-size:13px;color:#78716c;margin-top:3px;">${this.esc(this.roomTypeLabelSrv(r.roomType))} · ${r.occupants} occupant${r.occupants === 1 ? "" : "s"}</div>
           ${
-            r.occupantNames && r.occupantNames.length
-              ? `<div style="font-size:14px;color:#44403c;margin-top:10px;">${r.occupantNames.map((n: string) => this.esc(n)).join(" · ")}</div>`
+            r._shared
+              ? `<div style="display:inline-block;margin-top:6px;padding:2px 10px;border-radius:999px;background:#fde68a;color:#92400e;font-size:11px;letter-spacing:1px;text-transform:uppercase;">Shared room</div>`
+              : ""
+          }
+          <div style="font-size:13px;color:#78716c;margin-top:3px;">${this.esc(this.roomTypeLabelSrv(r.roomType))} · ${r._shared ? r._combinedCount : r.occupants} occupant${(r._shared ? r._combinedCount : r.occupants) === 1 ? "" : "s"}</div>
+          ${
+            (r._shared ? r._combinedNames : r.occupantNames)?.length
+              ? `<div style="font-size:14px;color:#44403c;margin-top:10px;">${(r._shared ? r._combinedNames : r.occupantNames).map((n: string) => this.esc(n)).join(" · ")}</div>`
               : ""
           }
           ${r.notes ? `<div style="font-size:12px;color:#78716c;margin-top:6px;font-style:italic;">${this.esc(r.notes)}</div>` : ""}
@@ -453,20 +731,25 @@ export class RsvpService {
           .fontSize(12)
           .fillColor("#6b7280")
           .text(
-            `${this.roomTypeLabelSrv(room.roomType)}  -  ${room.occupants} occupant${room.occupants === 1 ? "" : "s"}`,
+            `${this.roomTypeLabelSrv(room.roomType)}${room._shared ? " (shared)" : ""}  -  ${room._shared ? room._combinedCount : room.occupants} occupant${(room._shared ? room._combinedCount : room.occupants) === 1 ? "" : "s"}`,
             left,
             y,
             { width: right - left },
           );
         y = pdf.y + 6;
-        if (room.occupantNames && room.occupantNames.length) {
-          pdf
-            .fontSize(12)
-            .fillColor("#374151")
-            .text(`Guests: ${room.occupantNames.join(", ")}`, left, y, {
-              width: right - left,
-            });
-          y = pdf.y + 4;
+        {
+          const guestNames = room._shared
+            ? room._combinedNames
+            : room.occupantNames;
+          if (guestNames && guestNames.length) {
+            pdf
+              .fontSize(12)
+              .fillColor("#374151")
+              .text(`Guests: ${guestNames.join(", ")}`, left, y, {
+                width: right - left,
+              });
+            y = pdf.y + 4;
+          }
         }
         if (room.notes) {
           pdf
@@ -527,6 +810,22 @@ export class RsvpService {
         .join(" & ") ||
       event?.title ||
       "The Wedding";
+    // Shared room → show the reception the COMBINED occupant list across every
+    // party in the room, not just this pass's slice.
+    let shared = false;
+    let occupants = room.occupants;
+    let occupantNames: string[] = room.occupantNames || [];
+    if (room.roomKey) {
+      const occ = await this.getRoomOccupancy(
+        String(rsvp.eventId),
+        room.roomKey,
+      );
+      if (occ.rsvps.length > 1) {
+        shared = true;
+        occupants = occ.totalOccupants;
+        occupantNames = occ.occupantNames;
+      }
+    }
     return {
       guestName: rsvp.name,
       coupleNames,
@@ -535,8 +834,9 @@ export class RsvpService {
       roomType: room.roomType,
       roomTypeLabel: this.roomTypeLabelSrv(room.roomType),
       roomName: room.roomName,
-      occupants: room.occupants,
-      occupantNames: room.occupantNames || [],
+      shared,
+      occupants,
+      occupantNames,
       notes: room.notes || "",
       checkedIn: !!room.checkedIn,
       checkedInAt: room.checkedInAt || null,

@@ -26,6 +26,11 @@ export type MarriageGalleryLayout =
   | "grid"
   | "carousel"
   | "collage";
+// How the "Our Story" moments are arranged on the public page.
+//   spine   — alternating left/right timeline with a vertical spine + dots
+//   cards   — centered stack of image cards, no spine
+//   feature — large alternating side-by-side image/text blocks (magazine)
+export type MarriageStoryLayout = "spine" | "cards" | "feature";
 export type MarriageMonogramStyle = "mandala" | "ring" | "minimal";
 // Botanical floral decoration framing the hero (line-art leaves + blossoms).
 export type MarriageFloralAccents = "none" | "corners" | "frame";
@@ -73,6 +78,7 @@ export interface MarriageTheme {
   backgroundPattern: MarriageBackgroundPattern;
   fontScale: MarriageFontScale; // overall display-heading size
   galleryLayout: MarriageGalleryLayout; // how the photo gallery is arranged
+  storyLayout: MarriageStoryLayout; // how the "Our Story" moments are arranged
   animations: boolean; // scroll-cue bounce + subtle motion
   sections: MarriageSections;
 }
@@ -136,6 +142,7 @@ export const DEFAULT_MARRIAGE_THEME: MarriageTheme = {
   backgroundPattern: "none",
   fontScale: "normal",
   galleryLayout: "masonry",
+  storyLayout: "spine",
   animations: true,
   sections: { ...ALL_SECTIONS_ON },
 };
@@ -235,6 +242,14 @@ export const GALLERY_LAYOUTS: {
   { value: "grid", label: "Uniform grid" },
   { value: "carousel", label: "Swipe carousel" },
   { value: "collage", label: "Featured collage" },
+];
+export const STORY_LAYOUTS: {
+  value: MarriageStoryLayout;
+  label: string;
+}[] = [
+  { value: "spine", label: "Timeline (alternating)" },
+  { value: "cards", label: "Stacked cards" },
+  { value: "feature", label: "Feature (side-by-side)" },
 ];
 export const SECTION_LABELS: { key: keyof MarriageSections; label: string }[] = [
   { key: "countdown", label: "Countdown" },
@@ -397,6 +412,11 @@ export function resolveMarriageTheme(
       t.galleryLayout,
       ["masonry", "grid", "carousel", "collage"],
       d.galleryLayout,
+    ),
+    storyLayout: oneOf(
+      t.storyLayout,
+      ["spine", "cards", "feature"],
+      d.storyLayout,
     ),
     animations: t.animations !== false,
     sections: {

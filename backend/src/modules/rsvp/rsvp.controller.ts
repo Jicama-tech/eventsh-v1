@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Patch,
+  Delete,
   Get,
   Body,
   Param,
@@ -64,6 +65,53 @@ export class RsvpController {
       rsvpId,
       body?.allotments || [],
     );
+    return { success: true, data };
+  }
+
+  // Organizer — share one RSVP's room with another RSVP (same physical room,
+  // combined occupants across both parties).
+  @Post("events/:eventId/rooms/share")
+  @UseGuards(AuthGuard("jwt"))
+  async shareRoom(
+    @Param("eventId") eventId: string,
+    @Body()
+    body: {
+      sourceRsvpId?: string;
+      allotmentId?: string;
+      targetRsvpId?: string;
+      occupantNames?: string[];
+    },
+  ) {
+    const data = await this.rsvpService.shareRoom(
+      eventId,
+      String(body?.sourceRsvpId || ""),
+      String(body?.allotmentId || ""),
+      String(body?.targetRsvpId || ""),
+      body?.occupantNames || [],
+    );
+    return { success: true, data };
+  }
+
+  // Organizer — combined occupancy of a shared room (all parties + capacity).
+  @Get("events/:eventId/rooms/:roomKey/occupancy")
+  @UseGuards(AuthGuard("jwt"))
+  async roomOccupancy(
+    @Param("eventId") eventId: string,
+    @Param("roomKey") roomKey: string,
+  ) {
+    const data = await this.rsvpService.getRoomOccupancy(eventId, roomKey);
+    return { success: true, data };
+  }
+
+  // Organizer — remove one RSVP from a shared room.
+  @Delete("events/:eventId/rooms/:roomKey/rsvps/:rsvpId")
+  @UseGuards(AuthGuard("jwt"))
+  async unshareRoom(
+    @Param("eventId") eventId: string,
+    @Param("roomKey") roomKey: string,
+    @Param("rsvpId") rsvpId: string,
+  ) {
+    const data = await this.rsvpService.unshareRoom(eventId, roomKey, rsvpId);
     return { success: true, data };
   }
 
