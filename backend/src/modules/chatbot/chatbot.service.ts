@@ -2220,12 +2220,19 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
           }${t.depositPrice ? `, deposit ${money(t.depositPrice)}` : ""}`,
         );
       });
-      const availStalls = placedTables.filter(
-        (t: any) => t?.forSale !== false && !t?.isBooked,
+      // Only for-sale spaces count toward availability — a "not for sale"
+      // table is a layout-only reference (decoration/standing table) that
+      // cannot be booked, so it must NOT be counted in either the open count
+      // or the total.
+      const sellableTables = placedTables.filter(
+        (t: any) => t?.forSale !== false,
+      );
+      const availStalls = sellableTables.filter(
+        (t: any) => !t?.isBooked,
       ).length;
-      if (placedTables.length)
+      if (sellableTables.length)
         lines.push(
-          `Availability: ${availStalls} of ${placedTables.length} stalls open.`,
+          `Availability: ${availStalls} of ${sellableTables.length} stalls open.`,
         );
       lines.push(
         "Vendors book from the Stalls / Exhibitor section on this page.",
@@ -2269,10 +2276,12 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
             : `${money(t.tablePrice)} / table`;
         lines.push(`- ${t.name}: ${t.numberOfChairs} seats, ${price}`);
       });
-      const availRt = placedRt.filter((t: any) => !t?.isFullyBooked).length;
-      if (placedRt.length)
+      // Same rule for round tables — not-for-sale tables are decoration only.
+      const sellableRt = placedRt.filter((t: any) => t?.forSale !== false);
+      const availRt = sellableRt.filter((t: any) => !t?.isFullyBooked).length;
+      if (sellableRt.length)
         lines.push(
-          `Availability: ${availRt} of ${placedRt.length} tables not fully booked.`,
+          `Availability: ${availRt} of ${sellableRt.length} tables not fully booked.`,
         );
       lines.push("Book round-table seats from the Round Tables section here.");
     }
@@ -2359,14 +2368,22 @@ You help organizers with events, tickets, attendees, vendors, speakers, plans, s
     // the eventfront page uses to render its ticket-buying UI. A stray
     // ticketPrice value must NOT surface a "Buy tickets" pill when the event has
     // no visitor types (no purchase UI exists for it).
+    // A space type only earns a booking pill if at least one instance is
+    // actually FOR SALE. "Not for sale" spaces are layout-only decorations —
+    // e.g. round tables placed purely as references — so a type made up
+    // entirely of them shows no "Book …" pill (nothing to book).
+    const anyForSale = (arr: any): boolean =>
+      Array.isArray(arr) && arr.some((t: any) => t?.forSale !== false);
     const hasTickets = (ev.visitorTypes || []).length > 0;
-    const hasStalls = (ev.tableTemplates || []).length > 0;
+    const hasStalls =
+      anyForSale(ev.tableTemplates) ||
+      anyForSale(this.flattenVenueCollection(ev.venueTables));
     const hasSpeakers =
       (ev.speakers || []).length > 0 ||
       (ev.speakerSlotTemplates || []).length > 0;
     const hasRoundTables =
-      this.flattenVenueCollection(ev.venueRoundTables).length > 0 ||
-      (ev.roundTableTemplates || []).length > 0;
+      anyForSale(this.flattenVenueCollection(ev.venueRoundTables)) ||
+      anyForSale(ev.roundTableTemplates);
 
     if (opts.isPast) {
       // Past event — no purchases/bookings; steer to info instead.
