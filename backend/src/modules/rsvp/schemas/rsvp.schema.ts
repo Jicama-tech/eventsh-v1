@@ -83,6 +83,17 @@ export class Rsvp {
     // Reception check-in state, set when the room-ticket QR is scanned.
     checkedIn?: boolean;
     checkedInAt?: string;
+    // ---- Shared room (one physical room split across several RSVPs) ----
+    // Rows on different RSVPs that carry the SAME roomKey are the same
+    // physical room; their occupants combine toward one shared capacity.
+    // Absent/undefined = a normal, single-RSVP room.
+    roomKey?: string;
+    // Total capacity of the physical room (from roomType), so every linked
+    // row agrees on the ceiling regardless of how the split is entered.
+    capacity?: number;
+    // Denormalised list of the OTHER RSVP ids sharing this room — kept in
+    // sync on every share/unshare so the panel + tickets render fast.
+    sharedRsvpIds?: string[];
   }[];
 
   // Google profile id, kept for de-dup/audit.

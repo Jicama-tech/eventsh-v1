@@ -16,7 +16,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { BedDouble, Check, Loader2, Mail, Plus, Send, X } from "lucide-react";
+import {
+  BedDouble,
+  Check,
+  Loader2,
+  Mail,
+  Plus,
+  Send,
+  Users,
+  X,
+} from "lucide-react";
 
 const apiURL = __API_URL__;
 
@@ -42,6 +51,11 @@ interface Allot {
   occupantNames: string[];
   notes: string;
   checkedIn?: boolean;
+  // Shared room: rows on different RSVPs with the same roomKey are one
+  // physical room; sharedRsvpIds are the OTHER parties in it.
+  roomKey?: string;
+  capacity?: number;
+  sharedRsvpIds?: string[];
 }
 
 interface GuestLike {
@@ -80,12 +94,15 @@ function ageLineOf(a?: GuestLike["ageGroups"]): string {
 export default function GuestRoomDialog({
   eventId,
   guest,
+  allGuests = [],
   open,
   onOpenChange,
   onSaved,
 }: {
   eventId: string;
   guest: GuestLike | null;
+  /** Every RSVP in the event — used to pick a party to share a room with. */
+  allGuests?: GuestLike[];
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onSaved: (allotments: Allot[]) => void;
@@ -94,6 +111,16 @@ export default function GuestRoomDialog({
   const [rows, setRows] = useState<Allot[]>([]);
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
+  // Per-room share editor: which row is being shared, the target RSVP, and the
+  // people from that party going into the room.
+  const [shareFor, setShareFor] = useState<number | null>(null);
+  const [shareTarget, setShareTarget] = useState<string>("");
+  const [shareNames, setShareNames] = useState<string[]>([]);
+  const [sharing, setSharing] = useState(false);
+
+  // Other parties this room can be shared with (never the guest themselves).
+  const otherGuests = (allGuests || []).filter((g) => g._id !== guest?._id);
+  const guestById = new Map(otherGuests.map((g) => [g._id, g]));
 
   // The functions this guest is attending — each room is assigned to one of
   // them (or a single "General stay" option when none were picked).
@@ -139,6 +166,9 @@ export default function GuestRoomDialog({
             : [],
           notes: a.notes || "",
           checkedIn: a.checkedIn,
+          roomKey: a.roomKey,
+          capacity: a.capacity,
+          sharedRsvpIds: a.sharedRsvpIds,
         })),
       );
     } else {
@@ -286,6 +316,111 @@ export default function GuestRoomDialog({
       });
     } finally {
       setSending(false);
+    }
+  };
+
+  // Share a room with another party. Saves first (so the room has an id), then
+  // links the target RSVP + its chosen occupants. Closes so the parent refetches
+  // and the updated shared state shows on reopen.
+  const doShare = async (roomIndex: number) => {
+    if (!guest) return;
+    const row = rows[roomIndex];
+    if (!row?.roomName?.trim()) {
+      toast({
+        title: "Name the room first",
+        description: "Give the room a name/number before sharing it.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!shareTarget) {
+      toast({
+        title: "Pick a party",
+        description: "Choose which RSVP to share this room with.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (shareNames.length === 0) {
+      toast({
+        title: "Pick guests",
+        description: "Choose who from that party is in the room.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSharing(true);
+    try {
+      const saved = await persist();
+      const savedRow =
+        saved.find(
+          (s) =>
+            s.roomName === row.roomName && s.functionId === row.functionId,
+        ) || saved[roomIndex];
+      const allotmentId = savedRow?.id || row.id;
+      const token = sessionStorage.getItem("token");
+      const res = await fetch(`${apiURL}/events/${eventId}/rooms/share`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          sourceRsvpId: guest._id,
+          allotmentId,
+          targetRsvpId: shareTarget,
+          occupantNames: shareNames,
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.message || "Couldn't share the room");
+      toast({
+        title: "Room shared 🛏️",
+        description: `Added ${
+          guestById.get(shareTarget)?.name || "the other party"
+        } to this room.`,
+      });
+      setShareFor(null);
+      setShareTarget("");
+      setShareNames([]);
+      onSaved(saved);
+      onOpenChange(false);
+    } catch (e: any) {
+      toast({
+        title: "Couldn't share the room",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  // Remove one shared party from a room.
+  const doUnshare = async (roomKey: string, rsvpId: string) => {
+    setSharing(true);
+    try {
+      const token = sessionStorage.getItem("token");
+      const res = await fetch(
+        `${apiURL}/events/${eventId}/rooms/${roomKey}/rsvps/${rsvpId}`,
+        {
+          method: "DELETE",
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        },
+      );
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.message || "Couldn't update sharing");
+      toast({ title: "Removed from room" });
+      onSaved(rows);
+      onOpenChange(false);
+    } catch (e: any) {
+      toast({
+        title: "Couldn't update sharing",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -471,6 +606,141 @@ export default function GuestRoomDialog({
                         );
                       })()}
                     </div>
+                  )}
+                </div>
+                {/* Shared room — split this physical room across another party */}
+                <div className="rounded-lg border border-amber-100 bg-amber-50/60 p-2.5">
+                  {r.roomKey &&
+                    r.sharedRsvpIds &&
+                    r.sharedRsvpIds.length > 0 && (
+                      <div className="mb-2">
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                          Shared with
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {r.sharedRsvpIds.map((rid) => (
+                            <span
+                              key={rid}
+                              className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-white px-2 py-0.5 text-xs text-stone-700"
+                            >
+                              {guestById.get(rid)?.name || "Another party"}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  r.roomKey && doUnshare(r.roomKey, rid)
+                                }
+                                className="text-stone-400 hover:text-red-600"
+                                title="Remove from this room"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  {shareFor === i ? (
+                    <div className="space-y-2">
+                      <div>
+                        <Label className="text-xs">Share with RSVP</Label>
+                        <Select
+                          value={shareTarget}
+                          onValueChange={(v) => {
+                            setShareTarget(v);
+                            setShareNames([]);
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Pick a party…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {otherGuests.map((g) => (
+                              <SelectItem key={g._id} value={g._id}>
+                                {g.name} · {g.guestCount} guest
+                                {g.guestCount === 1 ? "" : "s"}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {shareTarget && (
+                        <div>
+                          <Label className="text-xs">Who from that party?</Label>
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {(guestById.get(shareTarget)?.attendees || [])
+                              .map((a) => a.name)
+                              .filter(Boolean)
+                              .map((n) => {
+                                const on = shareNames.includes(n);
+                                return (
+                                  <button
+                                    key={n}
+                                    type="button"
+                                    onClick={() =>
+                                      setShareNames((old) =>
+                                        on
+                                          ? old.filter((x) => x !== n)
+                                          : [...old, n],
+                                      )
+                                    }
+                                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition ${
+                                      on
+                                        ? "border-amber-400 bg-amber-500 text-white"
+                                        : "border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
+                                    }`}
+                                  >
+                                    {on && <Check className="h-3 w-3" />}
+                                    {n}
+                                  </button>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setShareFor(null);
+                            setShareTarget("");
+                            setShareNames([]);
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => doShare(i)}
+                          disabled={sharing}
+                          className="bg-amber-600 hover:bg-amber-700"
+                        >
+                          {sharing ? (
+                            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Users className="mr-1 h-4 w-4" />
+                          )}
+                          Add to room
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    otherGuests.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShareFor(i);
+                          setShareTarget("");
+                          setShareNames([]);
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 hover:text-amber-900"
+                      >
+                        <Users className="h-3.5 w-3.5" /> Share this room with
+                        another RSVP
+                      </button>
+                    )
                   )}
                 </div>
               </div>
