@@ -21,6 +21,15 @@ import {
   ChevronDown,
   CheckCircle2,
   Sparkles,
+  Heart,
+  Ticket,
+  QrCode,
+  Bed,
+  Palette,
+  Camera,
+  Mail,
+  MessageSquare,
+  LayoutGrid,
 } from "lucide-react";
 import {
   Card,
@@ -98,21 +107,24 @@ const eventSteps = [
 ];
 
 const whyChooseFeatures = [
-  { icon: Users, title: "Multi-Role Registration", desc: "Separate, branded onboarding flows for Visitors, Exhibitors, and Vendors.", color: "text-blue-400" },
-  { icon: Smartphone, title: "Instant Digital Badging", desc: "Auto-generates unique Dynamic QR Codes delivered via email, SMS, or WhatsApp.", color: "text-purple-400" },
-  { icon: CheckCircle2, title: "Contactless Check-In", desc: "Visitors scan their own QR codes for instant attendance tracking.", color: "text-emerald-400" },
-  { icon: BarChart3, title: "Session Tracking", desc: "Scan QR codes at seminar entrances to track high-demand topics.", color: "text-amber-400" },
-  { icon: Globe, title: "Interactive Real-Time Floor Plans", desc: "Drag-and-drop builder to design venue layouts with ease.", color: "text-cyan-400" },
-  { icon: ShoppingBag, title: "Booth Booking System", desc: "Premium vendors view live floor plans and claim preferred booth locations.", color: "text-blue-400" },
-  { icon: Store, title: "Add-On Purchase System", desc: "Seamless marketplace for vendors to purchase event extras.", color: "text-rose-400" },
-  { icon: ShoppingBag, title: "Dynamic QR Code Invoicing", desc: "Automated invoicing with QR codes for add-on purchases.", color: "text-blue-400" },
-  { icon: Smartphone, title: "Instant Payment Processing", desc: "Deposit funds directly through integrated payment systems.", color: "text-purple-400" },
-  { icon: Users, title: "Advanced CRM System", desc: "Manage all attendee and exhibitor relationships in one platform.", color: "text-emerald-400" },
-  { icon: BarChart3, title: "Historical Event Analysis", desc: "Comprehensive data from past events to inform future planning.", color: "text-amber-400" },
-  { icon: Globe, title: "Real-Time Analytics Dashboard", desc: "Live insights into event metrics, attendance, and engagement.", color: "text-cyan-400" },
-  { icon: Store, title: "Revenue Tracking", desc: "Monitor ticket sales, add-on purchases, and total event revenue.", color: "text-rose-400" },
-  { icon: Globe, title: "Multi-Event Management", desc: "Manage multiple events simultaneously from a single dashboard.", color: "text-cyan-400" },
-  { icon: Store, title: "Customizable Branding", desc: "White-label solutions for events with custom branding.", color: "text-rose-400" },
+  // ---- Professional events (expos, conferences, concerts) ----
+  { icon: Ticket, title: "Ticketing & Early-Bird Pricing", desc: "Multiple ticket types, coupons and pricing tiers for expos, concerts and conferences.", color: "text-blue-400" },
+  { icon: Store, title: "Exhibitor Stall Booking", desc: "Vendors claim stalls on a live, drag-and-drop venue floor plan.", color: "text-rose-400" },
+  { icon: Users, title: "Multi-Role Registration", desc: "Branded onboarding for visitors, exhibitors, vendors and speakers.", color: "text-emerald-400" },
+  { icon: QrCode, title: "Contactless QR Check-In", desc: "Attendees scan their own QR passes for instant, contactless entry.", color: "text-purple-400" },
+  { icon: CalendarDays, title: "Speakers & Sessions", desc: "Manage speaker slots, applications and session schedules with ease.", color: "text-cyan-400" },
+  { icon: BarChart3, title: "Revenue & Sales Analytics", desc: "Live ticket, stall and revenue insights across every event.", color: "text-amber-400" },
+  // ---- Personal events (weddings & celebrations) ----
+  { icon: Heart, title: "RSVP & Guest Lists", desc: "Collect RSVPs per function with age, side and attendance breakdowns.", color: "text-rose-400" },
+  { icon: Bed, title: "Room Allotment", desc: "Assign rooms to guests — even share one room across two families.", color: "text-blue-400" },
+  { icon: Palette, title: "Designer Wedding Themes", desc: "Beautiful themes, fonts and an “Our Story” timeline built in minutes.", color: "text-purple-400" },
+  { icon: Calendar, title: "Ceremonies & Countdown", desc: "Multi-function schedules, live ceremony announcements and a countdown.", color: "text-emerald-400" },
+  { icon: Camera, title: "Photo Galleries", desc: "Share your best moments in elegant, responsive photo galleries.", color: "text-cyan-400" },
+  { icon: Mail, title: "QR Room & Entry Passes", desc: "Email guests QR passes for event check-in and hotel-room access.", color: "text-amber-400" },
+  // ---- Works for both ----
+  { icon: MessageSquare, title: "Built-in AI Assistant", desc: "Run any event by chat — bookings, approvals, guest lists and more.", color: "text-purple-400" },
+  { icon: Globe, title: "Branded Event Pages", desc: "Every event gets a beautiful public page under your own brand.", color: "text-cyan-400" },
+  { icon: LayoutGrid, title: "One Dashboard, Every Event", desc: "Manage professional and personal events side by side.", color: "text-blue-400" },
 ];
 
 interface ScrollRevealProps {
@@ -417,6 +429,193 @@ const LandingPage = () => {
         </div>
       </section>
 
+      {/* See it in action — real professional + personal event pages */}
+      <section className="py-24 bg-[#0a0a0c] relative overflow-hidden">
+        {/* soft decorative glow — pure CSS, no image weight */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[900px] h-[420px] rounded-full opacity-20 blur-3xl"
+          style={{
+            background:
+              "radial-gradient(closest-side, rgba(99,102,241,0.55), transparent)",
+          }}
+        />
+        <div className="container mx-auto px-4 relative">
+          <ScrollReveal>
+            <div className="text-center mb-14">
+              <span className="inline-block text-xs font-semibold uppercase tracking-[0.25em] text-indigo-400 mb-4">
+                See it in action
+              </span>
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-5 tracking-tight">
+                One platform, every kind of event
+              </h2>
+              <p className="text-base md:text-lg text-slate-400 leading-relaxed max-w-3xl mx-auto">
+                From ticketed expos and exhibitor stalls to intimate weddings —
+                run the whole thing from a branded page, a live dashboard and an
+                AI assistant. Here's a real look at each.
+              </p>
+            </div>
+          </ScrollReveal>
+
+          <div className="max-w-6xl mx-auto space-y-20 md:space-y-28">
+            {[
+              {
+                eyebrow: "For Businesses & Organizers",
+                title: "A branded event page that sells",
+                desc: "Give every event a beautiful public page — under your own brand, taking bookings the moment you publish.",
+                points: [
+                  "Multiple ticket types with early-bird pricing",
+                  "Exhibitor stall booking on a live venue map",
+                  "Speakers, sponsors & a built-in AI assistant",
+                ],
+                img: "/landing/demo-professional.jpg",
+                url: "eventsh.com/…/events/dummy-event",
+                accent: "text-sky-400",
+              },
+              {
+                eyebrow: "For Businesses & Organizers",
+                title: "Run everything from one dashboard",
+                desc: "Track events, ticket sales, stalls and revenue at a glance — then drill into any event for the detail.",
+                points: [
+                  "Live revenue, tickets & stall analytics",
+                  "Per-event cards with sales progress",
+                  "Coupons, platform fees, feedback & more",
+                ],
+                img: "/landing/demo-dashboard.jpg",
+                url: "eventsh.com/organizer-dashboard",
+                accent: "text-indigo-400",
+              },
+              {
+                eyebrow: "AI, built in",
+                title: "Your AI event assistant",
+                desc: "Manage the whole event by chat — ask for your events, approvals, payments or a guest list and act on it instantly.",
+                points: [
+                  '"Show me all my events" → actionable cards',
+                  "Approve pending exhibitors & confirm payments",
+                  "Answers grounded in your real event data",
+                ],
+                img: "/landing/demo-chatbot.jpg",
+                url: "eventsh.com/…/assistant",
+                accent: "text-violet-400",
+              },
+              {
+                eyebrow: "For Personal Celebrations",
+                title: "Weddings, beautifully done",
+                desc: "A romantic, fully-themed invite you can build in minutes — your story, ceremonies, gallery and countdown.",
+                points: [
+                  'Designer themes, fonts & an "Our Story" timeline',
+                  "Photo gallery & live ceremony announcements",
+                  "Shareable invite with directions & RSVP",
+                ],
+                img: "/landing/demo-wedding.jpg",
+                url: "eventsh.com/…/aarav-and-diya",
+                accent: "text-rose-400",
+              },
+              {
+                eyebrow: "For Personal Celebrations",
+                title: "RSVP & guest management",
+                desc: "Collect RSVPs per function, see exactly who's coming, and allot rooms — even share one room across two families.",
+                points: [
+                  "Guest list with age & per-function breakdown",
+                  "Room allotment, incl. rooms shared across parties",
+                  "Export lists & email QR room passes",
+                ],
+                img: "/landing/demo-rsvp.jpg",
+                url: "eventsh.com/…/participants",
+                accent: "text-emerald-400",
+              },
+            ].map((d, i) => {
+              const flip = i % 2 === 1;
+              return (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-80px" }}
+                  transition={{ duration: 0.55 }}
+                  className="grid lg:grid-cols-2 gap-8 lg:gap-14 items-center"
+                >
+                  {/* Screenshot in a browser frame */}
+                  <div
+                    className={cn(
+                      "group",
+                      flip ? "lg:order-2" : "lg:order-1",
+                    )}
+                  >
+                    <div className="rounded-2xl overflow-hidden border border-white/10 bg-[#121216] shadow-2xl transition-all group-hover:border-white/20">
+                      <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-white/10 bg-[#16161b]">
+                        <span className="w-2.5 h-2.5 rounded-full bg-red-400/60" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-yellow-400/60" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-green-400/60" />
+                        <div className="ml-3 flex-1 rounded-md bg-white/5 px-3 py-1 text-[11px] text-slate-500 truncate">
+                          {d.url}
+                        </div>
+                      </div>
+                      <div className="overflow-hidden">
+                        {/* Looping muted clip so the pitch feels alive; the JPG
+                            poster paints instantly while the tiny mp4/webm loads. */}
+                        <video
+                          poster={d.img}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          preload="metadata"
+                          aria-label={d.title}
+                          className="w-full aspect-[16/10] object-cover object-top"
+                        >
+                          <source
+                            src={d.img.replace(/\.jpg$/, ".webm")}
+                            type="video/webm"
+                          />
+                          <source
+                            src={d.img.replace(/\.jpg$/, ".mp4")}
+                            type="video/mp4"
+                          />
+                        </video>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Feature copy */}
+                  <div className={cn(flip ? "lg:order-1" : "lg:order-2")}>
+                    <span
+                      className={cn(
+                        "text-xs font-semibold uppercase tracking-[0.2em]",
+                        d.accent,
+                      )}
+                    >
+                      {d.eyebrow}
+                    </span>
+                    <h3 className="text-2xl md:text-3xl font-bold text-white mt-3 mb-4 tracking-tight">
+                      {d.title}
+                    </h3>
+                    <p className="text-base text-slate-400 leading-relaxed mb-6">
+                      {d.desc}
+                    </p>
+                    <ul className="space-y-3">
+                      {d.points.map((pt, j) => (
+                        <li
+                          key={j}
+                          className="flex items-start gap-3 text-slate-300"
+                        >
+                          <CheckCircle2
+                            className={cn(
+                              "w-5 h-5 mt-0.5 flex-shrink-0",
+                              d.accent,
+                            )}
+                          />
+                          <span className="text-sm md:text-base">{pt}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
       {/* Public AI chatbot — FAQ + first-event onboarding (inline Google auth) */}
       <PublicChatbot />
 
@@ -429,7 +628,7 @@ const LandingPage = () => {
                 Why Choose EventsHub?
               </h2>
               <p className="text-base md:text-lg text-slate-400 leading-relaxed max-w-3xl mx-auto">
-                Everything you need to succeed, all in one place. Our platform is built to scale with your business, whether you're hosting global events or launching a niche online store.
+                One platform for every occasion — from ticketed expos, conferences and exhibitions to weddings and personal celebrations. Everything you need to plan, sell and host, in one place.
               </p>
             </div>
           </ScrollReveal>
@@ -462,7 +661,179 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Steps Section - Image Carousel with Browser Tab Layout */}
+      {/* How it works — two guided journeys */}
+      <section className="py-24 bg-[#1a1a1a]">
+        <div className="container mx-auto px-4">
+          <ScrollReveal>
+            <div className="text-center mb-16">
+              <span className="inline-block text-xs font-semibold uppercase tracking-[0.25em] text-indigo-400 mb-4">
+                How it works
+              </span>
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-5 tracking-tight">
+                From idea to a live event — in minutes
+              </h2>
+              <p className="text-base md:text-lg text-slate-400 leading-relaxed max-w-3xl mx-auto">
+                Two clear journeys, one platform. Follow the steps for a business
+                event or a personal celebration — no training or documentation
+                needed.
+              </p>
+            </div>
+          </ScrollReveal>
+          <div className="grid lg:grid-cols-2 gap-8 lg:gap-10 max-w-6xl mx-auto">
+            {[
+              {
+                label: "For Businesses & Organizers",
+                accent: "text-sky-400",
+                ring: "border-sky-500/40 text-sky-300",
+                img: "/landing/demo-dashboard.jpg",
+                steps: [
+                  { t: "Create your event", d: "Pick a type (expo, conference, concert…), add dates, venue and details." },
+                  { t: "Set up ticketing", d: "Add multiple ticket types, coupons and early-bird pricing — or make it free." },
+                  { t: "Design your venue", d: "Use the drag-and-drop floor plan to open exhibitor stalls, speaker slots and round tables." },
+                  { t: "Publish a branded page", d: "Your logo, colours and gallery on a public page — share the link anywhere." },
+                  { t: "Sell & manage", d: "Approve exhibitors, confirm payments, handle edit/cancellation requests — or just ask the AI." },
+                  { t: "Check in & analyse", d: "Scan QR passes on the day; track revenue, tickets, stalls and attendance live." },
+                ],
+              },
+              {
+                label: "For Personal Celebrations",
+                accent: "text-rose-400",
+                ring: "border-rose-500/40 text-rose-300",
+                img: "/landing/demo-wedding.jpg",
+                steps: [
+                  { t: "Create your celebration", d: "Choose a wedding or personal event and add your couple, hosts and functions." },
+                  { t: "Make it yours", d: "Pick a designer theme and fonts, then add your “Our Story” timeline and photo gallery." },
+                  { t: "Publish & invite", d: "Share a beautiful, mobile invitation with directions, a countdown and RSVP." },
+                  { t: "Collect RSVPs", d: "Guests respond per function; see exactly who's coming, with age and side breakdowns." },
+                  { t: "Allot rooms", d: "Assign hotel rooms, share a room across two families, and email QR room passes." },
+                  { t: "Go live", d: "Announce ceremonies as they start and manage the whole day by chat." },
+                ],
+              },
+            ].map((col, ci) => (
+              <motion.div
+                key={ci}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: ci * 0.1, duration: 0.5 }}
+                className="rounded-2xl border border-white/10 bg-[#121216] p-6 md:p-8"
+              >
+                <span
+                  className={cn(
+                    "text-xs font-semibold uppercase tracking-[0.2em]",
+                    col.accent,
+                  )}
+                >
+                  {col.label}
+                </span>
+                {/* Poster reused from the pitch clips above (already cached) —
+                    a visual anchor with effectively no extra page weight. */}
+                <img
+                  src={col.img}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="mt-4 w-full aspect-[16/9] object-cover object-top rounded-xl border border-white/10"
+                />
+                <div className="mt-7 space-y-6">
+                  {col.steps.map((s, i) => (
+                    <div key={i} className="flex gap-4">
+                      <div
+                        className={cn(
+                          "flex-shrink-0 w-9 h-9 rounded-full border flex items-center justify-center text-sm font-bold",
+                          col.ring,
+                        )}
+                      >
+                        {i + 1}
+                      </div>
+                      <div>
+                        <h4 className="text-white font-semibold">{s.t}</h4>
+                        <p className="text-sm text-slate-400 mt-1 leading-relaxed">
+                          {s.d}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Everything you can do — complete capability grid */}
+      <section className="py-24 bg-[#0a0a0c]">
+        <div className="container mx-auto px-4">
+          <ScrollReveal>
+            <div className="text-center mb-16">
+              <span className="inline-block text-xs font-semibold uppercase tracking-[0.25em] text-indigo-400 mb-4">
+                Everything you can do
+              </span>
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-5 tracking-tight">
+                A complete toolkit — no add-ons required
+              </h2>
+              <p className="text-base md:text-lg text-slate-400 leading-relaxed max-w-3xl mx-auto">
+                Every capability, in one platform. Here's the full picture, so
+                you always know what's possible.
+              </p>
+            </div>
+          </ScrollReveal>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 max-w-6xl mx-auto">
+            {[
+              { icon: Ticket, color: "text-blue-400", title: "Ticketing & Registration", items: ["Multiple ticket types & pricing tiers", "Coupons & early-bird discounts", "Walk-in / kiosk booking", "QR e-tickets via email & WhatsApp", "Multi-role registration"] },
+              { icon: Store, color: "text-rose-400", title: "Exhibitors & Stalls", items: ["Live floor-plan stall booking", "Vendor onboarding & profiles", "Payment approval & security deposits", "Edit & cancellation requests", "GST / UEN verification"] },
+              { icon: Users, color: "text-emerald-400", title: "Speakers & Sessions", items: ["Speaker slots & applications", "Session schedules & timing", "Approve speakers & issue passes"] },
+              { icon: Calendar, color: "text-cyan-400", title: "Round Tables", items: ["Gala & dinner seating", "Book by whole table or per chair", "Live seat availability"] },
+              { icon: Heart, color: "text-rose-400", title: "Weddings & Personal", items: ["Multi-function schedules", "“Our Story” timeline & gallery", "Designer themes & fonts", "Live ceremony announcements", "Countdown & directions"] },
+              { icon: CheckCircle2, color: "text-purple-400", title: "RSVP & Guests", items: ["RSVP per function", "Age & side breakdowns", "Guest-list export", "Attendance tracking"] },
+              { icon: Bed, color: "text-blue-400", title: "Room Allotment", items: ["Assign hotel rooms to guests", "Share one room across families", "Email QR room passes", "Occupancy & capacity checks"] },
+              { icon: QrCode, color: "text-purple-400", title: "Check-in & On-site", items: ["Contactless QR check-in", "Operators & volunteer helpers", "Kiosk mode", "Re-issue lost tickets"] },
+              { icon: BarChart3, color: "text-amber-400", title: "Payments & Revenue", items: ["Integrated payments", "Deposits & refunds", "Revenue & sales tracking", "Platform-fee management"] },
+              { icon: MessageSquare, color: "text-purple-400", title: "Built-in AI Assistant", items: ["Manage events by chat", "Approvals & payment confirmations", "Guest lists & pending queues", "Answers grounded in your data"] },
+              { icon: TrendingUp, color: "text-cyan-400", title: "Analytics & Feedback", items: ["Live dashboards", "Per-event statistics", "Historical event analysis", "Post-event feedback"] },
+              { icon: Shield, color: "text-blue-400", title: "Team, Branding & Plans", items: ["Operators with scoped access", "White-label branded pages", "Custom store link & storefront", "Memberships, plans & add-ons"] },
+            ].map((c, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 18 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: (i % 3) * 0.06, duration: 0.4 }}
+                className="rounded-xl border border-white/5 bg-[#121216] p-5 hover:border-white/15 transition-all"
+              >
+                <div
+                  className={cn(
+                    "w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center mb-4",
+                    c.color,
+                  )}
+                >
+                  <c.icon className="w-5 h-5" />
+                </div>
+                <h4 className="text-white font-bold mb-3">{c.title}</h4>
+                <ul className="space-y-2">
+                  {c.items.map((it, j) => (
+                    <li
+                      key={j}
+                      className="flex items-start gap-2 text-sm text-slate-400 leading-relaxed"
+                    >
+                      <CheckCircle2
+                        className={cn(
+                          "w-4 h-4 mt-0.5 flex-shrink-0",
+                          c.color,
+                        )}
+                      />
+                      <span>{it}</span>
+                    </li>
+                  ))}
+                </ul>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Steps Section — hidden for now (kept for later) */}
+      {false && (
       <section className="py-16 md:py-24 bg-[#0a0a0c] relative z-10">
         <div className="container mx-auto px-4 max-w-5xl">
           <div className="text-center mb-8 md:mb-16">
@@ -583,6 +954,7 @@ const LandingPage = () => {
           </div>
         </div>
       </section>
+      )}
 
       {/* FAQ Section */}
       <section className="py-24 bg-[#0a0a0c]">
