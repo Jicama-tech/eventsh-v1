@@ -409,6 +409,8 @@ export class EventsController {
         body.addOnItems = JSON.parse(body.addOnItems);
       if (typeof body.venueConfig === "string")
         body.venueConfig = JSON.parse(body.venueConfig);
+      if (typeof body.ageRestrictions === "string")
+        body.ageRestrictions = JSON.parse(body.ageRestrictions);
 
       if (typeof body.termsAndConditionsforStalls === "string")
         body.termsAndConditionsforStalls = JSON.parse(
@@ -815,6 +817,8 @@ export class EventsController {
         body.addOnItems = JSON.parse(body.addOnItems);
       if (typeof body.venueConfig === "string")
         body.venueConfig = JSON.parse(body.venueConfig);
+      if (typeof body.ageRestrictions === "string")
+        body.ageRestrictions = JSON.parse(body.ageRestrictions);
 
       if (typeof body.termsAndConditionsforStalls === "string")
         body.termsAndConditionsforStalls = JSON.parse(

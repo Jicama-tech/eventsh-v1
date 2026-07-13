@@ -69,6 +69,15 @@ export class FeaturesDto {
   accessibility?: boolean;
 }
 
+// One custom age restriction: a heading (e.g. "Vendors") + an age (e.g. "18+").
+export class AgeRestrictionItemDto {
+  @IsString()
+  heading: string;
+
+  @IsString()
+  age: string;
+}
+
 // Table templates (row-based pricing)
 export class TableTemplateDto {
   @IsString()
@@ -587,9 +596,21 @@ export class CreateEventDto {
   @IsOptional()
   ageRestriction?: string;
 
+  // Custom per-purpose age restrictions (heading + age). Whitelisted so the
+  // strict ValidationPipe doesn't reject the field on save.
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => AgeRestrictionItemDto)
+  ageRestrictions?: AgeRestrictionItemDto[];
+
   @IsString()
   @IsOptional()
   dresscode?: string;
+
+  @IsString()
+  @IsOptional()
+  dressCodeTheme?: string;
 
   @IsString()
   @IsOptional()

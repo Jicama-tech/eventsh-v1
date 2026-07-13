@@ -740,6 +740,42 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     Record<number, boolean>
   >({});
   const [showTermsStep, setShowTermsStep] = useState(false);
+  // Upfront Rules & Regulations gate — shown AFTER Google auth and BEFORE the
+  // stall-request form opens (for a NEW request). The vendor must scroll to the
+  // bottom of the terms + custom sections before the single Accept enables.
+  const [showStallTermsGate, setShowStallTermsGate] = useState(false);
+  const [stallGateScrolledEnd, setStallGateScrolledEnd] = useState(false);
+  // True once the vendor has accepted the rules for the current form open.
+  const [stallGateAcknowledged, setStallGateAcknowledged] = useState(false);
+  const stallGateScrollRef = useRef<HTMLDivElement | null>(null);
+  // When the gate opens, if its content is short enough to need no scrolling,
+  // enable Accept right away (otherwise the vendor could never satisfy the
+  // scroll-to-bottom requirement).
+  useEffect(() => {
+    if (!showStallTermsGate) return;
+    const id = window.setTimeout(() => {
+      const el = stallGateScrollRef.current;
+      if (el && el.scrollHeight <= el.clientHeight + 4)
+        setStallGateScrolledEnd(true);
+    }, 60);
+    return () => window.clearTimeout(id);
+  }, [showStallTermsGate]);
+  // GATE THE STALL FORM: whenever the form is requested open (via ANY path —
+  // new vendor, register-another, cancelled-then-new, no-existing-request …)
+  // and there are rules the vendor hasn't acknowledged yet, show the Rules &
+  // Regulations dialog FIRST. The form only renders once acknowledged. Closing
+  // the form clears the acknowledgement so the next request re-gates.
+  useEffect(() => {
+    if (!showRentForm) {
+      if (stallGateAcknowledged) setStallGateAcknowledged(false);
+      return;
+    }
+    if (stallGateAcknowledged || showStallTermsGate) return;
+    if (getStallGateContent().hasAny) {
+      setStallGateScrolledEnd(false);
+      setShowStallTermsGate(true);
+    }
+  }, [showRentForm, stallGateAcknowledged, showStallTermsGate, eventData]);
   const [availableTables, setAvailableTables] = useState<{
     [key: string]: any[];
   }>({});
@@ -1830,6 +1866,86 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       // non-fatal — fall back to the vendor's denormalised fields
     }
     setStallMembership({ planName, endDate, color });
+  };
+
+  // Rules & Regulations gate content: Special Instructions, Refund Policy,
+  // Terms & Conditions, every visible Custom Section, and the stall terms
+  // checklist. Age Restriction & Dress Code are intentionally excluded. Each
+  // HTML block respects the organizer's per-section visibility toggle.
+  const getStallGateContent = () => {
+    const ev: any = eventData || {};
+    const secVis =
+      (ev?.sectionVisibility as Record<string, boolean> | undefined) || {};
+    const shown = (k: string) => secVis[k] !== false;
+
+    // Rich-text (HTML) sections, in reading order.
+    const htmlSections: { key: string; title: string; html: string }[] = [];
+    if (shown("specialInstructions") && (ev.specialInstructions || "").trim())
+      htmlSections.push({
+        key: "specialInstructions",
+        title: "Special Instructions",
+        html: ev.specialInstructions,
+      });
+    if (shown("refundPolicy") && (ev.refundPolicy || "").trim())
+      htmlSections.push({
+        key: "refundPolicy",
+        title: "Refund Policy",
+        html: ev.refundPolicy,
+      });
+    if (shown("termsAndConditions") && (ev.termsAndConditions || "").trim())
+      htmlSections.push({
+        key: "termsAndConditions",
+        title: "Terms & Conditions",
+        html: ev.termsAndConditions,
+      });
+    // Custom sections the organizer added.
+    (Array.isArray(ev.customSections) ? ev.customSections : [])
+      .filter(
+        (s: any) =>
+          ((s?.heading || "").trim() || (s?.content || "").trim()) &&
+          secVis[s?.id] !== false,
+      )
+      .forEach((s: any) =>
+        htmlSections.push({
+          key: s.id || s.heading,
+          title: (s.heading || "").trim() || "More Information",
+          html: s.content || "",
+        }),
+      );
+
+    // Stall-specific terms checklist.
+    const terms = (ev.termsAndConditionsforStalls || []).filter(
+      (t: any) => (t?.termsAndConditionsforStalls || "").trim(),
+    );
+
+    return {
+      htmlSections,
+      terms,
+      hasAny: htmlSections.length > 0 || terms.length > 0,
+    };
+  };
+
+  // Vendor accepted the rules → dismiss the gate; the stall form (already
+  // requested open) then renders because it's now acknowledged. Record the
+  // acceptance against every term so the later payment-step terms card is
+  // already satisfied (no double-accepting the same fine print).
+  const acceptStallGate = () => {
+    const terms = eventData?.termsAndConditionsforStalls || [];
+    const allChecked: Record<number, boolean> = {};
+    terms.forEach((_: any, i: number) => {
+      allChecked[i] = true;
+    });
+    setStallTermsChecked(allChecked);
+    setStallGateAcknowledged(true);
+    setStallGateScrolledEnd(false);
+    setShowStallTermsGate(false);
+  };
+
+  // Vendor dismissed the rules without accepting → cancel the whole form open.
+  const cancelStallGate = () => {
+    setShowStallTermsGate(false);
+    setStallGateScrolledEnd(false);
+    setShowRentForm(false);
   };
 
   // Open a BLANK rent form for a NEW vendor profile under the authenticated
@@ -3841,7 +3957,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           "Stall request submitted successfully. Waiting for organizer approval.",
       });
 
-      setShowRentForm(false);
       setShopkeeperDetails(initialForm);
       setRegImageFile(null);
       setRegImagePreview("");
@@ -3851,6 +3966,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       setProductPreviews([]);
       setExistingProductImages([]);
       setStallMembership(null);
+      // Close the form AND the status/detail dialog → land on the eventfront.
+      returnToEventfront();
     } catch (error: any) {
       toast({
         duration: 5000,
@@ -4361,6 +4478,22 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     if (t?.id && t?.color) templateColorById[t.id] = t.color;
   });
 
+  // Legend entries — one swatch per FOR-SALE stall template (its colour → the
+  // type it represents). Not-for-sale / reference templates are excluded, so
+  // the legend only ever explains the spaces a vendor can actually buy.
+  const forSaleTemplateLegend: { name: string; color: string }[] = [];
+  (eventData?.tableTemplates || []).forEach((t: any) => {
+    if (!t || t.forSale === false) return;
+    const color = t.color || "#22c55e";
+    const name = t.name || "Space";
+    if (
+      !forSaleTemplateLegend.some(
+        (e) => e.name === name && e.color === color,
+      )
+    )
+      forSaleTemplateLegend.push({ name, color });
+  });
+
   // How many venues the organizer marked published — drives whether the
   // public venue switcher is shown (a lone published venue needs no switcher)
   // and lets us hide unpublished halls from the switcher options below.
@@ -4643,9 +4776,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         description:
           "Your request was sent to the organizer. They'll review it and email you (with any refund details).",
       });
-      setShowCancelDialog(false);
       setCancelReason("");
-      setShowCompletedChoice(false);
+      // Close the cancel dialog AND the status/detail dialog → eventfront.
+      returnToEventfront();
     } catch (e: any) {
       toast({
         variant: "destructive",
@@ -4668,6 +4801,25 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     setAmendScreenshot(null);
     setSelectedTables([]);
     setSelectedAddOns([]);
+  };
+
+  // After a request is submitted / updated / cancelled, drop the vendor back to
+  // the plain eventfront: close every stall-flow surface (form, space
+  // selection, the "Stall Request Status" detail dialog, choosers and the rules
+  // gate) so nothing re-opens over the page. The post-payment feedback prompt is
+  // intentionally left untouched.
+  const returnToEventfront = () => {
+    setShowRentForm(false);
+    setShowTableSelection(false);
+    setExistingStallRequest(null);
+    setShowStallTermsGate(false);
+    setStallGateAcknowledged(false);
+    setShowWhatsAppDialog(false);
+    setShowAccountChooser(false);
+    setShowRequestListChoice(false);
+    setShowCompletedChoice(false);
+    setShowRegisterTargetChoice(false);
+    setShowCancelDialog(false);
   };
 
   const handleAmendmentSubmit = async () => {
@@ -4704,6 +4856,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             "Awaiting organizer confirmation — your updated QR will follow once approved.",
         });
         resetAmend();
+        returnToEventfront();
       }
     } catch (e: any) {
       toast({
@@ -4740,6 +4893,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       // for feedback on the edit-payment experience.
       setFeedbackAmount(amendAmountDue);
       resetAmend();
+      returnToEventfront();
       setShowPaymentFeedback(true);
     } catch (e: any) {
       toast({
@@ -5717,13 +5871,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </p>
                   <button
                     onClick={handleRentStallClick}
-                    className="w-full h-11 rounded-xl border-2 font-semibold text-sm transition-all hover:opacity-90"
+                    className="w-full h-14 rounded-xl border-2 font-bold text-lg text-white shadow-md transition-all hover:opacity-90"
                     style={{
+                      backgroundColor: design?.primaryColor || "#f97316",
                       borderColor: design?.primaryColor || "#f97316",
-                      color: design?.primaryColor || "#f97316",
                     }}
                   >
-                    Rent a Stall / Preview Request
+                    Book stall
                   </button>
                   {/* Member entry point — small link under the main CTA.
                       Clicking opens the Google-verified Member dialog
@@ -6345,37 +6499,65 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               const customs = Array.isArray((eventData as any)?.customSections)
                 ? ((eventData as any).customSections as any[])
                 : [];
+              // Custom, per-purpose age restrictions (heading + age).
+              const customAges = (
+                Array.isArray((eventData as any)?.ageRestrictions)
+                  ? ((eventData as any).ageRestrictions as any[])
+                  : []
+              ).filter((a: any) => a && (a.heading || a.age));
+              const dressCodeTheme = String(
+                (eventData as any)?.dressCodeTheme || "",
+              ).trim();
               return (
                 <>
-                  {shown("ageDress") && (ageRestriction || dresscode) && (
-                    <CollapsibleCard
-                      title="Age Restriction & Dress Code"
-                      headingColor={design?.primaryColor}
-                    >
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {ageRestriction && (
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">
-                              Age Restriction
-                            </p>
-                            <p className="text-gray-700 text-sm">
-                              {ageRestriction}
-                            </p>
-                          </div>
-                        )}
-                        {dresscode && (
-                          <div>
+                  {shown("ageDress") &&
+                    (dresscode || dressCodeTheme || customAges.length > 0) && (
+                      <CollapsibleCard
+                        title="Age Restriction & Dress Code"
+                        headingColor={design?.primaryColor}
+                      >
+                        {(dresscode || dressCodeTheme) && (
+                          <div className="mb-1">
                             <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">
                               Dress Code
                             </p>
-                            <p className="text-gray-700 text-sm">
-                              {dresscode}
-                            </p>
+                            {dresscode && (
+                              <p className="text-gray-700 text-sm">
+                                {dresscode}
+                              </p>
+                            )}
+                            {dressCodeTheme && (
+                              <p className="text-gray-700 text-sm">
+                                <span className="font-medium">Theme:</span>{" "}
+                                {dressCodeTheme}
+                              </p>
+                            )}
                           </div>
                         )}
-                      </div>
-                    </CollapsibleCard>
-                  )}
+                        {customAges.length > 0 && (
+                          <div className="mt-4">
+                            <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
+                              Age limits by purpose
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                              {customAges.map((a: any, i: number) => (
+                                <div
+                                  key={i}
+                                  className="flex items-center justify-between gap-3 rounded-md bg-gray-50 px-3 py-1.5"
+                                >
+                                  <span className="text-sm font-medium text-gray-700">
+                                    {a.heading || "—"}
+                                  </span>
+                                  <span className="text-sm text-gray-500">
+                                    {a.age || "—"}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </CollapsibleCard>
+                    )}
                   {shown("specialInstructions") && specialInstructions && (
                     <CollapsibleCard
                       title="Special Instructions"
@@ -9862,6 +10044,135 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         amount={feedbackAmount}
       />
 
+      {/* ============================================================ */}
+      {/* RULES & REGULATIONS GATE — shown after Google auth, before the  */}
+      {/* stall-request form. Vendor must scroll to the bottom, then       */}
+      {/* Accept, before the form opens. Age Restriction & Dress Code are  */}
+      {/* intentionally excluded.                                          */}
+      {/* ============================================================ */}
+      <Dialog
+        open={showStallTermsGate}
+        onOpenChange={(o) => {
+          if (!o) cancelStallGate();
+        }}
+      >
+        <DialogContent className="max-w-2xl w-full max-h-[90vh] overflow-hidden p-0 flex flex-col">
+          <div className="shrink-0 border-b px-5 sm:px-6 py-4">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <FileText className="h-5 w-5 text-amber-600" />
+              Rules &amp; Regulations
+            </DialogTitle>
+            <DialogDescription className="text-sm text-gray-500">
+              Please read everything below. Scroll to the end to accept and
+              continue to your stall request.
+            </DialogDescription>
+          </div>
+
+          {(() => {
+            const { terms, htmlSections } = getStallGateContent();
+            const htmlCls =
+              "text-gray-600 text-sm prose prose-sm max-w-none [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4";
+            return (
+              <div
+                ref={stallGateScrollRef}
+                onScroll={(e) => {
+                  const el = e.currentTarget;
+                  if (
+                    el.scrollTop + el.clientHeight >=
+                    el.scrollHeight - 24
+                  )
+                    setStallGateScrolledEnd(true);
+                }}
+                className="flex-1 min-h-0 overflow-y-auto px-5 sm:px-6 py-4 space-y-5"
+              >
+                {/* Special Instructions, Refund Policy, Terms & Conditions and
+                    every visible custom section — each rendered as heading +
+                    rich text, in reading order. */}
+                {htmlSections.map((s) => (
+                  <div key={s.key} className="space-y-1.5">
+                    <h3 className="text-sm font-bold text-gray-900">
+                      {s.title}
+                    </h3>
+                    {(s.html || "").trim() && (
+                      <div
+                        className={htmlCls}
+                        dangerouslySetInnerHTML={{ __html: s.html }}
+                      />
+                    )}
+                  </div>
+                ))}
+
+                {/* Terms & Conditions for exhibitors */}
+                {terms.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-bold text-gray-900">
+                      Terms &amp; Conditions for Exhibitors
+                    </h3>
+                    <ol className="list-decimal ml-5 space-y-2">
+                      {terms.map((term: any, idx: number) => (
+                        <li
+                          key={idx}
+                          className="text-sm text-gray-700 leading-relaxed"
+                        >
+                          {term.termsAndConditionsforStalls}
+                          {term.isMandatory && (
+                            <span className="ml-2 inline-block text-xs font-semibold text-red-600 bg-red-100 px-2 py-0.5 rounded align-middle">
+                              ✱ Mandatory
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+
+                <div className="pt-2 text-center text-xs text-gray-400">
+                  — End of rules &amp; regulations —
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="shrink-0 border-t bg-gray-50 px-5 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <p className="text-xs text-gray-500 flex items-center gap-1">
+              {stallGateScrolledEnd ? (
+                <>
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                  You&apos;ve read to the end.
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
+                  Scroll to the bottom to enable Accept.
+                </>
+              )}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={cancelStallGate}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={!stallGateScrolledEnd}
+                onClick={acceptStallGate}
+                style={{
+                  backgroundColor: stallGateScrolledEnd
+                    ? design?.primaryColor || "#f97316"
+                    : undefined,
+                }}
+                className="text-white"
+              >
+                Accept &amp; Continue
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Table Selection Dialog - NEW */}
       {/* ============================================================ */}
       {/* TABLE SELECTION DIALOG                                        */}
@@ -9883,21 +10194,116 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-0">
             {/* ── MAIN CONTENT AREA ── */}
             <div className="px-4 sm:px-6 py-4 space-y-6">
-              {/* Legend */}
-              <div className="flex flex-wrap gap-4 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 bg-green-100 border-2 border-green-500 rounded" />
-                  <span>Available</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 bg-blue-300 border-2 border-blue-600 rounded" />
-                  <span>Selected</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 bg-gray-300 border-2 border-gray-500 rounded" />
-                  <span>Booked</span>
+              {/* Legend — each for-sale space type shows its own colour, then
+                  the interaction states (Selected = blue, Booked / Reserved /
+                  Not allowed = grey). */}
+              <div className="flex flex-col gap-2 text-sm">
+                {forSaleTemplateLegend.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                      Space types
+                    </span>
+                    {forSaleTemplateLegend.map((entry) => (
+                      <div
+                        key={`${entry.name}-${entry.color}`}
+                        className="flex items-center gap-2"
+                      >
+                        <div
+                          className="w-5 h-5 rounded border-2"
+                          style={{
+                            backgroundColor: entry.color + "80",
+                            borderColor: entry.color,
+                          }}
+                        />
+                        <span>{entry.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    Status
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 bg-blue-300 border-2 border-blue-600 rounded" />
+                    <span>Selected</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 bg-gray-300 border-2 border-gray-500 rounded" />
+                    <span>Booked / Reserved / Not allowed</span>
+                  </div>
                 </div>
               </div>
+
+              {/* ── RULES & REGULATIONS — surfaced up-front, BEFORE space
+                  selection, so vendors read and accept the fine print before
+                  they register rather than skimming past it at checkout. ── */}
+              {eventData?.termsAndConditionsforStalls &&
+                eventData.termsAndConditionsforStalls.length > 0 && (
+                  <Card className="border-amber-200">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <FileText className="h-4 w-4 text-amber-600" />
+                        Rules & Regulations for Exhibitors
+                      </CardTitle>
+                      <p className="text-sm text-gray-500">
+                        Please read and accept all terms before selecting your
+                        stall.
+                      </p>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {eventData.termsAndConditionsforStalls.map(
+                        (term: any, idx: number) => (
+                          <div
+                            key={idx}
+                            className={`flex items-start gap-3 p-3 rounded-lg border-2 transition-colors cursor-pointer ${
+                              stallTermsChecked[idx]
+                                ? "border-green-400 bg-green-50"
+                                : term.isMandatory
+                                  ? "border-red-200 bg-red-50"
+                                  : "border-gray-200 bg-gray-50"
+                            }`}
+                            onClick={() =>
+                              setStallTermsChecked((prev) => ({
+                                ...prev,
+                                [idx]: !prev[idx],
+                              }))
+                            }
+                          >
+                            <div
+                              className={`mt-0.5 w-5 h-5 flex-shrink-0 rounded border-2 flex items-center justify-center transition-colors ${
+                                stallTermsChecked[idx]
+                                  ? "bg-green-600 border-green-600"
+                                  : "border-gray-400 bg-white"
+                              }`}
+                            >
+                              {stallTermsChecked[idx] && (
+                                <CheckCircle2 className="h-3 w-3 text-white" />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm text-gray-800 leading-relaxed">
+                                {term.termsAndConditionsforStalls}
+                              </p>
+                              {term.isMandatory && (
+                                <span className="mt-1 inline-block text-xs font-semibold text-red-600 bg-red-100 px-2 py-0.5 rounded">
+                                  ✱ Mandatory
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ),
+                      )}
+                      {!allMandatoryTermsAccepted() && (
+                        <p className="text-xs text-red-600 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          Accept all mandatory terms to enable stall selection
+                          and payment.
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
 
               {/* Layout Selector — only if multiple halls */}
               {venueConfig && publishedVenueCount > 1 && (
@@ -10299,73 +10705,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 </Card>
               )}
 
-              {/* ── TERMS & CONDITIONS — inline ── */}
-              {eventData?.termsAndConditionsforStalls &&
-                eventData.termsAndConditionsforStalls.length > 0 && (
-                  <Card className="border-amber-200">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-base">
-                        <FileText className="h-4 w-4 text-amber-600" />
-                        Terms & Conditions for Exhibitors
-                      </CardTitle>
-                      <p className="text-sm text-gray-500">
-                        Please read and accept all terms before proceeding to
-                        payment.
-                      </p>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {eventData.termsAndConditionsforStalls.map(
-                        (term: any, idx: number) => (
-                          <div
-                            key={idx}
-                            className={`flex items-start gap-3 p-3 rounded-lg border-2 transition-colors cursor-pointer ${
-                              stallTermsChecked[idx]
-                                ? "border-green-400 bg-green-50"
-                                : term.isMandatory
-                                  ? "border-red-200 bg-red-50"
-                                  : "border-gray-200 bg-gray-50"
-                            }`}
-                            onClick={() =>
-                              setStallTermsChecked((prev) => ({
-                                ...prev,
-                                [idx]: !prev[idx],
-                              }))
-                            }
-                          >
-                            <div
-                              className={`mt-0.5 w-5 h-5 flex-shrink-0 rounded border-2 flex items-center justify-center transition-colors ${
-                                stallTermsChecked[idx]
-                                  ? "bg-green-600 border-green-600"
-                                  : "border-gray-400 bg-white"
-                              }`}
-                            >
-                              {stallTermsChecked[idx] && (
-                                <CheckCircle2 className="h-3 w-3 text-white" />
-                              )}
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-sm text-gray-800 leading-relaxed">
-                                {term.termsAndConditionsforStalls}
-                              </p>
-                              {term.isMandatory && (
-                                <span className="mt-1 inline-block text-xs font-semibold text-red-600 bg-red-100 px-2 py-0.5 rounded">
-                                  ✱ Mandatory
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ),
-                      )}
-                      {!allMandatoryTermsAccepted() && (
-                        <p className="text-xs text-red-600 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" />
-                          Accept all mandatory terms to enable the Proceed to
-                          Payment button.
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
             </div>
 
             {/* ── BOTTOM SUMMARY ROW ── */}
@@ -11943,7 +12282,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
       {/* Rent Form Dialog */}
       {/* Rent Form Dialog */}
-      {showRentForm && !showTableSelection && (
+      {showRentForm &&
+        !showTableSelection &&
+        !showStallTermsGate &&
+        (stallGateAcknowledged || !getStallGateContent().hasAny) && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
           <div className="bg-white border border-gray-200 rounded-2xl shadow-2xl max-w-xl w-full p-6 relative overflow-y-auto max-h-[90vh]">
             <button
