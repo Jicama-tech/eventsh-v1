@@ -368,8 +368,18 @@ export class Event {
   @Prop()
   ageRestriction?: string;
 
+  // Custom, per-purpose age restrictions — the organizer names each one
+  // (e.g. "Vendors", "Round Tables", "General") and picks the age. Optional;
+  // the single `ageRestriction` above stays as the overall/default.
+  @Prop({ type: [Object], default: [] })
+  ageRestrictions?: { heading: string; age: string }[];
+
   @Prop()
   dresscode?: string;
+
+  // Organizer-specified custom theme that goes with the dress code
+  @Prop()
+  dressCodeTheme?: string;
 
   @Prop()
   specialInstructions?: string;

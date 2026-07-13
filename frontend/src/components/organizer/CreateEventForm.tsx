@@ -5168,6 +5168,67 @@ const VenueDesigner = ({
                 </div>
               </div>
             )}
+            {/* Legend — one swatch per FOR-SALE space template (its colour → the
+                type it represents), then the two non-sellable states. Mirrors
+                the vendor-facing legend on the event page so the organizer
+                designs against the exact colours vendors will see. */}
+            {(() => {
+              const forSaleTemplates: { name: string; color: string }[] = [];
+              tableTemplates.forEach((t) => {
+                if (!t || (t as any).forSale === false) return;
+                const color = t.color || "#22c55e";
+                const name = t.name || "Space";
+                if (
+                  !forSaleTemplates.some(
+                    (e) => e.name === name && e.color === color,
+                  )
+                )
+                  forSaleTemplates.push({ name, color });
+              });
+              const hasNotForSale = tableTemplates.some(
+                (t) => (t as any).forSale === false,
+              );
+              if (forSaleTemplates.length === 0 && !hasNotForSale) return null;
+              return (
+                <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border bg-white px-3 py-2 text-xs">
+                  <span className="font-semibold uppercase tracking-wide text-slate-400">
+                    Legend
+                  </span>
+                  {forSaleTemplates.map((entry) => (
+                    <div
+                      key={`${entry.name}-${entry.color}`}
+                      className="flex items-center gap-1.5"
+                    >
+                      <span
+                        className="h-4 w-4 rounded border-2"
+                        style={{
+                          backgroundColor: entry.color + "80",
+                          borderColor: entry.color,
+                        }}
+                      />
+                      <span className="text-slate-700">{entry.name}</span>
+                    </div>
+                  ))}
+                  {hasNotForSale && (
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="h-4 w-4 rounded border-2 border-amber-500"
+                        style={{
+                          backgroundColor: "#f59e0b59",
+                          backgroundImage:
+                            "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.08) 3px, rgba(0,0,0,0.08) 6px)",
+                        }}
+                      />
+                      <span className="text-slate-700">Not for sale</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-4 w-4 rounded border-2 border-gray-500 bg-gray-300" />
+                    <span className="text-slate-700">Booked</span>
+                  </div>
+                </div>
+              );
+            })()}
             {/* CAD annotation toolbar — switch between moving Spaces and the
               drawing tools (line / text / rectangle / dimension). Inline in
               normal mode; floats at top-center in maximized mode so the tools
@@ -6972,7 +7033,11 @@ export function CreateEventForm({
           initialData.speakerSlotTemplates.length > 0),
     },
     ageRestriction: initialData?.ageRestriction ?? "All Ages",
+    ageRestrictions: Array.isArray(initialData?.ageRestrictions)
+      ? initialData.ageRestrictions
+      : [],
     dresscode: initialData?.dresscode ?? "Business Casual",
+    dressCodeTheme: initialData?.dressCodeTheme ?? "",
     specialInstructions: initialData?.specialInstructions ?? "",
     refundPolicy: initialData?.refundPolicy ?? "",
     termsAndConditions: initialData?.termsAndConditions ?? "",
@@ -8155,6 +8220,7 @@ export function CreateEventForm({
           key === "tags" ||
           key === "socialMedia" ||
           key === "categories" ||
+          key === "ageRestrictions" ||
           // Object-valued — must be JSON-encoded, NOT left to FormData's string
           // coercion (which turns it into the literal "[object Object]" that the
           // backend can't parse, wiping the per-section visibility on save).
@@ -8959,28 +9025,7 @@ export function CreateEventForm({
                       />
                     </label>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label>Age Restriction</Label>
-                      <Select
-                        value={formData.ageRestriction}
-                        onValueChange={(v) =>
-                          handleInputChange("ageRestriction", v)
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ageRestrictionOptions.map((opt) => (
-                            <SelectItem key={opt} value={opt}>
-                              {opt}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
+                  <div className="max-w-sm space-y-2">
                     <div>
                       <Label>Dress Code</Label>
                       <Select
@@ -8999,6 +9044,120 @@ export function CreateEventForm({
                         </SelectContent>
                       </Select>
                     </div>
+                    <div>
+                      <Label>Specific theme (optional)</Label>
+                      <Input
+                        value={formData.dressCodeTheme}
+                        onChange={(e) =>
+                          handleInputChange("dressCodeTheme", e.target.value)
+                        }
+                        placeholder="e.g. Great Gatsby, All White, Bollywood Retro"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Add a custom theme guests should dress to — shown on the
+                        event page alongside the dress code.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Custom age restrictions — a different age limit per
+                      purpose (e.g. Vendors, Round Tables). Optional; the single
+                      Age Restriction above stays as the general/default. */}
+                  <div className="rounded-lg border p-3 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <Label className="text-sm">
+                          Custom age restrictions
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Add a different age limit per purpose — e.g.
+                          &quot;Vendors&quot;, &quot;Round Tables&quot;.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          handleInputChange("ageRestrictions", [
+                            ...((formData.ageRestrictions as any[]) || []),
+                            { heading: "", age: "All Ages" },
+                          ])
+                        }
+                      >
+                        <Plus className="mr-1 h-4 w-4" /> Add
+                      </Button>
+                    </div>
+                    {((formData.ageRestrictions as any[]) || []).length ===
+                    0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        None added. The general Age Restriction above applies to
+                        everyone.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {((formData.ageRestrictions as any[]) || []).map(
+                          (row: any, i: number) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <Input
+                                placeholder="Heading (e.g. Vendors)"
+                                value={row.heading || ""}
+                                onChange={(e) => {
+                                  const next = [
+                                    ...((formData.ageRestrictions as any[]) ||
+                                      []),
+                                  ];
+                                  next[i] = {
+                                    ...next[i],
+                                    heading: e.target.value,
+                                  };
+                                  handleInputChange("ageRestrictions", next);
+                                }}
+                                className="flex-1"
+                              />
+                              <Select
+                                value={row.age || "All Ages"}
+                                onValueChange={(v) => {
+                                  const next = [
+                                    ...((formData.ageRestrictions as any[]) ||
+                                      []),
+                                  ];
+                                  next[i] = { ...next[i], age: v };
+                                  handleInputChange("ageRestrictions", next);
+                                }}
+                              >
+                                <SelectTrigger className="w-32 shrink-0">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {ageRestrictionOptions.map((opt) => (
+                                    <SelectItem key={opt} value={opt}>
+                                      {opt}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <button
+                                type="button"
+                                title="Remove"
+                                onClick={() =>
+                                  handleInputChange(
+                                    "ageRestrictions",
+                                    ((formData.ageRestrictions as any[]) ||
+                                      []).filter(
+                                      (_: any, idx: number) => idx !== i,
+                                    ),
+                                  )
+                                }
+                                className="shrink-0 text-stone-400 hover:text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Policies */}

@@ -4361,6 +4361,22 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     if (t?.id && t?.color) templateColorById[t.id] = t.color;
   });
 
+  // Legend entries — one swatch per FOR-SALE stall template (its colour → the
+  // type it represents). Not-for-sale / reference templates are excluded, so
+  // the legend only ever explains the spaces a vendor can actually buy.
+  const forSaleTemplateLegend: { name: string; color: string }[] = [];
+  (eventData?.tableTemplates || []).forEach((t: any) => {
+    if (!t || t.forSale === false) return;
+    const color = t.color || "#22c55e";
+    const name = t.name || "Space";
+    if (
+      !forSaleTemplateLegend.some(
+        (e) => e.name === name && e.color === color,
+      )
+    )
+      forSaleTemplateLegend.push({ name, color });
+  });
+
   // How many venues the organizer marked published — drives whether the
   // public venue switcher is shown (a lone published venue needs no switcher)
   // and lets us hide unpublished halls from the switcher options below.
@@ -6345,37 +6361,65 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               const customs = Array.isArray((eventData as any)?.customSections)
                 ? ((eventData as any).customSections as any[])
                 : [];
+              // Custom, per-purpose age restrictions (heading + age).
+              const customAges = (
+                Array.isArray((eventData as any)?.ageRestrictions)
+                  ? ((eventData as any).ageRestrictions as any[])
+                  : []
+              ).filter((a: any) => a && (a.heading || a.age));
+              const dressCodeTheme = String(
+                (eventData as any)?.dressCodeTheme || "",
+              ).trim();
               return (
                 <>
-                  {shown("ageDress") && (ageRestriction || dresscode) && (
-                    <CollapsibleCard
-                      title="Age Restriction & Dress Code"
-                      headingColor={design?.primaryColor}
-                    >
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {ageRestriction && (
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">
-                              Age Restriction
-                            </p>
-                            <p className="text-gray-700 text-sm">
-                              {ageRestriction}
-                            </p>
-                          </div>
-                        )}
-                        {dresscode && (
-                          <div>
+                  {shown("ageDress") &&
+                    (dresscode || dressCodeTheme || customAges.length > 0) && (
+                      <CollapsibleCard
+                        title="Age Restriction & Dress Code"
+                        headingColor={design?.primaryColor}
+                      >
+                        {(dresscode || dressCodeTheme) && (
+                          <div className="mb-1">
                             <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">
                               Dress Code
                             </p>
-                            <p className="text-gray-700 text-sm">
-                              {dresscode}
-                            </p>
+                            {dresscode && (
+                              <p className="text-gray-700 text-sm">
+                                {dresscode}
+                              </p>
+                            )}
+                            {dressCodeTheme && (
+                              <p className="text-gray-700 text-sm">
+                                <span className="font-medium">Theme:</span>{" "}
+                                {dressCodeTheme}
+                              </p>
+                            )}
                           </div>
                         )}
-                      </div>
-                    </CollapsibleCard>
-                  )}
+                        {customAges.length > 0 && (
+                          <div className="mt-4">
+                            <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
+                              Age limits by purpose
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                              {customAges.map((a: any, i: number) => (
+                                <div
+                                  key={i}
+                                  className="flex items-center justify-between gap-3 rounded-md bg-gray-50 px-3 py-1.5"
+                                >
+                                  <span className="text-sm font-medium text-gray-700">
+                                    {a.heading || "—"}
+                                  </span>
+                                  <span className="text-sm text-gray-500">
+                                    {a.age || "—"}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </CollapsibleCard>
+                    )}
                   {shown("specialInstructions") && specialInstructions && (
                     <CollapsibleCard
                       title="Special Instructions"
@@ -9883,19 +9927,44 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-0">
             {/* ── MAIN CONTENT AREA ── */}
             <div className="px-4 sm:px-6 py-4 space-y-6">
-              {/* Legend */}
-              <div className="flex flex-wrap gap-4 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 bg-green-100 border-2 border-green-500 rounded" />
-                  <span>Available</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 bg-blue-300 border-2 border-blue-600 rounded" />
-                  <span>Selected</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 bg-gray-300 border-2 border-gray-500 rounded" />
-                  <span>Booked</span>
+              {/* Legend — each for-sale space type shows its own colour, then
+                  the interaction states (Selected = blue, Booked / Reserved /
+                  Not allowed = grey). */}
+              <div className="flex flex-col gap-2 text-sm">
+                {forSaleTemplateLegend.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                      Space types
+                    </span>
+                    {forSaleTemplateLegend.map((entry) => (
+                      <div
+                        key={`${entry.name}-${entry.color}`}
+                        className="flex items-center gap-2"
+                      >
+                        <div
+                          className="w-5 h-5 rounded border-2"
+                          style={{
+                            backgroundColor: entry.color + "80",
+                            borderColor: entry.color,
+                          }}
+                        />
+                        <span>{entry.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    Status
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 bg-blue-300 border-2 border-blue-600 rounded" />
+                    <span>Selected</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 bg-gray-300 border-2 border-gray-500 rounded" />
+                    <span>Booked / Reserved / Not allowed</span>
+                  </div>
                 </div>
               </div>
 
