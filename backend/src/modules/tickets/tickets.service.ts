@@ -566,8 +566,15 @@ Thank you for choosing Eventsh! 🎊`;
       .sort({ purchaseDate: -1 })
       .exec();
 
-    const totalTicketsSold = tickets.reduce((sum, t) => sum + t.totalAmount, 0);
-    const totalRevenue = tickets.reduce((sum, t) => sum + t.totalAmount, 0);
+    // Cancelled registrations are still returned (the participants list shows
+    // them), but they must never count toward tickets-sold or revenue.
+    const active = tickets.filter((t) => t.status !== "cancelled");
+    const totalTicketsSold = active.reduce((sum, t) => sum + t.totalAmount, 0);
+    // Revenue = money actually collected → confirmed payments only, matching
+    // the canonical /organizers/analytics total.
+    const totalRevenue = active
+      .filter((t) => t.paymentConfirmed)
+      .reduce((sum, t) => sum + (t.totalAmount || 0), 0);
 
     const ticketTypeMap = new Map();
     tickets.forEach((ticket) => {

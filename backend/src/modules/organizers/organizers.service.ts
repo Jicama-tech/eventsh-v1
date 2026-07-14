@@ -1420,6 +1420,8 @@ export class OrganizersService {
               $match: {
                 organizerId: orgObjId,
                 purchaseDate: { $gte: startOfWindow },
+                // Cancelled registrations must not count toward revenue.
+                status: { $ne: "cancelled" },
               },
             },
             {
@@ -1443,7 +1445,7 @@ export class OrganizersService {
           .toArray(),
         ticketsCol
           .aggregate([
-            { $match: { organizerId: orgObjId } },
+            { $match: { organizerId: orgObjId, status: { $ne: "cancelled" } } },
             {
               $group: {
                 _id: "$eventId",
@@ -1462,7 +1464,7 @@ export class OrganizersService {
           .toArray(),
         ticketsCol
           .aggregate([
-            { $match: { organizerId: orgObjId } },
+            { $match: { organizerId: orgObjId, status: { $ne: "cancelled" } } },
             {
               $group: {
                 _id: null,
@@ -1535,6 +1537,8 @@ export class OrganizersService {
             $match: {
               organizerId: orgObjId,
               paymentStatus: "Paid",
+              // A cancelled stall booking must not count, even if paid.
+              status: { $ne: "Cancelled" },
             },
           },
           {
@@ -1551,6 +1555,67 @@ export class OrganizersService {
     const roundTableRev = (rtbAgg[0] as any)?.revenue || 0;
     const stallRev = (stallAgg[0] as any)?.revenue || 0;
     const totalRev = ticketRev + roundTableRev + stallRev;
+
+    // Per-event revenue map (tickets + stalls + round-tables) using the SAME
+    // canonical filters as the totals above, so list views (My Events,
+    // Dashboard Overview) can show a per-event number that sums exactly to the
+    // Total Revenue card. Keyed by eventId string.
+    const [ticketPerEvent, stallPerEvent, rtPerEvent] = await Promise.all([
+      ticketsCol
+        .aggregate([
+          { $match: { organizerId: orgObjId, status: { $ne: "cancelled" } } },
+          {
+            $group: {
+              _id: "$eventId",
+              revenue: {
+                $sum: { $cond: ["$paymentConfirmed", "$totalAmount", 0] },
+              },
+            },
+          },
+        ])
+        .toArray()
+        .catch(() => []),
+      stallsCol
+        .aggregate([
+          {
+            $match: {
+              organizerId: orgObjId,
+              paymentStatus: "Paid",
+              status: { $ne: "Cancelled" },
+            },
+          },
+          {
+            $group: {
+              _id: "$eventId",
+              revenue: { $sum: { $ifNull: ["$grandTotal", 0] } },
+            },
+          },
+        ])
+        .toArray()
+        .catch(() => []),
+      rtbCol
+        .aggregate([
+          { $match: { organizerId: orgObjId, paymentStatus: "Paid" } },
+          {
+            $group: {
+              _id: "$eventId",
+              revenue: { $sum: { $ifNull: ["$amount", 0] } },
+            },
+          },
+        ])
+        .toArray()
+        .catch(() => []),
+    ]);
+    const revenueByEvent: Record<string, number> = {};
+    for (const row of [
+      ...(ticketPerEvent as any[]),
+      ...(stallPerEvent as any[]),
+      ...(rtPerEvent as any[]),
+    ]) {
+      const key = String(row?._id);
+      if (!key || key === "null" || key === "undefined") continue;
+      revenueByEvent[key] = (revenueByEvent[key] || 0) + (row.revenue || 0);
+    }
 
     const fmt = (n: number) =>
       `${currency.symbol}${new Intl.NumberFormat(currency.locale, { maximumFractionDigits: 0 }).format(Number.isFinite(n) ? n : 0)}`;
@@ -1570,6 +1635,9 @@ export class OrganizersService {
         revenue: totalRev,
         revenueFormatted: fmt(totalRev),
       },
+      // Canonical per-event revenue (tickets + stalls + round-tables), so list
+      // views render numbers that reconcile with totals.revenue exactly.
+      revenueByEvent,
       revenueTrend: trend.map((t: any) => ({
         ...t,
         revenueFormatted: fmt(t.revenue),

@@ -553,7 +553,9 @@ const LandingPage = () => {
                     onClick={() => startDemoDashboard(ev._id)}
                     className="mt-3 w-full rounded-lg border border-sky-500/40 bg-sky-500/10 py-2.5 text-sm font-semibold text-sky-300 transition hover:bg-sky-500/20"
                   >
-                    Try the organizer dashboard →
+                    {col.kind === "personal"
+                      ? "Try the couple's dashboard →"
+                      : "Try the organizer dashboard →"}
                   </button>
                 )}
                 <div className="mt-7 space-y-6">
@@ -584,8 +586,8 @@ const LandingPage = () => {
       </section>
 
       {/* See it in action — LIVE admin-curated demo events. Clicking a card
-          opens its real eventfront in demo mode. */}
-      {showcaseEvents.length > 0 && (
+          opens its real eventfront in demo mode. Hidden for now. */}
+      {false && showcaseEvents.length > 0 && (
         <section className="py-24 bg-[#0a0a0c] relative overflow-hidden">
           <div
             aria-hidden

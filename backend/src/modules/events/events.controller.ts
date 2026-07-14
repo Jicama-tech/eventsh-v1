@@ -615,13 +615,21 @@ export class EventsController {
       if (!resolved) {
         return { success: false, message: "No demo organization available." };
       }
+      // Personal (wedding) demos open the Individual account experience
+      // (chatbot-only dashboard); professional demos open the full organizer
+      // dashboard. Both carry demo:true so they stay read-only.
+      const isPersonal = resolved.kind === "personal";
       const jwt = require("jsonwebtoken");
       const token = jwt.sign(
         {
           sub: resolved.organizerId,
-          roles: ["organizer"],
-          name: "Demo Organization",
-          organizationName: "Demo Organization",
+          roles: isPersonal ? ["individual"] : ["organizer"],
+          name: isPersonal ? "Demo Couple" : "Demo Organization",
+          // Email lets the individual chatbot resolve the demo wedding as "my
+          // events" (it looks the backing organizer up by email).
+          email: resolved.email || undefined,
+          organizationName:
+            resolved.orgName || (isPersonal ? "Our Wedding" : "Demo Organization"),
           demo: true,
         },
         process.env.JWT_ACCESS_SECRET,

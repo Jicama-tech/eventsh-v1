@@ -10278,76 +10278,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 </div>
               </div>
 
-              {/* ── RULES & REGULATIONS — surfaced up-front, BEFORE space
-                  selection, so vendors read and accept the fine print before
-                  they register rather than skimming past it at checkout. ── */}
-              {eventData?.termsAndConditionsforStalls &&
-                eventData.termsAndConditionsforStalls.length > 0 && (
-                  <Card className="border-amber-200">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-base">
-                        <FileText className="h-4 w-4 text-amber-600" />
-                        Rules & Regulations for Exhibitors
-                      </CardTitle>
-                      <p className="text-sm text-gray-500">
-                        Please read and accept all terms before selecting your
-                        stall.
-                      </p>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {eventData.termsAndConditionsforStalls.map(
-                        (term: any, idx: number) => (
-                          <div
-                            key={idx}
-                            className={`flex items-start gap-3 p-3 rounded-lg border-2 transition-colors cursor-pointer ${
-                              stallTermsChecked[idx]
-                                ? "border-green-400 bg-green-50"
-                                : term.isMandatory
-                                  ? "border-red-200 bg-red-50"
-                                  : "border-gray-200 bg-gray-50"
-                            }`}
-                            onClick={() =>
-                              setStallTermsChecked((prev) => ({
-                                ...prev,
-                                [idx]: !prev[idx],
-                              }))
-                            }
-                          >
-                            <div
-                              className={`mt-0.5 w-5 h-5 flex-shrink-0 rounded border-2 flex items-center justify-center transition-colors ${
-                                stallTermsChecked[idx]
-                                  ? "bg-green-600 border-green-600"
-                                  : "border-gray-400 bg-white"
-                              }`}
-                            >
-                              {stallTermsChecked[idx] && (
-                                <CheckCircle2 className="h-3 w-3 text-white" />
-                              )}
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-sm text-gray-800 leading-relaxed">
-                                {term.termsAndConditionsforStalls}
-                              </p>
-                              {term.isMandatory && (
-                                <span className="mt-1 inline-block text-xs font-semibold text-red-600 bg-red-100 px-2 py-0.5 rounded">
-                                  ✱ Mandatory
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ),
-                      )}
-                      {!allMandatoryTermsAccepted() && (
-                        <p className="text-xs text-red-600 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" />
-                          Accept all mandatory terms to enable stall selection
-                          and payment.
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
-
               {/* Layout Selector — only if multiple halls */}
               {venueConfig && publishedVenueCount > 1 && (
                 <div className="flex gap-2 overflow-x-auto pb-1">
@@ -10747,6 +10677,75 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </CardContent>
                 </Card>
               )}
+
+              {/* ── RULES & REGULATIONS — shown below the Add-Ons selection so
+                  vendors read and accept the fine print after choosing their
+                  stall and extras, right before proceeding to payment. ── */}
+              {eventData?.termsAndConditionsforStalls &&
+                eventData.termsAndConditionsforStalls.length > 0 && (
+                  <Card className="border-amber-200">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <FileText className="h-4 w-4 text-amber-600" />
+                        Rules & Regulations for Exhibitors
+                      </CardTitle>
+                      <p className="text-sm text-gray-500">
+                        Please read and accept all terms before proceeding to
+                        payment.
+                      </p>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {eventData.termsAndConditionsforStalls.map(
+                        (term: any, idx: number) => (
+                          <div
+                            key={idx}
+                            className={`flex items-start gap-3 p-3 rounded-lg border-2 transition-colors cursor-pointer ${
+                              stallTermsChecked[idx]
+                                ? "border-green-400 bg-green-50"
+                                : term.isMandatory
+                                  ? "border-red-200 bg-red-50"
+                                  : "border-gray-200 bg-gray-50"
+                            }`}
+                            onClick={() =>
+                              setStallTermsChecked((prev) => ({
+                                ...prev,
+                                [idx]: !prev[idx],
+                              }))
+                            }
+                          >
+                            <div
+                              className={`mt-0.5 w-5 h-5 flex-shrink-0 rounded border-2 flex items-center justify-center transition-colors ${
+                                stallTermsChecked[idx]
+                                  ? "bg-green-600 border-green-600"
+                                  : "border-gray-400 bg-white"
+                              }`}
+                            >
+                              {stallTermsChecked[idx] && (
+                                <CheckCircle2 className="h-3 w-3 text-white" />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm text-gray-800 leading-relaxed">
+                                {term.termsAndConditionsforStalls}
+                              </p>
+                              {term.isMandatory && (
+                                <span className="mt-1 inline-block text-xs font-semibold text-red-600 bg-red-100 px-2 py-0.5 rounded">
+                                  ✱ Mandatory
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ),
+                      )}
+                      {!allMandatoryTermsAccepted() && (
+                        <p className="text-xs text-red-600 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          Accept all mandatory terms to enable payment.
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
 
             </div>
 

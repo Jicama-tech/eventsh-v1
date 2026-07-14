@@ -21,6 +21,13 @@ export class DemoReadonlyGuard implements CanActivate {
     const method = String(req?.method || "GET").toUpperCase();
     if (DemoReadonlyGuard.SAFE.has(method)) return true;
 
+    // The AI chatbot is how an Individual account surfaces its events/guests,
+    // so a demo session must be able to query it (POST, but read-only in
+    // nature). Allow the message endpoints through.
+    const url = String(req?.url || req?.originalUrl || "");
+    if (/^\/?chatbot\/(message|public-message|event-message)/.test(url))
+      return true;
+
     const auth = String(req?.headers?.authorization || "");
     if (!auth.startsWith("Bearer ")) return true;
     const token = auth.slice(7);

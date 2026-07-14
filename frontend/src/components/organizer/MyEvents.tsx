@@ -200,6 +200,10 @@ const MyEvents: React.FC = () => {
   const [ticketsInfoMap, setTicketsInfoMap] = useState<
     Record<string, { ticketsSold: number; revenue: number }>
   >({});
+  // Canonical Total Revenue from GET /organizers/analytics/:id — the single
+  // source of truth (tickets + stalls + round-tables, paid, non-cancelled) so
+  // this tile matches the Analytics tab, Chatbot and Dashboard Overview.
+  const [analyticsRevenue, setAnalyticsRevenue] = useState<number | null>(null);
   const { country } = useCountry();
   const { formatPrice } = useCurrency(country);
 
@@ -294,12 +298,15 @@ const MyEvents: React.FC = () => {
         let ticketsSold = 0;
         let revenue = 0;
         tickets.forEach((ticket: any) => {
+          // Cancelled registrations must not count toward sold/revenue.
+          if (ticket.status === "cancelled") return;
           ticketsSold +=
             ticket.ticketDetails?.reduce(
               (acc: number, td: any) => acc + td.quantity,
               0,
             ) || 0;
-          revenue += ticket.totalAmount || 0;
+          // Revenue = collected money only (confirmed payments).
+          if (ticket.paymentConfirmed) revenue += ticket.totalAmount || 0;
         });
 
         return { ticketsSold, revenue };
@@ -349,6 +356,22 @@ const MyEvents: React.FC = () => {
         : data?.data || data?.events || [data];
 
       setEvents(eventsData || []);
+
+      // Canonical Total Revenue — same endpoint the Analytics tab / Chatbot use.
+      try {
+        const aRes = await fetch(
+          `${apiURL}/organizers/analytics/${organizerId}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (aRes.ok) {
+          const a = await aRes.json();
+          setAnalyticsRevenue(
+            typeof a?.totals?.revenue === "number" ? a.totals.revenue : null,
+          );
+        }
+      } catch {
+        /* fall back to the locally-summed ticket revenue */
+      }
 
       // Fetch ticket info for each event only once
       const ticketsInfoObj: Record<
@@ -978,10 +1001,10 @@ const MyEvents: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatPrice(stats.totalRevenue)}
+              {formatPrice(analyticsRevenue ?? stats.totalRevenue)}
             </div>
             <p className="text-xs text-muted-foreground">
-              From {stats.totalTicketsSold} tickets sold
+              Tickets, stalls &amp; round-tables (paid)
             </p>
           </CardContent>
         </Card>

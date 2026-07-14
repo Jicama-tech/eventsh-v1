@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useCountry } from "@/hooks/useCountry";
 import {
+  ticketsRevenue as calcTicketsRevenue,
+  stallsRevenue as calcStallsRevenue,
+  roundTablesRevenue as calcRoundTablesRevenue,
+} from "@/lib/revenue";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -69,22 +74,19 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
 
   const [tickets, setTickets] = useState<TicketData[]>([]);
   const [stalls, setStalls] = useState<StallData[]>([]);
+  const [roundTables, setRoundTables] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const { country } = useCountry();
     const { formatPrice } = useCurrency(country);
 
-  // --- Derived Metrics ---
-  const totalTicketRevenue = tickets.reduce(
-    (sum, t) => sum + (t.status === "confirmed" ? t.totalAmount : 0),
-    0,
-  );
-  const totalStallRevenue = stalls.reduce(
-    (sum, s) =>
-      sum + (["Confirmed", "Completed"].includes(s.status) ? s.grandTotal : 0),
-    0,
-  );
-  const grandTotalRevenue = totalTicketRevenue + totalStallRevenue;
+  // --- Derived Metrics (canonical revenue — see lib/revenue.ts) ---
+  // Paid & non-cancelled only, so this matches every other dashboard surface.
+  const totalTicketRevenue = calcTicketsRevenue(tickets);
+  const totalStallRevenue = calcStallsRevenue(stalls);
+  const totalRoundTableRevenue = calcRoundTablesRevenue(roundTables);
+  const grandTotalRevenue =
+    totalTicketRevenue + totalStallRevenue + totalRoundTableRevenue;
   const stallsBooked = stalls.filter((s) =>
     ["Confirmed", "Completed"].includes(s.status),
   ).length;
@@ -94,14 +96,17 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [tRes, sRes] = await Promise.all([
+        const [tRes, sRes, rRes] = await Promise.all([
           fetch(`${__API_URL__}/tickets/event/${event._id}`),
           fetch(`${__API_URL__}/stalls/event/${event._id}`),
+          fetch(`${__API_URL__}/round-table-bookings/event/${event._id}`),
         ]);
         const tData = await tRes.json();
         const sData = await sRes.json();
+        const rData = rRes.ok ? await rRes.json() : null;
         setTickets(tData.tickets || tData.data || []);
         setStalls(sData.data || []);
+        setRoundTables(rData?.data || rData || []);
       } catch (e) {
         // silently handle fetch errors
       } finally {
