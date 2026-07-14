@@ -935,7 +935,14 @@ export function OrganizerDashboard({
   const handleUpdateTicket = (ticketData: any) => {};
   const handleSaveSettings = (settingsData: any) => {};
 
+  // In a demo, only these tabs open their content; every other tab click
+  // surfaces the register/contact prompt instead of navigating.
+  const DEMO_VIEW_TABS = ["chatbot", "dashboard", "eventAttendees", "events"];
   const handleTabChange = (tab: string) => {
+    if (demoMode && !DEMO_VIEW_TABS.includes(tab)) {
+      setShowDemoPrompt(true);
+      return;
+    }
     setActiveTab(tab);
     setSidebarOpen(false);
   };
@@ -1092,28 +1099,11 @@ export function OrganizerDashboard({
         </div>
       </header>
 
-      {/* Main container with fixed sidebar and scrollable content.
-          In a demo, any action click here (sidebar tab OR content control)
-          opens the register/contact prompt instead of doing anything. The
-          header (Logout, Need Help) and the demo banner sit outside this
-          wrapper, so those still work. */}
-      <div
-        className="flex flex-1 overflow-hidden z-40"
-        onClickCapture={
-          demoMode
-            ? (e) => {
-                const el = (e.target as HTMLElement)?.closest?.(
-                  'button, a, input, select, textarea, [role="button"], [contenteditable]',
-                );
-                if (el) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setShowDemoPrompt(true);
-                }
-              }
-            : undefined
-        }
-      >
+      {/* Main container with fixed sidebar and scrollable content. In a demo,
+          the 4 allowed tabs open their content normally; other tabs open the
+          register/contact prompt (see handleTabChange). Writes are still
+          blocked by the backend DemoReadonlyGuard. */}
+      <div className="flex flex-1 overflow-hidden z-40">
         {/* Mobile Sidebar Overlay */}
         {sidebarOpen && !isIndividual && (
           <div
@@ -1162,6 +1152,12 @@ export function OrganizerDashboard({
                             : "justify-start"
                         } ${locked ? "opacity-60" : ""}`}
                         onClick={() => {
+                          // Demo: only the allowed tabs open; the rest (incl.
+                          // the storefront action) prompt to register/contact.
+                          if (demoMode && !DEMO_VIEW_TABS.includes(item.id)) {
+                            setShowDemoPrompt(true);
+                            return;
+                          }
                           if (item.id === "storefront") {
                             handleViewStorefront();
                           } else {
