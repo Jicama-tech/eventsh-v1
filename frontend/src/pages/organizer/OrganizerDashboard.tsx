@@ -1230,7 +1230,26 @@ export function OrganizerDashboard({
         )}
 
         {/* Main Content - Scrollable */}
-        <main className="flex-1 overflow-hidden flex flex-col">
+        <main
+          className="flex-1 overflow-hidden flex flex-col"
+          // Demo: the 4 allowed tabs render their content so prospects can look
+          // around, but clicking any control inside (Create Event, View, filters,
+          // chatbot input…) opens the register/contact prompt instead of acting.
+          onClickCapture={
+            demoMode
+              ? (e) => {
+                  const el = (e.target as HTMLElement)?.closest?.(
+                    'button, a, input, select, textarea, [role="button"], [contenteditable]',
+                  );
+                  if (el) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowDemoPrompt(true);
+                  }
+                }
+              : undefined
+          }
+        >
           <div
             className={
               activeTab === "chatbot"
