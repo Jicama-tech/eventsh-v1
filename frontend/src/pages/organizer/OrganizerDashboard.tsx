@@ -315,11 +315,10 @@ export function OrganizerDashboard({
       return false;
     }
   })();
-  // In a demo session only a curated set of tabs is shown (no event form,
-  // billing, settings, etc.). Combined with the operator filter below.
-  const DEMO_TABS = ["chatbot", "dashboard", "eventAttendees", "events"];
-  const isTabVisible = (id: string) =>
-    !demoMode || DEMO_TABS.includes(id);
+  // In a demo session ALL sidebar tabs are shown (so prospects see everything
+  // the platform offers) — but clicking any of them opens the register/contact
+  // prompt instead of navigating (handled by the demo click interceptor).
+  const isTabVisible = (_id: string) => true;
   const individualName: string = (() => {
     try {
       const token = sessionStorage.getItem("token");
@@ -1093,8 +1092,28 @@ export function OrganizerDashboard({
         </div>
       </header>
 
-      {/* Main container with fixed sidebar and scrollable content */}
-      <div className="flex flex-1 overflow-hidden z-40">
+      {/* Main container with fixed sidebar and scrollable content.
+          In a demo, any action click here (sidebar tab OR content control)
+          opens the register/contact prompt instead of doing anything. The
+          header (Logout, Need Help) and the demo banner sit outside this
+          wrapper, so those still work. */}
+      <div
+        className="flex flex-1 overflow-hidden z-40"
+        onClickCapture={
+          demoMode
+            ? (e) => {
+                const el = (e.target as HTMLElement)?.closest?.(
+                  'button, a, input, select, textarea, [role="button"], [contenteditable]',
+                );
+                if (el) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowDemoPrompt(true);
+                }
+              }
+            : undefined
+        }
+      >
         {/* Mobile Sidebar Overlay */}
         {sidebarOpen && !isIndividual && (
           <div
@@ -1215,23 +1234,7 @@ export function OrganizerDashboard({
         )}
 
         {/* Main Content - Scrollable */}
-        <main
-          className="flex-1 overflow-hidden flex flex-col"
-          onClickCapture={
-            demoMode
-              ? (e) => {
-                  const el = (e.target as HTMLElement)?.closest?.(
-                    'button, a, input, select, textarea, [role="button"], [contenteditable]',
-                  );
-                  if (el) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setShowDemoPrompt(true);
-                  }
-                }
-              : undefined
-          }
-        >
+        <main className="flex-1 overflow-hidden flex flex-col">
           <div
             className={
               activeTab === "chatbot"
