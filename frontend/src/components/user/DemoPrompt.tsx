@@ -2,7 +2,6 @@
 // admin-curated showcase). Instead of performing the real action (buy ticket,
 // RSVP, book a stall…), we invite them to register or get in touch.
 
-import { useNavigate } from "react-router-dom";
 import { Sparkles, X } from "lucide-react";
 
 export default function DemoPrompt({
@@ -12,7 +11,11 @@ export default function DemoPrompt({
   open: boolean;
   onClose: () => void;
 }) {
-  const navigate = useNavigate();
+  // Full navigation so it resolves in any context (guest eventfront or the
+  // organizer-role demo dashboard, where /register may not be mounted).
+  const go = (path: string) => {
+    window.location.href = path;
+  };
   if (!open) return null;
   return (
     <div
@@ -41,13 +44,13 @@ export default function DemoPrompt({
         </p>
         <div className="mt-6 flex flex-col gap-2 sm:flex-row">
           <button
-            onClick={() => navigate("/register")}
+            onClick={() => go("/register")}
             className="flex-1 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
           >
             Register free
           </button>
           <button
-            onClick={() => navigate("/contact")}
+            onClick={() => go("/contact")}
             className="flex-1 rounded-xl border-2 border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-gray-300"
           >
             Contact us

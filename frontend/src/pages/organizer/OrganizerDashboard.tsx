@@ -45,6 +45,7 @@ import { EventfrontTemplate } from "./EventfrontTemplate";
 import DashboardOverview from "@/components/organizer/DashboardOverview";
 import { OrganizerAnalyticsCharts } from "@/components/organizer/OrganizerAnalyticsCharts";
 import { ChatbotWidget } from "@/components/organizer/ChatbotWidget";
+import DemoPrompt from "@/components/user/DemoPrompt";
 import { ModuleGate } from "@/components/ui/ModuleGate";
 import { jwtDecode } from "jwt-decode";
 import { useToast } from "@/hooks/use-toast";
@@ -265,6 +266,8 @@ export function OrganizerDashboard({
   const { country, setCountry } = useCountry();
   const apiURL = __API_URL__;
   const { isModuleEnabled, subscription } = useSubscription();
+  // In a read-only demo, any action click surfaces the register/contact prompt.
+  const [showDemoPrompt, setShowDemoPrompt] = useState(false);
 
   // Read operator restrictions from JWT (set when an operator logs in via WhatsApp).
   const operatorAccessTabs: string[] = (() => {
@@ -312,6 +315,11 @@ export function OrganizerDashboard({
       return false;
     }
   })();
+  // In a demo session only a curated set of tabs is shown (no event form,
+  // billing, settings, etc.). Combined with the operator filter below.
+  const DEMO_TABS = ["chatbot", "dashboard", "eventAttendees", "events"];
+  const isTabVisible = (id: string) =>
+    !demoMode || DEMO_TABS.includes(id);
   const individualName: string = (() => {
     try {
       const token = sessionStorage.getItem("token");
@@ -1009,6 +1017,10 @@ export function OrganizerDashboard({
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
+      <DemoPrompt
+        open={showDemoPrompt}
+        onClose={() => setShowDemoPrompt(false)}
+      />
       {/* Read-only demo banner — a prospect exploring the demo organization.
           Browsing works; any change is blocked (UI + backend) and points here. */}
       {demoMode && (
@@ -1111,7 +1123,10 @@ export function OrganizerDashboard({
             <nav className="p-3 sm:p-4 space-y-1 sm:space-y-2 flex-1 overflow-y-auto">
               <TooltipProvider delayDuration={0}>
                 {navigationItems
-                  .filter((item) => isTabAllowedForOperator(item.id))
+                  .filter(
+                    (item) =>
+                      isTabAllowedForOperator(item.id) && isTabVisible(item.id),
+                  )
                   .map((item) => {
                     // Items without a moduleKey (Dashboard, Settings) are always available.
                     const locked =
@@ -1200,7 +1215,23 @@ export function OrganizerDashboard({
         )}
 
         {/* Main Content - Scrollable */}
-        <main className="flex-1 overflow-hidden flex flex-col">
+        <main
+          className="flex-1 overflow-hidden flex flex-col"
+          onClickCapture={
+            demoMode
+              ? (e) => {
+                  const el = (e.target as HTMLElement)?.closest?.(
+                    'button, a, input, select, textarea, [role="button"], [contenteditable]',
+                  );
+                  if (el) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowDemoPrompt(true);
+                  }
+                }
+              : undefined
+          }
+        >
           <div
             className={
               activeTab === "chatbot"
@@ -1227,7 +1258,7 @@ export function OrganizerDashboard({
                       ? []
                       : navigationItems
                           .filter((n) => n.id !== "chatbot")
-                          .filter((n) => isTabAllowedForOperator(n.id))
+                          .filter((n) => isTabAllowedForOperator(n.id) && isTabVisible(n.id))
                           .map((n) => ({
                             id: n.id,
                             label: n.label,
@@ -1617,7 +1648,7 @@ export function OrganizerDashboard({
         <ChatbotWidget
           navItems={navigationItems
             .filter((n) => n.id !== "chatbot")
-            .filter((n) => isTabAllowedForOperator(n.id))
+            .filter((n) => isTabAllowedForOperator(n.id) && isTabVisible(n.id))
             .map((n) => ({ id: n.id, label: n.label, icon: n.icon }))}
           onNavigate={(tab) => {
             if (tab === "storefront") handleViewStorefront();
