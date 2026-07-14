@@ -326,10 +326,21 @@ export class EventsService {
 
   async create(createEventDto: CreateEventDto): Promise<Event> {
     try {
-      const startDate = new Date(createEventDto.startDate);
-      const endDate = createEventDto.endDate
-        ? new Date(createEventDto.endDate)
-        : new Date(createEventDto.startDate);
+      // Guard against unparseable dates. A blank or malformed startDate/endDate
+      // would otherwise become an "Invalid Date" and fail the Mongoose save
+      // with a cast error (a 400 with no obvious cause). Marriage events derive
+      // their dates from the ceremony list, which can be empty — fall back to
+      // "now" so the event still saves.
+      const parseDate = (v: any, fallback: Date): Date => {
+        if (v === undefined || v === null || v === "") return fallback;
+        const d = new Date(v);
+        return isNaN(d.getTime()) ? fallback : d;
+      };
+      const startDate = parseDate(createEventDto.startDate, new Date());
+      const endDate = parseDate(
+        createEventDto.endDate ?? createEventDto.startDate,
+        startDate,
+      );
 
       // Initial ticket capacity = sum of visitor-type caps when present,
       // otherwise the flat totalTickets. Stored in originalTotalTickets so the
@@ -470,7 +481,25 @@ export class EventsService {
 
       return savedEvent;
     } catch (error) {
-      throw { statusCode: 400, message: error.message || "Event creation failed", validationErrors: error.errors };
+      // Surface the real reason. Mongoose validation/cast errors carry the
+      // offending path(s) in `error.errors` — flatten them into the message so
+      // the organizer sees exactly which field failed (e.g. "organizer is
+      // required"), and log the full error so it's visible in server logs.
+      const fieldMsgs =
+        error?.errors && typeof error.errors === "object"
+          ? Object.values(error.errors)
+              .map((e: any) => e?.message)
+              .filter(Boolean)
+              .join("; ")
+          : "";
+      const message =
+        fieldMsgs || error?.message || "Event creation failed";
+      console.error("[events.create] failed:", message, error?.stack || error);
+      throw new BadRequestException({
+        statusCode: 400,
+        message,
+        validationErrors: error?.errors,
+      });
     }
   }
 
