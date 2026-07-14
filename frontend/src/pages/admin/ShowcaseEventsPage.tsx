@@ -306,22 +306,23 @@ export function ShowcaseEventsPage() {
                       <SelectItem value="both">Event page + Dashboard</SelectItem>
                     </SelectContent>
                   </Select>
-                  {/* Order only matters when there's more than one demo of the
-                      same kind — otherwise it's just noise. */}
-                  {events.filter((x) => x.showcaseKind === e.showcaseKind)
-                    .length > 1 && (
+                  {/* Landing-page position for this demo. Lower numbers show
+                      first (within each kind). Always available so any number
+                      of demos can be ordered. */}
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">Order</span>
                     <Input
                       type="number"
                       defaultValue={e.showcaseOrder ?? 0}
-                      className="w-20"
-                      title="Order on the landing page"
+                      className="w-16"
+                      title="Order on the landing page (lower shows first)"
                       onBlur={(ev) =>
                         patchShowcase(e._id, {
                           showcaseOrder: Number(ev.target.value) || 0,
                         })
                       }
                     />
-                  )}
+                  </div>
                   <Button
                     size="sm"
                     variant={e.isDemo ? "buttonOutline" : "default"}

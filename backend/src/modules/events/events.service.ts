@@ -579,25 +579,30 @@ export class EventsService {
 
       // Handle date conversions — guard against invalid date strings so we
       // don't push an "Invalid Date" into a Date field (which throws a cast
-      // error during save and surfaces as an opaque 500).
+      // error during save). A blank/malformed date is dropped rather than
+      // failing the whole edit, so saving a wedding whose ceremonies have no
+      // date (or an odd format) never 400s — it just leaves the stored date
+      // untouched. Mirrors the same defensiveness in create().
       if (updateEventDto.startDate) {
         const d = new Date(updateEventDto.startDate);
         if (isNaN(d.getTime())) {
-          throw new BadRequestException(
-            `Invalid start date: "${updateEventDto.startDate}"`,
-          );
+          delete updateEventDto.startDate;
+        } else {
+          updateEventDto.startDate = d as any;
         }
-        updateEventDto.startDate = d as any;
       }
       if (updateEventDto.endDate) {
         const d = new Date(updateEventDto.endDate);
         if (isNaN(d.getTime())) {
-          throw new BadRequestException(
-            `Invalid end date: "${updateEventDto.endDate}"`,
-          );
+          delete updateEventDto.endDate;
+        } else {
+          updateEventDto.endDate = d as any;
         }
-        updateEventDto.endDate = d as any;
-      } else if (updateEventDto.startDate) {
+      }
+      if (
+        !updateEventDto.endDate &&
+        (updateEventDto.startDate as any) instanceof Date
+      ) {
         updateEventDto.endDate = new Date(updateEventDto.startDate) as any;
       }
 
