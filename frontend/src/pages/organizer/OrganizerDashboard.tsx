@@ -45,6 +45,7 @@ import { EventfrontTemplate } from "./EventfrontTemplate";
 import DashboardOverview from "@/components/organizer/DashboardOverview";
 import { OrganizerAnalyticsCharts } from "@/components/organizer/OrganizerAnalyticsCharts";
 import { ChatbotWidget } from "@/components/organizer/ChatbotWidget";
+import DemoPrompt from "@/components/user/DemoPrompt";
 import { ModuleGate } from "@/components/ui/ModuleGate";
 import { jwtDecode } from "jwt-decode";
 import { useToast } from "@/hooks/use-toast";
@@ -265,6 +266,8 @@ export function OrganizerDashboard({
   const { country, setCountry } = useCountry();
   const apiURL = __API_URL__;
   const { isModuleEnabled, subscription } = useSubscription();
+  // In a read-only demo, any action click surfaces the register/contact prompt.
+  const [showDemoPrompt, setShowDemoPrompt] = useState(false);
 
   // Read operator restrictions from JWT (set when an operator logs in via WhatsApp).
   const operatorAccessTabs: string[] = (() => {
@@ -300,6 +303,22 @@ export function OrganizerDashboard({
   })();
   const isIndividual =
     userRoles.includes("individual") && !userRoles.includes("organizer");
+  // Read-only demo session (prospect exploring the demo org from the landing).
+  // Writes are blocked in the UI (and by the backend DemoReadonlyGuard).
+  const demoMode = (() => {
+    try {
+      const token = sessionStorage.getItem("token");
+      if (!token) return false;
+      const decoded: any = jwtDecode(token);
+      return decoded?.demo === true;
+    } catch {
+      return false;
+    }
+  })();
+  // In a demo session ALL sidebar tabs are shown (so prospects see everything
+  // the platform offers) — but clicking any of them opens the register/contact
+  // prompt instead of navigating (handled by the demo click interceptor).
+  const isTabVisible = (_id: string) => true;
   const individualName: string = (() => {
     try {
       const token = sessionStorage.getItem("token");
@@ -461,6 +480,8 @@ export function OrganizerDashboard({
   };
 
   const createDefaultSettings = async (organizerId: string, token: string) => {
+    // Never write in a read-only demo session (the backend would 403 anyway).
+    if (demoMode) return;
     const createData = {
       organizerId,
       ...defaultSettings,
@@ -914,7 +935,14 @@ export function OrganizerDashboard({
   const handleUpdateTicket = (ticketData: any) => {};
   const handleSaveSettings = (settingsData: any) => {};
 
+  // In a demo, only these tabs open their content; every other tab click
+  // surfaces the register/contact prompt instead of navigating.
+  const DEMO_VIEW_TABS = ["chatbot", "dashboard", "eventAttendees", "events"];
   const handleTabChange = (tab: string) => {
+    if (demoMode && !DEMO_VIEW_TABS.includes(tab)) {
+      setShowDemoPrompt(true);
+      return;
+    }
     setActiveTab(tab);
     setSidebarOpen(false);
   };
@@ -995,6 +1023,33 @@ export function OrganizerDashboard({
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
+      <DemoPrompt
+        open={showDemoPrompt}
+        onClose={() => setShowDemoPrompt(false)}
+      />
+      {/* Read-only demo banner — a prospect exploring the demo organization.
+          Browsing works; any change is blocked (UI + backend) and points here. */}
+      {demoMode && (
+        <div className="flex flex-shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-indigo-600 px-4 py-2 text-center text-sm font-medium text-white">
+          <span>
+            👀 You're exploring a read-only demo — changes are disabled.
+          </span>
+          <span className="flex items-center gap-2">
+            <button
+              onClick={() => (window.location.href = "/register")}
+              className="rounded-full bg-white px-3 py-0.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
+            >
+              Register free
+            </button>
+            <button
+              onClick={() => (window.location.href = "/contact")}
+              className="rounded-full border border-white/70 px-3 py-0.5 text-xs font-semibold hover:bg-white/10"
+            >
+              Contact us
+            </button>
+          </span>
+        </div>
+      )}
       {/* Header */}
       <header className="border-b bg-card sticky top-0 z-50 flex-shrink-0">
         <div className="flex h-14 sm:h-16 items-center justify-between px-4 sm:px-6">
@@ -1044,7 +1099,10 @@ export function OrganizerDashboard({
         </div>
       </header>
 
-      {/* Main container with fixed sidebar and scrollable content */}
+      {/* Main container with fixed sidebar and scrollable content. In a demo,
+          the 4 allowed tabs open their content normally; other tabs open the
+          register/contact prompt (see handleTabChange). Writes are still
+          blocked by the backend DemoReadonlyGuard. */}
       <div className="flex flex-1 overflow-hidden z-40">
         {/* Mobile Sidebar Overlay */}
         {sidebarOpen && !isIndividual && (
@@ -1074,7 +1132,10 @@ export function OrganizerDashboard({
             <nav className="p-3 sm:p-4 space-y-1 sm:space-y-2 flex-1 overflow-y-auto">
               <TooltipProvider delayDuration={0}>
                 {navigationItems
-                  .filter((item) => isTabAllowedForOperator(item.id))
+                  .filter(
+                    (item) =>
+                      isTabAllowedForOperator(item.id) && isTabVisible(item.id),
+                  )
                   .map((item) => {
                     // Items without a moduleKey (Dashboard, Settings) are always available.
                     const locked =
@@ -1091,6 +1152,12 @@ export function OrganizerDashboard({
                             : "justify-start"
                         } ${locked ? "opacity-60" : ""}`}
                         onClick={() => {
+                          // Demo: only the allowed tabs open; the rest (incl.
+                          // the storefront action) prompt to register/contact.
+                          if (demoMode && !DEMO_VIEW_TABS.includes(item.id)) {
+                            setShowDemoPrompt(true);
+                            return;
+                          }
                           if (item.id === "storefront") {
                             handleViewStorefront();
                           } else {
@@ -1163,7 +1230,26 @@ export function OrganizerDashboard({
         )}
 
         {/* Main Content - Scrollable */}
-        <main className="flex-1 overflow-hidden flex flex-col">
+        <main
+          className="flex-1 overflow-hidden flex flex-col"
+          // Demo: the 4 allowed tabs render their content so prospects can look
+          // around, but clicking any control inside (Create Event, View, filters,
+          // chatbot input…) opens the register/contact prompt instead of acting.
+          onClickCapture={
+            demoMode
+              ? (e) => {
+                  const el = (e.target as HTMLElement)?.closest?.(
+                    'button, a, input, select, textarea, [role="button"], [contenteditable]',
+                  );
+                  if (el) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowDemoPrompt(true);
+                  }
+                }
+              : undefined
+          }
+        >
           <div
             className={
               activeTab === "chatbot"
@@ -1190,7 +1276,7 @@ export function OrganizerDashboard({
                       ? []
                       : navigationItems
                           .filter((n) => n.id !== "chatbot")
-                          .filter((n) => isTabAllowedForOperator(n.id))
+                          .filter((n) => isTabAllowedForOperator(n.id) && isTabVisible(n.id))
                           .map((n) => ({
                             id: n.id,
                             label: n.label,
@@ -1580,7 +1666,7 @@ export function OrganizerDashboard({
         <ChatbotWidget
           navItems={navigationItems
             .filter((n) => n.id !== "chatbot")
-            .filter((n) => isTabAllowedForOperator(n.id))
+            .filter((n) => isTabAllowedForOperator(n.id) && isTabVisible(n.id))
             .map((n) => ({ id: n.id, label: n.label, icon: n.icon }))}
           onNavigate={(tab) => {
             if (tab === "storefront") handleViewStorefront();

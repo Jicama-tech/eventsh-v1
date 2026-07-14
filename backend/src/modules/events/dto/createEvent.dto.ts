@@ -428,6 +428,13 @@ export class VolunteerDto {
 }
 
 // A single ceremony within a Personal/Marriage event.
+export class FunctionTimelineItemDto {
+  @IsString() @IsOptional() id?: string;
+  @IsString() @IsOptional() time?: string;
+  @IsString() @IsOptional() title?: string;
+  @IsString() @IsOptional() location?: string;
+}
+
 export class FunctionDto {
   @IsString() @IsOptional() id?: string;
   @IsString() @IsOptional() name?: string;
@@ -438,6 +445,11 @@ export class FunctionDto {
   @IsString() @IsOptional() address?: string;
   @IsString() @IsOptional() dressCode?: string;
   @IsString() @IsOptional() notes?: string;
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => FunctionTimelineItemDto)
+  timeline?: FunctionTimelineItemDto[];
   @IsString() @IsOptional() accommodation?: string;
   @IsBoolean() @IsOptional() isLive?: boolean;
   @IsString() @IsOptional() announcedAt?: string;
@@ -447,6 +459,7 @@ export class FunctionDto {
 // Mirrors the frontend MarriageTheme (frontend/src/lib/marriageThemes.ts).
 export class MarriageThemeDto {
   @IsString() @IsOptional() preset?: string;
+  @IsString() @IsOptional() layoutTemplate?: string;
   @IsString() @IsOptional() primaryColor?: string;
   @IsString() @IsOptional() accentColor?: string;
   @IsString() @IsOptional() bgColor?: string;
@@ -462,12 +475,16 @@ export class MarriageThemeDto {
   @IsString() @IsOptional() monogramStyle?: string;
   @IsString() @IsOptional() topMotif?: string;
   @IsString() @IsOptional() floralAccents?: string;
+  @IsString() @IsOptional() floralStyle?: string;
+  @IsString() @IsOptional() heroFilter?: string;
   @IsString() @IsOptional() headingStyle?: string;
   @IsString() @IsOptional() backgroundPattern?: string;
   @IsString() @IsOptional() fontScale?: string;
   @IsString() @IsOptional() galleryLayout?: string;
   @IsString() @IsOptional() storyLayout?: string;
+  @IsString() @IsOptional() functionTimelineLayout?: string;
   @IsBoolean() @IsOptional() animations?: boolean;
+  @IsBoolean() @IsOptional() fallingPetals?: boolean;
   // Per-section visibility map ({ countdown, welcome, story, ... }).
   @IsObject() @IsOptional() sections?: Record<string, boolean>;
 }
@@ -530,6 +547,31 @@ export class CreateEventDto {
   @IsString()
   @IsOptional()
   eventType?: string;
+
+  // Landing-page showcase / demo flags (admin-created demo events only).
+  @IsBoolean()
+  @IsOptional()
+  isShowcase?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  isDemo?: boolean;
+
+  @IsString()
+  @IsOptional()
+  showcaseKind?: string;
+
+  @IsString()
+  @IsOptional()
+  showcaseMode?: string;
+
+  @IsNumber()
+  @IsOptional()
+  showcaseOrder?: number;
+
+  @IsString()
+  @IsOptional()
+  showcaseBlurb?: string;
 
   @IsString()
   @IsOptional()

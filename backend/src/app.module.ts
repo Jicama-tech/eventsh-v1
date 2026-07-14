@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
 import { MongooseModule } from "@nestjs/mongoose";
 import { ConfigModule } from "@nestjs/config";
+import { DemoReadonlyGuard } from "./common/guards/demo-readonly.guard";
 import { ScheduleModule } from "@nestjs/schedule";
 import { AuthModule } from "./modules/auth/auth.module";
 import { UsersModule } from "./modules/users/users.module";
@@ -84,6 +86,10 @@ import { RsvpModule } from "./modules/rsvp/rsvp.module";
     PaymentFeedbackModule,
     RsvpModule,
     MembershipsModule,
+  ],
+  providers: [
+    // Read-only demo sessions can never mutate real data via the API.
+    { provide: APP_GUARD, useClass: DemoReadonlyGuard },
   ],
 })
 export class AppModule {}

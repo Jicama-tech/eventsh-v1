@@ -45,6 +45,7 @@ import "swiper/css";
 import { TestimonialsCarousel } from "@/components/landing/TestimonialsCarousel";
 import { PublicChatbot } from "@/components/landing/PublicChatbot";
 import { cn } from "@/lib/utils";
+import { startDemoDashboard } from "@/lib/demoDashboard";
 import { useState, useRef, ReactNode, useEffect } from "react";
 import { Menu, X } from "lucide-react";
 
@@ -183,6 +184,16 @@ const LandingPage = () => {
   const [isCarouselPaused, setIsCarouselPaused] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Admin-curated live demo events shown in "See it in action". Clicking a card
+  // opens its real (demo-mode) eventfront.
+  const [showcaseEvents, setShowcaseEvents] = useState<any[]>([]);
+  useEffect(() => {
+    fetch(`${__API_URL__}/events/showcase`)
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((j) => setShowcaseEvents(Array.isArray(j?.data) ? j.data : []))
+      .catch(() => setShowcaseEvents([]));
+  }, []);
 
   // Auto-advance carousel every 3000ms (pauses on hover)
   useEffect(() => {
@@ -429,7 +440,237 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* See it in action — real professional + personal event pages */}
+      {/* How it works — two guided journeys */}
+      <section className="py-24 bg-[#1a1a1a]">
+        <div className="container mx-auto px-4">
+          <ScrollReveal>
+            <div className="text-center mb-16">
+              <span className="inline-block text-xs font-semibold uppercase tracking-[0.25em] text-indigo-400 mb-4">
+                How it works
+              </span>
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-5 tracking-tight">
+                From idea to a live event — in minutes
+              </h2>
+              <p className="text-base md:text-lg text-slate-400 leading-relaxed max-w-3xl mx-auto">
+                Two clear journeys, one platform. Follow the steps for a business
+                event or a personal celebration — no training or documentation
+                needed.
+              </p>
+            </div>
+          </ScrollReveal>
+          <div className="grid lg:grid-cols-2 gap-8 lg:gap-10 max-w-6xl mx-auto">
+            {[
+              {
+                kind: "professional",
+                label: "For Businesses & Organizers",
+                accent: "text-sky-400",
+                ring: "border-sky-500/40 text-sky-300",
+                img: "/landing/demo-dashboard.jpg",
+                steps: [
+                  { t: "Create your event", d: "Pick a type (expo, conference, concert…), add dates, venue and details." },
+                  { t: "Set up ticketing", d: "Add multiple ticket types, coupons and early-bird pricing — or make it free." },
+                  { t: "Design your venue", d: "Use the drag-and-drop floor plan to open exhibitor stalls, speaker slots and round tables." },
+                  { t: "Publish a branded page", d: "Your logo, colours and gallery on a public page — share the link anywhere." },
+                  { t: "Sell & manage", d: "Approve exhibitors, confirm payments, handle edit/cancellation requests — or just ask the AI." },
+                  { t: "Check in & analyse", d: "Scan QR passes on the day; track revenue, tickets, stalls and attendance live." },
+                ],
+              },
+              {
+                kind: "personal",
+                label: "For Personal Celebrations",
+                accent: "text-rose-400",
+                ring: "border-rose-500/40 text-rose-300",
+                img: "/landing/demo-wedding.jpg",
+                steps: [
+                  { t: "Create your celebration", d: "Choose a wedding or personal event and add your couple, hosts and functions." },
+                  { t: "Make it yours", d: "Pick a designer theme and fonts, then add your “Our Story” timeline and photo gallery." },
+                  { t: "Publish & invite", d: "Share a beautiful, mobile invitation with directions, a countdown and RSVP." },
+                  { t: "Collect RSVPs", d: "Guests respond per function; see exactly who's coming, with age and side breakdowns." },
+                  { t: "Allot rooms", d: "Assign hotel rooms, share a room across two families, and email QR room passes." },
+                  { t: "Go live", d: "Announce ceremonies as they start and manage the whole day by chat." },
+                ],
+              },
+            ]
+              // Each journey card is tied to its admin-curated demo event.
+              // If that demo is hidden/unfeatured (no matching showcase event),
+              // the whole card is hidden.
+              .filter((col) =>
+                showcaseEvents.some((e) => e.showcaseKind === col.kind),
+              )
+              .map((col, ci) => {
+              const ev = showcaseEvents.find(
+                (e) => e.showcaseKind === col.kind,
+              );
+              const evImg = ev?.image
+                ? ev.image.startsWith("http")
+                  ? ev.image
+                  : `${__API_URL__}${
+                      ev.image.startsWith("/") ? "" : "/"
+                    }${ev.image}`
+                : col.img;
+              return (
+              <motion.div
+                key={ci}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: ci * 0.1, duration: 0.5 }}
+                className="rounded-2xl border border-white/10 bg-[#121216] p-6 md:p-8"
+              >
+                <span
+                  className={cn(
+                    "text-xs font-semibold uppercase tracking-[0.2em]",
+                    col.accent,
+                  )}
+                >
+                  {col.label}
+                </span>
+                {/* The demo eventfront created in the Super Admin — click to
+                    open the real (demo-mode) page. */}
+                <button
+                  type="button"
+                  onClick={() => ev && navigate(`/demo/events/${ev._id}`)}
+                  className="group mt-4 block w-full overflow-hidden rounded-xl border border-white/10"
+                >
+                  <img
+                    src={evImg}
+                    alt={ev?.title || ""}
+                    loading="lazy"
+                    decoding="async"
+                    className="w-full aspect-[16/9] object-cover object-top transition-transform duration-500 group-hover:scale-105"
+                  />
+                  <span className="flex items-center justify-center gap-1.5 bg-black/40 py-2 text-xs font-semibold text-white">
+                    Open the live demo →
+                  </span>
+                </button>
+                {/* The organizer dashboard (read-only) — shown when the admin
+                    enabled it for this demo. */}
+                {ev &&
+                  (ev.showcaseMode === "dashboard" ||
+                    ev.showcaseMode === "both") && (
+                  <button
+                    type="button"
+                    onClick={() => startDemoDashboard(ev._id)}
+                    className="mt-3 w-full rounded-lg border border-sky-500/40 bg-sky-500/10 py-2.5 text-sm font-semibold text-sky-300 transition hover:bg-sky-500/20"
+                  >
+                    Try the organizer dashboard →
+                  </button>
+                )}
+                <div className="mt-7 space-y-6">
+                  {col.steps.map((s, i) => (
+                    <div key={i} className="flex gap-4">
+                      <div
+                        className={cn(
+                          "flex-shrink-0 w-9 h-9 rounded-full border flex items-center justify-center text-sm font-bold",
+                          col.ring,
+                        )}
+                      >
+                        {i + 1}
+                      </div>
+                      <div>
+                        <h4 className="text-white font-semibold">{s.t}</h4>
+                        <p className="text-sm text-slate-400 mt-1 leading-relaxed">
+                          {s.d}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* See it in action — LIVE admin-curated demo events. Clicking a card
+          opens its real eventfront in demo mode. */}
+      {showcaseEvents.length > 0 && (
+        <section className="py-24 bg-[#0a0a0c] relative overflow-hidden">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[900px] h-[420px] rounded-full opacity-20 blur-3xl"
+            style={{
+              background:
+                "radial-gradient(closest-side, rgba(99,102,241,0.55), transparent)",
+            }}
+          />
+          <div className="container mx-auto px-4 relative">
+            <div className="text-center mb-14">
+              <span className="inline-block text-xs font-semibold uppercase tracking-[0.25em] text-indigo-400 mb-4">
+                See it in action
+              </span>
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-5 tracking-tight">
+                Explore real event pages
+              </h2>
+              <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+                Tap any demo below to open the live page — a professional event
+                or a personal celebration. It's exactly what your guests would
+                see.
+              </p>
+            </div>
+            <div className="grid gap-8 md:grid-cols-2 max-w-5xl mx-auto">
+              {showcaseEvents.map((e) => {
+                const img = e.image
+                  ? e.image.startsWith("http")
+                    ? e.image
+                    : `${__API_URL__}${
+                        e.image.startsWith("/") ? "" : "/"
+                      }${e.image}`
+                  : "";
+                const isPersonal = e.showcaseKind === "personal";
+                return (
+                  <button
+                    key={e._id}
+                    type="button"
+                    onClick={() => navigate(`/demo/events/${e._id}`)}
+                    className="group text-left rounded-2xl overflow-hidden border border-white/10 bg-[#111114] hover:border-indigo-400/60 hover:shadow-2xl hover:shadow-indigo-500/10 transition-all"
+                  >
+                    <div className="relative aspect-[16/10] overflow-hidden bg-[#1a1a1f]">
+                      {img ? (
+                        <img
+                          src={img}
+                          alt={e.title}
+                          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="h-full w-full bg-gradient-to-br from-indigo-500/30 to-pink-500/20" />
+                      )}
+                      <span
+                        className={cn(
+                          "absolute top-3 left-3 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wider backdrop-blur",
+                          isPersonal
+                            ? "bg-rose-500/80 text-white"
+                            : "bg-indigo-500/80 text-white",
+                        )}
+                      >
+                        {isPersonal ? "Personal" : "Professional"}
+                      </span>
+                    </div>
+                    <div className="p-5">
+                      <h3 className="text-xl font-bold text-white">
+                        {e.title}
+                      </h3>
+                      {e.showcaseBlurb && (
+                        <p className="mt-1.5 text-sm text-gray-400 line-clamp-2">
+                          {e.showcaseBlurb}
+                        </p>
+                      )}
+                      <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-400 group-hover:gap-2.5 transition-all">
+                        Open live demo →
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* See it in action — hidden for now */}
+      {false && (
       <section className="py-24 bg-[#0a0a0c] relative overflow-hidden">
         {/* soft decorative glow — pure CSS, no image weight */}
         <div
@@ -615,11 +856,13 @@ const LandingPage = () => {
           </div>
         </div>
       </section>
+      )}
 
       {/* Public AI chatbot — FAQ + first-event onboarding (inline Google auth) */}
       <PublicChatbot />
 
-      {/* Why Choose Us */}
+      {/* Why Choose Us — hidden for now */}
+      {false && (
       <section className="py-24 bg-[#1a1a1a]">
         <div className="container mx-auto px-4">
           <ScrollReveal>
@@ -660,108 +903,11 @@ const LandingPage = () => {
           </div>
         </div>
       </section>
+      )}
 
-      {/* How it works — two guided journeys */}
-      <section className="py-24 bg-[#1a1a1a]">
-        <div className="container mx-auto px-4">
-          <ScrollReveal>
-            <div className="text-center mb-16">
-              <span className="inline-block text-xs font-semibold uppercase tracking-[0.25em] text-indigo-400 mb-4">
-                How it works
-              </span>
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-5 tracking-tight">
-                From idea to a live event — in minutes
-              </h2>
-              <p className="text-base md:text-lg text-slate-400 leading-relaxed max-w-3xl mx-auto">
-                Two clear journeys, one platform. Follow the steps for a business
-                event or a personal celebration — no training or documentation
-                needed.
-              </p>
-            </div>
-          </ScrollReveal>
-          <div className="grid lg:grid-cols-2 gap-8 lg:gap-10 max-w-6xl mx-auto">
-            {[
-              {
-                label: "For Businesses & Organizers",
-                accent: "text-sky-400",
-                ring: "border-sky-500/40 text-sky-300",
-                img: "/landing/demo-dashboard.jpg",
-                steps: [
-                  { t: "Create your event", d: "Pick a type (expo, conference, concert…), add dates, venue and details." },
-                  { t: "Set up ticketing", d: "Add multiple ticket types, coupons and early-bird pricing — or make it free." },
-                  { t: "Design your venue", d: "Use the drag-and-drop floor plan to open exhibitor stalls, speaker slots and round tables." },
-                  { t: "Publish a branded page", d: "Your logo, colours and gallery on a public page — share the link anywhere." },
-                  { t: "Sell & manage", d: "Approve exhibitors, confirm payments, handle edit/cancellation requests — or just ask the AI." },
-                  { t: "Check in & analyse", d: "Scan QR passes on the day; track revenue, tickets, stalls and attendance live." },
-                ],
-              },
-              {
-                label: "For Personal Celebrations",
-                accent: "text-rose-400",
-                ring: "border-rose-500/40 text-rose-300",
-                img: "/landing/demo-wedding.jpg",
-                steps: [
-                  { t: "Create your celebration", d: "Choose a wedding or personal event and add your couple, hosts and functions." },
-                  { t: "Make it yours", d: "Pick a designer theme and fonts, then add your “Our Story” timeline and photo gallery." },
-                  { t: "Publish & invite", d: "Share a beautiful, mobile invitation with directions, a countdown and RSVP." },
-                  { t: "Collect RSVPs", d: "Guests respond per function; see exactly who's coming, with age and side breakdowns." },
-                  { t: "Allot rooms", d: "Assign hotel rooms, share a room across two families, and email QR room passes." },
-                  { t: "Go live", d: "Announce ceremonies as they start and manage the whole day by chat." },
-                ],
-              },
-            ].map((col, ci) => (
-              <motion.div
-                key={ci}
-                initial={{ opacity: 0, y: 24 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: ci * 0.1, duration: 0.5 }}
-                className="rounded-2xl border border-white/10 bg-[#121216] p-6 md:p-8"
-              >
-                <span
-                  className={cn(
-                    "text-xs font-semibold uppercase tracking-[0.2em]",
-                    col.accent,
-                  )}
-                >
-                  {col.label}
-                </span>
-                {/* Poster reused from the pitch clips above (already cached) —
-                    a visual anchor with effectively no extra page weight. */}
-                <img
-                  src={col.img}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  className="mt-4 w-full aspect-[16/9] object-cover object-top rounded-xl border border-white/10"
-                />
-                <div className="mt-7 space-y-6">
-                  {col.steps.map((s, i) => (
-                    <div key={i} className="flex gap-4">
-                      <div
-                        className={cn(
-                          "flex-shrink-0 w-9 h-9 rounded-full border flex items-center justify-center text-sm font-bold",
-                          col.ring,
-                        )}
-                      >
-                        {i + 1}
-                      </div>
-                      <div>
-                        <h4 className="text-white font-semibold">{s.t}</h4>
-                        <p className="text-sm text-slate-400 mt-1 leading-relaxed">
-                          {s.d}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* Everything you can do — complete capability grid */}
+      {/* Everything you can do — hidden for now */}
+      {false && (
       <section className="py-24 bg-[#0a0a0c]">
         <div className="container mx-auto px-4">
           <ScrollReveal>
@@ -831,6 +977,7 @@ const LandingPage = () => {
           </div>
         </div>
       </section>
+      )}
 
       {/* Steps Section — hidden for now (kept for later) */}
       {false && (
@@ -956,7 +1103,8 @@ const LandingPage = () => {
       </section>
       )}
 
-      {/* FAQ Section */}
+      {/* FAQ Section — hidden for now */}
+      {false && (
       <section className="py-24 bg-[#0a0a0c]">
         <div className="container mx-auto px-4 max-w-3xl">
           <h2 className="text-3xl md:text-5xl font-bold text-white mb-12 text-center">Frequently Asked Questions</h2>
@@ -997,6 +1145,7 @@ const LandingPage = () => {
           </div>
         </div>
       </section>
+      )}
 
       <TestimonialsCarousel />
 

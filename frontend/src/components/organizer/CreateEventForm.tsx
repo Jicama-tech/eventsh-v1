@@ -178,6 +178,8 @@ interface CreateEventFormProps {
    */
   duplicateMode?: boolean;
   initialData?: any;
+  /** Save under this organizer id instead of the token subject (admin demo). */
+  organizerIdOverride?: string;
 }
 
 interface TableTemplate {
@@ -6483,6 +6485,7 @@ export function CreateEventForm({
   editMode = false,
   duplicateMode = false,
   initialData,
+  organizerIdOverride,
 }: CreateEventFormProps) {
   const { toast } = useToast();
   const venueRef = useRef<HTMLDivElement>(null);
@@ -8383,7 +8386,9 @@ export function CreateEventForm({
       // the same name makes the backend receive an array it can't parse, which
       // silently wiped the per-section visibility on every save.
 
-      data.append("organizerId", organizer.sub);
+      // When an admin creates a demo/showcase event, save it under the demo
+      // organizer (override) instead of the admin's own token subject.
+      data.append("organizerId", organizerIdOverride || organizer.sub);
 
       // Build speakers array ONLY from session slots (single source of truth)
       const builtSpeakers: any[] = [];

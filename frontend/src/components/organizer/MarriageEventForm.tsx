@@ -23,6 +23,7 @@ import {
   GripVertical,
   Calendar,
   Palette,
+  LayoutTemplate,
   Bell,
   Loader2,
   Megaphone,
@@ -67,12 +68,16 @@ import {
   HERO_LAYOUTS,
   HEADING_STYLES,
   BACKGROUND_PATTERNS,
+  HERO_FILTERS,
   FONT_SCALES,
   GALLERY_LAYOUTS,
   STORY_LAYOUTS,
+  FUNCTION_TIMELINE_LAYOUTS,
   MONOGRAM_STYLES,
   TOP_MOTIFS,
   FLORAL_ACCENTS,
+  FLORAL_STYLES,
+  LAYOUT_TEMPLATES,
   SECTION_LABELS,
   HERO_NAME_CLASS,
   MARRIAGE_FONTS_HREF,
@@ -86,6 +91,15 @@ import MarriageMonogram from "@/components/user/MarriageMonogram";
 import MarriageMotif from "@/components/user/MarriageMotif";
 import MarriageFloral from "@/components/user/MarriageFloral";
 
+// One row in a function's own schedule/timeline — what happens, when and where
+// WITHIN that ceremony (e.g. 6:00 PM Welcome drinks · Foyer).
+interface FunctionTimelineItem {
+  id: string;
+  time: string; // e.g. "18:00"
+  title: string; // what's included
+  location: string; // where (falls back to the function venue when blank)
+}
+
 interface MarriageFunctionItem {
   id: string;
   name: string;
@@ -96,6 +110,8 @@ interface MarriageFunctionItem {
   address: string;
   dressCode: string;
   notes: string;
+  // Sub-schedule for this function: the sequence of things happening during it.
+  timeline?: FunctionTimelineItem[];
   // Lodging info specific to this ceremony's location (multi-city weddings).
   accommodation?: string;
   // Whether this ceremony is currently announced as "started" (drives the
@@ -111,6 +127,8 @@ interface MarriageEventFormProps {
   editMode?: boolean;
   duplicateMode?: boolean;
   initialData?: any;
+  /** Save under this organizer id instead of the token subject (admin demo). */
+  organizerIdOverride?: string;
 }
 
 // A labelled color control: native swatch picker + editable hex field, kept
@@ -287,6 +305,561 @@ function MiniStoryPreview({
   );
 }
 
+// Compact, template-aware hero for the Design-tab live preview so switching the
+// "Design template" visibly restyles the hero before publishing. Mirrors
+// renderHero() in MarriageEventFront at small scale. Reads the --w-* CSS vars
+// set on the preview frame, so colors/fonts stay in sync.
+function MiniHeroPreview({
+  theme,
+  p1,
+  p2,
+  banner,
+}: {
+  theme: MarriageTheme;
+  p1: string;
+  p2: string;
+  banner: string;
+}) {
+  const t = theme.layoutTemplate;
+  const heading: React.CSSProperties = { fontFamily: "var(--w-heading-font)" };
+  const onPhoto = !!banner;
+  const H = "h-52";
+
+  const bg = (opacity = 1) =>
+    banner ? (
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: `url(${banner})`, opacity, filter: "var(--w-hero-filter)" }}
+      />
+    ) : (
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(135deg, var(--w-primary-soft), var(--w-bg) 55%, var(--w-accent-soft))",
+          opacity,
+        }}
+      />
+    );
+
+  const florals = (color: string) =>
+    theme.floralAccents !== "none" ? (
+      <div className="absolute inset-0" style={{ color }}>
+        <MarriageFloral position="tl" size={46} variant={theme.floralStyle} className="opacity-80" />
+        <MarriageFloral position="br" size={46} variant={theme.floralStyle} className="opacity-80" />
+      </div>
+    ) : null;
+
+  // Compact core: (motif) → kicker → names → tagline → date pill.
+  const core = (
+    align: "center" | "left",
+    photo: boolean,
+    decor = true,
+    showKicker = true,
+  ) => {
+    const alignCls = align === "left" ? "text-left" : "text-center";
+    const mAuto = align === "left" ? "" : "mx-auto";
+    return (
+      <div className={alignCls} style={{ color: photo ? "#fff" : "var(--w-text)" }}>
+        {decor && theme.topMotif !== "none" && (
+          <MarriageMotif
+            variant={theme.topMotif}
+            size={36}
+            className={`mb-1 ${mAuto}`}
+          />
+        )}
+        {decor && theme.showMonogram && (
+          <MarriageMonogram
+            left={p1}
+            right={p2}
+            variant={theme.monogramStyle}
+            size={50}
+            className={`mb-1.5 ${mAuto}`}
+          />
+        )}
+        {showKicker && (
+          <p className="text-[8px] uppercase tracking-[0.3em] opacity-75">
+            Together with their families
+          </p>
+        )}
+        <h3
+          style={{ ...heading, lineHeight: 1.05 }}
+          className="mt-1 text-xl font-light"
+        >
+          {p1} <span style={{ color: "var(--w-primary)" }}>&amp;</span> {p2}
+        </h3>
+        {theme.heroTagline.trim() && (
+          <p className="mt-1 text-[8px] uppercase tracking-[0.25em] opacity-70">
+            {theme.heroTagline}
+          </p>
+        )}
+        <span
+          className="mt-2 inline-flex items-center gap-1 border px-2 py-0.5 text-[8px]"
+          style={{
+            borderColor: photo
+              ? "rgba(255,255,255,0.5)"
+              : "var(--w-primary-border)",
+            borderRadius: "var(--w-radius)",
+          }}
+        >
+          ♥ Wedding Day
+        </span>
+      </div>
+    );
+  };
+
+  if (t === "split") {
+    return (
+      <div className={`relative grid ${H} grid-cols-2 overflow-hidden`}>
+        <div className="relative">{bg()}</div>
+        <div
+          className="relative flex items-center p-3"
+          style={{ background: "var(--w-bg)" }}
+        >
+          <div className="w-full">
+            {(theme.topMotif !== "none" || theme.showMonogram) && (
+              <div className="mb-2 flex flex-col items-center">
+                {theme.topMotif !== "none" && (
+                  <MarriageMotif variant={theme.topMotif} size={30} />
+                )}
+                {theme.showMonogram && (
+                  <MarriageMonogram
+                    left={p1}
+                    right={p2}
+                    variant={theme.monogramStyle}
+                    size={40}
+                  />
+                )}
+              </div>
+            )}
+            {core("center", false, false)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (t === "cinema") {
+    return (
+      <div className={`relative flex ${H} items-end overflow-hidden`}>
+        {bg()}
+        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-x-0 top-0 h-3 bg-black/80" />
+        <div className="absolute inset-x-0 bottom-0 h-3 bg-black/80" />
+        <div className="relative z-10 w-full p-3 pb-5">
+          {core("left", true, false)}
+        </div>
+      </div>
+    );
+  }
+  if (t === "editorial") {
+    return (
+      <div className={`relative flex ${H} items-center overflow-hidden`}>
+        {banner ? (
+          <>
+            {bg()}
+            <div
+              className="absolute inset-0"
+              style={{ background: "var(--w-bg)", opacity: 0.7 }}
+            />
+          </>
+        ) : (
+          <div className="absolute inset-0" style={{ background: "var(--w-bg)" }} />
+        )}
+        <div className="relative z-10 w-full px-4">
+          <div
+            className="h-px w-full"
+            style={{ background: "var(--w-primary-border)" }}
+          />
+          <div className="py-2">{core("left", false)}</div>
+          <div
+            className="h-px w-full"
+            style={{ background: "var(--w-primary-border)" }}
+          />
+        </div>
+      </div>
+    );
+  }
+  if (t === "minimal") {
+    return (
+      <div
+        className={`relative flex ${H} items-center justify-center overflow-hidden`}
+        style={{ background: "var(--w-bg)" }}
+      >
+        {banner && bg(0.18)}
+        <div
+          className="relative z-10 px-4 text-center"
+          style={{ color: "var(--w-text)" }}
+        >
+          <p className="mb-3 text-[8px] uppercase tracking-[0.45em] opacity-70">
+            Together with their families
+          </p>
+          <h3
+            style={heading}
+            className="text-base font-light uppercase tracking-[0.25em]"
+          >
+            {p1} &amp; {p2}
+          </h3>
+          <span
+            className="mx-auto mt-3 block h-px w-10"
+            style={{ background: "var(--w-primary)" }}
+          />
+        </div>
+      </div>
+    );
+  }
+  if (t === "deco") {
+    return (
+      <div
+        className={`relative flex ${H} items-center justify-center overflow-hidden`}
+      >
+        {bg()}
+        {onPhoto && <div className="absolute inset-0 bg-black/35" />}
+        <div className="relative z-10 p-4">
+          <div className="relative p-4">
+            <span
+              className="pointer-events-none absolute inset-0 border-2"
+              style={{ borderColor: "var(--w-accent)" }}
+            />
+            <span
+              className="pointer-events-none absolute inset-[3px] border"
+              style={{ borderColor: "var(--w-accent)", opacity: 0.6 }}
+            />
+            {core("center", onPhoto)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (t === "gilded") {
+    return (
+      <div
+        className={`relative flex ${H} items-center justify-center overflow-hidden p-3`}
+      >
+        {bg()}
+        {onPhoto && <div className="absolute inset-0 bg-black/30" />}
+        {florals("#fff")}
+        <div className="relative z-10 w-[86%]">
+          <div
+            className="border p-3 shadow-lg"
+            style={{
+              background: "var(--w-surface)",
+              color: "var(--w-text)",
+              borderColor: "var(--w-primary-border)",
+              borderRadius: "var(--w-radius)",
+            }}
+          >
+            {core("center", false)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (t === "atelier") {
+    return (
+      <div
+        className={`relative flex ${H} items-center justify-center overflow-hidden`}
+      >
+        {bg()}
+        {onPhoto && <div className="absolute inset-0 bg-black/30" />}
+        <div
+          className="relative z-10 px-4 text-center"
+          style={{ color: onPhoto ? "#fff" : "var(--w-text)" }}
+        >
+          <p className="text-[8px] uppercase tracking-[0.45em] opacity-80">
+            The wedding of
+          </p>
+          <span
+            className="mx-auto my-2 block h-px w-14"
+            style={{ background: "var(--w-accent)" }}
+          />
+          <h3 style={{ ...heading, lineHeight: 1.05 }} className="text-xl font-light">
+            {p1} <span style={{ color: "var(--w-primary)" }}>&amp;</span> {p2}
+          </h3>
+          <span
+            className="mx-auto my-2 block h-px w-14"
+            style={{ background: "var(--w-accent)" }}
+          />
+          <p className="text-[8px] uppercase tracking-[0.35em] opacity-80">
+            Wedding Day
+          </p>
+        </div>
+      </div>
+    );
+  }
+  if (t === "ivory") {
+    return (
+      <div
+        className={`relative flex ${H} items-center justify-center overflow-hidden`}
+        style={{ background: "var(--w-bg)" }}
+      >
+        {banner && (
+          <>
+            {bg()}
+            <div
+              className="absolute inset-0"
+              style={{ background: "var(--w-bg)", opacity: 0.62 }}
+            />
+          </>
+        )}
+        {florals("var(--w-primary)")}
+        <div className="relative z-10 px-4">{core("center", false)}</div>
+      </div>
+    );
+  }
+  if (t === "folio") {
+    return (
+      <div
+        className={`relative flex ${H} items-center justify-center overflow-hidden px-3`}
+      >
+        {bg()}
+        {onPhoto && <div className="absolute inset-0 bg-black/30" />}
+        <div className="relative z-10 w-[88%]">
+          <div
+            className="relative px-4 py-4"
+            style={{ outline: "1px solid var(--w-accent)", outlineOffset: 4 }}
+          >
+            <span
+              className="pointer-events-none absolute inset-0 border"
+              style={{ borderColor: "var(--w-accent)" }}
+            />
+            <div style={{ color: onPhoto ? "#fff" : "var(--w-text)" }}>
+              <p className="mb-2 text-center text-[8px] uppercase tracking-[0.4em] opacity-80">
+                — The Wedding —
+              </p>
+              {core("center", onPhoto, false, false)}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (t === "portrait") {
+    return (
+      <div
+        className={`relative flex ${H} items-center justify-center overflow-hidden p-3`}
+        style={{ background: "var(--w-bg)" }}
+      >
+        <div className="relative w-full max-w-[52%] text-center">
+          <div
+            className="p-1 shadow-md"
+            style={{
+              background: "var(--w-surface)",
+              border: "1px solid var(--w-primary-border)",
+            }}
+          >
+            <div
+              className="relative w-full overflow-hidden"
+              style={{ aspectRatio: "3 / 4" }}
+            >
+              {banner ? (
+                bg()
+              ) : (
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background:
+                      "linear-gradient(160deg, var(--w-primary), var(--w-accent))",
+                  }}
+                />
+              )}
+            </div>
+          </div>
+          <div className="mt-2">
+            <h3
+              style={{ ...heading, lineHeight: 1.05 }}
+              className="text-sm font-light"
+            >
+              {p1} <span style={{ color: "var(--w-primary)" }}>&amp;</span> {p2}
+            </h3>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (t === "royal") {
+    return (
+      <div
+        className={`relative flex ${H} items-center justify-center overflow-hidden px-3`}
+      >
+        {bg()}
+        {onPhoto && <div className="absolute inset-0 bg-black/35" />}
+        <div className="relative z-10 w-[88%]">
+          <div
+            className="px-4 py-4"
+            style={{ border: "2px double var(--w-accent)" }}
+          >
+            {core("center", onPhoto)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (t === "boho") {
+    return (
+      <div
+        className={`relative flex ${H} items-center justify-center overflow-hidden`}
+        style={{
+          background:
+            "radial-gradient(circle at 30% 20%, var(--w-primary-soft), transparent 60%), radial-gradient(circle at 75% 80%, var(--w-accent-soft), transparent 55%), var(--w-bg)",
+        }}
+      >
+        {banner && (
+          <>
+            {bg()}
+            <div
+              className="absolute inset-0"
+              style={{ background: "var(--w-bg)", opacity: 0.5 }}
+            />
+          </>
+        )}
+        <div className="absolute inset-0" style={{ color: "var(--w-primary)" }}>
+          <MarriageFloral position="tl" size={44} variant={theme.floralStyle} className="opacity-80" />
+          <MarriageFloral position="tr" size={44} variant={theme.floralStyle} className="opacity-80" />
+          <MarriageFloral position="bl" size={44} variant={theme.floralStyle} className="opacity-80" />
+          <MarriageFloral position="br" size={44} variant={theme.floralStyle} className="opacity-80" />
+        </div>
+        <div className="relative z-10 px-4 text-center">
+          <span
+            className="mb-2 inline-block rounded-full px-2.5 py-0.5 text-[7px] uppercase tracking-[0.3em]"
+            style={{ background: "var(--w-primary-soft)", color: "var(--w-primary)" }}
+          >
+            We're getting married
+          </span>
+          {core("center", false, false, false)}
+        </div>
+      </div>
+    );
+  }
+  if (t === "poster") {
+    return (
+      <div
+        className={`relative flex ${H} items-center justify-center overflow-hidden`}
+      >
+        {bg()}
+        <div className="absolute inset-0 bg-black/45" />
+        <div className="relative z-10 px-4 text-center" style={{ color: "#fff" }}>
+          <p className="mb-1 text-[7px] uppercase tracking-[0.5em] opacity-85">
+            Save the date
+          </p>
+          <h3
+            style={{ ...heading, lineHeight: 0.95 }}
+            className="text-2xl font-semibold uppercase tracking-tight"
+          >
+            {p1}
+            <span className="block" style={{ color: "var(--w-primary)" }}>
+              &amp; {p2}
+            </span>
+          </h3>
+          <span
+            className="mx-auto mt-2 block h-1 w-12"
+            style={{ background: "var(--w-primary)" }}
+          />
+        </div>
+      </div>
+    );
+  }
+  if (t === "vintage") {
+    return (
+      <div
+        className={`relative flex ${H} items-center justify-center overflow-hidden p-3`}
+        style={{
+          background:
+            "radial-gradient(circle at center, var(--w-surface), var(--w-bg))",
+        }}
+      >
+        <div className="relative z-10 text-center">
+          <div
+            className="mx-auto mb-2 overflow-hidden"
+            style={{
+              width: "5rem",
+              aspectRatio: "4 / 5",
+              borderRadius: "50%",
+              border: "2px solid var(--w-accent)",
+              boxShadow: "0 0 0 4px var(--w-primary-tint)",
+            }}
+          >
+            {banner ? (
+              bg()
+            ) : (
+              <div
+                className="absolute inset-0"
+                style={{
+                  background:
+                    "linear-gradient(160deg, var(--w-primary), var(--w-accent))",
+                }}
+              />
+            )}
+          </div>
+          <p className="text-[7px] uppercase tracking-[0.4em] opacity-70">Est.</p>
+          <h3 style={{ ...heading }} className="text-base font-light">
+            {p1} &amp; {p2}
+          </h3>
+        </div>
+      </div>
+    );
+  }
+  if (t === "collage") {
+    return (
+      <div
+        className={`relative flex ${H} items-center justify-center overflow-hidden`}
+      >
+        {banner ? (
+          <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
+            {[0, 1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="bg-cover bg-center"
+                style={{ backgroundImage: `url(${banner})`, filter: "var(--w-hero-filter)" }}
+              />
+            ))}
+          </div>
+        ) : (
+          <div
+            className="absolute inset-0 grid grid-cols-2 grid-rows-2"
+            style={{ gap: 2 }}
+          >
+            {[0, 1, 2, 3].map((i) => (
+              <div
+                key={i}
+                style={{
+                  background:
+                    i % 2 ? "var(--w-primary)" : "var(--w-accent)",
+                  opacity: 0.8,
+                }}
+              />
+            ))}
+          </div>
+        )}
+        <div className="absolute inset-0 bg-black/45" />
+        <div className="relative z-10 w-[80%]">
+          <div
+            className="px-4 py-3 text-center backdrop-blur-sm"
+            style={{
+              background: "rgba(0,0,0,0.28)",
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.35)",
+              borderRadius: "var(--w-radius)",
+            }}
+          >
+            {core("center", true, false)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  // classic
+  return (
+    <div
+      className={`relative flex ${H} items-center justify-center overflow-hidden`}
+    >
+      {bg()}
+      {onPhoto && <div className="absolute inset-0 bg-black/35" />}
+      {florals(onPhoto ? "#fff" : "var(--w-primary)")}
+      <div className="relative z-10 px-4">{core("center", onPhoto)}</div>
+    </div>
+  );
+}
+
 const newFunctionId = () => `fn-${Math.random().toString(36).slice(2, 9)}`;
 
 const emptyFunction = (name = ""): MarriageFunctionItem => ({
@@ -299,9 +872,19 @@ const emptyFunction = (name = ""): MarriageFunctionItem => ({
   address: "",
   dressCode: "",
   notes: "",
+  timeline: [],
   accommodation: "",
   isLive: false,
   announcedAt: "",
+});
+
+const newTimelineId = () => `tl-${Math.random().toString(36).slice(2, 9)}`;
+
+const emptyTimelineItem = (): FunctionTimelineItem => ({
+  id: newTimelineId(),
+  time: "",
+  title: "",
+  location: "",
 });
 
 /**
@@ -320,6 +903,7 @@ export function MarriageEventForm({
   editMode = false,
   duplicateMode = false,
   initialData,
+  organizerIdOverride,
 }: MarriageEventFormProps) {
   const { toast } = useToast();
   const [currentTab, setCurrentTab] = useState("couple");
@@ -361,6 +945,14 @@ export function MarriageEventForm({
         address: f.address ?? "",
         dressCode: f.dressCode ?? "",
         notes: f.notes ?? "",
+        timeline: Array.isArray(f.timeline)
+          ? f.timeline.map((it: any) => ({
+              id: it.id || newTimelineId(),
+              time: it.time ?? "",
+              title: it.title ?? "",
+              location: it.location ?? "",
+            }))
+          : [],
         accommodation: f.accommodation ?? "",
         isLive: f.isLive ?? false,
         announcedAt: f.announcedAt ?? "",
@@ -681,6 +1273,9 @@ export function MarriageEventForm({
       data.append("visibility", form.visibility);
       data.append("inviteLink", form.inviteLink ?? "");
       data.append("status", form.published ? "published" : "draft");
+
+      // Admin-created demo weddings save under the demo organizer.
+      if (organizerIdOverride) data.append("organizerId", organizerIdOverride);
 
       data.append("functions", JSON.stringify(namedFunctions));
       data.append(
@@ -1108,6 +1703,111 @@ export function MarriageEventForm({
                           rows={2}
                         />
                       </div>
+
+                      {/* Function timeline — the running order WITHIN this
+                          ceremony: what's included, when, and where. Shown as a
+                          schedule on the public wedding page. */}
+                      <div className="sm:col-span-2">
+                        <div className="mb-2 flex items-center justify-between">
+                          <Label>Timeline for this function</Label>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              updateFunction(fn.id, {
+                                timeline: [
+                                  ...(fn.timeline ?? []),
+                                  emptyTimelineItem(),
+                                ],
+                              })
+                            }
+                          >
+                            <Plus className="mr-1 h-4 w-4" /> Add item
+                          </Button>
+                        </div>
+                        <p className="mb-2 text-xs text-muted-foreground">
+                          Add the running order — e.g. 6:00 PM Welcome drinks ·
+                          Foyer, 7:00 PM Dinner · Main Hall. Leave the place blank
+                          to use the venue above.
+                        </p>
+                        {(fn.timeline ?? []).length === 0 ? (
+                          <div className="rounded-lg border border-dashed p-3 text-center text-xs text-muted-foreground">
+                            No timeline items yet. Click “Add item” to build the
+                            schedule.
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {(fn.timeline ?? []).map((it, tIdx) => (
+                              <div
+                                key={it.id}
+                                className="flex flex-col gap-2 rounded-lg border bg-slate-50 p-2 sm:flex-row sm:items-center"
+                              >
+                                <span className="hidden w-5 text-center text-xs font-semibold text-slate-400 sm:block">
+                                  {tIdx + 1}
+                                </span>
+                                <Input
+                                  type="time"
+                                  value={it.time}
+                                  onChange={(e) =>
+                                    updateFunction(fn.id, {
+                                      timeline: (fn.timeline ?? []).map((x) =>
+                                        x.id === it.id
+                                          ? { ...x, time: e.target.value }
+                                          : x,
+                                      ),
+                                    })
+                                  }
+                                  className="bg-white sm:w-32"
+                                />
+                                <Input
+                                  value={it.title}
+                                  onChange={(e) =>
+                                    updateFunction(fn.id, {
+                                      timeline: (fn.timeline ?? []).map((x) =>
+                                        x.id === it.id
+                                          ? { ...x, title: e.target.value }
+                                          : x,
+                                      ),
+                                    })
+                                  }
+                                  placeholder="What's happening (e.g. Welcome drinks)"
+                                  className="flex-1 bg-white"
+                                />
+                                <Input
+                                  value={it.location}
+                                  onChange={(e) =>
+                                    updateFunction(fn.id, {
+                                      timeline: (fn.timeline ?? []).map((x) =>
+                                        x.id === it.id
+                                          ? { ...x, location: e.target.value }
+                                          : x,
+                                      ),
+                                    })
+                                  }
+                                  placeholder="Where (optional)"
+                                  className="bg-white sm:w-44"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 px-2 text-red-500 hover:text-red-600"
+                                  onClick={() =>
+                                    updateFunction(fn.id, {
+                                      timeline: (fn.timeline ?? []).filter(
+                                        (x) => x.id !== it.id,
+                                      ),
+                                    })
+                                  }
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1468,6 +2168,48 @@ export function MarriageEventForm({
             <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
               {/* ---- Controls ---- */}
               <div className="space-y-6">
+                {/* Design template — the single biggest style choice. Reshapes
+                    the whole hero (and section rhythm) into a distinct look. */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <LayoutTemplate className="h-5 w-5" /> Design template
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Choose an overall look for the hero. Colors, fonts and the
+                      sections below all still apply on top of it.
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                      {LAYOUT_TEMPLATES.map((o) => {
+                        const active = theme.layoutTemplate === o.value;
+                        return (
+                          <button
+                            key={o.value}
+                            type="button"
+                            onClick={() =>
+                              patchTheme({ layoutTemplate: o.value })
+                            }
+                            className={`flex flex-col gap-1 rounded-xl border-2 p-3 text-left transition ${
+                              active
+                                ? "border-primary ring-2 ring-primary/20"
+                                : "border-muted hover:border-primary/50"
+                            }`}
+                          >
+                            <span className="text-sm font-semibold">
+                              {o.label}
+                            </span>
+                            <span className="text-[11px] leading-tight text-muted-foreground">
+                              {o.hint}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -1757,6 +2499,33 @@ export function MarriageEventForm({
                       </p>
                     </div>
                     <div>
+                      <Label className="text-sm">Floral style</Label>
+                      <Select
+                        value={theme.floralStyle}
+                        onValueChange={(v) =>
+                          patchTheme({
+                            floralStyle: v as MarriageTheme["floralStyle"],
+                            preset: theme.preset,
+                          })
+                        }
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FLORAL_STYLES.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>
+                              {o.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Which botanical drawing the floral framing uses
+                        (roses, eucalyptus, tropical…).
+                      </p>
+                    </div>
+                    <div>
                       <Label className="text-sm">Hero tagline</Label>
                       <Input
                         value={theme.heroTagline}
@@ -1896,6 +2665,33 @@ export function MarriageEventForm({
                       </Select>
                     </div>
                     <div>
+                      <Label className="text-sm">Hero photo filter</Label>
+                      <Select
+                        value={theme.heroFilter}
+                        onValueChange={(v) =>
+                          patchTheme({
+                            heroFilter: v as MarriageTheme["heroFilter"],
+                            preset: theme.preset,
+                          })
+                        }
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {HERO_FILTERS.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>
+                              {o.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        A photo treatment for the hero banner (warm, vintage,
+                        noir…).
+                      </p>
+                    </div>
+                    <div>
                       <Label className="text-sm">Photo gallery layout</Label>
                       <Select
                         value={theme.galleryLayout}
@@ -1950,17 +2746,62 @@ export function MarriageEventForm({
                         wedding page.
                       </p>
                     </div>
+                    <div>
+                      <Label className="text-sm">
+                        Function timeline design
+                      </Label>
+                      <Select
+                        value={theme.functionTimelineLayout}
+                        onValueChange={(v) =>
+                          patchTheme({
+                            functionTimelineLayout:
+                              v as MarriageTheme["functionTimelineLayout"],
+                            preset: theme.preset,
+                          })
+                        }
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FUNCTION_TIMELINE_LAYOUTS.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>
+                              {o.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        How each function's schedule (its timeline of steps) is
+                        shown on the wedding page.
+                      </p>
+                    </div>
                     <div className="flex items-center justify-between rounded-lg border p-3">
                       <div>
                         <Label className="text-sm">Animations</Label>
                         <p className="text-xs text-muted-foreground">
-                          Subtle motion like the scroll cue.
+                          Subtle motion — fade-ins and a slow Ken-Burns zoom on
+                          the hero photo.
                         </p>
                       </div>
                       <Switch
                         checked={theme.animations}
                         onCheckedChange={(c) =>
                           patchTheme({ animations: c, preset: theme.preset })
+                        }
+                      />
+                    </div>
+                    <div className="flex items-center justify-between rounded-lg border p-3">
+                      <div>
+                        <Label className="text-sm">Falling petals</Label>
+                        <p className="text-xs text-muted-foreground">
+                          A gentle shower of petals drifting down the page.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={theme.fallingPetals}
+                        onCheckedChange={(c) =>
+                          patchTheme({ fallingPetals: c, preset: theme.preset })
                         }
                       />
                     </div>
@@ -1983,67 +2824,17 @@ export function MarriageEventForm({
                   }}
                   className="relative mt-2 overflow-hidden border shadow-sm"
                 >
-                  {theme.floralAccents !== "none" && (
-                    <div
-                      className="absolute inset-0"
-                      style={{ color: "var(--w-primary)" }}
-                    >
-                      <MarriageFloral position="tl" size={84} className="opacity-80" />
-                      <MarriageFloral position="br" size={84} className="opacity-80" />
-                      {theme.floralAccents === "frame" && (
-                        <>
-                          <MarriageFloral position="tr" size={84} className="opacity-80" />
-                          <MarriageFloral position="bl" size={84} className="opacity-80" />
-                        </>
-                      )}
-                    </div>
-                  )}
-                  <div className="relative px-6 py-9 text-center">
-                    {theme.topMotif !== "none" && (
-                      <MarriageMotif
-                        variant={theme.topMotif}
-                        size={72}
-                        className="mb-2"
-                      />
-                    )}
-                    {theme.showMonogram && (
-                      <MarriageMonogram
-                        left={form.partner1Name || "Aarav"}
-                        right={form.partner2Name || "Diya"}
-                        variant={theme.monogramStyle}
-                        size={92}
-                        className="mb-3"
-                      />
-                    )}
-                    <p className="text-[10px] uppercase tracking-[0.3em] opacity-70">
-                      Together with their families
+                  <MiniHeroPreview
+                    theme={theme}
+                    p1={form.partner1Name.trim() || "Aarav"}
+                    p2={form.partner2Name.trim() || "Diya"}
+                    banner={bannerPreview}
+                  />
+                  <div className="relative px-6 py-6 text-center">
+                    {/* Design template name, so the picker choice is explicit */}
+                    <p className="mb-4 text-[10px] uppercase tracking-[0.25em] opacity-60">
+                      Template · {theme.layoutTemplate}
                     </p>
-                    <h3
-                      style={{
-                        fontFamily: "var(--w-heading-font)",
-                        lineHeight: 1.1,
-                      }}
-                      className="mt-3 text-3xl font-light"
-                    >
-                      {form.partner1Name.trim() || "Aarav"}
-                      <span style={{ color: "var(--w-primary)" }}> &amp; </span>
-                      {form.partner2Name.trim() || "Diya"}
-                    </h3>
-                    {theme.heroTagline.trim() && (
-                      <p className="mt-2 text-[11px] uppercase tracking-[0.25em] opacity-70">
-                        {theme.heroTagline}
-                      </p>
-                    )}
-                    <span
-                      style={{
-                        borderColor: "var(--w-primary-border)",
-                        color: "var(--w-primary)",
-                        borderRadius: "var(--w-radius)",
-                      }}
-                      className="mt-4 inline-flex items-center gap-1.5 border px-4 py-1 text-xs"
-                    >
-                      ♥ Wedding Day
-                    </span>
                     <div className="mt-5 flex items-center justify-center gap-2">
                       {[
                         theme.primaryColor,

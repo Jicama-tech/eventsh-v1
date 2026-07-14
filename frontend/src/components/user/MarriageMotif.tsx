@@ -84,6 +84,92 @@ export function MarriageMotif({
         <path d="M41 64 Q 50 67 59 64" stroke="var(--w-accent)" strokeWidth="0.8" fill="none" />
       </>
     );
+  } else if (variant === "rings") {
+    // Two interlocking wedding bands.
+    content = (
+      <>
+        <circle cx="43" cy="40" r="14" stroke="var(--w-accent)" strokeWidth="1.6" fill="none" />
+        <circle cx="57" cy="40" r="14" stroke="currentColor" strokeWidth="1.4" fill="none" opacity="0.85" />
+        {/* little sparkle on the left band */}
+        <path
+          d="M43 24 l1.4 3 3 1.4 -3 1.4 -1.4 3 -1.4 -3 -3 -1.4 3 -1.4z"
+          fill="var(--w-accent)"
+        />
+        <Flourish />
+      </>
+    );
+  } else if (variant === "dove") {
+    // A gentle line-art dove in flight.
+    content = (
+      <>
+        <g stroke="currentColor" strokeWidth="1" fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M28 46 C 36 34 48 30 60 32 C 66 33 70 36 74 40" fill="var(--w-primary-soft)" />
+          <path d="M60 32 C 64 26 70 24 76 24 C 72 28 70 32 68 36" fill="var(--w-primary-soft)" />
+          <path d="M34 44 C 30 40 26 40 22 42 C 26 44 29 46 32 47" fill="var(--w-primary-soft)" />
+          <path d="M28 46 C 34 50 44 52 52 50" />
+          <path d="M52 50 L 60 56 M 56 50 L 62 58" />
+        </g>
+        <circle cx="72" cy="37" r="1.2" fill="var(--w-accent)" />
+        <Flourish />
+      </>
+    );
+  } else if (variant === "wreath") {
+    // A laurel / floral wreath circling a small heart.
+    content = (
+      <>
+        <path d="M50 20 C 30 24 24 44 34 58" stroke="currentColor" strokeWidth="1" fill="none" />
+        <path d="M50 20 C 70 24 76 44 66 58" stroke="currentColor" strokeWidth="1" fill="none" />
+        {[26, 34, 42, 50].map((y, i) => (
+          <g key={`l${i}`}>
+            <ellipse
+              cx={i < 2 ? 30 - i * 1 : 34 - i}
+              cy={y}
+              rx="4"
+              ry="2"
+              transform={`rotate(${-40 + i * 6} ${i < 2 ? 30 : 34} ${y})`}
+              fill="var(--w-primary-soft)"
+              stroke="currentColor"
+              strokeWidth="0.5"
+            />
+            <ellipse
+              cx={i < 2 ? 70 + i * 1 : 66 + i}
+              cy={y}
+              rx="4"
+              ry="2"
+              transform={`rotate(${40 - i * 6} ${i < 2 ? 70 : 66} ${y})`}
+              fill="var(--w-primary-soft)"
+              stroke="currentColor"
+              strokeWidth="0.5"
+            />
+          </g>
+        ))}
+        <path
+          d="M50 52 c -3 -3.6 -3.9 -5.4 -2.4 -7.2 1.2 -1.2 3.6 -1.2 4.8 0 1.5 -1.2 3.6 -1.2 4.8 0 1.5 1.8 0.6 3.6 -2.4 7.2z"
+          fill="var(--w-accent-soft)"
+          stroke="var(--w-accent)"
+          strokeWidth="0.7"
+        />
+        <Flourish />
+      </>
+    );
+  } else if (variant === "crest") {
+    // A heraldic crest / shield frame (monogram-ready).
+    content = (
+      <>
+        <path
+          d="M50 16 L 68 22 V 40 C 68 54 60 62 50 68 C 40 62 32 54 32 40 V 22 Z"
+          fill="var(--w-primary-soft)"
+          stroke="currentColor"
+          strokeWidth="1.1"
+        />
+        <path d="M38 27 H 62" stroke="var(--w-accent)" strokeWidth="0.8" />
+        <path d="M40 58 C 45 61 55 61 60 58" stroke="var(--w-accent)" strokeWidth="0.8" fill="none" />
+        {/* little laurel sprigs at the base */}
+        <path d="M50 45 C 46 41 46 35 50 31 C 54 35 54 41 50 45 Z" fill="var(--w-accent-soft)" stroke="var(--w-accent)" strokeWidth="0.6" />
+        <circle cx="50" cy="22" r="1.4" fill="var(--w-accent)" />
+        <Flourish />
+      </>
+    );
   } else if (variant === "floral") {
     content = (
       <>
