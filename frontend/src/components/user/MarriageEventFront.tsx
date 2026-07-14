@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import MarriageRsvp from "./MarriageRsvp";
+import DemoPrompt from "./DemoPrompt";
 import MarriageMonogram from "./MarriageMonogram";
 import MarriageMotif from "./MarriageMotif";
 import MarriageFloral from "./MarriageFloral";
@@ -11,6 +12,7 @@ import {
   HERO_NAME_CLASS,
   MARRIAGE_FONTS_HREF,
   type MarriageHeadingStyle,
+  type MarriageFloralStyle,
   type MarriageGalleryLayout,
   type MarriageStoryLayout,
 } from "@/lib/marriageThemes";
@@ -20,7 +22,6 @@ import {
   Share2,
   Mail,
   Phone,
-  ChevronDown,
   Camera,
   Check,
 } from "lucide-react";
@@ -62,6 +63,106 @@ interface MarriageEventFrontProps {
   eventData: any;
 }
 
+// A page-wide floral layer: sprays scattered down BOTH side edges of the whole
+// page (behind the content), so the design decorates the full invitation, not
+// just the hero. `dense` (frame mode) adds a second, offset set of sprays.
+function PageFlorals({
+  variant,
+  dense,
+  color,
+}: {
+  variant: MarriageFloralStyle;
+  dense: boolean;
+  color: string;
+}) {
+  const base: {
+    top: string;
+    side: "left" | "right";
+    pos: "tl" | "tr" | "bl" | "br";
+  }[] = [
+    { top: "14%", side: "left", pos: "tl" },
+    { top: "29%", side: "right", pos: "tr" },
+    { top: "45%", side: "left", pos: "bl" },
+    { top: "60%", side: "right", pos: "br" },
+    { top: "75%", side: "left", pos: "tl" },
+    { top: "90%", side: "right", pos: "tr" },
+  ];
+  const extra: typeof base = [
+    { top: "21%", side: "right", pos: "br" },
+    { top: "37%", side: "left", pos: "tl" },
+    { top: "53%", side: "right", pos: "tr" },
+    { top: "68%", side: "left", pos: "bl" },
+    { top: "83%", side: "right", pos: "br" },
+  ];
+  const spots = dense ? [...base, ...extra] : base;
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-0 hidden overflow-hidden lg:block"
+      style={{ color }}
+      aria-hidden
+    >
+      {spots.map((s, i) => (
+        <div
+          key={i}
+          className="absolute"
+          style={{ top: s.top, [s.side]: 0 } as React.CSSProperties}
+        >
+          <MarriageFloral
+            position={s.pos}
+            variant={variant}
+            size={185}
+            className="opacity-50"
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Deterministic petal parameters (no Math.random → stable across renders).
+const PETAL_DATA = Array.from({ length: 18 }, (_, i) => ({
+  left: (i * 5.7 + (i % 4) * 6) % 100,
+  size: 9 + (i % 4) * 4,
+  dur: 9 + (i % 6) * 1.7,
+  delay: -((i * 1.3) % 12),
+  drift: (i % 2 ? 1 : -1) * (28 + (i % 5) * 16),
+  op: 0.5 + (i % 3) * 0.13,
+  accent: i % 2 === 0,
+  round: i % 3 === 0 ? "150% 0 150% 0" : "50% 0 50% 50%",
+}));
+
+// A gentle shower of petals drifting down the whole viewport — the signature
+// romantic "wow". Fixed so they keep falling as guests scroll; pointer-events
+// off; auto-disabled under prefers-reduced-motion (via the injected CSS).
+function FallingPetals() {
+  return (
+    <div
+      className="pointer-events-none fixed inset-0 z-40 overflow-hidden"
+      aria-hidden
+    >
+      {PETAL_DATA.map((p, i) => (
+        <span
+          key={i}
+          className="wed-petal"
+          style={
+            {
+              left: `${p.left}%`,
+              width: p.size,
+              height: p.size,
+              borderRadius: p.round,
+              background: p.accent ? "var(--w-accent)" : "var(--w-primary)",
+              "--pdur": `${p.dur}s`,
+              "--pdel": `${p.delay}s`,
+              "--pd": `${p.drift}px`,
+              "--po": p.op,
+            } as React.CSSProperties
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
 /**
  * Public, wedding-themed event page. Rendered by eventFront.tsx when an
  * event's eventType is "personal" + "Marriage Function". Reads the same
@@ -89,6 +190,9 @@ export default function MarriageEventFront({
     [marriage?.theme],
   );
   const palette = useMemo(() => buildMarriagePalette(theme), [theme]);
+  // Demo mode: admin-curated showcase wedding. RSVP invites register/contact.
+  const isDemo = (eventData as any)?.isDemo === true;
+  const [showDemoPrompt, setShowDemoPrompt] = useState(false);
 
   // Load the wedding display fonts once (only on this public page).
   useEffect(() => {
@@ -247,6 +351,821 @@ export default function MarriageEventFront({
   const revealAttr = theme.animations
     ? ({ "data-wed-reveal": "" } as const)
     : {};
+  // The below-hero sections inherit the design template's "family" so the whole
+  // page reads as one design, not just a styled hero.
+  const sectionFamily = sectionFamilyFor(theme.layoutTemplate);
+
+  // ---- Hero design templates -------------------------------------------
+  // Shared building blocks below are composed differently per
+  // `theme.layoutTemplate` so a single choice restyles the whole hero.
+  const heroHeightCls = HERO_HEIGHT_CLASS[theme.heroHeight];
+  const onHeroColor = bannerUrl ? "var(--w-on-hero)" : "var(--w-text)";
+
+  // Full-bleed background: photo + gradient, or a soft palette gradient.
+  const heroBackdrop = (strong = false) =>
+    bannerUrl ? (
+      <>
+        <div
+          className="wed-kb absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url(${bannerUrl})`, filter: "var(--w-hero-filter)" }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            background: strong
+              ? "linear-gradient(to top, rgba(0,0,0,0.74), rgba(0,0,0,0.32) 55%, rgba(0,0,0,0.22))"
+              : "linear-gradient(to bottom, rgba(0,0,0,calc(var(--w-hero-overlay) * 0.85)), rgba(0,0,0,calc(var(--w-hero-overlay) * 0.65)), rgba(0,0,0,var(--w-hero-overlay)))",
+          }}
+        />
+      </>
+    ) : (
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(135deg, var(--w-primary-soft), var(--w-bg) 55%, var(--w-accent-soft))",
+        }}
+      />
+    );
+
+  const heroFlorals = theme.floralAccents !== "none" && (
+    <div
+      className="absolute inset-0 z-[1]"
+      style={{ color: bannerUrl ? "var(--w-on-hero)" : "var(--w-primary)" }}
+    >
+      <MarriageFloral position="tl" variant={theme.floralStyle} className="opacity-80" />
+      <MarriageFloral position="br" variant={theme.floralStyle} className="opacity-80" />
+      {theme.floralAccents === "frame" && (
+        <>
+          <MarriageFloral position="tr" variant={theme.floralStyle} className="opacity-80" />
+          <MarriageFloral position="bl" variant={theme.floralStyle} className="opacity-80" />
+        </>
+      )}
+    </div>
+  );
+
+  // Core hero content (kicker → names → tagline → date → ornament → cue),
+  // aligned per template. Options let each template drop the parts it renders
+  // itself, so custom eyebrows/dates never double up.
+  const heroCore = (
+    align: "center" | "left" = "center",
+    opts: {
+      decor?: boolean;
+      kicker?: boolean;
+      date?: boolean;
+      ornament?: boolean;
+    } = {},
+  ) => {
+    const {
+      decor = true,
+      kicker: showKicker = true,
+      date: showDate = true,
+      ornament: showOrnament = true,
+    } = opts;
+    const items =
+      align === "left" ? "items-start text-left" : "items-center text-center";
+    const kicker = align === "left" ? "justify-start" : "justify-center";
+    const namesWrap = align === "left" ? "items-start" : "items-center";
+    return (
+      <div className={`flex flex-col ${items}`}>
+        {decor && theme.topMotif !== "none" && (
+          <MarriageMotif variant={theme.topMotif} className="mb-3" />
+        )}
+        {decor && showMonogram && (
+          <MarriageMonogram
+            left={partner1}
+            right={partner2}
+            variant={theme.monogramStyle}
+            className="mb-6"
+          />
+        )}
+        {showKicker && (
+          <p
+            className={`mb-6 flex items-center ${kicker} gap-3 text-xs uppercase tracking-[0.35em] opacity-90`}
+          >
+            <span className="h-px w-10 bg-current opacity-50" />
+            Together with their families
+            <span className="h-px w-10 bg-current opacity-50" />
+          </p>
+        )}
+        {theme.heroLayout === "inline" && coupleLine.length > 1 ? (
+          <h1
+            style={heroNameStyle}
+            className={`${heroNameClass} font-light leading-tight tracking-wide`}
+          >
+            {coupleLine[0]}{" "}
+            <span style={{ color: "var(--w-primary)" }}>&amp;</span>{" "}
+            {coupleLine[1]}
+          </h1>
+        ) : (
+          <div className={`flex flex-col ${namesWrap} gap-2 sm:gap-4`}>
+            {coupleLine.map((name, i) => (
+              <div
+                key={i}
+                className={`flex flex-col ${namesWrap} gap-2 sm:gap-4`}
+              >
+                <h1
+                  style={heroNameStyle}
+                  className={`${heroNameClass} font-light leading-tight tracking-wide`}
+                >
+                  {name}
+                </h1>
+                {i === 0 && coupleLine.length > 1 && (
+                  <span
+                    style={{ ...headingStyle, color: "var(--w-primary)" }}
+                    className="text-3xl italic sm:text-4xl"
+                  >
+                    &amp;
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {tagline && (
+          <p className="mt-4 text-base uppercase tracking-[0.3em] opacity-90 sm:text-lg">
+            {tagline}
+          </p>
+        )}
+        {showDate && mainDate && (
+          <p className="mt-8 inline-flex items-center gap-2 rounded-full border border-current/30 px-5 py-2 text-sm tracking-wide sm:text-base">
+            <Heart className="h-4 w-4 fill-current" />
+            {prettyDate(mainDate)}
+          </p>
+        )}
+        {showOrnament && <Ornament className="mt-8 opacity-90" />}
+      </div>
+    );
+  };
+
+  const renderHero = () => {
+    const t = theme.layoutTemplate;
+
+    // SPLIT — banner one side, content panel the other.
+    if (t === "split") {
+      return (
+        <header
+          className={`relative grid ${heroHeightCls} grid-cols-1 overflow-hidden md:grid-cols-2`}
+        >
+          <div className="relative min-h-[38vh] md:min-h-0">
+            {bannerUrl ? (
+              <div
+                className="wed-kb absolute inset-0 bg-cover bg-center"
+                style={{ backgroundImage: `url(${bannerUrl})`, filter: "var(--w-hero-filter)" }}
+              />
+            ) : (
+              <div
+                className="absolute inset-0"
+                style={{
+                  background:
+                    "linear-gradient(135deg, var(--w-primary), var(--w-accent))",
+                }}
+              />
+            )}
+          </div>
+          <div
+            className="relative flex items-center px-8 py-12 sm:px-12"
+            style={{ background: "var(--w-bg)", color: "var(--w-text)" }}
+          >
+            {theme.floralAccents !== "none" && (
+              <div
+                className="absolute inset-0 z-[1]"
+                style={{ color: "var(--w-primary)" }}
+              >
+                <MarriageFloral position="tr" variant={theme.floralStyle} className="opacity-70" />
+                <MarriageFloral position="bl" variant={theme.floralStyle} className="opacity-70" />
+              </div>
+            )}
+            <div
+              {...revealAttr}
+              className="relative z-10 mx-auto w-full max-w-md"
+            >
+              {/* Emblem centered over the (left-aligned) text column. */}
+              {(theme.topMotif !== "none" || showMonogram) && (
+                <div className="mb-6 flex flex-col items-center">
+                  {theme.topMotif !== "none" && (
+                    <MarriageMotif
+                      variant={theme.topMotif}
+                      className={showMonogram ? "mb-3" : ""}
+                    />
+                  )}
+                  {showMonogram && (
+                    <MarriageMonogram
+                      left={partner1}
+                      right={partner2}
+                      variant={theme.monogramStyle}
+                    />
+                  )}
+                </div>
+              )}
+              {heroCore("center", { decor: false })}
+            </div>
+          </div>
+        </header>
+      );
+    }
+
+    // CINEMA — letterboxed, content anchored bottom-left.
+    if (t === "cinema") {
+      return (
+        <header
+          className={`relative flex ${heroHeightCls} items-end overflow-hidden`}
+        >
+          {heroBackdrop(true)}
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-[7vh] bg-black/75" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[7vh] bg-black/75" />
+          <div
+            {...revealAttr}
+            className="relative z-10 mx-auto w-full max-w-5xl px-8 pb-[12vh]"
+            style={{ color: "var(--w-on-hero)" }}
+          >
+            {heroCore("left", { decor: false })}
+          </div>
+        </header>
+      );
+    }
+
+    // EDITORIAL — airy masthead, left-aligned, thin rules.
+    if (t === "editorial") {
+      return (
+        <header
+          className={`relative flex ${heroHeightCls} items-center overflow-hidden`}
+        >
+          {bannerUrl ? (
+            <>
+              <div
+                className="wed-kb absolute inset-0 bg-cover bg-center"
+                style={{ backgroundImage: `url(${bannerUrl})`, filter: "var(--w-hero-filter)" }}
+              />
+              <div
+                className="absolute inset-0"
+                style={{ background: "var(--w-bg)", opacity: 0.7 }}
+              />
+            </>
+          ) : (
+            <div
+              className="absolute inset-0"
+              style={{ background: "var(--w-bg)" }}
+            />
+          )}
+          <div
+            {...revealAttr}
+            className="relative z-10 mx-auto w-full max-w-4xl px-8"
+            style={{ color: "var(--w-text)" }}
+          >
+            <div
+              className="h-px w-full"
+              style={{ background: "var(--w-primary-border)" }}
+            />
+            <div className="py-8">{heroCore("left")}</div>
+            <div
+              className="h-px w-full"
+              style={{ background: "var(--w-primary-border)" }}
+            />
+          </div>
+        </header>
+      );
+    }
+
+    // MINIMAL — whisper-quiet, no ornament, generous whitespace.
+    if (t === "minimal") {
+      return (
+        <header
+          className={`relative flex ${heroHeightCls} items-center justify-center overflow-hidden`}
+          style={{ background: "var(--w-bg)" }}
+        >
+          {bannerUrl && (
+            <div
+              className="absolute inset-0 bg-cover bg-center opacity-20"
+              style={{ backgroundImage: `url(${bannerUrl})`, filter: "var(--w-hero-filter)" }}
+            />
+          )}
+          <div
+            {...revealAttr}
+            className="relative z-10 mx-auto max-w-2xl px-6 text-center"
+            style={{ color: "var(--w-text)" }}
+          >
+            <p className="mb-10 text-[11px] uppercase tracking-[0.5em] opacity-70">
+              Together with their families
+            </p>
+            <h1
+              style={heroNameStyle}
+              className="text-3xl font-light uppercase tracking-[0.25em] sm:text-5xl"
+            >
+              {coupleLine.join("  &  ")}
+            </h1>
+            <span
+              className="mx-auto mt-8 block h-px w-16"
+              style={{ background: "var(--w-primary)" }}
+            />
+            {mainDate && (
+              <p className="mt-8 text-sm uppercase tracking-[0.35em] opacity-80">
+                {prettyDate(mainDate)}
+              </p>
+            )}
+          </div>
+        </header>
+      );
+    }
+
+    // DECO — Art-Deco double gold frame around centered names.
+    if (t === "deco") {
+      return (
+        <header
+          className={`relative flex ${heroHeightCls} items-center justify-center overflow-hidden`}
+        >
+          {heroBackdrop()}
+          <div
+            {...revealAttr}
+            className="relative z-10 mx-auto max-w-2xl px-6"
+            style={{ color: onHeroColor }}
+          >
+            <div className="relative p-8 sm:p-12">
+              <span
+                className="pointer-events-none absolute inset-0 border-2"
+                style={{ borderColor: "var(--w-accent)" }}
+              />
+              <span
+                className="pointer-events-none absolute inset-[6px] border"
+                style={{ borderColor: "var(--w-accent)", opacity: 0.6 }}
+              />
+              {heroCore("center")}
+            </div>
+          </div>
+        </header>
+      );
+    }
+
+    // GILDED — bordered card panel floating over the banner.
+    if (t === "gilded") {
+      return (
+        <header
+          className={`relative flex ${heroHeightCls} items-center justify-center overflow-hidden px-6`}
+        >
+          {heroBackdrop()}
+          {heroFlorals}
+          <div {...revealAttr} className="relative z-10 mx-auto w-full max-w-xl">
+            <div
+              className="border p-8 shadow-2xl sm:p-12"
+              style={{
+                background: "var(--w-surface)",
+                color: "var(--w-text)",
+                borderColor: "var(--w-primary-border)",
+                borderRadius: "var(--w-radius)",
+              }}
+            >
+              {heroCore("center")}
+            </div>
+          </div>
+        </header>
+      );
+    }
+
+    // ATELIER — the signature editorial look: centered names framed by thin
+    // gold hairline rules, an "The wedding of" eyebrow, generous spacing.
+    if (t === "atelier") {
+      return (
+        <header
+          className={`relative flex ${heroHeightCls} items-center justify-center overflow-hidden`}
+        >
+          {heroBackdrop()}
+          <div
+            {...revealAttr}
+            className="relative z-10 mx-auto max-w-3xl px-6 text-center"
+            style={{ color: onHeroColor }}
+          >
+            {theme.topMotif !== "none" && (
+              <MarriageMotif variant={theme.topMotif} className="mb-4" />
+            )}
+            <p className="mb-6 text-[11px] uppercase tracking-[0.5em] opacity-80">
+              The wedding of
+            </p>
+            <span
+              className="mx-auto mb-8 block h-px w-24"
+              style={{ background: "var(--w-accent)" }}
+            />
+            {theme.heroLayout === "inline" && coupleLine.length > 1 ? (
+              <h1
+                style={heroNameStyle}
+                className={`${heroNameClass} font-light leading-tight tracking-wide`}
+              >
+                {coupleLine[0]}{" "}
+                <span style={{ color: "var(--w-primary)" }}>&amp;</span>{" "}
+                {coupleLine[1]}
+              </h1>
+            ) : (
+              <div className="flex flex-col items-center gap-2 sm:gap-3">
+                {coupleLine.map((name, i) => (
+                  <div key={i} className="flex flex-col items-center gap-2">
+                    <h1
+                      style={heroNameStyle}
+                      className={`${heroNameClass} font-light leading-tight tracking-wide`}
+                    >
+                      {name}
+                    </h1>
+                    {i === 0 && coupleLine.length > 1 && (
+                      <span
+                        style={{ ...headingStyle, color: "var(--w-primary)" }}
+                        className="text-2xl italic sm:text-3xl"
+                      >
+                        &amp;
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            <span
+              className="mx-auto mt-8 block h-px w-24"
+              style={{ background: "var(--w-accent)" }}
+            />
+            {mainDate && (
+              <p className="mt-6 text-sm uppercase tracking-[0.4em] opacity-85 sm:text-base">
+                {prettyDate(mainDate)}
+              </p>
+            )}
+            {tagline && (
+              <p className="mt-3 text-xs uppercase tracking-[0.3em] opacity-70">
+                {tagline}
+              </p>
+            )}
+          </div>
+        </header>
+      );
+    }
+
+    // IVORY — bright, airy warm wash. Photo kept light (not darkened) so the
+    // page reads soft and luminous; centered names in the theme text colour.
+    if (t === "ivory") {
+      return (
+        <header
+          className={`relative flex ${heroHeightCls} items-center justify-center overflow-hidden`}
+          style={{ background: "var(--w-bg)" }}
+        >
+          {bannerUrl && (
+            <>
+              <div
+                className="wed-kb absolute inset-0 bg-cover bg-center"
+                style={{ backgroundImage: `url(${bannerUrl})`, filter: "var(--w-hero-filter)" }}
+              />
+              <div
+                className="absolute inset-0"
+                style={{ background: "var(--w-bg)", opacity: 0.62 }}
+              />
+            </>
+          )}
+          {heroFlorals}
+          <div
+            {...revealAttr}
+            className="relative z-10 mx-auto max-w-3xl px-6"
+            style={{ color: "var(--w-text)" }}
+          >
+            {heroCore("center")}
+          </div>
+        </header>
+      );
+    }
+
+    // FOLIO — book title-page: a thin double-ruled border around the names,
+    // flat (no shadow), with a small caption, like a printed programme cover.
+    if (t === "folio") {
+      return (
+        <header
+          className={`relative flex ${heroHeightCls} items-center justify-center overflow-hidden px-6`}
+        >
+          {heroBackdrop()}
+          <div
+            {...revealAttr}
+            className="relative z-10 mx-auto w-full max-w-xl"
+            style={{ color: onHeroColor }}
+          >
+            <div
+              className="relative px-8 py-10 sm:px-12 sm:py-14"
+              style={{ outline: "1px solid var(--w-accent)", outlineOffset: 6 }}
+            >
+              <span
+                className="pointer-events-none absolute inset-0 border"
+                style={{ borderColor: "var(--w-accent)" }}
+              />
+              <p className="mb-6 text-center text-[11px] uppercase tracking-[0.45em] opacity-80">
+                — The Wedding —
+              </p>
+              {heroCore("center", { decor: false, kicker: false })}
+            </div>
+          </div>
+        </header>
+      );
+    }
+
+    // PORTRAIT — a matted, framed portrait of the couple with their names set
+    // BENEATH the photo (gallery-print feel) rather than overlaid on it.
+    if (t === "portrait") {
+      return (
+        <header
+          className={`relative flex ${heroHeightCls} items-center justify-center overflow-hidden px-6 py-12`}
+          style={{ background: "var(--w-bg)" }}
+        >
+          {heroFlorals}
+          <div
+            {...revealAttr}
+            className="relative z-10 w-full max-w-sm text-center"
+            style={{ color: "var(--w-text)" }}
+          >
+            <div
+              className="mx-auto p-2 shadow-xl"
+              style={{
+                background: "var(--w-surface)",
+                border: "1px solid var(--w-primary-border)",
+              }}
+            >
+              <div
+                className="relative w-full overflow-hidden"
+                style={{ aspectRatio: "3 / 4" }}
+              >
+                {bannerUrl ? (
+                  <div
+                    className="wed-kb absolute inset-0 bg-cover bg-center"
+                    style={{ backgroundImage: `url(${bannerUrl})`, filter: "var(--w-hero-filter)" }}
+                  />
+                ) : (
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      background:
+                        "linear-gradient(160deg, var(--w-primary), var(--w-accent))",
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+            <div className="mt-6">{heroCore("center", { decor: false })}</div>
+          </div>
+        </header>
+      );
+    }
+
+    // ROYAL — ornate, regal: heavy gold double frame with corner flourishes,
+    // mandala monogram + top motif emphasised, over the banner.
+    if (t === "royal") {
+      return (
+        <header
+          className={`relative flex ${heroHeightCls} items-center justify-center overflow-hidden px-6`}
+        >
+          {heroBackdrop()}
+          <div
+            {...revealAttr}
+            className="relative z-10 mx-auto w-full max-w-2xl"
+            style={{ color: onHeroColor }}
+          >
+            <div
+              className="relative px-6 py-10 sm:px-12 sm:py-14"
+              style={{ border: "3px double var(--w-accent)" }}
+            >
+              {/* corner flourishes */}
+              {(["tl", "tr", "bl", "br"] as const).map((c) => (
+                <span
+                  key={c}
+                  className="pointer-events-none absolute h-5 w-5"
+                  style={{
+                    borderColor: "var(--w-accent)",
+                    top: c[0] === "t" ? -3 : "auto",
+                    bottom: c[0] === "b" ? -3 : "auto",
+                    left: c[1] === "l" ? -3 : "auto",
+                    right: c[1] === "r" ? -3 : "auto",
+                    borderTop: c[0] === "t" ? "3px solid" : undefined,
+                    borderBottom: c[0] === "b" ? "3px solid" : undefined,
+                    borderLeft: c[1] === "l" ? "3px solid" : undefined,
+                    borderRight: c[1] === "r" ? "3px solid" : undefined,
+                  }}
+                />
+              ))}
+              {theme.topMotif !== "none" ? (
+                <MarriageMotif variant={theme.topMotif} className="mb-2" />
+              ) : (
+                <MarriageMonogram
+                  left={partner1}
+                  right={partner2}
+                  variant="mandala"
+                  className="mb-2"
+                />
+              )}
+              {heroCore("center", { decor: false })}
+            </div>
+          </div>
+        </header>
+      );
+    }
+
+    // BOHO — soft, organic and warm: floral frame on all corners, a rounded
+    // pill kicker, light and airy over a gentle wash.
+    if (t === "boho") {
+      return (
+        <header
+          className={`relative flex ${heroHeightCls} items-center justify-center overflow-hidden`}
+        >
+          {bannerUrl ? (
+            <>
+              <div
+                className="wed-kb absolute inset-0 bg-cover bg-center"
+                style={{ backgroundImage: `url(${bannerUrl})`, filter: "var(--w-hero-filter)" }}
+              />
+              <div
+                className="absolute inset-0"
+                style={{ background: "var(--w-bg)", opacity: 0.5 }}
+              />
+            </>
+          ) : (
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  "radial-gradient(circle at 30% 20%, var(--w-primary-soft), transparent 60%), radial-gradient(circle at 75% 80%, var(--w-accent-soft), transparent 55%), var(--w-bg)",
+              }}
+            />
+          )}
+          <div className="absolute inset-0 z-[1]" style={{ color: "var(--w-primary)" }}>
+            <MarriageFloral position="tl" variant={theme.floralStyle} className="opacity-80" />
+            <MarriageFloral position="tr" variant={theme.floralStyle} className="opacity-80" />
+            <MarriageFloral position="bl" variant={theme.floralStyle} className="opacity-80" />
+            <MarriageFloral position="br" variant={theme.floralStyle} className="opacity-80" />
+          </div>
+          <div
+            {...revealAttr}
+            className="relative z-10 mx-auto max-w-2xl px-6 text-center"
+            style={{ color: "var(--w-text)" }}
+          >
+            <span
+              className="mb-5 inline-block rounded-full px-4 py-1 text-[11px] uppercase tracking-[0.3em]"
+              style={{
+                background: "var(--w-primary-soft)",
+                color: "var(--w-primary)",
+              }}
+            >
+              We're getting married
+            </span>
+            {heroCore("center", { decor: false, kicker: false })}
+          </div>
+        </header>
+      );
+    }
+
+    // POSTER — bold, contemporary: an oversized single line of names, strong
+    // type, a thick accent underline. Modern event-poster energy.
+    if (t === "poster") {
+      return (
+        <header
+          className={`relative flex ${heroHeightCls} items-center justify-center overflow-hidden`}
+        >
+          {heroBackdrop(true)}
+          <div
+            {...revealAttr}
+            className="relative z-10 mx-auto max-w-4xl px-6 text-center"
+            style={{ color: "var(--w-on-hero)" }}
+          >
+            <p className="mb-4 text-xs uppercase tracking-[0.5em] opacity-85">
+              Save the date
+            </p>
+            <h1
+              style={heroNameStyle}
+              className="text-5xl font-semibold uppercase leading-[0.95] tracking-tight sm:text-8xl"
+            >
+              {partner1}
+              <span className="block" style={{ color: "var(--w-primary)" }}>
+                &amp; {partner2}
+              </span>
+            </h1>
+            <span
+              className="mx-auto mt-6 block h-1.5 w-24"
+              style={{ background: "var(--w-primary)" }}
+            />
+            {mainDate && (
+              <p className="mt-6 text-lg font-medium tracking-wide sm:text-2xl">
+                {prettyDate(mainDate)}
+              </p>
+            )}
+          </div>
+        </header>
+      );
+    }
+
+    // VINTAGE — timeless parchment feel: an oval-framed portrait vignette with
+    // "est." date and classic serif names beneath.
+    if (t === "vintage") {
+      return (
+        <header
+          className={`relative flex ${heroHeightCls} items-center justify-center overflow-hidden px-6 py-12`}
+          style={{
+            background:
+              "radial-gradient(circle at center, var(--w-surface), var(--w-bg))",
+          }}
+        >
+          {heroFlorals}
+          <div
+            {...revealAttr}
+            className="relative z-10 w-full max-w-md text-center"
+            style={{ color: "var(--w-text)" }}
+          >
+            <div
+              className="relative mx-auto mb-6 overflow-hidden"
+              style={{
+                width: "min(58vw, 15rem)",
+                aspectRatio: "4 / 5",
+                borderRadius: "50%",
+                border: "2px solid var(--w-accent)",
+                boxShadow: "0 0 0 6px var(--w-primary-tint)",
+              }}
+            >
+              {bannerUrl ? (
+                <div
+                  className="wed-kb absolute inset-0 bg-cover bg-center"
+                  style={{ backgroundImage: `url(${bannerUrl})`, filter: "var(--w-hero-filter)" }}
+                />
+              ) : (
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background:
+                      "linear-gradient(160deg, var(--w-primary), var(--w-accent))",
+                  }}
+                />
+              )}
+            </div>
+            <p className="mb-2 text-[11px] uppercase tracking-[0.4em] opacity-70">
+              Est. {mainDate ? prettyDate(mainDate) : "Our Day"}
+            </p>
+            {heroCore("center", { decor: false, kicker: false, date: false })}
+          </div>
+        </header>
+      );
+    }
+
+    // COLLAGE — a photo mosaic (banner + gallery) behind a translucent panel
+    // holding the names. Falls back to a palette gradient when no photos.
+    if (t === "collage") {
+      const imgs = [bannerUrl, ...gallery].filter(Boolean).slice(0, 4);
+      return (
+        <header
+          className={`relative flex ${heroHeightCls} items-center justify-center overflow-hidden`}
+        >
+          {imgs.length > 0 ? (
+            <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="bg-cover bg-center"
+                  style={{
+                    backgroundImage: `url(${imgs[i % imgs.length]})`,
+                  }}
+                />
+              ))}
+            </div>
+          ) : (
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(135deg, var(--w-primary), var(--w-accent))",
+              }}
+            />
+          )}
+          <div className="absolute inset-0 bg-black/45" />
+          <div
+            {...revealAttr}
+            className="relative z-10 mx-auto max-w-md px-6"
+          >
+            <div
+              className="px-6 py-8 text-center backdrop-blur-sm"
+              style={{
+                background: "rgba(0,0,0,0.28)",
+                color: "var(--w-on-hero)",
+                border: "1px solid rgba(255,255,255,0.35)",
+                borderRadius: "var(--w-radius)",
+              }}
+            >
+              {heroCore("center", { decor: false })}
+            </div>
+          </div>
+        </header>
+      );
+    }
+
+    // CLASSIC (default) — centered names over a full banner.
+    return (
+      <header
+        className={`relative flex ${heroHeightCls} items-center justify-center overflow-hidden`}
+      >
+        {heroBackdrop()}
+        {heroFlorals}
+        <div
+          {...revealAttr}
+          className="relative z-10 mx-auto max-w-3xl px-6"
+          style={{ color: onHeroColor }}
+        >
+          {heroCore("center")}
+        </div>
+      </header>
+    );
+  };
 
   return (
     <div
@@ -261,8 +1180,36 @@ export default function MarriageEventFront({
         color: "var(--w-text)",
         fontFamily: "var(--w-body-font)",
       }}
-      className="min-h-screen"
+      className="relative min-h-screen"
+      data-wed-anim={theme.animations ? "" : undefined}
     >
+      {/* Page-wide floral decoration — scattered down both side edges of the
+          whole page (behind the content) when floral framing is on. */}
+      {theme.floralAccents !== "none" && (
+        <PageFlorals
+          variant={theme.floralStyle}
+          dense={theme.floralAccents === "frame"}
+          color={palette.isDark ? "rgba(255,255,255,0.92)" : "var(--w-primary)"}
+        />
+      )}
+      {/* Falling petals — the ambient romantic effect (opt-in). */}
+      {theme.fallingPetals && <FallingPetals />}
+      <DemoPrompt
+        open={showDemoPrompt}
+        onClose={() => setShowDemoPrompt(false)}
+      />
+      <div className="relative z-10">
+        {isDemo && (
+          <div className="sticky top-0 z-[80] flex items-center justify-center gap-2 bg-indigo-600 px-4 py-1.5 text-center text-xs font-semibold text-white">
+            Live demo — this is an example wedding page.
+            <button
+              onClick={() => setShowDemoPrompt(true)}
+              className="underline underline-offset-2 hover:opacity-90"
+            >
+              Create your own
+            </button>
+          </div>
+        )}
       {/* ---------------- LIVE ANNOUNCEMENT BAR ----------------
           Shows when the couple marks a ceremony "started". Sticky so guests
           scrolling the page always see what's happening now. */}
@@ -276,15 +1223,24 @@ export default function MarriageEventFront({
             <span className="h-2 w-2 rounded-full bg-current" />
             Live
           </span>
-          {/* Continuously scrolling message. Two identical copies + the
-              -50% marquee keyframe make the loop seamless; it pauses on
-              hover so guests can read it. */}
+          {/* Continuously scrolling message. The track is two IDENTICAL halves,
+              each repeating the line several times so a half is always wider
+              than the bar — the -50% keyframe then loops with no blank gap,
+              regardless of message length or screen width. Pauses on hover. */}
           <div className="relative flex-1 overflow-hidden py-2.5">
-            <div className="flex w-max animate-marquee whitespace-nowrap text-sm font-semibold hover:[animation-play-state:paused]">
-              <span className="px-10">{adBarLine}</span>
-              <span className="px-10" aria-hidden="true">
-                {adBarLine}
-              </span>
+            <div
+              className="flex w-max animate-marquee whitespace-nowrap text-sm font-semibold hover:[animation-play-state:paused]"
+              style={{ animationDuration: "40s" }}
+            >
+              {[0, 1].map((half) => (
+                <div key={half} className="flex" aria-hidden={half === 1}>
+                  {[0, 1, 2, 3].map((k) => (
+                    <span key={k} className="px-10">
+                      {adBarLine}
+                    </span>
+                  ))}
+                </div>
+              ))}
             </div>
           </div>
           {/* Directions stays pinned (non-moving) so it's always clickable. */}
@@ -321,132 +1277,8 @@ export default function MarriageEventFront({
         )}
       </button>
 
-      {/* ---------------- HERO ---------------- */}
-      <header
-        className={`relative flex ${HERO_HEIGHT_CLASS[theme.heroHeight]} items-center justify-center overflow-hidden`}
-      >
-        {bannerUrl ? (
-          <>
-            <div
-              className="absolute inset-0 bg-cover bg-center"
-              style={{ backgroundImage: `url(${bannerUrl})` }}
-            />
-            <div
-              className="absolute inset-0"
-              style={{
-                background:
-                  "linear-gradient(to bottom, rgba(0,0,0,calc(var(--w-hero-overlay) * 0.85)), rgba(0,0,0,calc(var(--w-hero-overlay) * 0.65)), rgba(0,0,0,var(--w-hero-overlay)))",
-              }}
-            />
-          </>
-        ) : (
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                "linear-gradient(135deg, var(--w-primary-soft), var(--w-bg) 55%, var(--w-accent-soft))",
-            }}
-          />
-        )}
-
-        {/* Botanical corner florals framing the hero (luxury-invitation feel) */}
-        {theme.floralAccents !== "none" && (
-          <div
-            className="absolute inset-0 z-[1]"
-            style={{ color: bannerUrl ? "var(--w-on-hero)" : "var(--w-primary)" }}
-          >
-            <MarriageFloral position="tl" className="opacity-80" />
-            <MarriageFloral position="br" className="opacity-80" />
-            {theme.floralAccents === "frame" && (
-              <>
-                <MarriageFloral position="tr" className="opacity-80" />
-                <MarriageFloral position="bl" className="opacity-80" />
-              </>
-            )}
-          </div>
-        )}
-
-        <div
-          {...revealAttr}
-          className="relative z-10 mx-auto max-w-3xl px-6 text-center"
-          style={{ color: bannerUrl ? "var(--w-on-hero)" : "var(--w-text)" }}
-        >
-          {theme.topMotif !== "none" && (
-            <MarriageMotif variant={theme.topMotif} className="mb-3" />
-          )}
-
-          {showMonogram && (
-            <MarriageMonogram
-              left={partner1}
-              right={partner2}
-              variant={theme.monogramStyle}
-              className="mb-6"
-            />
-          )}
-
-          <p className="mb-6 flex items-center justify-center gap-3 text-xs uppercase tracking-[0.35em] opacity-90">
-            <span className="h-px w-10 bg-current opacity-50" />
-            Together with their families
-            <span className="h-px w-10 bg-current opacity-50" />
-          </p>
-
-          {theme.heroLayout === "inline" && coupleLine.length > 1 ? (
-            <h1
-              style={heroNameStyle}
-              className={`${heroNameClass} font-light leading-tight tracking-wide`}
-            >
-              {coupleLine[0]}{" "}
-              <span style={{ color: "var(--w-primary)" }}>&amp;</span>{" "}
-              {coupleLine[1]}
-            </h1>
-          ) : (
-            <div className="flex flex-col items-center gap-2 sm:gap-4">
-              {coupleLine.map((name, i) => (
-                <div
-                  key={i}
-                  className="flex flex-col items-center gap-2 sm:gap-4"
-                >
-                  <h1
-                    style={heroNameStyle}
-                    className={`${heroNameClass} font-light leading-tight tracking-wide`}
-                  >
-                    {name}
-                  </h1>
-                  {i === 0 && coupleLine.length > 1 && (
-                    <span
-                      style={{ ...headingStyle, color: "var(--w-primary)" }}
-                      className="text-3xl italic sm:text-4xl"
-                    >
-                      &amp;
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {tagline && (
-            <p className="mt-4 text-base uppercase tracking-[0.3em] opacity-90 sm:text-lg">
-              {tagline}
-            </p>
-          )}
-
-          {mainDate && (
-            <p className="mt-8 inline-flex items-center gap-2 rounded-full border border-current/30 px-5 py-2 text-sm tracking-wide sm:text-base">
-              <Heart className="h-4 w-4 fill-current" />
-              {prettyDate(mainDate)}
-            </p>
-          )}
-
-          <Ornament className="mt-8 opacity-90" />
-
-          {theme.animations && (
-            <div className="mt-8 animate-bounce opacity-80">
-              <ChevronDown className="mx-auto h-6 w-6" />
-            </div>
-          )}
-        </div>
-      </header>
+      {/* ---------------- HERO (design-template aware) ---------------- */}
+      {renderHero()}
 
       {/* ---------------- COUNTDOWN ---------------- */}
       {sec.countdown && countdown && (
@@ -544,6 +1376,7 @@ export default function MarriageEventFront({
               icon={<Heart className="h-5 w-5" />}
               label="Our Story"
               variant={theme.headingStyle}
+              family={sectionFamily}
             />
 
             {(marriage.howWeMet || "").trim() && (
@@ -587,6 +1420,7 @@ export default function MarriageEventFront({
               icon={<Calendar className="h-5 w-5" />}
               label="Wedding Events"
               variant={theme.headingStyle}
+              family={sectionFamily}
             />
             <div className="mt-12 space-y-8">
               {functions.map((fn, idx) => {
@@ -675,6 +1509,44 @@ export default function MarriageEventFront({
                         {fn.notes}
                       </p>
                     )}
+
+                    {/* Function timeline — the running order within this
+                        ceremony, as a designed connected timeline. */}
+                    {(() => {
+                      const items = (
+                        Array.isArray((fn as any).timeline)
+                          ? ((fn as any).timeline as any[])
+                          : []
+                      ).filter(
+                        (it) => it && (it.time || it.title || it.location),
+                      );
+                      if (items.length === 0) return null;
+                      return (
+                        <>
+                          <div className="mx-auto mt-7 flex max-w-lg items-center gap-3">
+                            <span
+                              className="h-px flex-1"
+                              style={{ background: "var(--w-primary-border)" }}
+                            />
+                            <span
+                              className="text-[11px] font-semibold uppercase tracking-[0.3em]"
+                              style={{ color: "var(--w-primary)" }}
+                            >
+                              Schedule
+                            </span>
+                            <span
+                              className="h-px flex-1"
+                              style={{ background: "var(--w-primary-border)" }}
+                            />
+                          </div>
+                          <FunctionTimeline
+                            items={items}
+                            fallbackVenue={fn.venueName}
+                            layout={theme.functionTimelineLayout}
+                          />
+                        </>
+                      );
+                    })()}
                   </div>
                 );
               })}
@@ -698,6 +1570,7 @@ export default function MarriageEventFront({
               icon={<Camera className="h-5 w-5" />}
               label="Moments"
               variant={theme.headingStyle}
+              family={sectionFamily}
             />
             <div className="mt-10">
               <GalleryGrid images={gallery} layout={theme.galleryLayout} />
@@ -713,28 +1586,38 @@ export default function MarriageEventFront({
             icon={<Heart className="h-5 w-5" />}
             label="Join Us"
             variant={theme.headingStyle}
+              family={sectionFamily}
           />
           <p className="mx-auto mt-6 max-w-md text-lg font-light opacity-90">
             We would be honoured to celebrate this special day with you.
           </p>
 
-          {/* Guest RSVP — Google sign-in then the response form. The
-              ceremonies are passed in so guests can pick which functions
-              they'll attend (falls back to id-by-index when a function has
-              no id, matching the ceremonies list above). */}
-          <MarriageRsvp
-            eventId={eventData._id}
-            functions={functions
-              .filter((f) => (f?.name || "").trim())
-              .map((f, i) => ({
-                id: f.id || `fn-${i}`,
-                name: f.name,
-                date: f.date,
-                time: f.time,
-                venueName: f.venueName,
-                address: f.address,
-              }))}
-          />
+          {/* Guest RSVP — Google sign-in then the response form. In demo mode
+              the real RSVP is replaced by a register/contact invite. */}
+          {isDemo ? (
+            <button
+              type="button"
+              onClick={() => setShowDemoPrompt(true)}
+              className="mt-2 inline-flex items-center gap-2 rounded-full px-8 py-3 text-base font-medium text-white shadow-md transition hover:opacity-90"
+              style={{ background: "var(--w-primary)" }}
+            >
+              RSVP
+            </button>
+          ) : (
+            <MarriageRsvp
+              eventId={eventData._id}
+              functions={functions
+                .filter((f) => (f?.name || "").trim())
+                .map((f, i) => ({
+                  id: f.id || `fn-${i}`,
+                  name: f.name,
+                  date: f.date,
+                  time: f.time,
+                  venueName: f.venueName,
+                  address: f.address,
+                }))}
+            />
+          )}
 
           {/* Optional external RSVP/registry link the couple provided. */}
           {inviteLink && (
@@ -817,6 +1700,7 @@ export default function MarriageEventFront({
           </p>
         )}
       </footer>
+      </div>
     </div>
   );
 }
@@ -825,14 +1709,83 @@ export default function MarriageEventFront({
 // These read the same cascading `--w-*` CSS variables set on the page root,
 // so they stay in theme without needing the palette passed down.
 
+// Each design template belongs to a "section family" that carries its look
+// down into the below-hero sections — so the whole page feels designed, not
+// just the hero. The family decides the decoration drawn under every section
+// heading (and, via sectionCardStyle, the card treatment).
+export type MarriageSectionFamily = "framed" | "rule" | "botanical" | "modern";
+const TEMPLATE_FAMILY: Record<string, MarriageSectionFamily> = {
+  atelier: "rule",
+  editorial: "rule",
+  poster: "rule",
+  minimal: "rule",
+  cinema: "rule",
+  deco: "framed",
+  royal: "framed",
+  gilded: "framed",
+  folio: "framed",
+  classic: "botanical",
+  boho: "botanical",
+  ivory: "botanical",
+  vintage: "botanical",
+  split: "modern",
+  collage: "modern",
+  portrait: "modern",
+};
+export function sectionFamilyFor(template: string): MarriageSectionFamily {
+  return TEMPLATE_FAMILY[template] || "botanical";
+}
+
+// The decoration drawn under a section heading, matched to the design family.
+function SectionDecor({ family }: { family: MarriageSectionFamily }) {
+  if (family === "rule") {
+    return (
+      <span
+        className="mt-4 inline-flex items-center gap-2.5"
+        style={{ color: "var(--w-primary)" }}
+        aria-hidden
+      >
+        <span className="h-px w-10 sm:w-16" style={{ background: "currentColor", opacity: 0.4 }} />
+        <span className="h-1.5 w-1.5 rotate-45" style={{ background: "var(--w-accent)" }} />
+        <span className="h-px w-10 sm:w-16" style={{ background: "currentColor", opacity: 0.4 }} />
+      </span>
+    );
+  }
+  if (family === "framed") {
+    return (
+      <span
+        className="mt-4 flex flex-col items-center gap-1"
+        style={{ color: "var(--w-accent)" }}
+        aria-hidden
+      >
+        <span className="h-px w-24" style={{ background: "currentColor", opacity: 0.7 }} />
+        <span className="h-px w-14" style={{ background: "currentColor", opacity: 0.5 }} />
+      </span>
+    );
+  }
+  if (family === "modern") {
+    return (
+      <span
+        className="mt-4 block h-1 w-12 rounded-full"
+        style={{ background: "var(--w-primary)" }}
+        aria-hidden
+      />
+    );
+  }
+  // botanical (default) — the hand-drawn leaf flourish.
+  return <HeadingFlourish />;
+}
+
 function SectionHeading({
   icon,
   label,
   variant = "ornament",
+  family = "botanical",
 }: {
   icon: React.ReactNode;
   label: string;
   variant?: MarriageHeadingStyle;
+  family?: MarriageSectionFamily;
 }) {
   const heading = (
     <h2
@@ -843,22 +1796,19 @@ function SectionHeading({
     </h2>
   );
 
-  // Minimal: label flanked by delicate rules.
+  // Minimal: label flanked by delicate rules, with the family decor beneath.
   if (variant === "line") {
     return (
-      <div
-        className="flex items-center justify-center gap-4"
-        style={{ color: "var(--w-primary)" }}
-      >
-        <span
-          className="h-px w-12 sm:w-20"
-          style={{ background: "currentColor", opacity: 0.4 }}
-        />
-        {heading}
-        <span
-          className="h-px w-12 sm:w-20"
-          style={{ background: "currentColor", opacity: 0.4 }}
-        />
+      <div className="flex flex-col items-center">
+        <div
+          className="flex items-center justify-center gap-4"
+          style={{ color: "var(--w-primary)" }}
+        >
+          <span className="h-px w-12 sm:w-20" style={{ background: "currentColor", opacity: 0.4 }} />
+          {heading}
+          <span className="h-px w-12 sm:w-20" style={{ background: "currentColor", opacity: 0.4 }} />
+        </div>
+        <SectionDecor family={family} />
       </div>
     );
   }
@@ -877,16 +1827,16 @@ function SectionHeading({
           {icon}
         </span>
         {heading}
-        <HeadingFlourish />
+        <SectionDecor family={family} />
       </div>
     );
   }
 
-  // Ornament (default): a hand-drawn botanical flourish under the label.
+  // Ornament (default): family-matched decoration under the label.
   return (
     <div className="flex flex-col items-center">
       {heading}
-      <HeadingFlourish />
+      <SectionDecor family={family} />
     </div>
   );
 }
@@ -1012,6 +1962,194 @@ function StoryMomentText({ m }: { m: StoryMomentView }) {
         />
       )}
     </>
+  );
+}
+
+// A ceremony's running order, rendered as an elegant connected timeline:
+// time · a node on a continuous vertical spine · what & where. Purely themed
+// via the --w-* CSS variables, so it matches whichever design template /
+// palette is active. Location falls back to the ceremony venue.
+function FunctionTimeline({
+  items,
+  fallbackVenue,
+  layout = "spine",
+}: {
+  items: {
+    id?: string;
+    time?: string;
+    title?: string;
+    location?: string;
+  }[];
+  fallbackVenue?: string;
+  layout?: "spine" | "alternating" | "cards" | "compact";
+}) {
+  const place = (it: { location?: string }) => it.location || fallbackVenue;
+
+  // COMPACT — a tight single-line-per-step list.
+  if (layout === "compact") {
+    return (
+      <div className="mx-auto mt-6 max-w-lg space-y-2 text-left">
+        {items.map((it, i) => (
+          <div
+            key={it.id || i}
+            className="flex flex-wrap items-baseline gap-x-2 text-sm"
+          >
+            <span
+              className="w-[4.5rem] shrink-0 text-right font-semibold tracking-wide"
+              style={{ color: "var(--w-primary)" }}
+            >
+              {prettyTime(it.time) || ""}
+            </span>
+            <span className="opacity-40">·</span>
+            {it.title && <span className="font-medium">{it.title}</span>}
+            {place(it) && (
+              <span className="text-xs" style={{ color: "var(--w-muted)" }}>
+                · {place(it)}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // CARDS — a centered stack of small cards, no connecting line.
+  if (layout === "cards") {
+    return (
+      <div className="mx-auto mt-6 flex max-w-md flex-col gap-3">
+        {items.map((it, i) => (
+          <div
+            key={it.id || i}
+            className="px-4 py-3 text-center"
+            style={{
+              background: "var(--w-surface)",
+              border: "1px solid var(--w-primary-border)",
+              borderRadius: "var(--w-radius)",
+            }}
+          >
+            <span
+              className="text-sm font-semibold tracking-wide"
+              style={{ color: "var(--w-primary)" }}
+            >
+              {prettyTime(it.time) || ""}
+            </span>
+            {it.title && (
+              <p className="mt-0.5 text-base font-medium leading-snug">
+                {it.title}
+              </p>
+            )}
+            {place(it) && (
+              <p className="text-xs" style={{ color: "var(--w-muted)" }}>
+                {place(it)}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // ALTERNATING — cards alternate left/right of a centered line.
+  if (layout === "alternating") {
+    return (
+      <div className="relative mx-auto mt-8 max-w-2xl">
+        <div
+          className="absolute bottom-0 top-0 left-4 w-px -translate-x-1/2 sm:left-1/2"
+          style={{ background: "var(--w-primary)", opacity: 0.3 }}
+        />
+        <div className="space-y-6">
+          {items.map((it, i) => {
+            const even = i % 2 === 0;
+            return (
+              <div key={it.id || i} className="relative">
+                <span
+                  className="absolute top-1.5 left-4 z-10 h-3 w-3 -translate-x-1/2 rounded-full sm:left-1/2"
+                  style={{
+                    background: "var(--w-primary)",
+                    boxShadow: "0 0 0 4px var(--w-primary-soft)",
+                  }}
+                />
+                <div
+                  className={`pl-10 sm:w-1/2 sm:pl-0 ${
+                    even
+                      ? "sm:pr-10 sm:text-right"
+                      : "sm:ml-[50%] sm:pl-10 sm:text-left"
+                  }`}
+                >
+                  <span
+                    className="text-sm font-semibold tracking-wide"
+                    style={{ color: "var(--w-primary)" }}
+                  >
+                    {prettyTime(it.time) || ""}
+                  </span>
+                  {it.title && (
+                    <p className="text-base font-medium leading-snug">
+                      {it.title}
+                    </p>
+                  )}
+                  {place(it) && (
+                    <p className="text-xs" style={{ color: "var(--w-muted)" }}>
+                      {place(it)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // SPINE (default) — connected vertical timeline.
+  return (
+    <div className="mx-auto mt-7 max-w-lg text-left">
+      {items.map((it, i) => {
+        const last = i === items.length - 1;
+        return (
+          <div key={it.id || i} className="relative flex gap-4">
+            <div className="w-[4.5rem] shrink-0 pt-0.5 text-right">
+              <span
+                className="text-sm font-semibold tracking-wide"
+                style={{ color: "var(--w-primary)" }}
+              >
+                {prettyTime(it.time) || ""}
+              </span>
+            </div>
+            <div className="relative flex w-3 flex-col items-center">
+              <span
+                className="mt-1.5 h-3 w-3 shrink-0 rounded-full"
+                style={{
+                  background: "var(--w-primary)",
+                  boxShadow: "0 0 0 4px var(--w-primary-soft)",
+                }}
+              />
+              {!last && (
+                <span
+                  className="w-px flex-1"
+                  style={{ background: "var(--w-primary)", opacity: 0.35 }}
+                />
+              )}
+            </div>
+            <div className={`flex-1 ${last ? "pb-0" : "pb-7"}`}>
+              {it.title && (
+                <p className="text-base font-medium leading-snug">
+                  {it.title}
+                </p>
+              )}
+              {place(it) && (
+                <p
+                  className="mt-0.5 text-xs"
+                  style={{ color: "var(--w-muted)" }}
+                >
+                  {place(it)}
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1327,7 +2465,18 @@ if (
 ) {
   const s = document.createElement("style");
   s.id = "marriage-eventfront-anim";
-  s.textContent =
-    "@keyframes wedReveal{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}[data-wed-reveal]{animation:wedReveal .9s cubic-bezier(.2,.7,.2,1) both}";
+  s.textContent = [
+    // Section fade-up on load / scroll.
+    "@keyframes wedReveal{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}",
+    "[data-wed-reveal]{animation:wedReveal .9s cubic-bezier(.2,.7,.2,1) both}",
+    // Ken Burns — a slow, breathing zoom on the hero photo.
+    "@keyframes wedKen{from{transform:scale(1)}to{transform:scale(1.12)}}",
+    "[data-wed-anim] .wed-kb{animation:wedKen 22s ease-in-out infinite alternate}",
+    // Falling petals — drift down while swaying + rotating.
+    "@keyframes wedPetal{0%{transform:translateY(-10vh) translateX(0) rotate(0deg);opacity:0}12%{opacity:var(--po,.8)}86%{opacity:var(--po,.8)}100%{transform:translateY(112vh) translateX(var(--pd,40px)) rotate(420deg);opacity:0}}",
+    ".wed-petal{position:absolute;top:0;will-change:transform,opacity;animation:wedPetal var(--pdur,12s) linear var(--pdel,0s) infinite}",
+    // Respect users who prefer no motion.
+    "@media (prefers-reduced-motion: reduce){.wed-petal{display:none}[data-wed-anim] .wed-kb{animation:none}[data-wed-reveal]{animation:none}}",
+  ].join("");
   document.head.appendChild(s);
 }

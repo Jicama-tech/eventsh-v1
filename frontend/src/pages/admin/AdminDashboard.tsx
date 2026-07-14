@@ -43,6 +43,7 @@ import {
   Settings as SettingsIcon,
   Receipt,
   MessageSquare,
+  Sparkles,
 } from "lucide-react";
 import { useFetchWithLoading } from "@/hooks/useFetchWithLoading";
 import { useToast } from "@/hooks/use-toast";
@@ -78,6 +79,11 @@ const PendingSubscriptionsPage = lazy(() =>
 );
 const SettingsPage = lazy(() =>
   import("./SettingsPage").then((m) => ({ default: m.SettingsPage })),
+);
+const ShowcaseEventsPage = lazy(() =>
+  import("./ShowcaseEventsPage").then((m) => ({
+    default: m.ShowcaseEventsPage,
+  })),
 );
 
 interface Stats {
@@ -350,6 +356,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     { id: "agents", label: "Agents", icon: Briefcase },
     { id: "users", label: "Users", icon: Users },
     { id: "pricing", label: "Plans & Pricing", icon: Package },
+    { id: "showcase", label: "Showcase Events", icon: Sparkles },
     {
       id: "pending-subscriptions",
       label: "Pending Payments",
@@ -846,6 +853,12 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
               <TabsContent value="pricing" className="mt-0">
                 <Suspense fallback={<TabLoader />}>
                   <PricingPage />
+                </Suspense>
+              </TabsContent>
+
+              <TabsContent value="showcase" className="mt-0">
+                <Suspense fallback={<TabLoader />}>
+                  <ShowcaseEventsPage />
                 </Suspense>
               </TabsContent>
 

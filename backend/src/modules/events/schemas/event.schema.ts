@@ -224,6 +224,10 @@ class MarriageFunction {
   @Prop() address?: string;
   @Prop() dressCode?: string;
   @Prop() notes?: string;
+  // Running order WITHIN this ceremony: what's included, when and where. Each
+  // item is { id, time, title, location }. `location` falls back to venueName.
+  @Prop({ type: [Object], default: undefined })
+  timeline?: { id: string; time?: string; title?: string; location?: string }[];
   // Lodging info specific to THIS ceremony's location — for weddings where
   // functions are on different dates/cities (e.g. a Roka elsewhere). Falls
   // back to the event-level marriage.accommodations when empty.
@@ -287,6 +291,33 @@ export class Event {
   // field existed stay valid.
   @Prop({ enum: ["commercial", "personal"] })
   eventType?: string;
+
+  // ── Landing-page showcase / demo ──────────────────────────────────────
+  // Admin-created demo events used to show off the product on the public
+  // landing page. `isShowcase` surfaces the event in the landing "See it in
+  // action" grid; `isDemo` puts its public eventfront into demo mode (every
+  // buy/RSVP/book action opens a "Register / Contact Us" prompt instead of
+  // performing the real action). Both default false so real events are
+  // unaffected.
+  @Prop({ default: false })
+  isShowcase?: boolean;
+
+  @Prop({ default: false })
+  isDemo?: boolean;
+
+  @Prop({ enum: ["professional", "personal"] })
+  showcaseKind?: string;
+
+  // What the landing entry points expose for this demo: just the public event
+  // page, the (read-only) organizer dashboard, or both.
+  @Prop({ enum: ["eventfront", "dashboard", "both"], default: "eventfront" })
+  showcaseMode?: string;
+
+  @Prop({ default: 0 })
+  showcaseOrder?: number;
+
+  @Prop()
+  showcaseBlurb?: string;
 
   // Ceremonies for a Personal/Marriage event. Generic top-level array so other
   // multi-part personal events can reuse it later. Empty for commercial events.

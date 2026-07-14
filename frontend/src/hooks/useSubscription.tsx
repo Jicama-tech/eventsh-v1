@@ -93,14 +93,17 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       }
       const decoded: any = jwtDecode(token);
       const roles: string[] = Array.isArray(decoded?.roles) ? decoded.roles : [];
-      // Individuals (Google-signed-in, no Organizer record yet) get a
-      // permissive synthetic subscription so ModuleGate doesn't lock the
-      // create-event tabs behind an Upgrade overlay during onboarding.
+      // Individuals (Google-signed-in, no Organizer record yet) AND super
+      // admins get a permissive synthetic subscription so ModuleGate never
+      // locks features behind an Upgrade overlay. For individuals this covers
+      // onboarding (real plan gating begins once they publish); for admins it
+      // gives full rights everywhere (e.g. building demo/showcase events).
       // Empty `modules` triggers the existing permissive fallback in
-      // isModuleEnabled / isModuleSectionEnabled — everything reads as
-      // enabled. Real plan-based gating kicks in once they publish their
-      // first event (lazy-creates the Organizer row + Individual plan).
-      if (roles.includes("individual") && !roles.includes("organizer")) {
+      // isModuleEnabled / isModuleSectionEnabled — everything reads as enabled.
+      if (
+        roles.includes("admin") ||
+        (roles.includes("individual") && !roles.includes("organizer"))
+      ) {
         setSubscription({
           subscribed: true,
           planId: null,

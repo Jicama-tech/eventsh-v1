@@ -378,6 +378,10 @@ export class EventsController {
           country: req.user?.country,
         });
         body.organizerId = String(org._id);
+      } else if (roles.includes("admin") && body.organizerId) {
+        // An admin creating a demo/showcase event explicitly targets an
+        // organizer (the demo organization) — keep the provided organizerId
+        // rather than attaching the event to the admin's own token subject.
       } else {
         // Extract organizer ID from JWT token
         body.organizerId = req.user.userId || req.user.sub || body.organizerId;
@@ -397,6 +401,11 @@ export class EventsController {
       // invalid enum value. Drop it so the field just stays unset rather than
       // failing the whole save.
       if (!body.eventType) delete body.eventType;
+      // Showcase/demo flags arrive as FormData strings — coerce to booleans.
+      if (typeof body.isShowcase === "string")
+        body.isShowcase = body.isShowcase === "true";
+      if (typeof body.isDemo === "string")
+        body.isDemo = body.isDemo === "true";
       if (typeof body.features === "string")
         body.features = JSON.parse(body.features);
       if (typeof body.socialMedia === "string")
@@ -578,6 +587,55 @@ export class EventsController {
     } catch (error) {
       console.error("Error in getAllEvents:", error);
       throw error;
+    }
+  }
+
+  // Public: the admin-curated demo events shown on the landing page's
+  // "See it in action" grid. Declared before @Get(":id") so "showcase" isn't
+  // swallowed as an event id.
+  @Get("showcase")
+  async getShowcaseEvents() {
+    try {
+      const data = await this.eventsService.getShowcaseEvents();
+      return { success: true, data };
+    } catch (error) {
+      console.error("Error in getShowcaseEvents:", error);
+      return { success: false, data: [] };
+    }
+  }
+
+  // Public: mint a short-lived READ-ONLY organizer session for the demo org so
+  // prospects can explore the dashboard. The token carries `demo: true`; the
+  // frontend puts the dashboard into read-only mode (writes → register/contact)
+  // and the backend rejects any mutation from a demo token (DemoReadonlyGuard).
+  @Post("demo-session")
+  async demoSession(@Body("eventId") eventId?: string) {
+    try {
+      const resolved = await this.eventsService.resolveDemoOrg(eventId);
+      if (!resolved) {
+        return { success: false, message: "No demo organization available." };
+      }
+      const jwt = require("jsonwebtoken");
+      const token = jwt.sign(
+        {
+          sub: resolved.organizerId,
+          roles: ["organizer"],
+          name: "Demo Organization",
+          organizationName: "Demo Organization",
+          demo: true,
+        },
+        process.env.JWT_ACCESS_SECRET,
+        { expiresIn: "2h" },
+      );
+      return {
+        success: true,
+        token,
+        focusEventId: resolved.focusEventId,
+        routeTo: "/organizer-dashboard",
+      };
+    } catch (error) {
+      console.error("Error in demoSession:", error);
+      return { success: false, message: "Could not start demo session." };
     }
   }
 
@@ -805,6 +863,11 @@ export class EventsController {
       // update — legacy events have none stored and the form sends "". Dropping
       // it leaves the field untouched instead of failing enum validation.
       if (!body.eventType) delete body.eventType;
+      // Showcase/demo flags arrive as FormData strings — coerce to booleans.
+      if (typeof body.isShowcase === "string")
+        body.isShowcase = body.isShowcase === "true";
+      if (typeof body.isDemo === "string")
+        body.isDemo = body.isDemo === "true";
       if (typeof body.features === "string")
         body.features = JSON.parse(body.features);
       if (typeof body.socialMedia === "string")
@@ -1016,6 +1079,19 @@ export class EventsController {
   }
 
   // Toggle the public eventfront link on/off (My Events "Publish" switch).
+  // Admin: set/clear the landing-page showcase + demo flags and metadata.
+  @Patch(":id/showcase")
+  @UseGuards(AuthGuard("jwt"))
+  async setShowcase(@Param("id") id: string, @Body() body: any) {
+    try {
+      const event = await this.eventsService.setShowcase(id, body);
+      return { success: true, data: event };
+    } catch (error) {
+      console.error("Error in setShowcase:", error);
+      throw error;
+    }
+  }
+
   @Patch(":id/publish")
   @UseGuards(AuthGuard("jwt"))
   async setPublished(

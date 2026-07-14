@@ -114,6 +114,8 @@ import AnnouncementBar from "@/components/ui/AnnouncementBar";
 import { Checkbox } from "@radix-ui/react-checkbox";
 import { OrganizerStore } from "./organizerStoreFront";
 import MarriageEventFront from "./MarriageEventFront";
+import DemoPrompt from "./DemoPrompt";
+import { startDemoDashboard } from "@/lib/demoDashboard";
 import StallPaymentPanel from "./StallPaymentPanel";
 import PaymentFeedbackDialog from "./PaymentFeedbackDialog";
 import { EventChatbot } from "./EventChatbot";
@@ -668,6 +670,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // Controls the new Google-verified Member dialog mounted under the
   // Rent-a-Stall card. Replaces the old storefront-only entry point.
   const [showMemberDialog, setShowMemberDialog] = useState(false);
+  // Demo mode: this is an admin-curated showcase event. Any real action
+  // (buy ticket, book stall, become member) instead invites the visitor to
+  // register / contact us.
+  const [showDemoPrompt, setShowDemoPrompt] = useState(false);
   // Membership status for the logged-in exhibitor, scoped to this
   // event's organizer. Populated after OTP verify when shopkeeper email
   // is known. When set + the space template has a memberPrice, the
@@ -1524,6 +1530,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
   // Handle Rent a Stall Click - Show WhatsApp Dialog
   const handleRentStallClick = () => {
+    if ((eventData as any)?.isDemo) {
+      setShowDemoPrompt(true);
+      return;
+    }
     setShowWhatsAppDialog(true);
     setWhatsappNumber("");
     setWhatsappOtp("");
@@ -4010,6 +4020,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
   const handleGetTickets = async (typeIndexOverride?: number) => {
     if (!eventData || !eventData.organizer) return;
+    if ((eventData as any)?.isDemo) {
+      setShowDemoPrompt(true);
+      return;
+    }
     if (isEventOver(eventData)) {
       toast({
         title: "This event has ended",
@@ -4925,6 +4939,31 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     // (the Ad bar) actually works. Using `overflow-x-hidden`
     // here is what made the bar stop sticking on scroll.
     <div className="min-h-screen bg-[#f5f5f5] overflow-x-clip">
+      {/* Demo-mode: showcase event. Actions invite register/contact. */}
+      <DemoPrompt
+        open={showDemoPrompt}
+        onClose={() => setShowDemoPrompt(false)}
+      />
+      {(eventData as any)?.isDemo && (
+        <div className="sticky top-0 z-[80] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-indigo-600 px-4 py-1.5 text-center text-xs font-semibold text-white">
+          Live demo — this is an example event page.
+          {((eventData as any)?.showcaseMode === "dashboard" ||
+            (eventData as any)?.showcaseMode === "both") && (
+            <button
+              onClick={() => startDemoDashboard((eventData as any)?._id)}
+              className="rounded-full bg-white/20 px-2.5 py-0.5 hover:bg-white/30"
+            >
+              See the organizer dashboard →
+            </button>
+          )}
+          <button
+            onClick={() => setShowDemoPrompt(true)}
+            className="underline underline-offset-2 hover:opacity-90"
+          >
+            Create your own
+          </button>
+        </div>
+      )}
       {/* Past-event notice — once the event is over, all purchases and
           bookings (tickets, stalls, speakers, round tables) are closed.
           The submit handlers and the backend enforce this too; this bar
@@ -5886,7 +5925,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   <div className="mt-3 text-center">
                     <button
                       type="button"
-                      onClick={() => setShowMemberDialog(true)}
+                      onClick={() =>
+                        (eventData as any)?.isDemo
+                          ? setShowDemoPrompt(true)
+                          : setShowMemberDialog(true)
+                      }
                       className="text-xs font-medium hover:underline inline-flex items-center gap-1"
                       style={{
                         color: design?.primaryColor || "#f97316",

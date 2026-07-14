@@ -240,6 +240,66 @@ export class EventsService {
     return { token, eventId, name, email: volunteer.email };
   }
 
+  // Resolve the demo organization for a "Try the dashboard" session. Uses the
+  // given demo event's organizer, or falls back to any showcase event's org.
+  // Only demo/showcase events qualify, so this can't mint a session for a real
+  // organization.
+  async resolveDemoOrg(
+    eventId?: string,
+  ): Promise<{ organizerId: string; focusEventId: string | null } | null> {
+    let ev: any = null;
+    if (eventId) {
+      ev = await this.eventModel
+        .findOne({ _id: eventId, isDemo: true })
+        .select("organizer")
+        .lean()
+        .catch(() => null);
+    }
+    if (!ev) {
+      ev = await this.eventModel
+        .findOne({ isShowcase: true })
+        .select("organizer")
+        .sort({ createdAt: -1 })
+        .lean();
+    }
+    if (!ev?.organizer) return null;
+    return {
+      organizerId: String(ev.organizer),
+      focusEventId: eventId || null,
+    };
+  }
+
+  // Admin: update the showcase / demo flags + metadata on an event.
+  async setShowcase(id: string, body: any): Promise<Event> {
+    const $set: any = {};
+    if (body.isShowcase !== undefined) $set.isShowcase = body.isShowcase === true;
+    if (body.isDemo !== undefined) $set.isDemo = body.isDemo === true;
+    if (body.showcaseKind !== undefined) $set.showcaseKind = body.showcaseKind;
+    if (body.showcaseMode !== undefined) $set.showcaseMode = body.showcaseMode;
+    if (body.showcaseOrder !== undefined)
+      $set.showcaseOrder = Number(body.showcaseOrder) || 0;
+    if (body.showcaseBlurb !== undefined)
+      $set.showcaseBlurb = body.showcaseBlurb;
+    return this.eventModel
+      .findByIdAndUpdate(id, { $set }, { new: true })
+      .exec();
+  }
+
+  // Admin-curated demo events for the public landing "See it in action" grid.
+  // Returns only the light fields the cards need, newest showcaseOrder first
+  // within each kind (professional / personal).
+  async getShowcaseEvents(): Promise<any[]> {
+    const events = await this.eventModel
+      .find({ isShowcase: true })
+      .select(
+        "title description showcaseKind showcaseMode showcaseBlurb showcaseOrder eventType category image isDemo organizationName organizer",
+      )
+      .sort({ showcaseKind: 1, showcaseOrder: 1, createdAt: -1 })
+      .lean()
+      .exec();
+    return events || [];
+  }
+
   async create(createEventDto: CreateEventDto): Promise<Event> {
     try {
       const startDate = new Date(createEventDto.startDate);
@@ -264,6 +324,13 @@ export class EventsService {
         title: createEventDto.title,
         description: createEventDto.description,
         eventType: createEventDto.eventType,
+        // Landing-page showcase / demo flags (admin-created demo events).
+        isShowcase: createEventDto.isShowcase === true,
+        isDemo: createEventDto.isDemo === true,
+        showcaseKind: createEventDto.showcaseKind,
+        showcaseMode: createEventDto.showcaseMode || "eventfront",
+        showcaseOrder: Number(createEventDto.showcaseOrder) || 0,
+        showcaseBlurb: createEventDto.showcaseBlurb,
         category: createEventDto.category,
         startDate,
         time: createEventDto.time,

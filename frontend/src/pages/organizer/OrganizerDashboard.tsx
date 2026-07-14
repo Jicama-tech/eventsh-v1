@@ -300,6 +300,18 @@ export function OrganizerDashboard({
   })();
   const isIndividual =
     userRoles.includes("individual") && !userRoles.includes("organizer");
+  // Read-only demo session (prospect exploring the demo org from the landing).
+  // Writes are blocked in the UI (and by the backend DemoReadonlyGuard).
+  const demoMode = (() => {
+    try {
+      const token = sessionStorage.getItem("token");
+      if (!token) return false;
+      const decoded: any = jwtDecode(token);
+      return decoded?.demo === true;
+    } catch {
+      return false;
+    }
+  })();
   const individualName: string = (() => {
     try {
       const token = sessionStorage.getItem("token");
@@ -461,6 +473,8 @@ export function OrganizerDashboard({
   };
 
   const createDefaultSettings = async (organizerId: string, token: string) => {
+    // Never write in a read-only demo session (the backend would 403 anyway).
+    if (demoMode) return;
     const createData = {
       organizerId,
       ...defaultSettings,
@@ -995,6 +1009,29 @@ export function OrganizerDashboard({
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
+      {/* Read-only demo banner — a prospect exploring the demo organization.
+          Browsing works; any change is blocked (UI + backend) and points here. */}
+      {demoMode && (
+        <div className="flex flex-shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-indigo-600 px-4 py-2 text-center text-sm font-medium text-white">
+          <span>
+            👀 You're exploring a read-only demo — changes are disabled.
+          </span>
+          <span className="flex items-center gap-2">
+            <button
+              onClick={() => (window.location.href = "/register")}
+              className="rounded-full bg-white px-3 py-0.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
+            >
+              Register free
+            </button>
+            <button
+              onClick={() => (window.location.href = "/contact")}
+              className="rounded-full border border-white/70 px-3 py-0.5 text-xs font-semibold hover:bg-white/10"
+            >
+              Contact us
+            </button>
+          </span>
+        </div>
+      )}
       {/* Header */}
       <header className="border-b bg-card sticky top-0 z-50 flex-shrink-0">
         <div className="flex h-14 sm:h-16 items-center justify-between px-4 sm:px-6">
