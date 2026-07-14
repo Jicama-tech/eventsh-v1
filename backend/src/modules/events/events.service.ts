@@ -326,10 +326,21 @@ export class EventsService {
 
   async create(createEventDto: CreateEventDto): Promise<Event> {
     try {
-      const startDate = new Date(createEventDto.startDate);
-      const endDate = createEventDto.endDate
-        ? new Date(createEventDto.endDate)
-        : new Date(createEventDto.startDate);
+      // Guard against unparseable dates. A blank or malformed startDate/endDate
+      // would otherwise become an "Invalid Date" and fail the Mongoose save
+      // with a cast error (a 400 with no obvious cause). Marriage events derive
+      // their dates from the ceremony list, which can be empty — fall back to
+      // "now" so the event still saves.
+      const parseDate = (v: any, fallback: Date): Date => {
+        if (v === undefined || v === null || v === "") return fallback;
+        const d = new Date(v);
+        return isNaN(d.getTime()) ? fallback : d;
+      };
+      const startDate = parseDate(createEventDto.startDate, new Date());
+      const endDate = parseDate(
+        createEventDto.endDate ?? createEventDto.startDate,
+        startDate,
+      );
 
       // Initial ticket capacity = sum of visitor-type caps when present,
       // otherwise the flat totalTickets. Stored in originalTotalTickets so the
@@ -470,7 +481,25 @@ export class EventsService {
 
       return savedEvent;
     } catch (error) {
-      throw { statusCode: 400, message: error.message || "Event creation failed", validationErrors: error.errors };
+      // Surface the real reason. Mongoose validation/cast errors carry the
+      // offending path(s) in `error.errors` — flatten them into the message so
+      // the organizer sees exactly which field failed (e.g. "organizer is
+      // required"), and log the full error so it's visible in server logs.
+      const fieldMsgs =
+        error?.errors && typeof error.errors === "object"
+          ? Object.values(error.errors)
+              .map((e: any) => e?.message)
+              .filter(Boolean)
+              .join("; ")
+          : "";
+      const message =
+        fieldMsgs || error?.message || "Event creation failed";
+      console.error("[events.create] failed:", message, error?.stack || error);
+      throw new BadRequestException({
+        statusCode: 400,
+        message,
+        validationErrors: error?.errors,
+      });
     }
   }
 
@@ -550,25 +579,30 @@ export class EventsService {
 
       // Handle date conversions — guard against invalid date strings so we
       // don't push an "Invalid Date" into a Date field (which throws a cast
-      // error during save and surfaces as an opaque 500).
+      // error during save). A blank/malformed date is dropped rather than
+      // failing the whole edit, so saving a wedding whose ceremonies have no
+      // date (or an odd format) never 400s — it just leaves the stored date
+      // untouched. Mirrors the same defensiveness in create().
       if (updateEventDto.startDate) {
         const d = new Date(updateEventDto.startDate);
         if (isNaN(d.getTime())) {
-          throw new BadRequestException(
-            `Invalid start date: "${updateEventDto.startDate}"`,
-          );
+          delete updateEventDto.startDate;
+        } else {
+          updateEventDto.startDate = d as any;
         }
-        updateEventDto.startDate = d as any;
       }
       if (updateEventDto.endDate) {
         const d = new Date(updateEventDto.endDate);
         if (isNaN(d.getTime())) {
-          throw new BadRequestException(
-            `Invalid end date: "${updateEventDto.endDate}"`,
-          );
+          delete updateEventDto.endDate;
+        } else {
+          updateEventDto.endDate = d as any;
         }
-        updateEventDto.endDate = d as any;
-      } else if (updateEventDto.startDate) {
+      }
+      if (
+        !updateEventDto.endDate &&
+        (updateEventDto.startDate as any) instanceof Date
+      ) {
         updateEventDto.endDate = new Date(updateEventDto.startDate) as any;
       }
 
