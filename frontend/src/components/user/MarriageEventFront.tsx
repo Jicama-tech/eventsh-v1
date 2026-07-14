@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import MarriageRsvp from "./MarriageRsvp";
 import DemoPrompt from "./DemoPrompt";
+import { startDemoDashboard } from "@/lib/demoDashboard";
 import MarriageMonogram from "./MarriageMonogram";
 import MarriageMotif from "./MarriageMotif";
 import MarriageFloral from "./MarriageFloral";
@@ -1200,8 +1201,17 @@ export default function MarriageEventFront({
       />
       <div className="relative z-10">
         {isDemo && (
-          <div className="sticky top-0 z-[80] flex items-center justify-center gap-2 bg-indigo-600 px-4 py-1.5 text-center text-xs font-semibold text-white">
+          <div className="sticky top-0 z-[80] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-indigo-600 px-4 py-1.5 text-center text-xs font-semibold text-white">
             Live demo — this is an example wedding page.
+            {((eventData as any)?.showcaseMode === "dashboard" ||
+              (eventData as any)?.showcaseMode === "both") && (
+              <button
+                onClick={() => startDemoDashboard((eventData as any)?._id)}
+                className="rounded-full bg-white/20 px-2.5 py-0.5 hover:bg-white/30"
+              >
+                See the dashboard →
+              </button>
+            )}
             <button
               onClick={() => setShowDemoPrompt(true)}
               className="underline underline-offset-2 hover:opacity-90"

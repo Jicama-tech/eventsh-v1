@@ -1232,11 +1232,12 @@ export function OrganizerDashboard({
         {/* Main Content - Scrollable */}
         <main
           className="flex-1 overflow-hidden flex flex-col"
-          // Demo: the 4 allowed tabs render their content so prospects can look
-          // around, but clicking any control inside (Create Event, View, filters,
-          // chatbot input…) opens the register/contact prompt instead of acting.
+          // Demo: in the organizer (professional) view the 4 allowed tabs render
+          // their content, but any control click opens the register/contact
+          // prompt. The Individual (wedding) view is left interactive so the
+          // chatbot can surface the demo wedding — writes are blocked server-side.
           onClickCapture={
-            demoMode
+            demoMode && !isIndividual
               ? (e) => {
                   const el = (e.target as HTMLElement)?.closest?.(
                     'button, a, input, select, textarea, [role="button"], [contenteditable]',

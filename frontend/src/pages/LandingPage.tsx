@@ -553,7 +553,9 @@ const LandingPage = () => {
                     onClick={() => startDemoDashboard(ev._id)}
                     className="mt-3 w-full rounded-lg border border-sky-500/40 bg-sky-500/10 py-2.5 text-sm font-semibold text-sky-300 transition hover:bg-sky-500/20"
                   >
-                    Try the organizer dashboard →
+                    {col.kind === "personal"
+                      ? "Try the couple's dashboard →"
+                      : "Try the organizer dashboard →"}
                   </button>
                 )}
                 <div className="mt-7 space-y-6">

@@ -244,28 +244,52 @@ export class EventsService {
   // given demo event's organizer, or falls back to any showcase event's org.
   // Only demo/showcase events qualify, so this can't mint a session for a real
   // organization.
-  async resolveDemoOrg(
-    eventId?: string,
-  ): Promise<{ organizerId: string; focusEventId: string | null } | null> {
+  async resolveDemoOrg(eventId?: string): Promise<{
+    organizerId: string;
+    focusEventId: string | null;
+    kind: "personal" | "professional";
+    email: string | null;
+    orgName: string | null;
+  } | null> {
     let ev: any = null;
     if (eventId) {
       ev = await this.eventModel
         .findOne({ _id: eventId, isDemo: true })
-        .select("organizer")
+        .select("organizer showcaseKind eventType category")
         .lean()
         .catch(() => null);
     }
     if (!ev) {
       ev = await this.eventModel
         .findOne({ isShowcase: true })
-        .select("organizer")
+        .select("organizer showcaseKind eventType category")
         .sort({ createdAt: -1 })
         .lean();
     }
     if (!ev?.organizer) return null;
+    const isPersonal =
+      ev.showcaseKind === "personal" ||
+      ev.eventType === "personal" ||
+      ev.category === "Marriage Function";
+    // The individual chatbot resolves "my events" by the account's email, so
+    // include the backing organizer's email in the demo token.
+    let email: string | null = null;
+    let orgName: string | null = null;
+    try {
+      const org: any = await this.eventModel.db
+        .collection("organizers")
+        .findOne({ _id: new Types.ObjectId(String(ev.organizer)) });
+      email = org?.email || null;
+      orgName = org?.organizationName || null;
+    } catch {
+      // best-effort — falls back to no email (chatbot shows onboarding)
+    }
     return {
       organizerId: String(ev.organizer),
       focusEventId: eventId || null,
+      kind: isPersonal ? "personal" : "professional",
+      email,
+      orgName,
     };
   }
 
