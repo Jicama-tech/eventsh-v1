@@ -2746,22 +2746,68 @@ ${context}
       const storeUrl = slug ? `/${slug}` : undefined;
       const eventsWithStats = await Promise.all(
         events.map(async (ev: any) => {
-          const ticketStats = await this.ticketModel
-            .aggregate([
-              { $match: { eventId: ev._id } },
-              {
-                $group: {
-                  _id: null,
-                  count: { $sum: 1 },
-                  revenue: { $sum: { $ifNull: ["$amount", 0] } },
+          // Canonical per-event revenue = paid tickets + Paid/non-Cancelled
+          // stalls + Paid round-tables, so the card matches the dashboard.
+          // (The old query summed a non-existent `$amount` field on tickets, so
+          // this number was always 0.)
+          const [ticketStats, stallRevAgg, rtRevAgg] = await Promise.all([
+            this.ticketModel
+              .aggregate([
+                { $match: { eventId: ev._id, status: { $ne: "cancelled" } } },
+                {
+                  $group: {
+                    _id: null,
+                    count: { $sum: 1 },
+                    revenue: {
+                      $sum: {
+                        $cond: [
+                          "$paymentConfirmed",
+                          { $ifNull: ["$totalAmount", 0] },
+                          0,
+                        ],
+                      },
+                    },
+                  },
                 },
-              },
-            ])
-            .catch(() => []);
+              ])
+              .catch(() => []),
+            this.stallModel
+              .aggregate([
+                {
+                  $match: {
+                    eventId: ev._id,
+                    paymentStatus: "Paid",
+                    status: { $ne: "Cancelled" },
+                  },
+                },
+                {
+                  $group: {
+                    _id: null,
+                    revenue: { $sum: { $ifNull: ["$grandTotal", 0] } },
+                  },
+                },
+              ])
+              .catch(() => []),
+            this.roundTableBookingModel
+              .aggregate([
+                { $match: { eventId: ev._id, paymentStatus: "Paid" } },
+                {
+                  $group: {
+                    _id: null,
+                    revenue: { $sum: { $ifNull: ["$amount", 0] } },
+                  },
+                },
+              ])
+              .catch(() => []),
+          ]);
           const stats = (ticketStats[0] || {}) as {
             count?: number;
             revenue?: number;
           };
+          const canonicalRevenue =
+            (ticketStats[0]?.revenue || 0) +
+            (stallRevAgg[0]?.revenue || 0) +
+            (rtRevAgg[0]?.revenue || 0);
 
           // Marriage / Personal events have no tickets — their "participants"
           // are RSVP guests. Count attending RSVPs so the card shows a real
@@ -2806,7 +2852,7 @@ ${context}
             status: ev.status || (ev.published ? "published" : "draft"),
             ticketCount: participantCount,
             isRsvp,
-            revenue: stats.revenue || 0,
+            revenue: canonicalRevenue,
             currency: backingOrg.country
               ? COUNTRY_CURRENCY[backingOrg.country]?.symbol || "$"
               : "$",
@@ -5271,6 +5317,7 @@ ${context}
                   eventId: evObj._id,
                   organizerId: orgObjId,
                   paymentConfirmed: true,
+                  status: { $ne: "cancelled" },
                 },
               },
               {
@@ -5303,6 +5350,22 @@ ${context}
                   total: { $sum: 1 },
                   booked: { $sum: { $ifNull: ["$paidAmount", 0] } },
                   value: { $sum: { $ifNull: ["$grandTotal", 0] } },
+                  // Canonical stall revenue: grandTotal on Paid, non-Cancelled
+                  // stalls (matches /organizers/analytics and the dashboard).
+                  revenue: {
+                    $sum: {
+                      $cond: [
+                        {
+                          $and: [
+                            { $eq: ["$paymentStatus", "Paid"] },
+                            { $ne: ["$status", "Cancelled"] },
+                          ],
+                        },
+                        { $ifNull: ["$grandTotal", 0] },
+                        0,
+                      ],
+                    },
+                  },
                 },
               },
             ]),
@@ -5331,7 +5394,9 @@ ${context}
         const ticketsSold = tickAgg[0]?.count || 0;
         const ticketRevenue = tickAgg[0]?.revenue || 0;
         const attended = attendAgg[0]?.count || 0;
-        const stallRevenue = stallTotals[0]?.booked || 0;
+        // Use the canonical Paid/non-Cancelled stall revenue so the total
+        // reconciles with the rest of the dashboard.
+        const stallRevenue = stallTotals[0]?.revenue || 0;
         const rtRevenue = rtBookings[0]?.revenue || 0;
         // Capacity
         const capacity =

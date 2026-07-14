@@ -540,7 +540,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
       partial: requests.filter((r) => r.paymentStatus === "Partial").length,
       unpaid: requests.filter((r) => r.paymentStatus === "Unpaid").length,
       totalRevenue: requests
-        .filter((r) => r.paymentStatus === "Paid")
+        .filter((r) => r.paymentStatus === "Paid" && r.status !== "Cancelled")
         .reduce((sum, r) => sum + r.grandTotal, 0),
     };
     setStallStats(stats);

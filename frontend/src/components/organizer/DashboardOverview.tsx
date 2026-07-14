@@ -92,7 +92,7 @@ export default function DashboardOverview({
   const { country } = useCountry();
   const { formatPrice, getSymbol } = useCurrency(country);
 
-  const calculateEventMetrics = (event, tickets, stalls = []) => {
+  const calculateEventMetrics = (event, tickets, stalls = [], revenueByEvent = {}) => {
     const eventTickets = tickets.filter(
       (ticket) =>
         ticket.eventId._id === event._id && ticket.status === "confirmed",
@@ -135,11 +135,18 @@ export default function DashboardOverview({
     ).length;
 
     const stallsRevenue = eventStalls
-      .filter((stall) => stall.paymentStatus === "Paid")
+      .filter(
+        (stall) =>
+          stall.paymentStatus === "Paid" && stall.status !== "Cancelled",
+      )
       .reduce((sum, stall) => sum + (stall.grandTotal || 0), 0);
 
-    // Combined revenue from tickets and stalls
-    const totalRevenue = ticketsRevenue + stallsRevenue;
+    // Canonical per-event revenue (tickets + stalls + round-tables) comes from
+    // the analytics endpoint so it reconciles exactly with the Total Revenue
+    // card. Fall back to the local tickets+stalls sum if it isn't available.
+    const canonical = revenueByEvent?.[String(event._id)];
+    const totalRevenue =
+      typeof canonical === "number" ? canonical : ticketsRevenue + stallsRevenue;
 
     const totalCapacity =
       event.visitorTypes?.length > 0
@@ -200,7 +207,10 @@ export default function DashboardOverview({
     ).length;
 
     const stallsRevenue = stallsData
-      .filter((stall) => stall.paymentStatus === "Paid")
+      .filter(
+        (stall) =>
+          stall.paymentStatus === "Paid" && stall.status !== "Cancelled",
+      )
       .reduce((sum, stall) => sum + (stall.grandTotal || 0), 0);
 
     // Prefer the unified analytics endpoint total (tickets + round-tables +
@@ -302,6 +312,7 @@ export default function DashboardOverview({
       // 3b. Unified analytics totals — the same source the chatbot reads.
       // Includes ticket + round-table + stall revenue.
       let analyticsTotals = null;
+      let revenueByEvent = {};
       try {
         const analyticsResponse = await fetch(
           `${apiURL}/organizers/analytics/${organizerIdFromToken}`,
@@ -310,6 +321,7 @@ export default function DashboardOverview({
         if (analyticsResponse.ok) {
           const a = await analyticsResponse.json();
           analyticsTotals = a.totals || null;
+          revenueByEvent = a.revenueByEvent || {};
         }
       } catch {
         /* fall back to local calc */
@@ -317,7 +329,7 @@ export default function DashboardOverview({
 
       // 4. Process and Merge Data (with stalls)
       const processedEvents = allEvents.map((event) =>
-        calculateEventMetrics(event, ticketData, stallsData),
+        calculateEventMetrics(event, ticketData, stallsData, revenueByEvent),
       );
 
       // 4. Update State with Merged Data

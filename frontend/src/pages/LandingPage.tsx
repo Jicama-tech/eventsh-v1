@@ -586,8 +586,8 @@ const LandingPage = () => {
       </section>
 
       {/* See it in action — LIVE admin-curated demo events. Clicking a card
-          opens its real eventfront in demo mode. */}
-      {showcaseEvents.length > 0 && (
+          opens its real eventfront in demo mode. Hidden for now. */}
+      {false && showcaseEvents.length > 0 && (
         <section className="py-24 bg-[#0a0a0c] relative overflow-hidden">
           <div
             aria-hidden

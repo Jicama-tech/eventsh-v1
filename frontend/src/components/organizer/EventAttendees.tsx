@@ -80,6 +80,11 @@ import {
 import { Input } from "../ui/input";
 import { toast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrencyhook";
+import {
+  ticketsRevenue as calcTicketsRevenue,
+  stallsRevenue as calcStallsRevenue,
+  roundTablesRevenue as calcRoundTablesRevenue,
+} from "@/lib/revenue";
 import RoundTableBookings from "@/components/organizer/RoundTableBookings";
 import { useCountry } from "@/hooks/useCountry";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
@@ -427,11 +432,13 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
             const eventTicketsSold = tickets.reduce(
               (sum, ticket) =>
-                sum +
-                (ticket.ticketDetails?.reduce(
-                  (acc, t) => acc + t.quantity,
-                  0,
-                ) || 0),
+                ticket.status === "cancelled"
+                  ? sum
+                  : sum +
+                    (ticket.ticketDetails?.reduce(
+                      (acc, t) => acc + t.quantity,
+                      0,
+                    ) || 0),
               0,
             );
             totalTicketsSum += eventTicketsSold;
@@ -1850,7 +1857,13 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     </div>
   );
 
-  const totalTicketsSold = eventTickets.reduce((sum, ticket) => {
+  // Cancelled registrations stay visible in the list but must never count
+  // toward tickets-sold or revenue totals.
+  const activeEventTickets = eventTickets.filter(
+    (ticket) => ticket.status !== "cancelled",
+  );
+
+  const totalTicketsSold = activeEventTickets.reduce((sum, ticket) => {
     const ticketCount =
       ticket.ticketDetails?.reduce((acc, t) => acc + t.quantity, 0) || 0;
     return sum + ticketCount;
@@ -1860,32 +1873,18 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     (ticket) => ticket.attendance,
   ).length;
 
-  // Combined revenue across all participant types for the open event.
-  //   tickets   — sum of paid ticket totalAmount
-  //   stalls    — sum of paidAmount on stalls
-  //   speakers  — sum of fees collected from speakers (Paid only)
-  //   round     — sum of paid round-table booking amounts (eventRoundBookings
-  //               state — populated alongside other fetches in handleViewAttendance)
-  const ticketsRevenue = eventTickets.reduce(
-    (sum, ticket) => sum + (ticket.totalAmount || 0),
-    0,
-  );
-  const stallsRevenue = stalls.reduce(
-    (sum: number, s: any) => sum + (s.paidAmount || 0),
-    0,
-  );
-  const speakersRevenue = eventSpeakers.reduce(
-    (sum: number, sp: any) =>
-      sum + (sp.paymentStatus === "Paid" ? sp.fee || 0 : 0),
-    0,
-  );
-  const roundTablesRevenue = eventRoundBookings.reduce(
-    (sum: number, b: any) =>
-      sum + (b.paymentStatus === "Paid" ? b.amount || 0 : 0),
-    0,
-  );
-  const totalRevenue =
-    ticketsRevenue + stallsRevenue + speakersRevenue + roundTablesRevenue;
+  // Combined revenue across participant types for the open event, using the
+  // canonical revenue rules (see lib/revenue.ts) so this matches the Analytics
+  // tab, My Events and the Dashboard Overview exactly:
+  //   tickets — paid (paymentConfirmed) & not cancelled → totalAmount
+  //   stalls  — Paid & not Cancelled                    → grandTotal
+  //   round   — Paid                                    → amount
+  // Speaker fees are computed for display but intentionally EXCLUDED from the
+  // headline Total Revenue.
+  const ticketsRevenue = calcTicketsRevenue(activeEventTickets);
+  const stallsRevenue = calcStallsRevenue(stalls);
+  const roundTablesRevenue = calcRoundTablesRevenue(eventRoundBookings);
+  const totalRevenue = ticketsRevenue + stallsRevenue + roundTablesRevenue;
 
   useEffect(() => {
     fetchEventsData();
