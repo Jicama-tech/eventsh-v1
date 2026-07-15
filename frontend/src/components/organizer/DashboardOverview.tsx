@@ -2,7 +2,6 @@ import React, { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   CalendarDays,
   MapPin,
@@ -417,23 +416,20 @@ export default function DashboardOverview({
     const ticketsRevenue = event.ticketsRevenue || 0;
     const stallsRevenue = event.stallsRevenue || 0;
 
+    // Single-list phase tag: Live / Upcoming / Past.
     const badgeColor =
       type === "current"
         ? "bg-green-500"
         : type === "upcoming"
-          ? event.status === "Selling"
-            ? "bg-blue-500"
-            : event.status === "Early Bird"
-              ? "bg-orange-500"
-              : "bg-gray-500"
+          ? "bg-blue-500"
           : "bg-gray-500";
 
     const badgeText =
       type === "current"
         ? "LIVE"
         : type === "upcoming"
-          ? event.status || "PENDING"
-          : "COMPLETED";
+          ? "UPCOMING"
+          : "PAST";
 
     const mainDate = event.startDate || event.date;
 
@@ -1257,72 +1253,49 @@ export default function DashboardOverview({
 
       <hr />
 
-      {/* Events Tabs */}
-      <Tabs defaultValue="current" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 h-auto [&>button]:whitespace-nowrap [&>button]:px-1 [&>button]:text-xs sm:[&>button]:px-3 sm:[&>button]:text-sm">
-          <TabsTrigger value="current">
-            Current Events ({currentEvents.length})
-          </TabsTrigger>
-          <TabsTrigger value="upcoming">
-            Upcoming ({upcomingEvents.length})
-          </TabsTrigger>
-          <TabsTrigger value="past">
-            Past Events ({pastEvents.length})
-          </TabsTrigger>
-        </TabsList>
+      {/* Events — a single list. Each card carries a Live / Upcoming / Past
+          tag instead of splitting them across three tabs. Ordered Live first,
+          then Upcoming, then Past. */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Events</h3>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 font-medium text-green-700">
+              <span className="h-2 w-2 rounded-full bg-green-500" />
+              {currentEvents.length} Live
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">
+              <span className="h-2 w-2 rounded-full bg-blue-500" />
+              {upcomingEvents.length} Upcoming
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-600">
+              <span className="h-2 w-2 rounded-full bg-gray-400" />
+              {pastEvents.length} Past
+            </span>
+          </div>
+        </div>
 
-        {/* Current Events Content */}
-        <TabsContent value="current" className="space-y-4 pt-4">
-          {currentEvents.length > 0 ? (
-            currentEvents.map((event) => (
-              <EventCard key={event._id} event={event} type="current" />
-            ))
-          ) : (
-            <Card>
-              <CardContent className="text-center py-8">
-                <CalendarDays className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">
-                  No current events running.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* Upcoming Events Content */}
-        <TabsContent value="upcoming" className="space-y-4 pt-4">
-          {upcomingEvents.length > 0 ? (
-            upcomingEvents.map((event) => (
-              <EventCard key={event._id} event={event} type="upcoming" />
-            ))
-          ) : (
-            <Card>
-              <CardContent className="text-center py-8">
-                <CalendarDays className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">
-                  No upcoming events scheduled.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* Past Events Content */}
-        <TabsContent value="past" className="space-y-4 pt-4">
-          {pastEvents.length > 0 ? (
-            pastEvents.map((event) => (
-              <EventCard key={event._id} event={event} type="past" />
-            ))
-          ) : (
-            <Card>
-              <CardContent className="text-center py-8">
-                <CalendarDays className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">No past events found.</p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-      </Tabs>
+        {(() => {
+          const all = [
+            ...currentEvents.map((event) => ({ event, type: "current" })),
+            ...upcomingEvents.map((event) => ({ event, type: "upcoming" })),
+            ...pastEvents.map((event) => ({ event, type: "past" })),
+          ];
+          if (all.length === 0) {
+            return (
+              <Card>
+                <CardContent className="text-center py-8">
+                  <CalendarDays className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                  <p className="text-muted-foreground">No events yet.</p>
+                </CardContent>
+              </Card>
+            );
+          }
+          return all.map(({ event, type }) => (
+            <EventCard key={event._id} event={event} type={type} />
+          ));
+        })()}
+      </div>
 
       {showQRDialog && selectedQrCodeEvent && (
         <EventQRCode
