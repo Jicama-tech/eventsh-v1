@@ -3539,7 +3539,10 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                                 // Revoking a parent tab also revokes its nested
                                 // sub-permission(s).
                                 if (t.id === "eventAttendees" && !e.target.checked) {
-                                  next = next.filter((x) => x !== "deleteStalls");
+                                  next = next.filter(
+                                    (x) =>
+                                      x !== "deleteStalls" && x !== "editStalls",
+                                  );
                                 }
                                 if (t.id === "events" && !e.target.checked) {
                                   next = next.filter((x) => x !== "deleteEvents");
@@ -3579,6 +3582,25 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                           }
                         />
                         Allow deleting exhibitor stalls
+                      </label>
+                      <label className="flex items-center gap-2 text-sm border rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/30">
+                        <input
+                          type="checkbox"
+                          checked={(operatorForm.accessTabs ?? []).includes(
+                            "editStalls",
+                          )}
+                          onChange={(e) =>
+                            setOperatorForm((prev) => ({
+                              ...prev,
+                              accessTabs: e.target.checked
+                                ? [...prev.accessTabs, "editStalls"]
+                                : prev.accessTabs.filter(
+                                    (x) => x !== "editStalls",
+                                  ),
+                            }))
+                          }
+                        />
+                        Allow editing the stall request (spaces &amp; add-ons)
                       </label>
                     </div>
                   )}

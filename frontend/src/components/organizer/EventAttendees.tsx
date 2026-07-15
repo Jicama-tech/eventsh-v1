@@ -94,6 +94,7 @@ import { StallRequest } from "./shopKeeper";
 import { Separator } from "@radix-ui/react-separator";
 import { Textarea } from "../ui/textarea";
 import { ExhibitorDetailDialog } from "./ExhibitorDetailDialog";
+import { StallEditDialog } from "./StallEditDialog";
 // jsPDF and html2canvas are dynamically imported when needed
 
 export interface StatusHistoryEntry {
@@ -299,6 +300,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     todaysAttendees: 0,
   });
   const [loading, setLoading] = useState(true);
+  // Organizer "Edit stall" dialog — re-allocate spaces/add-ons + collect extra.
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editStall, setEditStall] = useState<any>(null);
   // Add this state to manage which tab is currently active
   const [activeTab, setActiveTab] = useState("user");
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
@@ -1609,6 +1613,22 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       const tabs: string[] = Array.isArray(d.accessTabs) ? d.accessTabs : [];
       if (tabs.length === 0) return true; // operator with full access
       return tabs.includes("deleteStalls");
+    } catch {
+      return false;
+    }
+  })();
+
+  // Same gate as delete, but for the "Edit stall request" action. Organizer
+  // always; operators only when granted the "editStalls" sub-permission.
+  const canEditStalls = (() => {
+    const token = sessionStorage.getItem("token");
+    if (!token) return false;
+    try {
+      const d: any = jwtDecode(token);
+      if (!d.operatorId) return true;
+      const tabs: string[] = Array.isArray(d.accessTabs) ? d.accessTabs : [];
+      if (tabs.length === 0) return true;
+      return tabs.includes("editStalls");
     } catch {
       return false;
     }
@@ -3151,6 +3171,22 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                     >
                                       <Eye className="h-4 w-4" />
                                     </Button>
+                                    {canEditStalls &&
+                                      (s.status === "Processing" ||
+                                        s.status === "Completed") && (
+                                        <Button
+                                          variant="outline"
+                                          size="icon"
+                                          className="h-7 w-7 text-blue-700 border-blue-300 hover:bg-blue-50"
+                                          onClick={() => {
+                                            setEditStall(s);
+                                            setShowEditDialog(true);
+                                          }}
+                                          title="Edit spaces & add-ons"
+                                        >
+                                          <Pencil className="h-4 w-4" />
+                                        </Button>
+                                      )}
                                     {canManageStallDeletion && canDeleteStall(s) && (
                                       <Button
                                         variant="outline"
@@ -3903,6 +3939,22 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           if (stallRequest?._id) await fetchStall(stallRequest._id);
         }}
       />
+
+      {/* Organizer edit — re-allocate spaces/add-ons + collect any extra. */}
+      {editStall && (
+        <StallEditDialog
+          open={showEditDialog}
+          onOpenChange={(o) => {
+            setShowEditDialog(o);
+            if (!o) setEditStall(null);
+          }}
+          stall={editStall}
+          changedBy={getActorLabel()}
+          onDone={async () => {
+            if (selectedEvent?._id) await fetchStallTickets(selectedEvent._id);
+          }}
+        />
+      )}
 
       {/* Confirm Dialog */}
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
