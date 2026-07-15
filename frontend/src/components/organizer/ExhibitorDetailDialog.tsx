@@ -18,6 +18,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { stallStage } from "@/lib/stallStatus";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@radix-ui/react-separator";
@@ -57,40 +58,6 @@ interface StatusHistoryEntry {
 }
 
 const apiURL = __API_URL__;
-
-const getStatusBadge = (status: string) => {
-  const variants: Record<string, { variant: any; icon: any; color: string }> = {
-    Pending: { variant: "secondary", icon: Clock, color: "text-yellow-600" },
-    Confirmed: {
-      variant: "default",
-      icon: CheckCircle2,
-      color: "text-green-600",
-    },
-    Cancelled: {
-      variant: "destructive",
-      icon: XCircle,
-      color: "text-red-600",
-    },
-    Processing: {
-      variant: "default",
-      icon: AlertCircle,
-      color: "text-blue-600",
-    },
-    Completed: {
-      variant: "default",
-      icon: CheckCircle2,
-      color: "text-green-700",
-    },
-  };
-  const config = variants[status] || variants.Pending;
-  const Icon = config.icon;
-  return (
-    <Badge variant={config.variant} className="flex items-center gap-1">
-      <Icon className="h-3 w-3" />
-      {status}
-    </Badge>
-  );
-};
 
 const getPaymentBadge = (paymentStatus: string) => {
   const variants: Record<string, { variant: any; color: string }> = {
@@ -305,7 +272,10 @@ export function ExhibitorDetailDialog({
                   <CardTitle className="text-sm">Request Status</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {getStatusBadge(stallRequest.status)}
+                  {(() => {
+                    const stage = stallStage(stallRequest);
+                    return <Badge className={stage.className}>{stage.label}</Badge>;
+                  })()}
                 </CardContent>
               </Card>
               <Card>

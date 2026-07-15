@@ -3217,12 +3217,13 @@ Thank you for choosing Eventsh! 🎊`;
         .populate([
           {
             path: "shopkeeperId",
-            // Operator-venue view + organizer billing both read these fields.
-            // Both shopName + businessName exist on the schema as separate
-            // properties; data lives in whichever the vendor filled in, so
-            // we ship both and let the frontend fall back.
+            // Operator-venue view + organizer billing + the exhibitor Excel
+            // export read these fields. Both shopName + businessName exist on
+            // the schema as separate properties; data lives in whichever the
+            // vendor filled in, so we ship both and let the frontend fall back.
+            // Keep this in sync with the fields the export/stall dialog show.
             select:
-              "name email phoneNumber whatsAppNumber shopName businessName businessType",
+              "name email businessEmail phoneNumber phone whatsAppNumber whatsappNumber countryCode country shopName businessName businessType businessCategory businessDescription instagramLink instagramHandle faceBookLink businessOwnerNationality residency noOfOperators refundPaymentDescription productDescription nameOfApplicant registrationNumber brandName hasDocVerification GSTNumber UENNumber",
           },
           {
             path: "eventId",

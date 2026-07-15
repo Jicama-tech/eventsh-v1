@@ -18,6 +18,7 @@ import {
   FileSpreadsheet,
   ChevronDown,
   Share,
+  Map,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -33,6 +34,13 @@ import { jwtDecode } from "jwt-decode";
 import { EventQRCode } from "./EventQRCode";
 import { EventAnalyticsDialog } from "./EventAnalyticsDialog";
 import { EventSpaceAnalyticsDialog } from "./EventSpaceAnalyticsDialog";
+import { OperatorVenueView } from "./OperatorVenueView";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";
 
@@ -88,6 +96,9 @@ export default function DashboardOverview({
   // Space-template analytics drill-down (Upcoming/Current events).
   const [showSpaceAnalytics, setShowSpaceAnalytics] = useState(false);
   const [spaceAnalyticsEvent, setSpaceAnalyticsEvent] = useState<any>(null);
+  // Live venue-layout view (which spaces are booked + add-ons purchased).
+  const [showVenueLayout, setShowVenueLayout] = useState(false);
+  const [venueLayoutEvent, setVenueLayoutEvent] = useState<any>(null);
   const { country } = useCountry();
   const { formatPrice, getSymbol } = useCurrency(country);
 
@@ -133,6 +144,20 @@ export default function DashboardOverview({
       (stall) => stall.status === "Pending",
     ).length;
 
+    // Total SELLABLE spaces placed in the venue — the reference/denominator for
+    // "Stalls Booked". venueTables can be a flat array or an object keyed by
+    // venueConfig; a space is sellable unless explicitly forSale:false.
+    const placedSpaces: any[] = Array.isArray(event.venueTables)
+      ? event.venueTables
+      : event.venueTables && typeof event.venueTables === "object"
+        ? Object.values(event.venueTables).flatMap((v: any) =>
+            Array.isArray(v) ? v : [],
+          )
+        : [];
+    const sellableSpaces = placedSpaces.filter(
+      (p: any) => p?.forSale !== false,
+    ).length;
+
     const stallsRevenue = eventStalls
       .filter(
         (stall) =>
@@ -176,6 +201,7 @@ export default function DashboardOverview({
       stallsBooked,
       stallsPending,
       stallsTotal: eventStalls.length,
+      sellableSpaces,
     };
   };
 
@@ -413,6 +439,7 @@ export default function DashboardOverview({
     const stallsBooked = event.stallsBooked || 0;
     const stallsPending = event.stallsPending || 0;
     const stallsTotal = event.stallsTotal || 0;
+    const sellableSpaces = event.sellableSpaces || 0;
     const ticketsRevenue = event.ticketsRevenue || 0;
     const stallsRevenue = event.stallsRevenue || 0;
 
@@ -499,10 +526,17 @@ export default function DashboardOverview({
                 </div>
               </div>
 
-              {/* Metric 2: Stalls Booked */}
+              {/* Metric 2: Stalls Booked — shown against the total sellable
+                  spaces in the venue so it reads as "booked of available". */}
               <div className="text-center">
                 <div className="text-xl font-bold text-purple-600">
                   {stallsBooked}
+                  {sellableSpaces > 0 && (
+                    <span className="text-sm font-semibold text-muted-foreground">
+                      {" "}
+                      / {sellableSpaces}
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Stalls Booked
@@ -598,6 +632,22 @@ export default function DashboardOverview({
                     >
                       <LineChart className="h-4 w-4 mr-1" />
                       Analytics
+                    </Button>
+                  )}
+                  {/* Live venue layout — booked spaces + purchased add-ons,
+                      same view volunteers/operators see. Spaces free up when a
+                      booking is cancelled or deleted. Not for personal events. */}
+                  {event.eventType !== "personal" && (
+                    <Button
+                      variant="buttonOutline"
+                      size="sm"
+                      onClick={() => {
+                        setVenueLayoutEvent(event);
+                        setShowVenueLayout(true);
+                      }}
+                    >
+                      <Map className="h-4 w-4 mr-1" />
+                      Venue Layout
                     </Button>
                   )}
                   {/* <Button
@@ -1343,6 +1393,28 @@ export default function DashboardOverview({
         }}
         event={spaceAnalyticsEvent}
       />
+
+      {/* Live venue layout — which spaces are booked and which add-ons were
+          purchased, using the same view volunteers/operators get. */}
+      <Dialog
+        open={showVenueLayout}
+        onOpenChange={(o) => {
+          setShowVenueLayout(o);
+          if (!o) setVenueLayoutEvent(null);
+        }}
+      >
+        <DialogContent className="max-w-6xl w-[95vw] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Map className="h-5 w-5" />
+              Venue Layout — {venueLayoutEvent?.title || venueLayoutEvent?.name}
+            </DialogTitle>
+          </DialogHeader>
+          {venueLayoutEvent && (
+            <OperatorVenueView eventId={venueLayoutEvent._id} />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
