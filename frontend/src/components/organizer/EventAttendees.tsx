@@ -49,6 +49,7 @@ import {
   CreditCard,
   Package,
   FileText,
+  FileSpreadsheet,
   AlertCircle,
   X,
   Check,
@@ -85,6 +86,7 @@ import {
   stallsRevenue as calcStallsRevenue,
   roundTablesRevenue as calcRoundTablesRevenue,
 } from "@/lib/revenue";
+import { stallStage } from "@/lib/stallStatus";
 import RoundTableBookings from "@/components/organizer/RoundTableBookings";
 import { useCountry } from "@/hooks/useCountry";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
@@ -279,6 +281,14 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   const [ticketFilter, setTicketFilter] = useState("");
   const [attendeesFilter, setAttendeesFilter] = useState("");
   const [dateSort, setDateSort] = useState("");
+  // Per-tab filters — each participant tab (Visitors / Exhibitors / Speakers /
+  // Round Tables) filters independently so an organizer can drill into one
+  // list without the others interfering.
+  const [exhibitorSearch, setExhibitorSearch] = useState("");
+  const [exhibitorStatusFilter, setExhibitorStatusFilter] = useState("all");
+  const [exhibitorPaymentFilter, setExhibitorPaymentFilter] = useState("all");
+  const [speakerSearch, setSpeakerSearch] = useState("");
+  const [speakerStatusFilter, setSpeakerStatusFilter] = useState("all");
   const [stats, setStats] = useState<DashboardStats>({
     totalEvents: 0,
     liveEvents: 0,
@@ -336,6 +346,10 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const DELETE_CONFIRM_PHRASE = "I_WANT_TO_DELETE";
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  // Optional proof the organizer/operator can attach when confirming a payment
+  // (e.g. a screenshot the vendor sent over WhatsApp). Both are optional.
+  const [payTxnId, setPayTxnId] = useState("");
+  const [payScreenshot, setPayScreenshot] = useState<File | null>(null);
   const [actionNotes, setActionNotes] = useState("");
   const [cancellationReason, setCancellationReason] = useState("");
   const [paymentStatusUpdate, setPaymentStatusUpdate] = useState<
@@ -1601,6 +1615,19 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     if (!selectedRequest || !selectedEvent) return;
     setIsSubmitting(true);
     try {
+      // If the organizer attached proof (transaction ID and/or screenshot the
+      // vendor sent on WhatsApp), save it on the stall first. Both are optional.
+      if (payTxnId.trim() || payScreenshot) {
+        const proof = new FormData();
+        proof.append("stallId", selectedRequest._id);
+        if (payTxnId.trim()) proof.append("transactionId", payTxnId.trim());
+        if (payScreenshot) proof.append("screenshot", payScreenshot);
+        await fetch(`${apiURL}/stalls/upload-transaction-screenshot`, {
+          method: "POST",
+          body: proof,
+        }).catch(() => {});
+      }
+
       const response = await fetch(
         `${apiURL}/stalls/${selectedRequest._id}/payment-status`,
         {
@@ -1622,6 +1649,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         });
         setShowPaymentDialog(false);
         setActionNotes("");
+        setPayTxnId("");
+        setPayScreenshot(null);
         await fetchStallTickets(selectedEvent._id);
       } else throw new Error(result.message);
     } catch (error: any) {
@@ -1885,6 +1914,192 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   const stallsRevenue = calcStallsRevenue(stalls);
   const roundTablesRevenue = calcRoundTablesRevenue(eventRoundBookings);
   const totalRevenue = ticketsRevenue + stallsRevenue + roundTablesRevenue;
+
+  // ── Per-tab filtered lists ──────────────────────────────────────────────
+  // Exhibitors: filter by name/business/email + booking status + payment.
+  const filteredStalls = stalls.filter((s: any) => {
+    const q = exhibitorSearch.trim().toLowerCase();
+    if (q) {
+      const v = s.shopkeeperId || {};
+      const hay = [
+        v.name,
+        v.shopName,
+        v.businessName,
+        v.email,
+        s.nameOfApplicant,
+        s.brandName,
+        s.businessName,
+        s.email,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (
+      exhibitorStatusFilter !== "all" &&
+      (s.status || "Pending") !== exhibitorStatusFilter
+    )
+      return false;
+    if (
+      exhibitorPaymentFilter !== "all" &&
+      (s.paymentStatus || "Unpaid") !== exhibitorPaymentFilter
+    )
+      return false;
+    return true;
+  });
+
+  // Speakers: filter by name/org/email/topic + request status.
+  const filteredSpeakers = eventSpeakers.filter((req: any) => {
+    const q = speakerSearch.trim().toLowerCase();
+    if (q) {
+      const hay = [
+        req.name,
+        req.organization,
+        req.email,
+        req.title,
+        req.sessions?.[0]?.topic,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (
+      speakerStatusFilter !== "all" &&
+      (req.status || "Pending") !== speakerStatusFilter
+    )
+      return false;
+    return true;
+  });
+
+  // Export the (currently filtered) exhibitor list to a CSV that opens in
+  // Excel. Includes the full shopkeeper profile, selected spaces, add-ons,
+  // amounts, payment ID and the derived status — images are intentionally
+  // excluded.
+  const exportStallsToCSV = () => {
+    // Mirrors the "Shopkeeper Information" shown in the stall detail dialog
+    // (no images / address fields), plus Refund Payment Description, and the
+    // booking specifics (spaces, add-ons, amounts, payment ID, status).
+    const header = [
+      "#",
+      "Owner Name",
+      "Business Name",
+      "Primary Email",
+      "Business Email",
+      "WhatsApp",
+      "Country / Nationality",
+      "Instagram",
+      "GST / UEN / Reg. No.",
+      "Category",
+      "Applicant Name",
+      "Owner Nationality",
+      "Residency",
+      "No. of Operators",
+      "Coupon Assigned",
+      "Refund Payment Description",
+      "Product Description",
+      "Selected Spaces",
+      "Add-Ons",
+      "Grand Total",
+      "Paid Amount",
+      "Remaining",
+      "Payment Status",
+      "Payment ID",
+      "Payment Method",
+      "Status",
+      "Requested Date",
+      "Last Updated",
+    ];
+    const rows: (string | number)[][] = [header];
+    filteredStalls.forEach((s: any, idx: number) => {
+      const v =
+        s.shopkeeperId && typeof s.shopkeeperId === "object"
+          ? s.shopkeeperId
+          : {};
+      const spaces = Array.isArray(s.selectedTables)
+        ? s.selectedTables
+            .map((t: any) => t.tableName || t.tableId || "")
+            .filter(Boolean)
+            .join("; ")
+        : "";
+      const addons = Array.isArray(s.selectedAddOns)
+        ? s.selectedAddOns
+            .map((a: any) => `${a.name} x${a.quantity || 1}`)
+            .join("; ")
+        : "";
+      rows.push([
+        idx + 1,
+        v.name || s.nameOfApplicant || s.brandName || "", // Owner Name
+        v.shopName || s.brandName || v.businessName || s.businessName || "", // Business Name
+        v.email || s.email || "", // Primary Email
+        v.businessEmail || "", // Business Email
+        v.whatsappNumber ||
+          v.whatsAppNumber ||
+          s.whatsappNumber ||
+          s.whatsAppNumber ||
+          "", // WhatsApp
+        v.countryCode ||
+          v.country ||
+          s.businessOwnerNationality ||
+          v.businessOwnerNationality ||
+          "", // Country / Nationality
+        v.instagramHandle || v.instagramLink || "", // Instagram
+        v.GSTNumber ||
+          v.UENNumber ||
+          s.registrationNumber ||
+          v.registrationNumber ||
+          "", // GST / UEN / Reg. No.
+        v.businessCategory || "", // Category
+        s.nameOfApplicant || v.nameOfApplicant || "", // Applicant Name
+        s.businessOwnerNationality || v.businessOwnerNationality || "", // Owner Nationality
+        s.residency || v.residency || "", // Residency
+        s.noOfOperators || v.noOfOperators || "", // No. of Operators
+        s.couponCodeAssigned || "", // Coupon Assigned
+        s.refundPaymentDescription || v.refundPaymentDescription || "", // Refund Payment Description
+        s.productDescription || v.productDescription || "", // Product Description
+        spaces,
+        addons,
+        s.grandTotal ?? "",
+        s.paidAmount ?? "",
+        s.remainingAmount ?? "",
+        s.paymentStatus || "Unpaid",
+        s.transactionId || "",
+        s.paymentMethod || "",
+        stallStage(s).label,
+        s.requestDate ? formatDate(s.requestDate) : "",
+        s.updatedAt ? formatDateTime(s.updatedAt) : "",
+      ]);
+    });
+    const csv = rows
+      .map((row) =>
+        row
+          .map((cell) => {
+            const str = String(cell ?? "");
+            return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+          })
+          .join(","),
+      )
+      .join("\n");
+    // Prepend a BOM so Excel reads it as UTF-8 (keeps accents/₹ intact).
+    const blob = new Blob(["﻿" + csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const evtName = (selectedEvent?.title || "event").replace(
+      /[^a-z0-9]/gi,
+      "_",
+    );
+    link.href = url;
+    link.download = `${evtName}_Exhibitors_${
+      new Date().toISOString().split("T")[0]
+    }.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     fetchEventsData();
@@ -2648,9 +2863,69 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                           No exhibitor bookings for this event yet.
                         </div>
                       ) : (
+                        <>
+                          {/* Exhibitors filter — search + status + payment. */}
+                          <div className="flex flex-wrap items-center gap-3 mb-4">
+                            <Input
+                              placeholder="Search exhibitor, business or email…"
+                              value={exhibitorSearch}
+                              onChange={(e) => setExhibitorSearch(e.target.value)}
+                              className="w-64"
+                            />
+                            <Select
+                              value={exhibitorStatusFilter}
+                              onValueChange={setExhibitorStatusFilter}
+                            >
+                              <SelectTrigger className="w-40">
+                                <SelectValue placeholder="Status" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All statuses</SelectItem>
+                                <SelectItem value="Pending">Pending</SelectItem>
+                                <SelectItem value="Approved">Approved</SelectItem>
+                                <SelectItem value="Confirmed">Confirmed</SelectItem>
+                                <SelectItem value="Processing">Processing</SelectItem>
+                                <SelectItem value="Completed">Completed</SelectItem>
+                                <SelectItem value="Cancelled">Cancelled</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Select
+                              value={exhibitorPaymentFilter}
+                              onValueChange={setExhibitorPaymentFilter}
+                            >
+                              <SelectTrigger className="w-36">
+                                <SelectValue placeholder="Payment" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All payments</SelectItem>
+                                <SelectItem value="Paid">Paid</SelectItem>
+                                <SelectItem value="Partial">Partial</SelectItem>
+                                <SelectItem value="Unpaid">Unpaid</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <span className="ml-auto text-sm text-muted-foreground">
+                              Showing {filteredStalls.length} of {stalls.length}
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={exportStallsToCSV}
+                              disabled={filteredStalls.length === 0}
+                              title="Export the exhibitor list (details, spaces, add-ons, payment ID) to Excel"
+                            >
+                              <FileSpreadsheet className="h-4 w-4 mr-1.5" />
+                              Export to Excel
+                            </Button>
+                          </div>
+                          {filteredStalls.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground">
+                              No exhibitors match your filters.
+                            </div>
+                          ) : (
                         <Table>
                           <TableHeader>
                             <TableRow>
+                              <TableHead className="w-10">#</TableHead>
                               <TableHead>Exhibitor</TableHead>
                               <TableHead>Business</TableHead>
                               <TableHead>Contact</TableHead>
@@ -2658,11 +2933,12 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                               <TableHead>Amount</TableHead>
                               <TableHead>Payment</TableHead>
                               <TableHead>Status</TableHead>
+                              <TableHead>Last Updated</TableHead>
                               <TableHead className="text-right">Action</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {stalls.map((s: any) => (
+                            {filteredStalls.map((s: any, idx: number) => (
                               <TableRow
                                 key={s._id}
                                 className={stallRowClass(
@@ -2670,6 +2946,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                   highlightStallIds.includes(String(s._id)),
                                 )}
                               >
+                                <TableCell className="text-muted-foreground tabular-nums">
+                                  {idx + 1}
+                                </TableCell>
                                 <TableCell className="font-medium">
                                   {s.shopkeeperId?.name ||
                                     s.nameOfApplicant ||
@@ -2738,9 +3017,25 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                   </Badge>
                                 </TableCell>
                                 <TableCell>
-                                  <Badge variant="secondary">
-                                    {s.status || "Pending"}
-                                  </Badge>
+                                  {(() => {
+                                    const stage = stallStage(s);
+                                    return (
+                                      <Badge className={stage.className}>
+                                        {stage.label}
+                                      </Badge>
+                                    );
+                                  })()}
+                                </TableCell>
+                                <TableCell>
+                                  {/* When the stall was last touched — a new
+                                      selection, a payment, or a status change. */}
+                                  {s.updatedAt ? (
+                                    <div className="text-sm">
+                                      {formatDateTime(s.updatedAt)}
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
                                 </TableCell>
                                 <TableCell className="text-right">
                                   <div className="flex items-center justify-end gap-1">
@@ -2808,6 +3103,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                             ))}
                           </TableBody>
                         </Table>
+                          )}
+                        </>
                       )}
                     </CardContent>
                   </Card>
@@ -2832,6 +3129,39 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                           No speakers for this event yet.
                         </div>
                       ) : (
+                        <>
+                          {/* Speakers filter — search + request status. */}
+                          <div className="flex flex-wrap items-center gap-3 mb-4">
+                            <Input
+                              placeholder="Search speaker, org, email or topic…"
+                              value={speakerSearch}
+                              onChange={(e) => setSpeakerSearch(e.target.value)}
+                              className="w-64"
+                            />
+                            <Select
+                              value={speakerStatusFilter}
+                              onValueChange={setSpeakerStatusFilter}
+                            >
+                              <SelectTrigger className="w-40">
+                                <SelectValue placeholder="Status" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All statuses</SelectItem>
+                                <SelectItem value="Pending">Pending</SelectItem>
+                                <SelectItem value="Confirmed">Confirmed</SelectItem>
+                                <SelectItem value="Rejected">Rejected</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <span className="ml-auto text-sm text-muted-foreground">
+                              Showing {filteredSpeakers.length} of{" "}
+                              {eventSpeakers.length}
+                            </span>
+                          </div>
+                          {filteredSpeakers.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground">
+                              No speakers match your filters.
+                            </div>
+                          ) : (
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -2846,7 +3176,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {eventSpeakers.map((req: any) => (
+                            {filteredSpeakers.map((req: any) => (
                               <TableRow key={req._id}>
                                 <TableCell>
                                   <div className="font-medium flex items-center gap-2">
@@ -2968,6 +3298,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                             ))}
                           </TableBody>
                         </Table>
+                          )}
+                        </>
                       )}
                     </CardContent>
                   </Card>
@@ -3484,6 +3816,10 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         onSharePDF={handleSharePDF}
         onConfirmPayment={(stall) => {
           setSelectedRequest(stall);
+          // Pre-fill any proof the vendor already submitted so the organizer
+          // can add/replace it; both fields stay optional.
+          setPayTxnId((stall as any)?.transactionId || "");
+          setPayScreenshot(null);
           setShowPaymentDialog(true);
         }}
         onConfirmAmendment={(stall) => {
@@ -3764,6 +4100,41 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 rows={3}
               />
             </div>
+
+            {/* Optional proof — lets the organizer record the transaction ID
+                and/or the screenshot the vendor sent over WhatsApp. Both are
+                optional, so a payment can be confirmed with neither. */}
+            <div className="rounded-lg border bg-gray-50/60 p-3 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Payment proof (optional) — attach if the vendor sent a
+                transaction ID or screenshot on WhatsApp.
+              </p>
+              <div>
+                <Label htmlFor="pay-txn-id">Transaction ID / Reference</Label>
+                <Input
+                  id="pay-txn-id"
+                  placeholder="e.g. UPI123456789 or bank ref"
+                  value={payTxnId}
+                  onChange={(e) => setPayTxnId(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="pay-screenshot">Payment Screenshot</Label>
+                <Input
+                  id="pay-screenshot"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) =>
+                    setPayScreenshot(e.target.files?.[0] || null)
+                  }
+                />
+                {payScreenshot && (
+                  <p className="text-xs text-green-700 mt-1">
+                    {payScreenshot.name} attached
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
           <DialogFooter>
@@ -3772,6 +4143,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
               onClick={() => {
                 setShowPaymentDialog(false);
                 setActionNotes("");
+                setPayTxnId("");
+                setPayScreenshot(null);
               }}
             >
               Cancel

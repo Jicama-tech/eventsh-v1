@@ -2,7 +2,6 @@ import React, { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   CalendarDays,
   MapPin,
@@ -19,6 +18,7 @@ import {
   FileSpreadsheet,
   ChevronDown,
   Share,
+  Map,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -34,6 +34,13 @@ import { jwtDecode } from "jwt-decode";
 import { EventQRCode } from "./EventQRCode";
 import { EventAnalyticsDialog } from "./EventAnalyticsDialog";
 import { EventSpaceAnalyticsDialog } from "./EventSpaceAnalyticsDialog";
+import { OperatorVenueView } from "./OperatorVenueView";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";
 
@@ -89,6 +96,9 @@ export default function DashboardOverview({
   // Space-template analytics drill-down (Upcoming/Current events).
   const [showSpaceAnalytics, setShowSpaceAnalytics] = useState(false);
   const [spaceAnalyticsEvent, setSpaceAnalyticsEvent] = useState<any>(null);
+  // Live venue-layout view (which spaces are booked + add-ons purchased).
+  const [showVenueLayout, setShowVenueLayout] = useState(false);
+  const [venueLayoutEvent, setVenueLayoutEvent] = useState<any>(null);
   const { country } = useCountry();
   const { formatPrice, getSymbol } = useCurrency(country);
 
@@ -134,6 +144,20 @@ export default function DashboardOverview({
       (stall) => stall.status === "Pending",
     ).length;
 
+    // Total SELLABLE spaces placed in the venue — the reference/denominator for
+    // "Stalls Booked". venueTables can be a flat array or an object keyed by
+    // venueConfig; a space is sellable unless explicitly forSale:false.
+    const placedSpaces: any[] = Array.isArray(event.venueTables)
+      ? event.venueTables
+      : event.venueTables && typeof event.venueTables === "object"
+        ? Object.values(event.venueTables).flatMap((v: any) =>
+            Array.isArray(v) ? v : [],
+          )
+        : [];
+    const sellableSpaces = placedSpaces.filter(
+      (p: any) => p?.forSale !== false,
+    ).length;
+
     const stallsRevenue = eventStalls
       .filter(
         (stall) =>
@@ -177,6 +201,7 @@ export default function DashboardOverview({
       stallsBooked,
       stallsPending,
       stallsTotal: eventStalls.length,
+      sellableSpaces,
     };
   };
 
@@ -414,26 +439,24 @@ export default function DashboardOverview({
     const stallsBooked = event.stallsBooked || 0;
     const stallsPending = event.stallsPending || 0;
     const stallsTotal = event.stallsTotal || 0;
+    const sellableSpaces = event.sellableSpaces || 0;
     const ticketsRevenue = event.ticketsRevenue || 0;
     const stallsRevenue = event.stallsRevenue || 0;
 
+    // Single-list phase tag: Live / Upcoming / Past.
     const badgeColor =
       type === "current"
         ? "bg-green-500"
         : type === "upcoming"
-          ? event.status === "Selling"
-            ? "bg-blue-500"
-            : event.status === "Early Bird"
-              ? "bg-orange-500"
-              : "bg-gray-500"
+          ? "bg-blue-500"
           : "bg-gray-500";
 
     const badgeText =
       type === "current"
         ? "LIVE"
         : type === "upcoming"
-          ? event.status || "PENDING"
-          : "COMPLETED";
+          ? "UPCOMING"
+          : "PAST";
 
     const mainDate = event.startDate || event.date;
 
@@ -503,10 +526,17 @@ export default function DashboardOverview({
                 </div>
               </div>
 
-              {/* Metric 2: Stalls Booked */}
+              {/* Metric 2: Stalls Booked — shown against the total sellable
+                  spaces in the venue so it reads as "booked of available". */}
               <div className="text-center">
                 <div className="text-xl font-bold text-purple-600">
                   {stallsBooked}
+                  {sellableSpaces > 0 && (
+                    <span className="text-sm font-semibold text-muted-foreground">
+                      {" "}
+                      / {sellableSpaces}
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Stalls Booked
@@ -602,6 +632,22 @@ export default function DashboardOverview({
                     >
                       <LineChart className="h-4 w-4 mr-1" />
                       Analytics
+                    </Button>
+                  )}
+                  {/* Live venue layout — booked spaces + purchased add-ons,
+                      same view volunteers/operators see. Spaces free up when a
+                      booking is cancelled or deleted. Not for personal events. */}
+                  {event.eventType !== "personal" && (
+                    <Button
+                      variant="buttonOutline"
+                      size="sm"
+                      onClick={() => {
+                        setVenueLayoutEvent(event);
+                        setShowVenueLayout(true);
+                      }}
+                    >
+                      <Map className="h-4 w-4 mr-1" />
+                      Venue Layout
                     </Button>
                   )}
                   {/* <Button
@@ -1257,72 +1303,49 @@ export default function DashboardOverview({
 
       <hr />
 
-      {/* Events Tabs */}
-      <Tabs defaultValue="current" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 h-auto [&>button]:whitespace-nowrap [&>button]:px-1 [&>button]:text-xs sm:[&>button]:px-3 sm:[&>button]:text-sm">
-          <TabsTrigger value="current">
-            Current Events ({currentEvents.length})
-          </TabsTrigger>
-          <TabsTrigger value="upcoming">
-            Upcoming ({upcomingEvents.length})
-          </TabsTrigger>
-          <TabsTrigger value="past">
-            Past Events ({pastEvents.length})
-          </TabsTrigger>
-        </TabsList>
+      {/* Events — a single list. Each card carries a Live / Upcoming / Past
+          tag instead of splitting them across three tabs. Ordered Live first,
+          then Upcoming, then Past. */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Events</h3>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 font-medium text-green-700">
+              <span className="h-2 w-2 rounded-full bg-green-500" />
+              {currentEvents.length} Live
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">
+              <span className="h-2 w-2 rounded-full bg-blue-500" />
+              {upcomingEvents.length} Upcoming
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-600">
+              <span className="h-2 w-2 rounded-full bg-gray-400" />
+              {pastEvents.length} Past
+            </span>
+          </div>
+        </div>
 
-        {/* Current Events Content */}
-        <TabsContent value="current" className="space-y-4 pt-4">
-          {currentEvents.length > 0 ? (
-            currentEvents.map((event) => (
-              <EventCard key={event._id} event={event} type="current" />
-            ))
-          ) : (
-            <Card>
-              <CardContent className="text-center py-8">
-                <CalendarDays className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">
-                  No current events running.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* Upcoming Events Content */}
-        <TabsContent value="upcoming" className="space-y-4 pt-4">
-          {upcomingEvents.length > 0 ? (
-            upcomingEvents.map((event) => (
-              <EventCard key={event._id} event={event} type="upcoming" />
-            ))
-          ) : (
-            <Card>
-              <CardContent className="text-center py-8">
-                <CalendarDays className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">
-                  No upcoming events scheduled.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* Past Events Content */}
-        <TabsContent value="past" className="space-y-4 pt-4">
-          {pastEvents.length > 0 ? (
-            pastEvents.map((event) => (
-              <EventCard key={event._id} event={event} type="past" />
-            ))
-          ) : (
-            <Card>
-              <CardContent className="text-center py-8">
-                <CalendarDays className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">No past events found.</p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-      </Tabs>
+        {(() => {
+          const all = [
+            ...currentEvents.map((event) => ({ event, type: "current" })),
+            ...upcomingEvents.map((event) => ({ event, type: "upcoming" })),
+            ...pastEvents.map((event) => ({ event, type: "past" })),
+          ];
+          if (all.length === 0) {
+            return (
+              <Card>
+                <CardContent className="text-center py-8">
+                  <CalendarDays className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                  <p className="text-muted-foreground">No events yet.</p>
+                </CardContent>
+              </Card>
+            );
+          }
+          return all.map(({ event, type }) => (
+            <EventCard key={event._id} event={event} type={type} />
+          ));
+        })()}
+      </div>
 
       {showQRDialog && selectedQrCodeEvent && (
         <EventQRCode
@@ -1370,6 +1393,28 @@ export default function DashboardOverview({
         }}
         event={spaceAnalyticsEvent}
       />
+
+      {/* Live venue layout — which spaces are booked and which add-ons were
+          purchased, using the same view volunteers/operators get. */}
+      <Dialog
+        open={showVenueLayout}
+        onOpenChange={(o) => {
+          setShowVenueLayout(o);
+          if (!o) setVenueLayoutEvent(null);
+        }}
+      >
+        <DialogContent className="max-w-6xl w-[95vw] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Map className="h-5 w-5" />
+              Venue Layout — {venueLayoutEvent?.title || venueLayoutEvent?.name}
+            </DialogTitle>
+          </DialogHeader>
+          {venueLayoutEvent && (
+            <OperatorVenueView eventId={venueLayoutEvent._id} />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

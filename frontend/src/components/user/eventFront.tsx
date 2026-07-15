@@ -10051,9 +10051,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             </Button>
             <Button
               onClick={submitAmendPayment}
-              disabled={
-                amendSubmitting || (!amendTxnId.trim() && !amendScreenshot)
-              }
+              disabled={amendSubmitting}
               style={{ backgroundColor: design?.primaryColor || "#2563eb" }}
             >
               {amendSubmitting

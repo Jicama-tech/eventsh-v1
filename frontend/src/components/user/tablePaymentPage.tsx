@@ -950,8 +950,8 @@ const TablePaymentPage = () => {
                   {/* Transaction Verification */}
                   {AmountToBePaid > 0 && (showQR || paymentMode === "bank") && (
                     <div className="mt-4 p-4 border rounded-xl bg-gray-50/50 space-y-3">
-                      <p className="font-semibold text-sm text-gray-700">Payment Verification <span className="text-red-500">*</span></p>
-                      <p className="text-xs text-gray-500">Required: enter your transaction ID or upload a payment screenshot so the organizer can verify your payment.</p>
+                      <p className="font-semibold text-sm text-gray-700">Payment Verification <span className="text-gray-400 font-normal">(optional)</span></p>
+                      <p className="text-xs text-gray-500">Optional: add your transaction ID or a payment screenshot here so the organizer can verify faster. If you can't, just tap <span className="font-medium">I have Paid</span> — you can send the proof to the organizer on WhatsApp and they'll confirm it.</p>
                       <div className="space-y-3">
                         <div>
                           <label className="text-xs font-medium text-gray-600 block mb-1">Transaction ID / Reference Number</label>
@@ -1257,10 +1257,10 @@ const TablePaymentPage = () => {
                     </Button>
                   </div>
                   {(() => {
-                    // Proof (a transaction ID or a screenshot) is required
-                    // before a paid booking can be submitted — this stops a
-                    // vendor confirming without actually paying.
-                    const proofMissing =
+                    // Proof (transaction ID / screenshot) is OPTIONAL — a vendor
+                    // who can't upload it can still submit "I have Paid" and send
+                    // the proof to the organizer on WhatsApp, who confirms it.
+                    const noProof =
                       AmountToBePaid > 0 &&
                       !transactionId.trim() &&
                       !transactionScreenshot;
@@ -1268,7 +1268,7 @@ const TablePaymentPage = () => {
                       <>
                         <Button
                           onClick={handlePaymentConfirmation}
-                          disabled={isProcessing || proofMissing}
+                          disabled={isProcessing}
                           className="w-full py-6 text-lg font-bold bg-green-600 hover:bg-green-700 text-white shadow-md transition-all transform hover:scale-[1.02] disabled:opacity-60"
                         >
                           {isProcessing ? (
@@ -1283,10 +1283,11 @@ const TablePaymentPage = () => {
                             </>
                           )}
                         </Button>
-                        {proofMissing && (
-                          <p className="text-xs text-amber-700 mt-2">
-                            Enter your transaction ID or upload a payment
-                            screenshot above before submitting.
+                        {noProof && (
+                          <p className="text-xs text-gray-500 mt-2">
+                            No screenshot or transaction ID? No problem — submit
+                            anyway and send your payment proof to the organizer on
+                            WhatsApp. They'll confirm it from their end.
                           </p>
                         )}
                         <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mt-2">

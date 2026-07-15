@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { stallStage } from "@/lib/stallStatus";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -730,46 +731,6 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
 
   // ============ UTILITY FUNCTIONS ============
 
-  const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: any; icon: any; color: string }> =
-      {
-        Pending: {
-          variant: "secondary",
-          icon: Clock,
-          color: "text-yellow-600",
-        },
-        Confirmed: {
-          variant: "default",
-          icon: CheckCircle2,
-          color: "text-green-600",
-        },
-        Cancelled: {
-          variant: "destructive",
-          icon: XCircle,
-          color: "text-red-600",
-        },
-        Processing: {
-          variant: "default",
-          icon: AlertCircle,
-          color: "text-blue-600",
-        },
-        Completed: {
-          variant: "default",
-          icon: CheckCircle2,
-          color: "text-green-700",
-        },
-      };
-
-    const config = variants[status] || variants.Pending;
-    const Icon = config.icon;
-
-    return (
-      <Badge variant={config.variant} className="flex items-center gap-1">
-        <Icon className="h-3 w-3" />
-        {status}
-      </Badge>
-    );
-  };
 
   const getPaymentBadge = (paymentStatus: string) => {
     const variants: Record<string, { variant: any; color: string }> = {
@@ -1075,7 +1036,14 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                             )}
                           </TableCell>
                           <TableCell>
-                            {getStatusBadge(request.status)}
+                            {(() => {
+                              const stage = stallStage(request);
+                              return (
+                                <Badge className={stage.className}>
+                                  {stage.label}
+                                </Badge>
+                              );
+                            })()}
                           </TableCell>
                           <TableCell>
                             {getPaymentBadge(request.paymentStatus)}
@@ -1307,7 +1275,12 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                     <CardTitle className="text-sm">Request Status</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {getStatusBadge(selectedRequest.status)}
+                    {(() => {
+                      const stage = stallStage(selectedRequest);
+                      return (
+                        <Badge className={stage.className}>{stage.label}</Badge>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
                 <Card>

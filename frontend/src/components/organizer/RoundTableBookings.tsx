@@ -23,6 +23,9 @@ const RoundTableBookings = ({ eventId }: RoundTableBookingsProps) => {
   const [loading, setLoading] = useState(true);
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  // Round-tables tab filters (search + payment status).
+  const [rtSearch, setRtSearch] = useState("");
+  const [rtPaymentFilter, setRtPaymentFilter] = useState("all");
   const { toast } = useToast();
   const apiURL = __API_URL__;
   const { country } = useCountry();
@@ -130,6 +133,20 @@ const RoundTableBookings = ({ eventId }: RoundTableBookingsProps) => {
     );
   }
 
+  const filteredBookings = bookings.filter((b) => {
+    const q = rtSearch.trim().toLowerCase();
+    if (q) {
+      const hay = [b.visitorName, b.visitorEmail, b.visitorPhone]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (rtPaymentFilter !== "all" && b.paymentStatus !== rtPaymentFilter)
+      return false;
+    return true;
+  });
+
   return (
     <div className="space-y-4">
       {/* Summary */}
@@ -182,6 +199,31 @@ const RoundTableBookings = ({ eventId }: RoundTableBookingsProps) => {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Round Tables filter — search + payment status. */}
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <input
+              type="text"
+              placeholder="Search visitor, email or phone…"
+              value={rtSearch}
+              onChange={(e) => setRtSearch(e.target.value)}
+              className="w-64 rounded-md border px-3 py-2 text-sm"
+            />
+            <select
+              value={rtPaymentFilter}
+              onChange={(e) => setRtPaymentFilter(e.target.value)}
+              className="rounded-md border px-3 py-2 text-sm"
+            >
+              <option value="all">All payments</option>
+              <option value="Paid">Paid</option>
+              <option value="Submitted">Submitted</option>
+              <option value="Pending">Pending</option>
+              <option value="Failed">Failed</option>
+              <option value="Refunded">Refunded</option>
+            </select>
+            <span className="ml-auto text-sm text-gray-500">
+              Showing {filteredBookings.length} of {bookings.length}
+            </span>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -197,7 +239,17 @@ const RoundTableBookings = ({ eventId }: RoundTableBookingsProps) => {
                 </tr>
               </thead>
               <tbody>
-                {bookings.map((booking) => (
+                {filteredBookings.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={8}
+                      className="py-8 text-center text-gray-500"
+                    >
+                      No bookings match your filters.
+                    </td>
+                  </tr>
+                )}
+                {filteredBookings.map((booking) => (
                   <tr
                     key={booking._id}
                     className="border-b last:border-0 hover:bg-gray-50"

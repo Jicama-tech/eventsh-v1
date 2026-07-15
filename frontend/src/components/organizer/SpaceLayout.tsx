@@ -38,6 +38,12 @@ export interface SpaceState {
   ringColor?: string;
   /** Native hover tooltip on the space (e.g. "A1 — Approved · Acme Foods"). */
   title?: string;
+  /** Explicit fill colour override — wins over template / booked greys. Lets a
+   *  caller paint booked spaces a distinct colour while keeping them clickable
+   *  (e.g. the volunteer view marks booked stalls dark grey). */
+  fill?: string;
+  /** Explicit border colour override, paired with `fill`. */
+  border?: string;
 }
 
 export interface SpaceLayoutProps {
@@ -210,6 +216,10 @@ const SpaceLayout = forwardRef<HTMLDivElement, SpaceLayoutProps>(
               bg = GREY_FILL;
               border = GREY_BORDER;
             }
+            // Explicit caller override (e.g. booked spaces painted dark grey in
+            // the volunteer view) wins over the defaults above.
+            if (st.fill) bg = st.fill;
+            if (st.border) border = st.border;
 
             const rot = t.rotation || 0;
             const w = (t.displayWidth ?? t.width ?? 50) * s;

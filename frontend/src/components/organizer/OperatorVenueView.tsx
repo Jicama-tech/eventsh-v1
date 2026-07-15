@@ -12,6 +12,10 @@ import type { StallRequest } from "./shopKeeper";
 
 const apiURL = __API_URL__;
 
+// Booking statuses that no longer occupy a space, so their tables read as free
+// in the layout (kept in sync with EventSpaceAnalyticsDialog).
+const DEAD_STATUSES = new Set(["Cancelled", "Rejected", "Declined"]);
+
 interface PositionedTable {
   positionId: string;
   id?: string;
@@ -184,6 +188,11 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
           const stallsJson = await stallsRes.json();
           const stalls: any[] = stallsJson?.data || stallsJson || [];
           for (const stall of stalls) {
+            // A cancelled / rejected / declined booking no longer holds its
+            // space — skip it so the layout shows those tables as free again
+            // (mirrors the space-analytics dialog's DEAD_STATUSES). Hard-deleted
+            // stalls simply don't come back from the fetch, so they free too.
+            if (DEAD_STATUSES.has(stall?.status)) continue;
             const positions: any[] = stall?.selectedTables || [];
             const addOns = (stall?.selectedAddOns || []).map((a: any) => ({
               id: a.addOnId,
@@ -468,7 +477,14 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
         <span className="font-semibold uppercase tracking-wide">Legend:</span>
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-3 bg-pink-400/80 border border-pink-600 rounded-sm" />
-          Space (template colour)
+          Available space
+        </span>
+        <span className="flex items-center gap-1">
+          <span
+            className="inline-block w-3 h-3 rounded-sm border"
+            style={{ backgroundColor: "#374151", borderColor: "#1f2937" }}
+          />
+          Booked
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-3 bg-purple-400 rounded-sm" />
@@ -519,12 +535,18 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
           doors={doors}
           speakerZones={zones}
           getState={(t: any) => {
-            // Same look as the eventfront: every space keeps its template
-            // colour. booked:false is explicit so SpaceLayout doesn't fall
-            // back to t.isBooked and grey it out — who booked it shows on hover.
+            // Booked spaces are painted DARK GREY so a volunteer can tell at a
+            // glance which stalls are taken (and click them for details); free
+            // spaces keep their template colour. booked:false keeps the space
+            // clickable — the dark fill comes from the explicit `fill` override
+            // rather than SpaceLayout's non-interactive grey. Cancelled/deleted
+            // bookings are already dropped from `bookings`, so they read free.
             const booking = bookings[t.positionId];
             return {
               booked: false,
+              ...(booking
+                ? { fill: "#374151", border: "#1f2937" } // slate-700 / slate-800
+                : {}),
               title: booking
                 ? `${t.tableName || t.name || "Stall"} — ${booking.vendorName}`
                 : t.tableName || t.name || "Available",
@@ -544,7 +566,8 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
                 <span
                   className="truncate w-full text-center"
                   style={{
-                    color: "#111827",
+                    // White on the dark-grey booked fill; dark on free spaces.
+                    color: booking ? "#f9fafb" : "#111827",
                     fontWeight: 800,
                     fontSize: 8,
                     lineHeight: 1,
