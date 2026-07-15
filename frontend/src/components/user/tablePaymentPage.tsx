@@ -1132,26 +1132,12 @@ const TablePaymentPage = () => {
                                       If the QR code fails, Pay Directly to UEN:{" "}
                                       {(organizer as any)?.UENNumber || uenId}.
                                     </p>
-
-                                    <p className="text-sm text-gray-600">
-                                      WhatsAppNumber:{" "}
-                                      <span className="font-medium">
-                                        {orderData?.whatsAppNumber}
-                                      </span>
-                                    </p>
                                   </div>
                                 ) : mobileId ? (
                                   <div>
                                     <p className="font-semibold text-lg text-green-700">
                                       If the QR code fails, Pay Directly to Mobile
                                       Number: {mobileId}.
-                                    </p>
-
-                                    <p className="text-sm text-gray-600">
-                                      WhatsAppNumber:{" "}
-                                      <span className="font-medium">
-                                        {orderData?.whatsAppNumber}
-                                      </span>
                                     </p>
                                   </div>
                                 ) : null}

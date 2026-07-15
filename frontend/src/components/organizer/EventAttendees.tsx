@@ -287,6 +287,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   const [exhibitorSearch, setExhibitorSearch] = useState("");
   const [exhibitorStatusFilter, setExhibitorStatusFilter] = useState("all");
   const [exhibitorPaymentFilter, setExhibitorPaymentFilter] = useState("all");
+  // Sort for the exhibitor list: name / business (A–Z, Z–A) or last-updated
+  // time (newest / oldest). Defaults to most recently updated first.
+  const [exhibitorSort, setExhibitorSort] = useState("updated-desc");
   const [speakerSearch, setSpeakerSearch] = useState("");
   const [speakerStatusFilter, setSpeakerStatusFilter] = useState("all");
   const [stats, setStats] = useState<DashboardStats>({
@@ -1949,6 +1952,44 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     return true;
   });
 
+  // Apply the chosen sort. Name/business use the same fallbacks the table shows.
+  const exhibitorName = (s: any) =>
+    (s.shopkeeperId?.name || s.nameOfApplicant || s.brandName || "")
+      .toString()
+      .toLowerCase();
+  const exhibitorBusiness = (s: any) =>
+    (
+      s.shopkeeperId?.shopName ||
+      s.businessName ||
+      s.brandName ||
+      ""
+    )
+      .toString()
+      .toLowerCase();
+  const sortedStalls = [...filteredStalls].sort((a: any, b: any) => {
+    switch (exhibitorSort) {
+      case "name-asc":
+        return exhibitorName(a).localeCompare(exhibitorName(b));
+      case "name-desc":
+        return exhibitorName(b).localeCompare(exhibitorName(a));
+      case "business-asc":
+        return exhibitorBusiness(a).localeCompare(exhibitorBusiness(b));
+      case "business-desc":
+        return exhibitorBusiness(b).localeCompare(exhibitorBusiness(a));
+      case "updated-asc":
+        return (
+          new Date(a.updatedAt || 0).getTime() -
+          new Date(b.updatedAt || 0).getTime()
+        );
+      case "updated-desc":
+      default:
+        return (
+          new Date(b.updatedAt || 0).getTime() -
+          new Date(a.updatedAt || 0).getTime()
+        );
+    }
+  });
+
   // Speakers: filter by name/org/email/topic + request status.
   const filteredSpeakers = eventSpeakers.filter((req: any) => {
     const q = speakerSearch.trim().toLowerCase();
@@ -2012,7 +2053,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       "Last Updated",
     ];
     const rows: (string | number)[][] = [header];
-    filteredStalls.forEach((s: any, idx: number) => {
+    sortedStalls.forEach((s: any, idx: number) => {
       const v =
         s.shopkeeperId && typeof s.shopkeeperId === "object"
           ? s.shopkeeperId
@@ -2899,8 +2940,35 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                               <SelectContent>
                                 <SelectItem value="all">All payments</SelectItem>
                                 <SelectItem value="Paid">Paid</SelectItem>
-                                <SelectItem value="Partial">Partial</SelectItem>
                                 <SelectItem value="Unpaid">Unpaid</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Select
+                              value={exhibitorSort}
+                              onValueChange={setExhibitorSort}
+                            >
+                              <SelectTrigger className="w-48" title="Sort by">
+                                <SelectValue placeholder="Sort by" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="name-asc">
+                                  Exhibitor (A–Z)
+                                </SelectItem>
+                                <SelectItem value="name-desc">
+                                  Exhibitor (Z–A)
+                                </SelectItem>
+                                <SelectItem value="business-asc">
+                                  Business (A–Z)
+                                </SelectItem>
+                                <SelectItem value="business-desc">
+                                  Business (Z–A)
+                                </SelectItem>
+                                <SelectItem value="updated-desc">
+                                  Last Updated (Newest)
+                                </SelectItem>
+                                <SelectItem value="updated-asc">
+                                  Last Updated (Oldest)
+                                </SelectItem>
                               </SelectContent>
                             </Select>
                             <span className="ml-auto text-sm text-muted-foreground">
@@ -2938,7 +3006,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {filteredStalls.map((s: any, idx: number) => (
+                            {sortedStalls.map((s: any, idx: number) => (
                               <TableRow
                                 key={s._id}
                                 className={stallRowClass(
@@ -4074,9 +4142,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {selectedStallAllowsMinimum && (
-                    <SelectItem value="Partial">Partial Payment</SelectItem>
-                  )}
+                  {/* Partial payment disabled for now — only full payment. */}
                   <SelectItem value="Paid">Fully Paid</SelectItem>
                 </SelectContent>
               </Select>
