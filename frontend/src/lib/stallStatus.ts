@@ -59,7 +59,7 @@ export function stallStage(stall: any): StallStage {
 
   // Approved by the organizer; it's now the vendor's turn to pay.
   if (status === "Confirmed" || status === "Approved")
-    return { label: "Approved — Awaiting Payment", className: BLUE };
+    return { label: "Approved", className: BLUE };
 
   return { label: status, className: GRAY };
 }

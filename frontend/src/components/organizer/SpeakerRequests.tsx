@@ -770,7 +770,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
               <Select value={paymentStatusUpdate} onValueChange={(v: "Partial" | "Paid") => setPaymentStatusUpdate(v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Partial">Partial Payment</SelectItem>
+                  {/* Partial payment disabled for now — only full payment. */}
                   <SelectItem value="Paid">Fully Paid</SelectItem>
                 </SelectContent>
               </Select>

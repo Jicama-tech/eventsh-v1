@@ -4,6 +4,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2, Info } from "lucide-react";
 import { ExhibitorDetailDialog } from "./ExhibitorDetailDialog";
@@ -136,6 +137,12 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
   // or loading; ExhibitorDetailDialog accepts null and renders an empty body.
   const [selectedStall, setSelectedStall] = useState<StallRequest | null>(null);
   const [stallDialogOpen, setStallDialogOpen] = useState(false);
+  // Touch devices have no hover, so a tap opens this quick card (same content
+  // as the desktop hover card); its "View details" button then opens the full
+  // dialog — mirroring the two-step desktop flow.
+  const [quickCard, setQuickCard] = useState<{ t: any; booking: any } | null>(
+    null,
+  );
   const [loadingStall, setLoadingStall] = useState(false);
 
   // Fit-to-width scaling, identical to the public eventfront map: the canvas
@@ -297,6 +304,96 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
     } finally {
       setLoadingStall(false);
     }
+  };
+
+  // Quick card content (vendor + add-ons + "View details"). Shared by the
+  // desktop hover card and the mobile tap dialog so both stay in sync.
+  const renderQuickCard = (t: any, booking: any, onView: () => void) => {
+    const dots = (booking.addOns || []).map((a: any) => ({
+      id: a.id,
+      name: addOnColorMap.get(a.id)?.name || a.name,
+      color: addOnColorMap.get(a.id)?.color || "#6b7280",
+      quantity: a.quantity,
+      price: a.price,
+    }));
+    return (
+      <div className="space-y-2">
+        <div>
+          <div className="font-semibold text-sm">
+            {t.tableName || t.name || "Stall"}
+          </div>
+          <div className="text-xs text-slate-600">
+            Booked by {booking.vendorName}
+          </div>
+          {booking.businessName && (
+            <div className="text-xs text-slate-500">{booking.businessName}</div>
+          )}
+          {booking.vendorEmail && (
+            <div className="text-[11px] text-muted-foreground">
+              {booking.vendorEmail}
+            </div>
+          )}
+          {booking.vendorPhone && (
+            <div className="text-[11px] text-muted-foreground">
+              {booking.vendorPhone}
+            </div>
+          )}
+          {booking.totalPaid != null && (
+            <div className="text-[11px] text-slate-500 mt-1">
+              Total paid:{" "}
+              {new Intl.NumberFormat("en-US", {
+                style: "currency",
+                currency: "USD",
+                maximumFractionDigits: 0,
+              }).format(Number(booking.totalPaid))}
+            </div>
+          )}
+        </div>
+        {dots.length === 0 ? (
+          <div className="text-xs italic text-muted-foreground">
+            No add-ons purchased.
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Add-ons ({dots.length})
+            </div>
+            <ul className="space-y-1 max-h-48 overflow-y-auto pr-1">
+              {dots.map((d: any, i: number) => (
+                <li
+                  key={`${d.id}-${i}`}
+                  className="flex items-center gap-2 text-xs"
+                >
+                  <span
+                    className="w-3 h-3 rounded-full border border-gray-300 shrink-0"
+                    style={{ backgroundColor: d.color }}
+                  />
+                  <span className="flex-1 truncate">{d.name}</span>
+                  {d.quantity > 1 && (
+                    <span className="text-muted-foreground">× {d.quantity}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full mt-1"
+          disabled={!positionToStallId[t.positionId]}
+          onClick={onView}
+        >
+          {loadingStall ? (
+            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+          ) : (
+            <Info className="h-3.5 w-3.5 mr-1" />
+          )}
+          View details
+        </Button>
+      </div>
+    );
   };
 
   if (loading) {
@@ -534,6 +631,13 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
           roundTables={rounds}
           doors={doors}
           speakerZones={zones}
+          // Tapping a booked space opens the quick card (the hover card is
+          // desktop-only — no hover on touch). Its "View details" button then
+          // opens the full dialog, mirroring the desktop two-step flow.
+          onSpaceClick={(t: any) => {
+            const booking = bookings[t.positionId];
+            if (booking) setQuickCard({ t, booking });
+          }}
           getState={(t: any) => {
             // Booked spaces are painted DARK GREY so a volunteer can tell at a
             // glance which stalls are taken (and click them for details); free
@@ -601,97 +705,13 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
           wrapSpace={(t: any, node: any) => {
             const booking = bookings[t.positionId];
             if (!booking) return node;
-            const dots = (booking.addOns || []).map((a: any) => ({
-              id: a.id,
-              name: addOnColorMap.get(a.id)?.name || a.name,
-              color: addOnColorMap.get(a.id)?.color || "#6b7280",
-              quantity: a.quantity,
-              price: a.price,
-            }));
             return (
               <HoverCard openDelay={120}>
                 <HoverCardTrigger asChild>{node}</HoverCardTrigger>
                 <HoverCardContent side="top" align="center" className="w-80 p-3">
-                  <div className="space-y-2">
-                    <div>
-                      <div className="font-semibold text-sm">
-                        {t.tableName || t.name || "Stall"}
-                      </div>
-                      <div className="text-xs text-slate-600">
-                        Booked by {booking.vendorName}
-                      </div>
-                      {booking.businessName && (
-                        <div className="text-xs text-slate-500">
-                          {booking.businessName}
-                        </div>
-                      )}
-                      {booking.vendorEmail && (
-                        <div className="text-[11px] text-muted-foreground">
-                          {booking.vendorEmail}
-                        </div>
-                      )}
-                      {booking.vendorPhone && (
-                        <div className="text-[11px] text-muted-foreground">
-                          {booking.vendorPhone}
-                        </div>
-                      )}
-                      {booking.totalPaid != null && (
-                        <div className="text-[11px] text-slate-500 mt-1">
-                          Total paid:{" "}
-                          {new Intl.NumberFormat("en-US", {
-                            style: "currency",
-                            currency: "USD",
-                            maximumFractionDigits: 0,
-                          }).format(Number(booking.totalPaid))}
-                        </div>
-                      )}
-                    </div>
-                    {dots.length === 0 ? (
-                      <div className="text-xs italic text-muted-foreground">
-                        No add-ons purchased.
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                          Add-ons ({dots.length})
-                        </div>
-                        <ul className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                          {dots.map((d: any, i: number) => (
-                            <li
-                              key={`${d.id}-${i}`}
-                              className="flex items-center gap-2 text-xs"
-                            >
-                              <span
-                                className="w-3 h-3 rounded-full border border-gray-300 shrink-0"
-                                style={{ backgroundColor: d.color }}
-                              />
-                              <span className="flex-1 truncate">{d.name}</span>
-                              {d.quantity > 1 && (
-                                <span className="text-muted-foreground">
-                                  × {d.quantity}
-                                </span>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-full mt-1"
-                      disabled={!positionToStallId[t.positionId]}
-                      onClick={() => openStallDetails(t.positionId)}
-                    >
-                      {loadingStall ? (
-                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                      ) : (
-                        <Info className="h-3.5 w-3.5 mr-1" />
-                      )}
-                      View details
-                    </Button>
-                  </div>
+                  {renderQuickCard(t, booking, () =>
+                    openStallDetails(t.positionId),
+                  )}
                 </HoverCardContent>
               </HoverCard>
             );
@@ -700,6 +720,24 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
           </div>
         </div>
       </div>
+
+      {/* Mobile quick card — shown on tap (no hover on touch). Same content as
+          the desktop hover card; its "View details" opens the full dialog. */}
+      <Dialog
+        open={!!quickCard}
+        onOpenChange={(o) => {
+          if (!o) setQuickCard(null);
+        }}
+      >
+        <DialogContent className="max-w-sm p-4">
+          {quickCard &&
+            renderQuickCard(quickCard.t, quickCard.booking, () => {
+              const pos = quickCard.t.positionId;
+              setQuickCard(null);
+              openStallDetails(pos);
+            })}
+        </DialogContent>
+      </Dialog>
 
       {/* Volunteer/operator dialog. Same component the organizer's Exhibitors
           tab uses — minus the admin callbacks (Confirm Payment, Return

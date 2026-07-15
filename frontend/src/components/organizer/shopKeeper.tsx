@@ -936,7 +936,6 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   <SelectContent>
                     <SelectItem value="all">All Payments</SelectItem>
                     <SelectItem value="Unpaid">Unpaid</SelectItem>
-                    <SelectItem value="Partial">Partial</SelectItem>
                     <SelectItem value="Paid">Paid</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1799,9 +1798,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {selectedStallAllowsMinimum && (
-                    <SelectItem value="Partial">Partial Payment</SelectItem>
-                  )}
+                  {/* Partial payment disabled for now — only full payment. */}
                   <SelectItem value="Paid">Fully Paid</SelectItem>
                 </SelectContent>
               </Select>
