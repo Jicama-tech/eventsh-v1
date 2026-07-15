@@ -19,6 +19,8 @@ import { StallPaymentSchedulerService } from "./stall-payment-scheduler.service"
 import { StallsService } from "./stalls.service";
 import { CreateStallDto } from "./dto/create-stall.dto";
 import { SelectTablesAndAddOnsDto } from "./dto/tableSelect.dto";
+import { OrganizerEditStallDto } from "./dto/organizer-edit-stall.dto";
+import { EditStallDetailsDto } from "./dto/edit-stall-details.dto";
 import {
   AmendStallDto,
   AmendPaymentDto,
@@ -486,5 +488,27 @@ export class StallsController {
     @Body("changedBy") changedBy: string,
   ) {
     return await this.stallsService.returnedDeposit(id, notes, changedBy);
+  }
+
+  // Organizer re-allocates a booking's spaces + add-ons (within the vendor's
+  // preferred type) and gets back the extra amount to collect, if any.
+  @Patch(":id/organizer-edit")
+  @HttpCode(HttpStatus.OK)
+  async organizerEdit(
+    @Param("id") id: string,
+    @Body() dto: OrganizerEditStallDto,
+  ) {
+    return await this.stallsService.organizerEditSpaces(id, dto);
+  }
+
+  // Organizer/operator edits a stall's full form (contact + business profile +
+  // applicant/registration details). Saves to the stall + vendor records.
+  @Patch(":id/edit-details")
+  @HttpCode(HttpStatus.OK)
+  async editDetails(
+    @Param("id") id: string,
+    @Body() dto: EditStallDetailsDto,
+  ) {
+    return await this.stallsService.editStallDetails(id, dto);
   }
 }

@@ -21,6 +21,9 @@ interface StallPaymentPanelProps {
   onTransactionIdChange: (v: string) => void;
   screenshot: File | null;
   onScreenshotChange: (f: File | null) => void;
+  /** Fires with the best shareable payment link (UPI deep link / PayNow QR
+   * image / static QR URL) so a caller can offer a "Copy pay link" action. */
+  onLinkReady?: (link: string) => void;
 }
 
 /**
@@ -39,6 +42,7 @@ export default function StallPaymentPanel({
   onTransactionIdChange,
   screenshot,
   onScreenshotChange,
+  onLinkReady,
 }: StallPaymentPanelProps) {
   const { toast } = useToast();
   const [organizer, setOrganizer] = useState<any>(null);
@@ -59,6 +63,13 @@ export default function StallPaymentPanel({
   const [screenshotPreview, setScreenshotPreview] = useState("");
 
   const paymentURL = organizer?.paymentURL || "";
+
+  // Surface the best shareable payment link to the caller (UPI deep link opens
+  // the vendor's payment app with the amount; PayNow/static are QR image URLs).
+  useEffect(() => {
+    const link = dynamicUpiString || dynamicUENString || paymentURL;
+    if (link) onLinkReady?.(link);
+  }, [dynamicUpiString, dynamicUENString, paymentURL, onLinkReady]);
 
   const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const isAndroid = /Android/i.test(navigator.userAgent);

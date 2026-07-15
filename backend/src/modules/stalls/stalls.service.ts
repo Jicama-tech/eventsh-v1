@@ -18,6 +18,8 @@ import * as path from "path";
 import * as puppeteer from "puppeteer";
 import { CreateStallDto } from "./dto/create-stall.dto";
 import { SelectTablesAndAddOnsDto } from "./dto/tableSelect.dto";
+import { OrganizerEditStallDto } from "./dto/organizer-edit-stall.dto";
+import { EditStallDetailsDto } from "./dto/edit-stall-details.dto";
 import {
   AmendStallDto,
   AmendPaymentDto,
@@ -710,6 +712,369 @@ export class StallsService {
         message: error.message,
         data: null,
       };
+    }
+  }
+
+  /**
+   * ORGANIZER-initiated edit of a stall's space + add-on allocation. Re-allocates
+   * the spaces (restricted to the vendor's preferred template(s)) and add-ons on
+   * a booking that already holds a space (status Processing or Completed), frees
+   * the old spaces, books the new, recomputes totals, and returns the extra
+   * amount to collect (`amountDue = max(0, newGrandTotal - oldGrandTotal)`).
+   *
+   * When there's an extra charge the booking is moved to Processing with the
+   * outstanding balance recorded, so the organizer can collect it (dynamic QR)
+   * and then confirm payment (which re-issues the ticket). No auto-payment here.
+   */
+  async organizerEditSpaces(stallId: string, dto: OrganizerEditStallDto) {
+    try {
+      if (!Types.ObjectId.isValid(stallId)) {
+        throw new BadRequestException("Invalid stall ID format");
+      }
+      const stall = await this.stallModel.findById(stallId).populate("eventId");
+      if (!stall) throw new NotFoundException("Stall request not found");
+
+      const eventDoc: any = stall.eventId;
+      if (!eventDoc) throw new NotFoundException("Event not found for this stall.");
+      if (eventHasEnded(eventDoc)) {
+        throw new BadRequestException(EVENT_ENDED_MESSAGE);
+      }
+      if (stall.status !== "Processing" && stall.status !== "Completed") {
+        throw new BadRequestException(
+          "Only a booking that already holds a space (awaiting payment or confirmed) can be edited this way.",
+        );
+      }
+
+      const newTables = dto.selectedTables || [];
+      if (newTables.length === 0) {
+        throw new BadRequestException("Select at least one space.");
+      }
+
+      const event = eventDoc.toObject ? eventDoc.toObject() : eventDoc;
+      let allTables: any[] = [];
+      if (typeof event.venueTables === "object" && event.venueTables !== null) {
+        allTables = Object.values(event.venueTables).flat();
+      } else if (Array.isArray(event.venueTables)) {
+        allTables = event.venueTables;
+      }
+
+      // Map each placed position → its template id, so we can enforce the
+      // vendor's preferred-type restriction regardless of what the client sent.
+      const posToTemplateId: Record<string, string> = {};
+      allTables.forEach((t: any) => {
+        if (t?.positionId) posToTemplateId[t.positionId] = t.id;
+      });
+
+      // Preferred templates: the multi-type set, falling back to the singular.
+      const preferredIds: string[] = (
+        (stall as any).preferredTemplateIds &&
+        (stall as any).preferredTemplateIds.length > 0
+          ? (stall as any).preferredTemplateIds
+          : [(stall as any).preferredTemplateId]
+      ).filter(Boolean);
+
+      if (preferredIds.length > 0) {
+        for (const t of newTables) {
+          const tplId = posToTemplateId[t.positionId] || (t as any).tableId;
+          if (tplId && !preferredIds.includes(String(tplId))) {
+            throw new BadRequestException(
+              `Space "${t.tableName || t.positionId}" is not one of the vendor's preferred space types.`,
+            );
+          }
+        }
+      }
+
+      // Availability: none of the new positions may be held by ANOTHER active
+      // booking (this stall's own current spaces are fine — they get freed).
+      const newPositionIds = newTables.map((t) => t.positionId);
+      const bookedStalls = await this.stallModel.find({
+        eventId: stall.eventId,
+        _id: { $ne: stallId },
+        status: { $in: ["Processing", "Completed"] },
+        "selectedTables.0": { $exists: true },
+      });
+      const otherBookedPositions = new Set(
+        bookedStalls.flatMap((s) => s.selectedTables.map((t) => t.positionId)),
+      );
+      const clash = newPositionIds.filter((p) => otherBookedPositions.has(p));
+      if (clash.length > 0) {
+        throw new ConflictException(
+          `Some selected spaces are no longer available: ${clash.join(", ")}`,
+        );
+      }
+
+      // Per-type + total caps (same rules as vendor selection).
+      const templatesById: Record<string, any> = {};
+      (event.tableTemplates || []).forEach((tpl: any) => {
+        if (tpl?.id) templatesById[tpl.id] = tpl;
+      });
+      const countByTemplate: Record<string, number> = {};
+      for (const sel of newTables) {
+        const tplId = posToTemplateId[sel.positionId] || (sel as any).tableId;
+        if (!tplId) continue;
+        countByTemplate[tplId] = (countByTemplate[tplId] || 0) + 1;
+      }
+      for (const [tplId, count] of Object.entries(countByTemplate)) {
+        const max = Number(templatesById[tplId]?.maxPerBooking);
+        if (Number.isFinite(max) && max > 0 && count > max) {
+          const name = templatesById[tplId]?.name || "this type";
+          throw new BadRequestException(
+            `At most ${max} "${name}" space${max === 1 ? "" : "s"} per booking.`,
+          );
+        }
+      }
+      const maxTotal = Number(event.maxSpacesPerVendor);
+      if (Number.isFinite(maxTotal) && maxTotal > 0 && newTables.length > maxTotal) {
+        throw new BadRequestException(
+          `At most ${maxTotal} space${maxTotal === 1 ? "" : "s"} for this event.`,
+        );
+      }
+
+      // Enforce the vendor's requested per-type quantities (their allowed
+      // booking number). preferredTemplateQuantities is parallel to
+      // preferredTemplateIds; 0 / missing = unrestricted for that type.
+      const reqQtys: number[] = Array.isArray(
+        (stall as any).preferredTemplateQuantities,
+      )
+        ? (stall as any).preferredTemplateQuantities
+        : [];
+      if (reqQtys.length > 0 && preferredIds.length > 0) {
+        const allowedByTpl: Record<string, number> = {};
+        preferredIds.forEach((id, i) => {
+          allowedByTpl[String(id)] = Number(reqQtys[i]) || 0;
+        });
+        for (const [tplId, count] of Object.entries(countByTemplate)) {
+          const allow = allowedByTpl[tplId] || 0;
+          if (allow > 0 && count > allow) {
+            throw new BadRequestException(
+              `The vendor requested only ${allow} of that space type.`,
+            );
+          }
+        }
+        const totalAllowed = Object.values(allowedByTpl).reduce(
+          (s, n) => s + (n || 0),
+          0,
+        );
+        if (totalAllowed > 0 && newTables.length > totalAllowed) {
+          throw new BadRequestException(
+            `The vendor may book at most ${totalAllowed} space${totalAllowed === 1 ? "" : "s"}.`,
+          );
+        }
+      }
+
+      // Re-price add-ons from the event's authoritative price list.
+      const addOnById: Record<string, any> = {};
+      (event.addOnItems || []).forEach((a: any) => {
+        if (a?.id) addOnById[a.id] = a;
+      });
+      const newAddOns = (dto.selectedAddOns || []).map((a) => {
+        const authoritative = addOnById[a.addOnId];
+        const price = authoritative ? Number(authoritative.price) : a.price;
+        return {
+          addOnId: a.addOnId,
+          name: authoritative?.name || a.name,
+          price,
+          quantity: Math.max(1, Number(a.quantity) || 1),
+          color: authoritative?.color,
+        };
+      });
+
+      // Totals + the extra to collect.
+      const tablesTotal = newTables.reduce((s, t) => s + (t.price || 0), 0);
+      const depositTotal = newTables.reduce(
+        (s, t) => s + (t.depositAmount || 0),
+        0,
+      );
+      const addOnsTotal = newAddOns.reduce(
+        (s, a) => s + a.price * a.quantity,
+        0,
+      );
+      const newGrandTotal = tablesTotal + depositTotal + addOnsTotal;
+      const oldGrandTotal = Number((stall as any).grandTotal) || 0;
+      const amountDue = Math.max(0, newGrandTotal - oldGrandTotal);
+      const wasCompleted = stall.status === "Completed";
+
+      // Re-map the event's venueTables in one pass: book the new positions, free
+      // any of this booking's old positions that are no longer selected.
+      const oldPositions = new Set(
+        (stall.selectedTables || []).map((t: any) => t.positionId),
+      );
+      const newPositions = new Set(newPositionIds);
+      const remap = (table: any) => {
+        const obj = table.toObject ? table.toObject() : table;
+        const pos = obj.positionId;
+        if (newPositions.has(pos)) {
+          return { ...obj, isBooked: true, bookedBy: String(stallId) };
+        }
+        if (oldPositions.has(pos)) {
+          return { ...obj, isBooked: false, bookedBy: null };
+        }
+        return obj;
+      };
+      const eventLive: any = await this.eventModel.findById(event._id);
+      if (eventLive?.venueTables) {
+        if (Array.isArray(eventLive.venueTables)) {
+          eventLive.venueTables = eventLive.venueTables.map(remap);
+        } else {
+          for (const layoutId of Object.keys(eventLive.venueTables)) {
+            eventLive.venueTables[layoutId] = (
+              eventLive.venueTables[layoutId] || []
+            ).map(remap);
+          }
+        }
+        eventLive.markModified("venueTables");
+        await eventLive.save();
+      }
+
+      // Update the stall.
+      const actor = (dto.changedBy || "").trim() || "Organizer";
+      stall.selectedTables = newTables as any;
+      stall.selectedAddOns = newAddOns as any;
+      (stall as any).tablesTotal = tablesTotal;
+      (stall as any).depositTotal = depositTotal;
+      (stall as any).addOnsTotal = addOnsTotal;
+      (stall as any).grandTotal = newGrandTotal;
+      (stall as any).remainingAmount = amountDue;
+      if (amountDue > 0) {
+        // Needs a top-up before it's settled again.
+        stall.status = "Processing" as any;
+        if (wasCompleted) stall.paymentStatus = "Partial" as any;
+        (stall as any).qrCodePath = null;
+        (stall as any).qrCodeData = null;
+      }
+      stall.statusHistory.push({
+        status: stall.status,
+        note:
+          `Spaces/add-ons edited by ${actor}.` +
+          (amountDue > 0
+            ? ` Extra ${amountDue} to collect.`
+            : " No extra charge.") +
+          (dto.notes && dto.notes.trim() ? ` ${dto.notes.trim()}` : ""),
+        changedAt: new Date(),
+        changedBy: actor,
+      } as any);
+      await stall.save();
+
+      const populated = await this.stallModel
+        .findById(stallId)
+        .populate("shopkeeperId")
+        .populate("eventId")
+        .populate("organizerId");
+
+      return {
+        success: true,
+        message:
+          amountDue > 0
+            ? `Allocation updated. Collect the extra ${amountDue} from the vendor, then confirm payment.`
+            : "Allocation updated. No extra charge.",
+        amountDue,
+        grandTotal: newGrandTotal,
+        data: populated,
+      };
+    } catch (error) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException ||
+        error instanceof ConflictException
+      ) {
+        throw error;
+      }
+      this.logger.error("Error editing stall spaces:", error);
+      return { success: false, message: (error as any)?.message, data: null };
+    }
+  }
+
+  /**
+   * ORGANIZER/OPERATOR edit of a stall's full form (contact + business profile +
+   * applicant/registration details). Contact/business fields save to the vendor;
+   * applicant/registration fields save to BOTH the stall and the vendor so the
+   * detail dialog + export stay in sync. Only sent fields are updated.
+   */
+  async editStallDetails(stallId: string, dto: EditStallDetailsDto) {
+    try {
+      if (!Types.ObjectId.isValid(stallId)) {
+        throw new BadRequestException("Invalid stall ID format");
+      }
+      const stall = await this.stallModel.findById(stallId);
+      if (!stall) throw new NotFoundException("Stall request not found");
+
+      const set = (obj: any, key: string, val: any) => {
+        if (val !== undefined) obj[key] = val;
+      };
+
+      // Fields that live on the stall doc (also mirrored to the vendor below).
+      set(stall, "brandName", dto.brandName);
+      set(stall, "nameOfApplicant", dto.nameOfApplicant);
+      set(stall, "registrationNumber", dto.registrationNumber);
+      set(stall, "residency", dto.residency);
+      set(stall, "businessOwnerNationality", dto.businessOwnerNationality);
+      set(stall, "refundPaymentDescription", dto.refundPaymentDescription);
+      set(stall, "productDescription", dto.productDescription);
+      set(stall, "noOfOperators", dto.noOfOperators);
+
+      const actor = (dto.changedBy || "").trim() || "Organizer";
+      stall.statusHistory.push({
+        status: stall.status,
+        note: `Stall form edited by ${actor}.`,
+        changedAt: new Date(),
+        changedBy: actor,
+      } as any);
+      await stall.save();
+
+      // Vendor profile fields (+ the shared ones).
+      const vendorId = (stall as any).shopkeeperId;
+      if (vendorId) {
+        const vUpdate: Record<string, any> = {};
+        set(vUpdate, "name", dto.name);
+        set(vUpdate, "email", dto.email);
+        set(vUpdate, "businessEmail", dto.businessEmail);
+        set(vUpdate, "whatsAppNumber", dto.whatsAppNumber);
+        set(vUpdate, "whatsappNumber", dto.whatsAppNumber);
+        set(vUpdate, "phoneNumber", dto.phoneNumber);
+        set(vUpdate, "country", dto.country);
+        set(vUpdate, "businessName", dto.businessName);
+        set(vUpdate, "businessType", dto.businessType);
+        set(vUpdate, "businessCategory", dto.businessCategory);
+        set(vUpdate, "businessDescription", dto.businessDescription);
+        set(vUpdate, "address", dto.address);
+        set(vUpdate, "city", dto.city);
+        set(vUpdate, "state", dto.state);
+        set(vUpdate, "pincode", dto.pincode);
+        set(vUpdate, "faceBookLink", dto.faceBookLink);
+        set(vUpdate, "instagramLink", dto.instagramLink);
+        set(vUpdate, "brandName", dto.brandName);
+        set(vUpdate, "nameOfApplicant", dto.nameOfApplicant);
+        set(vUpdate, "registrationNumber", dto.registrationNumber);
+        set(vUpdate, "residency", dto.residency);
+        set(vUpdate, "businessOwnerNationality", dto.businessOwnerNationality);
+        set(vUpdate, "refundPaymentDescription", dto.refundPaymentDescription);
+        set(vUpdate, "productDescription", dto.productDescription);
+        set(vUpdate, "noOfOperators", dto.noOfOperators);
+        if (Object.keys(vUpdate).length > 0) {
+          await this.vendorModel.findByIdAndUpdate(vendorId, { $set: vUpdate });
+        }
+      }
+
+      const populated = await this.stallModel
+        .findById(stallId)
+        .populate("shopkeeperId")
+        .populate("eventId")
+        .populate("organizerId");
+
+      return {
+        success: true,
+        message: "Stall details updated.",
+        data: populated,
+      };
+    } catch (error) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+      this.logger.error("Error editing stall details:", error);
+      return { success: false, message: (error as any)?.message, data: null };
     }
   }
 
@@ -3223,7 +3588,7 @@ Thank you for choosing Eventsh! 🎊`;
             // vendor filled in, so we ship both and let the frontend fall back.
             // Keep this in sync with the fields the export/stall dialog show.
             select:
-              "name email businessEmail phoneNumber phone whatsAppNumber whatsappNumber countryCode country shopName businessName businessType businessCategory businessDescription instagramLink instagramHandle faceBookLink businessOwnerNationality residency noOfOperators refundPaymentDescription productDescription nameOfApplicant registrationNumber brandName hasDocVerification GSTNumber UENNumber",
+              "name email businessEmail phoneNumber phone whatsAppNumber whatsappNumber countryCode country shopName businessName businessType businessCategory businessDescription instagramLink instagramHandle faceBookLink businessOwnerNationality residency noOfOperators refundPaymentDescription productDescription nameOfApplicant registrationNumber brandName hasDocVerification GSTNumber UENNumber isMember membershipEndDate",
           },
           {
             path: "eventId",

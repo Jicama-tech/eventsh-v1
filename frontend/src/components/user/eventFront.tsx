@@ -9796,40 +9796,43 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   Edit request (operators &amp; add-ons)
                 </Button>
               )}
-              {/* Ask the organizer to cancel/delete this booking (frees the
-                  space + refund handled by the organizer). Hidden if a request
-                  is already pending. */}
-              {existingStallRequest?.pendingCancellation?.status ===
-              "requested" ? (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-center text-xs text-amber-700">
-                  Cancellation request pending organizer review.
-                </div>
-              ) : (
-                <Button
-                  variant="outline"
-                  className="w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-                  onClick={() => {
-                    setCancelReason("");
-                    setShowCancelDialog(true);
-                  }}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Cancel / delete this booking
-                </Button>
-              )}
+              {/* Register a new request — under this or a different vendor. */}
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setShowRegisterTargetChoice(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Register a new request
+              </Button>
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   variant="outline"
                   onClick={() => setShowCompletedChoice(false)}
                 >
-                  Close
+                  Review
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowRegisterTargetChoice(true)}
-                >
-                  Register a new request
-                </Button>
+                {/* Ask the organizer to cancel/delete this booking (frees the
+                    space + refund handled by the organizer). Hidden if a
+                    request is already pending. */}
+                {existingStallRequest?.pendingCancellation?.status ===
+                "requested" ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-center text-xs text-amber-700 flex items-center justify-center">
+                    Cancellation pending review
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                    onClick={() => {
+                      setCancelReason("");
+                      setShowCancelDialog(true);
+                    }}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Cancel / delete
+                  </Button>
+                )}
               </div>
             </div>
           ) : (
