@@ -1,6 +1,12 @@
 // File: EventDetailPage.tsx
 
-import React, { useState, useEffect, useRef, useMemo, CSSProperties } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  CSSProperties,
+} from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -374,9 +380,7 @@ function CollapsibleCard({
           )}
         </span>
       </button>
-      {open && (
-        <div className="px-5 sm:px-6 pb-5 sm:pb-6">{children}</div>
-      )}
+      {open && <div className="px-5 sm:px-6 pb-5 sm:pb-6">{children}</div>}
     </div>
   );
 }
@@ -1149,9 +1153,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         if (data) {
           setActiveMembership({
             planName:
-              typeof data.planId === "object"
-                ? data.planId?.name
-                : undefined,
+              typeof data.planId === "object" ? data.planId?.name : undefined,
             endDate: data.endDate,
           });
         }
@@ -1188,15 +1190,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // The lookup key is the template `id` carried on every placed row.
   const resolveTablePricing = (table: any) => {
     const useMember = isMember;
-    const templates: any[] = Array.isArray(
-      (eventData as any)?.tableTemplates,
-    )
+    const templates: any[] = Array.isArray((eventData as any)?.tableTemplates)
       ? (eventData as any).tableTemplates
       : [];
     const tpl =
-      table?.id != null
-        ? templates.find((t: any) => t?.id === table.id)
-        : null;
+      table?.id != null ? templates.find((t: any) => t?.id === table.id) : null;
 
     const pickMember = (placed: any, fromTpl: any) =>
       placed != null ? placed : fromTpl != null ? fromTpl : null;
@@ -1212,17 +1210,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     );
 
     const tablePrice =
-      useMember && memberPrice != null
-        ? memberPrice
-        : table?.tablePrice ?? 0;
+      useMember && memberPrice != null ? memberPrice : (table?.tablePrice ?? 0);
     const bookingPrice =
       useMember && memberBookingPrice != null
         ? memberBookingPrice
-        : table?.bookingPrice ?? 0;
+        : (table?.bookingPrice ?? 0);
     const depositPrice =
       useMember && memberDepositPrice != null
         ? memberDepositPrice
-        : table?.depositPrice ?? 0;
+        : (table?.depositPrice ?? 0);
     const regularPrice = table?.tablePrice ?? 0;
     const memberSaved =
       useMember && memberPrice != null && regularPrice > memberPrice
@@ -1266,8 +1262,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           tablePrice: p.tablePrice,
           bookingPrice: p.bookingPrice,
           depositPrice: p.depositPrice,
-          appliedTier:
-            isMember && p.memberSaved > 0 ? "member" : "regular",
+          appliedTier: isMember && p.memberSaved > 0 ? "member" : "regular",
           memberSaved: p.memberSaved,
         };
       });
@@ -1674,7 +1669,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // Google sign-in lookups) and route the user to the right next screen.
   // `fallbackWhatsApp` keeps the verified WhatsApp number when the vendor
   // doc itself doesn't carry one (e.g. matched only by email).
-  const applyVendorRecord = async (shopData: any, fallbackWhatsApp?: string) => {
+  const applyVendorRecord = async (
+    shopData: any,
+    fallbackWhatsApp?: string,
+  ) => {
     // Applying an existing profile is never a "register new" flow.
     setRegisterNewMode(false);
     setShopkeeperExists(true);
@@ -1924,8 +1922,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       );
 
     // Stall-specific terms checklist.
-    const terms = (ev.termsAndConditionsforStalls || []).filter(
-      (t: any) => (t?.termsAndConditionsforStalls || "").trim(),
+    const terms = (ev.termsAndConditionsforStalls || []).filter((t: any) =>
+      (t?.termsAndConditionsforStalls || "").trim(),
     );
 
     return {
@@ -2016,7 +2014,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // (linked accounts) and branches: 0 → fresh registration, 1 → continue,
   // 2+ → account chooser.
   const lookupVendorByEmail = async (email: string) => {
-    const clean = String(email || "").trim().toLowerCase();
+    const clean = String(email || "")
+      .trim()
+      .toLowerCase();
     if (!clean) {
       setStallGoogleLoading(false);
       toast({
@@ -3610,8 +3610,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     shopkeeperDetails.preferredTemplateIds || []
   ).reduce(
     (sum, _id, i) =>
-      sum +
-      (Number(shopkeeperDetails.preferredTemplateQuantities?.[i]) || 1),
+      sum + (Number(shopkeeperDetails.preferredTemplateQuantities?.[i]) || 1),
     0,
   );
   // Per-type ceiling: the template's own maxPerBooking if set, else the cap.
@@ -3816,8 +3815,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     } else if (
       regNo &&
       regConfig.maxLength > 0 &&
-      (regNo.length < regConfig.minLength ||
-        regNo.length > regConfig.maxLength)
+      (regNo.length < regConfig.minLength || regNo.length > regConfig.maxLength)
     ) {
       invalid.push(
         regConfig.minLength === regConfig.maxLength
@@ -3890,11 +3888,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       // aren't re-verified (saves the external API call) and shown to the
       // organizer in the stall details dialog for easy approval.
       formData.append("isGSTVerified", gstVerified ? "true" : "false");
-      if (gstDetails)
-        formData.append("gstDetails", JSON.stringify(gstDetails));
+      if (gstDetails) formData.append("gstDetails", JSON.stringify(gstDetails));
       formData.append("isUENVerified", uenVerified ? "true" : "false");
-      if (uenDetails)
-        formData.append("uenDetails", JSON.stringify(uenDetails));
+      if (uenDetails) formData.append("uenDetails", JSON.stringify(uenDetails));
       formData.append(
         "refundPaymentDescription",
         shopkeeperDetails.refundPaymentDescription,
@@ -3913,15 +3909,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       // Multiple preferred space types (combination). Sent as JSON; the legacy
       // singular fields are kept in sync (first selection) for older paths.
       const prefIds: string[] = shopkeeperDetails.preferredTemplateIds || [];
-      const prefNames: string[] = shopkeeperDetails.preferredTemplateNames || [];
+      const prefNames: string[] =
+        shopkeeperDetails.preferredTemplateNames || [];
       if (prefIds.length > 0) {
         // Quantities parallel to prefIds — default 1 for any missing entry.
-        const prefQtys = prefIds.map(
-          (_id, i) =>
-            Math.max(
-              1,
-              Number(shopkeeperDetails.preferredTemplateQuantities?.[i]) || 1,
-            ),
+        const prefQtys = prefIds.map((_id, i) =>
+          Math.max(
+            1,
+            Number(shopkeeperDetails.preferredTemplateQuantities?.[i]) || 1,
+          ),
         );
         formData.append("preferredTemplateIds", JSON.stringify(prefIds));
         formData.append("preferredTemplateNames", JSON.stringify(prefNames));
@@ -4431,7 +4427,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       }
     }
     // Compact UTC format expected by Google Calendar: YYYYMMDDTHHmmssZ
-    return base.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    return base
+      .toISOString()
+      .replace(/[-:]/g, "")
+      .replace(/\.\d{3}/, "");
   };
   const googleCalendarUrl = (() => {
     try {
@@ -4477,7 +4476,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // Denominator = original capacity. Never let it fall below what's currently
   // available, so a missing/stale original can't show e.g. "97 / 97" — once
   // tickets sell, available drops but the total stays the original (e.g. 100).
-  const totalTickets = Math.max(Number(rawOriginalTotal) || 0, availableTickets);
+  const totalTickets = Math.max(
+    Number(rawOriginalTotal) || 0,
+    availableTickets,
+  );
 
   // Extract layout IDs from venueConfig
   const layoutIds = venueConfig?.map((config) => config.id) || [];
@@ -4501,9 +4503,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     const color = t.color || "#22c55e";
     const name = t.name || "Space";
     if (
-      !forSaleTemplateLegend.some(
-        (e) => e.name === name && e.color === color,
-      )
+      !forSaleTemplateLegend.some((e) => e.name === name && e.color === color)
     )
       forSaleTemplateLegend.push({ name, color });
   });
@@ -4580,42 +4580,42 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     currentLayoutDoors
       .filter((door: any) => inCrop(door?.x, door?.y))
       .map((door: any) => {
-      const type = (door?.type || "").toLowerCase();
-      const isEntrance = type === "entrance";
-      const isExit = type === "exit";
-      const isSquare = door?.shape === "square";
-      const w = Number(door?.width) > 0 ? Number(door.width) : 50;
-      const h = Number(door?.height) > 0 ? Number(door.height) : 50;
-      // Entrance green, exit red, custom door uses its stored colour.
-      const doorColor = isEntrance
-        ? "#16a34a"
-        : isExit
-          ? "#dc2626"
-          : door?.color || "#f97316";
-      const fallback = isEntrance ? "IN" : isExit ? "OUT" : "DOOR";
-      return (
-        <div
-          key={`door-${door.id || `${door.x}-${door.y}`}`}
-          className={`absolute flex items-center justify-center text-[10px] font-bold text-white shadow-md select-none pointer-events-none border-2 ${
-            isSquare ? "rounded-md" : "rounded-full"
-          }`}
-          style={{
-            left: `${door.x}px`,
-            top: `${door.y}px`,
-            width: `${w}px`,
-            height: `${h}px`,
-            backgroundColor: doorColor,
-            borderColor: "rgba(0,0,0,0.25)",
-            transform: `rotate(${door.rotation || 0}deg)`,
-            transformOrigin: "center center",
-            zIndex: 4,
-          }}
-          title={(door.label as string) || fallback}
-        >
-          <span className="px-0.5 truncate">{door.label || fallback}</span>
-        </div>
-      );
-    });
+        const type = (door?.type || "").toLowerCase();
+        const isEntrance = type === "entrance";
+        const isExit = type === "exit";
+        const isSquare = door?.shape === "square";
+        const w = Number(door?.width) > 0 ? Number(door.width) : 50;
+        const h = Number(door?.height) > 0 ? Number(door.height) : 50;
+        // Entrance green, exit red, custom door uses its stored colour.
+        const doorColor = isEntrance
+          ? "#16a34a"
+          : isExit
+            ? "#dc2626"
+            : door?.color || "#f97316";
+        const fallback = isEntrance ? "IN" : isExit ? "OUT" : "DOOR";
+        return (
+          <div
+            key={`door-${door.id || `${door.x}-${door.y}`}`}
+            className={`absolute flex items-center justify-center text-[10px] font-bold text-white shadow-md select-none pointer-events-none border-2 ${
+              isSquare ? "rounded-md" : "rounded-full"
+            }`}
+            style={{
+              left: `${door.x}px`,
+              top: `${door.y}px`,
+              width: `${w}px`,
+              height: `${h}px`,
+              backgroundColor: doorColor,
+              borderColor: "rgba(0,0,0,0.25)",
+              transform: `rotate(${door.rotation || 0}deg)`,
+              transformOrigin: "center center",
+              zIndex: 4,
+            }}
+            title={(door.label as string) || fallback}
+          >
+            <span className="px-0.5 truncate">{door.label || fallback}</span>
+          </div>
+        );
+      });
 
   const handleAddOnSelect = (addon: any) => {
     // In Edit-Request (amend) mode add-ons are add-only: an originally-booked
@@ -4664,8 +4664,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       cap += perCap;
       if (!Number.isFinite(cap)) break;
     }
-    const current =
-      selectedAddOns.find((a) => a.id === addonId)?.quantity || 0;
+    const current = selectedAddOns.find((a) => a.id === addonId)?.quantity || 0;
     if (Number.isFinite(cap) && current + 1 > cap) {
       toast({
         duration: 3500,
@@ -5023,9 +5022,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           (eventData as any)?.adBar?.message && (
             <AnnouncementBar
               message={(eventData as any).adBar.message}
-              backgroundColor={
-                (eventData as any).adBar.bgColor || "#000000"
-              }
+              backgroundColor={(eventData as any).adBar.bgColor || "#000000"}
               textColor={(eventData as any).adBar.textColor || "#ffffff"}
             />
           )}
@@ -5125,9 +5122,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           : [];
         if (sponsors.length === 0) return null;
         const resolveSrc = (u: string) =>
-          /^https?:\/\//.test(u) || u.startsWith("blob:")
-            ? u
-            : `${apiURL}${u}`;
+          /^https?:\/\//.test(u) || u.startsWith("blob:") ? u : `${apiURL}${u}`;
         return (
           <div className="border-b border-gray-100 bg-white py-4">
             <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">
@@ -5778,8 +5773,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     {/* Buy Tickets CTA — only if visitorTypes exist. Once the
                         event is over, sales close: the button is replaced with
                         an "ended" notice (the handler + backend also refuse). */}
-                    {visitorTypes && visitorTypes.length > 0 && (
-                      isEventOver(eventData) ? (
+                    {visitorTypes &&
+                      visitorTypes.length > 0 &&
+                      (isEventOver(eventData) ? (
                         <div className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 mb-3 text-center text-sm font-medium text-gray-500">
                           This event has ended — ticket sales are closed.
                         </div>
@@ -5794,8 +5790,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           <Ticket className="h-5 w-5" />
                           Buy Tickets
                         </button>
-                      )
-                    )}
+                      ))}
 
                     {/* Share */}
                     <div className="flex gap-3">
@@ -6008,75 +6003,75 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   organizer.whatsAppNumber;
                 if (!showCard) return null;
                 return (
-                <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-                  <div className="px-5 pt-5 pb-4">
-                    <p
-                      className="text-sm sm:text-lg font-bold tracking-widest uppercase mb-4"
-                      style={{ color: design?.primaryColor }}
-                    >
-                      Contact Organizer
-                    </p>
-                    <div className="space-y-3">
-                      {phoneEntries.length > 0 && (
-                        <div className="flex items-start gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
-                            <Phone className="h-3.5 w-3.5 text-gray-400" />
+                  <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+                    <div className="px-5 pt-5 pb-4">
+                      <p
+                        className="text-sm sm:text-lg font-bold tracking-widest uppercase mb-4"
+                        style={{ color: design?.primaryColor }}
+                      >
+                        Contact Organizer
+                      </p>
+                      <div className="space-y-3">
+                        {phoneEntries.length > 0 && (
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                              <Phone className="h-3.5 w-3.5 text-gray-400" />
+                            </div>
+                            <div className="text-sm font-medium flex flex-col gap-1">
+                              {phoneEntries.map((e, idx) => (
+                                <a
+                                  key={`p-${idx}`}
+                                  href={`tel:${e.phone.replace(/\s+/g, "")}`}
+                                  className="hover:underline"
+                                  style={{
+                                    color: design?.secondaryColor || "#ef4444",
+                                  }}
+                                >
+                                  {e.name && (
+                                    <span className="text-gray-700 font-semibold mr-1.5">
+                                      {e.name}:
+                                    </span>
+                                  )}
+                                  {e.phone}
+                                </a>
+                              ))}
+                            </div>
                           </div>
-                          <div className="text-sm font-medium flex flex-col gap-1">
-                            {phoneEntries.map((e, idx) => (
-                              <a
-                                key={`p-${idx}`}
-                                href={`tel:${e.phone.replace(/\s+/g, "")}`}
-                                className="hover:underline"
-                                style={{
-                                  color: design?.secondaryColor || "#ef4444",
-                                }}
-                              >
-                                {e.name && (
-                                  <span className="text-gray-700 font-semibold mr-1.5">
-                                    {e.name}:
-                                  </span>
-                                )}
-                                {e.phone}
-                              </a>
-                            ))}
+                        )}
+                        {organizer.email && (
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                              <Mail className="h-3.5 w-3.5 text-gray-400" />
+                            </div>
+                            <a
+                              href={`mailto:${organizer.email}`}
+                              className="text-sm font-medium hover:underline break-all"
+                              style={{
+                                color: design?.secondaryColor || "#ef4444",
+                              }}
+                            >
+                              {organizer.email}
+                            </a>
                           </div>
-                        </div>
-                      )}
-                      {organizer.email && (
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
-                            <Mail className="h-3.5 w-3.5 text-gray-400" />
+                        )}
+                        {organizer.whatsAppNumber && (
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                              <FaWhatsapp className="h-3.5 w-3.5 text-green-500" />
+                            </div>
+                            <a
+                              href={`https://wa.me/${organizer.whatsAppNumber.replace(/\D/g, "")}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm font-medium text-gray-700 hover:text-green-600 transition-colors"
+                            >
+                              {organizer.whatsAppNumber}
+                            </a>
                           </div>
-                          <a
-                            href={`mailto:${organizer.email}`}
-                            className="text-sm font-medium hover:underline break-all"
-                            style={{
-                              color: design?.secondaryColor || "#ef4444",
-                            }}
-                          >
-                            {organizer.email}
-                          </a>
-                        </div>
-                      )}
-                      {organizer.whatsAppNumber && (
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
-                            <FaWhatsapp className="h-3.5 w-3.5 text-green-500" />
-                          </div>
-                          <a
-                            href={`https://wa.me/${organizer.whatsAppNumber.replace(/\D/g, "")}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm font-medium text-gray-700 hover:text-green-600 transition-colors"
-                          >
-                            {organizer.whatsAppNumber}
-                          </a>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
                 );
               })()}
 
@@ -6111,7 +6106,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       const first = (segs[0] || "").toLowerCase();
                       // Instagram /p/<id>/ + /reel/<id>/; Facebook
                       // /events/<id>/ + /posts/<id>/.
-                      if (first === "p" || first === "post" || first === "posts")
+                      if (
+                        first === "p" ||
+                        first === "post" ||
+                        first === "posts"
+                      )
                         return "View Post";
                       if (first === "reel" || first === "reels")
                         return "View Reel";
@@ -6302,51 +6301,51 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             to a section (Organizer / Venue Layout). The History tab was
             removed — reels now live below the Event Gallery. */}
         <div ref={tabsSectionRef} className="scroll-mt-24">
-        <Tabs
-          value={activeTab}
-          onValueChange={setActiveTab}
-          className="w-full"
-        >
-          <TabsList className="bg-gray-100 border border-gray-200 rounded-2xl p-1 h-auto flex flex-wrap w-full mt-5 gap-1">
-            <TabsTrigger
-              value="organizer"
-              className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
-            >
-              Organizer
-            </TabsTrigger>
-            {((venueTables && Object.keys(venueTables).length > 0) ||
-              roundTableData.length > 0) && (
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="w-full"
+          >
+            <TabsList className="bg-gray-100 border border-gray-200 rounded-2xl p-1 h-auto flex flex-wrap w-full mt-5 gap-1">
               <TabsTrigger
-                value="venue"
+                value="organizer"
                 className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
               >
-                Venue Layout
+                Organizer
               </TabsTrigger>
-            )}
-            {eventData?.speakers && eventData.speakers.length > 0 && (
-              <TabsTrigger
-                value="speakers"
-                className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
-              >
-                Speakers
-              </TabsTrigger>
-            )}
-            {/* Round tables are shown inside the Venue Layout tab now —
-                no separate "Round Tables" tab. */}
-            {eventData?.endDate &&
-              new Date(eventData.endDate) <= new Date() &&
-              !!eventData?.totalTickets &&
-              eventData.totalTickets > 0 && (
+              {((venueTables && Object.keys(venueTables).length > 0) ||
+                roundTableData.length > 0) && (
                 <TabsTrigger
-                  value="feedback"
+                  value="venue"
                   className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
                 >
-                  Feedback
+                  Venue Layout
                 </TabsTrigger>
               )}
-          </TabsList>
+              {eventData?.speakers && eventData.speakers.length > 0 && (
+                <TabsTrigger
+                  value="speakers"
+                  className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
+                >
+                  Speakers
+                </TabsTrigger>
+              )}
+              {/* Round tables are shown inside the Venue Layout tab now —
+                no separate "Round Tables" tab. */}
+              {eventData?.endDate &&
+                new Date(eventData.endDate) <= new Date() &&
+                !!eventData?.totalTickets &&
+                eventData.totalTickets > 0 && (
+                  <TabsTrigger
+                    value="feedback"
+                    className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
+                  >
+                    Feedback
+                  </TabsTrigger>
+                )}
+            </TabsList>
 
-          {/* History tab — Instagram reel carousel, ported verbatim
+            {/* History tab — Instagram reel carousel, ported verbatim
               from kioscart-v1's <InstagramCarousel/> pattern
               (frontend/src/components/ui/InstagramCarousel.tsx).
               The key differences from our earlier attempt:
@@ -6367,330 +6366,455 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                    the full path segment, and Instagram's embed
                    endpoint handles both canonical and share-token
                    ids transparently. */}
-          {/* Disabled — reels were moved to a "History" section below the
+            {/* Disabled — reels were moved to a "History" section below the
               Event Gallery; this old in-tab carousel no longer renders. */}
-          {false && (() => {
-            const extractReelId = (url: string): string | null => {
-              const reel = url.match(/\/reel(?:s)?\/([A-Za-z0-9_-]+)/);
-              if (reel) return reel[1];
-              const post = url.match(/\/p\/([A-Za-z0-9_-]+)/);
-              if (post) return post[1];
-              const tv = url.match(/\/tv\/([A-Za-z0-9_-]+)/);
-              if (tv) return tv[1];
-              return null;
-            };
-            const toEmbedSrc = (url: string): string | null => {
-              const id = extractReelId(url);
-              if (!id) return null;
-              return `https://www.instagram.com/p/${id}/embed/?cr=1&v=14&rd=https%3A%2F%2Fwww.instagram.com`;
-            };
-            const validEmbeds = cleanedReelLinks
-              .map((u) => ({ url: u, src: toEmbedSrc(u) }))
-              .filter((e): e is { url: string; src: string } => !!e.src);
-            if (validEmbeds.length === 0) return null;
-            // Repeat the list enough times to make the marquee feel
-            // continuous regardless of how many reels are supplied.
-            const repeatCount = Math.max(
-              2,
-              Math.ceil(12 / validEmbeds.length),
-            );
-            const marqueeItems = Array.from(
-              { length: repeatCount },
-              () => validEmbeds,
-            ).flat();
-            return (
-              <TabsContent value="history" className="mt-4 space-y-4">
-                <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
-                  <div className="flex items-center justify-between mb-4">
-                    <p
-                      className="text-sm sm:text-lg font-bold tracking-widest uppercase"
-                      style={{ color: design?.primaryColor }}
-                    >
-                      Reels Carousel
-                    </p>
-                    <span className="text-xs text-gray-400 font-medium">
-                      {cleanedReelLinks.length}{" "}
-                      {cleanedReelLinks.length === 1 ? "reel" : "reels"}
-                    </span>
-                  </div>
-                  <div
-                    ref={reelMarqueeRef}
-                    className="overflow-hidden"
-                  >
-                    <div className="flex gap-4 w-max anim-reel-marquee">
-                      {marqueeItems.map((item, i) => (
-                        <div
-                          key={`reel-${i}`}
-                          className="flex-shrink-0 rounded-2xl overflow-hidden border border-gray-200 bg-white shadow-sm"
-                          style={{ width: "220px" }}
+            {false &&
+              (() => {
+                const extractReelId = (url: string): string | null => {
+                  const reel = url.match(/\/reel(?:s)?\/([A-Za-z0-9_-]+)/);
+                  if (reel) return reel[1];
+                  const post = url.match(/\/p\/([A-Za-z0-9_-]+)/);
+                  if (post) return post[1];
+                  const tv = url.match(/\/tv\/([A-Za-z0-9_-]+)/);
+                  if (tv) return tv[1];
+                  return null;
+                };
+                const toEmbedSrc = (url: string): string | null => {
+                  const id = extractReelId(url);
+                  if (!id) return null;
+                  return `https://www.instagram.com/p/${id}/embed/?cr=1&v=14&rd=https%3A%2F%2Fwww.instagram.com`;
+                };
+                const validEmbeds = cleanedReelLinks
+                  .map((u) => ({ url: u, src: toEmbedSrc(u) }))
+                  .filter((e): e is { url: string; src: string } => !!e.src);
+                if (validEmbeds.length === 0) return null;
+                // Repeat the list enough times to make the marquee feel
+                // continuous regardless of how many reels are supplied.
+                const repeatCount = Math.max(
+                  2,
+                  Math.ceil(12 / validEmbeds.length),
+                );
+                const marqueeItems = Array.from(
+                  { length: repeatCount },
+                  () => validEmbeds,
+                ).flat();
+                return (
+                  <TabsContent value="history" className="mt-4 space-y-4">
+                    <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
+                      <div className="flex items-center justify-between mb-4">
+                        <p
+                          className="text-sm sm:text-lg font-bold tracking-widest uppercase"
+                          style={{ color: design?.primaryColor }}
                         >
-                          <div
-                            className="overflow-hidden relative"
-                            style={{ height: "280px" }}
-                          >
-                            <iframe
-                              src={item.src}
-                              title={`Instagram reel ${i}`}
-                              loading="lazy"
-                              allow="encrypted-media"
-                              allowFullScreen
-                              scrolling="no"
-                              style={{
-                                width: "100%",
-                                height: "820px",
-                                border: 0,
-                                display: "block",
-                                marginTop: "-60px",
-                              }}
-                            />
-                          </div>
+                          Reels Carousel
+                        </p>
+                        <span className="text-xs text-gray-400 font-medium">
+                          {cleanedReelLinks.length}{" "}
+                          {cleanedReelLinks.length === 1 ? "reel" : "reels"}
+                        </span>
+                      </div>
+                      <div ref={reelMarqueeRef} className="overflow-hidden">
+                        <div className="flex gap-4 w-max anim-reel-marquee">
+                          {marqueeItems.map((item, i) => (
+                            <div
+                              key={`reel-${i}`}
+                              className="flex-shrink-0 rounded-2xl overflow-hidden border border-gray-200 bg-white shadow-sm"
+                              style={{ width: "220px" }}
+                            >
+                              <div
+                                className="overflow-hidden relative"
+                                style={{ height: "280px" }}
+                              >
+                                <iframe
+                                  src={item.src}
+                                  title={`Instagram reel ${i}`}
+                                  loading="lazy"
+                                  allow="encrypted-media"
+                                  allowFullScreen
+                                  scrolling="no"
+                                  style={{
+                                    width: "100%",
+                                    height: "820px",
+                                    border: 0,
+                                    display: "block",
+                                    marginTop: "-60px",
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-3 text-center">
+                        Hover to pause
+                      </p>
                     </div>
-                  </div>
-                  <p className="text-[11px] text-gray-400 mt-3 text-center">
-                    Hover to pause
-                  </p>
-                </div>
-              </TabsContent>
-            );
-          })()}
+                  </TabsContent>
+                );
+              })()}
 
-          <TabsContent value="organizer" className="mt-4 space-y-4">
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
-              <p
-                className="text-sm sm:text-lg font-bold tracking-widest uppercase mb-5"
-                style={{ color: design?.primaryColor }}
-              >
-                About Organizer
-              </p>
-              <div className="flex items-start space-x-4 mb-5">
-                <div
-                  className="h-14 w-14 rounded-2xl flex items-center justify-center text-white font-bold text-xl flex-shrink-0"
-                  style={{ backgroundColor: design?.primaryColor || "#f97316" }}
+            <TabsContent value="organizer" className="mt-4 space-y-4">
+              <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
+                <p
+                  className="text-sm sm:text-lg font-bold tracking-widest uppercase mb-5"
+                  style={{ color: design?.primaryColor }}
                 >
-                  {organizer.organizationName.charAt(0).toUpperCase()}
+                  About Organizer
+                </p>
+                <div className="flex items-start space-x-4 mb-5">
+                  <div
+                    className="h-14 w-14 rounded-2xl flex items-center justify-center text-white font-bold text-xl flex-shrink-0"
+                    style={{
+                      backgroundColor: design?.primaryColor || "#f97316",
+                    }}
+                  >
+                    {organizer.organizationName.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg text-gray-900">
+                      {organizer.organizationName}
+                    </h3>
+                    <p className="text-gray-500 text-sm">{organizer.name}</p>
+                    {(organizer.description || organizer.bio) && (
+                      <p className="text-gray-400 text-sm mt-2 leading-relaxed whitespace-pre-line">
+                        {organizer.description || organizer.bio}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-lg text-gray-900">
-                    {organizer.organizationName}
-                  </h3>
-                  <p className="text-gray-500 text-sm">{organizer.name}</p>
-                  {(organizer.description || organizer.bio) && (
-                    <p className="text-gray-400 text-sm mt-2 leading-relaxed whitespace-pre-line">
-                      {organizer.description || organizer.bio}
-                    </p>
-                  )}
-                </div>
-              </div>
 
-              {/* QR scanner / operator entry moved to a small link near the
+                {/* QR scanner / operator entry moved to a small link near the
                   page bottom — keeps this Organizer tab focused on the
                   organizer's profile, not on operator-only actions. */}
 
-              {socialMedia &&
-                (socialMedia.facebook ||
-                  socialMedia.instagram ||
-                  socialMedia.twitter) && (
-                  <div className="flex gap-3 mt-4">
-                    {socialMedia.facebook && (
-                      <a
-                        href={socialMedia.facebook}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2.5 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-all"
-                      >
-                        <Facebook className="h-4 w-4 text-gray-500" />
-                      </a>
-                    )}
-                    {socialMedia.instagram && (
-                      <a
-                        href={socialMedia.instagram}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2.5 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-all"
-                      >
-                        <Instagram className="h-4 w-4 text-gray-500" />
-                      </a>
-                    )}
-                    {socialMedia.twitter && (
-                      <a
-                        href={socialMedia.twitter}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2.5 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-all"
-                      >
-                        <Twitter className="h-4 w-4 text-gray-500" />
-                      </a>
-                    )}
-                  </div>
-                )}
-            </div>
+                {socialMedia &&
+                  (socialMedia.facebook ||
+                    socialMedia.instagram ||
+                    socialMedia.twitter) && (
+                    <div className="flex gap-3 mt-4">
+                      {socialMedia.facebook && (
+                        <a
+                          href={socialMedia.facebook}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2.5 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-all"
+                        >
+                          <Facebook className="h-4 w-4 text-gray-500" />
+                        </a>
+                      )}
+                      {socialMedia.instagram && (
+                        <a
+                          href={socialMedia.instagram}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2.5 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-all"
+                        >
+                          <Instagram className="h-4 w-4 text-gray-500" />
+                        </a>
+                      )}
+                      {socialMedia.twitter && (
+                        <a
+                          href={socialMedia.twitter}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2.5 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-all"
+                        >
+                          <Twitter className="h-4 w-4 text-gray-500" />
+                        </a>
+                      )}
+                    </div>
+                  )}
+              </div>
 
-            {/* Info sections — each rendered in its OWN card, and shown only
+              {/* Info sections — each rendered in its OWN card, and shown only
                 when the organizer's per-section toggle is on. Age Restriction
                 + Dress Code share a single card. A missing visibility key
                 means "shown" (so older events keep displaying everything). */}
-            {(() => {
-              const secVis =
-                ((eventData as any)?.sectionVisibility as
-                  | Record<string, boolean>
-                  | undefined) || {};
-              const shown = (k: string) => secVis[k] !== false;
-              const htmlCls =
-                "text-gray-600 prose prose-sm max-w-none [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4";
-              const customs = Array.isArray((eventData as any)?.customSections)
-                ? ((eventData as any).customSections as any[])
-                : [];
-              // Custom, per-purpose age restrictions (heading + age).
-              const customAges = (
-                Array.isArray((eventData as any)?.ageRestrictions)
-                  ? ((eventData as any).ageRestrictions as any[])
-                  : []
-              ).filter((a: any) => a && (a.heading || a.age));
-              const dressCodeTheme = String(
-                (eventData as any)?.dressCodeTheme || "",
-              ).trim();
-              return (
-                <>
-                  {shown("ageDress") &&
-                    (dresscode || dressCodeTheme || customAges.length > 0) && (
+              {(() => {
+                const secVis =
+                  ((eventData as any)?.sectionVisibility as
+                    | Record<string, boolean>
+                    | undefined) || {};
+                const shown = (k: string) => secVis[k] !== false;
+                const htmlCls =
+                  "text-gray-600 prose prose-sm max-w-none [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4";
+                const customs = Array.isArray(
+                  (eventData as any)?.customSections,
+                )
+                  ? ((eventData as any).customSections as any[])
+                  : [];
+                // Custom, per-purpose age restrictions (heading + age).
+                const customAges = (
+                  Array.isArray((eventData as any)?.ageRestrictions)
+                    ? ((eventData as any).ageRestrictions as any[])
+                    : []
+                ).filter((a: any) => a && (a.heading || a.age));
+                const dressCodeTheme = String(
+                  (eventData as any)?.dressCodeTheme || "",
+                ).trim();
+                return (
+                  <>
+                    {shown("ageDress") &&
+                      (dresscode ||
+                        dressCodeTheme ||
+                        customAges.length > 0) && (
+                        <CollapsibleCard
+                          title="Age Restriction & Dress Code"
+                          headingColor={design?.primaryColor}
+                        >
+                          {(dresscode || dressCodeTheme) && (
+                            <div className="mb-1">
+                              <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">
+                                Dress Code
+                              </p>
+                              {dresscode && (
+                                <p className="text-gray-700 text-sm">
+                                  {dresscode}
+                                </p>
+                              )}
+                              {dressCodeTheme && (
+                                <p className="text-gray-700 text-sm">
+                                  <span className="font-medium">Theme:</span>{" "}
+                                  {dressCodeTheme}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                          {customAges.length > 0 && (
+                            <div className="mt-4">
+                              <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
+                                Age limits by purpose
+                              </p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                                {customAges.map((a: any, i: number) => (
+                                  <div
+                                    key={i}
+                                    className="flex items-center justify-between gap-3 rounded-md bg-gray-50 px-3 py-1.5"
+                                  >
+                                    <span className="text-sm font-medium text-gray-700">
+                                      {a.heading || "—"}
+                                    </span>
+                                    <span className="text-sm text-gray-500">
+                                      {a.age || "—"}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </CollapsibleCard>
+                      )}
+                    {shown("specialInstructions") && specialInstructions && (
                       <CollapsibleCard
-                        title="Age Restriction & Dress Code"
+                        title="Special Instructions"
                         headingColor={design?.primaryColor}
                       >
-                        {(dresscode || dressCodeTheme) && (
-                          <div className="mb-1">
-                            <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">
-                              Dress Code
-                            </p>
-                            {dresscode && (
-                              <p className="text-gray-700 text-sm">
-                                {dresscode}
-                              </p>
-                            )}
-                            {dressCodeTheme && (
-                              <p className="text-gray-700 text-sm">
-                                <span className="font-medium">Theme:</span>{" "}
-                                {dressCodeTheme}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        {customAges.length > 0 && (
-                          <div className="mt-4">
-                            <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
-                              Age limits by purpose
-                            </p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-                              {customAges.map((a: any, i: number) => (
-                                <div
-                                  key={i}
-                                  className="flex items-center justify-between gap-3 rounded-md bg-gray-50 px-3 py-1.5"
-                                >
-                                  <span className="text-sm font-medium text-gray-700">
-                                    {a.heading || "—"}
-                                  </span>
-                                  <span className="text-sm text-gray-500">
-                                    {a.age || "—"}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                        <div
+                          className={htmlCls}
+                          dangerouslySetInnerHTML={{
+                            __html: specialInstructions,
+                          }}
+                        />
                       </CollapsibleCard>
                     )}
-                  {shown("specialInstructions") && specialInstructions && (
-                    <CollapsibleCard
-                      title="Special Instructions"
-                      headingColor={design?.primaryColor}
-                    >
-                      <div
-                        className={htmlCls}
-                        dangerouslySetInnerHTML={{
-                          __html: specialInstructions,
-                        }}
-                      />
-                    </CollapsibleCard>
-                  )}
-                  {shown("refundPolicy") && refundPolicy && (
-                    <CollapsibleCard
-                      title="Refund Policy"
-                      headingColor={design?.primaryColor}
-                    >
-                      <div
-                        className={htmlCls}
-                        dangerouslySetInnerHTML={{ __html: refundPolicy }}
-                      />
-                    </CollapsibleCard>
-                  )}
-                  {shown("termsAndConditions") && termsAndConditions && (
-                    <CollapsibleCard
-                      title="Terms & Conditions"
-                      headingColor={design?.primaryColor}
-                    >
-                      <div
-                        className={htmlCls}
-                        dangerouslySetInnerHTML={{
-                          __html: termsAndConditions,
-                        }}
-                      />
-                    </CollapsibleCard>
-                  )}
-                  {customs
-                    .filter(
-                      (s: any) =>
-                        ((s?.heading || "").trim() ||
-                          (s?.content || "").trim()) &&
-                        shown(s?.id),
-                    )
-                    .map((s: any) => (
+                    {shown("refundPolicy") && refundPolicy && (
                       <CollapsibleCard
-                        key={s.id || s.heading}
-                        title={(s.heading || "").trim() || "More Information"}
+                        title="Refund Policy"
                         headingColor={design?.primaryColor}
                       >
-                        {(s.content || "").trim() && (
-                          <div
-                            className={htmlCls}
-                            dangerouslySetInnerHTML={{ __html: s.content }}
-                          />
-                        )}
+                        <div
+                          className={htmlCls}
+                          dangerouslySetInnerHTML={{ __html: refundPolicy }}
+                        />
                       </CollapsibleCard>
-                    ))}
-                </>
-              );
-            })()}
-          </TabsContent>
+                    )}
+                    {shown("termsAndConditions") && termsAndConditions && (
+                      <CollapsibleCard
+                        title="Terms & Conditions"
+                        headingColor={design?.primaryColor}
+                      >
+                        <div
+                          className={htmlCls}
+                          dangerouslySetInnerHTML={{
+                            __html: termsAndConditions,
+                          }}
+                        />
+                      </CollapsibleCard>
+                    )}
+                    {customs
+                      .filter(
+                        (s: any) =>
+                          ((s?.heading || "").trim() ||
+                            (s?.content || "").trim()) &&
+                          shown(s?.id),
+                      )
+                      .map((s: any) => (
+                        <CollapsibleCard
+                          key={s.id || s.heading}
+                          title={(s.heading || "").trim() || "More Information"}
+                          headingColor={design?.primaryColor}
+                        >
+                          {(s.content || "").trim() && (
+                            <div
+                              className={htmlCls}
+                              dangerouslySetInnerHTML={{ __html: s.content }}
+                            />
+                          )}
+                        </CollapsibleCard>
+                      ))}
+                  </>
+                );
+              })()}
+            </TabsContent>
 
-          {/* Speaker Zone */}
-          <TabsContent value="speakers" className="mt-4 space-y-4">
-            {eventData?.speakers && eventData.speakers.length > 0 && (
-              <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
-                <p
-                  className="text-sm sm:text-lg font-bold tracking-widest uppercase mb-6"
-                  style={{ color: design?.primaryColor }}
-                >
-                  Speaker Lineup
-                </p>
+            {/* Speaker Zone */}
+            <TabsContent value="speakers" className="mt-4 space-y-4">
+              {eventData?.speakers && eventData.speakers.length > 0 && (
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
+                  <p
+                    className="text-sm sm:text-lg font-bold tracking-widest uppercase mb-6"
+                    style={{ color: design?.primaryColor }}
+                  >
+                    Speaker Lineup
+                  </p>
 
-                {/* Keynote Speakers */}
-                {eventData.speakers.filter((s: any) => s.isKeynote).length >
-                  0 && (
-                  <div className="mb-8">
-                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
-                      Keynote Speakers
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {eventData.speakers
-                        .filter((s: any) => s.isKeynote)
-                        .map((speaker: any) => (
-                          <div
-                            key={speaker.id}
-                            className="flex gap-4 p-4 rounded-xl bg-gradient-to-br from-gray-50 to-white border border-gray-100 shadow-sm"
-                          >
-                            <div className="flex-shrink-0">
+                  {/* Keynote Speakers */}
+                  {eventData.speakers.filter((s: any) => s.isKeynote).length >
+                    0 && (
+                    <div className="mb-8">
+                      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
+                        Keynote Speakers
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {eventData.speakers
+                          .filter((s: any) => s.isKeynote)
+                          .map((speaker: any) => (
+                            <div
+                              key={speaker.id}
+                              className="flex gap-4 p-4 rounded-xl bg-gradient-to-br from-gray-50 to-white border border-gray-100 shadow-sm"
+                            >
+                              <div className="flex-shrink-0">
+                                {speaker.image ? (
+                                  <img
+                                    src={
+                                      speaker.image.startsWith("/")
+                                        ? `${apiURL?.replace("/api", "") || ""}${speaker.image}`
+                                        : speaker.image
+                                    }
+                                    alt={speaker.name}
+                                    className="w-20 h-20 rounded-full object-cover border-2 border-white shadow-md"
+                                  />
+                                ) : (
+                                  <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-2xl font-bold border-2 border-white shadow-md">
+                                    {speaker.name?.charAt(0)?.toUpperCase()}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h4 className="font-bold text-gray-900 truncate">
+                                    {speaker.name}
+                                  </h4>
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800">
+                                    KEYNOTE
+                                  </span>
+                                </div>
+                                {speaker.title && (
+                                  <p className="text-sm text-gray-600">
+                                    {speaker.title}
+                                    {speaker.organization
+                                      ? ` at ${speaker.organization}`
+                                      : ""}
+                                  </p>
+                                )}
+                                {speaker.bio && (
+                                  <p className="text-xs text-gray-500 mt-2 line-clamp-2">
+                                    {speaker.bio}
+                                  </p>
+                                )}
+                                {speaker.socialLinks && (
+                                  <div className="flex gap-3 mt-2">
+                                    {speaker.socialLinks.linkedin && (
+                                      <a
+                                        href={speaker.socialLinks.linkedin}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                                      >
+                                        LinkedIn
+                                      </a>
+                                    )}
+                                    {speaker.socialLinks.twitter && (
+                                      <a
+                                        href={speaker.socialLinks.twitter}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-gray-600 hover:text-gray-800 text-xs font-medium"
+                                      >
+                                        X / Twitter
+                                      </a>
+                                    )}
+                                    {speaker.socialLinks.website && (
+                                      <a
+                                        href={speaker.socialLinks.website}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-indigo-600 hover:text-indigo-800 text-xs font-medium"
+                                      >
+                                        Website
+                                      </a>
+                                    )}
+                                  </div>
+                                )}
+                                {speaker.slots && speaker.slots.length > 0 && (
+                                  <div className="mt-3 space-y-1">
+                                    {speaker.slots.map(
+                                      (slot: any, si: number) => (
+                                        <div
+                                          key={si}
+                                          className="flex items-center gap-2 text-xs bg-white rounded-lg px-2 py-1 border"
+                                        >
+                                          {slot.startTime && (
+                                            <span className="font-mono text-gray-500">
+                                              {slot.startTime}
+                                              {slot.endTime
+                                                ? ` - ${slot.endTime}`
+                                                : ""}
+                                            </span>
+                                          )}
+                                          <span className="font-medium text-gray-800">
+                                            {slot.topic}
+                                          </span>
+                                        </div>
+                                      ),
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Other Speakers */}
+                  {eventData.speakers.filter((s: any) => !s.isKeynote).length >
+                    0 && (
+                    <div>
+                      {eventData.speakers.filter((s: any) => s.isKeynote)
+                        .length > 0 && (
+                        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
+                          Speakers & Panelists
+                        </h3>
+                      )}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {eventData.speakers
+                          .filter((s: any) => !s.isKeynote)
+                          .map((speaker: any) => (
+                            <div
+                              key={speaker.id}
+                              className="text-center p-4 rounded-xl bg-gray-50/50 border border-gray-100 hover:shadow-sm transition-shadow"
+                            >
                               {speaker.image ? (
                                 <img
                                   src={
@@ -6699,1702 +6823,1645 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                       : speaker.image
                                   }
                                   alt={speaker.name}
-                                  className="w-20 h-20 rounded-full object-cover border-2 border-white shadow-md"
+                                  className="w-16 h-16 rounded-full object-cover mx-auto border-2 border-white shadow"
                                 />
                               ) : (
-                                <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-2xl font-bold border-2 border-white shadow-md">
+                                <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-xl font-bold mx-auto border-2 border-white shadow">
                                   {speaker.name?.charAt(0)?.toUpperCase()}
                                 </div>
                               )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h4 className="font-bold text-gray-900 truncate">
-                                  {speaker.name}
-                                </h4>
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800">
-                                  KEYNOTE
-                                </span>
-                              </div>
+                              <h4 className="font-semibold text-gray-900 mt-3 text-sm">
+                                {speaker.name}
+                              </h4>
                               {speaker.title && (
-                                <p className="text-sm text-gray-600">
+                                <p className="text-xs text-gray-500 mt-0.5">
                                   {speaker.title}
-                                  {speaker.organization
-                                    ? ` at ${speaker.organization}`
-                                    : ""}
                                 </p>
                               )}
-                              {speaker.bio && (
-                                <p className="text-xs text-gray-500 mt-2 line-clamp-2">
-                                  {speaker.bio}
+                              {speaker.organization && (
+                                <p className="text-xs text-gray-400">
+                                  {speaker.organization}
                                 </p>
-                              )}
-                              {speaker.socialLinks && (
-                                <div className="flex gap-3 mt-2">
-                                  {speaker.socialLinks.linkedin && (
-                                    <a
-                                      href={speaker.socialLinks.linkedin}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-blue-600 hover:text-blue-800 text-xs font-medium"
-                                    >
-                                      LinkedIn
-                                    </a>
-                                  )}
-                                  {speaker.socialLinks.twitter && (
-                                    <a
-                                      href={speaker.socialLinks.twitter}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-gray-600 hover:text-gray-800 text-xs font-medium"
-                                    >
-                                      X / Twitter
-                                    </a>
-                                  )}
-                                  {speaker.socialLinks.website && (
-                                    <a
-                                      href={speaker.socialLinks.website}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-indigo-600 hover:text-indigo-800 text-xs font-medium"
-                                    >
-                                      Website
-                                    </a>
-                                  )}
-                                </div>
                               )}
                               {speaker.slots && speaker.slots.length > 0 && (
-                                <div className="mt-3 space-y-1">
+                                <div className="mt-2 space-y-1">
                                   {speaker.slots.map(
                                     (slot: any, si: number) => (
                                       <div
                                         key={si}
-                                        className="flex items-center gap-2 text-xs bg-white rounded-lg px-2 py-1 border"
+                                        className="text-[11px] text-gray-600 bg-white rounded px-2 py-0.5 border"
                                       >
                                         {slot.startTime && (
-                                          <span className="font-mono text-gray-500">
+                                          <span className="font-mono mr-1">
                                             {slot.startTime}
-                                            {slot.endTime
-                                              ? ` - ${slot.endTime}`
-                                              : ""}
                                           </span>
                                         )}
-                                        <span className="font-medium text-gray-800">
-                                          {slot.topic}
-                                        </span>
+                                        {slot.topic}
                                       </div>
                                     ),
                                   )}
                                 </div>
                               )}
                             </div>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Other Speakers */}
-                {eventData.speakers.filter((s: any) => !s.isKeynote).length >
-                  0 && (
-                  <div>
-                    {eventData.speakers.filter((s: any) => s.isKeynote).length >
-                      0 && (
-                      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
-                        Speakers & Panelists
-                      </h3>
-                    )}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {eventData.speakers
-                        .filter((s: any) => !s.isKeynote)
-                        .map((speaker: any) => (
-                          <div
-                            key={speaker.id}
-                            className="text-center p-4 rounded-xl bg-gray-50/50 border border-gray-100 hover:shadow-sm transition-shadow"
-                          >
-                            {speaker.image ? (
-                              <img
-                                src={
-                                  speaker.image.startsWith("/")
-                                    ? `${apiURL?.replace("/api", "") || ""}${speaker.image}`
-                                    : speaker.image
-                                }
-                                alt={speaker.name}
-                                className="w-16 h-16 rounded-full object-cover mx-auto border-2 border-white shadow"
-                              />
-                            ) : (
-                              <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-xl font-bold mx-auto border-2 border-white shadow">
-                                {speaker.name?.charAt(0)?.toUpperCase()}
-                              </div>
-                            )}
-                            <h4 className="font-semibold text-gray-900 mt-3 text-sm">
-                              {speaker.name}
-                            </h4>
-                            {speaker.title && (
-                              <p className="text-xs text-gray-500 mt-0.5">
-                                {speaker.title}
-                              </p>
-                            )}
-                            {speaker.organization && (
-                              <p className="text-xs text-gray-400">
-                                {speaker.organization}
-                              </p>
-                            )}
-                            {speaker.slots && speaker.slots.length > 0 && (
-                              <div className="mt-2 space-y-1">
-                                {speaker.slots.map((slot: any, si: number) => (
-                                  <div
-                                    key={si}
-                                    className="text-[11px] text-gray-600 bg-white rounded px-2 py-0.5 border"
-                                  >
-                                    {slot.startTime && (
-                                      <span className="font-mono mr-1">
-                                        {slot.startTime}
-                                      </span>
-                                    )}
-                                    {slot.topic}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="venue" className="mt-4 space-y-6">
-            {(venueTables && Object.keys(venueTables).length > 0) ||
-            roundTableData.length > 0 ? (
-              <div className="space-y-5">
-                {/* Layout Selector — only published venues are offered */}
-                {venueConfig && publishedVenueCount > 1 && (
-                  <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <MapIcon className="h-4 w-4 text-gray-400" />
-                        <p
-                          className="text-sm sm:text-lg font-bold tracking-widest uppercase"
-                          style={{ color: design?.primaryColor }}
-                        >
-                          Venue Layouts
-                        </p>
+                          ))}
                       </div>
                     </div>
-                    <div className="flex gap-2 overflow-x-auto pb-1">
-                      {venueConfig.map((layout, index) =>
-                        layout?.published === false ? null : (
-                          <button
-                            key={layout.id}
-                            onClick={() => setCurrentLayoutIndex(index)}
-                            className={`shrink-0 whitespace-nowrap px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
-                              currentLayoutIndex === index
-                                ? "text-white"
-                                : "border border-gray-200 text-gray-500 bg-gray-50 hover:bg-gray-100"
-                            }`}
-                            style={
-                              currentLayoutIndex === index
-                                ? { backgroundColor: design?.primaryColor }
-                                : {}
-                            }
+                  )}
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="venue" className="mt-4 space-y-6">
+              {(venueTables && Object.keys(venueTables).length > 0) ||
+              roundTableData.length > 0 ? (
+                <div className="space-y-5">
+                  {/* Layout Selector — only published venues are offered */}
+                  {venueConfig && publishedVenueCount > 1 && (
+                    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <MapIcon className="h-4 w-4 text-gray-400" />
+                          <p
+                            className="text-sm sm:text-lg font-bold tracking-widest uppercase"
+                            style={{ color: design?.primaryColor }}
                           >
-                            <MapIcon className="h-3.5 w-3.5" />
-                            {layout.name}
-                          </button>
-                        ),
-                      )}
+                            Venue Layouts
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 overflow-x-auto pb-1">
+                        {venueConfig.map((layout, index) =>
+                          layout?.published === false ? null : (
+                            <button
+                              key={layout.id}
+                              onClick={() => setCurrentLayoutIndex(index)}
+                              className={`shrink-0 whitespace-nowrap px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
+                                currentLayoutIndex === index
+                                  ? "text-white"
+                                  : "border border-gray-200 text-gray-500 bg-gray-50 hover:bg-gray-100"
+                              }`}
+                              style={
+                                currentLayoutIndex === index
+                                  ? { backgroundColor: design?.primaryColor }
+                                  : {}
+                              }
+                            >
+                              <MapIcon className="h-3.5 w-3.5" />
+                              {layout.name}
+                            </button>
+                          ),
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
-                {/* Current Layout Display — the header row doubles as
+                  )}
+                  {/* Current Layout Display — the header row doubles as
                     a toggle so the heavy canvas only renders when the
                     user expands it. Chevron sits on the right of the
                     "Table Arrangement" title so the whole strip reads
                     as one clickable disclosure. */}
-                {venueConfig && venueConfig[currentLayoutIndex] && (
-                  <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-                    <button
-                      type="button"
-                      onClick={() => setShowVenueLayout((v) => !v)}
-                      aria-expanded={showVenueLayout}
-                      className="w-full px-5 pt-5 pb-3 flex items-center gap-2 hover:bg-gray-50 transition-colors"
-                    >
-                      <TableIcon className="h-4 w-4 text-gray-400" />
-                      <p
-                        className="text-sm sm:text-lg font-bold tracking-widest uppercase text-left"
-                        style={{ color: design?.primaryColor }}
+                  {venueConfig && venueConfig[currentLayoutIndex] && (
+                    <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+                      <button
+                        type="button"
+                        onClick={() => setShowVenueLayout((v) => !v)}
+                        aria-expanded={showVenueLayout}
+                        className="w-full px-5 pt-5 pb-3 flex items-center gap-2 hover:bg-gray-50 transition-colors"
                       >
-                        {venueConfig[currentLayoutIndex].name} — Table
-                        Arrangement
-                      </p>
-                      <span className="ml-auto">
-                        {showVenueLayout ? (
-                          <ChevronUp className="h-4 w-4 text-gray-500" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4 text-gray-500" />
-                        )}
-                      </span>
-                    </button>
-                    {showVenueLayout && (
-                    <div className="px-5 pb-5 space-y-5">
-                      {/* Venue map */}
-                      <div
-                        ref={venueDisplayContainerRef}
-                        className="overflow-auto rounded-xl border border-gray-200"
-                        style={{ background: "#f9fafb" }}
-                      >
-                        {/* Scale the layout to fit the container width. If a
+                        <TableIcon className="h-4 w-4 text-gray-400" />
+                        <p
+                          className="text-sm sm:text-lg font-bold tracking-widest uppercase text-left"
+                          style={{ color: design?.primaryColor }}
+                        >
+                          {venueConfig[currentLayoutIndex].name} — Table
+                          Arrangement
+                        </p>
+                        <span className="ml-auto">
+                          {showVenueLayout ? (
+                            <ChevronUp className="h-4 w-4 text-gray-500" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-gray-500" />
+                          )}
+                        </span>
+                      </button>
+                      {showVenueLayout && (
+                        <div className="px-5 pb-5 space-y-5">
+                          {/* Venue map */}
+                          <div
+                            ref={venueDisplayContainerRef}
+                            className="overflow-auto rounded-xl border border-gray-200"
+                            style={{ background: "#f9fafb" }}
+                          >
+                            {/* Scale the layout to fit the container width. If a
                             wide venue still overflows, the box scrolls
                             (horizontal + vertical) so every space — including
                             the right-most ones — stays reachable. */}
-                        <div
-                          className="mx-auto"
-                          style={{
-                            width: `${venueDisplayCanvas.width * venueDisplayScale}px`,
-                            height: `${venueDisplayCanvas.height * venueDisplayScale}px`,
-                          }}
-                        >
-                          <div
-                            className="relative shadow-sm border border-gray-300 origin-top-left"
-                            style={{
-                              width: `${venueDisplayCanvas.width}px`,
-                              height: `${venueDisplayCanvas.height}px`,
-                              transform: `scale(${venueDisplayScale})`,
-                              transformOrigin: "top left",
-                              backgroundImage: `linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)`,
-                              backgroundSize: `${venueConfig[currentLayoutIndex]?.gridSize || 40}px ${venueConfig[currentLayoutIndex]?.gridSize || 40}px`,
-                              backgroundColor: "#ffffff",
-                            }}
-                          >
-                            {venueConfig[currentLayoutIndex]?.hasMainStage && (
-                              <div
-                                className="absolute bg-purple-200 border-2 border-purple-500 flex items-center justify-center font-bold text-purple-700 shadow-md"
-                                style={{
-                                  top: "0px",
-                                  left: "50%",
-                                  transform: "translateX(-50%)",
-                                  width: "200px",
-                                  height: "60px",
-                                  zIndex: 10,
-                                }}
-                              >
-                                MAIN STAGE
-                              </div>
-                            )}
-                            {venueTables[currentLayoutId]
-                              ?.filter((table) => inCrop(table.x, table.y))
-                              .map((table) => {
-                              const isBooked = table.isBooked;
-                              const notForSale = (table as any).forSale === false;
-                              return (
-                                <div
-                                  key={table.positionId}
-                                  className={`absolute border flex items-center justify-center transition-all group z-[5] hover:z-[100] ${
-                                    table.type === "Round"
-                                      ? "rounded-full"
-                                      : table.type === "Corner"
-                                        ? "rounded-lg"
-                                        : "rounded-sm"
-                                  } ${notForSale
-                                    ? "cursor-default"
-                                    : "cursor-pointer hover:shadow-xl hover:ring-2 hover:ring-offset-1 hover:ring-blue-400 shadow-sm"
-                                  }`}
-                                  style={{
-                                    left: `${table.x}px`,
-                                    top: `${table.y}px`,
-                                    width: `${(table as any).displayWidth ?? table.width}px`,
-                                    height: `${(table as any).displayHeight ?? table.height}px`,
-                                    transform: `rotate(${table.rotation || 0}deg)`,
-                                    transformOrigin: "center center",
-                                    // z-index is driven by the class above so
-                                    // `hover:z-[100]` can lift the hovered space
-                                    // (and its tooltip) above its neighbours —
-                                    // an inline zIndex would override the class
-                                    // and the tooltip would render under the
-                                    // adjacent spaces.
-                                    // Darker tint of the template colour with a
-                                    // solid coloured border; bold dark label so
-                                    // it stays clearly readable. Booked stays
-                                    // uniform (we don't reveal availability).
-                                    ...(notForSale
-                                      ? {
-                                          backgroundColor:
-                                            ((table as any).color || "#f59e0b") +
-                                            "59",
-                                          borderColor:
-                                            (table as any).color || "#f59e0b",
-                                          backgroundImage:
-                                            "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.05) 3px, rgba(0,0,0,0.05) 6px)",
-                                        }
-                                      : {
-                                          backgroundColor:
-                                            ((table as any).color || "#22c55e") +
-                                            "80",
-                                          borderColor:
-                                            (table as any).color || "#22c55e",
-                                        }),
-                                  }}
-                                >
-                                  <div className="relative group hover:z-50">
-                                    <div
-                                      className="text-center w-full h-full flex flex-col items-center justify-center p-0.5"
-                                      style={{
-                                        transform: `rotate(-${table.rotation || 0}deg)`,
-                                      }}
-                                    >
-                                      <span className="font-extrabold text-[8px] leading-none truncate w-full text-gray-900">
-                                        {table.name}
-                                      </span>
-                                    </div>
-                                    {/* Not-for-sale spaces are layout-only
-                                        references (decoration / standing
-                                        tables) — no price, not bookable — so
-                                        they get NO hover tooltip. */}
-                                    {!notForSale && (
-                                    <div
-                                      className="pointer-events-none absolute bottom-full left-1/2 z-[100] mb-3 w-max opacity-0 transition-opacity group-hover:opacity-100"
-                                      style={{
-                                        transform: `translateX(-50%) rotate(-${table.rotation || 0}deg)`,
-                                        transformOrigin: "bottom center",
-                                      }}
-                                    >
-                                      <div className="relative">
-                                        <div className="rounded-md bg-gray-900 px-3 py-2 text-xs text-white shadow-2xl border border-gray-700 flex flex-col gap-0.5">
-                                          <div className="font-bold text-sm whitespace-nowrap">
-                                            {table.name}
-                                          </div>
-                                          <div className="text-gray-300 whitespace-nowrap">
-                                            {table.type} · Row {table.rowNumber}
-                                          </div>
-                                          <div className="text-gray-300 whitespace-nowrap">
-                                            {table.width * 10}×{table.height * 10}cm
-                                          </div>
-                                          {(() => {
-                                            // Show BOTH the member price and the
-                                            // regular price whenever the space
-                                            // has a member price (resolved from
-                                            // the placed space or its template),
-                                            // so any visitor sees both tiers.
-                                            const tpls = Array.isArray(
-                                              (eventData as any)?.tableTemplates,
-                                            )
-                                              ? (eventData as any).tableTemplates
-                                              : [];
-                                            const tpl =
-                                              (table as any).id != null
-                                                ? tpls.find(
-                                                    (t: any) =>
-                                                      t?.id === (table as any).id,
-                                                  )
-                                                : null;
-                                            const member =
-                                              (table as any).memberPrice != null
-                                                ? (table as any).memberPrice
-                                                : tpl?.memberPrice ?? null;
-                                            const regular = table.tablePrice ?? 0;
-                                            const hasMember =
-                                              member != null &&
-                                              Number(member) !== Number(regular);
-                                            return hasMember ? (
-                                              <>
-                                                <div className="text-emerald-400 font-semibold whitespace-nowrap">
-                                                  Member {formatPrice(member)}
-                                                </div>
-                                                <div className="text-gray-400 whitespace-nowrap text-[11px]">
-                                                  Regular {formatPrice(regular)}
-                                                </div>
-                                              </>
-                                            ) : (
-                                              <div className="text-green-400 font-semibold whitespace-nowrap">
-                                                {formatPrice(regular)}
-                                              </div>
-                                            );
-                                          })()}
-                                        </div>
-
-                                        {/* Arrow tail */}
-                                        <div className="absolute left-1/2 top-full -mt-1 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 border-b border-r border-gray-700"></div>
-                                      </div>
-                                    </div>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                            {/* Round tables — rendered on the same venue map
-                                as the Spaces. Interactive seat selection;
-                                "not for sale" tables show as non-bookable
-                                references. */}
-                            {roundTableData
-                              .filter(
-                                (rt: any) =>
-                                  belongsToLayout(rt?.venueConfigId) &&
-                                  inCrop(rt?.x, rt?.y),
-                              )
-                              .map((rt: any) => {
-                                const bookedChairs: number[] =
-                                  rt.bookedChairs || [];
-                                const isReference = rt.forSale === false;
-                                const mySelection = roundTableSelections.find(
-                                  (sel) =>
-                                    sel.tablePositionId === rt.positionId,
-                                );
-                                const mySelectedChairs =
-                                  mySelection?.selectedChairIndices || [];
-                                const isFullyBooked =
-                                  rt.isFullyBooked ||
-                                  bookedChairs.length >= rt.numberOfChairs;
-                                const diameter = rt.tableDiameter || 120;
-                                const chairSz = Math.max(12, diameter * 0.14);
-                                const chairR =
-                                  diameter / 2 + chairSz / 2 + 4;
-                                const cx = (rt.x || 0) + diameter / 2;
-                                const cy = (rt.y || 0) + diameter / 2;
-                                const col = rt.color || "#8B5CF6";
-                                const hasSel = mySelectedChairs.length > 0;
-
-                                const handleChairClick = (ci: number) => {
-                                  if (isReference) return;
-                                  if (bookedChairs.includes(ci)) return;
-                                  if (rt.sellingMode === "table") {
-                                    if (mySelection) {
-                                      setRoundTableSelections(
-                                        roundTableSelections.filter(
-                                          (x) =>
-                                            x.tablePositionId !==
-                                            rt.positionId,
-                                        ),
-                                      );
-                                    } else if (!isFullyBooked) {
-                                      setRoundTableSelections([
-                                        ...roundTableSelections,
-                                        {
-                                          tablePositionId: rt.positionId,
-                                          tableName: rt.name,
-                                          tableCategory:
-                                            rt.category || "Standard",
-                                          sellingMode: rt.sellingMode,
-                                          selectedChairIndices: Array.from(
-                                            { length: rt.numberOfChairs },
-                                            (_, i) => i,
-                                          ),
-                                          amount: rtTablePrice(rt),
-                                          color: col,
-                                        },
-                                      ]);
-                                    }
-                                  } else {
-                                    const sel = mySelectedChairs.includes(ci)
-                                      ? mySelectedChairs.filter(
-                                          (c) => c !== ci,
-                                        )
-                                      : [...mySelectedChairs, ci];
-                                    const amt = rtChairPrice(rt) * sel.length;
-                                    const rest = roundTableSelections.filter(
-                                      (x) =>
-                                        x.tablePositionId !== rt.positionId,
-                                    );
-                                    if (sel.length === 0)
-                                      setRoundTableSelections(rest);
-                                    else
-                                      setRoundTableSelections([
-                                        ...rest,
-                                        {
-                                          tablePositionId: rt.positionId,
-                                          tableName: rt.name,
-                                          tableCategory:
-                                            rt.category || "Standard",
-                                          sellingMode: rt.sellingMode,
-                                          selectedChairIndices: sel,
-                                          amount: amt,
-                                          color: col,
-                                        },
-                                      ]);
-                                  }
-                                };
-
-                                return (
-                                  <div
-                                    key={`rt-${rt.positionId}`}
-                                    style={{
-                                      position: "absolute",
-                                      left: 0,
-                                      top: 0,
-                                      zIndex: 6,
-                                    }}
-                                  >
-                                    {/* Table circle */}
-                                    <div
-                                      onClick={() => {
-                                        if (
-                                          !isReference &&
-                                          rt.sellingMode === "table"
-                                        )
-                                          handleChairClick(0);
-                                      }}
-                                      title={isReference ? undefined : rt.name}
-                                      className="rounded-full flex flex-col items-center justify-center"
-                                      style={{
-                                        position: "absolute",
-                                        left: cx - diameter / 2,
-                                        top: cy - diameter / 2,
-                                        width: diameter,
-                                        height: diameter,
-                                        background: hasSel
-                                          ? `radial-gradient(circle at 40% 35%, ${col}30, ${col}15)`
-                                          : `radial-gradient(circle at 40% 35%, ${col}18, ${col}08)`,
-                                        border: hasSel
-                                          ? `2.5px solid ${col}`
-                                          : `1.5px solid ${col}55`,
-                                        opacity: isReference ? 0.7 : 1,
-                                        backgroundImage: isReference
-                                          ? "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 6px)"
-                                          : undefined,
-                                        cursor: isReference
-                                          ? "not-allowed"
-                                          : rt.sellingMode === "table"
-                                            ? "pointer"
-                                            : "default",
-                                      }}
-                                    >
-                                      <span
-                                        style={{
-                                          fontSize: 9,
-                                          fontWeight: 800,
-                                          color: col,
-                                          textAlign: "center",
-                                          lineHeight: 1.1,
-                                          padding: "0 2px",
-                                        }}
-                                      >
-                                        {rt.name}
-                                      </span>
-                                    </div>
-
-                                    {/* Chairs */}
-                                    {Array.from({
-                                      length: rt.numberOfChairs,
-                                    }).map((_, i) => {
-                                      const a =
-                                        (2 * Math.PI * i) /
-                                          rt.numberOfChairs -
-                                        Math.PI / 2;
-                                      const px =
-                                        cx + chairR * Math.cos(a) - chairSz / 2;
-                                      const py =
-                                        cy + chairR * Math.sin(a) - chairSz / 2;
-                                      const bk = bookedChairs.includes(i);
-                                      const sl = mySelectedChairs.includes(i);
-                                      return (
-                                        <button
-                                          key={i}
-                                          type="button"
-                                          onClick={() => handleChairClick(i)}
-                                          disabled={bk || isReference}
-                                          className="rounded-full flex items-center justify-center font-bold"
-                                          style={{
-                                            position: "absolute",
-                                            left: px,
-                                            top: py,
-                                            width: chairSz,
-                                            height: chairSz,
-                                            fontSize: Math.max(
-                                              6,
-                                              chairSz * 0.45,
-                                            ),
-                                            color: bk ? "#9ca3af" : "white",
-                                            backgroundColor: bk
-                                              ? "#f3f4f6"
-                                              : sl
-                                                ? "#2563eb"
-                                                : col,
-                                            border: bk
-                                              ? "1.5px solid #d1d5db"
-                                              : sl
-                                                ? "2px solid #1d4ed8"
-                                                : "1.5px solid rgba(255,255,255,0.8)",
-                                            cursor:
-                                              bk || isReference
-                                                ? "not-allowed"
-                                                : "pointer",
-                                            opacity: bk ? 0.6 : 1,
-                                            transform: sl
-                                              ? "scale(1.15)"
-                                              : "scale(1)",
-                                            zIndex: sl ? 12 : 7,
-                                          }}
-                                          title={isReference ? undefined : `Seat ${i + 1} — ${bk ? "Taken" : sl ? "Selected" : "Available"}${rt.sellingMode === "chair" ? ` · ${formatPrice(rtChairPrice(rt))}` : ""}`}
-                                        >
-                                          {i + 1}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                );
-                              })}
-                            {/* Entrance / exit door markers */}
-                            {renderDoors()}
-                            {layoutAnnotations.length > 0 && (
-                              <VenueAnnotationLayer
-                                readOnly
-                                width={venueDisplayCanvas.width}
-                                height={venueDisplayCanvas.height}
-                                scale={1}
-                                zIndex={4}
-                                annotations={layoutAnnotations}
-                              />
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Available-tables list intentionally removed — space
-                          availability is hidden on the public venue preview. */}
-                    </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Add-On Items — collapsible, same disclosure as the
-                    info sections and the Venue Layout. */}
-                {addOnItems && addOnItems.length > 0 && (
-                  <CollapsibleCard
-                    title="Add-On Items"
-                    headingColor={design?.primaryColor}
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {addOnItems.map((item) => (
-                        <div
-                          key={item.id}
-                          className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <h5 className="font-semibold text-gray-800">
-                                {item.name}
-                              </h5>
-                              <p className="text-xs text-gray-400 mt-1">
-                                {item.description}
-                              </p>
-                            </div>
-                            <p
-                              className="font-bold text-base"
-                              style={{ color: design?.secondaryColor }}
-                            >
-                              {formatPrice(item.price || 0)}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CollapsibleCard>
-                )}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
-                <p className="text-gray-400">
-                  No venue layouts available for this event
-                </p>
-              </div>
-            )}
-            {/* Round-table seat booking — lives inside the Venue tab,
-                below the layout map (the map above now shows the round
-                tables alongside the Spaces). Only shown when at least one
-                round table is actually sellable; "not for sale" round tables
-                are layout references only, so the box is hidden for them. */}
-            {roundTableData.some((rt: any) => rt.forSale !== false) && (
-              <div className="space-y-5">
-                {/* Header */}
-                <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900">
-                        Reserve Your Seats
-                      </h3>
-                      <p className="text-sm text-gray-500 mt-0.5">
-                        Click on available chairs to select your preferred
-                        seating
-                      </p>
-                    </div>
-                    {roundTableSelections.length > 0 && (
-                      <div
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl"
-                        style={{ backgroundColor: `${design?.primaryColor}10` }}
-                      >
-                        <span className="text-sm font-medium text-gray-600">
-                          {roundTableSelections.reduce(
-                            (sum, s) => sum + s.selectedChairIndices.length,
-                            0,
-                          )}{" "}
-                          seat(s)
-                        </span>
-                        <span className="text-sm text-gray-400">&middot;</span>
-                        <span
-                          className="text-sm font-bold"
-                          style={{ color: design?.primaryColor }}
-                        >
-                          {formatPrice(
-                            roundTableSelections.reduce(
-                              (sum, s) => sum + s.amount,
-                              0,
-                            ),
-                          )}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Table category cards (bookable tables only — "not for
-                      sale" tables are layout references and are excluded). */}
-                  {(() => {
-                    const bookable = roundTableData.filter(
-                      (rt: any) => rt.forSale !== false,
-                    );
-                    const categories = [
-                      ...new Set(
-                        bookable.map((rt: any) => rt.category || "Standard"),
-                      ),
-                    ];
-                    return (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                        {categories.map((cat) => {
-                          const tablesInCat = bookable.filter(
-                            (rt: any) => (rt.category || "Standard") === cat,
-                          );
-                          const sample = tablesInCat[0];
-                          const totalSeats = tablesInCat.reduce(
-                            (s: number, rt: any) => s + rt.numberOfChairs,
-                            0,
-                          );
-                          const bookedSeats = tablesInCat.reduce(
-                            (s: number, rt: any) =>
-                              s + (rt.bookedChairs?.length || 0),
-                            0,
-                          );
-                          return (
                             <div
-                              key={cat}
-                              className="rounded-xl border p-3 sm:p-4"
+                              className="mx-auto"
                               style={{
-                                borderColor: `${sample.color || "#8B5CF6"}33`,
-                                backgroundColor: `${sample.color || "#8B5CF6"}06`,
+                                width: `${venueDisplayCanvas.width * venueDisplayScale}px`,
+                                height: `${venueDisplayCanvas.height * venueDisplayScale}px`,
                               }}
                             >
-                              <div className="flex items-center gap-2 mb-2">
-                                <div
-                                  className="w-2.5 h-2.5 rounded-full"
-                                  style={{
-                                    backgroundColor: sample.color || "#8B5CF6",
-                                  }}
-                                />
-                                <span className="font-bold text-sm text-gray-800">
-                                  {cat}
-                                </span>
-                              </div>
-                              <div className="space-y-1 text-xs text-gray-500">
-                                <p>
-                                  {tablesInCat.length} table
-                                  {tablesInCat.length > 1 ? "s" : ""}
-                                </p>
-                                <p
-                                  className="font-medium"
-                                  style={{ color: sample.color || "#8B5CF6" }}
-                                >
-                                  {sample.sellingMode === "table"
-                                    ? formatPrice(rtTablePrice(sample)) +
-                                      " / table"
-                                    : formatPrice(rtChairPrice(sample)) +
-                                      " / seat"}
-                                </p>
-                                <div className="flex items-center gap-1.5 mt-1">
-                                  <div className="flex-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
-                                    <div
-                                      className="h-full rounded-full"
-                                      style={{
-                                        width: `${totalSeats > 0 ? (bookedSeats / totalSeats) * 100 : 0}%`,
-                                        backgroundColor:
-                                          sample.color || "#8B5CF6",
-                                      }}
-                                    />
-                                  </div>
-                                  <span className="text-[10px] text-gray-400">
-                                    {totalSeats - bookedSeats} left
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {/* Round Tables now render on the main venue map above
-                    (alongside the Spaces), so this standalone round-tables
-                    map is intentionally disabled. */}
-                {false &&
-                  venueConfig &&
-                  venueConfig[currentLayoutIndex] &&
-                  (() => {
-                    const vc = venueConfig[currentLayoutIndex];
-                    const canvasW = vc.width || 800;
-                    const canvasH = vc.height || 500;
-                    const pad = 25;
-                    const totalW = canvasW + pad * 2;
-                    const totalH = canvasH + pad * 2;
-                    const s = venueDisplayScale;
-
-                    return (
-                      <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-                        <div className="px-5 pt-5 pb-3">
-                          <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
-                            <div className="flex items-center gap-2">
                               <div
-                                className="w-8 h-8 rounded-lg flex items-center justify-center"
+                                className="relative shadow-sm border border-gray-300 origin-top-left"
                                 style={{
-                                  backgroundColor: `${design?.primaryColor}15`,
-                                }}
-                              >
-                                <MapPin
-                                  className="h-4 w-4"
-                                  style={{ color: design?.primaryColor }}
-                                />
-                              </div>
-                              <div>
-                                <p className="text-sm font-bold text-gray-800">
-                                  {vc.name}
-                                </p>
-                                <p className="text-[10px] text-gray-400">
-                                  Tap chairs to select seats
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-1.5">
-                              <div className="flex items-center gap-1.5">
-                                <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-sm" />
-                                <span className="text-[10px] font-medium text-gray-600">
-                                  Open
-                                </span>
-                              </div>
-                              <div className="w-px h-3 bg-gray-200" />
-                              <div className="flex items-center gap-1.5">
-                                <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm" />
-                                <span className="text-[10px] font-medium text-gray-600">
-                                  Selected
-                                </span>
-                              </div>
-                              <div className="w-px h-3 bg-gray-200" />
-                              <div className="flex items-center gap-1.5">
-                                <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
-                                <span className="text-[10px] font-medium text-gray-600">
-                                  Taken
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="px-3 pb-5">
-                          <div
-                            className="overflow-x-auto rounded-xl border border-gray-200"
-                            style={{ background: "#fafbfc" }}
-                          >
-                            <div
-                              className="relative mx-auto"
-                              style={{
-                                width: `${totalW}px`,
-                                height: `${totalH}px`,
-                                minWidth: `${totalW}px`,
-                              }}
-                            >
-                              {/* Grid background — offset by padding */}
-                              <div
-                                className="absolute rounded-lg"
-                                style={{
-                                  left: pad,
-                                  top: pad,
-                                  width: canvasW,
-                                  height: canvasH,
-                                  backgroundImage: `
-                                  linear-gradient(to right, rgba(0,0,0,0.04) 1px, transparent 1px),
-                                  linear-gradient(to bottom, rgba(0,0,0,0.04) 1px, transparent 1px)
-                                `,
-                                  backgroundSize: `${vc.gridSize || 20}px ${vc.gridSize || 20}px`,
+                                  width: `${venueDisplayCanvas.width}px`,
+                                  height: `${venueDisplayCanvas.height}px`,
+                                  transform: `scale(${venueDisplayScale})`,
+                                  transformOrigin: "top left",
+                                  backgroundImage: `linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)`,
+                                  backgroundSize: `${venueConfig[currentLayoutIndex]?.gridSize || 40}px ${venueConfig[currentLayoutIndex]?.gridSize || 40}px`,
                                   backgroundColor: "#ffffff",
-                                  border: "1px solid #e5e7eb",
                                 }}
                               >
-                                {/* Main Stage */}
-                                {vc.hasMainStage && (
+                                {venueConfig[currentLayoutIndex]
+                                  ?.hasMainStage && (
                                   <div
-                                    className="absolute flex items-center justify-center font-bold rounded-b-lg"
+                                    className="absolute bg-purple-200 border-2 border-purple-500 flex items-center justify-center font-bold text-purple-700 shadow-md"
                                     style={{
-                                      top: 0,
+                                      top: "0px",
                                       left: "50%",
                                       transform: "translateX(-50%)",
-                                      width: 200,
-                                      height: 50,
+                                      width: "200px",
+                                      height: "60px",
                                       zIndex: 10,
-                                      fontSize: 11,
-                                      letterSpacing: 3,
-                                      background:
-                                        "linear-gradient(180deg, #ddd6fe, #c4b5fd)",
-                                      color: "#6d28d9",
-                                      borderBottom: "2px solid #8b5cf6",
                                     }}
                                   >
                                     MAIN STAGE
                                   </div>
                                 )}
+                                {venueTables[currentLayoutId]
+                                  ?.filter((table) => inCrop(table.x, table.y))
+                                  .map((table) => {
+                                    const isBooked = table.isBooked;
+                                    const notForSale =
+                                      (table as any).forSale === false;
+                                    return (
+                                      <div
+                                        key={table.positionId}
+                                        className={`absolute border flex items-center justify-center transition-all group z-[5] hover:z-[100] ${
+                                          table.type === "Round"
+                                            ? "rounded-full"
+                                            : table.type === "Corner"
+                                              ? "rounded-lg"
+                                              : "rounded-sm"
+                                        } ${
+                                          notForSale
+                                            ? "cursor-default"
+                                            : "cursor-pointer hover:shadow-xl hover:ring-2 hover:ring-offset-1 hover:ring-blue-400 shadow-sm"
+                                        }`}
+                                        style={{
+                                          left: `${table.x}px`,
+                                          top: `${table.y}px`,
+                                          width: `${(table as any).displayWidth ?? table.width}px`,
+                                          height: `${(table as any).displayHeight ?? table.height}px`,
+                                          transform: `rotate(${table.rotation || 0}deg)`,
+                                          transformOrigin: "center center",
+                                          // z-index is driven by the class above so
+                                          // `hover:z-[100]` can lift the hovered space
+                                          // (and its tooltip) above its neighbours —
+                                          // an inline zIndex would override the class
+                                          // and the tooltip would render under the
+                                          // adjacent spaces.
+                                          // Darker tint of the template colour with a
+                                          // solid coloured border; bold dark label so
+                                          // it stays clearly readable. Booked stays
+                                          // uniform (we don't reveal availability).
+                                          ...(notForSale
+                                            ? {
+                                                backgroundColor:
+                                                  ((table as any).color ||
+                                                    "#f59e0b") + "59",
+                                                borderColor:
+                                                  (table as any).color ||
+                                                  "#f59e0b",
+                                                backgroundImage:
+                                                  "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.05) 3px, rgba(0,0,0,0.05) 6px)",
+                                              }
+                                            : {
+                                                backgroundColor:
+                                                  ((table as any).color ||
+                                                    "#22c55e") + "80",
+                                                borderColor:
+                                                  (table as any).color ||
+                                                  "#22c55e",
+                                              }),
+                                        }}
+                                      >
+                                        <div className="relative group hover:z-50">
+                                          <div
+                                            className="text-center w-full h-full flex flex-col items-center justify-center p-0.5"
+                                            style={{
+                                              transform: `rotate(-${table.rotation || 0}deg)`,
+                                            }}
+                                          >
+                                            <span className="font-extrabold text-[8px] leading-none truncate w-full text-gray-900">
+                                              {table.name}
+                                            </span>
+                                          </div>
+                                          {/* Not-for-sale spaces are layout-only
+                                        references (decoration / standing
+                                        tables) — no price, not bookable — so
+                                        they get NO hover tooltip. */}
+                                          {!notForSale && (
+                                            <div
+                                              className="pointer-events-none absolute bottom-full left-1/2 z-[100] mb-3 w-max opacity-0 transition-opacity group-hover:opacity-100"
+                                              style={{
+                                                transform: `translateX(-50%) rotate(-${table.rotation || 0}deg)`,
+                                                transformOrigin:
+                                                  "bottom center",
+                                              }}
+                                            >
+                                              <div className="relative">
+                                                <div className="rounded-md bg-gray-900 px-3 py-2 text-xs text-white shadow-2xl border border-gray-700 flex flex-col gap-0.5">
+                                                  <div className="font-bold text-sm whitespace-nowrap">
+                                                    {table.name}
+                                                  </div>
+                                                  <div className="text-gray-300 whitespace-nowrap">
+                                                    {table.type} · Row{" "}
+                                                    {table.rowNumber}
+                                                  </div>
+                                                  <div className="text-gray-300 whitespace-nowrap">
+                                                    {table.width * 10}×
+                                                    {table.height * 10}cm
+                                                  </div>
+                                                  {(() => {
+                                                    // Show BOTH the member price and the
+                                                    // regular price whenever the space
+                                                    // has a member price (resolved from
+                                                    // the placed space or its template),
+                                                    // so any visitor sees both tiers.
+                                                    const tpls = Array.isArray(
+                                                      (eventData as any)
+                                                        ?.tableTemplates,
+                                                    )
+                                                      ? (eventData as any)
+                                                          .tableTemplates
+                                                      : [];
+                                                    const tpl =
+                                                      (table as any).id != null
+                                                        ? tpls.find(
+                                                            (t: any) =>
+                                                              t?.id ===
+                                                              (table as any).id,
+                                                          )
+                                                        : null;
+                                                    const member =
+                                                      (table as any)
+                                                        .memberPrice != null
+                                                        ? (table as any)
+                                                            .memberPrice
+                                                        : (tpl?.memberPrice ??
+                                                          null);
+                                                    const regular =
+                                                      table.tablePrice ?? 0;
+                                                    const hasMember =
+                                                      member != null &&
+                                                      Number(member) !==
+                                                        Number(regular);
+                                                    return hasMember ? (
+                                                      <>
+                                                        <div className="text-emerald-400 font-semibold whitespace-nowrap">
+                                                          Member{" "}
+                                                          {formatPrice(member)}
+                                                        </div>
+                                                        <div className="text-gray-400 whitespace-nowrap text-[11px]">
+                                                          Regular{" "}
+                                                          {formatPrice(regular)}
+                                                        </div>
+                                                      </>
+                                                    ) : (
+                                                      <div className="text-green-400 font-semibold whitespace-nowrap">
+                                                        {formatPrice(regular)}
+                                                      </div>
+                                                    );
+                                                  })()}
+                                                </div>
 
-                              </div>
-
-                              {/* Round Tables — positioned relative to pad offset */}
-                              {roundTableData.map((rt: any) => {
-                                const bookedChairs: number[] =
-                                  rt.bookedChairs || [];
-                                const mySelection = roundTableSelections.find(
-                                  (sel) =>
-                                    sel.tablePositionId === rt.positionId,
-                                );
-                                const mySelectedChairs =
-                                  mySelection?.selectedChairIndices || [];
-                                const isFullyBooked =
-                                  rt.isFullyBooked ||
-                                  bookedChairs.length >= rt.numberOfChairs;
-                                const d = Math.round(
-                                  (rt.tableDiameter || 120) * 0.55,
-                                );
-                                const chairSz = 14;
-                                const chairR = d / 2 + chairSz / 2 + 3;
-                                // Center in the padded canvas
-                                const cx = pad + (rt.x || 0) + d / 2;
-                                const cy = pad + (rt.y || 0) + d / 2;
-
-                                // A "not for sale" table is a layout
-                                // reference only and cannot be booked.
-                                const isReference = rt.forSale === false;
-                                const handleChairClick = (ci: number) => {
-                                  if (isReference) return;
-                                  if (bookedChairs.includes(ci)) return;
-                                  if (rt.sellingMode === "table") {
-                                    if (mySelection) {
-                                      setRoundTableSelections(
-                                        roundTableSelections.filter(
-                                          (x) =>
-                                            x.tablePositionId !== rt.positionId,
-                                        ),
-                                      );
-                                    } else if (!isFullyBooked) {
-                                      setRoundTableSelections([
-                                        ...roundTableSelections,
-                                        {
-                                          tablePositionId: rt.positionId,
-                                          tableName: rt.name,
-                                          tableCategory:
-                                            rt.category || "Standard",
-                                          sellingMode: rt.sellingMode,
-                                          selectedChairIndices: Array.from(
-                                            { length: rt.numberOfChairs },
-                                            (_, i) => i,
-                                          ),
-                                          amount: rtTablePrice(rt),
-                                          color: rt.color || "#8B5CF6",
-                                        },
-                                      ]);
-                                    }
-                                  } else {
-                                    const sel = mySelectedChairs.includes(ci)
-                                      ? mySelectedChairs.filter((c) => c !== ci)
-                                      : [...mySelectedChairs, ci];
-                                    const amt = rtChairPrice(rt) * sel.length;
-                                    const rest = roundTableSelections.filter(
-                                      (x) =>
-                                        x.tablePositionId !== rt.positionId,
+                                                {/* Arrow tail */}
+                                                <div className="absolute left-1/2 top-full -mt-1 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 border-b border-r border-gray-700"></div>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
                                     );
-                                    if (sel.length === 0) {
-                                      setRoundTableSelections(rest);
-                                    } else {
-                                      setRoundTableSelections([
-                                        ...rest,
-                                        {
-                                          tablePositionId: rt.positionId,
-                                          tableName: rt.name,
-                                          tableCategory:
-                                            rt.category || "Standard",
-                                          sellingMode: rt.sellingMode,
-                                          selectedChairIndices: sel,
-                                          amount: amt,
-                                          color: rt.color || "#8B5CF6",
-                                        },
-                                      ]);
-                                    }
-                                  }
-                                };
+                                  })}
+                                {/* Round tables — rendered on the same venue map
+                                as the Spaces. Interactive seat selection;
+                                "not for sale" tables show as non-bookable
+                                references. */}
+                                {roundTableData
+                                  .filter(
+                                    (rt: any) =>
+                                      belongsToLayout(rt?.venueConfigId) &&
+                                      inCrop(rt?.x, rt?.y),
+                                  )
+                                  .map((rt: any) => {
+                                    const bookedChairs: number[] =
+                                      rt.bookedChairs || [];
+                                    const isReference = rt.forSale === false;
+                                    const mySelection =
+                                      roundTableSelections.find(
+                                        (sel) =>
+                                          sel.tablePositionId === rt.positionId,
+                                      );
+                                    const mySelectedChairs =
+                                      mySelection?.selectedChairIndices || [];
+                                    const isFullyBooked =
+                                      rt.isFullyBooked ||
+                                      bookedChairs.length >= rt.numberOfChairs;
+                                    const diameter = rt.tableDiameter || 120;
+                                    const chairSz = Math.max(
+                                      12,
+                                      diameter * 0.14,
+                                    );
+                                    const chairR =
+                                      diameter / 2 + chairSz / 2 + 4;
+                                    const cx = (rt.x || 0) + diameter / 2;
+                                    const cy = (rt.y || 0) + diameter / 2;
+                                    const col = rt.color || "#8B5CF6";
+                                    const hasSel = mySelectedChairs.length > 0;
 
-                                const hasSel = mySelectedChairs.length > 0;
-
-                                const col = rt.color || "#8B5CF6";
-
-                                return (
-                                  <div
-                                    key={rt.positionId}
-                                    className="group"
-                                    style={{
-                                      position: "absolute",
-                                      left: 0,
-                                      top: 0,
-                                      pointerEvents: "none",
-                                    }}
-                                  >
-                                    {/* Table circle */}
-                                    <div
-                                      className="rounded-full flex flex-col items-center justify-center transition-shadow"
-                                      style={{
-                                        position: "absolute",
-                                        left: cx - d / 2,
-                                        top: cy - d / 2,
-                                        width: d,
-                                        height: d,
-                                        background: hasSel
-                                          ? `radial-gradient(circle at 40% 35%, ${col}30, ${col}15)`
-                                          : `radial-gradient(circle at 40% 35%, ${col}18, ${col}08)`,
-                                        border: hasSel
-                                          ? `2.5px solid ${col}`
-                                          : `1.5px solid ${col}55`,
-                                        boxShadow: hasSel
-                                          ? `0 0 0 3px ${col}15, 0 4px 12px ${col}20`
-                                          : `0 1px 4px rgba(0,0,0,0.06)`,
-                                        zIndex: 6,
-                                        cursor: isReference
-                                          ? "not-allowed"
-                                          : rt.sellingMode === "table"
-                                            ? "pointer"
-                                            : "default",
-                                        opacity: isReference ? 0.7 : 1,
-                                        pointerEvents: "auto",
-                                      }}
-                                      onClick={() => {
-                                        if (
-                                          !isReference &&
-                                          rt.sellingMode === "table"
+                                    const handleChairClick = (ci: number) => {
+                                      if (isReference) return;
+                                      if (bookedChairs.includes(ci)) return;
+                                      if (rt.sellingMode === "table") {
+                                        if (mySelection) {
+                                          setRoundTableSelections(
+                                            roundTableSelections.filter(
+                                              (x) =>
+                                                x.tablePositionId !==
+                                                rt.positionId,
+                                            ),
+                                          );
+                                        } else if (!isFullyBooked) {
+                                          setRoundTableSelections([
+                                            ...roundTableSelections,
+                                            {
+                                              tablePositionId: rt.positionId,
+                                              tableName: rt.name,
+                                              tableCategory:
+                                                rt.category || "Standard",
+                                              sellingMode: rt.sellingMode,
+                                              selectedChairIndices: Array.from(
+                                                { length: rt.numberOfChairs },
+                                                (_, i) => i,
+                                              ),
+                                              amount: rtTablePrice(rt),
+                                              color: col,
+                                            },
+                                          ]);
+                                        }
+                                      } else {
+                                        const sel = mySelectedChairs.includes(
+                                          ci,
                                         )
-                                          handleChairClick(0);
-                                      }}
-                                    >
-                                      <span
-                                        style={{
-                                          fontSize: 7,
-                                          fontWeight: 800,
-                                          color: col,
-                                          textAlign: "center",
-                                          lineHeight: 1.1,
-                                          letterSpacing: 0.2,
-                                        }}
-                                      >
-                                        {rt.name}
-                                      </span>
-                                      <span
-                                        style={{
-                                          fontSize: 5,
-                                          color: "white",
-                                          backgroundColor: col,
-                                          borderRadius: 4,
-                                          padding: "0.5px 3px",
-                                          marginTop: 1,
-                                          fontWeight: 600,
-                                        }}
-                                      >
-                                        {isReference ? "Reference" : rt.category}
-                                      </span>
-                                    </div>
+                                          ? mySelectedChairs.filter(
+                                              (c) => c !== ci,
+                                            )
+                                          : [...mySelectedChairs, ci];
+                                        const amt =
+                                          rtChairPrice(rt) * sel.length;
+                                        const rest =
+                                          roundTableSelections.filter(
+                                            (x) =>
+                                              x.tablePositionId !==
+                                              rt.positionId,
+                                          );
+                                        if (sel.length === 0)
+                                          setRoundTableSelections(rest);
+                                        else
+                                          setRoundTableSelections([
+                                            ...rest,
+                                            {
+                                              tablePositionId: rt.positionId,
+                                              tableName: rt.name,
+                                              tableCategory:
+                                                rt.category || "Standard",
+                                              sellingMode: rt.sellingMode,
+                                              selectedChairIndices: sel,
+                                              amount: amt,
+                                              color: col,
+                                            },
+                                          ]);
+                                      }
+                                    };
 
-                                    {/* Chairs */}
-                                    {Array.from({
-                                      length: rt.numberOfChairs,
-                                    }).map((_, i) => {
-                                      const a =
-                                        (2 * Math.PI * i) / rt.numberOfChairs -
-                                        Math.PI / 2;
-                                      const px =
-                                        cx + chairR * Math.cos(a) - chairSz / 2;
-                                      const py =
-                                        cy + chairR * Math.sin(a) - chairSz / 2;
-                                      const bk = bookedChairs.includes(i);
-                                      const sl = mySelectedChairs.includes(i);
-                                      return (
-                                        <button
-                                          key={i}
-                                          type="button"
-                                          onClick={() => handleChairClick(i)}
-                                          disabled={bk || isReference}
-                                          className="rounded-full flex items-center justify-center font-bold transition-all"
+                                    return (
+                                      <div
+                                        key={`rt-${rt.positionId}`}
+                                        style={{
+                                          position: "absolute",
+                                          left: 0,
+                                          top: 0,
+                                          zIndex: 6,
+                                        }}
+                                      >
+                                        {/* Table circle */}
+                                        <div
+                                          onClick={() => {
+                                            if (
+                                              !isReference &&
+                                              rt.sellingMode === "table"
+                                            )
+                                              handleChairClick(0);
+                                          }}
+                                          title={
+                                            isReference ? undefined : rt.name
+                                          }
+                                          className="rounded-full flex flex-col items-center justify-center"
                                           style={{
                                             position: "absolute",
-                                            left: px,
-                                            top: py,
-                                            width: chairSz,
-                                            height: chairSz,
-                                            fontSize: 6,
-                                            pointerEvents: "auto",
-                                            color: bk ? "#9ca3af" : "white",
-                                            backgroundColor: bk
-                                              ? "#f3f4f6"
-                                              : sl
-                                                ? "#2563eb"
-                                                : col,
-                                            border: bk
-                                              ? "1.5px solid #d1d5db"
-                                              : sl
-                                                ? "2px solid #1d4ed8"
-                                                : "1.5px solid rgba(255,255,255,0.8)",
-                                            cursor: bk
+                                            left: cx - diameter / 2,
+                                            top: cy - diameter / 2,
+                                            width: diameter,
+                                            height: diameter,
+                                            background: hasSel
+                                              ? `radial-gradient(circle at 40% 35%, ${col}30, ${col}15)`
+                                              : `radial-gradient(circle at 40% 35%, ${col}18, ${col}08)`,
+                                            border: hasSel
+                                              ? `2.5px solid ${col}`
+                                              : `1.5px solid ${col}55`,
+                                            opacity: isReference ? 0.7 : 1,
+                                            backgroundImage: isReference
+                                              ? "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 6px)"
+                                              : undefined,
+                                            cursor: isReference
                                               ? "not-allowed"
-                                              : "pointer",
-                                            opacity: bk ? 0.6 : 1,
-                                            transform: sl
-                                              ? "scale(1.2)"
-                                              : "scale(1)",
-                                            zIndex: sl ? 12 : 7,
-                                            boxShadow: sl
-                                              ? "0 0 0 2px rgba(37,99,235,0.25), 0 2px 8px rgba(37,99,235,0.3)"
-                                              : bk
-                                                ? "none"
-                                                : "0 1px 3px rgba(0,0,0,0.12)",
+                                              : rt.sellingMode === "table"
+                                                ? "pointer"
+                                                : "default",
                                           }}
-                                          title={`Seat ${i + 1} — ${bk ? "Taken" : sl ? "Selected" : "Available"}${rt.sellingMode === "chair" ? ` · ${formatPrice(rtChairPrice(rt))}` : ""}`}
                                         >
-                                          {i + 1}
-                                        </button>
-                                      );
-                                    })}
+                                          <span
+                                            style={{
+                                              fontSize: 9,
+                                              fontWeight: 800,
+                                              color: col,
+                                              textAlign: "center",
+                                              lineHeight: 1.1,
+                                              padding: "0 2px",
+                                            }}
+                                          >
+                                            {rt.name}
+                                          </span>
+                                        </div>
 
-                                    {/* Tooltip on hover */}
-                                    <div
-                                      className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-                                      style={{
-                                        position: "absolute",
-                                        left: cx - 60,
-                                        top: cy - d / 2 - 40,
-                                        width: 120,
-                                        zIndex: 50,
-                                      }}
-                                    >
-                                      <div className="bg-gray-900/95 backdrop-blur-sm text-white text-[9px] px-3 py-2 rounded-lg shadow-xl text-center">
-                                        <p className="font-bold text-[10px]">
-                                          {rt.name}
-                                        </p>
-                                        <p className="text-gray-300 mt-0.5">
-                                          {isReference
-                                            ? "Not for sale"
-                                            : rt.sellingMode === "table"
-                                              ? formatPrice(rtTablePrice(rt))
-                                              : `${formatPrice(rtChairPrice(rt))} / seat`}
-                                        </p>
-                                        <div className="w-2 h-2 bg-gray-900/95 rotate-45 absolute -bottom-1 left-1/2 -translate-x-1/2" />
+                                        {/* Chairs */}
+                                        {Array.from({
+                                          length: rt.numberOfChairs,
+                                        }).map((_, i) => {
+                                          const a =
+                                            (2 * Math.PI * i) /
+                                              rt.numberOfChairs -
+                                            Math.PI / 2;
+                                          const px =
+                                            cx +
+                                            chairR * Math.cos(a) -
+                                            chairSz / 2;
+                                          const py =
+                                            cy +
+                                            chairR * Math.sin(a) -
+                                            chairSz / 2;
+                                          const bk = bookedChairs.includes(i);
+                                          const sl =
+                                            mySelectedChairs.includes(i);
+                                          return (
+                                            <button
+                                              key={i}
+                                              type="button"
+                                              onClick={() =>
+                                                handleChairClick(i)
+                                              }
+                                              disabled={bk || isReference}
+                                              className="rounded-full flex items-center justify-center font-bold"
+                                              style={{
+                                                position: "absolute",
+                                                left: px,
+                                                top: py,
+                                                width: chairSz,
+                                                height: chairSz,
+                                                fontSize: Math.max(
+                                                  6,
+                                                  chairSz * 0.45,
+                                                ),
+                                                color: bk ? "#9ca3af" : "white",
+                                                backgroundColor: bk
+                                                  ? "#f3f4f6"
+                                                  : sl
+                                                    ? "#2563eb"
+                                                    : col,
+                                                border: bk
+                                                  ? "1.5px solid #d1d5db"
+                                                  : sl
+                                                    ? "2px solid #1d4ed8"
+                                                    : "1.5px solid rgba(255,255,255,0.8)",
+                                                cursor:
+                                                  bk || isReference
+                                                    ? "not-allowed"
+                                                    : "pointer",
+                                                opacity: bk ? 0.6 : 1,
+                                                transform: sl
+                                                  ? "scale(1.15)"
+                                                  : "scale(1)",
+                                                zIndex: sl ? 12 : 7,
+                                              }}
+                                              title={
+                                                isReference
+                                                  ? undefined
+                                                  : `Seat ${i + 1} — ${bk ? "Taken" : sl ? "Selected" : "Available"}${rt.sellingMode === "chair" ? ` · ${formatPrice(rtChairPrice(rt))}` : ""}`
+                                              }
+                                            >
+                                              {i + 1}
+                                            </button>
+                                          );
+                                        })}
                                       </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
+                                    );
+                                  })}
+                                {/* Entrance / exit door markers */}
+                                {renderDoors()}
+                                {layoutAnnotations.length > 0 && (
+                                  <VenueAnnotationLayer
+                                    readOnly
+                                    width={venueDisplayCanvas.width}
+                                    height={venueDisplayCanvas.height}
+                                    scale={1}
+                                    zIndex={4}
+                                    annotations={layoutAnnotations}
+                                  />
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
 
-                {/* Booking Summary & Checkout */}
-                {roundTableSelections.length > 0 && (
-                  <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                    {/* Header bar */}
-                    <div
-                      className="px-5 py-4 border-b"
-                      style={{
-                        background: `linear-gradient(135deg, ${design?.primaryColor}08, ${design?.secondaryColor}08)`,
-                      }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-7 h-7 rounded-lg flex items-center justify-center"
-                            style={{
-                              backgroundColor: design?.primaryColor,
-                              color: "white",
-                            }}
-                          >
-                            <Ticket className="h-3.5 w-3.5" />
-                          </div>
-                          <span className="font-bold text-sm text-gray-800">
-                            Your Selection
-                          </span>
+                          {/* Available-tables list intentionally removed — space
+                          availability is hidden on the public venue preview. */}
                         </div>
-                        <span className="text-xs text-gray-400">
-                          {roundTableSelections.reduce(
-                            (sum, s) => sum + s.selectedChairIndices.length,
-                            0,
-                          )}{" "}
-                          seat(s)
-                        </span>
-                      </div>
+                      )}
                     </div>
+                  )}
 
-                    <div className="p-5 space-y-5">
-                      {/* Selected items */}
-                      <div className="space-y-2">
-                        {roundTableSelections.map((sel) => (
+                  {/* Add-On Items — collapsible, same disclosure as the
+                    info sections and the Venue Layout. */}
+                  {addOnItems && addOnItems.length > 0 && (
+                    <CollapsibleCard
+                      title="Add-On Items"
+                      headingColor={design?.primaryColor}
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {addOnItems.map((item) => (
                           <div
-                            key={sel.tablePositionId}
-                            className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors"
+                            key={item.id}
+                            className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
                           >
-                            <div className="flex items-center gap-3">
-                              <div
-                                className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                                style={{ backgroundColor: sel.color }}
-                              >
-                                {sel.selectedChairIndices.length}
-                              </div>
+                            <div className="flex items-start justify-between">
                               <div>
-                                <p className="font-semibold text-sm text-gray-800">
-                                  {sel.tableName}
-                                </p>
-                                <p className="text-[11px] text-gray-400">
-                                  {sel.sellingMode === "table"
-                                    ? `Whole table · ${sel.selectedChairIndices.length} seats`
-                                    : `Seat ${sel.selectedChairIndices.map((c) => c + 1).join(", ")}`}
-                                  <span
-                                    className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] font-medium"
-                                    style={{
-                                      backgroundColor: `${sel.color}15`,
-                                      color: sel.color,
-                                    }}
-                                  >
-                                    {sel.tableCategory}
-                                  </span>
+                                <h5 className="font-semibold text-gray-800">
+                                  {item.name}
+                                </h5>
+                                <p className="text-xs text-gray-400 mt-1">
+                                  {item.description}
                                 </p>
                               </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="font-bold text-sm text-gray-800">
-                                {formatPrice(sel.amount)}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setRoundTableSelections(
-                                    roundTableSelections.filter(
-                                      (s) =>
-                                        s.tablePositionId !==
-                                        sel.tablePositionId,
-                                    ),
-                                  )
-                                }
-                                className="w-6 h-6 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all text-sm"
+                              <p
+                                className="font-bold text-base"
+                                style={{ color: design?.secondaryColor }}
                               >
-                                &times;
-                              </button>
+                                {formatPrice(item.price || 0)}
+                              </p>
                             </div>
                           </div>
                         ))}
                       </div>
-
-                      {/* Total */}
-                      <div className="flex justify-between items-center py-3 border-y border-gray-100">
-                        <span className="font-bold text-gray-800">
-                          Total Amount
-                        </span>
-                        <span
-                          className="text-xl font-black"
-                          style={{ color: design?.primaryColor }}
-                        >
-                          {formatPrice(
-                            roundTableSelections.reduce(
-                              (sum, s) => sum + s.amount,
-                              0,
-                            ),
-                          )}
-                        </span>
-                      </div>
-
-                      {/* Visitor info */}
-                      <div className="space-y-4">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                          Contact Details
+                    </CollapsibleCard>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+                  <p className="text-gray-400">
+                    No venue layouts available for this event
+                  </p>
+                </div>
+              )}
+              {/* Round-table seat booking — lives inside the Venue tab,
+                below the layout map (the map above now shows the round
+                tables alongside the Spaces). Only shown when at least one
+                round table is actually sellable; "not for sale" round tables
+                are layout references only, so the box is hidden for them. */}
+              {roundTableData.some((rt: any) => rt.forSale !== false) && (
+                <div className="space-y-5">
+                  {/* Header */}
+                  <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
+                      <div>
+                        <h3 className="text-lg font-bold text-gray-900">
+                          Reserve Your Seats
+                        </h3>
+                        <p className="text-sm text-gray-500 mt-0.5">
+                          Click on available chairs to select your preferred
+                          seating
                         </p>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <div>
-                            <label className="text-[11px] font-medium text-gray-500 mb-1 block">
-                              Full Name *
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="John Doe"
-                              value={rtVisitorInfo.name}
-                              onChange={(e) =>
-                                setRtVisitorInfo({
-                                  ...rtVisitorInfo,
-                                  name: e.target.value,
-                                })
-                              }
-                              className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:border-transparent transition-shadow"
-                              style={
-                                { focusRingColor: design?.primaryColor } as any
-                              }
-                            />
+                      </div>
+                      {roundTableSelections.length > 0 && (
+                        <div
+                          className="flex items-center gap-2 px-4 py-2 rounded-xl"
+                          style={{
+                            backgroundColor: `${design?.primaryColor}10`,
+                          }}
+                        >
+                          <span className="text-sm font-medium text-gray-600">
+                            {roundTableSelections.reduce(
+                              (sum, s) => sum + s.selectedChairIndices.length,
+                              0,
+                            )}{" "}
+                            seat(s)
+                          </span>
+                          <span className="text-sm text-gray-400">
+                            &middot;
+                          </span>
+                          <span
+                            className="text-sm font-bold"
+                            style={{ color: design?.primaryColor }}
+                          >
+                            {formatPrice(
+                              roundTableSelections.reduce(
+                                (sum, s) => sum + s.amount,
+                                0,
+                              ),
+                            )}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Table category cards (bookable tables only — "not for
+                      sale" tables are layout references and are excluded). */}
+                    {(() => {
+                      const bookable = roundTableData.filter(
+                        (rt: any) => rt.forSale !== false,
+                      );
+                      const categories = [
+                        ...new Set(
+                          bookable.map((rt: any) => rt.category || "Standard"),
+                        ),
+                      ];
+                      return (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                          {categories.map((cat) => {
+                            const tablesInCat = bookable.filter(
+                              (rt: any) => (rt.category || "Standard") === cat,
+                            );
+                            const sample = tablesInCat[0];
+                            const totalSeats = tablesInCat.reduce(
+                              (s: number, rt: any) => s + rt.numberOfChairs,
+                              0,
+                            );
+                            const bookedSeats = tablesInCat.reduce(
+                              (s: number, rt: any) =>
+                                s + (rt.bookedChairs?.length || 0),
+                              0,
+                            );
+                            return (
+                              <div
+                                key={cat}
+                                className="rounded-xl border p-3 sm:p-4"
+                                style={{
+                                  borderColor: `${sample.color || "#8B5CF6"}33`,
+                                  backgroundColor: `${sample.color || "#8B5CF6"}06`,
+                                }}
+                              >
+                                <div className="flex items-center gap-2 mb-2">
+                                  <div
+                                    className="w-2.5 h-2.5 rounded-full"
+                                    style={{
+                                      backgroundColor:
+                                        sample.color || "#8B5CF6",
+                                    }}
+                                  />
+                                  <span className="font-bold text-sm text-gray-800">
+                                    {cat}
+                                  </span>
+                                </div>
+                                <div className="space-y-1 text-xs text-gray-500">
+                                  <p>
+                                    {tablesInCat.length} table
+                                    {tablesInCat.length > 1 ? "s" : ""}
+                                  </p>
+                                  <p
+                                    className="font-medium"
+                                    style={{ color: sample.color || "#8B5CF6" }}
+                                  >
+                                    {sample.sellingMode === "table"
+                                      ? formatPrice(rtTablePrice(sample)) +
+                                        " / table"
+                                      : formatPrice(rtChairPrice(sample)) +
+                                        " / seat"}
+                                  </p>
+                                  <div className="flex items-center gap-1.5 mt-1">
+                                    <div className="flex-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                                      <div
+                                        className="h-full rounded-full"
+                                        style={{
+                                          width: `${totalSeats > 0 ? (bookedSeats / totalSeats) * 100 : 0}%`,
+                                          backgroundColor:
+                                            sample.color || "#8B5CF6",
+                                        }}
+                                      />
+                                    </div>
+                                    <span className="text-[10px] text-gray-400">
+                                      {totalSeats - bookedSeats} left
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Round Tables now render on the main venue map above
+                    (alongside the Spaces), so this standalone round-tables
+                    map is intentionally disabled. */}
+                  {false &&
+                    venueConfig &&
+                    venueConfig[currentLayoutIndex] &&
+                    (() => {
+                      const vc = venueConfig[currentLayoutIndex];
+                      const canvasW = vc.width || 800;
+                      const canvasH = vc.height || 500;
+                      const pad = 25;
+                      const totalW = canvasW + pad * 2;
+                      const totalH = canvasH + pad * 2;
+                      const s = venueDisplayScale;
+
+                      return (
+                        <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+                          <div className="px-5 pt-5 pb-3">
+                            <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center"
+                                  style={{
+                                    backgroundColor: `${design?.primaryColor}15`,
+                                  }}
+                                >
+                                  <MapPin
+                                    className="h-4 w-4"
+                                    style={{ color: design?.primaryColor }}
+                                  />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold text-gray-800">
+                                    {vc.name}
+                                  </p>
+                                  <p className="text-[10px] text-gray-400">
+                                    Tap chairs to select seats
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-1.5">
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-sm" />
+                                  <span className="text-[10px] font-medium text-gray-600">
+                                    Open
+                                  </span>
+                                </div>
+                                <div className="w-px h-3 bg-gray-200" />
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm" />
+                                  <span className="text-[10px] font-medium text-gray-600">
+                                    Selected
+                                  </span>
+                                </div>
+                                <div className="w-px h-3 bg-gray-200" />
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
+                                  <span className="text-[10px] font-medium text-gray-600">
+                                    Taken
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <label className="text-[11px] font-medium text-gray-500 mb-1 block">
-                              Email *
-                            </label>
-                            <input
-                              type="email"
-                              placeholder="john@email.com"
-                              value={rtVisitorInfo.email}
-                              onChange={(e) =>
-                                setRtVisitorInfo({
-                                  ...rtVisitorInfo,
-                                  email: e.target.value,
-                                })
-                              }
-                              className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:border-transparent transition-shadow"
-                            />
+                          <div className="px-3 pb-5">
+                            <div
+                              className="overflow-x-auto rounded-xl border border-gray-200"
+                              style={{ background: "#fafbfc" }}
+                            >
+                              <div
+                                className="relative mx-auto"
+                                style={{
+                                  width: `${totalW}px`,
+                                  height: `${totalH}px`,
+                                  minWidth: `${totalW}px`,
+                                }}
+                              >
+                                {/* Grid background — offset by padding */}
+                                <div
+                                  className="absolute rounded-lg"
+                                  style={{
+                                    left: pad,
+                                    top: pad,
+                                    width: canvasW,
+                                    height: canvasH,
+                                    backgroundImage: `
+                                  linear-gradient(to right, rgba(0,0,0,0.04) 1px, transparent 1px),
+                                  linear-gradient(to bottom, rgba(0,0,0,0.04) 1px, transparent 1px)
+                                `,
+                                    backgroundSize: `${vc.gridSize || 20}px ${vc.gridSize || 20}px`,
+                                    backgroundColor: "#ffffff",
+                                    border: "1px solid #e5e7eb",
+                                  }}
+                                >
+                                  {/* Main Stage */}
+                                  {vc.hasMainStage && (
+                                    <div
+                                      className="absolute flex items-center justify-center font-bold rounded-b-lg"
+                                      style={{
+                                        top: 0,
+                                        left: "50%",
+                                        transform: "translateX(-50%)",
+                                        width: 200,
+                                        height: 50,
+                                        zIndex: 10,
+                                        fontSize: 11,
+                                        letterSpacing: 3,
+                                        background:
+                                          "linear-gradient(180deg, #ddd6fe, #c4b5fd)",
+                                        color: "#6d28d9",
+                                        borderBottom: "2px solid #8b5cf6",
+                                      }}
+                                    >
+                                      MAIN STAGE
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Round Tables — positioned relative to pad offset */}
+                                {roundTableData.map((rt: any) => {
+                                  const bookedChairs: number[] =
+                                    rt.bookedChairs || [];
+                                  const mySelection = roundTableSelections.find(
+                                    (sel) =>
+                                      sel.tablePositionId === rt.positionId,
+                                  );
+                                  const mySelectedChairs =
+                                    mySelection?.selectedChairIndices || [];
+                                  const isFullyBooked =
+                                    rt.isFullyBooked ||
+                                    bookedChairs.length >= rt.numberOfChairs;
+                                  const d = Math.round(
+                                    (rt.tableDiameter || 120) * 0.55,
+                                  );
+                                  const chairSz = 14;
+                                  const chairR = d / 2 + chairSz / 2 + 3;
+                                  // Center in the padded canvas
+                                  const cx = pad + (rt.x || 0) + d / 2;
+                                  const cy = pad + (rt.y || 0) + d / 2;
+
+                                  // A "not for sale" table is a layout
+                                  // reference only and cannot be booked.
+                                  const isReference = rt.forSale === false;
+                                  const handleChairClick = (ci: number) => {
+                                    if (isReference) return;
+                                    if (bookedChairs.includes(ci)) return;
+                                    if (rt.sellingMode === "table") {
+                                      if (mySelection) {
+                                        setRoundTableSelections(
+                                          roundTableSelections.filter(
+                                            (x) =>
+                                              x.tablePositionId !==
+                                              rt.positionId,
+                                          ),
+                                        );
+                                      } else if (!isFullyBooked) {
+                                        setRoundTableSelections([
+                                          ...roundTableSelections,
+                                          {
+                                            tablePositionId: rt.positionId,
+                                            tableName: rt.name,
+                                            tableCategory:
+                                              rt.category || "Standard",
+                                            sellingMode: rt.sellingMode,
+                                            selectedChairIndices: Array.from(
+                                              { length: rt.numberOfChairs },
+                                              (_, i) => i,
+                                            ),
+                                            amount: rtTablePrice(rt),
+                                            color: rt.color || "#8B5CF6",
+                                          },
+                                        ]);
+                                      }
+                                    } else {
+                                      const sel = mySelectedChairs.includes(ci)
+                                        ? mySelectedChairs.filter(
+                                            (c) => c !== ci,
+                                          )
+                                        : [...mySelectedChairs, ci];
+                                      const amt = rtChairPrice(rt) * sel.length;
+                                      const rest = roundTableSelections.filter(
+                                        (x) =>
+                                          x.tablePositionId !== rt.positionId,
+                                      );
+                                      if (sel.length === 0) {
+                                        setRoundTableSelections(rest);
+                                      } else {
+                                        setRoundTableSelections([
+                                          ...rest,
+                                          {
+                                            tablePositionId: rt.positionId,
+                                            tableName: rt.name,
+                                            tableCategory:
+                                              rt.category || "Standard",
+                                            sellingMode: rt.sellingMode,
+                                            selectedChairIndices: sel,
+                                            amount: amt,
+                                            color: rt.color || "#8B5CF6",
+                                          },
+                                        ]);
+                                      }
+                                    }
+                                  };
+
+                                  const hasSel = mySelectedChairs.length > 0;
+
+                                  const col = rt.color || "#8B5CF6";
+
+                                  return (
+                                    <div
+                                      key={rt.positionId}
+                                      className="group"
+                                      style={{
+                                        position: "absolute",
+                                        left: 0,
+                                        top: 0,
+                                        pointerEvents: "none",
+                                      }}
+                                    >
+                                      {/* Table circle */}
+                                      <div
+                                        className="rounded-full flex flex-col items-center justify-center transition-shadow"
+                                        style={{
+                                          position: "absolute",
+                                          left: cx - d / 2,
+                                          top: cy - d / 2,
+                                          width: d,
+                                          height: d,
+                                          background: hasSel
+                                            ? `radial-gradient(circle at 40% 35%, ${col}30, ${col}15)`
+                                            : `radial-gradient(circle at 40% 35%, ${col}18, ${col}08)`,
+                                          border: hasSel
+                                            ? `2.5px solid ${col}`
+                                            : `1.5px solid ${col}55`,
+                                          boxShadow: hasSel
+                                            ? `0 0 0 3px ${col}15, 0 4px 12px ${col}20`
+                                            : `0 1px 4px rgba(0,0,0,0.06)`,
+                                          zIndex: 6,
+                                          cursor: isReference
+                                            ? "not-allowed"
+                                            : rt.sellingMode === "table"
+                                              ? "pointer"
+                                              : "default",
+                                          opacity: isReference ? 0.7 : 1,
+                                          pointerEvents: "auto",
+                                        }}
+                                        onClick={() => {
+                                          if (
+                                            !isReference &&
+                                            rt.sellingMode === "table"
+                                          )
+                                            handleChairClick(0);
+                                        }}
+                                      >
+                                        <span
+                                          style={{
+                                            fontSize: 7,
+                                            fontWeight: 800,
+                                            color: col,
+                                            textAlign: "center",
+                                            lineHeight: 1.1,
+                                            letterSpacing: 0.2,
+                                          }}
+                                        >
+                                          {rt.name}
+                                        </span>
+                                        <span
+                                          style={{
+                                            fontSize: 5,
+                                            color: "white",
+                                            backgroundColor: col,
+                                            borderRadius: 4,
+                                            padding: "0.5px 3px",
+                                            marginTop: 1,
+                                            fontWeight: 600,
+                                          }}
+                                        >
+                                          {isReference
+                                            ? "Reference"
+                                            : rt.category}
+                                        </span>
+                                      </div>
+
+                                      {/* Chairs */}
+                                      {Array.from({
+                                        length: rt.numberOfChairs,
+                                      }).map((_, i) => {
+                                        const a =
+                                          (2 * Math.PI * i) /
+                                            rt.numberOfChairs -
+                                          Math.PI / 2;
+                                        const px =
+                                          cx +
+                                          chairR * Math.cos(a) -
+                                          chairSz / 2;
+                                        const py =
+                                          cy +
+                                          chairR * Math.sin(a) -
+                                          chairSz / 2;
+                                        const bk = bookedChairs.includes(i);
+                                        const sl = mySelectedChairs.includes(i);
+                                        return (
+                                          <button
+                                            key={i}
+                                            type="button"
+                                            onClick={() => handleChairClick(i)}
+                                            disabled={bk || isReference}
+                                            className="rounded-full flex items-center justify-center font-bold transition-all"
+                                            style={{
+                                              position: "absolute",
+                                              left: px,
+                                              top: py,
+                                              width: chairSz,
+                                              height: chairSz,
+                                              fontSize: 6,
+                                              pointerEvents: "auto",
+                                              color: bk ? "#9ca3af" : "white",
+                                              backgroundColor: bk
+                                                ? "#f3f4f6"
+                                                : sl
+                                                  ? "#2563eb"
+                                                  : col,
+                                              border: bk
+                                                ? "1.5px solid #d1d5db"
+                                                : sl
+                                                  ? "2px solid #1d4ed8"
+                                                  : "1.5px solid rgba(255,255,255,0.8)",
+                                              cursor: bk
+                                                ? "not-allowed"
+                                                : "pointer",
+                                              opacity: bk ? 0.6 : 1,
+                                              transform: sl
+                                                ? "scale(1.2)"
+                                                : "scale(1)",
+                                              zIndex: sl ? 12 : 7,
+                                              boxShadow: sl
+                                                ? "0 0 0 2px rgba(37,99,235,0.25), 0 2px 8px rgba(37,99,235,0.3)"
+                                                : bk
+                                                  ? "none"
+                                                  : "0 1px 3px rgba(0,0,0,0.12)",
+                                            }}
+                                            title={`Seat ${i + 1} — ${bk ? "Taken" : sl ? "Selected" : "Available"}${rt.sellingMode === "chair" ? ` · ${formatPrice(rtChairPrice(rt))}` : ""}`}
+                                          >
+                                            {i + 1}
+                                          </button>
+                                        );
+                                      })}
+
+                                      {/* Tooltip on hover */}
+                                      <div
+                                        className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                                        style={{
+                                          position: "absolute",
+                                          left: cx - 60,
+                                          top: cy - d / 2 - 40,
+                                          width: 120,
+                                          zIndex: 50,
+                                        }}
+                                      >
+                                        <div className="bg-gray-900/95 backdrop-blur-sm text-white text-[9px] px-3 py-2 rounded-lg shadow-xl text-center">
+                                          <p className="font-bold text-[10px]">
+                                            {rt.name}
+                                          </p>
+                                          <p className="text-gray-300 mt-0.5">
+                                            {isReference
+                                              ? "Not for sale"
+                                              : rt.sellingMode === "table"
+                                                ? formatPrice(rtTablePrice(rt))
+                                                : `${formatPrice(rtChairPrice(rt))} / seat`}
+                                          </p>
+                                          <div className="w-2 h-2 bg-gray-900/95 rotate-45 absolute -bottom-1 left-1/2 -translate-x-1/2" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <label className="text-[11px] font-medium text-gray-500 mb-1 block">
-                              Phone *
-                            </label>
-                            <PhoneInput
-                              value={rtVisitorInfo.phone}
-                              onChange={(value) =>
-                                setRtVisitorInfo({
-                                  ...rtVisitorInfo,
-                                  phone: value,
-                                })
-                              }
-                              enableSearch={true}
-                              countryCodeEditable={false}
-                              preferredCountries={[
-                                "in",
-                                "sg",
-                                "us",
-                                "gb",
-                                "ae",
-                              ]}
-                              inputProps={{ name: "rtPhone", required: true }}
-                              inputStyle={{
-                                width: "100%",
-                                height: "42px",
-                                borderRadius: "12px",
-                                fontSize: "14px",
-                                border: "1px solid #e5e7eb",
+                        </div>
+                      );
+                    })()}
+
+                  {/* Booking Summary & Checkout */}
+                  {roundTableSelections.length > 0 && (
+                    <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                      {/* Header bar */}
+                      <div
+                        className="px-5 py-4 border-b"
+                        style={{
+                          background: `linear-gradient(135deg, ${design?.primaryColor}08, ${design?.secondaryColor}08)`,
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-7 h-7 rounded-lg flex items-center justify-center"
+                              style={{
+                                backgroundColor: design?.primaryColor,
+                                color: "white",
                               }}
-                              containerStyle={{ width: "100%" }}
-                              buttonStyle={{
-                                borderRadius: "12px 0 0 12px",
-                                border: "1px solid #e5e7eb",
-                              }}
-                            />
+                            >
+                              <Ticket className="h-3.5 w-3.5" />
+                            </div>
+                            <span className="font-bold text-sm text-gray-800">
+                              Your Selection
+                            </span>
                           </div>
+                          <span className="text-xs text-gray-400">
+                            {roundTableSelections.reduce(
+                              (sum, s) => sum + s.selectedChairIndices.length,
+                              0,
+                            )}{" "}
+                            seat(s)
+                          </span>
                         </div>
                       </div>
 
-                      {/* Per-seat guest details — collapsible, optional */}
-                      {(() => {
-                        const totalSeats = roundTableSelections.reduce(
-                          (s, sel) => s + sel.selectedChairIndices.length,
-                          0,
-                        );
-                        const filledGuests = Object.values(rtSeatGuests)
-                          .flatMap((chairs) => Object.values(chairs))
-                          .filter((g) => g.name.trim()).length;
-                        return (
-                          <div className="rounded-xl border border-gray-100 overflow-hidden">
-                            <button
-                              type="button"
-                              onClick={() => setShowGuestForm(!showGuestForm)}
-                              className="w-full flex items-center justify-between px-4 py-3 bg-gray-50/80 hover:bg-gray-100/80 transition-colors text-left"
+                      <div className="p-5 space-y-5">
+                        {/* Selected items */}
+                        <div className="space-y-2">
+                          {roundTableSelections.map((sel) => (
+                            <div
+                              key={sel.tablePositionId}
+                              className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors"
                             >
-                              <div>
-                                <p className="text-xs font-semibold text-gray-700">
-                                  Add Guest Details
-                                </p>
-                                <p className="text-[10px] text-gray-400 mt-0.5">
-                                  {filledGuests > 0
-                                    ? `${filledGuests} of ${totalSeats} guests added — each gets their own QR via WhatsApp`
-                                    : `Optional — add guest names & WhatsApp to send individual QR tickets`}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {filledGuests > 0 && (
-                                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-                                    {filledGuests}/{totalSeats}
-                                  </span>
-                                )}
-                                <span
-                                  className={`text-gray-400 text-sm transition-transform ${showGuestForm ? "rotate-180" : ""}`}
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                                  style={{ backgroundColor: sel.color }}
                                 >
-                                  &#9662;
+                                  {sel.selectedChairIndices.length}
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-sm text-gray-800">
+                                    {sel.tableName}
+                                  </p>
+                                  <p className="text-[11px] text-gray-400">
+                                    {sel.sellingMode === "table"
+                                      ? `Whole table · ${sel.selectedChairIndices.length} seats`
+                                      : `Seat ${sel.selectedChairIndices.map((c) => c + 1).join(", ")}`}
+                                    <span
+                                      className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] font-medium"
+                                      style={{
+                                        backgroundColor: `${sel.color}15`,
+                                        color: sel.color,
+                                      }}
+                                    >
+                                      {sel.tableCategory}
+                                    </span>
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="font-bold text-sm text-gray-800">
+                                  {formatPrice(sel.amount)}
                                 </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setRoundTableSelections(
+                                      roundTableSelections.filter(
+                                        (s) =>
+                                          s.tablePositionId !==
+                                          sel.tablePositionId,
+                                      ),
+                                    )
+                                  }
+                                  className="w-6 h-6 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all text-sm"
+                                >
+                                  &times;
+                                </button>
                               </div>
-                            </button>
-                            {showGuestForm && (
-                              <div className="p-3 space-y-3 border-t border-gray-100">
-                                {roundTableSelections.map((sel) => (
-                                  <div
-                                    key={sel.tablePositionId}
-                                    className="space-y-2"
-                                  >
-                                    <p className="text-xs font-semibold text-gray-600 flex items-center gap-2">
-                                      <span
-                                        className="w-2 h-2 rounded-full"
-                                        style={{ backgroundColor: sel.color }}
-                                      />
-                                      {sel.tableName} — {sel.tableCategory}
-                                    </p>
-                                    {sel.selectedChairIndices.map(
-                                      (chairIdx) => {
-                                        const guest = rtSeatGuests[
-                                          sel.tablePositionId
-                                        ]?.[chairIdx] || {
-                                          name: "",
-                                          whatsApp: "",
-                                          email: "",
-                                        };
-                                        const updateGuest = (
-                                          field: string,
-                                          value: string,
-                                        ) => {
-                                          setRtSeatGuests((prev) => ({
-                                            ...prev,
-                                            [sel.tablePositionId]: {
-                                              ...prev[sel.tablePositionId],
-                                              [chairIdx]: {
-                                                ...guest,
-                                                [field]: value,
-                                              },
-                                            },
-                                          }));
-                                        };
-                                        const isFilled =
-                                          guest.name.trim().length > 0;
-                                        return (
-                                          <div
-                                            key={`${sel.tablePositionId}-${chairIdx}`}
-                                            className={`rounded-lg border p-3 transition-colors ${isFilled ? "border-green-200 bg-green-50/30" : "border-gray-200 bg-white"}`}
-                                          >
-                                            <p className="text-[10px] font-bold text-gray-400 mb-2 flex items-center gap-1.5">
-                                              <span
-                                                className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[8px]"
-                                                style={{
-                                                  backgroundColor: isFilled
-                                                    ? "#22c55e"
-                                                    : sel.color,
-                                                }}
-                                              >
-                                                {chairIdx + 1}
-                                              </span>
-                                              Seat {chairIdx + 1}
-                                              {isFilled && (
-                                                <span className="text-green-600 text-[9px] ml-auto">
-                                                  &#10003;
-                                                </span>
-                                              )}
-                                            </p>
-                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                              <input
-                                                type="text"
-                                                placeholder="Guest Name"
-                                                value={guest.name}
-                                                onChange={(e) =>
-                                                  updateGuest(
-                                                    "name",
-                                                    e.target.value,
-                                                  )
-                                                }
-                                                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                              />
-                                              <PhoneInput
-                                                value={guest.whatsApp}
-                                                onChange={(value) =>
-                                                  updateGuest("whatsApp", value)
-                                                }
-                                                enableSearch={true}
-                                                countryCodeEditable={false}
-                                                preferredCountries={[
-                                                  "in",
-                                                  "sg",
-                                                  "us",
-                                                  "gb",
-                                                  "ae",
-                                                ]}
-                                                inputProps={{
-                                                  name: `seat-phone-${chairIdx}`,
-                                                }}
-                                                inputStyle={{
-                                                  width: "100%",
-                                                  height: "34px",
-                                                  borderRadius: "8px",
-                                                  fontSize: "12px",
-                                                  border: "1px solid #e5e7eb",
-                                                }}
-                                                containerStyle={{
-                                                  width: "100%",
-                                                }}
-                                                buttonStyle={{
-                                                  borderRadius: "8px 0 0 8px",
-                                                  border: "1px solid #e5e7eb",
-                                                  height: "34px",
-                                                }}
-                                              />
-                                              <input
-                                                type="email"
-                                                placeholder="Email"
-                                                value={guest.email}
-                                                onChange={(e) =>
-                                                  updateGuest(
-                                                    "email",
-                                                    e.target.value,
-                                                  )
-                                                }
-                                                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                              />
-                                            </div>
-                                          </div>
-                                        );
-                                      },
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Total */}
+                        <div className="flex justify-between items-center py-3 border-y border-gray-100">
+                          <span className="font-bold text-gray-800">
+                            Total Amount
+                          </span>
+                          <span
+                            className="text-xl font-black"
+                            style={{ color: design?.primaryColor }}
+                          >
+                            {formatPrice(
+                              roundTableSelections.reduce(
+                                (sum, s) => sum + s.amount,
+                                0,
+                              ),
                             )}
-                          </div>
-                        );
-                      })()}
+                          </span>
+                        </div>
 
-                      {/* Book button */}
-                      <button
-                        type="button"
-                        disabled={
-                          rtBookingLoading ||
-                          !rtVisitorInfo.name ||
-                          !rtVisitorInfo.email ||
-                          !rtVisitorInfo.phone
-                        }
-                        onClick={async () => {
-                          if (isEventOver(eventData)) {
-                            toast({
-                              title: "This event has ended",
-                              description:
-                                "Round-table bookings are closed for this event.",
-                              variant: "destructive",
-                            });
-                            return;
-                          }
-                          setRtBookingLoading(true);
-                          try {
-                            const organizerId = eventData?.organizer?._id;
-                            const eid = eventId || id;
-                            const bookingPromises = roundTableSelections.map(
-                              (sel) => {
-                                const seatGuestsForTable =
-                                  sel.selectedChairIndices
-                                    .map((chairIdx) => {
-                                      const g =
-                                        rtSeatGuests[sel.tablePositionId]?.[
-                                          chairIdx
-                                        ];
-                                      return {
-                                        chairIndex: chairIdx,
-                                        name: g?.name || "",
-                                        whatsApp: g?.whatsApp || "",
-                                        email: g?.email || "",
-                                      };
-                                    })
-                                    .filter((g) => g.name.trim() !== "");
-
-                                return fetch(
-                                  `${apiURL}/round-table-bookings/create`,
+                        {/* Visitor info */}
+                        <div className="space-y-4">
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Contact Details
+                          </p>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                              <label className="text-[11px] font-medium text-gray-500 mb-1 block">
+                                Full Name *
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="John Doe"
+                                value={rtVisitorInfo.name}
+                                onChange={(e) =>
+                                  setRtVisitorInfo({
+                                    ...rtVisitorInfo,
+                                    name: e.target.value,
+                                  })
+                                }
+                                className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:border-transparent transition-shadow"
+                                style={
                                   {
-                                    method: "POST",
-                                    headers: {
-                                      "Content-Type": "application/json",
-                                    },
-                                    body: JSON.stringify({
-                                      eventId: eid,
-                                      organizerId,
-                                      tablePositionId: sel.tablePositionId,
-                                      selectedChairIndices:
-                                        sel.selectedChairIndices,
-                                      visitorName: rtVisitorInfo.name,
-                                      visitorEmail: rtVisitorInfo.email,
-                                      visitorPhone: rtVisitorInfo.phone,
-                                      seatGuests: seatGuestsForTable,
-                                    }),
-                                  },
-                                ).then((r) => r.json());
-                              },
-                            );
-                            const results = await Promise.all(bookingPromises);
-                            const failed = results.filter((r) => !r.success);
-                            if (failed.length > 0) {
+                                    focusRingColor: design?.primaryColor,
+                                  } as any
+                                }
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[11px] font-medium text-gray-500 mb-1 block">
+                                Email *
+                              </label>
+                              <input
+                                type="email"
+                                placeholder="john@email.com"
+                                value={rtVisitorInfo.email}
+                                onChange={(e) =>
+                                  setRtVisitorInfo({
+                                    ...rtVisitorInfo,
+                                    email: e.target.value,
+                                  })
+                                }
+                                className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:border-transparent transition-shadow"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[11px] font-medium text-gray-500 mb-1 block">
+                                Phone *
+                              </label>
+                              <PhoneInput
+                                value={rtVisitorInfo.phone}
+                                onChange={(value) =>
+                                  setRtVisitorInfo({
+                                    ...rtVisitorInfo,
+                                    phone: value,
+                                  })
+                                }
+                                enableSearch={true}
+                                countryCodeEditable={false}
+                                preferredCountries={[
+                                  "in",
+                                  "sg",
+                                  "us",
+                                  "gb",
+                                  "ae",
+                                ]}
+                                inputProps={{ name: "rtPhone", required: true }}
+                                inputStyle={{
+                                  width: "100%",
+                                  height: "42px",
+                                  borderRadius: "12px",
+                                  fontSize: "14px",
+                                  border: "1px solid #e5e7eb",
+                                }}
+                                containerStyle={{ width: "100%" }}
+                                buttonStyle={{
+                                  borderRadius: "12px 0 0 12px",
+                                  border: "1px solid #e5e7eb",
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Per-seat guest details — collapsible, optional */}
+                        {(() => {
+                          const totalSeats = roundTableSelections.reduce(
+                            (s, sel) => s + sel.selectedChairIndices.length,
+                            0,
+                          );
+                          const filledGuests = Object.values(rtSeatGuests)
+                            .flatMap((chairs) => Object.values(chairs))
+                            .filter((g) => g.name.trim()).length;
+                          return (
+                            <div className="rounded-xl border border-gray-100 overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => setShowGuestForm(!showGuestForm)}
+                                className="w-full flex items-center justify-between px-4 py-3 bg-gray-50/80 hover:bg-gray-100/80 transition-colors text-left"
+                              >
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-700">
+                                    Add Guest Details
+                                  </p>
+                                  <p className="text-[10px] text-gray-400 mt-0.5">
+                                    {filledGuests > 0
+                                      ? `${filledGuests} of ${totalSeats} guests added — each gets their own QR via WhatsApp`
+                                      : `Optional — add guest names & WhatsApp to send individual QR tickets`}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {filledGuests > 0 && (
+                                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                                      {filledGuests}/{totalSeats}
+                                    </span>
+                                  )}
+                                  <span
+                                    className={`text-gray-400 text-sm transition-transform ${showGuestForm ? "rotate-180" : ""}`}
+                                  >
+                                    &#9662;
+                                  </span>
+                                </div>
+                              </button>
+                              {showGuestForm && (
+                                <div className="p-3 space-y-3 border-t border-gray-100">
+                                  {roundTableSelections.map((sel) => (
+                                    <div
+                                      key={sel.tablePositionId}
+                                      className="space-y-2"
+                                    >
+                                      <p className="text-xs font-semibold text-gray-600 flex items-center gap-2">
+                                        <span
+                                          className="w-2 h-2 rounded-full"
+                                          style={{ backgroundColor: sel.color }}
+                                        />
+                                        {sel.tableName} — {sel.tableCategory}
+                                      </p>
+                                      {sel.selectedChairIndices.map(
+                                        (chairIdx) => {
+                                          const guest = rtSeatGuests[
+                                            sel.tablePositionId
+                                          ]?.[chairIdx] || {
+                                            name: "",
+                                            whatsApp: "",
+                                            email: "",
+                                          };
+                                          const updateGuest = (
+                                            field: string,
+                                            value: string,
+                                          ) => {
+                                            setRtSeatGuests((prev) => ({
+                                              ...prev,
+                                              [sel.tablePositionId]: {
+                                                ...prev[sel.tablePositionId],
+                                                [chairIdx]: {
+                                                  ...guest,
+                                                  [field]: value,
+                                                },
+                                              },
+                                            }));
+                                          };
+                                          const isFilled =
+                                            guest.name.trim().length > 0;
+                                          return (
+                                            <div
+                                              key={`${sel.tablePositionId}-${chairIdx}`}
+                                              className={`rounded-lg border p-3 transition-colors ${isFilled ? "border-green-200 bg-green-50/30" : "border-gray-200 bg-white"}`}
+                                            >
+                                              <p className="text-[10px] font-bold text-gray-400 mb-2 flex items-center gap-1.5">
+                                                <span
+                                                  className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[8px]"
+                                                  style={{
+                                                    backgroundColor: isFilled
+                                                      ? "#22c55e"
+                                                      : sel.color,
+                                                  }}
+                                                >
+                                                  {chairIdx + 1}
+                                                </span>
+                                                Seat {chairIdx + 1}
+                                                {isFilled && (
+                                                  <span className="text-green-600 text-[9px] ml-auto">
+                                                    &#10003;
+                                                  </span>
+                                                )}
+                                              </p>
+                                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                                <input
+                                                  type="text"
+                                                  placeholder="Guest Name"
+                                                  value={guest.name}
+                                                  onChange={(e) =>
+                                                    updateGuest(
+                                                      "name",
+                                                      e.target.value,
+                                                    )
+                                                  }
+                                                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                                />
+                                                <PhoneInput
+                                                  value={guest.whatsApp}
+                                                  onChange={(value) =>
+                                                    updateGuest(
+                                                      "whatsApp",
+                                                      value,
+                                                    )
+                                                  }
+                                                  enableSearch={true}
+                                                  countryCodeEditable={false}
+                                                  preferredCountries={[
+                                                    "in",
+                                                    "sg",
+                                                    "us",
+                                                    "gb",
+                                                    "ae",
+                                                  ]}
+                                                  inputProps={{
+                                                    name: `seat-phone-${chairIdx}`,
+                                                  }}
+                                                  inputStyle={{
+                                                    width: "100%",
+                                                    height: "34px",
+                                                    borderRadius: "8px",
+                                                    fontSize: "12px",
+                                                    border: "1px solid #e5e7eb",
+                                                  }}
+                                                  containerStyle={{
+                                                    width: "100%",
+                                                  }}
+                                                  buttonStyle={{
+                                                    borderRadius: "8px 0 0 8px",
+                                                    border: "1px solid #e5e7eb",
+                                                    height: "34px",
+                                                  }}
+                                                />
+                                                <input
+                                                  type="email"
+                                                  placeholder="Email"
+                                                  value={guest.email}
+                                                  onChange={(e) =>
+                                                    updateGuest(
+                                                      "email",
+                                                      e.target.value,
+                                                    )
+                                                  }
+                                                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                                />
+                                              </div>
+                                            </div>
+                                          );
+                                        },
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+
+                        {/* Book button */}
+                        <button
+                          type="button"
+                          disabled={
+                            rtBookingLoading ||
+                            !rtVisitorInfo.name ||
+                            !rtVisitorInfo.email ||
+                            !rtVisitorInfo.phone
+                          }
+                          onClick={async () => {
+                            if (isEventOver(eventData)) {
                               toast({
-                                title: "Some bookings failed",
-                                description: failed
-                                  .map((f) => f.message)
-                                  .join(", "),
+                                title: "This event has ended",
+                                description:
+                                  "Round-table bookings are closed for this event.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+                            setRtBookingLoading(true);
+                            try {
+                              const organizerId = eventData?.organizer?._id;
+                              const eid = eventId || id;
+                              const bookingPromises = roundTableSelections.map(
+                                (sel) => {
+                                  const seatGuestsForTable =
+                                    sel.selectedChairIndices
+                                      .map((chairIdx) => {
+                                        const g =
+                                          rtSeatGuests[sel.tablePositionId]?.[
+                                            chairIdx
+                                          ];
+                                        return {
+                                          chairIndex: chairIdx,
+                                          name: g?.name || "",
+                                          whatsApp: g?.whatsApp || "",
+                                          email: g?.email || "",
+                                        };
+                                      })
+                                      .filter((g) => g.name.trim() !== "");
+
+                                  return fetch(
+                                    `${apiURL}/round-table-bookings/create`,
+                                    {
+                                      method: "POST",
+                                      headers: {
+                                        "Content-Type": "application/json",
+                                      },
+                                      body: JSON.stringify({
+                                        eventId: eid,
+                                        organizerId,
+                                        tablePositionId: sel.tablePositionId,
+                                        selectedChairIndices:
+                                          sel.selectedChairIndices,
+                                        visitorName: rtVisitorInfo.name,
+                                        visitorEmail: rtVisitorInfo.email,
+                                        visitorPhone: rtVisitorInfo.phone,
+                                        seatGuests: seatGuestsForTable,
+                                      }),
+                                    },
+                                  ).then((r) => r.json());
+                                },
+                              );
+                              const results =
+                                await Promise.all(bookingPromises);
+                              const failed = results.filter((r) => !r.success);
+                              if (failed.length > 0) {
+                                toast({
+                                  title: "Some bookings failed",
+                                  description: failed
+                                    .map((f) => f.message)
+                                    .join(", "),
+                                  variant: "destructive",
+                                  duration: 5000,
+                                });
+                              }
+                              const successful = results.filter(
+                                (r) => r.success,
+                              );
+                              if (successful.length > 0) {
+                                // Navigate to payment page with booking IDs
+                                navigate("/round-table-payment", {
+                                  state: {
+                                    bookings: successful.map((r) => r.data),
+                                    eventTitle: eventData?.title,
+                                    totalAmount: successful.reduce(
+                                      (sum, r) => sum + r.data.amount,
+                                      0,
+                                    ),
+                                    organizerId: eventData?.organizer?._id,
+                                  },
+                                });
+                              }
+                            } catch (err: any) {
+                              toast({
+                                title: "Booking failed",
+                                description: err.message,
                                 variant: "destructive",
                                 duration: 5000,
                               });
+                            } finally {
+                              setRtBookingLoading(false);
                             }
-                            const successful = results.filter((r) => r.success);
-                            if (successful.length > 0) {
-                              // Navigate to payment page with booking IDs
-                              navigate("/round-table-payment", {
-                                state: {
-                                  bookings: successful.map((r) => r.data),
-                                  eventTitle: eventData?.title,
-                                  totalAmount: successful.reduce(
-                                    (sum, r) => sum + r.data.amount,
-                                    0,
-                                  ),
-                                  organizerId: eventData?.organizer?._id,
-                                },
-                              });
-                            }
-                          } catch (err: any) {
-                            toast({
-                              title: "Booking failed",
-                              description: err.message,
-                              variant: "destructive",
-                              duration: 5000,
-                            });
-                          } finally {
-                            setRtBookingLoading(false);
-                          }
-                        }}
-                        className="w-full py-3.5 rounded-xl font-bold text-white text-sm transition-all disabled:opacity-50 shadow-lg hover:shadow-xl hover:opacity-95"
-                        style={{
-                          background: `linear-gradient(135deg, ${design?.primaryColor || "#3b82f6"}, ${design?.secondaryColor || "#6366f1"})`,
-                        }}
-                      >
-                        {rtBookingLoading
-                          ? "Processing..."
-                          : "Proceed to Payment"}
-                      </button>
+                          }}
+                          className="w-full py-3.5 rounded-xl font-bold text-white text-sm transition-all disabled:opacity-50 shadow-lg hover:shadow-xl hover:opacity-95"
+                          style={{
+                            background: `linear-gradient(135deg, ${design?.primaryColor || "#3b82f6"}, ${design?.secondaryColor || "#6366f1"})`,
+                          }}
+                        >
+                          {rtBookingLoading
+                            ? "Processing..."
+                            : "Proceed to Payment"}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </TabsContent>
+                  )}
+                </div>
+              )}
+            </TabsContent>
 
-          <TabsContent value="feedback" className="mt-4">
-            <VisitorFeedbackCard eventId={id || eventData?._id || ""} />
-          </TabsContent>
-        </Tabs>
+            <TabsContent value="feedback" className="mt-4">
+              <VisitorFeedbackCard eventId={id || eventData?._id || ""} />
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* (Reel player Dialog removed — each reel card now embeds
@@ -8403,9 +8470,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             consistently rendered Instagram's logged-out placeholder
             instead of the actual reel.) */}
 
-        <EventFeedbackTokenHandler
-          eventId={id || eventData?._id || ""}
-        />
+        <EventFeedbackTokenHandler eventId={id || eventData?._id || ""} />
       </div>
 
       {/* WhatsApp Verification Dialog */}
@@ -9519,7 +9584,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       })()}
 
       <Dialog open={showWhatsAppDialog} onOpenChange={setShowWhatsAppDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className="sm:max-w-md"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center space-x-2">
               <Store className="h-6 w-6 text-blue-600" />
@@ -9559,7 +9628,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
       {/* Linked-accounts picker: this email owns multiple vendor profiles. */}
       <Dialog open={showAccountChooser} onOpenChange={setShowAccountChooser}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className="sm:max-w-md"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Store className="h-5 w-5 text-blue-600" />
@@ -9608,7 +9681,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           if (!open) setListRegisterStep(false);
         }}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className="sm:max-w-md"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Store className="h-5 w-5 text-blue-600" />
@@ -9740,7 +9817,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           if (!open) setShowRegisterTargetChoice(false);
         }}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className="sm:max-w-md"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Store className="h-5 w-5 text-green-600" />
@@ -9810,7 +9891,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   variant="outline"
                   onClick={() => setShowCompletedChoice(false)}
                 >
-                  Review
+                  Review Booking
                 </Button>
                 {/* Ask the organizer to cancel/delete this booking (frees the
                     space + refund handled by the organizer). Hidden if a
@@ -9830,7 +9911,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     }}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    Cancel / delete
+                    Delete Booking
                   </Button>
                 )}
               </div>
@@ -9886,7 +9967,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       {/* CANCEL / DELETE REQUEST — vendor gives a reason               */}
       {/* ============================================================ */}
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className="sm:max-w-md"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Trash2 className="h-5 w-5 text-red-600" />
@@ -9935,7 +10020,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           if (!o) setAmendMode(false);
         }}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className="sm:max-w-md"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Pencil className="h-5 w-5 text-blue-600" />
@@ -9953,9 +10042,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 type="button"
                 variant="outline"
                 size="icon"
-                onClick={() =>
-                  setAmendOperators((n) => Math.max(1, n - 1))
-                }
+                onClick={() => setAmendOperators((n) => Math.max(1, n - 1))}
                 disabled={amendOperators <= 1}
               >
                 −
@@ -9977,9 +10064,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 type="button"
                 variant="outline"
                 size="icon"
-                onClick={() =>
-                  setAmendOperators((n) => Math.min(10, n + 1))
-                }
+                onClick={() => setAmendOperators((n) => Math.min(10, n + 1))}
                 disabled={amendOperators >= 10}
               >
                 +
@@ -10014,7 +10099,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           setShowAmendPayment(o);
         }}
       >
-        <DialogContent className="max-w-lg w-full max-h-[92vh] overflow-hidden p-0 flex flex-col">
+        <DialogContent
+          className="max-w-lg w-full max-h-[92vh] overflow-hidden p-0 flex flex-col"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <div className="shrink-0 border-b px-5 py-4">
             <DialogTitle>Pay the difference</DialogTitle>
             <DialogDescription>
@@ -10100,7 +10189,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           if (!o) cancelStallGate();
         }}
       >
-        <DialogContent className="max-w-2xl w-full max-h-[90vh] overflow-hidden p-0 flex flex-col">
+        <DialogContent
+          className="max-w-2xl w-full max-h-[90vh] overflow-hidden p-0 flex flex-col"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <div className="shrink-0 border-b px-5 sm:px-6 py-4">
             <DialogTitle className="flex items-center gap-2 text-lg font-bold">
               <FileText className="h-5 w-5 text-amber-600" />
@@ -10121,10 +10214,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 ref={stallGateScrollRef}
                 onScroll={(e) => {
                   const el = e.currentTarget;
-                  if (
-                    el.scrollTop + el.clientHeight >=
-                    el.scrollHeight - 24
-                  )
+                  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 24)
                     setStallGateScrolledEnd(true);
                 }}
                 className="flex-1 min-h-0 overflow-y-auto px-5 sm:px-6 py-4 space-y-5"
@@ -10192,11 +10282,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               )}
             </p>
             <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={cancelStallGate}
-              >
+              <Button type="button" variant="outline" onClick={cancelStallGate}>
                 Cancel
               </Button>
               <Button
@@ -10222,7 +10308,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       {/* TABLE SELECTION DIALOG                                        */}
       {/* ============================================================ */}
       <Dialog open={showTableSelection} onOpenChange={setShowTableSelection}>
-        <DialogContent className="max-w-7xl w-full max-h-[95vh] overflow-hidden p-0 flex flex-col">
+        <DialogContent
+          className="max-w-7xl w-full max-h-[95vh] overflow-hidden p-0 flex flex-col"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           {/* Fixed header — stays put; only the body below scrolls. */}
           <div className="shrink-0 z-10 bg-white border-b px-4 sm:px-6 py-3 sm:py-4">
             <DialogTitle className="text-lg sm:text-xl font-bold">
@@ -10343,16 +10433,17 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       <div
                         className="relative mx-auto"
                         style={{
-                          width: `${venueDisplayCanvas.width}px`,
-                          height: `${venueDisplayCanvas.height}px`,
-                          minWidth: `${venueDisplayCanvas.width}px`,
+                          width: `${venueDisplayCanvas.width * dynamicScale}px`,
+                          height: `${venueDisplayCanvas.height * dynamicScale}px`,
                         }}
                       >
                         <div
-                          className="relative shadow-sm border border-gray-300"
+                          className="relative shadow-sm border border-gray-300 origin-top-left"
                           style={{
-                            width: "100%",
-                            height: "100%",
+                            width: `${venueDisplayCanvas.width}px`,
+                            height: `${venueDisplayCanvas.height}px`,
+                            transform: `scale(${dynamicScale})`,
+                            transformOrigin: "top left",
                             backgroundImage:
                               "linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)",
                             backgroundSize: `${eventData?.venueConfig?.[currentLayoutIndex]?.gridSize || 40}px ${eventData?.venueConfig?.[currentLayoutIndex]?.gridSize || 40}px`,
@@ -10549,7 +10640,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                             {table.type} · Row {table.rowNumber}
                                           </div>
                                           <div className="text-gray-300 whitespace-nowrap">
-                                            {table.width * 10}×{table.height * 10}
+                                            {table.width * 10}×
+                                            {table.height * 10}
                                             cm
                                           </div>
                                           {isSelected ? (
@@ -10586,8 +10678,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                   </div>
                                 </div>
                               );
-                            },
-                          )}
+                            })}
                           {/* Entrance / exit door markers */}
                           {renderDoors()}
                           {layoutAnnotations.length > 0 && (
@@ -10747,7 +10838,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     </CardContent>
                   </Card>
                 )}
-
             </div>
 
             {/* ── BOTTOM SUMMARY ROW ── */}
@@ -10759,15 +10849,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   <div className="flex items-center gap-2 text-emerald-800">
                     <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
                     <span>
-                      <strong>
-                        {activeMembership?.planName || "Member"}
-                      </strong>{" "}
+                      <strong>{activeMembership?.planName || "Member"}</strong>{" "}
                       pricing applied
                     </span>
                     {activeMembership?.endDate && (
                       <span className="text-xs text-emerald-700/80">
                         · valid till{" "}
-                        {new Date(activeMembership.endDate).toLocaleDateString()}
+                        {new Date(
+                          activeMembership.endDate,
+                        ).toLocaleDateString()}
                       </span>
                     )}
                   </div>
@@ -10808,7 +10898,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               {table.name}
                             </p>
                             <p className="text-gray-500">
-                              {table.rowNumber ? `Row ${table.rowNumber} • ` : ""}
+                              {table.rowNumber
+                                ? `Row ${table.rowNumber} • `
+                                : ""}
                               {table.tableType}
                             </p>
                             {Number.isFinite(table.width) &&
@@ -11028,7 +11120,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     disabled={amendSubmitting}
                     className="w-full sm:w-auto sm:px-10"
                     size="lg"
-                    style={{ backgroundColor: design?.primaryColor || "#2563eb" }}
+                    style={{
+                      backgroundColor: design?.primaryColor || "#2563eb",
+                    }}
                   >
                     {amendSubmitting
                       ? "Submitting…"
@@ -11122,202 +11216,203 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 height: venueDisplayCanvas.height * maximizedScale,
               }}
             >
-            <div
-              className="relative shadow border border-gray-300 origin-top-left"
-              style={{
-                // Use the expanded canvas dims so spaces placed past the
-                // venue rectangle stay visible in the maximized view.
-                width: `${venueDisplayCanvas.width}px`,
-                height: `${venueDisplayCanvas.height}px`,
-                transform: `scale(${maximizedScale})`,
-                transformOrigin: "top left",
-                backgroundImage:
-                  "linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)",
-                backgroundSize: `${eventData?.venueConfig?.[currentLayoutIndex]?.gridSize || 40}px ${eventData?.venueConfig?.[currentLayoutIndex]?.gridSize || 40}px`,
-                backgroundColor: "#ffffff",
-              }}
-            >
-              {/* Main Stage */}
-              {eventData?.venueConfig?.[currentLayoutIndex]?.hasMainStage && (
-                <div
-                  className="absolute bg-purple-200 border-2 border-purple-500 flex items-center justify-center font-bold text-purple-700"
-                  style={{
-                    top: 0,
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    width: 200,
-                    height: 60,
-                    zIndex: 10,
-                  }}
-                >
-                  MAIN STAGE
-                </div>
-              )}
-
-              {/* Tables */}
-              {(availableTables[currentLayoutId] || [])
-                .filter((table) => inCrop(table.x, table.y))
-                .map((table) => {
-                const isSelected = selectedTables.some(
-                  (t) => t.positionId === table.positionId,
-                );
-                const isBooked = table.isBooked;
-                const preferredIds: string[] =
-                  Array.isArray(
-                    existingStallRequest?.preferredTemplateIds,
-                  ) && existingStallRequest.preferredTemplateIds.length
-                    ? existingStallRequest.preferredTemplateIds
-                    : existingStallRequest?.preferredTemplateId
-                      ? [existingStallRequest.preferredTemplateId]
-                      : [];
-                const isWrongTemplate =
-                  preferredIds.length > 0 && !preferredIds.includes(table.id);
-                const isWrongCategory = !isCategoryAllowed(table);
-                const isNotForSale = table.forSale === false;
-
-                // Identical colour rule to the inline view so the layout looks
-                // the same maximised: available spaces use their template
-                // colour; booked/disabled grey out; not-for-sale hatches;
-                // selected turns solid blue. Same template-palette fallback as
-                // the inline view so a missing space colour never reads green.
-                const tpl =
-                  (table as any).color ||
-                  templateColorById[table.id] ||
-                  templateColorById[(table as any).tableId] ||
-                  (isNotForSale ? "#f59e0b" : "#22c55e");
-                let fillStyle: any = {
-                  backgroundColor: tpl + "80",
-                  borderColor: tpl,
-                };
-                let cursor =
-                  "cursor-pointer hover:shadow-xl hover:ring-2 hover:ring-blue-400";
-
-                if (isNotForSale) {
-                  fillStyle = {
-                    backgroundColor: tpl + "59",
-                    borderColor: tpl,
-                    backgroundImage:
-                      "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.05) 3px, rgba(0,0,0,0.05) 6px)",
-                  };
-                  cursor = "cursor-default opacity-80";
-                } else if (isBooked) {
-                  fillStyle = {
-                    backgroundColor: "#9ca3af80",
-                    borderColor: "#6b7280",
-                  };
-                  cursor = "cursor-not-allowed";
-                } else if (isWrongTemplate || isWrongCategory) {
-                  fillStyle = {
-                    backgroundColor: "#9ca3af66",
-                    borderColor: "#9ca3af",
-                  };
-                  cursor = "cursor-not-allowed opacity-90";
-                } else if (isSelected) {
-                  fillStyle = {
-                    backgroundColor: "#93c5fd",
-                    borderColor: "#2563eb",
-                  };
-                  cursor = "cursor-pointer shadow-lg ring-2 ring-blue-500";
-                }
-
-                return (
+              <div
+                className="relative shadow border border-gray-300 origin-top-left"
+                style={{
+                  // Use the expanded canvas dims so spaces placed past the
+                  // venue rectangle stay visible in the maximized view.
+                  width: `${venueDisplayCanvas.width}px`,
+                  height: `${venueDisplayCanvas.height}px`,
+                  transform: `scale(${maximizedScale})`,
+                  transformOrigin: "top left",
+                  backgroundImage:
+                    "linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)",
+                  backgroundSize: `${eventData?.venueConfig?.[currentLayoutIndex]?.gridSize || 40}px ${eventData?.venueConfig?.[currentLayoutIndex]?.gridSize || 40}px`,
+                  backgroundColor: "#ffffff",
+                }}
+              >
+                {/* Main Stage */}
+                {eventData?.venueConfig?.[currentLayoutIndex]?.hasMainStage && (
                   <div
-                    key={table.positionId}
-                    className={`absolute border flex items-center justify-center transition-all group hover:!z-[999] ${cursor} ${
-                      table.type === "Round"
-                        ? "rounded-full"
-                        : table.type === "Corner"
-                          ? "rounded-lg"
-                          : "rounded-sm"
-                    }`}
+                    className="absolute bg-purple-200 border-2 border-purple-500 flex items-center justify-center font-bold text-purple-700"
                     style={{
-                      left: table.x,
-                      top: table.y,
-                      width: (table as any).displayWidth ?? table.width,
-                      height: (table as any).displayHeight ?? table.height,
-                      transform: `rotate(${table.rotation || 0}deg)`,
-                      zIndex: isSelected ? 10 : 5,
-                      ...fillStyle,
-                    }}
-                    onClick={() => {
-                      if (
-                        isBooked ||
-                        isWrongTemplate ||
-                        isWrongCategory ||
-                        isNotForSale
-                      )
-                        return;
-                      handleTableClick(table);
+                      top: 0,
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      width: 200,
+                      height: 60,
+                      zIndex: 10,
                     }}
                   >
-                    <span className="text-[9px] font-bold text-center leading-none px-1 truncate">
-                      {table.name}
-                    </span>
-
-                    {/* Tooltip — each row is its own horizontal line above the space */}
-                    <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="relative">
-                        <div className="rounded bg-gray-900 px-3 py-2 text-[10px] text-white shadow border border-gray-700 flex flex-col gap-0.5">
-                          {isBooked ? (
-                            <div className="text-red-400 font-bold whitespace-nowrap">
-                              Sold
-                            </div>
-                          ) : isWrongTemplate ||
-                            isWrongCategory ||
-                            isNotForSale ? (
-                            <div className="text-amber-300 font-bold whitespace-nowrap">
-                              Reserved
-                            </div>
-                          ) : (
-                            <>
-                              <div className="font-bold whitespace-nowrap">
-                                {table.name}
-                              </div>
-                              <div className="text-gray-300 whitespace-nowrap">
-                                Row {table.rowNumber}
-                              </div>
-                              <div className="text-gray-300 whitespace-nowrap">
-                                {table.width * 10}×{table.height * 10}cm
-                              </div>
-                              <div
-                                className={`whitespace-nowrap ${
-                                  isSelected
-                                    ? "text-blue-400"
-                                    : "text-green-400"
-                                }`}
-                              >
-                                {isSelected
-                                  ? "✓ Selected"
-                                  : (() => {
-                                      const p = resolveTablePricing(table);
-                                      return p.memberSaved > 0
-                                        ? `Member ${formatPrice(p.tablePrice)}`
-                                        : formatPrice(p.tablePrice);
-                                    })()}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                        {/* Arrow tail — points down at the hovered space */}
-                        <div className="absolute left-1/2 top-full -mt-1 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 border-b border-r border-gray-700" />
-                      </div>
-                    </div>
+                    MAIN STAGE
                   </div>
-                );
-              })}
-              {/* Entrance / exit door markers */}
-              {renderDoors()}
-              {layoutAnnotations.length > 0 && (
-                <VenueAnnotationLayer
-                  readOnly
-                  width={venueDisplayCanvas.width}
-                  height={venueDisplayCanvas.height}
-                  scale={1}
-                  zIndex={4}
-                  annotations={layoutAnnotations}
-                />
-              )}
-            </div>
+                )}
+
+                {/* Tables */}
+                {(availableTables[currentLayoutId] || [])
+                  .filter((table) => inCrop(table.x, table.y))
+                  .map((table) => {
+                    const isSelected = selectedTables.some(
+                      (t) => t.positionId === table.positionId,
+                    );
+                    const isBooked = table.isBooked;
+                    const preferredIds: string[] =
+                      Array.isArray(
+                        existingStallRequest?.preferredTemplateIds,
+                      ) && existingStallRequest.preferredTemplateIds.length
+                        ? existingStallRequest.preferredTemplateIds
+                        : existingStallRequest?.preferredTemplateId
+                          ? [existingStallRequest.preferredTemplateId]
+                          : [];
+                    const isWrongTemplate =
+                      preferredIds.length > 0 &&
+                      !preferredIds.includes(table.id);
+                    const isWrongCategory = !isCategoryAllowed(table);
+                    const isNotForSale = table.forSale === false;
+
+                    // Identical colour rule to the inline view so the layout looks
+                    // the same maximised: available spaces use their template
+                    // colour; booked/disabled grey out; not-for-sale hatches;
+                    // selected turns solid blue. Same template-palette fallback as
+                    // the inline view so a missing space colour never reads green.
+                    const tpl =
+                      (table as any).color ||
+                      templateColorById[table.id] ||
+                      templateColorById[(table as any).tableId] ||
+                      (isNotForSale ? "#f59e0b" : "#22c55e");
+                    let fillStyle: any = {
+                      backgroundColor: tpl + "80",
+                      borderColor: tpl,
+                    };
+                    let cursor =
+                      "cursor-pointer hover:shadow-xl hover:ring-2 hover:ring-blue-400";
+
+                    if (isNotForSale) {
+                      fillStyle = {
+                        backgroundColor: tpl + "59",
+                        borderColor: tpl,
+                        backgroundImage:
+                          "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.05) 3px, rgba(0,0,0,0.05) 6px)",
+                      };
+                      cursor = "cursor-default opacity-80";
+                    } else if (isBooked) {
+                      fillStyle = {
+                        backgroundColor: "#9ca3af80",
+                        borderColor: "#6b7280",
+                      };
+                      cursor = "cursor-not-allowed";
+                    } else if (isWrongTemplate || isWrongCategory) {
+                      fillStyle = {
+                        backgroundColor: "#9ca3af66",
+                        borderColor: "#9ca3af",
+                      };
+                      cursor = "cursor-not-allowed opacity-90";
+                    } else if (isSelected) {
+                      fillStyle = {
+                        backgroundColor: "#93c5fd",
+                        borderColor: "#2563eb",
+                      };
+                      cursor = "cursor-pointer shadow-lg ring-2 ring-blue-500";
+                    }
+
+                    return (
+                      <div
+                        key={table.positionId}
+                        className={`absolute border flex items-center justify-center transition-all group hover:!z-[999] ${cursor} ${
+                          table.type === "Round"
+                            ? "rounded-full"
+                            : table.type === "Corner"
+                              ? "rounded-lg"
+                              : "rounded-sm"
+                        }`}
+                        style={{
+                          left: table.x,
+                          top: table.y,
+                          width: (table as any).displayWidth ?? table.width,
+                          height: (table as any).displayHeight ?? table.height,
+                          transform: `rotate(${table.rotation || 0}deg)`,
+                          zIndex: isSelected ? 10 : 5,
+                          ...fillStyle,
+                        }}
+                        onClick={() => {
+                          if (
+                            isBooked ||
+                            isWrongTemplate ||
+                            isWrongCategory ||
+                            isNotForSale
+                          )
+                            return;
+                          handleTableClick(table);
+                        }}
+                      >
+                        <span className="text-[9px] font-bold text-center leading-none px-1 truncate">
+                          {table.name}
+                        </span>
+
+                        {/* Tooltip — each row is its own horizontal line above the space */}
+                        <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="relative">
+                            <div className="rounded bg-gray-900 px-3 py-2 text-[10px] text-white shadow border border-gray-700 flex flex-col gap-0.5">
+                              {isBooked ? (
+                                <div className="text-red-400 font-bold whitespace-nowrap">
+                                  Sold
+                                </div>
+                              ) : isWrongTemplate ||
+                                isWrongCategory ||
+                                isNotForSale ? (
+                                <div className="text-amber-300 font-bold whitespace-nowrap">
+                                  Reserved
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="font-bold whitespace-nowrap">
+                                    {table.name}
+                                  </div>
+                                  <div className="text-gray-300 whitespace-nowrap">
+                                    Row {table.rowNumber}
+                                  </div>
+                                  <div className="text-gray-300 whitespace-nowrap">
+                                    {table.width * 10}×{table.height * 10}cm
+                                  </div>
+                                  <div
+                                    className={`whitespace-nowrap ${
+                                      isSelected
+                                        ? "text-blue-400"
+                                        : "text-green-400"
+                                    }`}
+                                  >
+                                    {isSelected
+                                      ? "✓ Selected"
+                                      : (() => {
+                                          const p = resolveTablePricing(table);
+                                          return p.memberSaved > 0
+                                            ? `Member ${formatPrice(p.tablePrice)}`
+                                            : formatPrice(p.tablePrice);
+                                        })()}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                            {/* Arrow tail — points down at the hovered space */}
+                            <div className="absolute left-1/2 top-full -mt-1 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 border-b border-r border-gray-700" />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                {/* Entrance / exit door markers */}
+                {renderDoors()}
+                {layoutAnnotations.length > 0 && (
+                  <VenueAnnotationLayer
+                    readOnly
+                    width={venueDisplayCanvas.width}
+                    height={venueDisplayCanvas.height}
+                    scale={1}
+                    zIndex={4}
+                    annotations={layoutAnnotations}
+                  />
+                )}
+              </div>
             </div>
           </div>
         </DialogContent>
@@ -12329,984 +12424,994 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         !showTableSelection &&
         !showStallTermsGate &&
         (stallGateAcknowledged || !getStallGateContent().hasAny) && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-          <div className="bg-white border border-gray-200 rounded-2xl shadow-2xl max-w-xl w-full p-6 relative overflow-y-auto max-h-[90vh]">
-            <button
-              className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 transition-all"
-              onClick={handleRentFormCancel}
-            >
-              ✖
-            </button>
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">
-              {shopkeeperExists
-                ? "Confirm Your Details"
-                : "Register for Stall Rental"}
-            </h2>
-            <p className="text-xs text-gray-400 mb-6">
-              {shopkeeperExists
-                ? "Your details have been loaded. Please review and submit."
-                : "Fill in your details to rent a stall at this event"}
-            </p>
-
-            {/* Active membership card — shown when the signed-in vendor is a
-                member, so they see their plan + validity right on the form. */}
-            {stallMembership && (
-              <div
-                className="rounded-xl border-2 p-3 mb-4 flex items-center gap-3"
-                style={{
-                  borderColor: (stallMembership.color || "#10b981") + "55",
-                  background: (stallMembership.color || "#10b981") + "08",
-                }}
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+            <div className="bg-white border border-gray-200 rounded-2xl shadow-2xl max-w-xl w-full p-6 relative overflow-y-auto max-h-[90vh]">
+              <button
+                className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 transition-all"
+                onClick={handleRentFormCancel}
               >
+                ✖
+              </button>
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">
+                {shopkeeperExists
+                  ? "Confirm Your Details"
+                  : "Register for Stall Rental"}
+              </h2>
+              <p className="text-xs text-gray-400 mb-6">
+                {shopkeeperExists
+                  ? "Your details have been loaded. Please review and submit."
+                  : "Fill in your details to rent a stall at this event"}
+              </p>
+
+              {/* Active membership card — shown when the signed-in vendor is a
+                member, so they see their plan + validity right on the form. */}
+              {stallMembership && (
                 <div
-                  className="h-9 w-9 rounded-full flex items-center justify-center shrink-0"
+                  className="rounded-xl border-2 p-3 mb-4 flex items-center gap-3"
                   style={{
-                    background: (stallMembership.color || "#10b981") + "1a",
+                    borderColor: (stallMembership.color || "#10b981") + "55",
+                    background: (stallMembership.color || "#10b981") + "08",
                   }}
                 >
-                  <Star
-                    className="h-5 w-5"
-                    style={{ color: stallMembership.color || "#10b981" }}
-                  />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="font-bold text-sm truncate"
+                  <div
+                    className="h-9 w-9 rounded-full flex items-center justify-center shrink-0"
+                    style={{
+                      background: (stallMembership.color || "#10b981") + "1a",
+                    }}
+                  >
+                    <Star
+                      className="h-5 w-5"
                       style={{ color: stallMembership.color || "#10b981" }}
-                    >
-                      {stallMembership.planName}
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700">
-                      <CheckCircle2 className="h-3 w-3" /> Active
-                    </span>
+                    />
                   </div>
-                  <div className="text-[11px] text-gray-500">
-                    Valid till{" "}
-                    {stallMembership.endDate
-                      ? new Date(stallMembership.endDate).toLocaleDateString()
-                      : "—"}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleRentFormSubmit} className="space-y-4">
-              {/* --- SECTION: PERSONAL & BUSINESS DETAILS --- */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>
-                    Name of Applicant <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    name="nameOfApplicant"
-                    value={shopkeeperDetails.nameOfApplicant}
-                    onChange={handleRentFormChange}
-                    placeholder="Full Name"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>
-                    Owner Name (Legal) <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    name="name"
-                    value={shopkeeperDetails.name}
-                    onChange={handleRentFormChange}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>
-                    Owner Nationality <span className="text-red-500">*</span>
-                  </Label>
-                  <Select
-                    value={shopkeeperDetails.businessOwnerNationality}
-                    onValueChange={(val) =>
-                      setShopkeeperDetails({
-                        ...shopkeeperDetails,
-                        businessOwnerNationality: val,
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Country" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {countries.map((c) => (
-                        <SelectItem key={c.code} value={c.name}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>
-                    Residency <span className="text-red-500">*</span>
-                  </Label>
-                  <Select
-                    value={shopkeeperDetails.residency}
-                    onValueChange={(val) =>
-                      setShopkeeperDetails({
-                        ...shopkeeperDetails,
-                        residency: val,
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Country" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {countries.map((c) => (
-                        <SelectItem key={c.code} value={c.name}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>
-                    Brand Name <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    name="brandName"
-                    value={shopkeeperDetails.brandName}
-                    onChange={handleRentFormChange}
-                    placeholder="Brand Name"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>
-                    Registered Business Name{" "}
-                    <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    name="shopName"
-                    value={shopkeeperDetails.shopName}
-                    onChange={handleRentFormChange}
-                    placeholder="Business Name"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Only show these if creating a NEW shopkeeper */}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {!shopkeeperExists ? (
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <Label>
-                        Primary Email <span className="text-red-500">*</span>
-                      </Label>
-                      {emailVerified && (
-                        <Badge className="bg-green-600">
-                          <CheckCircle className="w-3 h-3 mr-1" /> Verified
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <Input
-                        type="email"
-                        name="email"
-                        value={shopkeeperDetails.email}
-                        onChange={handleRentFormChange}
-                        disabled={emailVerified}
-                      />
-                      <Button
-                        type="button"
-                        onClick={sendOtpToBusinessEmail}
-                        disabled={
-                          sendingOtp ||
-                          !shopkeeperDetails.email ||
-                          emailVerified
-                        }
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="font-bold text-sm truncate"
+                        style={{ color: stallMembership.color || "#10b981" }}
                       >
-                        {sendingOtp
-                          ? "Sending..."
-                          : emailVerified
-                            ? "Verified"
-                            : "Send OTP"}
-                      </Button>
+                        {stallMembership.planName}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700">
+                        <CheckCircle2 className="h-3 w-3" /> Active
+                      </span>
                     </div>
-                    {otpSent && !emailVerified && (
-                      <div className="flex gap-2 mt-2">
+                    <div className="text-[11px] text-gray-500">
+                      Valid till{" "}
+                      {stallMembership.endDate
+                        ? new Date(stallMembership.endDate).toLocaleDateString()
+                        : "—"}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <form onSubmit={handleRentFormSubmit} className="space-y-4">
+                {/* --- SECTION: PERSONAL & BUSINESS DETAILS --- */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>
+                      Name of Applicant <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      name="nameOfApplicant"
+                      value={shopkeeperDetails.nameOfApplicant}
+                      onChange={handleRentFormChange}
+                      placeholder="Full Name"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>
+                      Owner Name (Legal) <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      name="name"
+                      value={shopkeeperDetails.name}
+                      onChange={handleRentFormChange}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>
+                      Owner Nationality <span className="text-red-500">*</span>
+                    </Label>
+                    <Select
+                      value={shopkeeperDetails.businessOwnerNationality}
+                      onValueChange={(val) =>
+                        setShopkeeperDetails({
+                          ...shopkeeperDetails,
+                          businessOwnerNationality: val,
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Country" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {countries.map((c) => (
+                          <SelectItem key={c.code} value={c.name}>
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>
+                      Residency <span className="text-red-500">*</span>
+                    </Label>
+                    <Select
+                      value={shopkeeperDetails.residency}
+                      onValueChange={(val) =>
+                        setShopkeeperDetails({
+                          ...shopkeeperDetails,
+                          residency: val,
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Country" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {countries.map((c) => (
+                          <SelectItem key={c.code} value={c.name}>
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>
+                      Brand Name <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      name="brandName"
+                      value={shopkeeperDetails.brandName}
+                      onChange={handleRentFormChange}
+                      placeholder="Brand Name"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>
+                      Registered Business Name{" "}
+                      <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      name="shopName"
+                      value={shopkeeperDetails.shopName}
+                      onChange={handleRentFormChange}
+                      placeholder="Business Name"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Only show these if creating a NEW shopkeeper */}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {!shopkeeperExists ? (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <Label>
+                          Primary Email <span className="text-red-500">*</span>
+                        </Label>
+                        {emailVerified && (
+                          <Badge className="bg-green-600">
+                            <CheckCircle className="w-3 h-3 mr-1" /> Verified
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
                         <Input
-                          value={otp}
-                          onChange={(e) => setOtp(e.target.value)}
-                          placeholder="Enter OTP"
+                          type="email"
+                          name="email"
+                          value={shopkeeperDetails.email}
+                          onChange={handleRentFormChange}
+                          disabled={emailVerified}
                         />
                         <Button
                           type="button"
-                          onClick={verifyOtpForBusinessEmail}
-                          disabled={verifyingOtp}
+                          onClick={sendOtpToBusinessEmail}
+                          disabled={
+                            sendingOtp ||
+                            !shopkeeperDetails.email ||
+                            emailVerified
+                          }
                         >
-                          Verify
+                          {sendingOtp
+                            ? "Sending..."
+                            : emailVerified
+                              ? "Verified"
+                              : "Send OTP"}
                         </Button>
                       </div>
-                    )}
-                  </div>
-                ) : (
+                      {otpSent && !emailVerified && (
+                        <div className="flex gap-2 mt-2">
+                          <Input
+                            value={otp}
+                            onChange={(e) => setOtp(e.target.value)}
+                            placeholder="Enter OTP"
+                          />
+                          <Button
+                            type="button"
+                            onClick={verifyOtpForBusinessEmail}
+                            disabled={verifyingOtp}
+                          >
+                            Verify
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label>
+                        Primary Email <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        value={shopkeeperDetails.email}
+                        disabled
+                        className="bg-gray-100"
+                      />
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     <Label>
-                      Primary Email <span className="text-red-500">*</span>
+                      Business Email <span className="text-red-500">*</span>
                     </Label>
                     <Input
-                      value={shopkeeperDetails.email}
-                      disabled
-                      className="bg-gray-100"
+                      type="email"
+                      name="businessEmail"
+                      value={shopkeeperDetails.businessEmail}
+                      onChange={handleRentFormChange}
+                      required
                     />
                   </div>
-                )}
-
-                <div className="space-y-2">
-                  <Label>
-                    Business Email <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    type="email"
-                    name="businessEmail"
-                    value={shopkeeperDetails.businessEmail}
-                    onChange={handleRentFormChange}
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* --- SECTION: CONTACT & VERIFICATION --- */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>
-                    WhatsApp Number <span className="text-red-500">*</span>
-                  </Label>
-                  <PhoneInput
-                    value={shopkeeperDetails.whatsappNumber}
-                    onChange={(whatsappNumber, country) => {
-                      setWhatsappCountry(country);
-                      setShopkeeperDetails((prev) => ({
-                        ...prev,
-                        whatsappNumber,
-                      }));
-                    }}
-                    countryCodeEditable={false}
-                    disabled={isStallApproved}
-                    inputStyle={{
-                      width: "100%",
-                      height: "36px",
-                      borderRadius: "6px",
-                    }}
-                  />
-                  {whatsappCountry && !isStallApproved && (
-                    <p className="text-[11px] text-gray-400">
-                      Enter {phoneHint(whatsappCountry)} for{" "}
-                      {whatsappCountry.name}
-                    </p>
-                  )}
                 </div>
 
-                <div className="space-y-2">
-                  <Label>
-                    Phone Number <span className="text-red-500">*</span>
-                  </Label>
-                  <PhoneInput
-                    value={shopkeeperDetails.phone}
-                    onChange={(phone, country) => {
-                      setPhoneCountry(country);
-                      setShopkeeperDetails((prev) => ({ ...prev, phone }));
-                    }}
-                    countryCodeEditable={false}
-                    disabled={isStallApproved}
-                    inputStyle={{
-                      width: "100%",
-                      height: "36px",
-                      borderRadius: "6px",
-                    }}
-                  />
-                  {phoneCountry && !isStallApproved && (
-                    <p className="text-[11px] text-gray-400">
-                      Enter {phoneHint(phoneCountry)} for {phoneCountry.name}
-                    </p>
-                  )}
-                </div>
-              </div>
+                {/* --- SECTION: CONTACT & VERIFICATION --- */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>
+                      WhatsApp Number <span className="text-red-500">*</span>
+                    </Label>
+                    <PhoneInput
+                      value={shopkeeperDetails.whatsappNumber}
+                      onChange={(whatsappNumber, country) => {
+                        setWhatsappCountry(country);
+                        setShopkeeperDetails((prev) => ({
+                          ...prev,
+                          whatsappNumber,
+                        }));
+                      }}
+                      countryCodeEditable={false}
+                      disabled={isStallApproved}
+                      inputStyle={{
+                        width: "100%",
+                        height: "36px",
+                        borderRadius: "6px",
+                      }}
+                    />
+                    {whatsappCountry && !isStallApproved && (
+                      <p className="text-[11px] text-gray-400">
+                        Enter {phoneHint(whatsappCountry)} for{" "}
+                        {whatsappCountry.name}
+                      </p>
+                    )}
+                  </div>
 
-              {/* --- SECTION: STALL CONFIGURATION --- */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>
-                    Business Category <span className="text-red-500">*</span>
-                  </Label>
-                  {/* Shared dynamic picker — categories an exhibitor
+                  <div className="space-y-2">
+                    <Label>
+                      Phone Number <span className="text-red-500">*</span>
+                    </Label>
+                    <PhoneInput
+                      value={shopkeeperDetails.phone}
+                      onChange={(phone, country) => {
+                        setPhoneCountry(country);
+                        setShopkeeperDetails((prev) => ({ ...prev, phone }));
+                      }}
+                      countryCodeEditable={false}
+                      disabled={isStallApproved}
+                      inputStyle={{
+                        width: "100%",
+                        height: "36px",
+                        borderRadius: "6px",
+                      }}
+                    />
+                    {phoneCountry && !isStallApproved && (
+                      <p className="text-[11px] text-gray-400">
+                        Enter {phoneHint(phoneCountry)} for {phoneCountry.name}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* --- SECTION: STALL CONFIGURATION --- */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>
+                      Business Category <span className="text-red-500">*</span>
+                    </Label>
+                    {/* Shared dynamic picker — categories an exhibitor
                       types here persist to /categories and surface next
                       time in the organizer's Space Layout and Add
                       Exhibitor form. Single-select shape preserves the
                       old required-field semantics. */}
-                  <ExhibitorCategoryPicker
-                    value={shopkeeperDetails.businessCategory}
-                    onChange={(val) =>
-                      setShopkeeperDetails({
-                        ...shopkeeperDetails,
-                        businessCategory: val,
-                      })
-                    }
-                    baseline={BUSINESS_CATEGORIES}
-                    placeholder="Select"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>
-                    No. of Operators <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={10}
-                    step={1}
-                    name="noOfOperators"
-                    value={shopkeeperDetails.noOfOperators}
-                    onChange={(e) => {
-                      // Clamp to 1–10 — blank/invalid or below snaps to 1,
-                      // anything above 10 caps at 10.
-                      const n = parseInt(e.target.value, 10);
-                      const clamped = !Number.isFinite(n)
-                        ? 1
-                        : Math.min(10, Math.max(1, n));
-                      setShopkeeperDetails((prev) => ({
-                        ...prev,
-                        noOfOperators: clamped,
-                      }));
-                    }}
-                    required
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-3">
-                  <Label>
-                    Registration Number ({regConfig.label}){" "}
-                    <span className="text-red-500">*</span>
-                  </Label>
-                  <div className="flex gap-2">
+                    <ExhibitorCategoryPicker
+                      value={shopkeeperDetails.businessCategory}
+                      onChange={(val) =>
+                        setShopkeeperDetails({
+                          ...shopkeeperDetails,
+                          businessCategory: val,
+                        })
+                      }
+                      baseline={BUSINESS_CATEGORIES}
+                      placeholder="Select"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>
+                      No. of Operators <span className="text-red-500">*</span>
+                    </Label>
                     <Input
-                      name="registrationNumber"
-                      value={shopkeeperDetails.registrationNumber}
+                      type="number"
+                      min={1}
+                      max={10}
+                      step={1}
+                      name="noOfOperators"
+                      value={shopkeeperDetails.noOfOperators}
                       onChange={(e) => {
-                        // Alphanumeric only, uppercased, and capped to the length
-                        // required by the residency (UEN 10 / GST 15).
-                        let v = e.target.value
-                          .replace(/[^a-zA-Z0-9]/g, "")
-                          .toUpperCase();
-                        if (regConfig.maxLength > 0)
-                          v = v.slice(0, regConfig.maxLength);
+                        // Clamp to 1–10 — blank/invalid or below snaps to 1,
+                        // anything above 10 caps at 10.
+                        const n = parseInt(e.target.value, 10);
+                        const clamped = !Number.isFinite(n)
+                          ? 1
+                          : Math.min(10, Math.max(1, n));
                         setShopkeeperDetails((prev) => ({
                           ...prev,
-                          registrationNumber: v,
+                          noOfOperators: clamped,
                         }));
-                        // Editing the number invalidates any prior verification.
-                        setGstVerified(false);
-                        setGstError("");
-                        setUenVerified(false);
-                        setUenError("");
                       }}
-                      maxLength={regConfig.maxLength || undefined}
-                      placeholder={
-                        regConfig.label === "UEN"
-                          ? "e.g. 201812345A"
-                          : regConfig.label === "GST"
-                            ? "e.g. 27AAPFU0939F1ZV"
-                            : "e.g. UEN / GST No."
-                      }
-                      disabled={isStallApproved || gstVerified || uenVerified}
                       required
-                      className="flex-1"
                     />
-                    {/* India GST is verified against the government registry
-                        (AppyFlow) as soon as it's filled in. */}
-                    {regConfig.label === "GST" &&
-                      !isStallApproved &&
-                      !isDummyReg && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() =>
-                          handleVerifyGST(shopkeeperDetails.registrationNumber)
-                        }
-                        disabled={
-                          !shopkeeperDetails.registrationNumber ||
-                          gstVerifying ||
-                          gstVerified
-                        }
-                        className="whitespace-nowrap"
-                      >
-                        {gstVerifying
-                          ? "Verifying…"
-                          : gstVerified
-                            ? "Verified ✓"
-                            : "Verify"}
-                      </Button>
-                    )}
-                    {/* Singapore UEN is verified against ACRA's free open-data
-                        registry (data.gov.sg) — no cost per check. */}
-                    {regConfig.label === "UEN" &&
-                      !isStallApproved &&
-                      !isDummyReg && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() =>
-                          handleVerifyUEN(shopkeeperDetails.registrationNumber)
-                        }
-                        disabled={
-                          !shopkeeperDetails.registrationNumber ||
-                          uenVerifying ||
-                          uenVerified
-                        }
-                        className="whitespace-nowrap"
-                      >
-                        {uenVerifying
-                          ? "Verifying…"
-                          : uenVerified
-                            ? "Verified ✓"
-                            : "Verify"}
-                      </Button>
-                    )}
                   </div>
-                  {regConfig.label === "GST" && gstError && (
-                    <p className="text-[11px] text-red-600">{gstError}</p>
-                  )}
-                  {regConfig.label === "GST" && gstVerified && gstDetails && (
-                    <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-                      <p className="mb-2 text-sm font-semibold text-green-700">
-                        ✓ GST Verified — details from the government registry
-                      </p>
-                      <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
-                        {(
-                          [
-                            ["GSTIN", gstDetails.gstin],
-                            ["Legal name", gstDetails.legalName],
-                            ["Trade name", gstDetails.tradeName],
-                            ["Status", gstDetails.status],
-                            ["Registered", gstDetails.registrationDate],
-                            ["Type", gstDetails.constitution],
-                            ["State", gstDetails.state],
-                            ["Address", gstDetails.address],
-                          ] as [string, string][]
-                        )
-                          .filter(([, v]) => !!v)
-                          .map(([label, value]) => (
-                            <div
-                              key={label}
-                              className={
-                                label === "Address" ? "sm:col-span-2" : ""
-                              }
-                            >
-                              <span className="text-[11px] uppercase tracking-wide text-green-700/70">
-                                {label}
-                              </span>
-                              <div className="font-medium text-green-900">
-                                {value}
-                              </div>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                  )}
-                  {regConfig.label === "UEN" && uenError && (
-                    <p className="text-[11px] text-red-600">{uenError}</p>
-                  )}
-                  {regConfig.label === "UEN" && uenVerified && uenDetails && (
-                    <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-                      <p className="mb-2 text-sm font-semibold text-green-700">
-                        ✓ UEN Verified — details from ACRA registry
-                      </p>
-                      <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
-                        {(
-                          [
-                            ["UEN", uenDetails.uen],
-                            ["Entity name", uenDetails.entityName],
-                            ["Status", uenDetails.status],
-                            ["Entity type", uenDetails.entityType],
-                            ["Issued", uenDetails.issueDate],
-                            ["Agency", uenDetails.agency],
-                            ["Address", uenDetails.address],
-                          ] as [string, string][]
-                        )
-                          .filter(([, v]) => !!v)
-                          .map(([label, value]) => (
-                            <div
-                              key={label}
-                              className={
-                                label === "Address" ? "sm:col-span-2" : ""
-                              }
-                            >
-                              <span className="text-[11px] uppercase tracking-wide text-green-700/70">
-                                {label}
-                              </span>
-                              <div className="font-medium text-green-900">
-                                {value}
-                              </div>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                  )}
-                  {regConfig.example && (
-                    <p className="text-[11px] text-muted-foreground">
-                      {regConfig.example}
-                    </p>
-                  )}
-                  {/* Vendors without a GST/UEN can drop in a placeholder so the
-                      required field is satisfied and they can still submit. It
-                      won't verify (it isn't a real registration), so the
-                      organizer knows to contact them and confirm before
-                      approving. */}
-                  {!isStallApproved && !isDummyReg && (
-                    <p className="text-[11px] text-muted-foreground">
-                      Don't have a{" "}
-                      {regConfig.label === "UEN/GST"
-                        ? "GST/UEN"
-                        : regConfig.label}
-                      ?{" "}
-                      <button
-                        type="button"
-                        onClick={() => {
+                  <div className="space-y-2 md:col-span-3">
+                    <Label>
+                      Registration Number ({regConfig.label}){" "}
+                      <span className="text-red-500">*</span>
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        name="registrationNumber"
+                        value={shopkeeperDetails.registrationNumber}
+                        onChange={(e) => {
+                          // Alphanumeric only, uppercased, and capped to the length
+                          // required by the residency (UEN 10 / GST 15).
+                          let v = e.target.value
+                            .replace(/[^a-zA-Z0-9]/g, "")
+                            .toUpperCase();
+                          if (regConfig.maxLength > 0)
+                            v = v.slice(0, regConfig.maxLength);
                           setShopkeeperDetails((prev) => ({
                             ...prev,
-                            registrationNumber: dummyRegNumber,
+                            registrationNumber: v,
                           }));
+                          // Editing the number invalidates any prior verification.
                           setGstVerified(false);
                           setGstError("");
                           setUenVerified(false);
                           setUenError("");
                         }}
-                        className="font-medium text-blue-600 underline hover:text-blue-700"
-                      >
-                        Use a placeholder &amp; submit
-                      </button>{" "}
-                      — the organizer will contact you to confirm.
-                    </p>
-                  )}
-                  {isDummyReg && !isStallApproved && (
-                    <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">
-                      Placeholder entered — this isn't a real {regConfig.label}.
-                      The organizer will reach out to verify your details before
-                      approving.
-                    </p>
-                  )}
+                        maxLength={regConfig.maxLength || undefined}
+                        placeholder={
+                          regConfig.label === "UEN"
+                            ? "e.g. 201812345A"
+                            : regConfig.label === "GST"
+                              ? "e.g. 27AAPFU0939F1ZV"
+                              : "e.g. UEN / GST No."
+                        }
+                        disabled={isStallApproved || gstVerified || uenVerified}
+                        required
+                        className="flex-1"
+                      />
+                      {/* India GST is verified against the government registry
+                        (AppyFlow) as soon as it's filled in. */}
+                      {regConfig.label === "GST" &&
+                        !isStallApproved &&
+                        !isDummyReg && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() =>
+                              handleVerifyGST(
+                                shopkeeperDetails.registrationNumber,
+                              )
+                            }
+                            disabled={
+                              !shopkeeperDetails.registrationNumber ||
+                              gstVerifying ||
+                              gstVerified
+                            }
+                            className="whitespace-nowrap"
+                          >
+                            {gstVerifying
+                              ? "Verifying…"
+                              : gstVerified
+                                ? "Verified ✓"
+                                : "Verify"}
+                          </Button>
+                        )}
+                      {/* Singapore UEN is verified against ACRA's free open-data
+                        registry (data.gov.sg) — no cost per check. */}
+                      {regConfig.label === "UEN" &&
+                        !isStallApproved &&
+                        !isDummyReg && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() =>
+                              handleVerifyUEN(
+                                shopkeeperDetails.registrationNumber,
+                              )
+                            }
+                            disabled={
+                              !shopkeeperDetails.registrationNumber ||
+                              uenVerifying ||
+                              uenVerified
+                            }
+                            className="whitespace-nowrap"
+                          >
+                            {uenVerifying
+                              ? "Verifying…"
+                              : uenVerified
+                                ? "Verified ✓"
+                                : "Verify"}
+                          </Button>
+                        )}
+                    </div>
+                    {regConfig.label === "GST" && gstError && (
+                      <p className="text-[11px] text-red-600">{gstError}</p>
+                    )}
+                    {regConfig.label === "GST" && gstVerified && gstDetails && (
+                      <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                        <p className="mb-2 text-sm font-semibold text-green-700">
+                          ✓ GST Verified — details from the government registry
+                        </p>
+                        <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
+                          {(
+                            [
+                              ["GSTIN", gstDetails.gstin],
+                              ["Legal name", gstDetails.legalName],
+                              ["Trade name", gstDetails.tradeName],
+                              ["Status", gstDetails.status],
+                              ["Registered", gstDetails.registrationDate],
+                              ["Type", gstDetails.constitution],
+                              ["State", gstDetails.state],
+                              ["Address", gstDetails.address],
+                            ] as [string, string][]
+                          )
+                            .filter(([, v]) => !!v)
+                            .map(([label, value]) => (
+                              <div
+                                key={label}
+                                className={
+                                  label === "Address" ? "sm:col-span-2" : ""
+                                }
+                              >
+                                <span className="text-[11px] uppercase tracking-wide text-green-700/70">
+                                  {label}
+                                </span>
+                                <div className="font-medium text-green-900">
+                                  {value}
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                    {regConfig.label === "UEN" && uenError && (
+                      <p className="text-[11px] text-red-600">{uenError}</p>
+                    )}
+                    {regConfig.label === "UEN" && uenVerified && uenDetails && (
+                      <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                        <p className="mb-2 text-sm font-semibold text-green-700">
+                          ✓ UEN Verified — details from ACRA registry
+                        </p>
+                        <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
+                          {(
+                            [
+                              ["UEN", uenDetails.uen],
+                              ["Entity name", uenDetails.entityName],
+                              ["Status", uenDetails.status],
+                              ["Entity type", uenDetails.entityType],
+                              ["Issued", uenDetails.issueDate],
+                              ["Agency", uenDetails.agency],
+                              ["Address", uenDetails.address],
+                            ] as [string, string][]
+                          )
+                            .filter(([, v]) => !!v)
+                            .map(([label, value]) => (
+                              <div
+                                key={label}
+                                className={
+                                  label === "Address" ? "sm:col-span-2" : ""
+                                }
+                              >
+                                <span className="text-[11px] uppercase tracking-wide text-green-700/70">
+                                  {label}
+                                </span>
+                                <div className="font-medium text-green-900">
+                                  {value}
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                    {regConfig.example && (
+                      <p className="text-[11px] text-muted-foreground">
+                        {regConfig.example}
+                      </p>
+                    )}
+                    {/* Vendors without a GST/UEN can drop in a placeholder so the
+                      required field is satisfied and they can still submit. It
+                      won't verify (it isn't a real registration), so the
+                      organizer knows to contact them and confirm before
+                      approving. */}
+                    {!isStallApproved && !isDummyReg && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Don't have a{" "}
+                        {regConfig.label === "UEN/GST"
+                          ? "GST/UEN"
+                          : regConfig.label}
+                        ?{" "}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShopkeeperDetails((prev) => ({
+                              ...prev,
+                              registrationNumber: dummyRegNumber,
+                            }));
+                            setGstVerified(false);
+                            setGstError("");
+                            setUenVerified(false);
+                            setUenError("");
+                          }}
+                          className="font-medium text-blue-600 underline hover:text-blue-700"
+                        >
+                          Use a placeholder &amp; submit
+                        </button>{" "}
+                        — the organizer will contact you to confirm.
+                      </p>
+                    )}
+                    {isDummyReg && !isStallApproved && (
+                      <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">
+                        Placeholder entered — this isn't a real{" "}
+                        {regConfig.label}. The organizer will reach out to
+                        verify your details before approving.
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* --- SECTION: SOCIAL & IMAGES --- */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>
-                    Facebook Link <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    name="faceBookLink"
-                    value={shopkeeperDetails.faceBookLink}
-                    onChange={handleRentFormChange}
-                    placeholder="https://facebook.com/yourbrand"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>
-                    Instagram Link <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    name="instagramLink"
-                    value={shopkeeperDetails.instagramLink}
-                    onChange={handleRentFormChange}
-                    placeholder="@yourbrand"
-                  />
-                </div>
-              </div>
-
-              {/* Image Uploads */}
-              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 space-y-4">
-                <h3 className="font-semibold text-gray-800">
-                  Brand Assets & Documents
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Reg Image */}
+                {/* --- SECTION: SOCIAL & IMAGES --- */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>
-                      Business Registration Document{" "}
-                      <span className="text-red-500">*</span>
+                      Facebook Link <span className="text-red-500">*</span>
                     </Label>
-                    <div className="flex items-center gap-4">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() =>
-                          document.getElementById("regUpload")?.click()
-                        }
-                      >
-                        <Upload className="w-4 h-4 mr-2" /> Upload
-                      </Button>
-                      <input
-                        id="regUpload"
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => handleSingleImageSelect(e, "reg")}
-                      />
-                      {regImagePreview && (
-                        <img
-                          src={regImagePreview}
-                          className="h-12 w-12 object-cover rounded border border-gray-300"
-                          alt="Reg"
-                        />
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Logo */}
-                  <div className="space-y-2">
-                    <Label>
-                      Company Logo <span className="text-red-500">*</span>
-                    </Label>
-                    <div className="flex items-center gap-4">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() =>
-                          document.getElementById("logoUpload")?.click()
-                        }
-                      >
-                        <Upload className="w-4 h-4 mr-2" /> Upload
-                      </Button>
-                      <input
-                        id="logoUpload"
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => handleSingleImageSelect(e, "logo")}
-                      />
-                      {logoPreview && (
-                        <img
-                          src={logoPreview}
-                          className="h-12 w-12 object-cover rounded border border-gray-300"
-                          alt="Logo"
-                        />
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Product Images */}
-                <div className="space-y-2 pt-4 border-t border-gray-200">
-                  <Label>
-                    Product Images (
-                    {productFiles.length + existingProductImages.length}/5){" "}
-                    <span className="text-red-500">*</span>
-                    <span className="ml-1 text-[11px] font-normal text-gray-400">
-                      (at least 1 required)
-                    </span>
-                  </Label>
-                  <div className="flex items-center gap-4 flex-wrap">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={
-                        productFiles.length + existingProductImages.length >= 5
-                      }
-                      onClick={() =>
-                        document.getElementById("productUpload")?.click()
-                      }
-                    >
-                      <Upload className="w-4 h-4 mr-2" /> Add Products
-                    </Button>
-                    <input
-                      id="productUpload"
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={handleMultipleImageSelect}
+                    <Input
+                      name="faceBookLink"
+                      value={shopkeeperDetails.faceBookLink}
+                      onChange={handleRentFormChange}
+                      placeholder="https://facebook.com/yourbrand"
                     />
-
-                    {/* Stored images from a returning vendor's profile */}
-                    {existingProductImages.map((preview, idx) => (
-                      <div key={`existing-${idx}`} className="relative group">
-                        <img
-                          src={preview}
-                          className="h-14 w-14 object-cover rounded border border-gray-300"
-                          alt={`Saved product ${idx}`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setExistingProductImages((prev) =>
-                              prev.filter((_, i) => i !== idx),
-                            )
-                          }
-                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <XCircle className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-
-                    {productPreviews.map((preview, idx) => (
-                      <div key={idx} className="relative group">
-                        <img
-                          src={preview}
-                          className="h-14 w-14 object-cover rounded border border-gray-300"
-                          alt={`Product ${idx}`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeProductImage(idx)}
-                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <XCircle className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>
+                      Instagram Link <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      name="instagramLink"
+                      value={shopkeeperDetails.instagramLink}
+                      onChange={handleRentFormChange}
+                      placeholder="@yourbrand"
+                    />
                   </div>
                 </div>
-              </div>
 
-              {/* Description */}
-              <div className="space-y-2">
-                <Label>
-                  Business, Products & Brand Description{" "}
-                  <span className="text-red-500">*</span>
-                </Label>
-                <Textarea
-                  name="description"
-                  value={shopkeeperDetails.description}
-                  onChange={handleRentFormChange}
-                  placeholder="Tell us about what you sell..."
-                  rows={3}
-                />
-              </div>
+                {/* Image Uploads */}
+                <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 space-y-4">
+                  <h3 className="font-semibold text-gray-800">
+                    Brand Assets & Documents
+                  </h3>
 
-              <div className="space-y-2">
-                <Label>
-                  Refund Payment Description{" "}
-                  <span className="text-red-500">*</span>
-                </Label>
-                <Textarea
-                  name="refundPaymentDescription"
-                  value={shopkeeperDetails.refundPaymentDescription}
-                  onChange={handleRentFormChange}
-                  placeholder="Tell us about what you sell..."
-                  rows={3}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>
-                  Full Address <span className="text-red-500">*</span>
-                </Label>
-                <Textarea
-                  name="address"
-                  value={shopkeeperDetails.address}
-                  onChange={handleRentFormChange}
-                  placeholder="Your business address"
-                  rows={2}
-                />
-              </div>
-
-              {/* Preferred Space Types — with quantity, total capped at the
-                  organizer's maxSpacesPerVendor. */}
-              {eventData?.tableTemplates &&
-                eventData.tableTemplates.filter((t: any) => t.forSale !== false)
-                  .length > 0 && (
-                  <div className="space-y-2 border-t pt-4">
-                    <div className="flex items-center justify-between">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Reg Image */}
+                    <div className="space-y-2">
                       <Label>
-                        Preferred Space Type(s){" "}
+                        Business Registration Document{" "}
                         <span className="text-red-500">*</span>
                       </Label>
-                      <span className="text-xs font-medium text-gray-500">
-                        {totalPreferredSpaces} of {maxSpacesPerVendor} space
-                        {maxSpacesPerVendor === 1 ? "" : "s"}
-                      </span>
+                      <div className="flex items-center gap-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() =>
+                            document.getElementById("regUpload")?.click()
+                          }
+                        >
+                          <Upload className="w-4 h-4 mr-2" /> Upload
+                        </Button>
+                        <input
+                          id="regUpload"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => handleSingleImageSelect(e, "reg")}
+                        />
+                        {regImagePreview && (
+                          <img
+                            src={regImagePreview}
+                            className="h-12 w-12 object-cover rounded border border-gray-300"
+                            alt="Reg"
+                          />
+                        )}
+                      </div>
                     </div>
-                    <p className="mb-2 text-[11px] text-gray-400">
-                      Pick the space types you want and set how many of each — up
-                      to {maxSpacesPerVendor} total. You'll only be able to book
-                      spaces of the selected type(s).
-                    </p>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {eventData.tableTemplates
-                        .filter((t: any) => t.forSale !== false)
-                        .map((template: any) => {
-                          const ids: string[] =
-                            shopkeeperDetails.preferredTemplateIds || [];
-                          const qtys: number[] =
-                            shopkeeperDetails.preferredTemplateQuantities || [];
-                          const idx = ids.indexOf(template.id);
-                          const isSelected = idx >= 0;
-                          const qty = isSelected ? Number(qtys[idx]) || 1 : 0;
-                          const atCap =
-                            totalPreferredSpaces >= maxSpacesPerVendor;
-                          const priceEl = (() => {
-                            const hasMember =
-                              isMember &&
-                              template.memberPrice != null &&
-                              Number(template.memberPrice) !==
-                                Number(template.tablePrice);
-                            if (hasMember) {
-                              return (
-                                <>
-                                  <span className="font-semibold text-emerald-600">
-                                    {formatPrice(template.memberPrice)}
-                                  </span>{" "}
-                                  <span className="text-gray-400 line-through">
-                                    {formatPrice(template.tablePrice)}
-                                  </span>
-                                </>
-                              );
-                            }
-                            return formatPrice(
-                              isMember && template.memberPrice != null
-                                ? template.memberPrice
-                                : template.tablePrice,
-                            );
-                          })();
-                          return (
-                            <div
-                              key={template.id}
-                              className={`rounded-xl border-2 p-3 transition-all ${
-                                isSelected ? "shadow-md" : "border-gray-200"
-                              }`}
-                              style={
-                                isSelected
-                                  ? {
-                                      borderColor: template.color || "#3b82f6",
-                                      backgroundColor:
-                                        (template.color || "#3b82f6") + "08",
-                                    }
-                                  : {}
-                              }
-                            >
-                              <button
-                                type="button"
-                                onClick={() => togglePreferredType(template)}
-                                disabled={
-                                  !isSelected && atCap && maxSpacesPerVendor > 1
-                                }
-                                className="w-full text-left disabled:opacity-50"
-                              >
-                                <div className="mb-1 flex items-center gap-2">
-                                  <div
-                                    className="h-3 w-3 rounded-sm"
-                                    style={{
-                                      backgroundColor:
-                                        template.color || "#6b7280",
-                                    }}
-                                  />
-                                  <span className="text-sm font-semibold text-gray-800">
-                                    {template.name}
-                                  </span>
-                                  {isSelected && (
-                                    <span
-                                      className="ml-auto text-xs font-medium"
-                                      style={{
-                                        color: template.color || "#3b82f6",
-                                      }}
-                                    >
-                                      Selected
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-[11px] text-gray-500">
-                                  {template.width}x{template.height}cm &middot;{" "}
-                                  {priceEl}
-                                </div>
-                              </button>
-                              {isSelected && (
-                                <div className="mt-2 flex items-center gap-2 border-t pt-2">
-                                  <span className="text-[11px] text-gray-500">
-                                    Quantity
-                                  </span>
-                                  <div className="ml-auto flex items-center gap-1">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        changePreferredQty(template, -1)
-                                      }
-                                      disabled={qty <= 1}
-                                      className="h-6 w-6 rounded border text-sm font-bold text-gray-600 disabled:opacity-40"
-                                    >
-                                      −
-                                    </button>
-                                    <span className="w-6 text-center text-sm font-semibold">
-                                      {qty}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        changePreferredQty(template, +1)
-                                      }
-                                      disabled={
-                                        atCap || qty >= perTypeMax(template)
-                                      }
-                                      className="h-6 w-6 rounded border text-sm font-bold text-gray-600 disabled:opacity-40"
-                                    >
-                                      +
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
+
+                    {/* Logo */}
+                    <div className="space-y-2">
+                      <Label>
+                        Company Logo <span className="text-red-500">*</span>
+                      </Label>
+                      <div className="flex items-center gap-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() =>
+                            document.getElementById("logoUpload")?.click()
+                          }
+                        >
+                          <Upload className="w-4 h-4 mr-2" /> Upload
+                        </Button>
+                        <input
+                          id="logoUpload"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => handleSingleImageSelect(e, "logo")}
+                        />
+                        {logoPreview && (
+                          <img
+                            src={logoPreview}
+                            className="h-12 w-12 object-cover rounded border border-gray-300"
+                            alt="Logo"
+                          />
+                        )}
+                      </div>
                     </div>
                   </div>
-                )}
 
-              <CardFooter className="flex justify-end gap-3 p-0 pt-4 border-t">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleRentFormCancel}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={
-                    loading ||
-                    (!shopkeeperExists &&
-                      (!shopkeeperDetails.businessEmail || !emailVerified)) ||
-                    !shopkeeperDetails.businessCategory
-                  }
-                >
-                  {loading ? "Submitting..." : "Submit Registration"}
-                </Button>
-              </CardFooter>
-            </form>
+                  {/* Product Images */}
+                  <div className="space-y-2 pt-4 border-t border-gray-200">
+                    <Label>
+                      Product Images (
+                      {productFiles.length + existingProductImages.length}/5){" "}
+                      <span className="text-red-500">*</span>
+                      <span className="ml-1 text-[11px] font-normal text-gray-400">
+                        (at least 1 required)
+                      </span>
+                    </Label>
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={
+                          productFiles.length + existingProductImages.length >=
+                          5
+                        }
+                        onClick={() =>
+                          document.getElementById("productUpload")?.click()
+                        }
+                      >
+                        <Upload className="w-4 h-4 mr-2" /> Add Products
+                      </Button>
+                      <input
+                        id="productUpload"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={handleMultipleImageSelect}
+                      />
+
+                      {/* Stored images from a returning vendor's profile */}
+                      {existingProductImages.map((preview, idx) => (
+                        <div key={`existing-${idx}`} className="relative group">
+                          <img
+                            src={preview}
+                            className="h-14 w-14 object-cover rounded border border-gray-300"
+                            alt={`Saved product ${idx}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExistingProductImages((prev) =>
+                                prev.filter((_, i) => i !== idx),
+                              )
+                            }
+                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+
+                      {productPreviews.map((preview, idx) => (
+                        <div key={idx} className="relative group">
+                          <img
+                            src={preview}
+                            className="h-14 w-14 object-cover rounded border border-gray-300"
+                            alt={`Product ${idx}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeProductImage(idx)}
+                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div className="space-y-2">
+                  <Label>
+                    Business, Products & Brand Description{" "}
+                    <span className="text-red-500">*</span>
+                  </Label>
+                  <Textarea
+                    name="description"
+                    value={shopkeeperDetails.description}
+                    onChange={handleRentFormChange}
+                    placeholder="Tell us about what you sell..."
+                    rows={3}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>
+                    Refund Payment Description{" "}
+                    <span className="text-red-500">*</span>
+                  </Label>
+                  <Textarea
+                    name="refundPaymentDescription"
+                    value={shopkeeperDetails.refundPaymentDescription}
+                    onChange={handleRentFormChange}
+                    placeholder="Tell us about what you sell..."
+                    rows={3}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>
+                    Full Address <span className="text-red-500">*</span>
+                  </Label>
+                  <Textarea
+                    name="address"
+                    value={shopkeeperDetails.address}
+                    onChange={handleRentFormChange}
+                    placeholder="Your business address"
+                    rows={2}
+                  />
+                </div>
+
+                {/* Preferred Space Types — with quantity, total capped at the
+                  organizer's maxSpacesPerVendor. */}
+                {eventData?.tableTemplates &&
+                  eventData.tableTemplates.filter(
+                    (t: any) => t.forSale !== false,
+                  ).length > 0 && (
+                    <div className="space-y-2 border-t pt-4">
+                      <div className="flex items-center justify-between">
+                        <Label>
+                          Preferred Space Type(s){" "}
+                          <span className="text-red-500">*</span>
+                        </Label>
+                        <span className="text-xs font-medium text-gray-500">
+                          {totalPreferredSpaces} of {maxSpacesPerVendor} space
+                          {maxSpacesPerVendor === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                      <p className="mb-2 text-[11px] text-gray-400">
+                        Pick the space types you want and set how many of each —
+                        up to {maxSpacesPerVendor} total. You'll only be able to
+                        book spaces of the selected type(s).
+                      </p>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {eventData.tableTemplates
+                          .filter((t: any) => t.forSale !== false)
+                          .map((template: any) => {
+                            const ids: string[] =
+                              shopkeeperDetails.preferredTemplateIds || [];
+                            const qtys: number[] =
+                              shopkeeperDetails.preferredTemplateQuantities ||
+                              [];
+                            const idx = ids.indexOf(template.id);
+                            const isSelected = idx >= 0;
+                            const qty = isSelected ? Number(qtys[idx]) || 1 : 0;
+                            const atCap =
+                              totalPreferredSpaces >= maxSpacesPerVendor;
+                            const priceEl = (() => {
+                              const hasMember =
+                                isMember &&
+                                template.memberPrice != null &&
+                                Number(template.memberPrice) !==
+                                  Number(template.tablePrice);
+                              if (hasMember) {
+                                return (
+                                  <>
+                                    <span className="font-semibold text-emerald-600">
+                                      {formatPrice(template.memberPrice)}
+                                    </span>{" "}
+                                    <span className="text-gray-400 line-through">
+                                      {formatPrice(template.tablePrice)}
+                                    </span>
+                                  </>
+                                );
+                              }
+                              return formatPrice(
+                                isMember && template.memberPrice != null
+                                  ? template.memberPrice
+                                  : template.tablePrice,
+                              );
+                            })();
+                            return (
+                              <div
+                                key={template.id}
+                                className={`rounded-xl border-2 p-3 transition-all ${
+                                  isSelected ? "shadow-md" : "border-gray-200"
+                                }`}
+                                style={
+                                  isSelected
+                                    ? {
+                                        borderColor:
+                                          template.color || "#3b82f6",
+                                        backgroundColor:
+                                          (template.color || "#3b82f6") + "08",
+                                      }
+                                    : {}
+                                }
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => togglePreferredType(template)}
+                                  disabled={
+                                    !isSelected &&
+                                    atCap &&
+                                    maxSpacesPerVendor > 1
+                                  }
+                                  className="w-full text-left disabled:opacity-50"
+                                >
+                                  <div className="mb-1 flex items-center gap-2">
+                                    <div
+                                      className="h-3 w-3 rounded-sm"
+                                      style={{
+                                        backgroundColor:
+                                          template.color || "#6b7280",
+                                      }}
+                                    />
+                                    <span className="text-sm font-semibold text-gray-800">
+                                      {template.name}
+                                    </span>
+                                    {isSelected && (
+                                      <span
+                                        className="ml-auto text-xs font-medium"
+                                        style={{
+                                          color: template.color || "#3b82f6",
+                                        }}
+                                      >
+                                        Selected
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] text-gray-500">
+                                    {template.width}x{template.height}cm
+                                    &middot; {priceEl}
+                                  </div>
+                                </button>
+                                {isSelected && (
+                                  <div className="mt-2 flex items-center gap-2 border-t pt-2">
+                                    <span className="text-[11px] text-gray-500">
+                                      Quantity
+                                    </span>
+                                    <div className="ml-auto flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          changePreferredQty(template, -1)
+                                        }
+                                        disabled={qty <= 1}
+                                        className="h-6 w-6 rounded border text-sm font-bold text-gray-600 disabled:opacity-40"
+                                      >
+                                        −
+                                      </button>
+                                      <span className="w-6 text-center text-sm font-semibold">
+                                        {qty}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          changePreferredQty(template, +1)
+                                        }
+                                        disabled={
+                                          atCap || qty >= perTypeMax(template)
+                                        }
+                                        className="h-6 w-6 rounded border text-sm font-bold text-gray-600 disabled:opacity-40"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+
+                <CardFooter className="flex justify-end gap-3 p-0 pt-4 border-t">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleRentFormCancel}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={
+                      loading ||
+                      (!shopkeeperExists &&
+                        (!shopkeeperDetails.businessEmail || !emailVerified)) ||
+                      !shopkeeperDetails.businessCategory
+                    }
+                  >
+                    {loading ? "Submitting..." : "Submit Registration"}
+                  </Button>
+                </CardFooter>
+              </form>
+            </div>
+
+            {/* Render Crop Modal Outside the form */}
+            {cropImage && (
+              <ImageCropModal
+                open={cropOpen}
+                image={cropImage}
+                onClose={() => {
+                  setCropOpen(false);
+                  setCropImage(null);
+                  setCropQueue([]);
+                }}
+                onCropComplete={handleCroppedImage}
+              />
+            )}
           </div>
-
-          {/* Render Crop Modal Outside the form */}
-          {cropImage && (
-            <ImageCropModal
-              open={cropOpen}
-              image={cropImage}
-              onClose={() => {
-                setCropOpen(false);
-                setCropImage(null);
-                setCropQueue([]);
-              }}
-              onCropComplete={handleCroppedImage}
-            />
-          )}
-        </div>
-      )}
+        )}
 
       {/* ── Footer: organizer credit + EventSH branding ── */}
       <footer className="border-t border-gray-200 bg-white py-6 text-center">
@@ -13336,9 +13441,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           eventId={eventData._id}
           chatbotName={eventData.chatbot.name}
           accentColor={
-            eventData.chatbot.accentColor ||
-            design?.primaryColor ||
-            "#2563eb"
+            eventData.chatbot.accentColor || design?.primaryColor || "#2563eb"
           }
           greetingActions={buildEventChatbotGreeting(eventData)}
           ticketTypes={(eventData.visitorTypes || [])
