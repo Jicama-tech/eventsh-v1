@@ -2942,7 +2942,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="all">All statuses</SelectItem>
-                                <SelectItem value="Pending">Pending</SelectItem>
+                                <SelectItem value="Pending">
+                                  Pending Registration Approval
+                                </SelectItem>
                                 <SelectItem value="Approved">Approved</SelectItem>
                                 <SelectItem value="Confirmed">Confirmed</SelectItem>
                                 <SelectItem value="Processing">Processing</SelectItem>

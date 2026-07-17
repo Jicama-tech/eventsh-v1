@@ -42,7 +42,7 @@ export function stallStage(stall: any): StallStage {
 
   // Initial request awaiting the organizer's approval.
   if (status === "Pending")
-    return { label: "Pending Approval", className: AMBER };
+    return { label: "Pending Registration Approval", className: AMBER };
 
   // Fully settled.
   if (paymentStatus === "Paid" || status === "Completed")
