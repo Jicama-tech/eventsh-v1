@@ -1177,11 +1177,11 @@ export default function MarriageEventFront({
         background: "var(--w-pattern-image), var(--w-bg)",
         backgroundSize: "var(--w-pattern-size), auto",
         backgroundRepeat: "repeat, no-repeat",
-        backgroundAttachment: "fixed, scroll",
+        backgroundAttachment: "scroll, scroll",
         color: "var(--w-text)",
         fontFamily: "var(--w-body-font)",
       }}
-      className="relative min-h-screen"
+      className="relative min-h-screen overflow-x-hidden"
       data-wed-anim={theme.animations ? "" : undefined}
     >
       {/* Page-wide floral decoration — scattered down both side edges of the
@@ -1308,7 +1308,7 @@ export default function MarriageEventFront({
               className="mx-auto mb-7"
               style={{ color: "var(--w-primary)" }}
             />
-            <div className="flex items-center justify-center gap-4 sm:gap-7">
+            <div className="flex items-center justify-center gap-1.5 sm:gap-7">
               {[
                 { v: countdown.days, l: "Days" },
                 { v: countdown.hours, l: "Hours" },
@@ -1317,7 +1317,7 @@ export default function MarriageEventFront({
               ].map((b, i) => (
                 <div
                   key={b.l}
-                  className="flex items-center gap-4 sm:gap-7"
+                  className="flex items-center gap-1.5 sm:gap-7"
                 >
                   {i > 0 && (
                     <span
@@ -1328,7 +1328,7 @@ export default function MarriageEventFront({
                   <div className="flex flex-col items-center">
                     <span
                       style={headingStyle}
-                      className="text-4xl font-light leading-none sm:text-6xl"
+                      className="text-3xl font-light leading-none sm:text-6xl"
                     >
                       {String(b.v).padStart(2, "0")}
                     </span>

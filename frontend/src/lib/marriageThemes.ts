@@ -483,7 +483,7 @@ export const HERO_HEIGHT_CLASS: Record<MarriageHeroHeight, string> = {
 export const HERO_NAME_CLASS: Record<MarriageFontScale, string> = {
   cozy: "text-4xl sm:text-6xl",
   normal: "text-5xl sm:text-7xl",
-  grand: "text-6xl sm:text-8xl",
+  grand: "text-5xl sm:text-8xl",
 };
 
 // Single Google Fonts request covering every heading option.

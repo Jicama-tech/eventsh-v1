@@ -6999,6 +6999,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     return (
                                       <div
                                         key={table.positionId}
+                                        onClick={() => {
+                                          // Click/tap a bookable space → start the
+                                          // stall process (Google/WhatsApp auth gate).
+                                          if (!notForSale) handleRentStallClick();
+                                        }}
                                         className={`absolute border flex items-center justify-center transition-all group z-[5] hover:z-[100] ${
                                           table.type === "Round"
                                             ? "rounded-full"
@@ -7065,7 +7070,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                         they get NO hover tooltip. */}
                                           {!notForSale && (
                                             <div
-                                              className="pointer-events-none absolute bottom-full left-1/2 z-[100] mb-3 w-max opacity-0 transition-opacity group-hover:opacity-100"
+                                              className="pointer-events-none absolute bottom-full left-1/2 z-[100] mb-3 w-max opacity-0 transition-opacity [@media(hover:hover)]:group-hover:opacity-100"
                                               style={{
                                                 transform: `translateX(-50%) rotate(-${table.rotation || 0}deg)`,
                                                 transformOrigin:

@@ -440,145 +440,87 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* How it works — two guided journeys */}
+      {/* See it in action — admin-curated demo events from the Super Admin.
+          Each card opens the real (demo-mode) page; a dashboard button shows
+          when the demo's showcaseMode is "dashboard" or "both". */}
       <section className="py-24 bg-[#1a1a1a]">
         <div className="container mx-auto px-4">
           <ScrollReveal>
             <div className="text-center mb-16">
               <span className="inline-block text-xs font-semibold uppercase tracking-[0.25em] text-indigo-400 mb-4">
-                How it works
+                See it in action
               </span>
               <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-5 tracking-tight">
-                From idea to a live event — in minutes
+                Explore our live demos
               </h2>
               <p className="text-base md:text-lg text-slate-400 leading-relaxed max-w-3xl mx-auto">
-                Two clear journeys, one platform. Follow the steps for a business
-                event or a personal celebration — no training or documentation
-                needed.
+                Tap any demo to open the real, live page — exactly what your guests
+                would see. Some include a read-only dashboard too.
               </p>
             </div>
           </ScrollReveal>
-          <div className="grid lg:grid-cols-2 gap-8 lg:gap-10 max-w-6xl mx-auto">
-            {[
-              {
-                kind: "professional",
-                label: "For Businesses & Organizers",
-                accent: "text-sky-400",
-                ring: "border-sky-500/40 text-sky-300",
-                img: "/landing/demo-dashboard.jpg",
-                steps: [
-                  { t: "Create your event", d: "Pick a type (expo, conference, concert…), add dates, venue and details." },
-                  { t: "Set up ticketing", d: "Add multiple ticket types, coupons and early-bird pricing — or make it free." },
-                  { t: "Design your venue", d: "Use the drag-and-drop floor plan to open exhibitor stalls, speaker slots and round tables." },
-                  { t: "Publish a branded page", d: "Your logo, colours and gallery on a public page — share the link anywhere." },
-                  { t: "Sell & manage", d: "Approve exhibitors, confirm payments, handle edit/cancellation requests — or just ask the AI." },
-                  { t: "Check in & analyse", d: "Scan QR passes on the day; track revenue, tickets, stalls and attendance live." },
-                ],
-              },
-              {
-                kind: "personal",
-                label: "For Personal Celebrations",
-                accent: "text-rose-400",
-                ring: "border-rose-500/40 text-rose-300",
-                img: "/landing/demo-wedding.jpg",
-                steps: [
-                  { t: "Create your celebration", d: "Choose a wedding or personal event and add your couple, hosts and functions." },
-                  { t: "Make it yours", d: "Pick a designer theme and fonts, then add your “Our Story” timeline and photo gallery." },
-                  { t: "Publish & invite", d: "Share a beautiful, mobile invitation with directions, a countdown and RSVP." },
-                  { t: "Collect RSVPs", d: "Guests respond per function; see exactly who's coming, with age and side breakdowns." },
-                  { t: "Allot rooms", d: "Assign hotel rooms, share a room across two families, and email QR room passes." },
-                  { t: "Go live", d: "Announce ceremonies as they start and manage the whole day by chat." },
-                ],
-              },
-            ]
-              // Each journey card is tied to its admin-curated demo event.
-              // If that demo is hidden/unfeatured (no matching showcase event),
-              // the whole card is hidden.
-              .filter((col) =>
-                showcaseEvents.some((e) => e.showcaseKind === col.kind),
-              )
-              .map((col, ci) => {
-              const ev = showcaseEvents.find(
-                (e) => e.showcaseKind === col.kind,
-              );
+          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
+            {showcaseEvents.map((ev, ci) => {
+              const isPersonal = ev.showcaseKind === "personal";
+              const label = isPersonal
+                ? "For Personal Celebrations"
+                : "For Businesses & Organizers";
+              const accent = isPersonal ? "text-rose-400" : "text-sky-400";
               const evImg = ev?.image
                 ? ev.image.startsWith("http")
                   ? ev.image
-                  : `${__API_URL__}${
-                      ev.image.startsWith("/") ? "" : "/"
-                    }${ev.image}`
-                : col.img;
+                  : `${__API_URL__}${ev.image.startsWith("/") ? "" : "/"}${ev.image}`
+                : isPersonal
+                  ? "/landing/demo-wedding.jpg"
+                  : "/landing/demo-dashboard.jpg";
               return (
-              <motion.div
-                key={ci}
-                initial={{ opacity: 0, y: 24 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: ci * 0.1, duration: 0.5 }}
-                className="rounded-2xl border border-white/10 bg-[#121216] p-6 md:p-8"
-              >
-                <span
-                  className={cn(
-                    "text-xs font-semibold uppercase tracking-[0.2em]",
-                    col.accent,
-                  )}
+                <motion.div
+                  key={ev._id || ci}
+                  initial={{ opacity: 0, y: 24 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: ci * 0.1, duration: 0.5 }}
+                  className="rounded-2xl border border-white/10 bg-[#121216] p-6 md:p-8"
                 >
-                  {col.label}
-                </span>
-                {/* The demo eventfront created in the Super Admin — click to
-                    open the real (demo-mode) page. */}
-                <button
-                  type="button"
-                  onClick={() => ev && navigate(`/demo/events/${ev._id}`)}
-                  className="group mt-4 block w-full overflow-hidden rounded-xl border border-white/10"
-                >
-                  <img
-                    src={evImg}
-                    alt={ev?.title || ""}
-                    loading="lazy"
-                    decoding="async"
-                    className="w-full aspect-[16/9] object-cover object-top transition-transform duration-500 group-hover:scale-105"
-                  />
-                  <span className="flex items-center justify-center gap-1.5 bg-black/40 py-2 text-xs font-semibold text-white">
-                    Open the live demo →
+                  <span
+                    className={cn(
+                      "text-xs font-semibold uppercase tracking-[0.2em]",
+                      accent,
+                    )}
+                  >
+                    {label}
                   </span>
-                </button>
-                {/* The organizer dashboard (read-only) — shown when the admin
-                    enabled it for this demo. */}
-                {ev &&
-                  (ev.showcaseMode === "dashboard" ||
-                    ev.showcaseMode === "both") && (
+                  {/* The demo eventfront created in the Super Admin. */}
                   <button
                     type="button"
-                    onClick={() => startDemoDashboard(ev._id)}
-                    className="mt-3 w-full rounded-lg border border-sky-500/40 bg-sky-500/10 py-2.5 text-sm font-semibold text-sky-300 transition hover:bg-sky-500/20"
+                    onClick={() => navigate(`/demo/events/${ev._id}`)}
+                    className="group mt-4 block w-full overflow-hidden rounded-xl border border-white/10"
                   >
-                    {col.kind === "personal"
-                      ? "Try the couple's dashboard →"
-                      : "Try the organizer dashboard →"}
+                    <img
+                      src={evImg}
+                      alt={ev?.title || ""}
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full aspect-[16/9] object-cover object-top transition-transform duration-500 group-hover:scale-105"
+                    />
+                    <span className="flex items-center justify-center gap-1.5 bg-black/40 py-2 text-xs font-semibold text-white">
+                      Open the live demo →
+                    </span>
                   </button>
-                )}
-                <div className="mt-7 space-y-6">
-                  {col.steps.map((s, i) => (
-                    <div key={i} className="flex gap-4">
-                      <div
-                        className={cn(
-                          "flex-shrink-0 w-9 h-9 rounded-full border flex items-center justify-center text-sm font-bold",
-                          col.ring,
-                        )}
-                      >
-                        {i + 1}
-                      </div>
-                      <div>
-                        <h4 className="text-white font-semibold">{s.t}</h4>
-                        <p className="text-sm text-slate-400 mt-1 leading-relaxed">
-                          {s.d}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
+                  {/* Read-only dashboard — shown when the admin enabled it. */}
+                  {(ev.showcaseMode === "dashboard" ||
+                    ev.showcaseMode === "both") && (
+                    <button
+                      type="button"
+                      onClick={() => startDemoDashboard(ev._id)}
+                      className="mt-4 w-full rounded-lg border border-sky-500/40 bg-sky-500/10 py-2.5 text-sm font-semibold text-sky-300 transition hover:bg-sky-500/20"
+                    >
+                      {isPersonal
+                        ? "Try the couple's dashboard →"
+                        : "Try the organizer dashboard →"}
+                    </button>
+                  )}
+                </motion.div>
               );
             })}
           </div>

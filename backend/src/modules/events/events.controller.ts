@@ -319,7 +319,7 @@ export class EventsController {
     FileFieldsInterceptor(
       [
         { name: "banner", maxCount: 1 },
-        { name: "gallery", maxCount: 5 },
+        { name: "gallery", maxCount: 50 },
         { name: "sponsorLogos", maxCount: 50 },
         { name: "addOnImages", maxCount: 100 },
         { name: "speakerImages", maxCount: 20 },
@@ -822,7 +822,7 @@ export class EventsController {
     FileFieldsInterceptor(
       [
         { name: "banner", maxCount: 1 },
-        { name: "gallery", maxCount: 5 },
+        { name: "gallery", maxCount: 50 },
         { name: "sponsorLogos", maxCount: 50 },
         { name: "addOnImages", maxCount: 100 },
         { name: "speakerImages", maxCount: 20 },

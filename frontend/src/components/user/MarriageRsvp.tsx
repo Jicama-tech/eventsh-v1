@@ -424,7 +424,7 @@ export default function MarriageRsvp({
                     <button
                       type="button"
                       onClick={() => removeAtt(i)}
-                      className="flex-shrink-0 text-stone-400 hover:text-red-600"
+                      className="flex-shrink-0 -m-1 p-1 text-stone-400 hover:text-red-600"
                       title="Remove guest"
                     >
                       <X className="h-4 w-4" />
