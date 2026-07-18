@@ -120,6 +120,7 @@ import AnnouncementBar from "@/components/ui/AnnouncementBar";
 import { Checkbox } from "@radix-ui/react-checkbox";
 import { OrganizerStore } from "./organizerStoreFront";
 import MarriageEventFront from "./MarriageEventFront";
+import { StallStepper } from "./StallStepper";
 import DemoPrompt from "./DemoPrompt";
 import { startDemoDashboard } from "@/lib/demoDashboard";
 import StallPaymentPanel from "./StallPaymentPanel";
@@ -3389,13 +3390,17 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         description: "Your stall request is awaiting organizer approval",
       });
     } else if (data.status === "Processing") {
-      // Tables already selected, awaiting payment
+      // Tables selected. If the vendor already submitted payment proof it's
+      // awaiting the organizer's verification; otherwise payment is pending.
       setShowWhatsAppDialog(false);
       setShowRentForm(false);
+      const paid = data.transactionId || data.transactionScreenshot;
       toast({
         duration: 5000,
-        title: "Proceed to Payment",
-        description: "Your tables are selected. Please complete payment.",
+        title: paid ? "Awaiting Approval" : "Complete Payment",
+        description: paid
+          ? "Payment submitted. Waiting for the organizer to approve."
+          : "Your tables are selected. Please complete payment.",
       });
     } else if (data.status === "Completed") {
       // Booking completed (paid). Offer: preview the existing booking, or
@@ -9605,6 +9610,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             </DialogDescription>
           </DialogHeader>
 
+          <StallStepper current={1} />
+
           <div className="space-y-4 py-4">
             {stallGoogleLoading ? (
               // GOOGLE SIGN-IN IN PROGRESS
@@ -10211,6 +10218,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             </DialogDescription>
           </div>
 
+          <div className="shrink-0 px-5 sm:px-6 pt-4">
+            <StallStepper current={2} />
+          </div>
+
           {(() => {
             const { terms, htmlSections } = getStallGateContent();
             const htmlCls =
@@ -10334,6 +10345,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-0">
             {/* ── MAIN CONTENT AREA ── */}
             <div className="px-4 sm:px-6 py-4 space-y-6">
+              <StallStepper current={4} />
               {/* Legend — each for-sale space type shows its own colour, then
                   the interaction states (Selected = blue, Booked / Reserved /
                   Not allowed = grey). */}
@@ -11447,6 +11459,39 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               </DialogDescription>
             </DialogHeader>
 
+            {existingStallRequest &&
+              existingStallRequest.status !== "Cancelled" &&
+              (() => {
+                const s = existingStallRequest.status;
+                const paid = !!(
+                  existingStallRequest.transactionId ||
+                  existingStallRequest.transactionScreenshot
+                );
+                // Request submitted, awaiting the organizer's approval.
+                if (s === "Pending")
+                  return (
+                    <StallStepper
+                      current={4}
+                      pending
+                      note="Waiting for organizer approval"
+                    />
+                  );
+                // Transaction cycle complete — booking confirmed & paid.
+                if (s === "Completed" || s === "Returned")
+                  return <StallStepper current={6} />;
+                // Paid, awaiting the organizer's payment verification.
+                if (s === "Processing" && paid)
+                  return (
+                    <StallStepper
+                      current={5}
+                      pending
+                      note="Waiting for payment approval"
+                    />
+                  );
+                // Confirmed / Approved / Processing (payment still pending).
+                return <StallStepper current={4} />;
+              })()}
+
             {existingStallRequest && (
               <div className="space-y-6">
                 {/* Status Header Section */}
@@ -11484,7 +11529,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       {existingStallRequest.status === "Cancelled" &&
                         "Your request was cancelled"}
                       {existingStallRequest.status === "Processing" &&
-                        "Your tables are selected. Please complete payment."}
+                        (existingStallRequest.transactionId ||
+                        existingStallRequest.transactionScreenshot
+                          ? "Payment submitted. Waiting for the organizer to verify it."
+                          : "Your tables are selected. Please complete payment.")}
                       {existingStallRequest.status === "Completed" &&
                         "Your stall booking is complete!"}
                     </p>
@@ -11525,14 +11573,28 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         </div>
                       </div>
 
-                      {/* Action Buttons for Processing State */}
-                      <div className="space-y-3">
-                        <Button className="w-full py-4 bg-blue-600 hover:bg-blue-700">
+                      {/* Once the vendor has submitted payment (transaction id
+                          or screenshot), it's awaiting the organizer's
+                          verification — hide "Proceed to Payment" and show a
+                          waiting notice. Only when payment is genuinely still
+                          pending do we offer to pay. */}
+                      {existingStallRequest.transactionId ||
+                      existingStallRequest.transactionScreenshot ? (
+                        <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+                          <Clock className="h-4 w-4 flex-shrink-0" />
+                          Payment submitted — waiting for organizer approval.
+                        </div>
+                      ) : (
+                        <Button
+                          onClick={() => {
+                            setShowTableSelection(true);
+                            fetchAvailableTables();
+                          }}
+                          className="w-full py-4 bg-blue-600 hover:bg-blue-700"
+                        >
                           Proceed to Payment
                         </Button>
-
-                        {/* The Payment Completed Button you requested */}
-                      </div>
+                      )}
                     </div>
                   )}
 
@@ -12448,6 +12510,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   ? "Your details have been loaded. Please review and submit."
                   : "Fill in your details to rent a stall at this event"}
               </p>
+
+              <StallStepper current={3} />
 
               {/* Active membership card — shown when the signed-in vendor is a
                 member, so they see their plan + validity right on the form. */}
