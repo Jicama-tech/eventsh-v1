@@ -683,7 +683,9 @@ export function OrganizerDashboard({
 
         if (response.ok) {
           const data = await response.json();
-          if (data) {
+          // A demo/dangling organizer has no store, so `data.data` is null —
+          // guard the slug read instead of crashing on it.
+          if (data?.data?.slug) {
             setStoreSlug(data.data.slug);
           }
         }
