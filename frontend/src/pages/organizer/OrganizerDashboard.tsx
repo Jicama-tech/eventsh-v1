@@ -167,7 +167,21 @@ function RoundTableBookingsTab({ apiURL }: { apiURL: string }) {
         const res = await fetch(`${apiURL}/events/organizer/${organizerId}`);
         if (res.ok) {
           const data = await res.json();
-          setRtEvents(data.data || []);
+          let list = data.data || [];
+          // In a demo session, show only events matching the demo kind so the
+          // personal (wedding) and professional demo dashboards stay separate
+          // even if some demos share a backing organizer.
+          if (decoded?.demo === true && decoded?.demoKind) {
+            const isPersonalEvt = (e: any) =>
+              e?.eventType === "personal" ||
+              e?.category === "Marriage Function";
+            list = list.filter((e: any) =>
+              decoded.demoKind === "personal"
+                ? isPersonalEvt(e)
+                : !isPersonalEvt(e),
+            );
+          }
+          setRtEvents(list);
         }
       } catch {
         // ignore

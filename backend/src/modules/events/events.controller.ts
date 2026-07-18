@@ -631,6 +631,9 @@ export class EventsController {
           organizationName:
             resolved.orgName || (isPersonal ? "Our Wedding" : "Demo Organization"),
           demo: true,
+          // Which demo dashboard this session is for, so the frontend shows
+          // only matching events (personal vs professional stay separate).
+          demoKind: resolved.kind,
         },
         process.env.JWT_ACCESS_SECRET,
         { expiresIn: "2h" },

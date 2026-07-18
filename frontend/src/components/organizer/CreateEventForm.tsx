@@ -7450,6 +7450,13 @@ export function CreateEventForm({
   };
 
   useEffect(() => {
+    // Admin creating/editing a demo event (Showcase page) bypasses the
+    // subscription gate, so the venue configuration (spaces, tables, layout)
+    // is fully editable instead of blurred/locked.
+    if (organizerIdOverride) {
+      setblurActive(true);
+      return;
+    }
     async function fetchData() {
       try {
         const token = sessionStorage.getItem("token");
@@ -7475,7 +7482,7 @@ export function CreateEventForm({
       }
     }
     fetchData();
-  }, []);
+  }, [organizerIdOverride]);
 
   // ─── Venue-name autocomplete (Geoapify Places via /users/places-autocomplete)
   type VenueSuggestion = {
