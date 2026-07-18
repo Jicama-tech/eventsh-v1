@@ -1286,34 +1286,35 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         const result = await response.json();
         setEventData(result.data);
 
-        const organizerId = result.data.organizer._id;
+        // Demo/showcase events can reference a missing organizer (populate
+        // returns null), so guard the org lookups — a null organizer must
+        // never crash the public event page.
+        const organizerId = result.data.organizer?._id;
 
-        // Fetch organizer store and organizer profile in parallel
-        const [organizerStore, organizerProfile] = await Promise.all([
-          fetch(
-            `${apiURL}/organizer-stores/organizer-store-detail/${organizerId}`,
-            {
+        if (organizerId) {
+          // Fetch organizer store and organizer profile in parallel
+          const [organizerStore, organizerProfile] = await Promise.all([
+            fetch(
+              `${apiURL}/organizer-stores/organizer-store-detail/${organizerId}`,
+              {
+                method: "GET",
+              },
+            ),
+            fetch(`${apiURL}/organizers/profile-get/${organizerId}`, {
               method: "GET",
-            },
-          ),
-          fetch(`${apiURL}/organizers/profile-get/${organizerId}`, {
-            method: "GET",
-          }),
-        ]);
+            }),
+          ]);
 
-        const storeResult = await organizerStore.json();
-        const profileResult = await organizerProfile.json();
+          const storeResult = await organizerStore.json();
+          const profileResult = await organizerProfile.json();
 
-        if (!storeResult.data) {
-          throw new Error("Failed to fetch organizer store details");
-        }
+          if (storeResult.data) {
+            setSettings(storeResult.data);
+          }
 
-        if (storeResult.data) {
-          setSettings(storeResult.data);
-        }
-
-        if (profileResult.data?.country) {
-          setCountry(profileResult.data.country);
+          if (profileResult.data?.country) {
+            setCountry(profileResult.data.country);
+          }
         }
       } catch (err: any) {
         setError(err.message);
@@ -3264,7 +3265,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           startDate: eventData?.startDate,
           endDate: eventData?.endDate,
           image: eventData?.image,
-          organizerId: eventData?.organizer._id,
+          organizerId: eventData?.organizer?._id,
         },
         shopkeeperDetails: {
           id: shopkeeperId,
@@ -3838,7 +3839,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
       const formData = new FormData();
       formData.append("eventId", eventData?._id || "");
-      formData.append("organizerId", eventData?.organizer._id || "");
+      formData.append("organizerId", eventData?.organizer?._id || "");
 
       // Append standard info
       // For an existing vendor we pass the id (update path); for a new one the
@@ -4051,7 +4052,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           price: Number(vt.price) || 0,
           quantity: 1,
           maxQuantity: Number(vt.maxCount) || 100,
-          organizerId: eventData.organizer._id,
+          organizerId: eventData?.organizer?._id,
           organizerName: eventData.organizer.name,
           organizationName: eventData.organizer.organizationName,
           eventDate: eventData.startDate,
@@ -4075,7 +4076,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           price: Number(eventData.ticketPrice) || 0,
           quantity: ticketQuantity,
           maxQuantity: Number(eventData.totalTickets) || 1,
-          organizerId: eventData.organizer._id,
+          organizerId: eventData?.organizer?._id,
           organizerName: eventData.organizer.name,
           organizationName: eventData.organizer.organizationName,
           eventDate: eventData.startDate,
@@ -4108,7 +4109,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       eventInfo: {
         id: eventData._id,
         title: eventData.title,
-        organizerId: eventData.organizer._id,
+        organizerId: eventData?.organizer?._id,
         organizerName: eventData.organizer.name,
         organizationName: eventData.organizer.organizationName,
         date: eventData.startDate,
