@@ -42,10 +42,17 @@ export function ShowcaseEventsPage() {
   }>(null);
 
   const token = () => sessionStorage.getItem("token") || "";
-  // Prefer the organizer of an existing demo event (always correct across
-  // environments); fall back to the env-configured id for the very first demo.
-  const demoOrgId =
-    (events.find((e) => e.organizer)?.organizer as string) || ENV_DEMO_ORG_ID;
+  // Assign each demo to the organizer of an existing demo of the SAME kind, so
+  // "Try the dashboard" for a kind lists every demo of that kind (personal
+  // demos under the personal demo org, professional under theirs). Editing an
+  // existing demo re-points it to the correct kind's org too, which fixes any
+  // demo that was previously created under the wrong organizer. Falls back to
+  // any demo's org, then the env-configured id for the very first demo.
+  const demoOrgIdFor = (kind: "professional" | "personal") =>
+    (events.find((e) => e.organizer && e.showcaseKind === kind)
+      ?.organizer as string) ||
+    (events.find((e) => e.organizer)?.organizer as string) ||
+    ENV_DEMO_ORG_ID;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -158,7 +165,7 @@ export function ShowcaseEventsPage() {
   if (creating === "professional") {
     return (
       <CreateEventForm
-        organizerIdOverride={demoOrgId}
+        organizerIdOverride={demoOrgIdFor("professional")}
         onSave={handleCreate("professional")}
         onClose={() => setCreating(null)}
       />
@@ -167,7 +174,7 @@ export function ShowcaseEventsPage() {
   if (creating === "personal") {
     return (
       <MarriageEventForm
-        organizerIdOverride={demoOrgId}
+        organizerIdOverride={demoOrgIdFor("personal")}
         onSave={handleCreate("personal")}
         onClose={() => setCreating(null)}
       />
@@ -180,7 +187,7 @@ export function ShowcaseEventsPage() {
       <CreateEventForm
         editMode
         initialData={editing.data}
-        organizerIdOverride={demoOrgId}
+        organizerIdOverride={demoOrgIdFor("professional")}
         onSave={handleUpdate(editing.data._id, "professional")}
         onClose={() => setEditing(null)}
       />
@@ -191,7 +198,7 @@ export function ShowcaseEventsPage() {
       <MarriageEventForm
         editMode
         initialData={editing.data}
-        organizerIdOverride={demoOrgId}
+        organizerIdOverride={demoOrgIdFor("personal")}
         onSave={handleUpdate(editing.data._id, "personal")}
         onClose={() => setEditing(null)}
       />
