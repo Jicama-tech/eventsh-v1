@@ -48,6 +48,7 @@ export class ChatbotController {
       return this.chatbot.handleIndividualMessage({
         userName: organizerName,
         userEmail: req.user?.email,
+        organizerId,
         message,
       });
     }
@@ -70,6 +71,7 @@ export class ChatbotController {
       return this.chatbot.handleIndividualMessage({
         userName: organizerName,
         userEmail: req.user.email,
+        organizerId,
         message,
       });
     }

@@ -2583,10 +2583,12 @@ ${context}
   async handleIndividualMessage({
     userName,
     userEmail,
+    organizerId,
     message,
   }: {
     userName: string;
     userEmail?: string;
+    organizerId?: string;
     message: string;
   }): Promise<{
     text: string;
@@ -2657,11 +2659,21 @@ ${context}
     // Case-insensitive lookup — older Organizer docs may have a mixed-case
     // email that won't match a lowercased equality check.
     const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const backingOrg: any = email
+    let backingOrg: any = email
       ? await this.organizerModel
           .findOne({ email: { $regex: `^${escapedEmail}$`, $options: "i" } })
           .lean()
       : null;
+    // Fall back to the organizer id carried on the token (`sub`) when the
+    // email doesn't resolve — e.g. a demo session whose backing organizer has
+    // no matching email. This is what lets "my events" list the events under
+    // the exact organizer the dashboard was opened for.
+    if (!backingOrg && organizerId) {
+      backingOrg = await this.organizerModel
+        .findById(organizerId)
+        .lean()
+        .catch(() => null);
+    }
 
     // Legacy events (and writes that slipped past Mongoose's cast) store
     // `organizer` as a String even though the schema declares ObjectId.
