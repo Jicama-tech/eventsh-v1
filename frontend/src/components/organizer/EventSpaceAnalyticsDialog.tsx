@@ -33,12 +33,12 @@ import { ExhibitorDetailDialog } from "./ExhibitorDetailDialog";
 
 const apiURL = __API_URL__;
 
-// Only paid-AND-confirmed stalls count as a booking of a space:
-// Confirmed = organizer verified the payment, Completed = confirmed stall
-// after the event. Pending/Approved (no payment) and Processing (payment
-// submitted but unverified) do NOT hold a space. Keep in sync with the
-// chatbot's get_event_venue tool.
-const SOLD_STATUSES = new Set(["Confirmed", "Completed"]);
+// Statuses that count as a booking of a space: Processing = vendor paid,
+// pending organizer approval; Confirmed = payment verified; Completed =
+// confirmed stall after the event. Pending/Approved (nothing paid) do NOT
+// hold a space. Same rule as the dashboard Event Card and the chatbot's
+// get_event_venue tool.
+const SOLD_STATUSES = new Set(["Processing", "Confirmed", "Completed"]);
 
 // Flatten venueTables, which is sometimes a flat array and sometimes a
 // Record<venueConfigId, table[]> (multi-layout events).

@@ -6234,14 +6234,14 @@ ${context}
         if (!ev) return { error: `No event matching "${args.event_name}"` };
         const evObj: any = ev;
 
-        // Booked = a placed space whose positionId appears in a PAID +
-        // CONFIRMED stall's selectedTables. Lifecycle: Pending → Approved →
-        // Processing (vendor submitted payment) → Confirmed (organizer
-        // verified the payment via confirmPayment) → Completed. Only
-        // Confirmed/Completed count — a Processing stall's payment is not
-        // verified yet, so it must NOT reduce availability. One vendor
-        // holding several spaces counts each space.
-        const soldStatuses = ["Confirmed", "Completed"];
+        // Booked = a placed space whose positionId appears in a booked
+        // stall's selectedTables. Booked statuses: Processing (vendor paid,
+        // pending organizer approval), Confirmed (payment verified via
+        // confirmPayment), Completed. Pending/Approved (nothing paid) do NOT
+        // reduce availability. Same rule as the dashboard Event Card and
+        // both analytics dialogs. One vendor holding several spaces counts
+        // each space.
+        const soldStatuses = ["Processing", "Confirmed", "Completed"];
         const stalls = await this.stallModel
           .find({ eventId: evObj._id, status: { $in: soldStatuses } })
           .select("selectedTables status")

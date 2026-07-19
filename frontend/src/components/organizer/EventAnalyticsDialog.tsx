@@ -87,8 +87,11 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
   const totalRoundTableRevenue = calcRoundTablesRevenue(roundTables);
   const grandTotalRevenue =
     totalTicketRevenue + totalStallRevenue + totalRoundTableRevenue;
+  // Booked = Processing (payment submitted, pending approval) + Confirmed
+  // (payment verified) + Completed. Same rule as the dashboard Event Card,
+  // the Space Analytics dialog, and the chatbot's get_event_venue.
   const stallsBooked = stalls.filter((s) =>
-    ["Confirmed", "Completed"].includes(s.status),
+    ["Processing", "Confirmed", "Completed"].includes(s.status),
   ).length;
 
   useEffect(() => {
