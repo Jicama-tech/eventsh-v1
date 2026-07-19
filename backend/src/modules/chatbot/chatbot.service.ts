@@ -6234,15 +6234,14 @@ ${context}
         if (!ev) return { error: `No event matching "${args.event_name}"` };
         const evObj: any = ev;
 
-        // Booked = a placed space whose positionId appears in a SOLD stall's
-        // selectedTables. Sold = the vendor paid for the space(s): status
-        // moves to "Processing" at payment submission (stalls.service sets
-        // venueTables isBooked at that same moment) and stays held through
-        // Confirmed/Approved/Completed. A "Pending" request has not bought
-        // anything yet, so it must NOT reduce availability — this mirrors the
-        // Platform Fees "Booked stalls" count. One vendor holding several
-        // spaces counts each space.
-        const soldStatuses = ["Processing", "Confirmed", "Approved", "Completed"];
+        // Booked = a placed space whose positionId appears in a PAID +
+        // CONFIRMED stall's selectedTables. Lifecycle: Pending → Approved →
+        // Processing (vendor submitted payment) → Confirmed (organizer
+        // verified the payment via confirmPayment) → Completed. Only
+        // Confirmed/Completed count — a Processing stall's payment is not
+        // verified yet, so it must NOT reduce availability. One vendor
+        // holding several spaces counts each space.
+        const soldStatuses = ["Confirmed", "Completed"];
         const stalls = await this.stallModel
           .find({ eventId: evObj._id, status: { $in: soldStatuses } })
           .select("selectedTables status")

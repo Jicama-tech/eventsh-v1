@@ -33,8 +33,12 @@ import { ExhibitorDetailDialog } from "./ExhibitorDetailDialog";
 
 const apiURL = __API_URL__;
 
-// Statuses that DON'T count as a live booking of a space.
-const DEAD_STATUSES = new Set(["Cancelled", "Rejected", "Declined"]);
+// Only paid-AND-confirmed stalls count as a booking of a space:
+// Confirmed = organizer verified the payment, Completed = confirmed stall
+// after the event. Pending/Approved (no payment) and Processing (payment
+// submitted but unverified) do NOT hold a space. Keep in sync with the
+// chatbot's get_event_venue tool.
+const SOLD_STATUSES = new Set(["Confirmed", "Completed"]);
 
 // Flatten venueTables, which is sometimes a flat array and sometimes a
 // Record<venueConfigId, table[]> (multi-layout events).
@@ -160,7 +164,7 @@ export function EventSpaceAnalyticsDialog({
   const templates: TemplateStat[] = useMemo(() => {
     if (!detail) return [];
     const placed = flattenPlaced(detail.venueTables);
-    const liveStalls = stalls.filter((s) => !DEAD_STATUSES.has(s?.status));
+    const liveStalls = stalls.filter((s) => SOLD_STATUSES.has(s?.status));
 
     // positionId -> stall that booked it (first wins)
     const posToStall = new Map<string, any>();
