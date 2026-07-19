@@ -632,6 +632,48 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
     sub: "Pick an event to see its stalls",
     prompt: "Show stalls per event",
   },
+  {
+    category: "Stalls",
+    Icon: Grid3x3,
+    tint: "text-purple-600 bg-purple-50",
+    title: "Spaces per event",
+    sub: "Per-type placed / booked / free breakdown",
+    prompt: "Show spaces per event",
+  },
+  {
+    category: "Stalls",
+    Icon: Store,
+    tint: "text-orange-600 bg-orange-50",
+    title: "Exhibitors per event",
+    sub: "Who's booked at an event — pick one",
+    prompt: "Show exhibitors per event",
+  },
+
+  // ========== MEMBERSHIPS ==========
+  {
+    category: "Memberships",
+    Icon: Star,
+    tint: "text-amber-600 bg-amber-50",
+    title: "Membership plans",
+    sub: "Your exhibitor membership tiers + member counts",
+    prompt: "Show my membership plans",
+  },
+  {
+    category: "Memberships",
+    Icon: Users,
+    tint: "text-emerald-600 bg-emerald-50",
+    title: "My members",
+    sub: "Exhibitors with a membership — plan, status, expiry",
+    prompt: "List my members",
+  },
+  {
+    category: "Memberships",
+    Icon: AlertCircle,
+    tint: "text-orange-600 bg-orange-50",
+    title: "Pending memberships",
+    sub: "Payments awaiting your verification",
+    prompt: "Show pending memberships",
+  },
 
   // ========== SPEAKERS ==========
   {
