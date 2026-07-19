@@ -739,9 +739,19 @@ export class StallsService {
       if (eventHasEnded(eventDoc)) {
         throw new BadRequestException(EVENT_ENDED_MESSAGE);
       }
-      if (stall.status !== "Processing" && stall.status !== "Completed") {
+      // Allow the organizer/operator to pick spaces + add-ons and collect
+      // payment on the vendor's behalf for a freshly-approved booking
+      // (Confirmed/Approved — no space yet, so oldGrandTotal is 0 and the full
+      // amount is collected), as well as re-allocating an existing one
+      // (Processing/Completed).
+      if (
+        stall.status !== "Confirmed" &&
+        stall.status !== "Approved" &&
+        stall.status !== "Processing" &&
+        stall.status !== "Completed"
+      ) {
         throw new BadRequestException(
-          "Only a booking that already holds a space (awaiting payment or confirmed) can be edited this way.",
+          "This booking can't have spaces selected in its current state.",
         );
       }
 
@@ -3588,7 +3598,7 @@ Thank you for choosing Eventsh! 🎊`;
             // vendor filled in, so we ship both and let the frontend fall back.
             // Keep this in sync with the fields the export/stall dialog show.
             select:
-              "name email businessEmail phoneNumber phone whatsAppNumber whatsappNumber countryCode country shopName businessName businessType businessCategory businessDescription instagramLink instagramHandle faceBookLink businessOwnerNationality residency noOfOperators refundPaymentDescription productDescription nameOfApplicant registrationNumber brandName hasDocVerification GSTNumber UENNumber isMember membershipEndDate",
+              "name email businessEmail phoneNumber phone whatsAppNumber whatsappNumber countryCode country shopName businessName businessType businessCategory businessDescription instagramLink instagramHandle faceBookLink businessOwnerNationality residency noOfOperators refundPaymentDescription productDescription nameOfApplicant registrationNumber brandName hasDocVerification isGSTVerified isUENVerified GSTNumber UENNumber isMember membershipEndDate",
           },
           {
             path: "eventId",

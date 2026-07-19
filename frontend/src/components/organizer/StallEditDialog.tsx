@@ -18,7 +18,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Check, Copy, Minus, Plus, Send } from "lucide-react";
+import {
+  Loader2,
+  Check,
+  Copy,
+  Minus,
+  Plus,
+  Send,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useCountry } from "@/hooks/useCountry";
 import { useCurrency } from "@/hooks/useCurrencyhook";
@@ -526,11 +535,13 @@ export function StallEditDialog({
       >
         <DialogHeader>
           <DialogTitle>
-            {step === "edit" ? "Edit stall — spaces & add-ons" : "Collect the extra charge"}
+            {step === "edit"
+              ? "Stall — spaces, add-ons & payment"
+              : "Collect the payment"}
           </DialogTitle>
           <DialogDescription>
             {step === "edit"
-              ? "Re-allocate spaces (limited to the vendor's preferred type) and add-ons. Any extra charge is collected next."
+              ? "Pick spaces (limited to the vendor's preferred type) and add-ons on the vendor's behalf. The amount to collect is calculated next."
               : `Show the QR to the vendor or share the pay link. After they pay, confirm to re-issue the ticket.`}
           </DialogDescription>
         </DialogHeader>
@@ -574,19 +585,47 @@ export function StallEditDialog({
                 {renderField("Owner Nationality", "businessOwnerNationality")}
                 {renderField("Business Type", "businessType")}
                 {renderField("Business Category", "businessCategory")}
-                {renderField("Registration No.", "registrationNumber")}
+                {/* Registration number is read-only here (same as the stall
+                    form on the eventfront) and shows the GST/UEN verification
+                    status carried on the vendor. */}
+                {(() => {
+                  const v: any = stall?.shopkeeperId || {};
+                  const regVerified = !!(
+                    v.isGSTVerified ||
+                    v.isUENVerified ||
+                    v.hasDocVerification
+                  );
+                  return (
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <Label className="text-xs text-muted-foreground">
+                          Registration No.
+                        </Label>
+                        {form.registrationNumber ? (
+                          regVerified ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-600">
+                              <CheckCircle2 className="h-3 w-3" /> Verified
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600">
+                              <AlertCircle className="h-3 w-3" /> Not verified
+                            </span>
+                          )
+                        ) : null}
+                      </div>
+                      <Input
+                        value={form.registrationNumber || ""}
+                        readOnly
+                        disabled
+                        className="bg-muted/40 disabled:opacity-100"
+                      />
+                    </div>
+                  );
+                })()}
                 {renderField("Residency", "residency")}
                 {renderField("No. of Operators", "noOfOperators")}
                 {renderField("Facebook", "faceBookLink")}
                 {renderField("Instagram", "instagramLink")}
-                {renderField("Address", "address", { full: true })}
-                {renderField("City", "city")}
-                {renderField("State", "state")}
-                {renderField("Pincode", "pincode")}
-                {renderField("Business Description", "businessDescription", {
-                  area: true,
-                  full: true,
-                })}
                 {renderField("Product Description", "productDescription", {
                   area: true,
                   full: true,
@@ -730,7 +769,7 @@ export function StallEditDialog({
             {/* Totals */}
             <div className="rounded-lg bg-slate-50 border p-3 text-sm space-y-1">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Current total paid</span>
+                <span className="text-muted-foreground">Current total</span>
                 <span className="font-medium">
                   {formatPrice(stall?.grandTotal || 0)}
                 </span>
@@ -740,7 +779,7 @@ export function StallEditDialog({
                 <span className="font-medium">{formatPrice(newGrand)}</span>
               </div>
               <div className="flex justify-between border-t pt-1">
-                <span className="font-semibold">Extra to collect</span>
+                <span className="font-semibold">Amount to collect</span>
                 <span
                   className={`font-bold ${extra > 0 ? "text-orange-600" : "text-green-600"}`}
                 >
@@ -755,7 +794,7 @@ export function StallEditDialog({
           // Pay step
           <div className="space-y-3">
             <div className="rounded-lg bg-orange-50 border border-orange-200 p-3 text-sm">
-              Extra to collect:{" "}
+              Amount to collect:{" "}
               <span className="font-bold">{formatPrice(amountDue)}</span>
             </div>
             {payLink && (

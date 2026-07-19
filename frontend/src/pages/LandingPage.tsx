@@ -4,7 +4,14 @@ import Navbar from "@/components/ui/navbar";
 import Footer from "@/components/ui/footer";
 import FeatureCard from "@/components/ui/featureCard";
 import SectionHeader from "@/components/ui/sectionHeader";
-import { motion, useScroll, useTransform, useSpring, AnimatePresence, Variants } from "framer-motion";
+import {
+  motion,
+  useScroll,
+  useTransform,
+  useSpring,
+  AnimatePresence,
+  Variants,
+} from "framer-motion";
 import {
   Calendar,
   ShoppingBag,
@@ -40,7 +47,7 @@ import {
 } from "@/components/ui/card";
 
 import { Swiper, SwiperSlide } from "swiper/react";
-import { Pagination, Autoplay } from "swiper/modules";
+import { Autoplay } from "swiper/modules";
 import "swiper/css";
 import { TestimonialsCarousel } from "@/components/landing/TestimonialsCarousel";
 import { PublicChatbot } from "@/components/landing/PublicChatbot";
@@ -70,7 +77,7 @@ const faqs = [
 const testimonials = [
   {
     name: "Rajesh, Event Organizer",
-    description: "Founder of \"Tech Innovate 2024\"",
+    description: 'Founder of "Tech Innovate 2024"',
     text: `Eventsh made managing our conference a breeze. The analytics and attendee tools saved us countless hours.`,
   },
   {
@@ -109,23 +116,98 @@ const eventSteps = [
 
 const whyChooseFeatures = [
   // ---- Professional events (expos, conferences, concerts) ----
-  { icon: Ticket, title: "Ticketing & Early-Bird Pricing", desc: "Multiple ticket types, coupons and pricing tiers for expos, concerts and conferences.", color: "text-blue-400" },
-  { icon: Store, title: "Exhibitor Stall Booking", desc: "Vendors claim stalls on a live, drag-and-drop venue floor plan.", color: "text-rose-400" },
-  { icon: Users, title: "Multi-Role Registration", desc: "Branded onboarding for visitors, exhibitors, vendors and speakers.", color: "text-emerald-400" },
-  { icon: QrCode, title: "Contactless QR Check-In", desc: "Attendees scan their own QR passes for instant, contactless entry.", color: "text-purple-400" },
-  { icon: CalendarDays, title: "Speakers & Sessions", desc: "Manage speaker slots, applications and session schedules with ease.", color: "text-cyan-400" },
-  { icon: BarChart3, title: "Revenue & Sales Analytics", desc: "Live ticket, stall and revenue insights across every event.", color: "text-amber-400" },
+  {
+    icon: Ticket,
+    title: "Ticketing & Early-Bird Pricing",
+    desc: "Multiple ticket types, coupons and pricing tiers for expos, concerts and conferences.",
+    color: "text-blue-400",
+  },
+  {
+    icon: Store,
+    title: "Exhibitor Stall Booking",
+    desc: "Vendors claim stalls on a live, drag-and-drop venue floor plan.",
+    color: "text-rose-400",
+  },
+  {
+    icon: Users,
+    title: "Multi-Role Registration",
+    desc: "Branded onboarding for visitors, exhibitors, vendors and speakers.",
+    color: "text-emerald-400",
+  },
+  {
+    icon: QrCode,
+    title: "Contactless QR Check-In",
+    desc: "Attendees scan their own QR passes for instant, contactless entry.",
+    color: "text-purple-400",
+  },
+  {
+    icon: CalendarDays,
+    title: "Speakers & Sessions",
+    desc: "Manage speaker slots, applications and session schedules with ease.",
+    color: "text-cyan-400",
+  },
+  {
+    icon: BarChart3,
+    title: "Revenue & Sales Analytics",
+    desc: "Live ticket, stall and revenue insights across every event.",
+    color: "text-amber-400",
+  },
   // ---- Personal events (weddings & celebrations) ----
-  { icon: Heart, title: "RSVP & Guest Lists", desc: "Collect RSVPs per function with age, side and attendance breakdowns.", color: "text-rose-400" },
-  { icon: Bed, title: "Room Allotment", desc: "Assign rooms to guests — even share one room across two families.", color: "text-blue-400" },
-  { icon: Palette, title: "Designer Wedding Themes", desc: "Beautiful themes, fonts and an “Our Story” timeline built in minutes.", color: "text-purple-400" },
-  { icon: Calendar, title: "Ceremonies & Countdown", desc: "Multi-function schedules, live ceremony announcements and a countdown.", color: "text-emerald-400" },
-  { icon: Camera, title: "Photo Galleries", desc: "Share your best moments in elegant, responsive photo galleries.", color: "text-cyan-400" },
-  { icon: Mail, title: "QR Room & Entry Passes", desc: "Email guests QR passes for event check-in and hotel-room access.", color: "text-amber-400" },
+  {
+    icon: Heart,
+    title: "RSVP & Guest Lists",
+    desc: "Collect RSVPs per function with age, side and attendance breakdowns.",
+    color: "text-rose-400",
+  },
+  {
+    icon: Bed,
+    title: "Room Allotment",
+    desc: "Assign rooms to guests — even share one room across two families.",
+    color: "text-blue-400",
+  },
+  {
+    icon: Palette,
+    title: "Designer Wedding Themes",
+    desc: "Beautiful themes, fonts and an “Our Story” timeline built in minutes.",
+    color: "text-purple-400",
+  },
+  {
+    icon: Calendar,
+    title: "Ceremonies & Countdown",
+    desc: "Multi-function schedules, live ceremony announcements and a countdown.",
+    color: "text-emerald-400",
+  },
+  {
+    icon: Camera,
+    title: "Photo Galleries",
+    desc: "Share your best moments in elegant, responsive photo galleries.",
+    color: "text-cyan-400",
+  },
+  {
+    icon: Mail,
+    title: "QR Room & Entry Passes",
+    desc: "Email guests QR passes for event check-in and hotel-room access.",
+    color: "text-amber-400",
+  },
   // ---- Works for both ----
-  { icon: MessageSquare, title: "Built-in AI Assistant", desc: "Run any event by chat — bookings, approvals, guest lists and more.", color: "text-purple-400" },
-  { icon: Globe, title: "Branded Event Pages", desc: "Every event gets a beautiful public page under your own brand.", color: "text-cyan-400" },
-  { icon: LayoutGrid, title: "One Dashboard, Every Event", desc: "Manage professional and personal events side by side.", color: "text-blue-400" },
+  {
+    icon: MessageSquare,
+    title: "Built-in AI Assistant",
+    desc: "Run any event by chat — bookings, approvals, guest lists and more.",
+    color: "text-purple-400",
+  },
+  {
+    icon: Globe,
+    title: "Branded Event Pages",
+    desc: "Every event gets a beautiful public page under your own brand.",
+    color: "text-cyan-400",
+  },
+  {
+    icon: LayoutGrid,
+    title: "One Dashboard, Every Event",
+    desc: "Manage professional and personal events side by side.",
+    color: "text-blue-400",
+  },
 ];
 
 interface ScrollRevealProps {
@@ -376,19 +458,22 @@ const LandingPage = () => {
       {/* Hero Section */}
       <section className="relative overflow-hidden min-h-[100vh] flex items-center">
         <div className="absolute inset-0 w-full h-full overflow-hidden">
-          <div className="absolute inset-0 flex flex-col gap-6 justify-center items-center" style={{ transform: "rotate(12deg) scale(1.5)" }}>
+          <div
+            className="absolute inset-0 flex flex-col gap-6 justify-center items-center"
+            style={{ transform: "rotate(12deg) scale(1.5)" }}
+          >
             {[...Array(8)].map((_, colIndex) => (
               <motion.div
                 key={colIndex}
                 className="flex gap-6"
                 style={{ width: "max-content" }}
                 animate={{
-                  x: colIndex % 2 === 0 ? [0, -1600] : [-1600, 0]
+                  x: colIndex % 2 === 0 ? [0, -1600] : [-1600, 0],
                 }}
                 transition={{
                   duration: 60,
                   repeat: Infinity,
-                  ease: "linear"
+                  ease: "linear",
                 }}
               >
                 {[...Array(20)].map((_, i) => (
@@ -415,10 +500,15 @@ const LandingPage = () => {
           <div className=" mx-auto text-center">
             <ScrollReveal>
               <h1 className="text-4xl sm:text-5xl md:text-8xl font-bold text-white mb-6 sm:mb-8 tracking-tight">
-                EventsHub <span className="bg-gradient-to-r from-primary via-blue-400 to-cyan-400 bg-clip-text text-transparent text-4xl sm:text-5xl md:text-7xl"> <br></br>Where People Connect</span>
+                EventsHub{" "}
+                <span className="bg-gradient-to-r from-primary via-blue-400 to-cyan-400 bg-clip-text text-transparent text-4xl sm:text-5xl md:text-7xl">
+                  {" "}
+                  <br></br>Where People Connect
+                </span>
               </h1>
               <p className="text-base sm:text-xl md:text-2xl text-slate-400 mb-10 sm:mb-12 leading-relaxed max-w-2xl mx-auto px-2">
-                EventsHub: Master organizer, exhibitor, and visitors in one seamless move. 
+                EventsHub: Master organizer, exhibitor, and visitors in one
+                seamless move.
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
                 <motion.div
@@ -446,84 +536,183 @@ const LandingPage = () => {
       <section className="py-24 bg-[#1a1a1a]">
         <div className="container mx-auto px-4">
           <ScrollReveal>
-            <div className="text-center mb-16">
+            <div className="text-center mb-14">
               <span className="inline-block text-xs font-semibold uppercase tracking-[0.25em] text-indigo-400 mb-4">
-                See it in action
+                Everything you need
               </span>
               <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-5 tracking-tight">
-                Explore our live demos
+                One platform, two kinds of events
               </h2>
               <p className="text-base md:text-lg text-slate-400 leading-relaxed max-w-3xl mx-auto">
-                Tap any demo to open the real, live page — exactly what your guests
-                would see. Some include a read-only dashboard too.
+                From ticketed expos and exhibitor stalls to intimate weddings —
+                here's exactly what each one includes.
               </p>
             </div>
           </ScrollReveal>
-          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
-            {showcaseEvents.map((ev, ci) => {
-              const isPersonal = ev.showcaseKind === "personal";
-              const label = isPersonal
-                ? "For Personal Celebrations"
-                : "For Businesses & Organizers";
-              const accent = isPersonal ? "text-rose-400" : "text-sky-400";
-              const evImg = ev?.image
-                ? ev.image.startsWith("http")
-                  ? ev.image
-                  : `${__API_URL__}${ev.image.startsWith("/") ? "" : "/"}${ev.image}`
-                : isPersonal
-                  ? "/landing/demo-wedding.jpg"
-                  : "/landing/demo-dashboard.jpg";
-              return (
-                <motion.div
-                  key={ev._id || ci}
-                  initial={{ opacity: 0, y: 24 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: ci * 0.1, duration: 0.5 }}
-                  className="rounded-2xl border border-white/10 bg-[#121216] p-6 md:p-8"
-                >
-                  <span
-                    className={cn(
-                      "text-xs font-semibold uppercase tracking-[0.2em]",
-                      accent,
-                    )}
-                  >
-                    {label}
-                  </span>
-                  {/* The demo eventfront created in the Super Admin. */}
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/demo/events/${ev._id}`)}
-                    className="group mt-4 block w-full overflow-hidden rounded-xl border border-white/10"
-                  >
-                    <img
-                      src={evImg}
-                      alt={ev?.title || ""}
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full aspect-[16/9] object-cover object-top transition-transform duration-500 group-hover:scale-105"
-                    />
-                    <span className="flex items-center justify-center gap-1.5 bg-black/40 py-2 text-xs font-semibold text-white">
-                      Open the live demo →
-                    </span>
-                  </button>
-                  {/* Read-only dashboard — shown when the admin enabled it. */}
-                  {(ev.showcaseMode === "dashboard" ||
-                    ev.showcaseMode === "both") && (
-                    <button
-                      type="button"
-                      onClick={() => startDemoDashboard(ev._id)}
-                      className="mt-4 w-full rounded-lg border border-sky-500/40 bg-sky-500/10 py-2.5 text-sm font-semibold text-sky-300 transition hover:bg-sky-500/20"
-                    >
-                      {isPersonal
-                        ? "Try the couple's dashboard →"
-                        : "Try the organizer dashboard →"}
-                    </button>
+
+          {/* Two feature cards — what a Professional vs a Personal event includes. */}
+          <div className="grid gap-6 lg:grid-cols-2 max-w-5xl mx-auto mb-20">
+            {[
+              {
+                eyebrow: "For Businesses & Organizers",
+                title: "Professional Events",
+                sub: "Expos · Conferences · Concerts · Exhibitions",
+                accent: "text-sky-400",
+                ring: "border-sky-500/30",
+                feats: whyChooseFeatures.slice(0, 6),
+              },
+              {
+                eyebrow: "For Personal Celebrations",
+                title: "Personal Events",
+                sub: "Weddings · Engagements · Family functions",
+                accent: "text-rose-400",
+                ring: "border-rose-500/30",
+                feats: whyChooseFeatures.slice(6, 12),
+              },
+            ].map((col) => (
+              <motion.div
+                key={col.title}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5 }}
+                className={cn(
+                  "rounded-2xl border bg-[#121216] p-6 md:p-8",
+                  col.ring,
+                )}
+              >
+                <span
+                  className={cn(
+                    "text-xs font-semibold uppercase tracking-[0.2em]",
+                    col.accent,
                   )}
-                </motion.div>
-              );
-            })}
+                >
+                  {col.eyebrow}
+                </span>
+                <h3 className="mt-2 text-2xl font-bold text-white">
+                  {col.title}
+                </h3>
+                <p className="mb-6 text-sm text-slate-400">{col.sub}</p>
+                <ul className="space-y-4">
+                  {col.feats.map((f) => (
+                    <li key={f.title} className="flex items-start gap-3">
+                      <div
+                        className={cn(
+                          "mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-white/5",
+                          f.color,
+                        )}
+                      >
+                        <f.icon className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-white">
+                          {f.title}
+                        </p>
+                        <p className="text-xs leading-relaxed text-slate-400">
+                          {f.desc}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </motion.div>
+            ))}
           </div>
+
+          {/* Live demos — an auto-rotating carousel of the admin-curated demos. */}
+          {showcaseEvents.length > 0 && (
+            <>
+              <ScrollReveal>
+                <div className="text-center mb-10">
+                  <span className="inline-block text-xs font-semibold uppercase tracking-[0.25em] text-indigo-400 mb-3">
+                    See it in action
+                  </span>
+                  <h3 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
+                    Explore our live demos
+                  </h3>
+                  <p className="mt-3 text-sm md:text-base text-slate-400 max-w-2xl mx-auto">
+                    Tap any demo to open the real, live page — some include a
+                    read-only dashboard too.
+                  </p>
+                </div>
+              </ScrollReveal>
+              {/* Auto-rotating carousel — pauses on hover, same pattern as the
+                  testimonials strip. */}
+              <Swiper
+                modules={[Autoplay]}
+                slidesPerView="auto"
+                spaceBetween={24}
+                loop
+                autoplay={{
+                  delay: 3000,
+                  disableOnInteraction: false,
+                  pauseOnMouseEnter: true,
+                }}
+                className="demos-marquee w-full !py-2"
+              >
+                {/* Duplicated so the loop stays seamless even with few demos. */}
+                {[...showcaseEvents, ...showcaseEvents].map((ev, ci) => {
+                  const isPersonal = ev.showcaseKind === "personal";
+                  const label = isPersonal
+                    ? "For Personal Celebrations"
+                    : "For Businesses & Organizers";
+                  const accent = isPersonal ? "text-rose-400" : "text-sky-400";
+                  const evImg = ev?.image
+                    ? ev.image.startsWith("http")
+                      ? ev.image
+                      : `${__API_URL__}${ev.image.startsWith("/") ? "" : "/"}${ev.image}`
+                    : isPersonal
+                      ? "/landing/demo-wedding.jpg"
+                      : "/landing/demo-dashboard.jpg";
+                  return (
+                    <SwiperSlide
+                      key={`${ev._id}-${ci}`}
+                      className="!h-auto !w-[85%] sm:!w-[360px]"
+                    >
+                      <div className="flex h-full flex-col rounded-2xl border border-white/10 bg-[#121216] p-6">
+                        <span
+                          className={cn(
+                            "text-xs font-semibold uppercase tracking-[0.2em]",
+                            accent,
+                          )}
+                        >
+                          {label}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/demo/events/${ev._id}`)}
+                          className="group mt-4 block w-full overflow-hidden rounded-xl border border-white/10"
+                        >
+                          <img
+                            src={evImg}
+                            alt={ev?.title || ""}
+                            loading="lazy"
+                            decoding="async"
+                            className="w-full aspect-[16/9] object-cover object-top transition-transform duration-500 group-hover:scale-105"
+                          />
+                          <span className="flex items-center justify-center gap-1.5 bg-black/40 py-2 text-xs font-semibold text-white">
+                            Open the live demo →
+                          </span>
+                        </button>
+                        {(ev.showcaseMode === "dashboard" ||
+                          ev.showcaseMode === "both") && (
+                          <button
+                            type="button"
+                            onClick={() => startDemoDashboard(ev._id)}
+                            className="mt-4 w-full rounded-lg border border-sky-500/40 bg-sky-500/10 py-2.5 text-sm font-semibold text-sky-300 transition hover:bg-sky-500/20"
+                          >
+                            {isPersonal
+                              ? "Try the couple's dashboard →"
+                              : "Try the organizer dashboard →"}
+                          </button>
+                        )}
+                      </div>
+                    </SwiperSlide>
+                  );
+                })}
+              </Swiper>
+            </>
+          )}
         </div>
       </section>
 
@@ -615,191 +804,191 @@ const LandingPage = () => {
 
       {/* See it in action — hidden for now */}
       {false && (
-      <section className="py-24 bg-[#0a0a0c] relative overflow-hidden">
-        {/* soft decorative glow — pure CSS, no image weight */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[900px] h-[420px] rounded-full opacity-20 blur-3xl"
-          style={{
-            background:
-              "radial-gradient(closest-side, rgba(99,102,241,0.55), transparent)",
-          }}
-        />
-        <div className="container mx-auto px-4 relative">
-          <ScrollReveal>
-            <div className="text-center mb-14">
-              <span className="inline-block text-xs font-semibold uppercase tracking-[0.25em] text-indigo-400 mb-4">
-                See it in action
-              </span>
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-5 tracking-tight">
-                One platform, every kind of event
-              </h2>
-              <p className="text-base md:text-lg text-slate-400 leading-relaxed max-w-3xl mx-auto">
-                From ticketed expos and exhibitor stalls to intimate weddings —
-                run the whole thing from a branded page, a live dashboard and an
-                AI assistant. Here's a real look at each.
-              </p>
-            </div>
-          </ScrollReveal>
+        <section className="py-24 bg-[#0a0a0c] relative overflow-hidden">
+          {/* soft decorative glow — pure CSS, no image weight */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[900px] h-[420px] rounded-full opacity-20 blur-3xl"
+            style={{
+              background:
+                "radial-gradient(closest-side, rgba(99,102,241,0.55), transparent)",
+            }}
+          />
+          <div className="container mx-auto px-4 relative">
+            <ScrollReveal>
+              <div className="text-center mb-14">
+                <span className="inline-block text-xs font-semibold uppercase tracking-[0.25em] text-indigo-400 mb-4">
+                  See it in action
+                </span>
+                <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-5 tracking-tight">
+                  One platform, every kind of event
+                </h2>
+                <p className="text-base md:text-lg text-slate-400 leading-relaxed max-w-3xl mx-auto">
+                  From ticketed expos and exhibitor stalls to intimate weddings
+                  — run the whole thing from a branded page, a live dashboard
+                  and an AI assistant. Here's a real look at each.
+                </p>
+              </div>
+            </ScrollReveal>
 
-          <div className="max-w-6xl mx-auto space-y-20 md:space-y-28">
-            {[
-              {
-                eyebrow: "For Businesses & Organizers",
-                title: "A branded event page that sells",
-                desc: "Give every event a beautiful public page — under your own brand, taking bookings the moment you publish.",
-                points: [
-                  "Multiple ticket types with early-bird pricing",
-                  "Exhibitor stall booking on a live venue map",
-                  "Speakers, sponsors & a built-in AI assistant",
-                ],
-                img: "/landing/demo-professional.jpg",
-                url: "eventsh.com/…/events/dummy-event",
-                accent: "text-sky-400",
-              },
-              {
-                eyebrow: "For Businesses & Organizers",
-                title: "Run everything from one dashboard",
-                desc: "Track events, ticket sales, stalls and revenue at a glance — then drill into any event for the detail.",
-                points: [
-                  "Live revenue, tickets & stall analytics",
-                  "Per-event cards with sales progress",
-                  "Coupons, platform fees, feedback & more",
-                ],
-                img: "/landing/demo-dashboard.jpg",
-                url: "eventsh.com/organizer-dashboard",
-                accent: "text-indigo-400",
-              },
-              {
-                eyebrow: "AI, built in",
-                title: "Your AI event assistant",
-                desc: "Manage the whole event by chat — ask for your events, approvals, payments or a guest list and act on it instantly.",
-                points: [
-                  '"Show me all my events" → actionable cards',
-                  "Approve pending exhibitors & confirm payments",
-                  "Answers grounded in your real event data",
-                ],
-                img: "/landing/demo-chatbot.jpg",
-                url: "eventsh.com/…/assistant",
-                accent: "text-violet-400",
-              },
-              {
-                eyebrow: "For Personal Celebrations",
-                title: "Weddings, beautifully done",
-                desc: "A romantic, fully-themed invite you can build in minutes — your story, ceremonies, gallery and countdown.",
-                points: [
-                  'Designer themes, fonts & an "Our Story" timeline',
-                  "Photo gallery & live ceremony announcements",
-                  "Shareable invite with directions & RSVP",
-                ],
-                img: "/landing/demo-wedding.jpg",
-                url: "eventsh.com/…/aarav-and-diya",
-                accent: "text-rose-400",
-              },
-              {
-                eyebrow: "For Personal Celebrations",
-                title: "RSVP & guest management",
-                desc: "Collect RSVPs per function, see exactly who's coming, and allot rooms — even share one room across two families.",
-                points: [
-                  "Guest list with age & per-function breakdown",
-                  "Room allotment, incl. rooms shared across parties",
-                  "Export lists & email QR room passes",
-                ],
-                img: "/landing/demo-rsvp.jpg",
-                url: "eventsh.com/…/participants",
-                accent: "text-emerald-400",
-              },
-            ].map((d, i) => {
-              const flip = i % 2 === 1;
-              return (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 30 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, margin: "-80px" }}
-                  transition={{ duration: 0.55 }}
-                  className="grid lg:grid-cols-2 gap-8 lg:gap-14 items-center"
-                >
-                  {/* Screenshot in a browser frame */}
-                  <div
-                    className={cn(
-                      "group",
-                      flip ? "lg:order-2" : "lg:order-1",
-                    )}
+            <div className="max-w-6xl mx-auto space-y-20 md:space-y-28">
+              {[
+                {
+                  eyebrow: "For Businesses & Organizers",
+                  title: "A branded event page that sells",
+                  desc: "Give every event a beautiful public page — under your own brand, taking bookings the moment you publish.",
+                  points: [
+                    "Multiple ticket types with early-bird pricing",
+                    "Exhibitor stall booking on a live venue map",
+                    "Speakers, sponsors & a built-in AI assistant",
+                  ],
+                  img: "/landing/demo-professional.jpg",
+                  url: "eventsh.com/…/events/dummy-event",
+                  accent: "text-sky-400",
+                },
+                {
+                  eyebrow: "For Businesses & Organizers",
+                  title: "Run everything from one dashboard",
+                  desc: "Track events, ticket sales, stalls and revenue at a glance — then drill into any event for the detail.",
+                  points: [
+                    "Live revenue, tickets & stall analytics",
+                    "Per-event cards with sales progress",
+                    "Coupons, platform fees, feedback & more",
+                  ],
+                  img: "/landing/demo-dashboard.jpg",
+                  url: "eventsh.com/organizer-dashboard",
+                  accent: "text-indigo-400",
+                },
+                {
+                  eyebrow: "AI, built in",
+                  title: "Your AI event assistant",
+                  desc: "Manage the whole event by chat — ask for your events, approvals, payments or a guest list and act on it instantly.",
+                  points: [
+                    '"Show me all my events" → actionable cards',
+                    "Approve pending exhibitors & confirm payments",
+                    "Answers grounded in your real event data",
+                  ],
+                  img: "/landing/demo-chatbot.jpg",
+                  url: "eventsh.com/…/assistant",
+                  accent: "text-violet-400",
+                },
+                {
+                  eyebrow: "For Personal Celebrations",
+                  title: "Weddings, beautifully done",
+                  desc: "A romantic, fully-themed invite you can build in minutes — your story, ceremonies, gallery and countdown.",
+                  points: [
+                    'Designer themes, fonts & an "Our Story" timeline',
+                    "Photo gallery & live ceremony announcements",
+                    "Shareable invite with directions & RSVP",
+                  ],
+                  img: "/landing/demo-wedding.jpg",
+                  url: "eventsh.com/…/aarav-and-diya",
+                  accent: "text-rose-400",
+                },
+                {
+                  eyebrow: "For Personal Celebrations",
+                  title: "RSVP & guest management",
+                  desc: "Collect RSVPs per function, see exactly who's coming, and allot rooms — even share one room across two families.",
+                  points: [
+                    "Guest list with age & per-function breakdown",
+                    "Room allotment, incl. rooms shared across parties",
+                    "Export lists & email QR room passes",
+                  ],
+                  img: "/landing/demo-rsvp.jpg",
+                  url: "eventsh.com/…/participants",
+                  accent: "text-emerald-400",
+                },
+              ].map((d, i) => {
+                const flip = i % 2 === 1;
+                return (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 30 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: "-80px" }}
+                    transition={{ duration: 0.55 }}
+                    className="grid lg:grid-cols-2 gap-8 lg:gap-14 items-center"
                   >
-                    <div className="rounded-2xl overflow-hidden border border-white/10 bg-[#121216] shadow-2xl transition-all group-hover:border-white/20">
-                      <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-white/10 bg-[#16161b]">
-                        <span className="w-2.5 h-2.5 rounded-full bg-red-400/60" />
-                        <span className="w-2.5 h-2.5 rounded-full bg-yellow-400/60" />
-                        <span className="w-2.5 h-2.5 rounded-full bg-green-400/60" />
-                        <div className="ml-3 flex-1 rounded-md bg-white/5 px-3 py-1 text-[11px] text-slate-500 truncate">
-                          {d.url}
-                        </div>
-                      </div>
-                      <div className="overflow-hidden">
-                        {/* Looping muted clip so the pitch feels alive; the JPG
-                            poster paints instantly while the tiny mp4/webm loads. */}
-                        <video
-                          poster={d.img}
-                          autoPlay
-                          loop
-                          muted
-                          playsInline
-                          preload="metadata"
-                          aria-label={d.title}
-                          className="w-full aspect-[16/10] object-cover object-top"
-                        >
-                          <source
-                            src={d.img.replace(/\.jpg$/, ".webm")}
-                            type="video/webm"
-                          />
-                          <source
-                            src={d.img.replace(/\.jpg$/, ".mp4")}
-                            type="video/mp4"
-                          />
-                        </video>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Feature copy */}
-                  <div className={cn(flip ? "lg:order-1" : "lg:order-2")}>
-                    <span
+                    {/* Screenshot in a browser frame */}
+                    <div
                       className={cn(
-                        "text-xs font-semibold uppercase tracking-[0.2em]",
-                        d.accent,
+                        "group",
+                        flip ? "lg:order-2" : "lg:order-1",
                       )}
                     >
-                      {d.eyebrow}
-                    </span>
-                    <h3 className="text-2xl md:text-3xl font-bold text-white mt-3 mb-4 tracking-tight">
-                      {d.title}
-                    </h3>
-                    <p className="text-base text-slate-400 leading-relaxed mb-6">
-                      {d.desc}
-                    </p>
-                    <ul className="space-y-3">
-                      {d.points.map((pt, j) => (
-                        <li
-                          key={j}
-                          className="flex items-start gap-3 text-slate-300"
-                        >
-                          <CheckCircle2
-                            className={cn(
-                              "w-5 h-5 mt-0.5 flex-shrink-0",
-                              d.accent,
-                            )}
-                          />
-                          <span className="text-sm md:text-base">{pt}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </motion.div>
-              );
-            })}
+                      <div className="rounded-2xl overflow-hidden border border-white/10 bg-[#121216] shadow-2xl transition-all group-hover:border-white/20">
+                        <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-white/10 bg-[#16161b]">
+                          <span className="w-2.5 h-2.5 rounded-full bg-red-400/60" />
+                          <span className="w-2.5 h-2.5 rounded-full bg-yellow-400/60" />
+                          <span className="w-2.5 h-2.5 rounded-full bg-green-400/60" />
+                          <div className="ml-3 flex-1 rounded-md bg-white/5 px-3 py-1 text-[11px] text-slate-500 truncate">
+                            {d.url}
+                          </div>
+                        </div>
+                        <div className="overflow-hidden">
+                          {/* Looping muted clip so the pitch feels alive; the JPG
+                            poster paints instantly while the tiny mp4/webm loads. */}
+                          <video
+                            poster={d.img}
+                            autoPlay
+                            loop
+                            muted
+                            playsInline
+                            preload="metadata"
+                            aria-label={d.title}
+                            className="w-full aspect-[16/10] object-cover object-top"
+                          >
+                            <source
+                              src={d.img.replace(/\.jpg$/, ".webm")}
+                              type="video/webm"
+                            />
+                            <source
+                              src={d.img.replace(/\.jpg$/, ".mp4")}
+                              type="video/mp4"
+                            />
+                          </video>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Feature copy */}
+                    <div className={cn(flip ? "lg:order-1" : "lg:order-2")}>
+                      <span
+                        className={cn(
+                          "text-xs font-semibold uppercase tracking-[0.2em]",
+                          d.accent,
+                        )}
+                      >
+                        {d.eyebrow}
+                      </span>
+                      <h3 className="text-2xl md:text-3xl font-bold text-white mt-3 mb-4 tracking-tight">
+                        {d.title}
+                      </h3>
+                      <p className="text-base text-slate-400 leading-relaxed mb-6">
+                        {d.desc}
+                      </p>
+                      <ul className="space-y-3">
+                        {d.points.map((pt, j) => (
+                          <li
+                            key={j}
+                            className="flex items-start gap-3 text-slate-300"
+                          >
+                            <CheckCircle2
+                              className={cn(
+                                "w-5 h-5 mt-0.5 flex-shrink-0",
+                                d.accent,
+                              )}
+                            />
+                            <span className="text-sm md:text-base">{pt}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
       )}
 
       {/* Public AI chatbot — FAQ + first-event onboarding (inline Google auth) */}
@@ -807,288 +996,426 @@ const LandingPage = () => {
 
       {/* Why Choose Us — hidden for now */}
       {false && (
-      <section className="py-24 bg-[#1a1a1a]">
-        <div className="container mx-auto px-4">
-          <ScrollReveal>
-            <div className="text-center mb-16">
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 tracking-tight">
-                Why Choose EventsHub?
-              </h2>
-              <p className="text-base md:text-lg text-slate-400 leading-relaxed max-w-3xl mx-auto">
-                One platform for every occasion — from ticketed expos, conferences and exhibitions to weddings and personal celebrations. Everything you need to plan, sell and host, in one place.
-              </p>
-            </div>
-          </ScrollReveal>
+        <section className="py-24 bg-[#1a1a1a]">
+          <div className="container mx-auto px-4">
+            <ScrollReveal>
+              <div className="text-center mb-16">
+                <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 tracking-tight">
+                  Why Choose EventsHub?
+                </h2>
+                <p className="text-base md:text-lg text-slate-400 leading-relaxed max-w-3xl mx-auto">
+                  One platform for every occasion — from ticketed expos,
+                  conferences and exhibitions to weddings and personal
+                  celebrations. Everything you need to plan, sell and host, in
+                  one place.
+                </p>
+              </div>
+            </ScrollReveal>
 
-          {/* Feature Cards Grid - 5 columns x 6 rows */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
-            {whyChooseFeatures.map((feature, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: (i % 5) * 0.05, duration: 0.4 }}
-                className="bg-[#121216] rounded-xl border border-white/5 p-4 hover:border-white/10 transition-all group h-full"
-                whileHover={{
-                  boxShadow: `0 0 20px 1px rgba(99,102,241,0.1)`,
-                  borderColor: "rgba(255,255,255,0.15)",
-                }}
-              >
-                <div className="flex flex-col items-center text-center h-full">
-                  <div className={cn("w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center mb-3 flex-shrink-0", feature.color)}>
-                    <feature.icon className="w-5 h-5" />
+            {/* Feature Cards Grid - 5 columns x 6 rows */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
+              {whyChooseFeatures.map((feature, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: (i % 5) * 0.05, duration: 0.4 }}
+                  className="bg-[#121216] rounded-xl border border-white/5 p-4 hover:border-white/10 transition-all group h-full"
+                  whileHover={{
+                    boxShadow: `0 0 20px 1px rgba(99,102,241,0.1)`,
+                    borderColor: "rgba(255,255,255,0.15)",
+                  }}
+                >
+                  <div className="flex flex-col items-center text-center h-full">
+                    <div
+                      className={cn(
+                        "w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center mb-3 flex-shrink-0",
+                        feature.color,
+                      )}
+                    >
+                      <feature.icon className="w-5 h-5" />
+                    </div>
+                    <h4 className="text-sm md:text-base font-bold text-white mb-2 line-clamp-2">
+                      {feature.title}
+                    </h4>
+                    <p className="text-xs md:text-sm text-slate-400 leading-relaxed line-clamp-3">
+                      {feature.desc}
+                    </p>
                   </div>
-                  <h4 className="text-sm md:text-base font-bold text-white mb-2 line-clamp-2">{feature.title}</h4>
-                  <p className="text-xs md:text-sm text-slate-400 leading-relaxed line-clamp-3">{feature.desc}</p>
-                </div>
-              </motion.div>
-            ))}
+                </motion.div>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
       )}
-
 
       {/* Everything you can do — hidden for now */}
       {false && (
-      <section className="py-24 bg-[#0a0a0c]">
-        <div className="container mx-auto px-4">
-          <ScrollReveal>
-            <div className="text-center mb-16">
-              <span className="inline-block text-xs font-semibold uppercase tracking-[0.25em] text-indigo-400 mb-4">
-                Everything you can do
-              </span>
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-5 tracking-tight">
-                A complete toolkit — no add-ons required
-              </h2>
-              <p className="text-base md:text-lg text-slate-400 leading-relaxed max-w-3xl mx-auto">
-                Every capability, in one platform. Here's the full picture, so
-                you always know what's possible.
-              </p>
-            </div>
-          </ScrollReveal>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 max-w-6xl mx-auto">
-            {[
-              { icon: Ticket, color: "text-blue-400", title: "Ticketing & Registration", items: ["Multiple ticket types & pricing tiers", "Coupons & early-bird discounts", "Walk-in / kiosk booking", "QR e-tickets via email & WhatsApp", "Multi-role registration"] },
-              { icon: Store, color: "text-rose-400", title: "Exhibitors & Stalls", items: ["Live floor-plan stall booking", "Vendor onboarding & profiles", "Payment approval & security deposits", "Edit & cancellation requests", "GST / UEN verification"] },
-              { icon: Users, color: "text-emerald-400", title: "Speakers & Sessions", items: ["Speaker slots & applications", "Session schedules & timing", "Approve speakers & issue passes"] },
-              { icon: Calendar, color: "text-cyan-400", title: "Round Tables", items: ["Gala & dinner seating", "Book by whole table or per chair", "Live seat availability"] },
-              { icon: Heart, color: "text-rose-400", title: "Weddings & Personal", items: ["Multi-function schedules", "“Our Story” timeline & gallery", "Designer themes & fonts", "Live ceremony announcements", "Countdown & directions"] },
-              { icon: CheckCircle2, color: "text-purple-400", title: "RSVP & Guests", items: ["RSVP per function", "Age & side breakdowns", "Guest-list export", "Attendance tracking"] },
-              { icon: Bed, color: "text-blue-400", title: "Room Allotment", items: ["Assign hotel rooms to guests", "Share one room across families", "Email QR room passes", "Occupancy & capacity checks"] },
-              { icon: QrCode, color: "text-purple-400", title: "Check-in & On-site", items: ["Contactless QR check-in", "Operators & volunteer helpers", "Kiosk mode", "Re-issue lost tickets"] },
-              { icon: BarChart3, color: "text-amber-400", title: "Payments & Revenue", items: ["Integrated payments", "Deposits & refunds", "Revenue & sales tracking", "Platform-fee management"] },
-              { icon: MessageSquare, color: "text-purple-400", title: "Built-in AI Assistant", items: ["Manage events by chat", "Approvals & payment confirmations", "Guest lists & pending queues", "Answers grounded in your data"] },
-              { icon: TrendingUp, color: "text-cyan-400", title: "Analytics & Feedback", items: ["Live dashboards", "Per-event statistics", "Historical event analysis", "Post-event feedback"] },
-              { icon: Shield, color: "text-blue-400", title: "Team, Branding & Plans", items: ["Operators with scoped access", "White-label branded pages", "Custom store link & storefront", "Memberships, plans & add-ons"] },
-            ].map((c, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 18 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: (i % 3) * 0.06, duration: 0.4 }}
-                className="rounded-xl border border-white/5 bg-[#121216] p-5 hover:border-white/15 transition-all"
-              >
-                <div
-                  className={cn(
-                    "w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center mb-4",
-                    c.color,
-                  )}
+        <section className="py-24 bg-[#0a0a0c]">
+          <div className="container mx-auto px-4">
+            <ScrollReveal>
+              <div className="text-center mb-16">
+                <span className="inline-block text-xs font-semibold uppercase tracking-[0.25em] text-indigo-400 mb-4">
+                  Everything you can do
+                </span>
+                <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-5 tracking-tight">
+                  A complete toolkit — no add-ons required
+                </h2>
+                <p className="text-base md:text-lg text-slate-400 leading-relaxed max-w-3xl mx-auto">
+                  Every capability, in one platform. Here's the full picture, so
+                  you always know what's possible.
+                </p>
+              </div>
+            </ScrollReveal>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 max-w-6xl mx-auto">
+              {[
+                {
+                  icon: Ticket,
+                  color: "text-blue-400",
+                  title: "Ticketing & Registration",
+                  items: [
+                    "Multiple ticket types & pricing tiers",
+                    "Coupons & early-bird discounts",
+                    "Walk-in / kiosk booking",
+                    "QR e-tickets via email & WhatsApp",
+                    "Multi-role registration",
+                  ],
+                },
+                {
+                  icon: Store,
+                  color: "text-rose-400",
+                  title: "Exhibitors & Stalls",
+                  items: [
+                    "Live floor-plan stall booking",
+                    "Vendor onboarding & profiles",
+                    "Payment approval & security deposits",
+                    "Edit & cancellation requests",
+                    "GST / UEN verification",
+                  ],
+                },
+                {
+                  icon: Users,
+                  color: "text-emerald-400",
+                  title: "Speakers & Sessions",
+                  items: [
+                    "Speaker slots & applications",
+                    "Session schedules & timing",
+                    "Approve speakers & issue passes",
+                  ],
+                },
+                {
+                  icon: Calendar,
+                  color: "text-cyan-400",
+                  title: "Round Tables",
+                  items: [
+                    "Gala & dinner seating",
+                    "Book by whole table or per chair",
+                    "Live seat availability",
+                  ],
+                },
+                {
+                  icon: Heart,
+                  color: "text-rose-400",
+                  title: "Weddings & Personal",
+                  items: [
+                    "Multi-function schedules",
+                    "“Our Story” timeline & gallery",
+                    "Designer themes & fonts",
+                    "Live ceremony announcements",
+                    "Countdown & directions",
+                  ],
+                },
+                {
+                  icon: CheckCircle2,
+                  color: "text-purple-400",
+                  title: "RSVP & Guests",
+                  items: [
+                    "RSVP per function",
+                    "Age & side breakdowns",
+                    "Guest-list export",
+                    "Attendance tracking",
+                  ],
+                },
+                {
+                  icon: Bed,
+                  color: "text-blue-400",
+                  title: "Room Allotment",
+                  items: [
+                    "Assign hotel rooms to guests",
+                    "Share one room across families",
+                    "Email QR room passes",
+                    "Occupancy & capacity checks",
+                  ],
+                },
+                {
+                  icon: QrCode,
+                  color: "text-purple-400",
+                  title: "Check-in & On-site",
+                  items: [
+                    "Contactless QR check-in",
+                    "Operators & volunteer helpers",
+                    "Kiosk mode",
+                    "Re-issue lost tickets",
+                  ],
+                },
+                {
+                  icon: BarChart3,
+                  color: "text-amber-400",
+                  title: "Payments & Revenue",
+                  items: [
+                    "Integrated payments",
+                    "Deposits & refunds",
+                    "Revenue & sales tracking",
+                    "Platform-fee management",
+                  ],
+                },
+                {
+                  icon: MessageSquare,
+                  color: "text-purple-400",
+                  title: "Built-in AI Assistant",
+                  items: [
+                    "Manage events by chat",
+                    "Approvals & payment confirmations",
+                    "Guest lists & pending queues",
+                    "Answers grounded in your data",
+                  ],
+                },
+                {
+                  icon: TrendingUp,
+                  color: "text-cyan-400",
+                  title: "Analytics & Feedback",
+                  items: [
+                    "Live dashboards",
+                    "Per-event statistics",
+                    "Historical event analysis",
+                    "Post-event feedback",
+                  ],
+                },
+                {
+                  icon: Shield,
+                  color: "text-blue-400",
+                  title: "Team, Branding & Plans",
+                  items: [
+                    "Operators with scoped access",
+                    "White-label branded pages",
+                    "Custom store link & storefront",
+                    "Memberships, plans & add-ons",
+                  ],
+                },
+              ].map((c, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 18 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: (i % 3) * 0.06, duration: 0.4 }}
+                  className="rounded-xl border border-white/5 bg-[#121216] p-5 hover:border-white/15 transition-all"
                 >
-                  <c.icon className="w-5 h-5" />
-                </div>
-                <h4 className="text-white font-bold mb-3">{c.title}</h4>
-                <ul className="space-y-2">
-                  {c.items.map((it, j) => (
-                    <li
-                      key={j}
-                      className="flex items-start gap-2 text-sm text-slate-400 leading-relaxed"
-                    >
-                      <CheckCircle2
-                        className={cn(
-                          "w-4 h-4 mt-0.5 flex-shrink-0",
-                          c.color,
-                        )}
-                      />
-                      <span>{it}</span>
-                    </li>
-                  ))}
-                </ul>
-              </motion.div>
-            ))}
+                  <div
+                    className={cn(
+                      "w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center mb-4",
+                      c.color,
+                    )}
+                  >
+                    <c.icon className="w-5 h-5" />
+                  </div>
+                  <h4 className="text-white font-bold mb-3">{c.title}</h4>
+                  <ul className="space-y-2">
+                    {c.items.map((it, j) => (
+                      <li
+                        key={j}
+                        className="flex items-start gap-2 text-sm text-slate-400 leading-relaxed"
+                      >
+                        <CheckCircle2
+                          className={cn(
+                            "w-4 h-4 mt-0.5 flex-shrink-0",
+                            c.color,
+                          )}
+                        />
+                        <span>{it}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </motion.div>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
       )}
 
       {/* Steps Section — hidden for now (kept for later) */}
       {false && (
-      <section className="py-16 md:py-24 bg-[#0a0a0c] relative z-10">
-        <div className="container mx-auto px-4 max-w-5xl">
-          <div className="text-center mb-8 md:mb-16">
-            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4">
-              Create Your Event in 4 Easy Steps
-            </h2>
-          </div>
-
-          {/* Carousel Image Box - Aspect 17/10 */}
-          <div
-            className="relative w-full aspect-[16/10] md:aspect-[17/10] rounded-t-2xl md:rounded-t-3xl overflow-hidden border-x border-t border-white/10 bg-[#121216] shadow-2xl group"
-            onMouseEnter={() => setIsCarouselPaused(true)}
-            onMouseLeave={() => setIsCarouselPaused(false)}
-          >
-            <AnimatePresence mode="wait">
-              <motion.img
-                key={activeStepIndex}
-                src={eventSteps[activeStepIndex].image}
-                loading="lazy"
-                decoding="async"
-                initial={{ opacity: 0, scale: 1.05 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.5 }}
-                className="w-full h-full object-cover"
-              />
-            </AnimatePresence>
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0c]/40 to-transparent" />
-
-            {/* Navigation Buttons - Hidden on small mobile */}
-            <div className="hidden sm:flex absolute inset-0 items-center justify-between px-4 md:px-6 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-              <button
-                onClick={() =>
-                  setActiveStepIndex(
-                    (prev) =>
-                      (prev - 1 + eventSteps.length) % eventSteps.length,
-                  )
-                }
-                className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white hover:bg-black/70 hover:border-white/40 transition-all"
-              >
-                <svg
-                  className="w-5 h-5 md:w-6 md:h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 19l-7-7 7-7"
-                  />
-                </svg>
-              </button>
-              <button
-                onClick={() =>
-                  setActiveStepIndex((prev) => (prev + 1) % eventSteps.length)
-                }
-                className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white hover:bg-black/70 hover:border-white/40 transition-all"
-              >
-                <svg
-                  className="w-5 h-5 md:w-6 md:h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 5l7 7-7 7"
-                  />
-                </svg>
-              </button>
+        <section className="py-16 md:py-24 bg-[#0a0a0c] relative z-10">
+          <div className="container mx-auto px-4 max-w-5xl">
+            <div className="text-center mb-8 md:mb-16">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4">
+                Create Your Event in 4 Easy Steps
+              </h2>
             </div>
-          </div>
 
-          {/* Browser Tab Layout / Steps Below */}
-          <div className="grid grid-cols-2 md:grid-cols-4 border-b border-x border-white/10 rounded-b-2xl md:rounded-b-3xl bg-[#0d0d11] overflow-hidden">
-            {eventSteps.map((step, index) => (
-              <button
-                key={index}
-                onClick={() => setActiveStepIndex(index)}
-                className={cn(
-                  "relative py-4 md:py-6 px-2 md:px-4 flex flex-col items-center gap-1 md:gap-2 transition-all group border-r border-white/5 last:border-r-0",
-                  "md:border-b-0 border-b border-b-white/5",
-                  "[&:nth-child(1)]:border-b md:[&:nth-child(1)]:border-b-0",
-                  "[&:nth-child(2)]:border-b md:[&:nth-child(2)]:border-b-0",
-                  "[&:nth-child(2)]:border-r-0 md:[&:nth-child(2)]:border-r",
-                  activeStepIndex === index
-                    ? "bg-[#16161c]"
-                    : "hover:bg-white/5",
-                )}
-              >
-                <div
+            {/* Carousel Image Box - Aspect 17/10 */}
+            <div
+              className="relative w-full aspect-[16/10] md:aspect-[17/10] rounded-t-2xl md:rounded-t-3xl overflow-hidden border-x border-t border-white/10 bg-[#121216] shadow-2xl group"
+              onMouseEnter={() => setIsCarouselPaused(true)}
+              onMouseLeave={() => setIsCarouselPaused(false)}
+            >
+              <AnimatePresence mode="wait">
+                <motion.img
+                  key={activeStepIndex}
+                  src={eventSteps[activeStepIndex].image}
+                  loading="lazy"
+                  decoding="async"
+                  initial={{ opacity: 0, scale: 1.05 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.5 }}
+                  className="w-full h-full object-cover"
+                />
+              </AnimatePresence>
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0c]/40 to-transparent" />
+
+              {/* Navigation Buttons - Hidden on small mobile */}
+              <div className="hidden sm:flex absolute inset-0 items-center justify-between px-4 md:px-6 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <button
+                  onClick={() =>
+                    setActiveStepIndex(
+                      (prev) =>
+                        (prev - 1 + eventSteps.length) % eventSteps.length,
+                    )
+                  }
+                  className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white hover:bg-black/70 hover:border-white/40 transition-all"
+                >
+                  <svg
+                    className="w-5 h-5 md:w-6 md:h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 19l-7-7 7-7"
+                    />
+                  </svg>
+                </button>
+                <button
+                  onClick={() =>
+                    setActiveStepIndex((prev) => (prev + 1) % eventSteps.length)
+                  }
+                  className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white hover:bg-black/70 hover:border-white/40 transition-all"
+                >
+                  <svg
+                    className="w-5 h-5 md:w-6 md:h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Browser Tab Layout / Steps Below */}
+            <div className="grid grid-cols-2 md:grid-cols-4 border-b border-x border-white/10 rounded-b-2xl md:rounded-b-3xl bg-[#0d0d11] overflow-hidden">
+              {eventSteps.map((step, index) => (
+                <button
+                  key={index}
+                  onClick={() => setActiveStepIndex(index)}
                   className={cn(
-                    "flex flex-col md:flex-row items-center gap-1 md:gap-3 transition-colors",
+                    "relative py-4 md:py-6 px-2 md:px-4 flex flex-col items-center gap-1 md:gap-2 transition-all group border-r border-white/5 last:border-r-0",
+                    "md:border-b-0 border-b border-b-white/5",
+                    "[&:nth-child(1)]:border-b md:[&:nth-child(1)]:border-b-0",
+                    "[&:nth-child(2)]:border-b md:[&:nth-child(2)]:border-b-0",
+                    "[&:nth-child(2)]:border-r-0 md:[&:nth-child(2)]:border-r",
                     activeStepIndex === index
-                      ? "text-primary"
-                      : "text-slate-500 group-hover:text-slate-300",
+                      ? "bg-[#16161c]"
+                      : "hover:bg-white/5",
                   )}
                 >
-                  <step.icon className="w-4 h-4 md:w-5 md:h-5" />
-                  <span className="font-bold text-xs sm:text-sm md:text-base uppercase tracking-wider text-center">
-                    {step.title}
-                  </span>
-                </div>
-                
-                {/* Active Indicator Line */}
-                {activeStepIndex === index && (
-                  <motion.div 
-                    layoutId="activeTab"
-                    className="absolute bottom-0 left-0 right-0 h-1 bg-primary"
-                  />
-                )}
-              </button>
-            ))}
+                  <div
+                    className={cn(
+                      "flex flex-col md:flex-row items-center gap-1 md:gap-3 transition-colors",
+                      activeStepIndex === index
+                        ? "text-primary"
+                        : "text-slate-500 group-hover:text-slate-300",
+                    )}
+                  >
+                    <step.icon className="w-4 h-4 md:w-5 md:h-5" />
+                    <span className="font-bold text-xs sm:text-sm md:text-base uppercase tracking-wider text-center">
+                      {step.title}
+                    </span>
+                  </div>
+
+                  {/* Active Indicator Line */}
+                  {activeStepIndex === index && (
+                    <motion.div
+                      layoutId="activeTab"
+                      className="absolute bottom-0 left-0 right-0 h-1 bg-primary"
+                    />
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
       )}
 
       {/* FAQ Section — hidden for now */}
       {false && (
-      <section className="py-24 bg-[#0a0a0c]">
-        <div className="container mx-auto px-4 max-w-3xl">
-          <h2 className="text-3xl md:text-5xl font-bold text-white mb-12 text-center">Frequently Asked Questions</h2>
-          <div className="space-y-4">
-            {faqs.map((faq, i) => (
-              <div
-                key={i}
-                className="bg-[#121216] border border-white/5 rounded-2xl overflow-hidden"
-              >
-                <button
-                  className="w-full px-8 py-6 flex items-center justify-between text-left hover:bg-white/5 transition-colors"
-                  onClick={() => setOpenFaqIndex(openFaqIndex === i ? null : i)}
+        <section className="py-24 bg-[#0a0a0c]">
+          <div className="container mx-auto px-4 max-w-3xl">
+            <h2 className="text-3xl md:text-5xl font-bold text-white mb-12 text-center">
+              Frequently Asked Questions
+            </h2>
+            <div className="space-y-4">
+              {faqs.map((faq, i) => (
+                <div
+                  key={i}
+                  className="bg-[#121216] border border-white/5 rounded-2xl overflow-hidden"
                 >
-                  <span className="text-lg font-bold text-white">{faq.question}</span>
-                  <ChevronDown
-                    className={cn(
-                      "w-5 h-5 text-slate-400 transition-transform duration-300",
-                      openFaqIndex === i && "rotate-180"
+                  <button
+                    className="w-full px-8 py-6 flex items-center justify-between text-left hover:bg-white/5 transition-colors"
+                    onClick={() =>
+                      setOpenFaqIndex(openFaqIndex === i ? null : i)
+                    }
+                  >
+                    <span className="text-lg font-bold text-white">
+                      {faq.question}
+                    </span>
+                    <ChevronDown
+                      className={cn(
+                        "w-5 h-5 text-slate-400 transition-transform duration-300",
+                        openFaqIndex === i && "rotate-180",
+                      )}
+                    />
+                  </button>
+                  <AnimatePresence>
+                    {openFaqIndex === i && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        <div className="px-8 pb-6 text-slate-400 leading-relaxed">
+                          {faq.answer}
+                        </div>
+                      </motion.div>
                     )}
-                  />
-                </button>
-                <AnimatePresence>
-                  {openFaqIndex === i && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <div className="px-8 pb-6 text-slate-400 leading-relaxed">
-                        {faq.answer}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            ))}
+                  </AnimatePresence>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
       )}
 
       <TestimonialsCarousel />
@@ -1098,15 +1425,26 @@ const LandingPage = () => {
         <div className="absolute inset-0 bg-primary/5" />
         <div className="container mx-auto px-4 relative z-10">
           <div className="max-w-4xl mx-auto text-center bg-[#121216] p-12 md:p-20 rounded-[3rem] border border-white/5 shadow-2xl">
-            <h2 className="text-4xl md:text-6xl font-bold text-white mb-8">Ready to Scale?</h2>
+            <h2 className="text-4xl md:text-6xl font-bold text-white mb-8">
+              Ready to Scale?
+            </h2>
             <p className="text-xl text-slate-400 mb-12 max-w-2xl mx-auto">
               Join thousands of organizers and businesses growing with Eventsh.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button size="xl" onClick={onShowLogin} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-white px-12 py-7 rounded-2xl font-bold text-lg">
+              <Button
+                size="xl"
+                onClick={onShowLogin}
+                className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-white px-12 py-7 rounded-2xl font-bold text-lg"
+              >
                 Get Started Now
               </Button>
-              <Button size="xl" variant="outline" onClick={contactUs} className="w-full sm:w-auto border-white/10 hover:bg-white/5 text-white px-12 py-7 rounded-2xl font-bold text-lg bg-black">
+              <Button
+                size="xl"
+                variant="outline"
+                onClick={contactUs}
+                className="w-full sm:w-auto border-white/10 hover:bg-white/5 text-white px-12 py-7 rounded-2xl font-bold text-lg bg-black"
+              >
                 Contact Sales
               </Button>
             </div>
