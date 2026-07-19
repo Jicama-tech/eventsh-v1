@@ -129,16 +129,34 @@ export default function DashboardOverview({
       isToday(new Date(ticket.purchaseDate)),
     ).length;
 
-    // Calculate stall metrics for this event
-    const eventStalls = stalls.filter(
-      (stall) =>
-        stall.eventId &&
-        (stall.eventId._id === event._id || stall.eventId === event._id),
-    );
+    // Calculate stall metrics for this event ONLY — eventId can arrive
+    // populated (object) or as a plain id; normalize both sides to strings
+    // so a type mismatch never leaks other events' stalls into this card.
+    const evId = String(event._id);
+    const eventStalls = stalls.filter((stall) => {
+      const raw = stall.eventId;
+      if (!raw) return false;
+      const sid = typeof raw === "object" ? raw._id : raw;
+      return String(sid) === evId;
+    });
 
-    const stallsBooked = eventStalls.filter((stall) =>
-      ["Confirmed", "Processing", "Completed"].includes(stall.status),
-    ).length;
+    // Booked = SPACES sold on this event's stalls (one vendor buying 3
+    // spaces counts 3), for stalls that are Processing (paid, pending
+    // approval) / Confirmed / Completed — same rule as the analytics
+    // dialogs and the chatbot. Keeps the numerator in the same unit as the
+    // "/ sellableSpaces" denominator below.
+    const stallsBooked = eventStalls
+      .filter((stall) =>
+        ["Confirmed", "Processing", "Completed"].includes(stall.status),
+      )
+      .reduce(
+        (sum, stall) =>
+          sum +
+          (Array.isArray(stall.selectedTables)
+            ? stall.selectedTables.length
+            : 0),
+        0,
+      );
 
     const stallsPending = eventStalls.filter(
       (stall) => stall.status === "Pending",
@@ -226,10 +244,21 @@ export default function DashboardOverview({
       0,
     );
 
-    // Calculate stalls statistics
-    const totalStallsBooked = stallsData.filter((stall) =>
-      ["Confirmed", "Processing", "Completed"].includes(stall.status),
-    ).length;
+    // Calculate stalls statistics — same unit as the per-event cards:
+    // SPACES sold across all events (a vendor's multi-space booking counts
+    // each space), Processing/Confirmed/Completed only.
+    const totalStallsBooked = stallsData
+      .filter((stall) =>
+        ["Confirmed", "Processing", "Completed"].includes(stall.status),
+      )
+      .reduce(
+        (sum, stall) =>
+          sum +
+          (Array.isArray(stall.selectedTables)
+            ? stall.selectedTables.length
+            : 0),
+        0,
+      );
 
     const stallsRevenue = stallsData
       .filter(
