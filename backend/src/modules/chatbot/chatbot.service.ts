@@ -1061,8 +1061,16 @@ export class ChatbotService {
             },
             status: {
               type: "string",
-              enum: ["all", "Confirmed", "Approved", "Processing", "Completed"],
-              description: "Filter by booking status (default 'all')",
+              enum: [
+                "all",
+                "Pending",
+                "Confirmed",
+                "Approved",
+                "Processing",
+                "Completed",
+              ],
+              description:
+                "Filter by booking status. Default 'all' = every live stall (excludes Cancelled/Rejected/Declined).",
             },
           },
           required: ["event_name"],
@@ -1148,8 +1156,9 @@ export class ChatbotService {
           properties: {
             status: {
               type: "string",
-              enum: ["active", "pending", "all"],
-              description: "Filter by membership status (default 'all')",
+              enum: ["active", "pending", "expired", "cancelled", "all"],
+              description:
+                "Filter by membership status (default 'all'). 'pending' covers both pending_payment and pending_verification.",
             },
             limit: {
               type: "number",
@@ -1582,8 +1591,8 @@ IMPORTANT: for the three pending-queue tools below the INTERFACE renders each it
 - "Feedback for <event>" / "ratings for <event>" → get_event_feedback(event_name). Lead with "**{avg}★ from {count}**", then a table | From | Rating | Comment |.
 
 MEMBERSHIP & SPACES:
-- "Membership plans" / "exhibitor membership tiers" / "what membership plans do I have" → get_membership_plans. Render: headline "You have **N membership plans** with **M active members**." Then a table | Plan | Price | Duration | Members | Active |.
-- "Show members" / "active memberships" / "who has a membership" → get_exhibitor_memberships. Render: headline "**N memberships**" then | # | Name | Email | Plan | Status | Start | End |.
+- "Membership plans" / "exhibitor membership tiers" / "what membership plans do I have" → get_membership_plans. Render: headline "You have **N membership plans** with **M active members**." Then a table | Plan | Price | Duration | Published | Members |.
+- "List my members" / "show members" / "my members" / "active memberships" / "who has a membership" / "vendors with membership" → get_exhibitor_memberships. Render: headline "**N memberships (M active)**" then | # | Name | Email | Plan | Status | Amount | Start | End |. Statuses: pending_payment → "Awaiting payment", pending_verification → "Verify payment", keep active/expired/cancelled as-is.
 - "What spaces are available in <event>" / "how many Premium spaces in <event>" → get_event_venue(event_name). Render: Venue table + per-type breakdown table.
 - "Who is exhibiting at <event>" → get_event_exhibitors(event_name). Render: | # | Business | Shop | Category | Spaces | Status | Payment | Member | table.
 
@@ -1629,7 +1638,7 @@ Focus: subscription plan, operators, profile, organization configuration.
 - "Show all plans" / "list plans" → list_plans. Table: | Plan | Price | Validity | Default |.
 - "List operators" / "my operators" → list_operators. Table: | Name | Email | WhatsApp | Tabs |.
 - "My profile" → get_organizer_info. Render as bold key-value pairs.
-- "Membership plans" / "exhibitor membership tiers" → get_membership_plans. Render: headline + | Plan | Price | Duration | Members | Active | table.
+- "Membership plans" / "exhibitor membership tiers" → get_membership_plans. Render: headline + | Plan | Price | Duration | Published | Members | table.
 - "Show all my settings" / "organization details" / "my org configuration" / "organization settings" → get_organization_settings. Render as a 2-column key-value table with sections: Profile (Name / Org Name / Email / Country / WhatsApp), Plan (Plan Name / Price / Expiry / Subscribed), Payment Methods (UPI / Bank / PayNow / QR — show ✓ or ✗), Other (Operators count / Slug / Commission %). Use **bold** for section headers between rows or render as 4 separate small tables.
 - To CHANGE plan / add operator / edit profile, call navigate_to(settings).`,
 
@@ -3522,6 +3531,18 @@ ${context}
     )
       return "feedback";
 
+    // Memberships (exhibitor CRM) + space availability — deterministic so
+    // "list my members" / "how many spaces are left in X" never fall through
+    // to the LLM router. Stalls specialist owns the membership + venue tools.
+    if (/\b(member|members|membership|memberships)\b/.test(m)) return "stalls";
+    if (
+      /\b(space|spaces|booth|booths)\b/.test(m) &&
+      /\b(left|available|free|remaining|open|booked|sold\s*out|layout|floor\s*plan)\b/.test(
+        m,
+      )
+    )
+      return "stalls";
+
     // Specific subjects — read/query verbs win over the generic "event" word
     if (/\b(attendee|attendees|who came|visitors|guest list)\b/.test(m))
       return "attendees";
@@ -4225,6 +4246,12 @@ ${context}
     if (
       /\b(list|show( me)?|all)\b.*\b(exhibitors?|vendors?)\b/.test(m) &&
       !/\b(per|for)\s+(an?\s+|the\s+)?event\b/.test(m) &&
+      // A quoted title means event-scoped ("Show exhibitors for \"X\"" from
+      // the event picker) — let the stalls specialist call
+      // get_event_exhibitors instead.
+      !/"[^"]+"|'[^']+'/.test(message) &&
+      // "vendors with membership" → membership tools, not the org-wide list.
+      !/\bmembers?\b|\bmembership/.test(m) &&
       !/\bpending\b/.test(m) &&
       !/\bapproved\b/.test(m)
     ) {
@@ -4474,7 +4501,7 @@ ${context}
   } | null> {
     const m = message.toLowerCase();
     const intentRe =
-      /\b(tickets?|stalls?|speakers?|attendees?|round\s*tables?|participation(?:\s*report)?)\s+(?:per|for)\s+(?:an?\s+|the\s+)?event\b/i;
+      /\b(tickets?|stalls?|speakers?|attendees?|round\s*tables?|spaces?|exhibitors?|participation(?:\s*report)?)\s+(?:per|for)\s+(?:an?\s+|the\s+)?event\b/i;
     const match = m.match(intentRe);
     if (!match) return null;
 
@@ -4492,7 +4519,9 @@ ${context}
       ? "round tables"
       : /participation/.test(rawIntent)
         ? "participation report"
-        : rawIntent.replace(/s$/, "") + "s";
+        : /^space/.test(rawIntent)
+          ? "space availability"
+          : rawIntent.replace(/s$/, "") + "s";
 
     const orgObjId = Types.ObjectId.isValid(organizerId)
       ? new Types.ObjectId(organizerId)
@@ -4529,7 +4558,11 @@ ${context}
               ? "List attendees for"
               : intent === "participation report"
                 ? "Show participation report for"
-                : "Show round tables for";
+                : intent === "space availability"
+                  ? "What spaces are available in"
+                  : intent === "exhibitors"
+                    ? "Show exhibitors for"
+                    : "Show round tables for";
 
     return {
       text: `Pick an event to see its **${intent}**:`,
@@ -6096,8 +6129,10 @@ ${context}
 
       // ── Membership / exhibitor CRM ──
       case "get_membership_plans": {
+        // Schema fields: name / price / currency / durationDays / perks /
+        // published / archived. Archived plans are soft-deleted — hide them.
         const plans = await this.membershipPlanModel
-          .find({ organizerId: orgObjId, isActive: { $ne: false } })
+          .find({ organizerId: orgObjId, archived: { $ne: true } })
           .lean();
         const memberships = await this.exhibitorMembershipModel
           .find({
@@ -6110,48 +6145,80 @@ ${context}
           const pid = String(m.planId || "");
           memberCountByPlanId[pid] = (memberCountByPlanId[pid] || 0) + 1;
         }
+        const fmtDuration = (days: number) =>
+          days % 365 === 0
+            ? `${days / 365} year${days / 365 > 1 ? "s" : ""}`
+            : days % 30 === 0
+              ? `${days / 30} month${days / 30 > 1 ? "s" : ""}`
+              : `${days} days`;
         const items = plans.map((p: any) => ({
-          name: p.name || p.planName || "—",
+          name: p.name || "—",
           price: p.price != null ? Number(p.price) : null,
-          priceINR: p.priceINR != null ? Number(p.priceINR) : null,
-          duration: p.durationMonths
-            ? `${p.durationMonths} months`
-            : p.durationWeeks
-              ? `${p.durationWeeks} weeks`
-              : p.durationDays
-                ? `${p.durationDays} days`
-                : "—",
-          benefits: Array.isArray(p.benefits) ? p.benefits : [],
-          isActive: p.isActive !== false,
+          currency: p.currency || "",
+          duration: p.durationDays ? fmtDuration(Number(p.durationDays)) : "—",
+          perks: Array.isArray(p.perks) ? p.perks : [],
+          published: p.published === true,
           memberCount: memberCountByPlanId[String(p._id)] || 0,
         }));
         return {
           total: items.length,
-          totalMembers: memberships.length,
+          totalActiveMembers: memberships.length,
           plans: items,
         };
       }
 
       case "get_exhibitor_memberships": {
+        // Status enum: pending_payment | pending_verification | active |
+        // expired | cancelled. "pending" from the model maps to both
+        // pending_* states.
         const statusFilter =
-          args.status && args.status !== "all" ? { status: args.status } : {};
+          args.status && args.status !== "all"
+            ? /^pending/.test(String(args.status))
+              ? {
+                  status: {
+                    $in: ["pending_payment", "pending_verification"],
+                  },
+                }
+              : { status: args.status }
+            : {};
         const limit = Number(args.limit) || 100;
         const rows = await this.exhibitorMembershipModel
           .find({ organizerId: orgObjId, ...statusFilter })
           .sort({ createdAt: -1 })
           .limit(Math.min(limit, 200))
           .lean();
+        // Plan name lives on MembershipPlan — join via planId.
+        const planIds = [
+          ...new Set(rows.map((r: any) => String(r.planId || "")).filter(Boolean)),
+        ];
+        const planNameById = new Map<string, string>();
+        if (planIds.length > 0) {
+          const plans = await this.membershipPlanModel
+            .find({ _id: { $in: planIds } })
+            .select("name")
+            .lean();
+          for (const p of plans) {
+            planNameById.set(String((p as any)._id), (p as any).name || "—");
+          }
+        }
+        const fmtDate = (d: any) =>
+          d ? new Date(d).toISOString().slice(0, 10) : "—";
         const items = rows.map((r: any, i: number) => ({
           "#": i + 1,
-          name: r.exhibitorName || r.name || "—",
-          email: r.exhibitorEmail || r.email || "—",
-          plan: r.planName || "—",
+          name: r.exhibitorName || "—",
+          email: r.exhibitorEmail || "—",
+          plan: planNameById.get(String(r.planId || "")) || "—",
           status: r.status || "—",
-          startDate: r.startDate || r.createdAt || "",
-          endDate: r.endDate || r.expiryDate || "",
+          amountPaid:
+            r.amountPaid != null
+              ? `${r.currency || ""} ${r.amountPaid}`.trim()
+              : "—",
+          startDate: fmtDate(r.startDate),
+          endDate: fmtDate(r.endDate),
         }));
         return {
           total: rows.length,
+          activeCount: rows.filter((r: any) => r.status === "active").length,
           memberships: items,
         };
       }
@@ -6167,38 +6234,75 @@ ${context}
         if (!ev) return { error: `No event matching "${args.event_name}"` };
         const evObj: any = ev;
 
-        // Resolve per-template availability by counting placed positions vs
-        // booked positions for each template.
+        // Booked = a placed space whose positionId appears in some live
+        // stall's selectedTables — the same join the Space Analytics dialog
+        // uses. venueTables[].isBooked is NOT reliable (a vendor can hold
+        // several spaces on one stall; isBooked isn't always synced).
+        const deadStatuses = ["Cancelled", "Rejected", "Declined"];
+        const stalls = await this.stallModel
+          .find({ eventId: evObj._id, status: { $nin: deadStatuses } })
+          .select("selectedTables status")
+          .lean();
+        const bookedPositionIds = new Set<string>();
+        for (const s of stalls) {
+          for (const t of (s as any).selectedTables || []) {
+            if (t?.positionId) bookedPositionIds.add(String(t.positionId));
+          }
+        }
+
         const templates: any[] = evObj.tableTemplates || [];
         const placed = this.flattenVenueCollection(evObj.venueTables);
-        const templatesOut = templates.map((tpl: any) => {
-          if (tpl.forSale === false) return null;
-          const positions = placed.filter((p: any) => p.id === tpl.id);
-          const total = positions.length;
-          const booked = positions.filter((p: any) => p.isBooked).length;
-          const free = total - booked;
-          return {
-            name: tpl.name || "—",
-            type: tpl.type || "Straight",
-            size: tpl.width && tpl.height ? `${tpl.width}×${tpl.height}cm` : "—",
-            price: tpl.tablePrice != null ? Number(tpl.tablePrice) : null,
-            bookingPrice:
-              tpl.bookingPrice != null ? Number(tpl.bookingPrice) : null,
-            depositPrice:
-              tpl.depositPrice != null ? Number(tpl.depositPrice) : null,
-            memberPrice:
-              tpl.memberPrice != null ? Number(tpl.memberPrice) : null,
-            total,
-            booked,
-            free,
-            full: free <= 0 && total > 0,
-          };
-        }).filter(Boolean);
+        const templatesOut = templates
+          .map((tpl: any) => {
+            if (tpl.forSale === false) return null;
+            const positions = placed.filter(
+              (p: any) => String(p.id) === String(tpl.id),
+            );
+            // Defensive: template counts as display-only when every placed
+            // space of it is forSale:false (mirrors the analytics dialog).
+            if (
+              positions.length > 0 &&
+              positions.every((p: any) => p.forSale === false)
+            )
+              return null;
+            const total = positions.length;
+            const booked = positions.filter((p: any) =>
+              bookedPositionIds.has(String(p.positionId)),
+            ).length;
+            const free = total - booked;
+            return {
+              name: tpl.name || "—",
+              type: tpl.type || "Straight",
+              size:
+                tpl.width && tpl.height ? `${tpl.width}×${tpl.height}cm` : "—",
+              price:
+                tpl.price != null
+                  ? Number(tpl.price)
+                  : tpl.tablePrice != null
+                    ? Number(tpl.tablePrice)
+                    : null,
+              bookingPrice:
+                tpl.bookingPrice != null ? Number(tpl.bookingPrice) : null,
+              depositPrice:
+                tpl.depositPrice != null ? Number(tpl.depositPrice) : null,
+              memberPrice:
+                tpl.memberPrice != null ? Number(tpl.memberPrice) : null,
+              total,
+              booked,
+              free,
+              full: free <= 0 && total > 0,
+            };
+          })
+          .filter(Boolean);
 
-        const vt = this.flattenVenueCollection(evObj.venueTables);
-        const sellable = vt.filter((t: any) => t.forSale !== false);
-        const totalPlaced = sellable.length;
-        const totalBooked = sellable.filter((t: any) => t.isBooked).length;
+        const totalPlaced = (templatesOut as any[]).reduce(
+          (s: number, t: any) => s + t.total,
+          0,
+        );
+        const totalBooked = (templatesOut as any[]).reduce(
+          (s: number, t: any) => s + t.booked,
+          0,
+        );
 
         const vc = (evObj.venueConfig || [])[0] || {};
         return {
@@ -6229,12 +6333,14 @@ ${context}
         if (!ev) return { error: `No event matching "${args.event_name}"` };
         const evObj: any = ev;
 
-        const statusFilter =
+        // Default: every live stall (anything not Cancelled/Rejected/
+        // Declined) — matches what the Space Analytics dialog counts.
+        const stallStatusQuery =
           args.status && args.status !== "all"
-            ? [args.status]
-            : ["Confirmed", "Approved", "Processing", "Completed"];
+            ? { status: args.status }
+            : { status: { $nin: ["Cancelled", "Rejected", "Declined"] } };
         const stalls = await this.stallModel
-          .find({ eventId: evObj._id, status: { $in: statusFilter } })
+          .find({ eventId: evObj._id, ...stallStatusQuery })
           .lean();
 
         let vendorCache: Map<string, any> = new Map();
