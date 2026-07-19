@@ -4,6 +4,8 @@ import { Model, Types } from "mongoose";
 import OpenAI from "openai";
 import { buildDefaultStorefrontSettings } from "../organizer-stores/default-settings";
 import { StallsService } from "../stalls/stalls.service";
+import { MembershipPlan } from "../memberships/schemas/membership-plan.schema";
+import { ExhibitorMembership } from "../memberships/schemas/exhibitor-membership.schema";
 import {
   GUIDE_INTRO,
   ORGANIZER_GUIDE_TOPICS,
@@ -128,6 +130,10 @@ const TOOL_GUARDED_BY: Record<string, OperatorTab> = {
   list_space_templates: "events",
   list_stalls: "events",
   list_speakers: "events",
+  get_event_venue: "events",
+  get_event_exhibitors: "events",
+  get_membership_plans: "settings",
+  get_exhibitor_memberships: "users",
   // Attendees / tickets
   list_tickets: "eventAttendees",
   get_ticket_detail: "eventAttendees",
@@ -366,6 +372,9 @@ export class ChatbotService {
     @InjectModel("User") private userModel: Model<any>,
     @InjectModel("Rsvp") private rsvpModel: Model<any>,
     @InjectModel("OrganizerStore") private organizerStoreModel: Model<any>,
+    @InjectModel(MembershipPlan.name) private membershipPlanModel: Model<any>,
+    @InjectModel(ExhibitorMembership.name)
+    private exhibitorMembershipModel: Model<any>,
     private readonly stallsService: StallsService,
   ) {
     const useQwen = !!process.env.QWEN_API_KEY;
@@ -1018,6 +1027,49 @@ export class ChatbotService {
       },
     },
 
+    // ── Venue & space availability ──
+    {
+      type: "function",
+      function: {
+        name: "get_event_venue",
+        description:
+          "Return venue layout and per-type space availability for a specific event: venue dimensions, grid config, stage, and a per-template breakdown of how many spaces of each type are placed / booked / free. Use for 'venue layout for event X', 'what spaces are available in event X', 'how many Premium spaces are open in X', 'show me the floor plan of event X'.",
+        parameters: {
+          type: "object",
+          properties: {
+            event_name: {
+              type: "string",
+              description: "Event title (partial match OK)",
+            },
+          },
+          required: ["event_name"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_event_exhibitors",
+        description:
+          "Return all exhibitors/vendors booked for a specific event — business name, shop, category, spaces selected, status, payment, and membership flag. Use for 'who is exhibiting at event X', 'show exhibitors for event X', 'list all vendors booked at event X'.",
+        parameters: {
+          type: "object",
+          properties: {
+            event_name: {
+              type: "string",
+              description: "Event title (partial match OK)",
+            },
+            status: {
+              type: "string",
+              enum: ["all", "Confirmed", "Approved", "Processing", "Completed"],
+              description: "Filter by booking status (default 'all')",
+            },
+          },
+          required: ["event_name"],
+        },
+      },
+    },
+
     {
       type: "function",
       function: {
@@ -1068,6 +1120,40 @@ export class ChatbotService {
             limit: {
               type: "number",
               description: "Max templates to return (default 50)",
+            },
+          },
+          required: [],
+        },
+      },
+    },
+
+    // ── Membership / exhibitor CRM ──
+    {
+      type: "function",
+      function: {
+        name: "get_membership_plans",
+        description:
+          "Return the organizer's exhibitor membership tiers / plans (CRM plans for vendors/exhibitors). Use for 'membership plans', 'exhibitor membership tiers', 'what membership plans do I offer for exhibitors', 'show my member plans'.",
+        parameters: { type: "object", properties: {}, required: [] },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_exhibitor_memberships",
+        description:
+          "Return exhibitor membership enrollments — which exhibitors have active or pending memberships, which plan they're on, and when it expires. Use for 'show all members', 'membership summary', 'who has a membership', 'exhibitor memberships', 'active members'.",
+        parameters: {
+          type: "object",
+          properties: {
+            status: {
+              type: "string",
+              enum: ["active", "pending", "all"],
+              description: "Filter by membership status (default 'all')",
+            },
+            limit: {
+              type: "number",
+              description: "Max rows (default 100)",
             },
           },
           required: [],
@@ -1224,6 +1310,7 @@ export class ChatbotService {
       "get_ticket_type_breakdown",
       "get_attendance_analytics",
       "get_event_participants",
+      "get_event_venue",
     ],
     events: [
       "list_events",
@@ -1242,6 +1329,8 @@ export class ChatbotService {
       "set_venue_config",
       "publish_event",
       "list_space_templates",
+      "get_event_venue",
+      "get_event_exhibitors",
       "navigate_to",
     ],
     tickets: [
@@ -1257,6 +1346,7 @@ export class ChatbotService {
       "search_attendee",
       "list_visitors",
       "list_exhibitors",
+      "get_exhibitor_memberships",
     ],
     stalls: [
       "list_stalls",
@@ -1270,6 +1360,10 @@ export class ChatbotService {
       "approve_stall_amendment",
       "resolve_stall_cancellation",
       "return_stall_deposit",
+      "get_membership_plans",
+      "get_exhibitor_memberships",
+      "get_event_venue",
+      "get_event_exhibitors",
       "navigate_to",
     ],
     speakers: [
@@ -1285,6 +1379,7 @@ export class ChatbotService {
       "list_operators",
       "get_organizer_info",
       "get_organization_settings",
+      "get_membership_plans",
       "navigate_to",
     ],
     // Platform Fees: no dedicated tools yet — the bot describes the tab,
@@ -1329,6 +1424,10 @@ export class ChatbotService {
       "approve_stall_amendment",
       "resolve_stall_cancellation",
       "return_stall_deposit",
+      "get_membership_plans",
+      "get_exhibitor_memberships",
+      "get_event_venue",
+      "get_event_exhibitors",
       "navigate_to",
     ],
   };
@@ -1413,6 +1512,8 @@ LISTING / VIEWING:
 - If venue is empty, write "—" in that cell. NEVER make up a venue.
 - After rendering the table, STOP. Do NOT call list_attendees, list_tickets, or any other tool — the user only asked for the events list.
 - "Event details for X" → get_event_detail. Bold key-value pairs.
+- "Venue for X" / "layout of X" / "what spaces are available in X" / "how many Premium spaces in X" → get_event_venue(event_name). Render: 1) a "Venue" table (Layout, Width, Height, Grid, Stage, Max/Spaces), 2) a "Space Types" table with columns | Type | Size | Price | Placed | Booked | Free | (mark "Full" rows in bold), 3) a total row.
+- "Who is exhibiting at X" / "exhibitors for X" / "show vendors at X" → get_event_exhibitors(event_name). Render a markdown table | # | Business | Shop | Category | Spaces | Status | Payment | Member |. Use "—" for missing values.
 
 CREATING:
 - ANY phrasing like "create event", "create a new event", "new event", "add event", "make an event" → call **create_event()** with no arguments. The tool returns a botAction that opens the blank Create Event form. Reply with ONE short line: "**Opening the Create Event form for you.**"
@@ -1480,6 +1581,12 @@ IMPORTANT: for the three pending-queue tools below the INTERFACE renders each it
 - "Cancellation requests" / "stalls asking to cancel" / "pending cancellations" → list_stall_cancellations. Reply with ONE line, e.g. "**2 cancellation requests — tap any to review.**" (or "**No pending cancellation requests.**"). No table.
 - "Feedback for <event>" / "ratings for <event>" → get_event_feedback(event_name). Lead with "**{avg}★ from {count}**", then a table | From | Rating | Comment |.
 
+MEMBERSHIP & SPACES:
+- "Membership plans" / "exhibitor membership tiers" / "what membership plans do I have" → get_membership_plans. Render: headline "You have **N membership plans** with **M active members**." Then a table | Plan | Price | Duration | Members | Active |.
+- "Show members" / "active memberships" / "who has a membership" → get_exhibitor_memberships. Render: headline "**N memberships**" then | # | Name | Email | Plan | Status | Start | End |.
+- "What spaces are available in <event>" / "how many Premium spaces in <event>" → get_event_venue(event_name). Render: Venue table + per-type breakdown table.
+- "Who is exhibiting at <event>" → get_event_exhibitors(event_name). Render: | # | Business | Shop | Category | Spaces | Status | Payment | Member | table.
+
 ACTIONS (only on an EXPLICIT request that names a Ref from a list above):
 - "Confirm payment for <ref>" → confirm_stall_payment(ref).
 - "Approve the edit for <ref>" → approve_stall_amendment(ref).
@@ -1522,6 +1629,7 @@ Focus: subscription plan, operators, profile, organization configuration.
 - "Show all plans" / "list plans" → list_plans. Table: | Plan | Price | Validity | Default |.
 - "List operators" / "my operators" → list_operators. Table: | Name | Email | WhatsApp | Tabs |.
 - "My profile" → get_organizer_info. Render as bold key-value pairs.
+- "Membership plans" / "exhibitor membership tiers" → get_membership_plans. Render: headline + | Plan | Price | Duration | Members | Active | table.
 - "Show all my settings" / "organization details" / "my org configuration" / "organization settings" → get_organization_settings. Render as a 2-column key-value table with sections: Profile (Name / Org Name / Email / Country / WhatsApp), Plan (Plan Name / Price / Expiry / Subscribed), Payment Methods (UPI / Bank / PayNow / QR — show ✓ or ✗), Other (Operators count / Slug / Commission %). Use **bold** for section headers between rows or render as 4 separate small tables.
 - To CHANGE plan / add operator / edit profile, call navigate_to(settings).`,
 
@@ -5983,6 +6091,193 @@ ${context}
             eventId: String((s.eventId as any)?._id || s.eventId || ""),
             category: "cancel",
           })),
+        };
+      }
+
+      // ── Membership / exhibitor CRM ──
+      case "get_membership_plans": {
+        const plans = await this.membershipPlanModel
+          .find({ organizerId: orgObjId, isActive: { $ne: false } })
+          .lean();
+        const memberships = await this.exhibitorMembershipModel
+          .find({
+            organizerId: orgObjId,
+            status: "active",
+          })
+          .lean();
+        const memberCountByPlanId: Record<string, number> = {};
+        for (const m of memberships) {
+          const pid = String(m.planId || "");
+          memberCountByPlanId[pid] = (memberCountByPlanId[pid] || 0) + 1;
+        }
+        const items = plans.map((p: any) => ({
+          name: p.name || p.planName || "—",
+          price: p.price != null ? Number(p.price) : null,
+          priceINR: p.priceINR != null ? Number(p.priceINR) : null,
+          duration: p.durationMonths
+            ? `${p.durationMonths} months`
+            : p.durationWeeks
+              ? `${p.durationWeeks} weeks`
+              : p.durationDays
+                ? `${p.durationDays} days`
+                : "—",
+          benefits: Array.isArray(p.benefits) ? p.benefits : [],
+          isActive: p.isActive !== false,
+          memberCount: memberCountByPlanId[String(p._id)] || 0,
+        }));
+        return {
+          total: items.length,
+          totalMembers: memberships.length,
+          plans: items,
+        };
+      }
+
+      case "get_exhibitor_memberships": {
+        const statusFilter =
+          args.status && args.status !== "all" ? { status: args.status } : {};
+        const limit = Number(args.limit) || 100;
+        const rows = await this.exhibitorMembershipModel
+          .find({ organizerId: orgObjId, ...statusFilter })
+          .sort({ createdAt: -1 })
+          .limit(Math.min(limit, 200))
+          .lean();
+        const items = rows.map((r: any, i: number) => ({
+          "#": i + 1,
+          name: r.exhibitorName || r.name || "—",
+          email: r.exhibitorEmail || r.email || "—",
+          plan: r.planName || "—",
+          status: r.status || "—",
+          startDate: r.startDate || r.createdAt || "",
+          endDate: r.endDate || r.expiryDate || "",
+        }));
+        return {
+          total: rows.length,
+          memberships: items,
+        };
+      }
+
+      // ── Venue & space availability ──
+      case "get_event_venue": {
+        const ev = await this.eventModel
+          .findOne({
+            organizer: this.orgScope(organizerId),
+            title: { $regex: args.event_name, $options: "i" },
+          })
+          .lean();
+        if (!ev) return { error: `No event matching "${args.event_name}"` };
+        const evObj: any = ev;
+
+        // Resolve per-template availability by counting placed positions vs
+        // booked positions for each template.
+        const templates: any[] = evObj.tableTemplates || [];
+        const placed = this.flattenVenueCollection(evObj.venueTables);
+        const templatesOut = templates.map((tpl: any) => {
+          if (tpl.forSale === false) return null;
+          const positions = placed.filter((p: any) => p.id === tpl.id);
+          const total = positions.length;
+          const booked = positions.filter((p: any) => p.isBooked).length;
+          const free = total - booked;
+          return {
+            name: tpl.name || "—",
+            type: tpl.type || "Straight",
+            size: tpl.width && tpl.height ? `${tpl.width}×${tpl.height}cm` : "—",
+            price: tpl.tablePrice != null ? Number(tpl.tablePrice) : null,
+            bookingPrice:
+              tpl.bookingPrice != null ? Number(tpl.bookingPrice) : null,
+            depositPrice:
+              tpl.depositPrice != null ? Number(tpl.depositPrice) : null,
+            memberPrice:
+              tpl.memberPrice != null ? Number(tpl.memberPrice) : null,
+            total,
+            booked,
+            free,
+            full: free <= 0 && total > 0,
+          };
+        }).filter(Boolean);
+
+        const vt = this.flattenVenueCollection(evObj.venueTables);
+        const sellable = vt.filter((t: any) => t.forSale !== false);
+        const totalPlaced = sellable.length;
+        const totalBooked = sellable.filter((t: any) => t.isBooked).length;
+
+        const vc = (evObj.venueConfig || [])[0] || {};
+        return {
+          event: evObj.title,
+          venue: {
+            layoutName: vc.name || "Default",
+            width: vc.width,
+            height: vc.height,
+            gridSize: vc.gridSize,
+            hasMainStage: vc.hasMainStage || false,
+            totalRows: vc.totalRows,
+          },
+          maxSpacesPerVendor: evObj.maxSpacesPerVendor || 1,
+          spacesPlaced: totalPlaced,
+          spacesBooked: totalBooked,
+          spacesFree: totalPlaced - totalBooked,
+          byType: templatesOut,
+        };
+      }
+
+      case "get_event_exhibitors": {
+        const ev = await this.eventModel
+          .findOne({
+            organizer: this.orgScope(organizerId),
+            title: { $regex: args.event_name, $options: "i" },
+          })
+          .lean();
+        if (!ev) return { error: `No event matching "${args.event_name}"` };
+        const evObj: any = ev;
+
+        const statusFilter =
+          args.status && args.status !== "all"
+            ? [args.status]
+            : ["Confirmed", "Approved", "Processing", "Completed"];
+        const stalls = await this.stallModel
+          .find({ eventId: evObj._id, status: { $in: statusFilter } })
+          .lean();
+
+        let vendorCache: Map<string, any> = new Map();
+        // Batch-load vendors so we can show business names.
+        const shopIds = [
+          ...new Set(
+            stalls
+              .map((s: any) => String(s.shopkeeperId || ""))
+              .filter(Boolean),
+          ),
+        ];
+        if (shopIds.length > 0) {
+          const vendors = await this.vendorModel
+            .find({ _id: { $in: shopIds } })
+            .lean();
+          for (const v of vendors) {
+            vendorCache.set(String((v as any)._id), v);
+          }
+        }
+
+        const items = stalls.map((s: any, i: number) => {
+          const v = vendorCache.get(String(s.shopkeeperId || "")) || {};
+          const spaceCount = (s.selectedTables || []).length;
+          const spaceNames = (s.selectedTables || [])
+            .map((t: any) => t.tableName || t.name || "")
+            .filter(Boolean)
+            .join(", ");
+          return {
+            "#": i + 1,
+            business: s.businessName || v.businessName || v.shopName || "—",
+            shop: s.shopName || v.shopName || "—",
+            category: s.businessCategory || v.businessCategory || "—",
+            spaces: spaceCount,
+            spaceNames: spaceNames || "—",
+            status: s.status || "—",
+            payment: s.paymentStatus || "Unpaid",
+            member: v.isMember ? "Yes" : "No",
+          };
+        });
+        return {
+          event: evObj.title,
+          total: items.length,
+          exhibitors: items,
         };
       }
 
