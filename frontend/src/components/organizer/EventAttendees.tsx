@@ -3174,7 +3174,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                       <Eye className="h-4 w-4" />
                                     </Button>
                                     {canEditStalls &&
-                                      (s.status === "Processing" ||
+                                      (s.status === "Confirmed" ||
+                                        s.status === "Approved" ||
+                                        s.status === "Processing" ||
                                         s.status === "Completed") && (
                                         <Button
                                           variant="outline"
@@ -3184,7 +3186,12 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                             setEditStall(s);
                                             setShowEditDialog(true);
                                           }}
-                                          title="Edit spaces & add-ons"
+                                          title={
+                                            s.status === "Confirmed" ||
+                                            s.status === "Approved"
+                                              ? "Select spaces & collect payment for the vendor"
+                                              : "Edit spaces & add-ons"
+                                          }
                                         >
                                           <Pencil className="h-4 w-4" />
                                         </Button>
