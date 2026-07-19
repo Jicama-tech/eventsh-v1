@@ -3624,12 +3624,62 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     const m = Number(template?.maxPerBooking);
     return Number.isFinite(m) && m > 0 ? m : maxSpacesPerVendor;
   };
+
+  // How many spaces are still available for each template type?
+  // Used to disable fully-booked templates in the preference picker.
+  // We exclude the vendor's own booked positions so they can still
+  // re-select or adjust a type they already hold.
+  const myBookedPositionIds = new Set(
+    (existingStallRequest?.selectedTables || []).map(
+      (t: any) => t.positionId,
+    ),
+  );
+  const spaceAvailabilityByTemplate = (() => {
+    // Flatten venueTables (Record<string, Table[]>) into a single array.
+    const vt = (eventData as any)?.venueTables || {};
+    const allTables: any[] = Array.isArray(vt)
+      ? vt
+      : vt && typeof vt === "object"
+        ? Object.values(vt).flat()
+        : [];
+    const counts: Record<string, { total: number; booked: number }> = {};
+    for (const t of allTables) {
+      if (t.forSale === false) continue;
+      const tid = t.id;
+      if (!tid) continue;
+      if (!counts[tid]) counts[tid] = { total: 0, booked: 0 };
+      counts[tid].total++;
+      // A space counts as "booked" only when held by someone else.
+      // Spaces the vendor already holds should not block them from
+      // picking the same template type again.
+      if (t.isBooked && !myBookedPositionIds.has(t.positionId)) {
+        counts[tid].booked++;
+      }
+    }
+    return counts;
+  })();
+  const isTemplateFullyBooked = (template: any): boolean => {
+    const info = spaceAvailabilityByTemplate[template.id];
+    if (!info || info.total === 0) return false; // no spaces placed yet → not "full"
+    return info.total - info.booked <= 0;
+  };
+
   // Add / remove a preferred type. Adds with quantity 1 (blocked at the cap).
   const togglePreferredType = (template: any) => {
     const ids = shopkeeperDetails.preferredTemplateIds || [];
     const names = shopkeeperDetails.preferredTemplateNames || [];
     const qtys = shopkeeperDetails.preferredTemplateQuantities || [];
     const idx = ids.indexOf(template.id);
+    // When all spaces of this type are booked the vendor can still
+    // pick it — they just go on a waiting queue and we let them know.
+    if (idx < 0 && isTemplateFullyBooked(template)) {
+      toast({
+        duration: 6000,
+        title: "Sold out — joining waitlist",
+        description: `All "${template.name}" spaces are booked. You'll be placed in a waiting queue and notified when one opens up.`,
+        variant: "default",
+      });
+    }
     if (idx >= 0) {
       const keep = (_: any, i: number) => i !== idx;
       const nIds = ids.filter(keep);
@@ -13325,6 +13375,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             const qty = isSelected ? Number(qtys[idx]) || 1 : 0;
                             const atCap =
                               totalPreferredSpaces >= maxSpacesPerVendor;
+                            const full =
+                              !isSelected && isTemplateFullyBooked(template);
                             const priceEl = (() => {
                               const hasMember =
                                 isMember &&
@@ -13387,7 +13439,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     <span className="text-sm font-semibold text-gray-800">
                                       {template.name}
                                     </span>
-                                    {isSelected && (
+                                    {full && (
+                                      <span className="ml-auto text-xs font-medium text-amber-600">
+                                        Sold out &mdash; waitlist
+                                      </span>
+                                    )}
+                                    {!full && isSelected && (
                                       <span
                                         className="ml-auto text-xs font-medium"
                                         style={{

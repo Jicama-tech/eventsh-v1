@@ -18,6 +18,14 @@ import {
   OrganizerStore,
   OrganizerStoreSchema,
 } from "../organizer-stores/entities/organizer-store.entity";
+import {
+  MembershipPlan,
+  MembershipPlanSchema,
+} from "../memberships/schemas/membership-plan.schema";
+import {
+  ExhibitorMembership,
+  ExhibitorMembershipSchema,
+} from "../memberships/schemas/exhibitor-membership.schema";
 import { StallsModule } from "../stalls/stalls.module";
 
 @Module({
@@ -43,6 +51,11 @@ import { StallsModule } from "../stalls/stalls.module";
       // For producing store-scoped public URLs (/{slug}/events/{id}) in
       // the Individual "My events" chatbot responses.
       { name: OrganizerStore.name, schema: OrganizerStoreSchema },
+      // Exhibitor membership plans + enrollments — available in
+      // the dashboard chatbot so organizers can ask about their tiers,
+      // member counts, and active exhibitor memberships.
+      { name: MembershipPlan.name, schema: MembershipPlanSchema },
+      { name: ExhibitorMembership.name, schema: ExhibitorMembershipSchema },
     ]),
   ],
   controllers: [ChatbotController],
