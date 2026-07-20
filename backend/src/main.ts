@@ -61,6 +61,8 @@ async function bootstrap() {
       "https://www.jicama.tech",
       "http://localhost:8080",
       "http://192.168.137.1:8080",
+      // LAN Wi-Fi origin for testing the dev build from a phone
+      "http://192.168.1.6:8080",
       "http://localhost:8081",
     ]; // sample static list, replace with DB call
   }
