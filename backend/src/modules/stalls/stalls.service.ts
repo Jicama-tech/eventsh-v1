@@ -29,6 +29,11 @@ import {
 import { UpdatePaymentStatusDto } from "./dto/paymentStatus.dto";
 import { UpdateStatusDto } from "./dto/updateStatus.dto";
 import { Stall, StallDocument } from "./entities/stall.entity";
+import {
+  StallFormDraft,
+  StallFormDraftDocument,
+} from "./schemas/stall-form-draft.schema";
+import { UpsertFormDraftDto } from "./dto/upsert-form-draft.dto";
 import { OtpService } from "../otp/otp.service";
 import { CouponService } from "../coupon/coupon.service";
 import { CreateCouponDto } from "../coupon/dto/create-coupon.dto";
@@ -77,6 +82,8 @@ export class StallsService {
     @InjectModel("Organizer") private organizerModel: Model<any>,
     @InjectModel("Operator") private operatorModel: Model<any>,
     @InjectModel("OrganizerStore") private organizerStoreModel: Model<any>,
+    @InjectModel(StallFormDraft.name)
+    private stallFormDraftModel: Model<StallFormDraftDocument>,
     private otpService: OtpService,
     private couponService: CouponService,
     private feedbackService: FeedbackService,
@@ -89,6 +96,44 @@ export class StallsService {
     const ticketsDir = path.join(process.cwd(), "uploads", "stallTickets");
     if (!fs.existsSync(ticketsDir))
       fs.mkdirSync(ticketsDir, { recursive: true });
+  }
+
+  // ============ FORM DRAFTS (cross-device resume) ============
+  // One draft per (event, email). Public + email-keyed like the rest of the
+  // stall flow. Deleted on successful registration; TTL cleans up the rest.
+
+  async getFormDraft(eventId: string, email: string) {
+    if (!Types.ObjectId.isValid(eventId) || !email) return null;
+    return this.stallFormDraftModel
+      .findOne({ eventId, email: email.toLowerCase().trim() })
+      .lean();
+  }
+
+  async upsertFormDraft(dto: UpsertFormDraftDto) {
+    const update: Record<string, any> = {
+      subStep: dto.subStep,
+      form: dto.form,
+    };
+    if (dto.emailVerified !== undefined) update.emailVerified = dto.emailVerified;
+    // termsAcceptedAt is write-once: set when the vendor accepts the gate,
+    // never cleared by later autosaves that omit the flag.
+    if (dto.termsAccepted) update.termsAcceptedAt = new Date();
+    return this.stallFormDraftModel
+      .findOneAndUpdate(
+        { eventId: dto.eventId, email: dto.email.toLowerCase().trim() },
+        { $set: update },
+        { new: true, upsert: true, setDefaultsOnInsert: true },
+      )
+      .lean();
+  }
+
+  async deleteFormDraft(eventId: string, email: string) {
+    if (!Types.ObjectId.isValid(eventId) || !email) return { deleted: false };
+    const res = await this.stallFormDraftModel.deleteOne({
+      eventId,
+      email: email.toLowerCase().trim(),
+    });
+    return { deleted: res.deletedCount > 0 };
   }
 
   // ============ PHASE 1: CREATE STALL REQUEST ============
@@ -407,6 +452,28 @@ export class StallsService {
       ]);
 
       await this.sendStallCreatedNotification(populatedStall);
+
+      // Registration complete — wipe the resume progress but KEEP the draft
+      // row and its termsAcceptedAt, so this vendor never re-accepts the
+      // Rules & Regulations for this event (e.g. when booking another stall).
+      // Failure here must not fail the request.
+      try {
+        const draftEmail = (
+          createStallDto.shopkeeperEmail ||
+          createStallDto.shopkeeperBusinessEmail ||
+          ""
+        )
+          .toLowerCase()
+          .trim();
+        if (draftEmail) {
+          await this.stallFormDraftModel.updateOne(
+            { eventId: createStallDto.eventId, email: draftEmail },
+            { $set: { form: {}, subStep: 1 } },
+          );
+        }
+      } catch {
+        /* non-fatal */
+      }
 
       return {
         success: true,

@@ -3967,7 +3967,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
       {/* Confirm Dialog */}
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <DialogContent>
+        <DialogContent compact>
           <DialogHeader>
             <DialogTitle>Confirm Stall Request</DialogTitle>
             <DialogDescription>
@@ -4096,7 +4096,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent compact>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Trash2 className="h-5 w-5 text-red-600" />

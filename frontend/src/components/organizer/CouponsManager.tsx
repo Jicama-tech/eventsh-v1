@@ -490,7 +490,7 @@ export function CouponsManager() {
 
       {/* Delete confirmation dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent compact className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Delete Coupon</DialogTitle>
             <DialogDescription>
