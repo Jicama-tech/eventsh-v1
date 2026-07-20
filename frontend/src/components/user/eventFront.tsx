@@ -12818,16 +12818,17 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         </Dialog>
       )}
 
-      {/* Rent Form Dialog */}
-      {/* Rent Form Dialog */}
+      {/* Rent Form — full-screen page (not a popup): the whole viewport is
+        the form, scrolling like a normal page, with a content column
+        centered for readability. Close button stays pinned while scrolling. */}
       {showRentForm &&
         !showTableSelection &&
         !showStallTermsGate &&
         (stallGateAcknowledged || !getStallGateContent().hasAny) && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-            <div className="bg-white border border-gray-200 rounded-2xl shadow-2xl max-w-xl w-full p-6 relative overflow-y-auto max-h-[90vh]">
+          <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+            <div className="w-full max-w-3xl mx-auto p-6 pb-16 relative">
               <button
-                className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 transition-all"
+                className="fixed top-4 right-4 z-10 w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 bg-white shadow-sm text-gray-500 hover:bg-gray-100 transition-all"
                 onClick={handleRentFormCancel}
               >
                 ✖
@@ -14015,8 +14016,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       </footer>
 
       {/* Public AI assistant — only when the organizer enabled it for this
-          event. Answers questions grounded in this event's own data. */}
-      {eventData?.chatbot?.enabled && (
+          event. Answers questions grounded in this event's own data.
+          Hidden while the full-screen stall form is open so its floating
+          launcher can't overlap the form. */}
+      {eventData?.chatbot?.enabled && !showRentForm && (
         <EventChatbot
           eventId={eventData._id}
           chatbotName={eventData.chatbot.name}
