@@ -4,6 +4,10 @@ import { StallsService } from "./stalls.service";
 import { StallsController } from "./stalls.controller";
 import { Stall, StallSchema } from "./entities/stall.entity";
 import { Vendor, VendorSchema } from "./schemas/vendor.schema";
+import {
+  StallFormDraft,
+  StallFormDraftSchema,
+} from "./schemas/stall-form-draft.schema";
 import { OtpModule } from "../otp/otp.module";
 import { CouponModule } from "../coupon/coupon.module";
 import { EventSchema } from "../events/schemas/event.schema";
@@ -22,6 +26,8 @@ import {
     MongooseModule.forFeature([
       { name: Stall.name, schema: StallSchema },
       { name: Vendor.name, schema: VendorSchema },
+      // In-progress registration forms — powers cross-device resume.
+      { name: StallFormDraft.name, schema: StallFormDraftSchema },
       { name: "Event", schema: EventSchema },
       { name: "Organizer", schema: OrganizerSchema },
       // Operators of the organizer — emailed when a new stall request lands
