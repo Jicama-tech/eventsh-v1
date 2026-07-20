@@ -7,7 +7,6 @@ import {
   Param,
   Query,
   Delete,
-  Put,
   HttpCode,
   HttpStatus,
   Res,
@@ -35,7 +34,6 @@ import { ConfirmPaymentDto } from "./dto/confirm-Payment.dto";
 import { AddStallNoteDto } from "./dto/add-stall-note.dto";
 import { ScanQRDto } from "./dto/scan-qr.dto";
 import { SendBulkInvitationDto } from "./dto/sendBulkInvitation.dto";
-import { UpsertFormDraftDto } from "./dto/upsert-form-draft.dto";
 import { diskStorage } from "multer";
 import {
   FileFieldsInterceptor,
@@ -98,35 +96,6 @@ export class StallsController {
       screenshotPath,
     );
     return { success: true, data: stall };
-  }
-
-  // ---- Registration form drafts (cross-device resume) ----
-  // Public + email-keyed, matching the rest of the stall flow.
-
-  @Get("form-draft")
-  async getFormDraft(
-    @Query("eventId") eventId: string,
-    @Query("email") email: string,
-  ) {
-    const draft = await this.stallsService.getFormDraft(eventId, email);
-    return { success: true, data: draft };
-  }
-
-  @Put("form-draft")
-  @HttpCode(HttpStatus.OK)
-  async upsertFormDraft(@Body() dto: UpsertFormDraftDto) {
-    const draft = await this.stallsService.upsertFormDraft(dto);
-    return { success: true, data: draft };
-  }
-
-  @Delete("form-draft")
-  @HttpCode(HttpStatus.OK)
-  async deleteFormDraft(
-    @Query("eventId") eventId: string,
-    @Query("email") email: string,
-  ) {
-    const res = await this.stallsService.deleteFormDraft(eventId, email);
-    return { success: true, ...res };
   }
 
   /**

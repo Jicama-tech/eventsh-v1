@@ -894,183 +894,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [cropQueue, setCropQueue] = useState<File[]>([]);
 
   const [shopkeeperDetails, setShopkeeperDetails] = useState(initialForm);
-
-  // Refund payment method dropdown + conditional detail field. Only the
-  // composed string (shopkeeperDetails.refundPaymentDescription) is submitted
-  // and stored — these two just drive the UI. Composed shapes: "Cash",
-  // "Bank Account: <details>", "Online Transaction: <phone/UEN>",
-  // "Other: <text>".
-  const REFUND_METHODS = ["Cash", "Bank Account", "Online Transaction", "Other"];
-  const [refundMethod, setRefundMethod] = useState("");
-  const [refundDetail, setRefundDetail] = useState("");
-
-  const composeRefundDescription = (method: string, detail: string) => {
-    if (!method) return "";
-    if (method === "Cash") return "Cash";
-    return detail.trim() ? `${method}: ${detail.trim()}` : "";
-  };
-
-  // Parse a stored refundPaymentDescription back into [method, detail].
-  // Legacy free-text values that match no known prefix land under "Other"
-  // with the full text intact, so nothing a returning vendor typed is lost.
-  const parseRefundDescription = (value: string): [string, string] => {
-    const v = (value || "").trim();
-    if (!v) return ["", ""];
-    if (v === "Cash") return ["Cash", ""];
-    for (const m of REFUND_METHODS) {
-      if (m !== "Cash" && v.startsWith(`${m}:`))
-        return [m, v.slice(m.length + 1).trim()];
-    }
-    return ["Other", v];
-  };
-
-  // Single entry point for the dropdown/detail inputs — keeps the composed
-  // string in shopkeeperDetails in sync so submit/validation read one source.
-  const applyRefundSelection = (method: string, detail: string) => {
-    setRefundMethod(method);
-    setRefundDetail(detail);
-    setShopkeeperDetails((prev) => ({
-      ...prev,
-      refundPaymentDescription: composeRefundDescription(method, detail),
-    }));
-  };
-
-  // ---- "Your details" sub-steps + server-side resume -------------------
-  // The registration form is split into 3 sub-steps. Progress (fields +
-  // sub-step + Terms acknowledgement) is saved per (event, email) via
-  // /stalls/form-draft so a vendor who drops off resumes from any device.
-  const RENT_SUB_STEPS = ["Personal", "Business", "Uploads & Stall"] as const;
-  const [rentSubStep, setRentSubStep] = useState(1);
-  const [maxSubStepReached, setMaxSubStepReached] = useState(1);
-  // True when this form-open was restored from a saved draft — used for the
-  // "picked up where you left off" banner + re-upload hint on step 3.
-  const [resumedFromDraft, setResumedFromDraft] = useState(false);
-  // Stamped when Next lands the vendor on the final sub-step. A double-click
-  // on "Next" would otherwise hit the "Submit Registration" button that
-  // replaces it mid-click and toast step-3 errors before the vendor has even
-  // seen the step — submits arriving within this window are swallowed.
-  const arrivedAtFinalStepAt = useRef(0);
-
-  const resetRentSubSteps = () => {
-    setRentSubStep(1);
-    setMaxSubStepReached(1);
-    setResumedFromDraft(false);
-  };
-
-  // Visibility class for a form block belonging to sub-step `n`. Blocks are
-  // hidden (not unmounted) so field/OTP/upload state survives step switches.
-  const subStepCls = (n: number) => (rentSubStep === n ? "" : "hidden");
-
-  const stallDraftEmail = () =>
-    (authedEmail || shopkeeperDetails.email || shopkeeperDetails.businessEmail || "")
-      .trim()
-      .toLowerCase();
-
-  // Fire-and-forget upsert. Files are never serialized — text fields only.
-  const saveStallDraft = async (opts?: {
-    subStep?: number;
-    termsAccepted?: boolean;
-  }) => {
-    const email = stallDraftEmail();
-    const eventId = (eventData as any)?._id;
-    if (!email || !eventId) return;
-    try {
-      await fetch(`${apiURL}/stalls/form-draft`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventId,
-          email,
-          // Checkpoint the FURTHEST step — going Back to edit an earlier step
-          // must not regress where a resume lands.
-          subStep: opts?.subStep ?? Math.max(maxSubStepReached, rentSubStep),
-          form: { ...shopkeeperDetails, refundMethod, refundDetail },
-          ...(opts?.termsAccepted ? { termsAccepted: true } : {}),
-          emailVerified,
-        }),
-      });
-    } catch {
-      /* draft saves are best-effort — never block the vendor */
-    }
-  };
-
-  const fetchStallDraft = async (email: string) => {
-    const eventId = (eventData as any)?._id;
-    if (!email || !eventId) return null;
-    try {
-      const res = await fetch(
-        `${apiURL}/stalls/form-draft?eventId=${eventId}&email=${encodeURIComponent(
-          email.trim().toLowerCase(),
-        )}`,
-      );
-      if (!res.ok) return null;
-      const json = await res.json();
-      return json?.data || null;
-    } catch {
-      return null;
-    }
-  };
-
-  // Overlay a fetched draft onto the form. The draft is newer than any stored
-  // vendor profile (its snapshot STARTED from that profile), so it wins.
-  // Returns true when a draft was applied.
-  const applyStallDraft = (draft: any): boolean => {
-    if (!draft) return false;
-    const { refundMethod: dm, refundDetail: dd, ...fields } = draft.form || {};
-    // A draft whose progress was cleared after submission carries only the
-    // terms acceptance — real field progress is any non-empty value.
-    const hasFieldProgress = Object.values(fields).some((v) =>
-      Array.isArray(v) ? v.length > 0 : String(v ?? "").trim() !== "",
-    );
-    if (hasFieldProgress) {
-      setShopkeeperDetails((prev) => ({ ...prev, ...fields }));
-      if (dm !== undefined || dd !== undefined) {
-        setRefundMethod(dm || "");
-        setRefundDetail(dd || "");
-      }
-    }
-    if (draft.emailVerified) setEmailVerified(true);
-    // Terms were accepted on a previous visit — skip the gate this time.
-    // Survives submission: only form progress is cleared, never this flag.
-    if (draft.termsAcceptedAt) setStallGateAcknowledged(true);
-    const s = Math.min(3, Math.max(1, Number(draft.subStep) || 1));
-    setRentSubStep(s);
-    setMaxSubStepReached(s);
-    // The "welcome back" banner only makes sense when actual progress was
-    // restored — not for a fresh form that merely remembers the terms.
-    setResumedFromDraft(hasFieldProgress || s > 1);
-    return true;
-  };
-
-  // After a successful submission: clear the resume progress but KEEP the
-  // draft row — its termsAcceptedAt means this vendor never re-accepts the
-  // Rules & Regulations for this event when booking again.
-  const clearStallDraftProgress = async () => {
-    const email = stallDraftEmail();
-    const eventId = (eventData as any)?._id;
-    if (!email || !eventId) return;
-    try {
-      await fetch(`${apiURL}/stalls/form-draft`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ eventId, email, subStep: 1, form: {} }),
-      });
-    } catch {
-      /* non-fatal */
-    }
-  };
-
-  // Debounced autosave while the form is open, so even mid-step typing
-  // survives a crash (Next/Back clicks also save explicitly).
-  useEffect(() => {
-    if (!showRentForm) return;
-    if (!stallDraftEmail()) return;
-    const id = window.setTimeout(() => {
-      saveStallDraft();
-    }, 1500);
-    return () => window.clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shopkeeperDetails, refundMethod, refundDetail, showRentForm]);
   // The country picked in each phone field's flag dropdown (from
   // react-phone-input-2's onChange). Drives the per-country digit-length
   // check on submit (India 10, Singapore 8, …).
@@ -1715,9 +1538,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     setWhatsappVerified(false);
     setShopkeeperExists(false);
     setShopkeeperDetails(initialForm);
-    setRefundMethod("");
-    setRefundDetail("");
-    resetRentSubSteps();
     setRequiresSelection(false); // <--- ADD THIS
     setSelectedDialogShopId("");
     setStallGoogleLoading(false);
@@ -1899,13 +1719,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       preferredTemplateNames: [] as string[],
       preferredTemplateQuantities: [] as number[],
     });
-    // Restore the refund-method dropdown from the stored composed string
-    // (legacy free-text parses to "Other" with the text preserved).
-    const [storedRefundMethod, storedRefundDetail] = parseRefundDescription(
-      shopData.refundPaymentDescription || "",
-    );
-    setRefundMethod(storedRefundMethod);
-    setRefundDetail(storedRefundDetail);
     setEmailVerified(true); // Assume verified if exists
 
     // Returning vendor whose GST was already verified — restore that state so
@@ -1951,15 +1764,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       description: "Your details have been loaded",
     });
 
-    // Resume any in-progress registration for this event: the draft is newer
-    // than the stored profile, so it overlays the prefill above and restores
-    // the sub-step + Terms acknowledgement BEFORE the form opens.
-    resetRentSubSteps();
-    const draft = await fetchStallDraft(
-      authedEmail || shopData.email || shopData.businessEmail || "",
-    );
-    applyStallDraft(draft);
-
     // Fetch existing request. fetchExistingRequest will handle opening the right dialog.
     await fetchExistingRequest(shopData._id, eventData?._id);
   };
@@ -1993,14 +1797,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       // If not found or API failed, show empty form
       setShopkeeperExists(false);
       setShopkeeperDetails({ ...initialForm, whatsappNumber: whatsAppNum });
-      resetRentSubSteps();
       setShowWhatsAppDialog(false);
       setShowRentForm(true);
     } catch (error) {
       console.error("Error checking shopkeeper:", error);
       setShopkeeperExists(false);
       setShopkeeperDetails({ ...initialForm, whatsappNumber: whatsAppNum });
-      resetRentSubSteps();
       setShowWhatsAppDialog(false);
       setShowRentForm(true);
     }
@@ -2147,9 +1949,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     setStallGateAcknowledged(true);
     setStallGateScrolledEnd(false);
     setShowStallTermsGate(false);
-    // Persist the acceptance on the server draft — the gate is skipped on
-    // every later visit for this event + email (any device).
-    saveStallDraft({ termsAccepted: true });
   };
 
   // Vendor dismissed the rules without accepting → cancel the whole form open.
@@ -2162,7 +1961,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // Open a BLANK rent form for a NEW vendor profile under the authenticated
   // email. The email stays locked (emailVerified); submit force-creates a new
   // vendor so this email can own multiple linked profiles.
-  const startRegisterNew = async (email: string) => {
+  const startRegisterNew = (email: string) => {
     setRegisterNewMode(true);
     setShopkeeperExists(false);
     setShopkeeperId(null);
@@ -2180,11 +1979,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     setProductFiles([]);
     setProductPreviews([]);
     setExistingProductImages([]);
-    // Resume a half-finished registration for this event (fields, sub-step,
-    // Terms acknowledgement) before the form opens.
-    resetRentSubSteps();
-    const draft = await fetchStallDraft(email);
-    applyStallDraft(draft);
     setShowAccountChooser(false);
     setShowCompletedChoice(false);
     setShowRegisterTargetChoice(false);
@@ -3968,116 +3762,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }));
   };
 
-  // Required-field checklist for ONE sub-step of the registration form.
-  // Mirrors the field allocation of the 3 sub-steps; the final submit runs
-  // all three so nothing slips through.
-  const collectMissingForSubStep = (step: number): string[] => {
-    const d = shopkeeperDetails;
-    const missing: string[] = [];
-    const blank = (v: any) => !String(v ?? "").trim();
-    const req = (isMissing: boolean, label: string) => {
-      if (isMissing) missing.push(label);
-    };
-
-    if (step === 1) {
-      // Personal
-      req(blank(d.nameOfApplicant), "Name of Applicant");
-      req(blank(d.name), "Owner Name");
-      req(blank(d.businessOwnerNationality), "Owner Nationality");
-      req(blank(d.residency), "Residency");
-      if (!shopkeeperExists) req(blank(d.email), "Primary Email");
-      req(blank(d.businessEmail), "Business Email");
-      req(blank(d.whatsappNumber), "WhatsApp Number");
-      req(blank(d.phone), "Phone Number");
-    } else if (step === 2) {
-      // Business
-      req(blank(d.brandName), "Brand Name");
-      req(blank(d.shopName), "Registered Business Name");
-      req(blank(d.businessCategory), "Business Category");
-      req(blank(d.registrationNumber), "Registration Number");
-      req(blank(d.faceBookLink), "Facebook Link");
-      req(blank(d.instagramLink), "Instagram Link");
-      req(blank(d.description), "Business, Products & Brand Description");
-      req(blank(d.address), "Full Address");
-    } else {
-      // Uploads & Stall
-      req(!d.noOfOperators || Number(d.noOfOperators) < 1, "No. of Operators");
-      // Method is always required; every method except Cash also needs its
-      // detail field (bank details / phone-UEN / free text) filled in.
-      req(blank(refundMethod), "Refund Payment Description");
-      req(
-        !blank(refundMethod) && refundMethod !== "Cash" && blank(refundDetail),
-        refundMethod === "Bank Account"
-          ? "Bank Details for Refund"
-          : refundMethod === "Online Transaction"
-            ? "Phone / UEN Number for Refund"
-            : "Refund Payment Description",
-      );
-      // Document uploads + at least one product image are mandatory. A
-      // returning vendor's stored images load as previews, so an existing
-      // preview satisfies the requirement (no forced re-upload).
-      req(!regImageFile && !regImagePreview, "Business Registration Document");
-      req(!logoFile && !logoPreview, "Company Logo");
-      req(
-        productFiles.length < 1 && existingProductImages.length < 1,
-        "at least 1 Product Image",
-      );
-      // Preferred space type — only required when the event exposes sellable
-      // space templates (same condition that renders the picker).
-      const sellableTemplates =
-        eventData?.tableTemplates?.filter((t: any) => t.forSale !== false) ||
-        [];
-      if (sellableTemplates.length > 0) {
-        req(
-          !(d.preferredTemplateIds && d.preferredTemplateIds.length > 0),
-          "Preferred Space Type",
-        );
-      }
-    }
-    return missing;
-  };
-
-  // "Next" on sub-steps 1–2: validate just that step, then advance and
-  // checkpoint the draft at the new furthest step.
-  const goToNextSubStep = () => {
-    const missing = collectMissingForSubStep(rentSubStep);
-    if (rentSubStep === 1 && !emailVerified && !shopkeeperExists) {
-      missing.push("Business Email verification (OTP)");
-    }
-    if (missing.length) {
-      toast({
-        duration: 6000,
-        title: "Missing required fields",
-        description: `Please complete: ${missing.join(", ")}.`,
-        variant: "destructive",
-      });
-      return;
-    }
-    const next = Math.min(3, rentSubStep + 1);
-    if (next === 3) arrivedAtFinalStepAt.current = Date.now();
-    setRentSubStep(next);
-    setMaxSubStepReached((m) => Math.max(m, next));
-    saveStallDraft({ subStep: Math.max(maxSubStepReached, next) });
-  };
-
-  const goToPrevSubStep = () => {
-    setRentSubStep((s) => Math.max(1, s - 1));
-  };
-
   // Handle form submission - UPDATED FOR NEW WORKFLOW
   const handleRentFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Enter-key implicit submission on sub-steps 1–2 acts as "Next" — the
-    // real submit only happens from the last sub-step.
-    if (rentSubStep < 3) {
-      goToNextSubStep();
-      return;
-    }
-
-    // Swallow the ghost submit from a double-click on "Next": the second
-    // click lands on the Submit button that just replaced it.
-    if (Date.now() - arrivedAtFinalStepAt.current < 800) return;
 
     if (isEventOver(eventData)) {
       toast({
@@ -4100,13 +3787,55 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
     // ---- Mandatory-field validation ----
     // Selects, file uploads, the phone input and textareas can't rely on the
-    // native `required` attribute inside this dialog. Each sub-step validates
-    // on Next; the final submit re-runs ALL steps as a safety net and
-    // surfaces the complete list of what's missing in one message.
+    // native `required` attribute inside this dialog, so we validate every
+    // required field explicitly and surface the complete list of what's
+    // missing in one message.
     const d = shopkeeperDetails;
-    const missing: string[] = [1, 2, 3].flatMap((s) =>
-      collectMissingForSubStep(s),
+    const missing: string[] = [];
+    const blank = (v: any) => !String(v ?? "").trim();
+    const req = (isMissing: boolean, label: string) => {
+      if (isMissing) missing.push(label);
+    };
+
+    req(blank(d.nameOfApplicant), "Name of Applicant");
+    req(blank(d.name), "Owner Name");
+    req(blank(d.businessOwnerNationality), "Owner Nationality");
+    req(blank(d.residency), "Residency");
+    req(blank(d.brandName), "Brand Name");
+    req(blank(d.shopName), "Registered Business Name");
+    if (!shopkeeperExists) req(blank(d.email), "Primary Email");
+    req(blank(d.businessEmail), "Business Email");
+    req(blank(d.whatsappNumber), "WhatsApp Number");
+    req(blank(d.phone), "Phone Number");
+    req(blank(d.businessCategory), "Business Category");
+    req(!d.noOfOperators || Number(d.noOfOperators) < 1, "No. of Operators");
+    req(blank(d.registrationNumber), "Registration Number");
+    req(blank(d.faceBookLink), "Facebook Link");
+    req(blank(d.instagramLink), "Instagram Link");
+    req(blank(d.description), "Business, Products & Brand Description");
+    req(blank(d.refundPaymentDescription), "Refund Payment Description");
+    req(blank(d.address), "Full Address");
+
+    // Document uploads + at least one product image are mandatory. A returning
+    // vendor's stored images are loaded as previews, so an existing preview
+    // satisfies the requirement (no forced re-upload); a new file overrides it.
+    req(!regImageFile && !regImagePreview, "Business Registration Document");
+    req(!logoFile && !logoPreview, "Company Logo");
+    req(
+      productFiles.length < 1 && existingProductImages.length < 1,
+      "at least 1 Product Image",
     );
+
+    // Preferred space type — only required when the event exposes sellable
+    // space templates (same condition that renders the picker).
+    const sellableTemplates =
+      eventData?.tableTemplates?.filter((t: any) => t.forSale !== false) || [];
+    if (sellableTemplates.length > 0) {
+      req(
+        !(d.preferredTemplateIds && d.preferredTemplateIds.length > 0),
+        "Preferred Space Type",
+      );
+    }
 
     if (missing.length) {
       toast({
@@ -4290,13 +4019,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           "Stall request submitted successfully. Waiting for organizer approval.",
       });
 
-      // Registration made it in — clear the resume progress but keep the
-      // terms acceptance so re-booking this event skips the rules gate.
-      clearStallDraftProgress();
       setShopkeeperDetails(initialForm);
-      setRefundMethod("");
-      setRefundDetail("");
-      resetRentSubSteps();
       setRegImageFile(null);
       setRegImagePreview("");
       setLogoFile(null);
@@ -4320,13 +4043,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   };
 
   const handleRentFormCancel = () => {
-    // NOTE: the server draft is intentionally KEPT on cancel — an accidental
-    // close must not lose progress. It's deleted on successful submit.
     setShowRentForm(false);
     setShopkeeperDetails(initialForm);
-    setRefundMethod("");
-    setRefundDetail("");
-    resetRentSubSteps();
     setEmailVerified(false);
     setOtpSent(false);
     setOtp("");
@@ -12845,53 +12563,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
               <StallStepper current={3} />
 
-              {/* Sub-steps of "Your details" — completed steps are clickable
-                so the vendor can jump back and edit. */}
-              <div className="mb-4 flex items-center justify-center gap-1">
-                {RENT_SUB_STEPS.map((label, i) => {
-                  const step = i + 1;
-                  const active = step === rentSubStep;
-                  const reachable = step <= maxSubStepReached;
-                  return (
-                    <button
-                      key={label}
-                      type="button"
-                      disabled={!reachable}
-                      onClick={() => reachable && setRentSubStep(step)}
-                      className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
-                        active
-                          ? "bg-blue-600 text-white"
-                          : reachable
-                            ? "bg-blue-50 text-blue-700 hover:bg-blue-100"
-                            : "bg-gray-100 text-gray-400"
-                      }`}
-                    >
-                      <span
-                        className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${
-                          active
-                            ? "bg-white/25"
-                            : reachable
-                              ? "bg-blue-600/10"
-                              : "bg-gray-200"
-                        }`}
-                      >
-                        {step}
-                      </span>
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Resumed-draft notice — progress was restored from the server */}
-              {resumedFromDraft && (
-                <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                  Welcome back — we saved your progress, so you're continuing
-                  where you left off. Use the step buttons above to review
-                  earlier answers.
-                </div>
-              )}
-
               {/* Active membership card — shown when the signed-in vendor is a
                 member, so they see their plan + validity right on the form. */}
               {stallMembership && (
@@ -12937,10 +12608,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
               <form onSubmit={handleRentFormSubmit} className="space-y-4">
                 {/* --- SECTION: PERSONAL & BUSINESS DETAILS --- */}
-                {/* Sub-step 1: Personal */}
-                <div
-                  className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${subStepCls(1)}`}
-                >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>
                       Name of Applicant <span className="text-red-500">*</span>
@@ -12966,9 +12634,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
                 </div>
 
-                <div
-                  className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${subStepCls(1)}`}
-                >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>
                       Owner Nationality <span className="text-red-500">*</span>
@@ -13021,10 +12687,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
                 </div>
 
-                {/* Sub-step 2: Business */}
-                <div
-                  className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${subStepCls(2)}`}
-                >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>
                       Brand Name <span className="text-red-500">*</span>
@@ -13054,9 +12717,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
                 {/* Only show these if creating a NEW shopkeeper */}
 
-                <div
-                  className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${subStepCls(1)}`}
-                >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {!shopkeeperExists ? (
                     <div className="space-y-2">
                       <div className="flex justify-between items-center">
@@ -13138,9 +12799,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 </div>
 
                 {/* --- SECTION: CONTACT & VERIFICATION --- */}
-                <div
-                  className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${subStepCls(1)}`}
-                >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>
                       WhatsApp Number <span className="text-red-500">*</span>
@@ -13197,14 +12856,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 </div>
 
                 {/* --- SECTION: STALL CONFIGURATION --- */}
-                {/* Split across sub-steps: category + registration number are
-                  Business (2); operator count is Uploads & Stall (3). */}
-                <div
-                  className={`grid grid-cols-1 md:grid-cols-3 gap-4 ${
-                    rentSubStep === 1 ? "hidden" : ""
-                  }`}
-                >
-                  <div className={`space-y-2 ${subStepCls(2)}`}>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
                     <Label>
                       Business Category <span className="text-red-500">*</span>
                     </Label>
@@ -13225,7 +12878,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       placeholder="Select"
                     />
                   </div>
-                  <div className={`space-y-2 ${subStepCls(3)}`}>
+                  <div className="space-y-2">
                     <Label>
                       No. of Operators <span className="text-red-500">*</span>
                     </Label>
@@ -13251,7 +12904,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       required
                     />
                   </div>
-                  <div className={`space-y-2 md:col-span-3 ${subStepCls(2)}`}>
+                  <div className="space-y-2 md:col-span-3">
                     <Label>
                       Registration Number ({regConfig.label}){" "}
                       <span className="text-red-500">*</span>
@@ -13471,9 +13124,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 </div>
 
                 {/* --- SECTION: SOCIAL & IMAGES --- */}
-                <div
-                  className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${subStepCls(2)}`}
-                >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>
                       Facebook Link <span className="text-red-500">*</span>
@@ -13498,25 +13149,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
                 </div>
 
-                {/* Image Uploads — Sub-step 3: Uploads & Stall */}
-                <div
-                  className={`border border-gray-200 rounded-lg p-4 bg-gray-50 space-y-4 ${subStepCls(3)}`}
-                >
+                {/* Image Uploads */}
+                <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 space-y-4">
                   <h3 className="font-semibold text-gray-800">
                     Brand Assets & Documents
                   </h3>
-                  {/* Files can't be stored in a resume draft (browser
-                    security) — remind restored vendors to re-attach. */}
-                  {resumedFromDraft &&
-                    !regImagePreview &&
-                    !logoPreview &&
-                    productPreviews.length === 0 &&
-                    existingProductImages.length === 0 && (
-                      <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">
-                        Images can't be saved with a draft — please attach your
-                        documents and product photos again.
-                      </p>
-                    )}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Reg Image */}
@@ -13661,7 +13298,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 </div>
 
                 {/* Description */}
-                <div className={`space-y-2 ${subStepCls(2)}`}>
+                <div className="space-y-2">
                   <Label>
                     Business, Products & Brand Description{" "}
                     <span className="text-red-500">*</span>
@@ -13675,62 +13312,21 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   />
                 </div>
 
-                <div className={`space-y-2 ${subStepCls(3)}`}>
+                <div className="space-y-2">
                   <Label>
                     Refund Payment Description{" "}
                     <span className="text-red-500">*</span>
                   </Label>
-                  <Select
-                    value={refundMethod}
-                    onValueChange={(val) =>
-                      // Switching method clears the old detail so a bank
-                      // account string never rides along under "Cash" etc.
-                      applyRefundSelection(val, "")
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select refund payment method" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {REFUND_METHODS.map((m) => (
-                        <SelectItem key={m} value={m}>
-                          {m}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {refundMethod === "Bank Account" && (
-                    <Textarea
-                      value={refundDetail}
-                      onChange={(e) =>
-                        applyRefundSelection(refundMethod, e.target.value)
-                      }
-                      placeholder="Account holder name, account number, bank name..."
-                      rows={3}
-                    />
-                  )}
-                  {refundMethod === "Online Transaction" && (
-                    <Input
-                      value={refundDetail}
-                      onChange={(e) =>
-                        applyRefundSelection(refundMethod, e.target.value)
-                      }
-                      placeholder="Phone number / UEN number"
-                    />
-                  )}
-                  {refundMethod === "Other" && (
-                    <Textarea
-                      value={refundDetail}
-                      onChange={(e) =>
-                        applyRefundSelection(refundMethod, e.target.value)
-                      }
-                      placeholder="Describe how you'd like to receive the refund"
-                      rows={3}
-                    />
-                  )}
+                  <Textarea
+                    name="refundPaymentDescription"
+                    value={shopkeeperDetails.refundPaymentDescription}
+                    onChange={handleRentFormChange}
+                    placeholder="Tell us about what you sell..."
+                    rows={3}
+                  />
                 </div>
 
-                <div className={`space-y-2 ${subStepCls(2)}`}>
+                <div className="space-y-2">
                   <Label>
                     Full Address <span className="text-red-500">*</span>
                   </Label>
@@ -13749,7 +13345,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   eventData.tableTemplates.filter(
                     (t: any) => t.forSale !== false,
                   ).length > 0 && (
-                    <div className={`space-y-2 border-t pt-4 ${subStepCls(3)}`}>
+                    <div className="space-y-2 border-t pt-4">
                       <div className="flex items-center justify-between">
                         <Label>
                           Preferred Space Type(s){" "}
@@ -13765,38 +13361,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         up to {maxSpacesPerVendor} total. You'll only be able to
                         book spaces of the selected type(s).
                       </p>
-                      {/* Persistent sold-out warning — a transient toast is
-                        easy to miss; this stays visible while any selected
-                        type has no spaces left, and suggests switching. */}
-                      {(() => {
-                        const soldOutSelected = eventData.tableTemplates
-                          .filter((t: any) => t.forSale !== false)
-                          .filter(
-                            (t: any) =>
-                              (
-                                shopkeeperDetails.preferredTemplateIds || []
-                              ).includes(t.id) && isTemplateFullyBooked(t),
-                          );
-                        if (soldOutSelected.length === 0) return null;
-                        const names = soldOutSelected
-                          .map((t: any) => `"${t.name}"`)
-                          .join(", ");
-                        return (
-                          <div className="mb-2 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
-                            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                            <p className="text-xs leading-snug text-amber-800">
-                              <span className="font-semibold">
-                                {names}{" "}
-                                {soldOutSelected.length === 1 ? "is" : "are"}{" "}
-                                already sold out.
-                              </span>{" "}
-                              You'll be placed on the waitlist and only get a
-                              space if one frees up. We suggest also selecting
-                              another space type that still has availability.
-                            </p>
-                          </div>
-                        );
-                      })()}
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         {eventData.tableTemplates
                           .filter((t: any) => t.forSale !== false)
@@ -13942,37 +13506,20 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     type="button"
                     variant="outline"
                     onClick={handleRentFormCancel}
-                    className="mr-auto"
                   >
                     Cancel
                   </Button>
-                  {rentSubStep > 1 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={goToPrevSubStep}
-                    >
-                      Back
-                    </Button>
-                  )}
-                  {rentSubStep < 3 ? (
-                    <Button type="button" onClick={goToNextSubStep}>
-                      Next
-                    </Button>
-                  ) : (
-                    <Button
-                      type="submit"
-                      disabled={
-                        loading ||
-                        (!shopkeeperExists &&
-                          (!shopkeeperDetails.businessEmail ||
-                            !emailVerified)) ||
-                        !shopkeeperDetails.businessCategory
-                      }
-                    >
-                      {loading ? "Submitting..." : "Submit Registration"}
-                    </Button>
-                  )}
+                  <Button
+                    type="submit"
+                    disabled={
+                      loading ||
+                      (!shopkeeperExists &&
+                        (!shopkeeperDetails.businessEmail || !emailVerified)) ||
+                      !shopkeeperDetails.businessCategory
+                    }
+                  >
+                    {loading ? "Submitting..." : "Submit Registration"}
+                  </Button>
                 </CardFooter>
               </form>
             </div>
