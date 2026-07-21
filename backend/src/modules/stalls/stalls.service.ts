@@ -16,6 +16,7 @@ import * as QRCode from "qrcode";
 import * as fs from "fs";
 import * as path from "path";
 import * as puppeteer from "puppeteer";
+import { UpsertFormDraftDto } from "./dto/upsert-form-draft.dto";
 import { CreateStallDto } from "./dto/create-stall.dto";
 import { SelectTablesAndAddOnsDto } from "./dto/tableSelect.dto";
 import { OrganizerEditStallDto } from "./dto/organizer-edit-stall.dto";
@@ -29,6 +30,7 @@ import {
 import { UpdatePaymentStatusDto } from "./dto/paymentStatus.dto";
 import { UpdateStatusDto } from "./dto/updateStatus.dto";
 import { Stall, StallDocument } from "./entities/stall.entity";
+import { StallFormDraft } from "./schemas/stall-form-draft.schema";
 import { OtpService } from "../otp/otp.service";
 import { CouponService } from "../coupon/coupon.service";
 import { CreateCouponDto } from "../coupon/dto/create-coupon.dto";
@@ -75,6 +77,8 @@ export class StallsService {
     @InjectModel("Organizer") private organizerModel: Model<any>,
     @InjectModel("Operator") private operatorModel: Model<any>,
     @InjectModel("OrganizerStore") private organizerStoreModel: Model<any>,
+    @InjectModel(StallFormDraft.name)
+    private stallFormDraftModel: Model<any>,
     private otpService: OtpService,
     private couponService: CouponService,
     private feedbackService: FeedbackService,
