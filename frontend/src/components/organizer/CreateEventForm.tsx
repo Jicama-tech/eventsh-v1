@@ -2702,6 +2702,30 @@ const TableManagement = ({
         </CardContent>
       </Card>
 
+      {/* Auto-generate vendor coupon toggle: when OFF, the payment-confirm
+          flow skips creating a 100%-off coupon and the vendor email omits it. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Vendor Coupon</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <Label className="flex flex-col gap-1">
+              <span>Auto-generate vendor coupon</span>
+              <span className="font-normal text-xs text-muted-foreground">
+                When a stall payment is confirmed, create a 100% off coupon
+                for the vendor's operators. Turn OFF if you manage entry
+                separately.
+              </span>
+            </Label>
+            <Switch
+              checked={autoGenerateVendorCoupon}
+              onCheckedChange={setAutoGenerateVendorCoupon}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Add-Ons Management */}
       <Card>
         <CardHeader>
@@ -6523,6 +6547,8 @@ export function CreateEventForm({
   // Max total spaces a single vendor may book (drives the quantity-based
   // preferred-space picker on the stall form). Stored as a string while editing.
   const [maxSpacesPerVendor, setMaxSpacesPerVendor] = useState<string>("1");
+  const [autoGenerateVendorCoupon, setAutoGenerateVendorCoupon] =
+    useState(true);
 
   // Add freshly picked sponsor logo files (multiple, no limit).
   const handleSponsorUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -7355,6 +7381,9 @@ export function CreateEventForm({
       }
       if (initialData.maxSpacesPerVendor != null) {
         setMaxSpacesPerVendor(String(initialData.maxSpacesPerVendor));
+      }
+      if (initialData.autoGenerateVendorCoupon != null) {
+        setAutoGenerateVendorCoupon(initialData.autoGenerateVendorCoupon);
       }
       if (initialData.tableTemplates) {
         setTableTemplates(initialData.tableTemplates);
@@ -8332,6 +8361,10 @@ export function CreateEventForm({
       data.append(
         "maxSpacesPerVendor",
         String(Math.max(1, parseInt(maxSpacesPerVendor, 10) || 1)),
+      );
+      data.append(
+        "autoGenerateVendorCoupon",
+        autoGenerateVendorCoupon ? "true" : "false",
       );
       sponsorLogos.forEach((s) => {
         if (s.file) data.append("sponsorLogos", s.file);
