@@ -1504,6 +1504,8 @@ const TableManagement = ({
   selectedVenueConfigId,
   maxSpacesPerVendor,
   setMaxSpacesPerVendor,
+  autoGenerateVendorCoupon,
+  setAutoGenerateVendorCoupon,
 }: {
   tableTemplates: TableTemplate[];
   setTableTemplates: (templates: TableTemplate[]) => void;
@@ -1576,6 +1578,8 @@ const TableManagement = ({
   selectedVenueConfigId: string;
   maxSpacesPerVendor: string;
   setMaxSpacesPerVendor: (v: string) => void;
+  autoGenerateVendorCoupon: boolean;
+  setAutoGenerateVendorCoupon: (v: boolean) => void;
 }) => {
   // const { toast } = useToast();
 
@@ -11143,6 +11147,8 @@ export function CreateEventForm({
                   selectedVenueConfigId={selectedVenueConfigId}
                   maxSpacesPerVendor={maxSpacesPerVendor}
                   setMaxSpacesPerVendor={setMaxSpacesPerVendor}
+                  autoGenerateVendorCoupon={autoGenerateVendorCoupon}
+                  setAutoGenerateVendorCoupon={setAutoGenerateVendorCoupon}
                 />
               </BlurOverlay>
             </ModuleGate>
