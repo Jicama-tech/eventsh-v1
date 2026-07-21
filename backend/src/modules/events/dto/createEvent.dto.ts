@@ -713,6 +713,11 @@ export class CreateEventDto {
   @IsOptional()
   maxSpacesPerVendor?: number;
 
+  // When false, stall payment confirmation won't create a free-entry coupon.
+  @IsBoolean()
+  @IsOptional()
+  autoGenerateVendorCoupon?: boolean;
+
   // Instagram reel URLs — capped client-side at 10; surfaced as a
   // reel carousel on the eventfront. Loose string validation here so
   // organizers can paste any Instagram link format.

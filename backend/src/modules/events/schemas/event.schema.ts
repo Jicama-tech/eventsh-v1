@@ -509,6 +509,11 @@ export class Event {
   @Prop({ type: Number, default: 1 })
   maxSpacesPerVendor?: number;
 
+  // When false, no coupon is created when a stall payment is confirmed —
+  // the vendor's confirmation email/PDF won't include a free-entry code.
+  @Prop({ default: true })
+  autoGenerateVendorCoupon?: boolean;
+
   // Exhibition/Venue fields with ROW-BASED PRICING
   @Prop({ type: Array, default: [] })
   tableTemplates: {

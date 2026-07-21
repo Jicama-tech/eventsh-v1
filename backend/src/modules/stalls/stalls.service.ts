@@ -1261,48 +1261,52 @@ export class StallsService {
         throw new NotFoundException("Event not found for this stall");
       }
 
-      const couponName = (
-        (eventDetail.title || "Event") +
-        (vendor.businessName || vendor.shopName || vendor.name || "Vendor") +
-        (stall.noOfOperators || "1")
-      ).replace(/\s+/g, "");
-
       const orgId = (stall.organizerId as any)?._id || stall.organizerId;
-      const couponPayload: CreateCouponDto = {
-        organizerId: String(orgId),
-        code: couponName,
-        discountType: "PERCENTAGE",
-        discountPercentage: 100,
-        minOrderAmount: eventDetail.ticketPrice || "0",
-        maxUsage: Number(stall.noOfOperators) || 1,
-        expiryDate: eventDetail.startDate,
-        isActive: true,
-        eventId: String(eventId),
-        appliesTo: "ORGANIZER",
-      };
-
+      const autoCoupon = eventDetail.autoGenerateVendorCoupon !== false;
       let coupon: any;
-      try {
-        coupon = await this.couponService.create(couponPayload);
-      } catch (couponErr: any) {
-        // A coupon with this deterministic code already exists (e.g. the payment
-        // was confirmed before, or the same vendor/event regenerates the same
-        // code). Reuse the existing code instead of failing the entire
-        // confirmation with an E11000 duplicate-key error.
-        const isDuplicate =
-          couponErr?.code === 11000 ||
-          /E11000|duplicate key/i.test(String(couponErr?.message || couponErr));
-        if (isDuplicate) {
-          this.logger.warn(
-            `Coupon "${couponName}" already exists — reusing it for stall ${stallId}.`,
-          );
-          coupon = { code: couponName };
-        } else {
-          throw couponErr;
-        }
-      }
 
-      stall.couponCodeAssigned = coupon.code;
+      if (autoCoupon) {
+        const couponName = (
+          (eventDetail.title || "Event") +
+          (vendor.businessName || vendor.shopName || vendor.name || "Vendor") +
+          (stall.noOfOperators || "1")
+        ).replace(/\s+/g, "");
+
+        const couponPayload: CreateCouponDto = {
+          organizerId: String(orgId),
+          code: couponName,
+          discountType: "PERCENTAGE",
+          discountPercentage: 100,
+          minOrderAmount: eventDetail.ticketPrice || "0",
+          maxUsage: Number(stall.noOfOperators) || 1,
+          expiryDate: eventDetail.startDate,
+          isActive: true,
+          eventId: String(eventId),
+          appliesTo: "ORGANIZER",
+        };
+
+        try {
+          coupon = await this.couponService.create(couponPayload);
+        } catch (couponErr: any) {
+          // A coupon with this deterministic code already exists (e.g. the payment
+          // was confirmed before, or the same vendor/event regenerates the same
+          // code). Reuse the existing code instead of failing the entire
+          // confirmation with an E11000 duplicate-key error.
+          const isDuplicate =
+            couponErr?.code === 11000 ||
+            /E11000|duplicate key/i.test(String(couponErr?.message || couponErr));
+          if (isDuplicate) {
+            this.logger.warn(
+              `Coupon "${couponName}" already exists — reusing it for stall ${stallId}.`,
+            );
+            coupon = { code: couponName };
+          } else {
+            throw couponErr;
+          }
+        }
+
+        stall.couponCodeAssigned = coupon.code;
+      }
 
       // Get organizer country for currency
       const organizerDoc = await this.organizerModel.findById(orgId);
