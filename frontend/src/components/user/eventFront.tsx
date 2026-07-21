@@ -13375,8 +13375,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             const qty = isSelected ? Number(qtys[idx]) || 1 : 0;
                             const atCap =
                               totalPreferredSpaces >= maxSpacesPerVendor;
-                            const full =
-                              !isSelected && isTemplateFullyBooked(template);
+                            // Sold-out is a property of the space type itself,
+                            // NOT of whether the vendor has picked it — keep it
+                            // true after selection so the form still shows the
+                            // waitlist warning before they submit.
+                            const soldOut = isTemplateFullyBooked(template);
                             const priceEl = (() => {
                               const hasMember =
                                 isMember &&
@@ -13439,12 +13442,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     <span className="text-sm font-semibold text-gray-800">
                                       {template.name}
                                     </span>
-                                    {full && (
+                                    {soldOut && (
                                       <span className="ml-auto text-xs font-medium text-amber-600">
                                         Sold out &mdash; waitlist
                                       </span>
                                     )}
-                                    {!full && isSelected && (
+                                    {!soldOut && isSelected && (
                                       <span
                                         className="ml-auto text-xs font-medium"
                                         style={{
@@ -13460,6 +13463,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     &middot; {priceEl}
                                   </div>
                                 </button>
+                                {soldOut && isSelected && (
+                                  <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-700">
+                                    All &ldquo;{template.name}&rdquo; spaces are
+                                    currently booked. Keep this to join the
+                                    waiting queue, or pick another space type
+                                    that still has spaces available.
+                                  </div>
+                                )}
                                 {isSelected && (
                                   <div className="mt-2 flex items-center gap-2 border-t pt-2">
                                     <span className="text-[11px] text-gray-500">
