@@ -98,6 +98,63 @@ export class StallsService {
       fs.mkdirSync(ticketsDir, { recursive: true });
   }
 
+  /**
+   * Build the booking-summary message body (WhatsApp text + email HTML) for
+   * the stall confirmation / ticket delivery. Shared by the auto-delivery and
+   * the manual resend path so both show the same rich detail.
+   */
+  private buildBookingSummaryMessage(
+    stall: any,
+    vendor: any,
+    eventObj: any,
+    country: string,
+    headingText: string,
+    coupon?: any,
+    isReissue?: boolean,
+  ): string {
+    const eventDate = eventObj?.startDate
+      ? new Date(eventObj.startDate).toLocaleDateString()
+      : "TBA";
+    return (
+      `🎉 *${headingText}*\n\n` +
+      (isReissue
+        ? `✏️ Your booking was updated and approved — here's your *new* ticket.\n\n`
+        : "") +
+      `🎪 *Event:* ${eventObj?.title || "Event"}\n` +
+      `👤 *Business:* ${vendor.businessName || vendor.shopName || vendor.brandName || stall.brandName || vendor.name || "—"}\n` +
+      `📅 *Date:* ${eventDate}\n` +
+      `📍 *Venue:* ${eventObj?.location || "TBA"}\n\n` +
+      `📊 *Booking Summary:*\n` +
+      `📦 *Spaces Booked:*\n` +
+      (stall.selectedTables || [])
+        .filter(Boolean)
+        .map(
+          (t: any) =>
+            `  • ${t.name || t.tableName}${t.layoutName ? ` (${t.layoutName})` : ""} - ${formatCurrency(t.price || 0, country)}`,
+        )
+        .join("\n") +
+      `\n` +
+      `🛍️ *Add-ons Selected:*\n` +
+      (stall.selectedAddOns?.length > 0
+        ? (stall.selectedAddOns || [])
+            .filter(Boolean)
+            .map(
+              (a: any) =>
+                `  • ${a.name} x${a.quantity} - ${formatCurrency(a.price * a.quantity, country)}`,
+            )
+            .join("\n")
+        : "  None") +
+      `\n` +
+      `• Total: ${formatCurrency(stall.grandTotal, country)}\n` +
+      (coupon && coupon.code
+        ? `\n🎟️ *Coupon:* ${coupon.code} (${stall.noOfOperators} free entries)\n`
+        : "") +
+      (isReissue
+        ? `\n⚠️ This new QR replaces your previous one — the *old QR is no longer valid*.`
+        : `\n⚠️ Your stall ticket PDF is attached. Present the QR code at the event entrance.`)
+    );
+  }
+
   // ============ FORM DRAFTS (cross-device resume) ============
   // One draft per (event, email). Public + email-keyed like the rest of the
   // stall flow. Deleted on successful registration; TTL cleans up the rest.
@@ -1384,46 +1441,9 @@ export class StallsService {
     const vendorWhatsApp = vendor.whatsAppNumber || vendor.whatsappNumber;
     const vendorEmail = this.vendorEmailRecipients(vendor);
     const eventObj = stall.eventId as any;
-    const eventDate = eventObj?.startDate
-      ? new Date(eventObj.startDate).toLocaleDateString()
-      : "TBA";
-    const message =
-      `🎉 *${headingText}*\n\n` +
-      (isReissue
-        ? `✏️ Your booking was updated and approved — here's your *new* ticket.\n\n`
-        : "") +
-      `🎪 *Event:* ${eventObj?.title || "Event"}\n` +
-      `👤 *Business:* ${vendor.businessName || vendor.shopName || vendor.brandName || stall.brandName || vendor.name || "—"}\n` +
-      `📅 *Date:* ${eventDate}\n` +
-      `📍 *Venue:* ${eventObj?.location || "TBA"}\n\n` +
-      `📊 *Booking Summary:*\n` +
-      `📦 *Spaces Booked:*\n` +
-      stall.selectedTables
-        .filter(Boolean)
-        .map(
-          (t: any) =>
-            `  • ${t.name || t.tableName}${t.layoutName ? ` (${t.layoutName})` : ""} - ${formatCurrency(t.price || 0, country)}`,
-        )
-        .join("\n") +
-      `\n` +
-      `🛍️ *Add-ons Selected:*\n` +
-      (stall.selectedAddOns?.length > 0
-        ? stall.selectedAddOns
-            .filter(Boolean)
-            .map(
-              (a: any) =>
-                `  • ${a.name} x${a.quantity} - ${formatCurrency(a.price * a.quantity, country)}`,
-            )
-            .join("\n")
-        : "  None") +
-      `\n` +
-      `• Total: ${formatCurrency(stall.grandTotal, country)}\n` +
-      (coupon
-        ? `\n🎟️ *Coupon:* ${coupon.code} (${stall.noOfOperators} free entries)\n`
-        : "") +
-      (isReissue
-        ? `\n⚠️ This new QR replaces your previous one — the *old QR is no longer valid*.`
-        : `\n⚠️ Your stall ticket PDF is attached. Present the QR code at the event entrance.`);
+    const message = this.buildBookingSummaryMessage(
+      stall, vendor, eventObj, country, headingText, coupon, isReissue,
+    );
 
     // Render the ticket PDF. If headless Chromium fails (common on constrained
     // production hosts), DON'T abort delivery — fall back to a plain email.
@@ -2420,51 +2440,12 @@ export class StallsService {
 
       const eventObj = stall.eventId as any;
       const vendorObj = stall.shopkeeperId as any;
-      const eventDate = eventObj?.startDate
-        ? new Date(eventObj.startDate).toLocaleDateString()
-        : "TBA";
-
-      const message = `🎉 *Your Stall Confirmation is Ready!*
-
-🎪 *Stall:* Confirmed for ${eventObj?.title || "Event"}
-
-👤 *Business:* ${vendorObj?.businessName || vendorObj?.shopName || vendorObj?.brandName || stall.brandName || vendorObj?.name || "—"}
-
-📅 *Date:* ${eventDate}
-
-📍 *Venue:* ${eventObj?.location || "TBA"}
-
-📊 *Booking Summary:*
-📦 *Spaces Booked:*
-${
-  (stall.selectedTables || [])
-    .filter(Boolean)
-    .map(
-      (t: any) =>
-        `  • ${t.name || t.tableName}${t.layoutName ? ` (${t.layoutName})` : ""} - ${formatCurrency(t.price || 0, country)}`,
-    )
-    .join("\n")
-}
-🛍️ *Add-ons Selected:*
-${
-  stall.selectedAddOns?.length > 0
-    ? (stall.selectedAddOns || [])
-        .filter(Boolean)
-        .map(
-          (a: any) =>
-            `  • ${a.name} x${a.quantity} - ${formatCurrency(a.price * a.quantity, country)}`,
-        )
-        .join("\n")
-    : "  None"
-}
-• Total Amount: ${formatCurrency(stall.grandTotal, country)}
-
-⚠️ *Important:* Your stall ticket PDF is attached. 
-Please save it and present the QR code at the event entrance.
-
-The QR code can ONLY be scanned using the official Eventsh app.
-
-Thank you for choosing Eventsh! 🎊`;
+      // coupon is already passed in as a parameter — use it as-is.
+      const message = this.buildBookingSummaryMessage(
+        stall, vendorObj, eventObj, country,
+        "Your Stall Confirmation is Ready!",
+        coupon,
+      );
 
       // Send WhatsApp message
       await this.otpService.sendWhatsAppMessage(whatsappNumber, message);
@@ -4152,17 +4133,23 @@ Thank you for choosing Eventsh! 🎊`;
     const orgId = (stall.organizerId as any)?._id || stall.organizerId;
     const orgDoc = await this.organizerModel.findById(orgId).lean();
     const senderConfig = (orgDoc as any)?.emailConfig;
-
+    const country = (orgDoc as any)?.country || "IN";
+    const coupon = stall.couponCodeAssigned
+      ? { code: stall.couponCodeAssigned }
+      : undefined;
     const eventTitle = eventObj?.title || "Event";
+    const message = this.buildBookingSummaryMessage(
+      stall, vendorObj, eventObj, country,
+      "Your Stall Ticket",
+      coupon,
+    );
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
         <div style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:24px;text-align:center">
           <h1 style="margin:0;font-size:20px">Your Stall Ticket</h1>
         </div>
         <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-          <p>Hello ${vendorObj?.businessName || vendorObj?.shopName || vendorObj?.name || "there"},</p>
-          <p>Here is your stall ticket for <strong>${eventTitle}</strong>. Your QR code is attached as a PDF — present it at the event entrance.</p>
-          <p style="color:#64748b;font-size:12px;margin-top:20px">The QR code can only be scanned with the official Eventsh app.</p>
+          <p>${message.replace(/\*/g, "").replace(/\n/g, "<br/>")}</p>
         </div>
       </div>`;
 
