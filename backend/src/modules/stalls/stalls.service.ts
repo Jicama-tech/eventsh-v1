@@ -57,18 +57,17 @@ function parsePreferredArray(json?: string, legacy?: string): string[] {
 }
 
 function formatCurrency(amount: number, country?: string): string {
-  if (country === "IN") {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-    }).format(amount);
-  } else if (country === "SG") {
+  if (country === "SG") {
     return new Intl.NumberFormat("en-SG", {
       style: "currency",
       currency: "SGD",
     }).format(amount);
   }
-  return `$${amount.toFixed(2)}`;
+  // Default to Indian Rupee when no country or unknown country
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+  }).format(amount);
 }
 
 @Injectable()
@@ -130,7 +129,7 @@ export class StallsService {
         .filter(Boolean)
         .map(
           (t: any) =>
-            `  • ${t.name || t.tableName}${t.layoutName ? ` (${t.layoutName})` : ""} - ${formatCurrency(t.price || 0, country)}`,
+            `  • ${t.name || t.tableName}${t.layoutName ? ` (${t.layoutName})` : ""} - ${formatCurrency(t.price || 0, country)}${(t.depositAmount ?? 0) > 0 ? ` (Deposit: ${formatCurrency(t.depositAmount, country)})` : ""}`,
         )
         .join("\n") +
       `\n` +
