@@ -13346,6 +13346,39 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     (t: any) => t.forSale !== false,
                   ).length > 0 && (
                     <div className="space-y-2 border-t pt-4">
+                      {/* Form-level waitlist banner: shows above the heading
+                        when any picked space type is sold out, nudging the
+                        vendor to switch to a type that still has spaces. */}
+                      {(() => {
+                        const soldOutNames = (eventData?.tableTemplates || [])
+                          .filter(
+                            (t: any) =>
+                              (
+                                shopkeeperDetails.preferredTemplateIds || []
+                              ).includes(t.id) && isTemplateFullyBooked(t),
+                          )
+                          .map((t: any) => t.name);
+                        if (soldOutNames.length === 0) return null;
+                        const label =
+                          soldOutNames.length === 1
+                            ? `“${soldOutNames[0]}” is`
+                            : `${soldOutNames
+                                .map((n: string) => `“${n}”`)
+                                .join(", ")} are`;
+                        return (
+                          <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs leading-snug text-amber-800">
+                            <span aria-hidden className="mt-px">
+                              ⚠️
+                            </span>
+                            <span>
+                              <span className="font-semibold">Sold out —</span>{" "}
+                              {label} fully booked. Keep your selection to join
+                              the waiting queue, or change to another space type
+                              below that still has spaces available.
+                            </span>
+                          </div>
+                        );
+                      })()}
                       <div className="flex items-center justify-between">
                         <Label>
                           Preferred Space Type(s){" "}
@@ -13463,14 +13496,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     &middot; {priceEl}
                                   </div>
                                 </button>
-                                {soldOut && isSelected && (
-                                  <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-700">
-                                    All &ldquo;{template.name}&rdquo; spaces are
-                                    currently booked. Keep this to join the
-                                    waiting queue, or pick another space type
-                                    that still has spaces available.
-                                  </div>
-                                )}
                                 {isSelected && (
                                   <div className="mt-2 flex items-center gap-2 border-t pt-2">
                                     <span className="text-[11px] text-gray-500">
