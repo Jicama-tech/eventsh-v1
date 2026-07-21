@@ -1657,7 +1657,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
 
       {/* Confirm Dialog */}
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <DialogContent compact>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Confirm Stall Request</DialogTitle>
             <DialogDescription>

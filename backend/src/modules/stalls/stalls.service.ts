@@ -29,11 +29,6 @@ import {
 import { UpdatePaymentStatusDto } from "./dto/paymentStatus.dto";
 import { UpdateStatusDto } from "./dto/updateStatus.dto";
 import { Stall, StallDocument } from "./entities/stall.entity";
-import {
-  StallFormDraft,
-  StallFormDraftDocument,
-} from "./schemas/stall-form-draft.schema";
-import { UpsertFormDraftDto } from "./dto/upsert-form-draft.dto";
 import { OtpService } from "../otp/otp.service";
 import { CouponService } from "../coupon/coupon.service";
 import { CreateCouponDto } from "../coupon/dto/create-coupon.dto";
@@ -80,8 +75,6 @@ export class StallsService {
     @InjectModel("Organizer") private organizerModel: Model<any>,
     @InjectModel("Operator") private operatorModel: Model<any>,
     @InjectModel("OrganizerStore") private organizerStoreModel: Model<any>,
-    @InjectModel(StallFormDraft.name)
-    private stallFormDraftModel: Model<StallFormDraftDocument>,
     private otpService: OtpService,
     private couponService: CouponService,
     private feedbackService: FeedbackService,
@@ -507,28 +500,6 @@ export class StallsService {
       ]);
 
       await this.sendStallCreatedNotification(populatedStall);
-
-      // Registration complete — wipe the resume progress but KEEP the draft
-      // row and its termsAcceptedAt, so this vendor never re-accepts the
-      // Rules & Regulations for this event (e.g. when booking another stall).
-      // Failure here must not fail the request.
-      try {
-        const draftEmail = (
-          createStallDto.shopkeeperEmail ||
-          createStallDto.shopkeeperBusinessEmail ||
-          ""
-        )
-          .toLowerCase()
-          .trim();
-        if (draftEmail) {
-          await this.stallFormDraftModel.updateOne(
-            { eventId: createStallDto.eventId, email: draftEmail },
-            { $set: { form: {}, subStep: 1 } },
-          );
-        }
-      } catch {
-        /* non-fatal */
-      }
 
       return {
         success: true,
