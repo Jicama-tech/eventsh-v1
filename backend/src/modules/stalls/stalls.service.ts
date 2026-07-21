@@ -1402,7 +1402,7 @@ export class StallsService {
         .filter(Boolean)
         .map(
           (t: any) =>
-            `  • ${t.name || t.tableName}${t.layoutName ? ` (${t.layoutName})` : ""}`,
+            `  • ${t.name || t.tableName}${t.layoutName ? ` (${t.layoutName})` : ""} - ${formatCurrency(t.price || 0, country)}`,
         )
         .join("\n") +
       `\n` +
@@ -2441,7 +2441,7 @@ ${
     .filter(Boolean)
     .map(
       (t: any) =>
-        `  • ${t.name || t.tableName}${t.layoutName ? ` (${t.layoutName})` : ""}`,
+        `  • ${t.name || t.tableName}${t.layoutName ? ` (${t.layoutName})` : ""} - ${formatCurrency(t.price || 0, country)}`,
     )
     .join("\n")
 }
