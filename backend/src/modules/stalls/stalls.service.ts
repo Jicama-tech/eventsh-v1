@@ -1393,8 +1393,26 @@ export class StallsService {
       `📅 *Date:* ${eventDate}\n` +
       `📍 *Venue:* ${eventObj?.location || "TBA"}\n\n` +
       `📊 *Booking Summary:*\n` +
-      `• Tables: ${stall.selectedTables.length}\n` +
-      `• Add-ons: ${stall.selectedAddOns?.length || 0}\n` +
+      `📦 *Spaces Booked:*\n` +
+      stall.selectedTables
+        .filter(Boolean)
+        .map(
+          (t: any) =>
+            `  • ${t.name || t.tableName}${t.layoutName ? ` (${t.layoutName})` : ""}`,
+        )
+        .join("\n") +
+      `\n` +
+      `🛍️ *Add-ons Selected:*\n` +
+      (stall.selectedAddOns?.length > 0
+        ? stall.selectedAddOns
+            .filter(Boolean)
+            .map(
+              (a: any) =>
+                `  • ${a.name} x${a.quantity} - ${formatCurrency(a.price * a.quantity, country)}`,
+            )
+            .join("\n")
+        : "  None") +
+      `\n` +
       `• Total: ${formatCurrency(stall.grandTotal, country)}\n` +
       (coupon
         ? `\n🎟️ *Coupon:* ${coupon.code} (${stall.noOfOperators} free entries)\n`
@@ -2413,8 +2431,28 @@ export class StallsService {
 📍 *Venue:* ${eventObj?.location || "TBA"}
 
 📊 *Booking Summary:*
-• Tables: ${stall.selectedTables.length}
-• Add-ons: ${stall.selectedAddOns?.length || 0}
+📦 *Spaces Booked:*
+${
+  (stall.selectedTables || [])
+    .filter(Boolean)
+    .map(
+      (t: any) =>
+        `  • ${t.name || t.tableName}${t.layoutName ? ` (${t.layoutName})` : ""}`,
+    )
+    .join("\n")
+}
+🛍️ *Add-ons Selected:*
+${
+  stall.selectedAddOns?.length > 0
+    ? (stall.selectedAddOns || [])
+        .filter(Boolean)
+        .map(
+          (a: any) =>
+            `  • ${a.name} x${a.quantity} - ${formatCurrency(a.price * a.quantity, country)}`,
+        )
+        .join("\n")
+    : "  None"
+}
 • Total Amount: ${formatCurrency(stall.grandTotal, country)}
 
 ⚠️ *Important:* Your stall ticket PDF is attached. 
