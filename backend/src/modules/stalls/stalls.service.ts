@@ -52,18 +52,16 @@ function parsePreferredArray(json?: string, legacy?: string): string[] {
 }
 
 function formatCurrency(amount: number, country?: string): string {
-  if (country === "IN") {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-    }).format(amount);
-  } else if (country === "SG") {
-    return new Intl.NumberFormat("en-SG", {
-      style: "currency",
-      currency: "SGD",
-    }).format(amount);
+  if (country === "SG") {
+    // Singapore uses $ but we explicitly want SG$ to distinguish from other
+    // dollar currencies (USD, AUD, etc.).
+    return `SG$${amount.toFixed(2)}`;
   }
-  return `$${amount.toFixed(2)}`;
+  // Default to Indian Rupee when no country or unknown country
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+  }).format(amount);
 }
 
 @Injectable()
