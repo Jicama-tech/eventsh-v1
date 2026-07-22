@@ -166,6 +166,10 @@ export interface StallRequest {
     ticketPrice: number;
     totalTickets: number;
     gallery: string[];
+    // Event-form coupon toggle. When false, any coupon already generated for a
+    // stall is suppressed (shown as "None Assigned"; omitted from the shared
+    // QR/ticket) without being deleted.
+    autoGenerateVendorCoupon?: boolean;
   };
   organizerId: {
     _id: string;
