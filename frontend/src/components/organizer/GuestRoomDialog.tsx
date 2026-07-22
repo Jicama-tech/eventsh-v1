@@ -98,6 +98,7 @@ export default function GuestRoomDialog({
   open,
   onOpenChange,
   onSaved,
+  fullScreenOnMobile = false,
 }: {
   eventId: string;
   guest: GuestLike | null;
@@ -106,6 +107,8 @@ export default function GuestRoomDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onSaved: (allotments: Allot[]) => void;
+  /** Full-screen the dialog on phones (individual dashboard app-feel). */
+  fullScreenOnMobile?: boolean;
 }) {
   const { toast } = useToast();
   const [rows, setRows] = useState<Allot[]>([]);
@@ -426,7 +429,10 @@ export default function GuestRoomDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+      <DialogContent
+        fullScreenOnMobile={fullScreenOnMobile}
+        className="app-scroll max-h-[90vh] max-w-lg"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <BedDouble className="h-5 w-5 text-rose-500" />
@@ -492,9 +498,9 @@ export default function GuestRoomDialog({
                     <X className="h-4 w-4" />
                   </button>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
                   {fnOptions.length > 1 && (
-                    <div className="col-span-2">
+                    <div className="min-[400px]:col-span-2">
                       <Label className="text-xs">For function</Label>
                       <Select
                         value={r.functionId}
@@ -548,7 +554,7 @@ export default function GuestRoomDialog({
                       }
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div className="min-[400px]:col-span-2">
                     <Label className="text-xs">Room name / number</Label>
                     <Input
                       value={r.roomName}
@@ -556,7 +562,7 @@ export default function GuestRoomDialog({
                       placeholder="e.g. Taj Palace — Room 204"
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div className="min-[400px]:col-span-2">
                     <Label className="text-xs">Notes (optional)</Label>
                     <Input
                       value={r.notes}
@@ -565,7 +571,7 @@ export default function GuestRoomDialog({
                     />
                   </div>
                   {attendeeNames.length > 0 && (
-                    <div className="col-span-2">
+                    <div className="min-[400px]:col-span-2">
                       <Label className="text-xs">Who's in this room?</Label>
                       {(() => {
                         // Hide people already placed in another room — only show
@@ -807,7 +813,10 @@ export default function GuestRoomDialog({
               </span>
             </div>
 
-            <div className="flex flex-wrap justify-end gap-2 border-t pt-3">
+            {/* Pinned action bar — stays reachable no matter how many rooms
+                are added; spans the dialog edges and clears the home indicator
+                on mobile. */}
+            <div className="sticky bottom-0 z-10 -mx-6 -mb-6 flex flex-wrap justify-end gap-2 border-t bg-card/95 px-6 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-card/80">
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>

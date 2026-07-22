@@ -476,9 +476,9 @@ export const SECTION_LABELS: { key: keyof MarriageSections; label: string }[] = 
 
 // Tailwind class maps for structural sizing (read directly by the page).
 export const HERO_HEIGHT_CLASS: Record<MarriageHeroHeight, string> = {
-  full: "min-h-[92vh]",
-  tall: "min-h-[78vh]",
-  compact: "min-h-[60vh]",
+  full: "wed-hero-full",
+  tall: "wed-hero-tall",
+  compact: "wed-hero-compact",
 };
 export const HERO_NAME_CLASS: Record<MarriageFontScale, string> = {
   cozy: "text-4xl sm:text-6xl",
