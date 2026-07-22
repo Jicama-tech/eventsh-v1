@@ -1349,67 +1349,107 @@ export function MarriageEventForm({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Sticky Header — mirrors the commercial CreateEventForm */}
-      <div className="sticky top-0 z-50 bg-white border-b shadow-sm">
-        <div className="flex items-center justify-between p-4">
-          <div className="ml-2 flex items-center gap-3">
-            <h1 className="text-xl font-bold">
+    <div className="flex min-h-full flex-col bg-muted/40">
+      {/* Unified sticky app bar — header + tab strip pin together as one block
+          (no magic top offset) with translucent app chrome. Fills its dialog
+          scroller naturally instead of forcing a full 100vh page. */}
+      <div className="sticky top-0 z-50 border-b bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/80">
+        <div className="flex items-center justify-between gap-2 p-3 sm:p-4">
+          <div className="ml-1 flex min-w-0 items-center gap-3 sm:ml-2">
+            <h1 className="truncate text-base font-bold sm:text-xl">
               {editMode ? "Edit Wedding" : "Create Wedding"}
             </h1>
-            <Badge variant="secondary" className="font-normal">
+            <Badge
+              variant="secondary"
+              className="hidden font-normal sm:inline-flex"
+            >
               Marriage Function
             </Badge>
           </div>
-          <div className="flex gap-2">
-            <Button type="button" variant="buttonOutline" onClick={onClose}>
+          <div className="flex flex-shrink-0 items-center gap-2">
+            <Button
+              type="button"
+              variant="buttonOutline"
+              size="sm"
+              className="sm:h-10 sm:px-4"
+              onClick={onClose}
+            >
               Cancel
             </Button>
             <Button
               onClick={handleSubmit}
               disabled={saving}
-              className="min-w-32"
+              size="sm"
+              className="min-w-0 sm:h-10 sm:min-w-32 sm:px-4"
             >
-              {saving
-                ? editMode
-                  ? "Updating..."
-                  : "Creating..."
-                : editMode
-                  ? "Update Wedding"
-                  : "Create Wedding"}
+              {saving ? (
+                editMode ? (
+                  "Updating…"
+                ) : (
+                  "Creating…"
+                )
+              ) : (
+                <>
+                  <span className="sm:hidden">
+                    {editMode ? "Update" : "Create"}
+                  </span>
+                  <span className="hidden sm:inline">
+                    {editMode ? "Update Wedding" : "Create Wedding"}
+                  </span>
+                </>
+              )}
             </Button>
           </div>
         </div>
-      </div>
 
-      {/* Sticky Tabs */}
-      <div className="sticky top-[73px] z-40 bg-white border-b">
-        <Tabs value={currentTab} onValueChange={setCurrentTab}>
-          <TabsList className="grid w-full grid-cols-6 h-12">
-            <TabsTrigger value="couple" className="text-sm">
-              Couple &amp; Hosts
-            </TabsTrigger>
-            <TabsTrigger value="functions" className="text-sm">
-              Functions
-            </TabsTrigger>
-            <TabsTrigger value="media" className="text-sm">
-              Media
-            </TabsTrigger>
-            <TabsTrigger value="story" className="text-sm">
-              Story
-            </TabsTrigger>
-            <TabsTrigger value="design" className="text-sm">
-              Design
-            </TabsTrigger>
-            <TabsTrigger value="settings" className="text-sm">
-              Settings
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        {/* Tab strip — wraps to a 3×2 grid on phones, single 6-col row from sm
+            up, so no label ever gets cramped. */}
+        <div className="border-t px-2 py-1.5 sm:px-0 sm:py-0">
+          <Tabs value={currentTab} onValueChange={setCurrentTab}>
+            <TabsList className="grid h-auto w-full grid-cols-3 gap-1 bg-transparent sm:h-12 sm:grid-cols-6 sm:gap-0">
+              <TabsTrigger
+                value="couple"
+                className="whitespace-nowrap py-2 text-xs sm:text-sm"
+              >
+                Couple &amp; Hosts
+              </TabsTrigger>
+              <TabsTrigger
+                value="functions"
+                className="whitespace-nowrap py-2 text-xs sm:text-sm"
+              >
+                Functions
+              </TabsTrigger>
+              <TabsTrigger
+                value="media"
+                className="whitespace-nowrap py-2 text-xs sm:text-sm"
+              >
+                Media
+              </TabsTrigger>
+              <TabsTrigger
+                value="story"
+                className="whitespace-nowrap py-2 text-xs sm:text-sm"
+              >
+                Story
+              </TabsTrigger>
+              <TabsTrigger
+                value="design"
+                className="whitespace-nowrap py-2 text-xs sm:text-sm"
+              >
+                Design
+              </TabsTrigger>
+              <TabsTrigger
+                value="settings"
+                className="whitespace-nowrap py-2 text-xs sm:text-sm"
+              >
+                Settings
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </div>
 
       {/* Content */}
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6">
         <Tabs value={currentTab} onValueChange={setCurrentTab}>
           {/* COUPLE & HOSTS */}
           <TabsContent value="couple" className="space-y-6">

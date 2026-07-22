@@ -150,6 +150,24 @@ export class StallsService {
     );
   }
 
+  /**
+   * The coupon to surface on a stall's ticket / QR / detail view, honoring the
+   * event's live `autoGenerateVendorCoupon` toggle. A coupon generated earlier
+   * stays stored on the stall (couponCodeAssigned), but flipping the event
+   * toggle OFF suppresses it everywhere the vendor sees it — the PDF coupon box,
+   * the share/summary message, the download and the resend. Flipping it back ON
+   * restores it; nothing is deleted or invalidated (the code still redeems if
+   * scanned directly — this is a display/share gate, not a void).
+   */
+  private effectiveStallCoupon(
+    stall: any,
+    event: any,
+  ): { code: string } | null {
+    if (!stall?.couponCodeAssigned) return null;
+    if (event?.autoGenerateVendorCoupon === false) return null;
+    return { code: stall.couponCodeAssigned };
+  }
+
   // ============ FORM DRAFTS (cross-device resume) ============
   // One draft per (event, email). Public + email-keyed like the rest of the
   // stall flow. Deleted on successful registration; TTL cleans up the rest.
@@ -1740,10 +1758,10 @@ export class StallsService {
     });
 
     // Bump the free-entry coupon (one per operator), keeping the same code.
+    // Suppress it from the re-issued ticket when the event's coupon toggle is
+    // off, but still keep its max-usage in sync so re-enabling stays correct.
     const orgId = (stall.organizerId as any)?._id || stall.organizerId;
-    const coupon: any = stall.couponCodeAssigned
-      ? { code: stall.couponCodeAssigned }
-      : null;
+    const coupon: any = this.effectiveStallCoupon(stall, stall.eventId);
     if (stall.couponCodeAssigned) {
       try {
         await this.couponService.setMaxUsageByCode(
@@ -2316,11 +2334,11 @@ export class StallsService {
           `}
 
           ${
-            stall.couponCodeAssigned
+            coupon?.code
               ? `
           <div class="coupon-box">
              <div class="coupon-msg">🎟️ <strong>Exhibitor Complimentary Entry</strong></div>
-             <div class="coupon-code">${stall.couponCodeAssigned}</div>
+             <div class="coupon-code">${coupon.code}</div>
              <div class="coupon-msg">
                This coupon is valid for <strong>${stall.noOfOperators} Operator(s)</strong>.<br>
                Use this code at the time of Purchasing ticket to waive the entry price for your exhibitors/operators.
@@ -4035,10 +4053,9 @@ export class StallsService {
         margin: 2,
       });
 
-      // Construct dummy coupon object for HTML template using saved code
-      const coupon = stall.couponCodeAssigned
-        ? { code: stall.couponCodeAssigned }
-        : null;
+      // Construct coupon object for HTML template using the saved code, gated
+      // by the event's live coupon toggle (off ⇒ omit it from the PDF).
+      const coupon = this.effectiveStallCoupon(stall, stall.eventId);
 
       // Get organizer country for currency
       const organizerForCurrency = await this.organizerModel.findById(
@@ -4107,9 +4124,9 @@ export class StallsService {
     const orgDoc = await this.organizerModel.findById(orgId).lean();
     const senderConfig = (orgDoc as any)?.emailConfig;
     const country = (orgDoc as any)?.country || "IN";
-    const coupon = stall.couponCodeAssigned
-      ? { code: stall.couponCodeAssigned }
-      : undefined;
+    // Gate the coupon by the event's live toggle (off ⇒ no coupon in the
+    // resent ticket PDF + summary message).
+    const coupon = this.effectiveStallCoupon(stall, eventObj) ?? undefined;
     const eventTitle = eventObj?.title || "Event";
     const message = this.buildBookingSummaryMessage(
       stall, vendorObj, eventObj, country,

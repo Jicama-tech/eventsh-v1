@@ -858,7 +858,9 @@ export function ExhibitorDetailDialog({
                     Coupon Assigned
                   </Label>
                   <p className="text-sm">
-                    {stallRequest.couponCodeAssigned || "None Assigned"}
+                    {stallRequest.eventId?.autoGenerateVendorCoupon === false
+                      ? "None Assigned"
+                      : stallRequest.couponCodeAssigned || "None Assigned"}
                   </p>
                 </div>
 

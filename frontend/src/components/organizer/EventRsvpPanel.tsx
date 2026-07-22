@@ -83,9 +83,12 @@ interface RsvpStats {
 export default function EventRsvpPanel({
   eventId,
   eventTitle,
+  fullScreenOnMobile = false,
 }: {
   eventId: string;
   eventTitle?: string;
+  /** Full-screen the room-allotment dialog on phones (individual context). */
+  fullScreenOnMobile?: boolean;
 }) {
   const [rows, setRows] = useState<RsvpRow[]>([]);
   const [stats, setStats] = useState<RsvpStats | null>(null);
@@ -221,7 +224,7 @@ export default function EventRsvpPanel({
   return (
     <>
     <Card className="border-rose-200">
-      <CardHeader>
+      <CardHeader className="sticky top-0 z-10 rounded-t-xl border-b border-rose-100 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
         <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-lg">
           <span className="flex items-center gap-2">
             <Heart className="h-5 w-5 text-rose-500" />
@@ -265,7 +268,7 @@ export default function EventRsvpPanel({
 
         {/* Age-group breakdown of the guests currently shown — helps the
             planner size catering and rooms. */}
-        <div className="mb-4 grid grid-cols-4 gap-2">
+        <div className="mb-4 grid grid-cols-2 gap-2 min-[400px]:grid-cols-4">
           <AgeTile label="Adults" value={ageTotals.adults} />
           <AgeTile label="Seniors" value={ageTotals.seniors} />
           <AgeTile label="Children" value={ageTotals.children} />
@@ -559,6 +562,7 @@ export default function EventRsvpPanel({
       eventId={eventId}
       guest={allotGuest as any}
       allGuests={rows as any}
+      fullScreenOnMobile={fullScreenOnMobile}
       open={!!allotGuest}
       onOpenChange={(o) => !o && setAllotGuest(null)}
       onSaved={(allotments) => {
@@ -619,12 +623,17 @@ function Stat({
     rose: "bg-rose-50 text-rose-700",
   };
   return (
-    <div className={`rounded-xl p-4 ${tones[tone]}`}>
-      <div className="mb-1 flex items-center gap-1.5 text-xs uppercase tracking-wide opacity-80">
-        {icon}
-        {label}
+    <div className={`rounded-xl p-2 text-center sm:p-4 ${tones[tone]}`}>
+      {/* Fixed 2-line label box so a wrapping label ("Total Guests") doesn't
+          push its number below the others — all three numbers stay aligned.
+          On phones the icon is hidden and letter-spacing tightened so the
+          single-word labels ("Responses", "Attending") fit their narrow tile
+          instead of spilling into the neighbour; break-words is a hard guard. */}
+      <div className="mb-1 flex min-h-[1.75rem] items-start justify-center gap-1 text-[9px] font-medium uppercase leading-tight tracking-tight opacity-80 min-[360px]:text-[10px] sm:gap-1.5 sm:text-xs sm:tracking-wide">
+        <span className="mt-0.5 hidden shrink-0 sm:inline-flex">{icon}</span>
+        <span className="min-w-0 break-words">{label}</span>
       </div>
-      <div className="text-2xl font-semibold">{value}</div>
+      <div className="text-xl font-semibold sm:text-2xl">{value}</div>
     </div>
   );
 }

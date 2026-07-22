@@ -843,8 +843,6 @@ export function OrganizerDashboard({
       category?: string;
     },
   ) => {
-    // eslint-disable-next-line no-console
-    console.log("[dashboard] handleOpenEventForm called:", mode, payload);
     if (mode === "create") {
       setEditingEvent(null);
       // When the chatbot picked a personal event type, seed the form with it
@@ -867,8 +865,6 @@ export function OrganizerDashboard({
         handleTabChange("events");
       }
       setShowCreateEvent(true);
-      // eslint-disable-next-line no-console
-      console.log("[dashboard] setShowCreateEvent(true) for create");
       return;
     }
     if (mode === "edit" && payload?.eventId) {
@@ -1038,7 +1034,7 @@ export function OrganizerDashboard({
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="app-shell flex flex-col overflow-hidden">
       <DemoPrompt
         open={showDemoPrompt}
         onClose={() => setShowDemoPrompt(false)}
@@ -1067,7 +1063,7 @@ export function OrganizerDashboard({
         </div>
       )}
       {/* Header */}
-      <header className="border-b bg-card sticky top-0 z-50 flex-shrink-0">
+      <header className="safe-t border-b bg-card sticky top-0 z-50 flex-shrink-0">
         <div className="flex h-14 sm:h-16 items-center justify-between px-4 sm:px-6">
           <div className="flex items-center space-x-2">
             {/* Mobile menu button — hidden for Individuals (no sidebar) */}
@@ -1579,8 +1575,17 @@ export function OrganizerDashboard({
             }
           }}
         >
-          <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden p-0">
-            <div className="overflow-y-auto max-h-[90vh]">
+          <DialogContent
+            fullScreenOnMobile={isIndividual}
+            className="max-w-5xl max-h-[90vh] overflow-hidden p-0"
+          >
+            <div
+              className={`app-scroll ${
+                isIndividual
+                  ? "max-sm:flex-1 max-sm:min-h-0 sm:max-h-[90vh]"
+                  : "max-h-[90vh]"
+              }`}
+            >
               {showCreateEvent &&
                 (() => {
                   const activeInitial = editingEvent ?? createDefaults;

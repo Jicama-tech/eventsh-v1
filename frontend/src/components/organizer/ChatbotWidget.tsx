@@ -1456,8 +1456,6 @@ export function ChatbotWidget({
         // Auto-trigger UI driver actions after a short delay so the user can
         // read the bot's reply first.
         const ba = data.botAction as BotAction | undefined;
-        // eslint-disable-next-line no-console
-        console.log("[chatbot] botAction received:", ba, "onOpenEventForm?", !!onOpenEventForm);
         if (ba?.type === "navigate" && onNavigate) {
           setTimeout(() => onNavigate(ba.tab), 800);
         } else if (ba?.type === "openCreateEvent") {
@@ -1469,8 +1467,6 @@ export function ChatbotWidget({
                 ? { eventType: ba.eventType, category: ba.category }
                 : undefined;
             setTimeout(() => {
-              // eslint-disable-next-line no-console
-              console.log("[chatbot] firing onOpenEventForm(create)", preset);
               onOpenEventForm("create", preset);
             }, 800);
           } else {
@@ -1480,8 +1476,6 @@ export function ChatbotWidget({
         } else if (ba?.type === "openEditEvent") {
           if (onOpenEventForm) {
             setTimeout(() => {
-              // eslint-disable-next-line no-console
-              console.log("[chatbot] firing onOpenEventForm(edit)", ba);
               onOpenEventForm("edit", {
                 eventId: ba.eventId,
                 eventTitle: ba.eventTitle,
@@ -1779,7 +1773,7 @@ export function ChatbotWidget({
             ref={scrollRef}
             className={
               isPage
-                ? "flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4"
+                ? "app-scroll flex-1 px-4 sm:px-6 py-4 space-y-4"
                 : "flex-1 overflow-y-auto px-3 py-3 space-y-3"
             }
           >
@@ -2606,7 +2600,7 @@ export function ChatbotWidget({
             onSubmit={handleSubmit}
             className={
               isPage
-                ? "p-3 sm:p-4 border-t border-slate-200 bg-white flex gap-2 items-center flex-shrink-0"
+                ? "px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-4 sm:pt-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom))] border-t border-slate-200 bg-white flex gap-2 items-center flex-shrink-0"
                 : "p-2 border-t bg-white flex gap-2 items-center flex-shrink-0"
             }
           >
@@ -2718,7 +2712,10 @@ export function ChatbotWidget({
         open={!!rsvpEvent}
         onOpenChange={(o) => !o && setRsvpEvent(null)}
       >
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
+        <DialogContent
+          fullScreenOnMobile={isIndividual}
+          className="app-scroll max-w-4xl max-h-[90vh] overflow-x-hidden"
+        >
           <DialogHeader>
             <DialogTitle className="text-base">
               {rsvpEvent?.title
@@ -2730,6 +2727,7 @@ export function ChatbotWidget({
             <EventRsvpPanel
               eventId={rsvpEvent.id}
               eventTitle={rsvpEvent.title}
+              fullScreenOnMobile={isIndividual}
             />
           )}
         </DialogContent>
@@ -2738,7 +2736,10 @@ export function ChatbotWidget({
       {/* Individual custom sender email settings — the only place Individuals
           can reach this (they have no settings sidebar). */}
       <Dialog open={emailSettingsOpen} onOpenChange={setEmailSettingsOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          fullScreenOnMobile={isIndividual}
+          className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        >
           <DialogHeader>
             <DialogTitle className="text-base">Email settings</DialogTitle>
           </DialogHeader>

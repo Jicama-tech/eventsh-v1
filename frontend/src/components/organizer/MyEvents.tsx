@@ -1361,7 +1361,7 @@ const MyEvents: React.FC = () => {
               </h1>
             </DialogTitle> */}
           </DialogHeader>
-          <div className="overflow-y-auto max-h-[calc(90vh-80px)]">
+          <div className="app-scroll max-h-[calc(90vh-80px)]">
             {(() => {
               const activeInitial =
                 editingEvent ?? duplicatingFrom ?? newEventDefaults;
