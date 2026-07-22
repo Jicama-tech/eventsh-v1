@@ -53,7 +53,7 @@ async function bootstrap() {
   app.use(compression());
 
   async function getAllowedDomains(): Promise<string[]> {
-    return [
+    const domains = [
       "https://eventsh.com",
       "https://thefoxsg.com",
       "https://xcionasia.com",
@@ -63,6 +63,12 @@ async function bootstrap() {
       "http://192.168.137.1:8080",
       "http://localhost:8081",
     ]; // sample static list, replace with DB call
+    // Local-network dev origin (a phone browsing the Vite dev server over Wi-Fi).
+    // Kept out of production so a machine-specific LAN IP never ships.
+    if (process.env.NODE_ENV !== "production") {
+      domains.push("http://192.168.1.6:8080");
+    }
+    return domains;
   }
 
   app.enableCors({
