@@ -38,6 +38,7 @@ import { SubscriptionsModule } from "./modules/subscriptions/subscriptions.modul
 import { BillingPaymentsModule } from "./modules/billing-payments/billing-payments.module";
 import { MembershipsModule } from "./modules/memberships/memberships.module";
 import { RsvpModule } from "./modules/rsvp/rsvp.module";
+import { SuppliersModule } from "./modules/suppliers/suppliers.module";
 
 @Module({
   imports: [
@@ -86,6 +87,7 @@ import { RsvpModule } from "./modules/rsvp/rsvp.module";
     PaymentFeedbackModule,
     RsvpModule,
     MembershipsModule,
+    SuppliersModule,
   ],
   providers: [
     // Read-only demo sessions can never mutate real data via the API.
