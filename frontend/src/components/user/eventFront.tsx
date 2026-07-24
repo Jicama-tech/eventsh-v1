@@ -10389,6 +10389,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               Choose your tables, add-ons, and accept the terms to proceed to
               payment.
             </DialogDescription>
+            <p className="mt-1.5 text-xs sm:text-sm font-bold text-amber-600">
+              ⚠️ After selecting, pay for your space and upload your transaction
+              screenshot and ID, then tap the &quot;I have Paid&quot; button.
+              Your space is not reserved until you complete this.
+            </p>
           </div>
 
           {/* Scrollable body — the dialog frame + header stay fixed. */}

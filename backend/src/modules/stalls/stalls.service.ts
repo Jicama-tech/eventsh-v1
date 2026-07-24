@@ -3165,6 +3165,11 @@ export class StallsService {
                   <li>Select your preferred tables and add-ons</li>
                   <li>Complete the payment to confirm your stall</li>
                 </ol>
+                <div style="margin:16px 0;padding:12px 14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px">
+                  <p style="margin:0;color:#b45309;font-weight:700">
+                    ⚠️ Important: Selecting a space does not reserve it. You must select and pay for your space, upload your transaction screenshot and reference ID, then tap the "I have Paid" button. Until you do, your space is not reserved and may be given to another vendor.
+                  </p>
+                </div>
                 <div style="text-align:center;margin:22px 0 6px">
                   <a href="${eventUrl}" style="display:inline-block;background:#16a34a;color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px">
                     Open Event Page
