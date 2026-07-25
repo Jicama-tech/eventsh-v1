@@ -6,7 +6,7 @@
 // their corresponding callback prop is supplied — that's how the volunteer
 // view stays read-only without forking the markup.
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -385,6 +385,49 @@ export function ExhibitorDetailDialog({
       setIsExtending(false);
     }
   };
+
+  // Kick off the 24h confirmation window the moment the organizer opens a stall
+  // that is awaiting payment approval but has no deadline yet (e.g. a booking
+  // made before this feature shipped). New "I have Paid" submissions already
+  // arrive with a deadline, so this only fires for the older/pending ones.
+  const startedTimerRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const s = stallRequest as any;
+    if (!open || !s?._id || !onConfirmPayment) return;
+    const awaiting = s.status === "Processing" && s.paymentStatus !== "Paid";
+    if (!awaiting || s.confirmationDeadline) return;
+    if (startedTimerRef.current.has(s._id)) return;
+    startedTimerRef.current.add(s._id);
+    (async () => {
+      try {
+        const token = sessionStorage.getItem("token");
+        const res = await fetch(
+          `${apiURL}/stalls/${s._id}/start-confirmation-timer`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ changedBy: derivedUserDisplay || undefined }),
+          },
+        );
+        if (res.ok) {
+          const body = await res.json().catch(() => ({}));
+          if (body?.started) await onNoteAdded?.(); // refetch so the countdown shows
+        }
+      } catch {
+        // best-effort — the hourly scheduler backfills the deadline anyway.
+      }
+    })();
+  }, [
+    open,
+    (stallRequest as any)?._id,
+    (stallRequest as any)?.status,
+    (stallRequest as any)?.paymentStatus,
+    (stallRequest as any)?.confirmationDeadline,
+    onConfirmPayment,
+  ]);
 
   // "Resend ticket" is an organizer-only recovery action (volunteers get a
   // read-only dialog with no admin callbacks). It re-delivers the QR ticket

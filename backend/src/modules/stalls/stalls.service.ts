@@ -1589,6 +1589,47 @@ export class StallsService {
   }
 
   /**
+   * Start the 24h confirmation window for a stall that is awaiting payment
+   * approval but has no deadline yet — e.g. a booking submitted before this
+   * feature shipped. Called when the organizer opens the stall's detail dialog,
+   * so the countdown begins "from now". No-op (returns the existing deadline)
+   * if the stall isn't awaiting confirmation or the timer is already running.
+   */
+  async startConfirmationTimer(stallId: string, changedBy?: string) {
+    if (!Types.ObjectId.isValid(stallId)) {
+      throw new BadRequestException("Invalid stall ID format");
+    }
+    const stall = await this.stallModel.findById(stallId);
+    if (!stall) throw new NotFoundException("Stall request not found");
+
+    // Only stalls where the vendor has submitted payment ("I have Paid" →
+    // Processing) and it's still unconfirmed get a confirmation window.
+    const awaiting =
+      stall.status === "Processing" && stall.paymentStatus !== "Paid";
+    if (!awaiting || stall.confirmationDeadline) {
+      return {
+        started: false,
+        confirmationDeadline: stall.confirmationDeadline ?? null,
+      };
+    }
+
+    stall.confirmationDeadline = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    if (!stall.paymentSubmittedAt) {
+      stall.paymentSubmittedAt = (stall as any).selectionDate || new Date();
+    }
+    stall.deadlineRemindersSent = 0;
+    stall.statusHistory.push({
+      status: stall.status as any,
+      note: "24-hour payment-confirmation window started (organizer opened the request).",
+      changedAt: new Date(),
+      changedBy: changedBy || "System",
+    });
+    await stall.save();
+
+    return { started: true, confirmationDeadline: stall.confirmationDeadline };
+  }
+
+  /**
    * Render the stall ticket PDF and deliver it (WhatsApp text + email/WhatsApp
    * attachment), falling back to a plain email when the PDF render fails. Also
    * persists qrCodePath (the PDF url) + qrCodeData on the stall. Self-contained
@@ -3367,12 +3408,16 @@ export class StallsService {
   async processConfirmationDeadlines() {
     const REMINDER_HOURS = [12, 6, 1]; // remind when <= this many hours remain
     const now = Date.now();
-    // All stalls awaiting organizer confirmation ("I have Paid" → Processing).
-    // Includes ones with no deadline yet (paid before this feature shipped).
+    // Only stalls whose confirmation window has ALREADY been started — either by
+    // the vendor clicking "I have Paid" or by the organizer opening the request
+    // (startConfirmationTimer). We deliberately do NOT auto-start the timer for
+    // pre-feature stalls here; that only happens when the organizer opens the
+    // dialog, so the clock begins when a human actually looks at the request.
     const stalls = await this.stallModel
       .find({
         status: "Processing",
         paymentStatus: "Unpaid",
+        confirmationDeadline: { $ne: null, $exists: true },
       })
       .populate("shopkeeperId")
       .populate("eventId")
@@ -3380,21 +3425,8 @@ export class StallsService {
 
     let released = 0;
     let reminded = 0;
-    let backfilled = 0;
     for (const stall of stalls) {
       try {
-        // Already-paid stalls that pre-date this feature have no deadline —
-        // start their 24h window from NOW (never auto-release them instantly).
-        if (!stall.confirmationDeadline) {
-          stall.confirmationDeadline = new Date(now + 24 * 60 * 60 * 1000);
-          if (!stall.paymentSubmittedAt) {
-            stall.paymentSubmittedAt = stall.selectionDate || new Date(now);
-          }
-          stall.deadlineRemindersSent = 0;
-          await stall.save();
-          backfilled++;
-          continue;
-        }
         const deadline = new Date(stall.confirmationDeadline).getTime();
         if (!deadline) continue;
         const msRemaining = deadline - now;
@@ -3422,7 +3454,7 @@ export class StallsService {
         );
       }
     }
-    return { checked: stalls.length, released, reminded, backfilled };
+    return { checked: stalls.length, released, reminded };
   }
 
   // Space freed + soft-cancelled (matches the manual delete convention).

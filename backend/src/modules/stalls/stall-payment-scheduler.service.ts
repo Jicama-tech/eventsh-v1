@@ -27,9 +27,9 @@ export class StallPaymentSchedulerService {
   async handleConfirmationDeadlines() {
     try {
       const r = await this.stallsService.processConfirmationDeadlines();
-      if (r.reminded || r.released || r.backfilled) {
+      if (r.reminded || r.released) {
         this.logger.log(
-          `Confirmation-deadline check: ${r.checked} pending, ${r.backfilled} backfilled, ${r.reminded} reminded, ${r.released} released`,
+          `Confirmation-deadline check: ${r.checked} pending, ${r.reminded} reminded, ${r.released} released`,
         );
       }
     } catch (error) {
