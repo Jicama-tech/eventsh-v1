@@ -50,7 +50,7 @@ const faqData: FAQSection[] = [
       },
       {
         q: "How do I change my organization's country/currency?",
-        a: "Go to Settings → select your country (India or Singapore). The currency symbol (₹ or SG$) will update instantly across all pages — no logout needed.",
+        a: "Go to Settings → select your country. EventSH supports organizers worldwide, and your country's currency symbol (₹, SG$, $, €, £, and more) updates instantly across all pages — no logout needed.",
       },
     ],
   },
@@ -165,7 +165,7 @@ const faqData: FAQSection[] = [
       },
       {
         q: "How does currency work?",
-        a: "Your country setting determines the currency symbol. India → ₹ (INR), Singapore → SG$ (SGD). Change it in Settings — the currency updates instantly across all pages without logout.",
+        a: "Your country setting determines the currency shown everywhere. EventSH supports every country — e.g. India → ₹ (INR), Singapore → SG$ (SGD), United States → $ (USD), UK → £ (GBP), Eurozone → € (EUR). Change it in Settings and the currency updates instantly across all pages without logout.",
       },
       {
         q: "How are speaker/stall payments processed?",

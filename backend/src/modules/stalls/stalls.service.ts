@@ -36,6 +36,7 @@ import { CouponService } from "../coupon/coupon.service";
 import { CreateCouponDto } from "../coupon/dto/create-coupon.dto";
 import { FeedbackService } from "../feedback/feedback.service";
 import { MailService } from "../roles/mail.service";
+import { formatMoney } from "../../common/currency.util";
 
 // Parse a JSON-encoded string[] (multipart sends arrays as a string). Falls
 // back to a single legacy value when the array form isn't present, so older
@@ -184,7 +185,8 @@ export class StallsService {
       subStep: dto.subStep,
       form: dto.form,
     };
-    if (dto.emailVerified !== undefined) update.emailVerified = dto.emailVerified;
+    if (dto.emailVerified !== undefined)
+      update.emailVerified = dto.emailVerified;
     // termsAcceptedAt is write-once: set when the vendor accepts the gate,
     // never cleared by later autosaves that omit the flag.
     if (dto.termsAccepted) update.termsAcceptedAt = new Date();
@@ -310,8 +312,7 @@ export class StallsService {
         if (createStallDto.shopkeeperBusinessEmail)
           updateFields.businessEmail = createStallDto.shopkeeperBusinessEmail;
         if (createStallDto.shopkeeperWhatsAppNumber)
-          updateFields.whatsAppNumber =
-            createStallDto.shopkeeperWhatsAppNumber;
+          updateFields.whatsAppNumber = createStallDto.shopkeeperWhatsAppNumber;
         if (createStallDto.shopkeeperPhoneNumber)
           updateFields.phoneNumber = createStallDto.shopkeeperPhoneNumber;
         if (createStallDto.businessName)
@@ -400,7 +401,8 @@ export class StallsService {
             phoneNumber: createStallDto.shopkeeperPhoneNumber,
             businessName: createStallDto.businessName,
             businessType: createStallDto.businessType,
-            businessCategory: createStallDto.businessCategory || createStallDto.businessType,
+            businessCategory:
+              createStallDto.businessCategory || createStallDto.businessType,
             businessDescription: createStallDto.businessDescription,
             address: createStallDto.businessAddress,
             city: createStallDto.businessCity,
@@ -692,6 +694,11 @@ export class StallsService {
             remainingAmount: grandTotal,
             status: "Processing",
             selectionDate: new Date(),
+            // Vendor clicked "I have Paid": start the 24h organizer-confirmation
+            // window. If not confirmed by then, the space is auto-released.
+            paymentSubmittedAt: new Date(),
+            confirmationDeadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            deadlineRemindersSent: 0,
             notes: selectDto.notes || stall.notes,
             transactionId: selectDto.transactionId || null,
             transactionScreenshot: selectDto.transactionScreenshot || null,
@@ -757,6 +764,12 @@ export class StallsService {
           const senderConfig = await this.getOrganizerSenderConfig(
             stall.organizerId,
           );
+          const orgCountry = (
+            (await this.organizerModel
+              .findById(stall.organizerId)
+              .select("country")
+              .lean()) as any
+          )?.country as string | undefined;
           const tableNames = selectDto.selectedTables
             .map((t) => t.tableName)
             .join(", ");
@@ -773,7 +786,7 @@ export class StallsService {
                   submitted.</p>
                 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin:14px 0">
                   <p style="margin:0 0 6px"><strong>Spaces:</strong> ${tableNames || "—"}</p>
-                  <p style="margin:0 0 6px"><strong>Grand Total:</strong> ${updatedStall.grandTotal}</p>
+                  <p style="margin:0 0 6px"><strong>Grand Total:</strong> ${formatMoney(updatedStall.grandTotal, orgCountry)}</p>
                   <p style="margin:0"><strong>Status:</strong> Awaiting organizer payment approval</p>
                 </div>
                 <p><strong>What happens next?</strong> Please wait for the
@@ -850,7 +863,8 @@ export class StallsService {
       if (!stall) throw new NotFoundException("Stall request not found");
 
       const eventDoc: any = stall.eventId;
-      if (!eventDoc) throw new NotFoundException("Event not found for this stall.");
+      if (!eventDoc)
+        throw new NotFoundException("Event not found for this stall.");
       if (eventHasEnded(eventDoc)) {
         throw new BadRequestException(EVENT_ENDED_MESSAGE);
       }
@@ -949,7 +963,11 @@ export class StallsService {
         }
       }
       const maxTotal = Number(event.maxSpacesPerVendor);
-      if (Number.isFinite(maxTotal) && maxTotal > 0 && newTables.length > maxTotal) {
+      if (
+        Number.isFinite(maxTotal) &&
+        maxTotal > 0 &&
+        newTables.length > maxTotal
+      ) {
         throw new BadRequestException(
           `At most ${maxTotal} space${maxTotal === 1 ? "" : "s"} for this event.`,
         );
@@ -1208,11 +1226,7 @@ export class StallsService {
    * status. Used by exhibitor / organizer / operator / volunteer to leave
    * timeline entries at any time from the Stall Dialog.
    */
-  async addNote(
-    stallId: string,
-    note: string,
-    addedBy?: string,
-  ) {
+  async addNote(stallId: string, note: string, addedBy?: string) {
     if (!Types.ObjectId.isValid(stallId)) {
       throw new BadRequestException("Invalid stall ID format");
     }
@@ -1283,6 +1297,8 @@ export class StallsService {
       stall.status = "Completed";
       stall.completionDate = new Date();
       stall.remainingAmount = 0;
+      // Confirmed in time — cancel the 24h auto-release window.
+      stall.confirmationDeadline = null as any;
       stall.qrCodePath = qrCodeBase64;
       stall.statusHistory.push({
         status: "Completed" as any,
@@ -1342,7 +1358,9 @@ export class StallsService {
           // confirmation with an E11000 duplicate-key error.
           const isDuplicate =
             couponErr?.code === 11000 ||
-            /E11000|duplicate key/i.test(String(couponErr?.message || couponErr));
+            /E11000|duplicate key/i.test(
+              String(couponErr?.message || couponErr),
+            );
           if (isDuplicate) {
             this.logger.warn(
               `Coupon "${couponName}" already exists — reusing it for stall ${stallId}.`,
@@ -1400,6 +1418,177 @@ export class StallsService {
   }
 
   /**
+   * Organizer-initiated extension of a stall's 24h confirmation window. Adds
+   * `hours` to the current deadline (or to "now" if it has already lapsed), so
+   * the auto-release scheduler holds off and the dialog counter shows the new
+   * time. Only valid while the stall is still awaiting confirmation.
+   */
+  async extendConfirmationDeadline(
+    stallId: string,
+    hours: number,
+    note?: string,
+    changedBy?: string,
+  ) {
+    if (!Types.ObjectId.isValid(stallId)) {
+      throw new BadRequestException("Invalid stall ID format");
+    }
+    const hrs = Number(hours);
+    if (!Number.isFinite(hrs) || hrs <= 0 || hrs > 720) {
+      throw new BadRequestException(
+        "Extension must be between 1 and 720 hours",
+      );
+    }
+
+    const stall = await this.stallModel
+      .findById(stallId)
+      .populate("shopkeeperId")
+      .populate("eventId")
+      .populate("organizerId");
+    if (!stall) throw new NotFoundException("Stall request not found");
+
+    // Only stalls still awaiting organizer confirmation have a live window.
+    if (stall.paymentStatus === "Paid" || stall.status === "Cancelled") {
+      throw new BadRequestException(
+        "This booking is no longer awaiting confirmation.",
+      );
+    }
+
+    const now = Date.now();
+    const base = stall.confirmationDeadline
+      ? Math.max(now, new Date(stall.confirmationDeadline).getTime())
+      : now;
+    const newDeadline = new Date(base + hrs * 60 * 60 * 1000);
+    stall.confirmationDeadline = newDeadline;
+
+    // Recompute how many reminder thresholds are already crossed for the NEW
+    // deadline so extending doesn't re-fire reminders the team already saw.
+    const REMINDER_HOURS = [12, 6, 1];
+    const hoursRemaining = (newDeadline.getTime() - now) / 3_600_000;
+    stall.deadlineRemindersSent = REMINDER_HOURS.filter(
+      (h) => hoursRemaining <= h,
+    ).length;
+
+    const trimmedNote = String(note || "").trim();
+    stall.statusHistory.push({
+      status: stall.status as any,
+      note:
+        `Confirmation deadline extended by ${hrs} hour${
+          hrs === 1 ? "" : "s"
+        } by ${changedBy || "Organizer"}.` +
+        (trimmedNote ? ` Note: ${trimmedNote}` : ""),
+      changedAt: new Date(),
+      changedBy: changedBy || "Organizer",
+    });
+
+    await stall.save();
+
+    // Tell the vendor their confirmation window was extended (best-effort).
+    await this.notifyVendorDeadlineExtended(
+      stall,
+      hrs,
+      newDeadline,
+      trimmedNote,
+    );
+
+    return {
+      success: true,
+      message: `Deadline extended by ${hrs} hour${hrs === 1 ? "" : "s"}.`,
+      confirmationDeadline: stall.confirmationDeadline,
+      data: stall,
+    };
+  }
+
+  /**
+   * Emails the vendor that the organizer extended their payment-confirmation
+   * window — showing how much time was added, the new deadline + total time
+   * remaining, and the organizer's extension note. Best-effort; never throws.
+   */
+  private async notifyVendorDeadlineExtended(
+    stall: any,
+    hoursAdded: number,
+    newDeadline: Date,
+    note: string,
+  ) {
+    try {
+      const vendor = (stall.shopkeeperId as any) || {};
+      const to = this.vendorEmailRecipients(vendor);
+      if (!to) return;
+
+      const event = (stall.eventId as any) || {};
+      const senderConfig = await this.getOrganizerSenderConfig(
+        stall.organizerId,
+      );
+
+      const totalHoursLeft = Math.max(
+        0,
+        Math.round((newDeadline.getTime() - Date.now()) / 3_600_000),
+      );
+      const deadlineStr =
+        newDeadline.toLocaleString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+          timeZone: "Asia/Singapore",
+        }) + " SGT";
+      const businessName =
+        vendor?.businessName ||
+        vendor?.shopName ||
+        vendor?.brandName ||
+        vendor?.name ||
+        "there";
+
+      const html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+          <div style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:24px;text-align:center">
+            <h1 style="margin:0;font-size:20px">⏳ More time to confirm your payment</h1>
+            <p style="margin:6px 0 0;opacity:.9">${event?.title || "Your event"}</p>
+          </div>
+          <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+            <p>Hi ${businessName},</p>
+            <p>Good news — the organizer has <strong>extended your payment
+              confirmation window by ${hoursAdded} hour${
+                hoursAdded === 1 ? "" : "s"
+              }</strong>.</p>
+            <div style="border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;padding:16px;margin:16px 0;text-align:center">
+              <div style="font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#15803d">New confirmation deadline</div>
+              <div style="font-size:20px;font-weight:800;color:#16a34a;margin:6px 0">${deadlineStr}</div>
+              <div style="font-size:13px;color:#166534">You now have about <strong>${totalHoursLeft} hour${
+                totalHoursLeft === 1 ? "" : "s"
+              }</strong> remaining to confirm your payment.</div>
+            </div>
+            ${
+              note
+                ? `<div style="border-left:3px solid #16a34a;background:#f8fafc;padding:10px 14px;margin:14px 0">
+                     <p style="margin:0;color:#334155"><strong>Message from the organizer:</strong><br/>${note}</p>
+                   </div>`
+                : ""
+            }
+            <p style="color:#64748b;font-size:12px;margin-top:16px">Please make sure to connect with Organizer and Complete Payment (IF NOT DONE) before the new deadline so your space is secured.</p>
+          </div>
+        </div>`;
+
+      await this.mailService.sendEmail({
+        to,
+        subject: `Your payment confirmation window was extended — ${
+          event?.title || "Event"
+        }`,
+        html,
+        senderConfig,
+      });
+      this.logger.log(
+        `Deadline-extension email sent to vendor for stall ${stall._id}`,
+      );
+    } catch (e: any) {
+      this.logger.warn(
+        `[stalls] notifyVendorDeadlineExtended failed: ${e?.message || e}`,
+      );
+    }
+  }
+
+  /**
    * Render the stall ticket PDF and deliver it (WhatsApp text + email/WhatsApp
    * attachment), falling back to a plain email when the PDF render fails. Also
    * persists qrCodePath (the PDF url) + qrCodeData on the stall. Self-contained
@@ -1433,7 +1622,13 @@ export class StallsService {
     const vendorEmail = this.vendorEmailRecipients(vendor);
     const eventObj = stall.eventId as any;
     const message = this.buildBookingSummaryMessage(
-      stall, vendor, eventObj, country, headingText, coupon, isReissue,
+      stall,
+      vendor,
+      eventObj,
+      country,
+      headingText,
+      coupon,
+      isReissue,
     );
 
     // Render the ticket PDF. If headless Chromium fails (common on constrained
@@ -1571,7 +1766,9 @@ export class StallsService {
     );
 
     const bookedTables = stall.selectedTables || [];
-    const proposed = Array.isArray(dto.selectedAddOns) ? dto.selectedAddOns : [];
+    const proposed = Array.isArray(dto.selectedAddOns)
+      ? dto.selectedAddOns
+      : [];
     const seen = new Set<string>();
     const normalized: any[] = [];
 
@@ -1907,10 +2104,7 @@ export class StallsService {
    * cancel the booking, invalidate the QR + coupon, and email the vendor the
    * organizer's note (e.g. refund timing). On reject: email the vendor why.
    */
-  async decideCancellation(
-    stallId: string,
-    dto: CancellationDecisionDto,
-  ) {
+  async decideCancellation(stallId: string, dto: CancellationDecisionDto) {
     if (!Types.ObjectId.isValid(stallId)) {
       throw new BadRequestException("Invalid stall ID format");
     }
@@ -2069,7 +2263,8 @@ export class StallsService {
     // Organizer contact card ("Event Management") so the vendor knows who to
     // call — uses the contact numbers the organizer published in Settings
     // (contactPhones/contactPhoneNames), falling back to their primary phone.
-    const orgIdForPdf = (stall as any).organizerId?._id || (stall as any).organizerId;
+    const orgIdForPdf =
+      (stall as any).organizerId?._id || (stall as any).organizerId;
     let organizer: any = {};
     if (orgIdForPdf) {
       organizer =
@@ -2095,7 +2290,9 @@ export class StallsService {
           .join("")
       : organizer.phone || organizer.businessPhone || organizer.whatsAppNumber
         ? `<div class="detail-row"><span class="detail-label">📞 Phone:</span><span class="detail-value">${
-            organizer.phone || organizer.businessPhone || organizer.whatsAppNumber
+            organizer.phone ||
+            organizer.businessPhone ||
+            organizer.whatsAppNumber
           }</span></div>`
         : "";
 
@@ -2318,7 +2515,9 @@ export class StallsService {
             </div>
           </div>
 
-          ${qrBase64 ? `
+          ${
+            qrBase64
+              ? `
           <div class="qr-section">
             <p class="qr-head">Your Stall QR Code</p>
             <p class="qr-label">Scan at Event Entrance</p>
@@ -2327,11 +2526,13 @@ export class StallsService {
           <div class="warning">
             ⚠️ <strong>Important:</strong> Use Official EventSH App to scan QR code, to Check-In and Check-Out.
           </div>
-          ` : `
+          `
+              : `
           <div class="warning" style="background: #fef3c7; border-color: #f59e0b; color: #92400e;">
             ⏳ <strong>Awaiting Full Payment</strong> — Your QR code will be released once the organizer confirms full payment.
           </div>
-          `}
+          `
+          }
 
           ${
             coupon?.code
@@ -2391,7 +2592,10 @@ export class StallsService {
     });
 
     const page = await browser.newPage();
-    await page.setContent(await html, { waitUntil: "networkidle0", timeout: 20000 });
+    await page.setContent(await html, {
+      waitUntil: "networkidle0",
+      timeout: 20000,
+    });
 
     const uint8arrayBuffer = await page.pdf({
       format: "A4",
@@ -2433,7 +2637,10 @@ export class StallsService {
       const vendorObj = stall.shopkeeperId as any;
       // coupon is already passed in as a parameter — use it as-is.
       const message = this.buildBookingSummaryMessage(
-        stall, vendorObj, eventObj, country,
+        stall,
+        vendorObj,
+        eventObj,
+        country,
         "Your Stall Confirmation is Ready!",
         coupon,
       );
@@ -2443,7 +2650,8 @@ export class StallsService {
 
       // Resolve the owning organizer's custom-sender config (if any) so the
       // confirmation email goes from their address.
-      const orgId2 = (stall as any).organizerId?._id || (stall as any).organizerId;
+      const orgId2 =
+        (stall as any).organizerId?._id || (stall as any).organizerId;
       let orgEmailCfg: any = (stall as any).organizerId?.emailConfig;
       if (!orgEmailCfg && orgId2) {
         const od = await this.organizerModel
@@ -2551,7 +2759,7 @@ export class StallsService {
           `Your stall is now open. Enjoy the event! 🎉`;
 
         await this.otpService.sendWhatsAppMessage(
-          (vendor.whatsAppNumber || vendor.whatsappNumber),
+          vendor.whatsAppNumber || vendor.whatsappNumber,
           message,
         );
 
@@ -2594,7 +2802,7 @@ export class StallsService {
           `Thank you for participating! 🙏`;
 
         await this.otpService.sendWhatsAppMessage(
-          (vendor.whatsAppNumber || vendor.whatsappNumber),
+          vendor.whatsAppNumber || vendor.whatsappNumber,
           message,
         );
 
@@ -2900,7 +3108,9 @@ export class StallsService {
       // Collect unique recipient emails: organizer (login + business) + ops.
       const recipients = new Set<string>();
       const add = (e?: string) => {
-        const v = String(e || "").trim().toLowerCase();
+        const v = String(e || "")
+          .trim()
+          .toLowerCase();
         if (v) recipients.add(v);
       };
       add(organizer?.email);
@@ -3008,7 +3218,9 @@ export class StallsService {
 
       const recipients = new Set<string>();
       const add = (e?: string) => {
-        const v = String(e || "").trim().toLowerCase();
+        const v = String(e || "")
+          .trim()
+          .toLowerCase();
         if (v) recipients.add(v);
       };
       add((organizer as any)?.email);
@@ -3035,6 +3247,27 @@ export class StallsService {
         (vendor as any)?.brandName ||
         (vendor as any)?.name ||
         "An exhibitor";
+
+      // 24h organizer-confirmation window — show the countdown + deadline so
+      // reviewers know they're on the clock before the space auto-releases.
+      const deadlineDate = stall.confirmationDeadline
+        ? new Date(stall.confirmationDeadline)
+        : new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const hoursLeft = Math.max(
+        0,
+        Math.round((deadlineDate.getTime() - Date.now()) / 3_600_000),
+      );
+      const deadlineStr =
+        deadlineDate.toLocaleString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+          timeZone: "Asia/Singapore",
+        }) + " SGT";
+
       const row = (label: string, value: any) =>
         `<tr><td style="padding:4px 14px 4px 0;color:#64748b">${label}</td><td style="padding:4px 0;font-weight:600;color:#0f172a">${
           value || "—"
@@ -3050,11 +3283,17 @@ export class StallsService {
             <p><strong>${businessName}</strong> has submitted their payment and is
               waiting for your approval. Please verify the payment and release
               their stall ticket on priority so they aren't kept waiting.</p>
+            <div style="border:1px solid #fcd34d;background:#fffbeb;border-radius:10px;padding:16px;margin:16px 0;text-align:center">
+              <div style="font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#b45309">Confirmation deadline</div>
+              <div style="font-size:26px;font-weight:800;color:#d97706;margin:6px 0">⏳ ${hoursLeft} hours to approve</div>
+              <div style="font-size:13px;color:#92400e">Please confirm by <strong>${deadlineStr}</strong>.<br/>If it isn't confirmed within 24 hours, this booking is <strong>automatically cancelled</strong> and the space is released for re-booking.</div>
+            </div>
             <table style="border-collapse:collapse;margin:12px 0">
               ${row("Exhibitor", businessName)}
               ${row("Email", (vendor as any)?.email || (vendor as any)?.businessEmail)}
               ${row("Event", event?.title)}
-              ${row("Grand Total", grandTotal)}
+              ${row("Grand Total", formatMoney(grandTotal, (organizer as any)?.country))}
+              ${row("Confirm by", deadlineStr)}
               ${row("Status", "Payment submitted — awaiting approval")}
             </table>
             <div style="text-align:center;margin:22px 0 6px">
@@ -3092,6 +3331,262 @@ export class StallsService {
     }
   }
 
+  // ============ 24-HOUR CONFIRMATION DEADLINE (auto-release) ============
+
+  // Organizer + opted-in operator emails for a stall's organizer.
+  private async getStallReviewerEmails(
+    orgId: any,
+  ): Promise<{ recipients: string[]; senderConfig: any }> {
+    const [organizer, operators] = await Promise.all([
+      this.organizerModel.findById(orgId).lean(),
+      this.operatorModel.find({ organizerId: String(orgId) }).lean(),
+    ]);
+    const set = new Set<string>();
+    const add = (e?: string) => {
+      const v = String(e || "")
+        .trim()
+        .toLowerCase();
+      if (v) set.add(v);
+    };
+    add((organizer as any)?.email);
+    add((organizer as any)?.businessEmail);
+    for (const op of operators as any[]) {
+      if (!op.allowEmails) continue;
+      add(op.email);
+      add(op.companyEmail);
+    }
+    const senderConfig = await this.getOrganizerSenderConfig(orgId);
+    return { recipients: Array.from(set), senderConfig };
+  }
+
+  /**
+   * Cron-driven. For stalls where the vendor clicked "I have Paid" and the
+   * organizer hasn't confirmed yet, email reminders as the 24h window closes,
+   * then auto-release the space (soft-cancel) once it expires. Email-first.
+   */
+  async processConfirmationDeadlines() {
+    const REMINDER_HOURS = [12, 6, 1]; // remind when <= this many hours remain
+    const now = Date.now();
+    // All stalls awaiting organizer confirmation ("I have Paid" → Processing).
+    // Includes ones with no deadline yet (paid before this feature shipped).
+    const stalls = await this.stallModel
+      .find({
+        status: "Processing",
+        paymentStatus: "Unpaid",
+      })
+      .populate("shopkeeperId")
+      .populate("eventId")
+      .populate("organizerId");
+
+    let released = 0;
+    let reminded = 0;
+    let backfilled = 0;
+    for (const stall of stalls) {
+      try {
+        // Already-paid stalls that pre-date this feature have no deadline —
+        // start their 24h window from NOW (never auto-release them instantly).
+        if (!stall.confirmationDeadline) {
+          stall.confirmationDeadline = new Date(now + 24 * 60 * 60 * 1000);
+          if (!stall.paymentSubmittedAt) {
+            stall.paymentSubmittedAt = stall.selectionDate || new Date(now);
+          }
+          stall.deadlineRemindersSent = 0;
+          await stall.save();
+          backfilled++;
+          continue;
+        }
+        const deadline = new Date(stall.confirmationDeadline).getTime();
+        if (!deadline) continue;
+        const msRemaining = deadline - now;
+
+        if (msRemaining <= 0) {
+          await this.autoReleaseUnconfirmedStall(stall);
+          released++;
+          continue;
+        }
+        const hoursRemaining = msRemaining / 3_600_000;
+        const crossed = REMINDER_HOURS.filter(
+          (h) => hoursRemaining <= h,
+        ).length;
+        if (crossed > (stall.deadlineRemindersSent || 0)) {
+          await this.sendConfirmationReminder(stall, Math.ceil(hoursRemaining));
+          stall.deadlineRemindersSent = crossed;
+          await stall.save();
+          reminded++;
+        }
+      } catch (e: any) {
+        this.logger.warn(
+          `[stalls] deadline processing failed for ${stall._id}: ${
+            e?.message || e
+          }`,
+        );
+      }
+    }
+    return { checked: stalls.length, released, reminded, backfilled };
+  }
+
+  // Space freed + soft-cancelled (matches the manual delete convention).
+  private async autoReleaseUnconfirmedStall(stall: any) {
+    await this.releaseStallTables(stall);
+    stall.status = "Cancelled";
+    stall.confirmationDeadline = null;
+    stall.statusHistory.push({
+      status: "Cancelled" as any,
+      note: "Auto-released — the organizer did not confirm the payment within 24 hours. Space freed for re-booking.",
+      changedAt: new Date(),
+      changedBy: "System",
+    });
+    await stall.save();
+    await this.notifyDeadlineRelease(stall);
+    this.logger.log(`Auto-released unconfirmed stall ${stall._id}`);
+  }
+
+  private async sendConfirmationReminder(stall: any, hoursRemaining: number) {
+    try {
+      const event = stall.eventId as any;
+      const orgId = (stall.organizerId as any)?._id || stall.organizerId;
+      if (!orgId) return;
+      const vendor: any = await this.vendorModel
+        .findById(stall.shopkeeperId)
+        .lean();
+      const { recipients, senderConfig } =
+        await this.getStallReviewerEmails(orgId);
+      if (recipients.length === 0) return;
+      const businessName =
+        vendor?.businessName ||
+        vendor?.shopName ||
+        vendor?.brandName ||
+        vendor?.name ||
+        "An exhibitor";
+      const fe = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
+      const dashboardUrl = `${fe}/organizer/login?redirect=${encodeURIComponent(
+        "/organizer-dashboard",
+      )}`;
+      const html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+          <div style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;padding:24px;text-align:center">
+            <h1 style="margin:0;font-size:20px">⏳ ${hoursRemaining} hour(s) left to approve</h1>
+            <p style="margin:6px 0 0;opacity:.9">${event?.title || "Your event"}</p>
+          </div>
+          <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+            <p><strong>${businessName}</strong> submitted their payment and is waiting for your approval.</p>
+            <p style="font-weight:600;color:#b45309">Please confirm within <strong>${hoursRemaining} hour(s)</strong>, or their booking will be automatically cancelled and the space released for re-booking.</p>
+            <div style="text-align:center;margin:22px 0 6px">
+              <a href="${dashboardUrl}" style="display:inline-block;background:#d97706;color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px">Review &amp; Approve Payment</a>
+            </div>
+          </div>
+        </div>`;
+      await Promise.all(
+        recipients.map((to) =>
+          this.mailService
+            .sendEmail({
+              to,
+              subject: `⏳ ${hoursRemaining}h left to approve: ${businessName} — ${
+                event?.title || "Event"
+              }`,
+              html,
+              senderConfig,
+            })
+            .catch((e: any) =>
+              this.logger.warn(
+                `[stalls] deadline reminder failed for ${to}: ${e?.message || e}`,
+              ),
+            ),
+        ),
+      );
+      this.logger.log(
+        `Deadline reminder (${hoursRemaining}h) emailed to ${recipients.length} reviewer(s) for stall ${stall._id}`,
+      );
+    } catch (e: any) {
+      this.logger.warn(
+        `[stalls] sendConfirmationReminder failed: ${e?.message || e}`,
+      );
+    }
+  }
+
+  private async notifyDeadlineRelease(stall: any) {
+    try {
+      const event = stall.eventId as any;
+      const orgId = (stall.organizerId as any)?._id || stall.organizerId;
+      const vendor: any = await this.vendorModel
+        .findById(stall.shopkeeperId)
+        .lean();
+      const senderConfig = orgId
+        ? await this.getOrganizerSenderConfig(orgId)
+        : undefined;
+
+      // Vendor — booking released.
+      const vendorEmail = this.vendorEmailRecipients(vendor);
+      if (vendorEmail) {
+        const html = `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+            <div style="background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;padding:24px;text-align:center">
+              <h1 style="margin:0;font-size:20px">Booking released</h1>
+              <p style="margin:6px 0 0;opacity:.9">${event?.title || "Event"}</p>
+            </div>
+            <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+              <p>Dear ${vendor?.name || "Exhibitor"},</p>
+              <p>Your stall booking for <strong>${event?.title || "the event"}</strong> was <strong>not confirmed by the organizer within 24 hours</strong>, so the space has been released.</p>
+              <p>If you have already paid, please contact the organizer to resolve this or re-book.</p>
+            </div>
+          </div>`;
+        await this.mailService
+          .sendEmail({
+            to: vendorEmail,
+            subject: `Your stall booking was released — ${event?.title || "Event"}`,
+            html,
+            senderConfig,
+          })
+          .catch((e: any) =>
+            this.logger.warn(
+              `[stalls] release vendor email failed: ${e?.message || e}`,
+            ),
+          );
+      }
+
+      // Organizer + operators — space freed.
+      if (orgId) {
+        const { recipients } = await this.getStallReviewerEmails(orgId);
+        const businessName =
+          vendor?.businessName || vendor?.name || "An exhibitor";
+        const html = `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+            <div style="background:linear-gradient(135deg,#64748b,#475569);color:#fff;padding:24px;text-align:center">
+              <h1 style="margin:0;font-size:20px">Stall space released</h1>
+              <p style="margin:6px 0 0;opacity:.9">${event?.title || "Event"}</p>
+            </div>
+            <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+              <p><strong>${businessName}</strong>'s payment was not confirmed within 24 hours, so their booking was cancelled and the space is now available for re-booking.</p>
+            </div>
+          </div>`;
+        await Promise.all(
+          recipients.map((to) =>
+            this.mailService
+              .sendEmail({
+                to,
+                subject: `Stall space released (unconfirmed): ${businessName} — ${
+                  event?.title || "Event"
+                }`,
+                html,
+                senderConfig,
+              })
+              .catch((e: any) =>
+                this.logger.warn(
+                  `[stalls] release reviewer email failed for ${to}: ${
+                    e?.message || e
+                  }`,
+                ),
+              ),
+          ),
+        );
+      }
+    } catch (e: any) {
+      this.logger.warn(
+        `[stalls] notifyDeadlineRelease failed: ${e?.message || e}`,
+      );
+    }
+  }
+
   private async sendStatusUpdateNotification(
     stall: any,
     oldStatus: string,
@@ -3125,7 +3620,7 @@ export class StallsService {
       if (message) {
         try {
           await this.otpService.sendWhatsAppMessage(
-            (vendor.whatsAppNumber || vendor.whatsappNumber),
+            vendor.whatsAppNumber || vendor.whatsappNumber,
             message,
           );
         } catch (waErr) {
@@ -3165,6 +3660,11 @@ export class StallsService {
                   <li>Select your preferred tables and add-ons</li>
                   <li>Complete the payment to confirm your stall</li>
                 </ol>
+                <div style="margin:16px 0;padding:12px 14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px">
+                  <p style="margin:0;color:#b45309;font-weight:700">
+                    ⚠️ Selecting isn't reserving. Pay, upload proof &amp; tap "I have Paid" — else your space may go to another vendor.
+                  </p>
+                </div>
                 <div style="text-align:center;margin:22px 0 6px">
                   <a href="${eventUrl}" style="display:inline-block;background:#16a34a;color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px">
                     Open Event Page
@@ -3254,7 +3754,7 @@ export class StallsService {
 
       if (message) {
         await this.otpService.sendWhatsAppMessage(
-          (vendor.whatsAppNumber || vendor.whatsappNumber),
+          vendor.whatsAppNumber || vendor.whatsappNumber,
           message,
         );
       }
@@ -3382,7 +3882,8 @@ export class StallsService {
 
             if (populatedStall) {
               const orgDoc = await this.organizerModel.findById(
-                (populatedStall.organizerId as any)?._id || populatedStall.organizerId,
+                (populatedStall.organizerId as any)?._id ||
+                  populatedStall.organizerId,
               );
               const ctry = orgDoc?.country || "IN";
 
@@ -3394,28 +3895,37 @@ export class StallsService {
                 ctry,
               );
 
-              const pdfDir = path.join(process.cwd(), "uploads", "stallTickets");
-              if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
+              const pdfDir = path.join(
+                process.cwd(),
+                "uploads",
+                "stallTickets",
+              );
+              if (!fs.existsSync(pdfDir))
+                fs.mkdirSync(pdfDir, { recursive: true });
               const pdfFileName = `stall_booking_${stallId}.pdf`;
               const pdfPath = path.join(pdfDir, pdfFileName);
               await fs.promises.writeFile(pdfPath, pdfBuffer);
 
               const vendor = populatedStall.shopkeeperId as any;
-              const vendorWhatsApp = vendor?.whatsAppNumber || vendor?.whatsappNumber;
+              const vendorWhatsApp =
+                vendor?.whatsAppNumber || vendor?.whatsappNumber;
               const eventObj = populatedStall.eventId as any;
 
               const waText =
                 `*Partial Payment Received — ${eventObj?.title || "Event"}*\n\n` +
                 `We have received your partial payment.\n\n` +
-                `Paid: ${populatedStall.paidAmount}\n` +
-                `Remaining: ${populatedStall.remainingAmount}\n` +
-                `Grand Total: ${populatedStall.grandTotal}\n\n` +
+                `Paid: ${formatMoney(populatedStall.paidAmount, ctry)}\n` +
+                `Remaining: ${formatMoney(populatedStall.remainingAmount, ctry)}\n` +
+                `Grand Total: ${formatMoney(populatedStall.grandTotal, ctry)}\n\n` +
                 `Please complete the remaining payment. Your stall QR ticket will be released once full payment is confirmed by the organizer.\n\n` +
                 `Your booking details PDF is attached.`;
 
               // WhatsApp text only when a number is on file.
               if (vendorWhatsApp) {
-                await this.otpService.sendWhatsAppMessage(vendorWhatsApp, waText);
+                await this.otpService.sendWhatsAppMessage(
+                  vendorWhatsApp,
+                  waText,
+                );
               }
 
               // Always email the booking-details PDF (WhatsApp too when a
@@ -3431,16 +3941,19 @@ export class StallsService {
                   heading: "Partial Payment Received",
                   message:
                     `We have received your partial payment for ${eventObj?.title || "your event"}.\n\n` +
-                    `Paid: ${populatedStall.paidAmount}\n` +
-                    `Remaining: ${populatedStall.remainingAmount}\n` +
-                    `Grand Total: ${populatedStall.grandTotal}\n\n` +
+                    `Paid: ${formatMoney(populatedStall.paidAmount, ctry)}\n` +
+                    `Remaining: ${formatMoney(populatedStall.remainingAmount, ctry)}\n` +
+                    `Grand Total: ${formatMoney(populatedStall.grandTotal, ctry)}\n\n` +
                     `Your stall QR ticket will be released once full payment is confirmed by the organizer. Your booking details PDF is attached.`,
                   senderConfig: (orgDoc as any)?.emailConfig,
                 },
               );
             }
           } catch (partialErr) {
-            this.logger.warn("Failed to send partial payment notification", partialErr);
+            this.logger.warn(
+              "Failed to send partial payment notification",
+              partialErr,
+            );
           }
         }
         updateData.paymentDate = new Date();
@@ -3774,9 +4287,12 @@ export class StallsService {
     }
     const updateData: any = {};
     if (transactionId) updateData.transactionId = transactionId;
-    if (transactionScreenshot) updateData.transactionScreenshot = transactionScreenshot;
+    if (transactionScreenshot)
+      updateData.transactionScreenshot = transactionScreenshot;
 
-    return this.stallModel.findByIdAndUpdate(stallId, updateData, { new: true });
+    return this.stallModel.findByIdAndUpdate(stallId, updateData, {
+      new: true,
+    });
   }
 
   async remove(id: string, changedBy?: string) {
@@ -3955,7 +4471,10 @@ export class StallsService {
       stall.depositReturned = true;
       await stall.save();
 
-      await this.otpService.sendWhatsAppMessage((vendor.whatsAppNumber || vendor.whatsappNumber), message);
+      await this.otpService.sendWhatsAppMessage(
+        vendor.whatsAppNumber || vendor.whatsappNumber,
+        message,
+      );
     } catch (error) {
       this.logger.error("Error sending deposit returned notification:", error);
     }
@@ -4129,7 +4648,10 @@ export class StallsService {
     const coupon = this.effectiveStallCoupon(stall, eventObj) ?? undefined;
     const eventTitle = eventObj?.title || "Event";
     const message = this.buildBookingSummaryMessage(
-      stall, vendorObj, eventObj, country,
+      stall,
+      vendorObj,
+      eventObj,
+      country,
       "Your Stall Ticket",
       coupon,
     );

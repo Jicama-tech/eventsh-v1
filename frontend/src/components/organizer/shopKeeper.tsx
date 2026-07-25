@@ -195,6 +195,10 @@ export interface StallRequest {
   confirmationDate?: string;
   selectionDate?: string;
   paymentDate?: string;
+  // Set when the vendor clicks "I have Paid"; the organizer must confirm before
+  // this deadline or the space is auto-released. Drives the detail-dialog counter.
+  paymentSubmittedAt?: string;
+  confirmationDeadline?: string;
   completionDate?: string;
   hasCheckedIn: boolean;
   hasCheckedOut: boolean;

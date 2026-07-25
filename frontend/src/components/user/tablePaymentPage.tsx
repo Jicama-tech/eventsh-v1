@@ -673,6 +673,13 @@ const TablePaymentPage = () => {
           </div>
         </div>
 
+        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-3 sm:p-4">
+          <p className="text-sm font-bold text-amber-700">
+            ⚠️ Pay below, upload proof &amp; tap &quot;I have Paid&quot; — else
+            your space isn&apos;t reserved and may go to another vendor.
+          </p>
+        </div>
+
         <div className="grid md:grid-cols-3 gap-6">
           {/* Left Side - Payment Section */}
           <div className="md:col-span-2 space-y-6">

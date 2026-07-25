@@ -807,6 +807,133 @@ export class OrganizersService {
     }
   }
 
+  /**
+   * Email-based login resolver — the email-OTP mirror of
+   * findByWhatsAppNumber. Matches organizers by email/businessEmail and
+   * operators by email/companyEmail, then returns a JWT (or a
+   * requiresSelection payload when the email is linked to more than one
+   * organization). Kept structurally identical to the WhatsApp path so the
+   * login controller/frontend can treat both the same way.
+   */
+  async findByEmailForLogin(email: string, targetId?: string) {
+    try {
+      const norm = this.normalizeEmail(email);
+
+      const organizerQuery: any = {
+        $or: [{ email: norm }, { businessEmail: norm }],
+      };
+      const operatorQuery: any = {
+        $or: [{ email: norm }, { companyEmail: norm }],
+        organizerId: { $exists: true, $ne: null },
+      };
+
+      const [organizers, operators] = await Promise.all([
+        this.organizerModel.find(organizerQuery),
+        this.operatorModel.find(operatorQuery),
+      ]);
+
+      const operatorOrgIds = [...new Set(operators.map((o) => o.organizerId))];
+      const operatorOrgs = await this.organizerModel.find({
+        _id: { $in: operatorOrgIds },
+      });
+      const orgLookup = operatorOrgs.reduce<Record<string, string>>(
+        (acc, org) => {
+          acc[org._id.toString()] = org.organizationName;
+          return acc;
+        },
+        {},
+      );
+
+      const organizerOptions = organizers.map((o) => ({
+        id: o._id.toString(),
+        name: o.organizationName,
+        type: "organizer",
+        approved: o.approved,
+      }));
+      const operatorOptions = operators
+        .filter((o) => !!o.organizerId)
+        .map((o) => ({
+          id: o.organizerId!.toString(),
+          name: `${
+            orgLookup[o.organizerId!.toString()] || "Unknown Organization"
+          } (Operator: ${o.name})`,
+          type: "operator",
+          approved: true,
+        }));
+
+      const allOptions = [...organizerOptions, ...operatorOptions];
+      if (allOptions.length === 0) return null;
+
+      let selectedOption;
+      if (allOptions.length === 1) {
+        selectedOption = allOptions[0];
+      } else if (targetId) {
+        selectedOption = allOptions.find((opt) => opt.id === targetId);
+        if (!selectedOption) {
+          throw new NotFoundException("Selected account not found.");
+        }
+      } else {
+        return {
+          requiresSelection: true,
+          organizations: allOptions.map((opt) => ({
+            id: opt.id,
+            organizationName: opt.name,
+            type: opt.type,
+            approved: opt.approved,
+          })),
+        };
+      }
+
+      let payload: any;
+      if (selectedOption.type === "organizer") {
+        const organizer = organizers.find(
+          (o) => o._id.toString() === selectedOption!.id,
+        );
+        if (!organizer) throw new NotFoundException("Organizer not found.");
+        payload = {
+          name: organizer.name,
+          email: organizer.email,
+          sub: organizer._id.toString(),
+          country: organizer.country,
+          organizationName: organizer.organizationName,
+          roles: ["organizer"],
+        };
+      } else {
+        const op = operators.find(
+          (o) => o.organizerId?.toString() === selectedOption!.id,
+        );
+        if (!op || !op.organizerId) {
+          throw new NotFoundException("Operator not found.");
+        }
+        const parentOrg = operatorOrgs.find(
+          (o) => o._id.toString() === op.organizerId!.toString(),
+        );
+        if (!parentOrg) {
+          throw new NotFoundException("Parent organization not found.");
+        }
+        payload = {
+          name: op.name,
+          email: op.email ?? "",
+          sub: parentOrg._id.toString(),
+          operatorId: op._id.toString(),
+          accessTabs: (op as any).accessTabs || [],
+          country: parentOrg.country,
+          organizationName: parentOrg.organizationName,
+          roles: ["organizer"],
+        };
+      }
+
+      const token = this.jwtService.sign(payload, {
+        secret: process.env.JWT_ACCESS_SECRET,
+        expiresIn: "24h",
+      } as any);
+
+      return { message: "Token found", token };
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async approve(id: string) {
     return this.organizerModel
       .findByIdAndUpdate(id, { approved: true }, { new: true })

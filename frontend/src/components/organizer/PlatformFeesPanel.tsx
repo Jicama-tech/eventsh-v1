@@ -95,10 +95,9 @@ interface BillingResponse {
   region: { scheme: "UPI" | "PAYNOW"; currency: string } | null;
 }
 
+import { symbolForCode } from "@/data/currencies";
 function symbolFor(currency?: string) {
-  if (currency === "INR") return "₹";
-  if (currency === "SGD") return "SG$";
-  return "$";
+  return symbolForCode(currency);
 }
 
 export function PlatformFeesPanel() {

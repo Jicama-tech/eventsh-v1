@@ -3630,9 +3630,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // We exclude the vendor's own booked positions so they can still
   // re-select or adjust a type they already hold.
   const myBookedPositionIds = new Set(
-    (existingStallRequest?.selectedTables || []).map(
-      (t: any) => t.positionId,
-    ),
+    (existingStallRequest?.selectedTables || []).map((t: any) => t.positionId),
   );
   const spaceAvailabilityByTemplate = (() => {
     // Flatten venueTables (Record<string, Table[]>) into a single array.
@@ -7058,7 +7056,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                         onClick={() => {
                                           // Click/tap a bookable space → start the
                                           // stall process (Google/WhatsApp auth gate).
-                                          if (!notForSale) handleRentStallClick();
+                                          if (!notForSale)
+                                            handleRentStallClick();
                                         }}
                                         className={`absolute border flex items-center justify-center transition-all group z-[5] hover:z-[100] ${
                                           table.type === "Round"
@@ -10389,6 +10388,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               Choose your tables, add-ons, and accept the terms to proceed to
               payment.
             </DialogDescription>
+            <p className="mt-1.5 text-xs sm:text-sm font-bold text-amber-700">
+              ⚠️ Select Spaces & Add-Ons, Pay, upload proof &amp; tap &quot;I
+              have Paid&quot; — else your space isn&apos;t reserved.
+            </p>
           </div>
 
           {/* Scrollable body — the dialog frame + header stay fixed. */}

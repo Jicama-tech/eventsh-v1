@@ -72,15 +72,7 @@ import { useToast } from "@/hooks/use-toast";
 
 const apiURL = __API_URL__;
 
-const COUNTRY_CURRENCY: Record<string, { symbol: string; locale: string }> = {
-  IN: { symbol: "₹", locale: "en-IN" },
-  SG: { symbol: "SG$", locale: "en-SG" },
-  US: { symbol: "$", locale: "en-US" },
-  GB: { symbol: "£", locale: "en-GB" },
-  AE: { symbol: "AED ", locale: "en-AE" },
-  AU: { symbol: "A$", locale: "en-AU" },
-  EU: { symbol: "€", locale: "en-IE" },
-};
+import { currencyForCountry } from "@/data/currencies";
 function formatMoney(amount: number, curr: { symbol: string; locale: string }) {
   const safe = Number.isFinite(amount) ? amount : 0;
   return `${curr.symbol}${new Intl.NumberFormat(curr.locale, { maximumFractionDigits: 0 }).format(safe)}`;
@@ -1262,7 +1254,7 @@ export function ChatbotWidget({
     ctxCountry ||
     "US"
   ).toUpperCase();
-  const currency = COUNTRY_CURRENCY[effectiveCountry] || COUNTRY_CURRENCY.US;
+  const currency = currencyForCountry(effectiveCountry);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
