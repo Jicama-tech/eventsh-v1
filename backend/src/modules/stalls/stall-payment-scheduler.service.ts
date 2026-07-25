@@ -4,6 +4,7 @@ import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import { Stall, StallDocument, StallStatusEnum } from "./entities/stall.entity";
 import { OtpService } from "../otp/otp.service";
+import { StallsService } from "./stalls.service";
 
 @Injectable()
 export class StallPaymentSchedulerService {
@@ -14,7 +15,27 @@ export class StallPaymentSchedulerService {
     private readonly stallModel: Model<StallDocument>,
     @InjectModel("Event") private readonly eventModel: Model<any>,
     private readonly otpService: OtpService,
+    private readonly stallsService: StallsService,
   ) {}
+
+  /**
+   * Hourly — enforces the 24h organizer-confirmation window. After a vendor
+   * clicks "I have Paid", the organizer must confirm within 24h; this reminds
+   * them as it runs down (12h/6h/1h) and auto-releases the space on expiry.
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async handleConfirmationDeadlines() {
+    try {
+      const r = await this.stallsService.processConfirmationDeadlines();
+      if (r.reminded || r.released || r.backfilled) {
+        this.logger.log(
+          `Confirmation-deadline check: ${r.checked} pending, ${r.backfilled} backfilled, ${r.reminded} reminded, ${r.released} released`,
+        );
+      }
+    } catch (error) {
+      this.logger.error("Error in confirmation-deadline scheduler:", error);
+    }
+  }
 
   /**
    * Runs daily at 9 AM — checks all stalls with partial payment

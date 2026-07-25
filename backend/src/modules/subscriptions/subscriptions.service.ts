@@ -13,6 +13,7 @@ import {
   computePlanExpiry,
   formatPlanValidity,
 } from "../plans/plan-validity.util";
+import { currencyForCode } from "../../common/currency.util";
 import * as fs from "fs";
 import * as path from "path";
 // pdfkit ships without @types; use require to skip the missing-type error
@@ -231,9 +232,10 @@ export class SubscriptionsService {
   }
 
   private currencySymbol(currency: string) {
+    // INR keeps the plain "Rs." here (PDF/email fonts don't always ship the ₹
+    // glyph); every other currency resolves from the shared table.
     if (currency === "INR") return "Rs.";
-    if (currency === "SGD") return "SG$";
-    return "$";
+    return currencyForCode(currency).symbol;
   }
 
   /**
@@ -723,7 +725,7 @@ export class SubscriptionsService {
       Array.isArray(plan.features) && plan.features.length
         ? plan.features.map((f: string) => `  • ${f}`).join("\n")
         : "  • (no features listed)";
-    const symbol = doc.currency === "INR" ? "₹" : doc.currency === "SGD" ? "SG$" : "$";
+    const symbol = currencyForCode(doc.currency).symbol;
     const validTill = organizer.planExpiryDate
       ? new Date(organizer.planExpiryDate).toLocaleDateString()
       : "—";

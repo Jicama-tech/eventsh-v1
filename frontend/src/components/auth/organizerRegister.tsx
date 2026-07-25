@@ -24,19 +24,7 @@ import {
 } from "@/components/ui/select";
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
-
-const COUNTRIES = [
-  {
-    code: "IN",
-    name: "India",
-    countryCode: "+91",
-  },
-  {
-    code: "SG",
-    name: "Singapore",
-    countryCode: "+65",
-  },
-];
+import { COUNTRIES } from "@/data/countries";
 
 export function OrganizerRegister() {
   const apiURL = __API_URL__;
@@ -97,24 +85,25 @@ export function OrganizerRegister() {
   const [sendingOtp, setSendingOtp] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
 
-  // WhatsApp OTP state
-  const [waOtpSent, setWaOtpSent] = useState(false);
-  const [waOtp, setWaOtp] = useState("");
-  const [waVerified, setWaVerified] = useState(false);
-  const [waOtpError, setWaOtpError] = useState("");
-  const [sendingWaOtp, setSendingWaOtp] = useState(false);
-  const [verifyingWaOtp, setVerifyingWaOtp] = useState(false);
+  // WhatsApp is captured as the login identifier but is NOT OTP-verified at
+  // registration anymore (email-first). Login still uses a WhatsApp OTP.
 
   // General loading
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleCountryChange = (code: string) => {
     setSelectedCountry(code);
+    // Seed BOTH the WhatsApp and phone fields with the selected country's dial
+    // code (digits only — react-phone-input-2's expected value format). The
+    // keyed PhoneInputs below remount on country change so the visible code
+    // prefix updates too, not just this seeded value.
+    const dial = COUNTRIES.find((c) => c.code === code)?.dialCode || "";
+    const dialDigits = dial.replace(/\D/g, "");
     setProfile((prev) => ({
       ...prev,
       country: code,
-      whatsAppNumber: "",
-      phone: code === "SG" ? "+65" : "+91",
+      whatsAppNumber: dialDigits,
+      phone: dialDigits,
     }));
   };
 
@@ -124,13 +113,6 @@ export function OrganizerRegister() {
       setOtpSent(false);
       setOtp("");
       setOtpError("");
-    }
-
-    if (field === "whatsAppNumber") {
-      setWaVerified(false);
-      setWaOtpSent(false);
-      setWaOtp("");
-      setWaOtpError("");
     }
 
     setProfile((prev) => ({ ...prev, [field]: value }));
@@ -226,99 +208,6 @@ export function OrganizerRegister() {
     }
   };
 
-  // WhatsApp OTP handlers
-  const sendOtpToWhatsApp = async () => {
-    if (!profile.whatsAppNumber || profile.whatsAppNumber.length < 8) {
-      toast({
-        duration: 5000,
-        title: "Error",
-        description: "Please enter a valid WhatsApp number with country code.",
-      });
-      return;
-    }
-
-    try {
-      setSendingWaOtp(true);
-      const token = sessionStorage.getItem("token");
-      const response = await fetch(`${apiURL}/otp/send-whatsapp-otp`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ whatsappNumber: profile.whatsAppNumber }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to send WhatsApp OTP");
-      }
-
-      setWaOtpSent(true);
-      setWaOtpError("");
-      toast({
-        duration: 5000,
-        title: "OTP Sent",
-        description: "OTP sent to WhatsApp",
-      });
-    } catch (error: any) {
-      toast({
-        duration: 5000,
-        title: "Failed to send OTP",
-        description: error.message || "Failed to send WhatsApp OTP",
-        variant: "destructive",
-      });
-    } finally {
-      setSendingWaOtp(false);
-    }
-  };
-
-  const verifyOtpForWhatsApp = async () => {
-    if (!waOtp || waOtp.length < 4) {
-      setWaOtpError("Please enter a valid OTP");
-      return;
-    }
-
-    try {
-      setVerifyingWaOtp(true);
-      const token = sessionStorage.getItem("token");
-      const response = await fetch(`${apiURL}/otp/verify-whatsapp-otp`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          whatsappNumber: profile.whatsAppNumber,
-          otp: waOtp,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Invalid WhatsApp OTP");
-      }
-
-      setWaVerified(true);
-      setWaOtpError("");
-      toast({
-        duration: 5000,
-        title: "Verified",
-        description: "WhatsApp number verified",
-      });
-    } catch (error: any) {
-      setWaOtpError(error.message);
-      toast({
-        duration: 5000,
-        title: "Error",
-        description: error.message || "Invalid OTP",
-        variant: "destructive",
-      });
-    } finally {
-      setVerifyingWaOtp(false);
-    }
-  };
-
   // Form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -333,11 +222,11 @@ export function OrganizerRegister() {
       return;
     }
 
-    if (!waVerified) {
+    if (!profile.whatsAppNumber || profile.whatsAppNumber.length < 8) {
       toast({
         duration: 5000,
         title: "Error",
-        description: "Please verify your WhatsApp number",
+        description: "Please enter your WhatsApp number (used for login).",
         variant: "destructive",
       });
       return;
@@ -386,7 +275,7 @@ export function OrganizerRegister() {
         duration: 5000,
         title: "Registration Success",
         description:
-          "Your account is active and the starter plan is assigned. Please log in via WhatsApp OTP.",
+          "Your account is active and the starter plan is assigned. Please log in to continue.",
       });
       // The user may still be holding an "individual"-role JWT (Google
       // onboarding flow). Drop it so the authenticated route table swaps
@@ -408,7 +297,7 @@ export function OrganizerRegister() {
   };
 
   const isFormBlurred = !selectedCountry;
-  const shouldDisableFollowingFields = !emailVerified && !waVerified;
+  const shouldDisableFollowingFields = !emailVerified;
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-8">
@@ -443,7 +332,7 @@ export function OrganizerRegister() {
               <SelectContent>
                 {COUNTRIES.map((country) => (
                   <SelectItem key={country.code} value={country.code}>
-                    {country.name} ({country.countryCode})
+                    {country.name} ({country.dialCode})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -515,74 +404,32 @@ export function OrganizerRegister() {
               {otpError && <p className="text-sm text-red-600">{otpError}</p>}
             </div>
 
-            {/* WhatsApp Number with OTP */}
+            {/* WhatsApp Number — a contact number only. Not used for login and
+                not OTP-verified here (email-first). */}
             <div className="grid gap-2">
-              <div className="flex items-center justify-between">
-                <Label
-                  htmlFor="whatsAppNumber"
-                  className="flex items-center gap-2"
-                >
-                  <MessageCircle className="w-4 h-4 text-green-600" />
-                  WhatsApp Number ({currentCountry?.countryCode}){" "}
-                  <span className="text-red-600">*</span>
-                  <p className="text-xs text-gray-500 font-normal ml-2 inline-block">
-                    (Used for login)
-                  </p>
-                </Label>
-                {waVerified && (
-                  <Badge className="bg-green-600">
-                    <CheckCircle className="w-4 h-4 mr-1" /> Verified
-                  </Badge>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <PhoneInput
-                  country={selectedCountry?.toLowerCase() || "in"}
-                  value={profile.whatsAppNumber}
-                  onChange={(value) => handleChange("whatsAppNumber", value)}
-                  disabled={waVerified || !emailVerified}
-                  onlyCountries={
-                    selectedCountry
-                      ? [selectedCountry.toLowerCase()]
-                      : ["in", "sg"]
-                  }
-                  countryCodeEditable={false}
-                  inputStyle={{ width: "100%" }}
-                  dropdownStyle={{ zIndex: 100 }}
-                />
-                <Button
-                  type="button"
-                  onClick={sendOtpToWhatsApp}
-                  disabled={
-                    sendingWaOtp || !profile.whatsAppNumber || waVerified
-                  }
-                >
-                  {sendingWaOtp
-                    ? "Sending..."
-                    : waVerified
-                      ? "Verified"
-                      : "Send OTP"}
-                </Button>
-              </div>
-              {waOtpSent && !waVerified && (
-                <div className="flex gap-2 mt-2">
-                  <Input
-                    value={waOtp}
-                    onChange={(e) => setWaOtp(e.target.value)}
-                    placeholder="Enter WhatsApp OTP"
-                  />
-                  <Button
-                    type="button"
-                    onClick={verifyOtpForWhatsApp}
-                    disabled={verifyingWaOtp}
-                  >
-                    {verifyingWaOtp ? "Verifying..." : "Verify"}
-                  </Button>
-                </div>
-              )}
-              {waOtpError && (
-                <p className="text-sm text-red-600">{waOtpError}</p>
-              )}
+              <Label
+                htmlFor="whatsAppNumber"
+                className="flex items-center gap-2"
+              >
+                <MessageCircle className="w-4 h-4 text-green-600" />
+                WhatsApp Number ({currentCountry?.dialCode}){" "}
+                <span className="text-red-600">*</span>
+              </Label>
+              <PhoneInput
+                key={`wa-${selectedCountry || "in"}`}
+                country={selectedCountry?.toLowerCase() || "in"}
+                value={profile.whatsAppNumber}
+                onChange={(value) => handleChange("whatsAppNumber", value)}
+                disabled={!emailVerified}
+                onlyCountries={
+                  selectedCountry
+                    ? [selectedCountry.toLowerCase()]
+                    : ["in", "sg"]
+                }
+                countryCodeEditable={false}
+                inputStyle={{ width: "100%" }}
+                dropdownStyle={{ zIndex: 100 }}
+              />
             </div>
 
             {/* Full Name */}
@@ -631,9 +478,10 @@ export function OrganizerRegister() {
             {/* Phone */}
             <div className="grid gap-2">
               <Label htmlFor="phone">
-                Phone ({currentCountry?.countryCode})
+                Phone ({currentCountry?.dialCode})
               </Label>
               <PhoneInput
+                key={`phone-${selectedCountry || "in"}`}
                 country={selectedCountry?.toLowerCase() || "in"}
                 value={profile.phone}
                 onChange={(value) => handleChange("phone", value)}
@@ -717,7 +565,6 @@ export function OrganizerRegister() {
                   !profile.businessEmail ||
                   !emailVerified ||
                   !profile.whatsAppNumber ||
-                  !waVerified ||
                   !profile.organizationName ||
                   !profile.name
                 }

@@ -256,6 +256,18 @@ export class Stall {
   @Prop()
   paymentConfirmedDate?: Date; // When organizer confirms payment - NEW
 
+  // Vendor clicked "I have Paid" — starts the 24h organizer-confirmation window.
+  @Prop()
+  paymentSubmittedAt?: Date;
+
+  // When the space is auto-released if the organizer hasn't confirmed.
+  @Prop()
+  confirmationDeadline?: Date;
+
+  // How many "time remaining" reminder emails have gone out (throttles the cron).
+  @Prop({ default: 0 })
+  deadlineRemindersSent?: number;
+
   @Prop()
   completionDate?: Date;
 

@@ -6,7 +6,7 @@
 // their corresponding callback prop is supplied — that's how the volunteer
 // view stays read-only without forking the markup.
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { stallStage } from "@/lib/stallStatus";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@radix-ui/react-separator";
 import {
@@ -59,6 +60,62 @@ interface StatusHistoryEntry {
 
 const apiURL = __API_URL__;
 
+// Vendor images are stored as .webp. This wraps an image with a hover control
+// that downloads a converted PNG or JPG copy via the backend /files/download
+// endpoint (the stored file stays .webp — only the download is converted).
+function DownloadableImage({
+  path,
+  alt,
+  className,
+  wrapperClassName,
+}: {
+  path: string;
+  alt: string;
+  className?: string;
+  wrapperClassName?: string;
+}) {
+  const triggerDownload = (fmt: "png" | "jpg") => {
+    const url = `${apiURL.replace(/\/$/, "")}/files/download?path=${encodeURIComponent(
+      path,
+    )}&format=${fmt}`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+  return (
+    <div
+      className={`relative inline-block group/dl ${wrapperClassName || ""}`}
+    >
+      <img
+        src={`${apiURL.replace(/\/$/, "")}${path}`}
+        alt={alt}
+        className={className}
+      />
+      <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover/dl:opacity-100 transition-opacity">
+        <button
+          type="button"
+          onClick={() => triggerDownload("png")}
+          title="Download as PNG"
+          className="rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white hover:bg-black"
+        >
+          PNG
+        </button>
+        <button
+          type="button"
+          onClick={() => triggerDownload("jpg")}
+          title="Download as JPG"
+          className="rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white hover:bg-black"
+        >
+          JPG
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const getPaymentBadge = (paymentStatus: string) => {
   const variants: Record<string, { variant: any; color: string }> = {
     Unpaid: { variant: "destructive", color: "text-red-600" },
@@ -88,6 +145,60 @@ const formatDateTime = (dateTimeString?: string | Date) => {
     minute: "2-digit",
   });
 };
+
+// Live "confirm within HH:MM:SS or the space is released" counter, shown above
+// the Confirm Payment button once the vendor has submitted ("I have Paid").
+function ConfirmationCountdown({
+  deadline,
+  rightSlot,
+}: {
+  deadline: string;
+  rightSlot?: React.ReactNode;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const end = new Date(deadline).getTime();
+  if (isNaN(end)) return null;
+  const ms = end - now;
+  if (ms <= 0) {
+    return (
+      <div className="flex items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+        <span>
+          ⏳ Confirmation window elapsed — this space will be auto-released
+          shortly.
+        </span>
+        {rightSlot}
+      </div>
+    );
+  }
+  const totalSec = Math.floor(ms / 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const hh = pad(Math.floor(totalSec / 3600));
+  const mm = pad(Math.floor((totalSec % 3600) / 60));
+  const ss = pad(totalSec % 60);
+  const urgent = ms < 6 * 60 * 60 * 1000; // last 6 hours
+  return (
+    <div
+      className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm font-semibold ${
+        urgent
+          ? "border-red-200 bg-red-50 text-red-700"
+          : "border-amber-200 bg-amber-50 text-amber-700"
+      }`}
+    >
+      <span>
+        ⏳ Confirm within{" "}
+        <span className="font-bold tabular-nums">
+          {hh}:{mm}:{ss}
+        </span>{" "}
+        or this space is automatically released.
+      </span>
+      {rightSlot}
+    </div>
+  );
+}
 
 export interface ExhibitorDetailDialogProps {
   open: boolean;
@@ -212,6 +323,69 @@ export function ExhibitorDetailDialog({
     }
   };
 
+  // Extend the confirmation deadline via a dialog (hours + note). The note is
+  // logged to the timeline and emailed to the vendor.
+  const [extendDialogOpen, setExtendDialogOpen] = useState(false);
+  const [extendHours, setExtendHours] = useState<number>(24);
+  const [extendNote, setExtendNote] = useState("");
+  const [isExtending, setIsExtending] = useState(false);
+
+  const handleExtendDeadline = async () => {
+    if (!stallRequest?._id) return;
+    const hours = Number(extendHours);
+    if (!Number.isFinite(hours) || hours <= 0 || hours > 720) {
+      toast({
+        duration: 5000,
+        title: "Invalid hours",
+        description: "Enter a number of hours between 1 and 720.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsExtending(true);
+    try {
+      const token = sessionStorage.getItem("token");
+      const res = await fetch(
+        `${apiURL}/stalls/${stallRequest._id}/extend-deadline`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            hours,
+            note: extendNote.trim() || undefined,
+            changedBy: derivedUserDisplay || undefined,
+          }),
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message || `Extend failed (${res.status})`);
+      }
+      setExtendDialogOpen(false);
+      setExtendNote("");
+      await onNoteAdded?.(); // reuse the caller's refetch so the new deadline shows
+      toast({
+        duration: 4000,
+        title: "Deadline extended",
+        description: `Added ${hours} hour${
+          hours === 1 ? "" : "s"
+        } and notified the vendor by email.`,
+      });
+    } catch (err: any) {
+      toast({
+        duration: 5000,
+        title: "Could not extend deadline",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExtending(false);
+    }
+  };
+
   // "Resend ticket" is an organizer-only recovery action (volunteers get a
   // read-only dialog with no admin callbacks). It re-delivers the QR ticket
   // email and surfaces the real failure if the mail server rejects it.
@@ -254,6 +428,7 @@ export function ExhibitorDetailDialog({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -294,7 +469,25 @@ export function ExhibitorDetailDialog({
               stallRequest.status !== "Cancelled" &&
               (stallRequest.status as string) !== "Forfeited" &&
               stallRequest.paymentStatus !== "Paid" && (
-                <Card className="border-blue-200 bg-blue-50/50">
+                <div className="space-y-2">
+                  {(stallRequest as any).confirmationDeadline && (
+                    <ConfirmationCountdown
+                      deadline={(stallRequest as any).confirmationDeadline}
+                      rightSlot={
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="buttonOutline"
+                          className="h-7 shrink-0 border-amber-300 bg-white px-2 text-xs text-amber-800 hover:bg-amber-100"
+                          onClick={() => setExtendDialogOpen(true)}
+                        >
+                          <Clock className="mr-1 h-3.5 w-3.5" />
+                          Extend
+                        </Button>
+                      }
+                    />
+                  )}
+                  <Card className="border-blue-200 bg-blue-50/50">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div>
@@ -333,7 +526,8 @@ export function ExhibitorDetailDialog({
                       </Button>
                     </div>
                   </CardContent>
-                </Card>
+                  </Card>
+                </div>
               )}
 
             {/* Edit Request (amendment) approval — organizer only, shown when
@@ -529,22 +723,11 @@ export function ExhibitorDetailDialog({
                       <p className="text-xs text-amber-700 mb-1">
                         Payment Screenshot
                       </p>
-                      <a
-                        href={`${apiURL}${
-                          (stallRequest as any).transactionScreenshot
-                        }`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block"
-                      >
-                        <img
-                          src={`${apiURL}${
-                            (stallRequest as any).transactionScreenshot
-                          }`}
-                          alt="Transaction Screenshot"
-                          className="max-w-xs max-h-60 rounded-lg border border-amber-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                        />
-                      </a>
+                      <DownloadableImage
+                        path={(stallRequest as any).transactionScreenshot}
+                        alt="Transaction Screenshot"
+                        className="max-w-xs max-h-60 rounded-lg border border-amber-200 shadow-sm"
+                      />
                     </div>
                   )}
                   {(stallRequest as any).paymentMethod && (
@@ -613,8 +796,8 @@ export function ExhibitorDetailDialog({
               <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {stallRequest.companyLogo && (
                   <div className="col-span-2 mb-2 flex items-center gap-4">
-                    <img
-                      src={`${apiURL}${stallRequest.companyLogo}`}
+                    <DownloadableImage
+                      path={stallRequest.companyLogo}
                       alt="Company Logo"
                       className="w-16 h-16 rounded-md object-contain border bg-gray-50"
                     />
@@ -1101,8 +1284,8 @@ export function ExhibitorDetailDialog({
                     <Label className="text-muted-foreground block mb-2">
                       Registration Document
                     </Label>
-                    <img
-                      src={`${apiURL}${stallRequest.registrationImage}`}
+                    <DownloadableImage
+                      path={stallRequest.registrationImage}
                       alt="Registration"
                       className="max-w-xs rounded-md border"
                     />
@@ -1149,9 +1332,9 @@ export function ExhibitorDetailDialog({
                       <div className="flex gap-2 overflow-x-auto">
                         {stallRequest.productImage.map(
                           (img: string, idx: number) => (
-                            <img
+                            <DownloadableImage
                               key={idx}
-                              src={`${apiURL}${img}`}
+                              path={img}
                               alt="Product"
                               className="w-20 h-20 object-cover rounded-md border"
                             />
@@ -1777,5 +1960,94 @@ export function ExhibitorDetailDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Extend confirmation deadline — hours + note; logs to timeline and
+        emails the vendor with the new deadline + note. */}
+    <Dialog open={extendDialogOpen} onOpenChange={setExtendDialogOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Extend confirmation deadline</DialogTitle>
+          <DialogDescription>
+            Add more time for this vendor to confirm their payment. The vendor
+            is emailed the new deadline and your note.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="extend-hours">Extend by (hours)</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {[6, 12, 24, 48].map((h) => (
+                <button
+                  key={h}
+                  type="button"
+                  onClick={() => setExtendHours(h)}
+                  className={`rounded border px-2.5 py-1 text-xs font-semibold ${
+                    extendHours === h
+                      ? "border-amber-400 bg-amber-100 text-amber-900"
+                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {h}h
+                </button>
+              ))}
+            </div>
+            <Input
+              id="extend-hours"
+              type="number"
+              min={1}
+              max={720}
+              value={extendHours}
+              onChange={(e) => setExtendHours(Number(e.target.value))}
+              className="mt-1"
+              disabled={isExtending}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="extend-note">Note (reason for extension)</Label>
+            <Textarea
+              id="extend-note"
+              value={extendNote}
+              onChange={(e) => setExtendNote(e.target.value)}
+              placeholder="e.g. Vendor requested more time to arrange the bank transfer."
+              rows={3}
+              disabled={isExtending}
+            />
+            <p className="text-xs text-muted-foreground">
+              Added to the timeline and included in the email to the vendor.
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="buttonOutline"
+            onClick={() => setExtendDialogOpen(false)}
+            disabled={isExtending}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleExtendDeadline}
+            disabled={
+              isExtending ||
+              !extendHours ||
+              extendHours <= 0 ||
+              extendHours > 720
+            }
+          >
+            {isExtending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Extending…
+              </>
+            ) : (
+              "Extend & notify vendor"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

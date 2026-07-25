@@ -12,7 +12,6 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Shield, Mail, Building, Loader2 } from "lucide-react";
-import { useCountryCodes } from "@/hooks/useCountryCodes";
 import { useCountry } from "@/hooks/useCountry";
 import { Label } from "@/components/ui/label";
 import {
@@ -25,7 +24,7 @@ import {
 import { jwtDecode } from "jwt-decode";
 import { organizerToken } from "@/pages/organizer/EventfrontTemplate";
 
-type LoginStep = "number" | "otp" | "selection";
+type LoginStep = "email" | "otp" | "selection";
 
 interface OrganizerProfile {
   id: string;
@@ -35,16 +34,14 @@ interface OrganizerProfile {
 
 export function OrganizerLogin() {
   const { setCountry: setGlobalCountry } = useCountry();
-  const [whatsappNumber, setWhatsAppNumber] = useState("");
-  const [countryCode, setCountryCode] = useState("+65");
+  const [email, setEmail] = useState("");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
 
-  const [step, setStep] = useState<LoginStep>("number");
+  const [step, setStep] = useState<LoginStep>("email");
   const [organizers, setOrganizers] = useState<OrganizerProfile[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>("");
 
   const [isLoading, setIsLoading] = useState(false);
-  const { countryCodes, loading: loadingCountryCodes } = useCountryCodes();
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const { login } = useAuth();
@@ -84,16 +81,16 @@ export function OrganizerLogin() {
     inputRefs.current[nextIndex]?.focus();
   };
 
-  const fullNumber = countryCode + whatsappNumber;
+  const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
   // --- Step 1: Send OTP ---
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!whatsappNumber || whatsappNumber.length < 6) {
+    if (!isValidEmail(email)) {
       toast({
         duration: 5000,
-        title: "Invalid Number",
-        description: "Please enter a valid WhatsApp number",
+        title: "Invalid Email",
+        description: "Please enter a valid email address",
         variant: "destructive",
       });
       return;
@@ -101,11 +98,11 @@ export function OrganizerLogin() {
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${apiURL}/otp/send-whatsapp-otp`, {
+      const response = await fetch(`${apiURL}/otp/send-email-login-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          whatsappNumber: fullNumber,
+          email: email.trim().toLowerCase(),
           role: "organizer",
         }),
       });
@@ -118,7 +115,7 @@ export function OrganizerLogin() {
       toast({
         duration: 5000,
         title: "OTP Sent",
-        description: `Code sent to ${fullNumber}`,
+        description: `Code sent to ${email.trim().toLowerCase()}`,
       });
       setStep("otp");
       setOtp(["", "", "", "", "", ""]);
@@ -153,11 +150,11 @@ export function OrganizerLogin() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${apiURL}/otp/verify-chat-otp`, {
+      const response = await fetch(`${apiURL}/otp/verify-email-login-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          whatsappNumber: fullNumber,
+          email: email.trim().toLowerCase(),
           otp: otpString,
           role: "organizer",
         }),
@@ -206,11 +203,11 @@ export function OrganizerLogin() {
     try {
       const otpString = otp.join(""); // Resend OTP for final validation
 
-      const response = await fetch(`${apiURL}/otp/verify-chat-otp`, {
+      const response = await fetch(`${apiURL}/otp/verify-email-login-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          whatsappNumber: fullNumber,
+          email: email.trim().toLowerCase(),
           otp: otpString,
           role: "organizer",
           shopId: selectedOrgId, // Include the selected ID
@@ -230,9 +227,9 @@ export function OrganizerLogin() {
         title: "Login Failed",
         description: error.message,
       });
-      // If OTP expired during selection, send them back to number input
+      // If OTP expired during selection, send them back to the email step
       if (error.message.includes("expired")) {
-        setStep("number");
+        setStep("email");
       }
     } finally {
       setIsLoading(false);
@@ -272,63 +269,44 @@ export function OrganizerLogin() {
       <Card className="w-full max-w-md shadow-xl border-slate-100">
         <CardHeader className="text-center space-y-2">
           <div className="mx-auto bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mb-2">
-            {step === "number" && <Shield className="h-8 w-8 text-slate-600" />}
+            {step === "email" && <Shield className="h-8 w-8 text-slate-600" />}
             {step === "otp" && <Mail className="h-8 w-8 text-slate-600" />}
             {step === "selection" && (
               <Building className="h-8 w-8 text-slate-600" />
             )}
           </div>
           <CardTitle className="text-2xl font-bold text-slate-900">
-            {step === "number"
+            {step === "email"
               ? "Organizer Login"
               : step === "otp"
                 ? "Verify Code"
                 : "Select Organization"}
           </CardTitle>
           <CardDescription>
-            {step === "number" &&
-              "Enter your WhatsApp number to receive a code"}
-            {step === "otp" && `Enter the 6-digit code sent to ${fullNumber}`}
+            {step === "email" && "Enter your email to receive a login code"}
+            {step === "otp" && `Enter the 6-digit code sent to ${email}`}
             {step === "selection" &&
-              "Multiple organizations found linked to this number"}
+              "Multiple organizations found linked to this email"}
           </CardDescription>
         </CardHeader>
 
         <CardContent>
-          {step === "number" && (
+          {step === "email" && (
             <form onSubmit={handleRequestOtp} className="space-y-4">
-              <div className="flex gap-2">
-                <select
-                  className="w-36 border rounded p-2"
-                  value={countryCode}
-                  onChange={(e) => setCountryCode(e.target.value)}
-                  disabled={isLoading || loadingCountryCodes}
-                  required
-                >
-                  <option value="">Select Country</option>
-                  {countryCodes.map((cc) => (
-                    <option key={cc.dial_code + cc.name} value={cc.dial_code}>
-                      {cc.name} ({cc.dial_code})
-                    </option>
-                  ))}
-                </select>
-                <Input
-                  type="tel"
-                  placeholder="WhatsApp number"
-                  value={whatsappNumber}
-                  onChange={(e) =>
-                    setWhatsAppNumber(e.target.value.replace(/\D/g, ""))
-                  }
-                  className="flex-1"
-                  maxLength={15}
-                  disabled={isLoading}
-                  required
-                />
-              </div>
+              <Input
+                type="email"
+                placeholder="you@organization.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-11"
+                autoComplete="email"
+                disabled={isLoading}
+                required
+              />
               <Button
                 type="submit"
                 className="w-full h-11"
-                disabled={isLoading || whatsappNumber.length < 6}
+                disabled={isLoading || !isValidEmail(email)}
               >
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Send Verification Code
@@ -367,12 +345,12 @@ export function OrganizerLogin() {
                 type="button"
                 className="w-full text-slate-500"
                 onClick={() => {
-                  setStep("number");
+                  setStep("email");
                   setOtp(["", "", "", "", "", ""]);
                 }}
                 disabled={isLoading}
               >
-                Change Number
+                Change Email
               </Button>
             </form>
           )}

@@ -69,9 +69,9 @@ function shortRand(len = 6) {
   return out;
 }
 
+import { symbolForCountry } from "@/data/currencies";
 function formatPrice(country: string, n: number) {
-  const sym = country === "SG" ? "SG$" : country === "US" ? "$" : "₹";
-  return `${sym}${n}`;
+  return `${symbolForCountry(country)}${n}`;
 }
 
 export function InlineWalkinForm({
@@ -82,7 +82,7 @@ export function InlineWalkinForm({
   organizerId: string;
 }) {
   const country = (payload.country || "").toUpperCase();
-  const sym = country === "SG" ? "SG$" : country === "US" ? "$" : "₹";
+  const sym = symbolForCountry(country);
   const defaultDial = country === "SG" ? "+65" : "+91";
 
   const [step, setStep] = useState<Step>("pick_event");

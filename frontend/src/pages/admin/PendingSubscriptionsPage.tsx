@@ -66,10 +66,9 @@ interface UnifiedRow {
   createdAt: string;
 }
 
+import { symbolForCode } from "@/data/currencies";
 function symbol(c: string) {
-  if (c === "INR") return "₹";
-  if (c === "SGD") return "SG$";
-  return "$";
+  return symbolForCode(c);
 }
 
 /**

@@ -38,6 +38,7 @@ import { SubscriptionsModule } from "./modules/subscriptions/subscriptions.modul
 import { BillingPaymentsModule } from "./modules/billing-payments/billing-payments.module";
 import { MembershipsModule } from "./modules/memberships/memberships.module";
 import { RsvpModule } from "./modules/rsvp/rsvp.module";
+import { FilesModule } from "./modules/files/files.module";
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { RsvpModule } from "./modules/rsvp/rsvp.module";
     AuthModule,
     UsersModule,
     OtpModule,
+    FilesModule,
     EventsModule,
     OrganizersModule,
     // UploadsModule,

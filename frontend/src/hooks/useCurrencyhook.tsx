@@ -1,50 +1,11 @@
 // hooks/useCurrency.ts
 import { useMemo } from "react";
-
-interface CurrencyConfig {
-  symbol: string;
-  code: string;
-  locale: string;
-}
-
-const CURRENCY_CONFIG: Record<string, CurrencyConfig> = {
-  IN: { symbol: "₹", code: "INR", locale: "en-IN" },
-  // SG$ (not the browser-locale default "S$"/"$") — the product wants the
-  // currency to read unambiguously as Singapore dollars everywhere.
-  SG: { symbol: "SG$", code: "SGD", locale: "en-SG" },
-};
-
-// The backend stores organizer.country inconsistently — sometimes the ISO-2
-// code ("SG"), sometimes the full country name ("Singapore"), sometimes the
-// ISO-3 ("SGP"). subscriptions.service.ts already handles all three; mirror
-// that here so non-INR organizers don't silently fall through to the rupee
-// fallback below.
-const COUNTRY_ALIASES: Record<string, string> = {
-  IN: "IN",
-  IND: "IN",
-  INDIA: "IN",
-  SG: "SG",
-  SGP: "SG",
-  SINGAPORE: "SG",
-};
-
-const normalizeCountry = (country: string | undefined | null): string => {
-  if (!country) return "";
-  return COUNTRY_ALIASES[String(country).trim().toUpperCase()] || "";
-};
-
-// Fallback used ONLY when an unknown / unrecognized country is supplied.
-// Previously this was hard-coded to IN (₹), which surfaced as the wrong
-// currency for Singapore organizers (and any non-aliased country) the
-// moment the local `country` state was momentarily empty — e.g. during
-// the brief window after the buyer's Google sign-in redirect before the
-// organizer fetch resolves. USD is a more neutral default; the cart
-// flips to the organizer's real currency as soon as setCountry fires.
-const FALLBACK_CURRENCY: CurrencyConfig = {
-  symbol: "$",
-  code: "USD",
-  locale: "en-US",
-};
+import {
+  COUNTRY_CURRENCY,
+  FALLBACK_CURRENCY,
+  toIso2,
+  type CurrencyConfig,
+} from "@/data/currencies";
 
 // Cart-side cache key. Mirrors what ticketCart.tsx writes whenever it
 // resolves an organizer's country. When `country` arrives empty (e.g.
@@ -53,18 +14,22 @@ const FALLBACK_CURRENCY: CurrencyConfig = {
 // cache so we keep the previous currency instead of flashing to USD.
 const CART_COUNTRY_CACHE_KEY = "cart:country";
 
+const configFor = (country: string | undefined | null): CurrencyConfig | null => {
+  const iso2 = toIso2(country);
+  return iso2 ? COUNTRY_CURRENCY[iso2] : null;
+};
+
 export const useCurrency = (country: string) => {
   const config = useMemo(() => {
-    const direct = normalizeCountry(country);
-    if (direct) return CURRENCY_CONFIG[direct];
+    const direct = configFor(country);
+    if (direct) return direct;
     // No usable country was passed in. Peek at the cart cache before
     // falling through to USD so the post-Google-redirect render keeps
     // the organizer's currency (SG$, etc.) seamlessly.
     if (typeof window !== "undefined") {
       try {
-        const cached = sessionStorage.getItem(CART_COUNTRY_CACHE_KEY);
-        const cachedNorm = normalizeCountry(cached || "");
-        if (cachedNorm) return CURRENCY_CONFIG[cachedNorm];
+        const cached = configFor(sessionStorage.getItem(CART_COUNTRY_CACHE_KEY));
+        if (cached) return cached;
       } catch {
         // sessionStorage blocked (rare) — fall through.
       }
