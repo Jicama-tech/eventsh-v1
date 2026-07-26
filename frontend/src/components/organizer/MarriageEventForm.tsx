@@ -31,7 +31,22 @@ import {
   ArrowUp,
   ArrowDown,
   X,
+  Menu,
+  Users,
+  BookOpen,
+  Settings,
 } from "lucide-react";
+
+// Wedding form sections — rendered as the collapsible sidebar nav (same look
+// as the professional dashboard sidebar).
+const WED_SECTIONS = [
+  { id: "couple", label: "Couple & Hosts", icon: Users },
+  { id: "functions", label: "Functions", icon: Calendar },
+  { id: "media", label: "Media", icon: ImagePlus },
+  { id: "story", label: "Story", icon: BookOpen },
+  { id: "design", label: "Design", icon: Palette },
+  { id: "settings", label: "Settings", icon: Settings },
+];
 
 // Rich-text editor for "Our Story" timeline moments — same react-quill setup
 // as the commercial CreateEventForm (lazy-loaded, shared toolbar).
@@ -301,6 +316,56 @@ function MiniStoryPreview({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Preview-scoped falling petals — mirrors <FallingPetals /> on the public
+// eventfront, but sized to the preview box (container-relative %, not viewport
+// vh) so the organizer can see the effect the moment they toggle it on.
+const PREVIEW_PETALS = Array.from({ length: 12 }, (_, i) => ({
+  left: (i * 8.3 + (i % 3) * 5) % 100,
+  size: 6 + (i % 3) * 3,
+  dur: 6 + (i % 5) * 1.3,
+  delay: -((i * 0.9) % 8),
+  drift: (i % 2 ? 1 : -1) * (10 + (i % 4) * 6),
+  op: 0.5 + (i % 3) * 0.13,
+  accent: i % 2 === 0,
+  round: i % 3 === 0 ? "150% 0 150% 0" : "50% 0 50% 50%",
+}));
+
+function PreviewFallingPetals() {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
+      aria-hidden
+    >
+      <style>{`
+        @keyframes wedPetalPrev{0%{transform:translateY(-15%) translateX(0) rotate(0deg);opacity:0}12%{opacity:var(--po,.7)}86%{opacity:var(--po,.7)}100%{transform:translateY(115%) translateX(var(--pd,20px)) rotate(360deg);opacity:0}}
+        .wed-petal-prev{position:absolute;top:0;will-change:transform,opacity;animation:wedPetalPrev var(--pdur,8s) linear var(--pdel,0s) infinite}
+        @media (prefers-reduced-motion: reduce){.wed-petal-prev{display:none}}
+      `}</style>
+      {PREVIEW_PETALS.map((p, i) => (
+        <span
+          key={i}
+          className="wed-petal-prev"
+          style={
+            {
+              left: `${p.left}%`,
+              width: p.size,
+              height: p.size,
+              borderRadius: p.round,
+              background: p.accent
+                ? "var(--w-accent, var(--w-primary))"
+                : "var(--w-primary)",
+              "--pdur": `${p.dur}s`,
+              "--pdel": `${p.delay}s`,
+              "--pd": `${p.drift}px`,
+              "--po": p.op,
+            } as React.CSSProperties
+          }
+        />
+      ))}
     </div>
   );
 }
@@ -907,6 +972,12 @@ export function MarriageEventForm({
 }: MarriageEventFormProps) {
   const { toast } = useToast();
   const [currentTab, setCurrentTab] = useState("couple");
+  // Phone-only section sidebar (drawer). Tablet/desktop use the top tab strip.
+  const [navOpen, setNavOpen] = useState(false);
+  const selectSection = (id: string) => {
+    setCurrentTab(id);
+    setNavOpen(false);
+  };
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState(() => ({
@@ -914,6 +985,7 @@ export function MarriageEventForm({
     description: initialData?.description ?? "",
     partner1Name: initialData?.marriage?.partner1Name ?? "",
     partner2Name: initialData?.marriage?.partner2Name ?? "",
+    invitationTitle: initialData?.marriage?.invitationTitle ?? "",
     hostNames: initialData?.marriage?.hostNames ?? "",
     contactName: initialData?.marriage?.contactName ?? "",
     contactPhone: initialData?.marriage?.contactPhone ?? "",
@@ -1283,6 +1355,7 @@ export function MarriageEventForm({
         JSON.stringify({
           partner1Name: form.partner1Name.trim(),
           partner2Name: form.partner2Name.trim(),
+          invitationTitle: form.invitationTitle.trim(),
           hostNames: form.hostNames.trim(),
           contactName: form.contactName.trim(),
           contactPhone: form.contactPhone.trim(),
@@ -1349,108 +1422,129 @@ export function MarriageEventForm({
   };
 
   return (
-    <div className="flex min-h-full flex-col bg-muted/40">
-      {/* Unified sticky app bar — header + tab strip pin together as one block
-          (no magic top offset) with translucent app chrome. Fills its dialog
-          scroller naturally instead of forcing a full 100vh page. */}
-      <div className="sticky top-0 z-50 border-b bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/80">
-        <div className="flex items-center justify-between gap-2 p-3 sm:p-4">
-          <div className="ml-1 flex min-w-0 items-center gap-3 sm:ml-2">
-            <h1 className="truncate text-base font-bold sm:text-xl">
-              {editMode ? "Edit Wedding" : "Create Wedding"}
-            </h1>
-            <Badge
-              variant="secondary"
-              className="hidden font-normal sm:inline-flex"
-            >
-              Marriage Function
-            </Badge>
-          </div>
-          <div className="flex flex-shrink-0 items-center gap-2">
+    <div className="relative flex min-h-full bg-muted/40">
+      {/* Phone backdrop when the section sidebar is open. */}
+      {navOpen && (
+        <div
+          className="absolute inset-0 z-30 bg-black/40 md:hidden"
+          onClick={() => setNavOpen(false)}
+        />
+      )}
+
+      {/* Section sidebar — PHONES ONLY (md:hidden). Slides in as an overlay,
+          toggled by the hamburger. Tablet/desktop use the top tab strip below
+          (the original form layout). */}
+      <aside
+        className={`${navOpen ? "" : "hidden"} absolute inset-y-0 left-0 z-40 w-64 shrink-0 overflow-y-auto border-r bg-card/95 backdrop-blur-sm md:hidden`}
+      >
+        <nav className="space-y-1 p-3 sm:p-4">
+          {WED_SECTIONS.map((s) => (
             <Button
+              key={s.id}
               type="button"
-              variant="buttonOutline"
-              size="sm"
-              className="sm:h-10 sm:px-4"
-              onClick={onClose}
+              variant={currentTab === s.id ? "default" : "buttonOutline"}
+              className="w-full justify-start text-sm"
+              onClick={() => selectSection(s.id)}
             >
-              Cancel
+              <s.icon className="mr-2 h-4 w-4 flex-shrink-0" />
+              <span className="flex-1 truncate text-left">{s.label}</span>
             </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={saving}
-              size="sm"
-              className="min-w-0 sm:h-10 sm:min-w-32 sm:px-4"
-            >
-              {saving ? (
-                editMode ? (
-                  "Updating…"
+          ))}
+        </nav>
+      </aside>
+
+      {/* Content column */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Sticky header with hamburger + title + actions. */}
+        <div className="sticky top-0 z-20 border-b bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/80">
+          <div className="flex items-center justify-between gap-2 p-3 sm:p-4">
+            <div className="flex min-w-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0 md:hidden"
+                onClick={() => setNavOpen((o) => !o)}
+                title="Sections"
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+              <h1 className="truncate text-base font-bold sm:text-xl">
+                {editMode ? "Edit Wedding" : "Create Wedding"}
+              </h1>
+              <Badge
+                variant="secondary"
+                className="hidden font-normal sm:inline-flex"
+              >
+                Marriage Function
+              </Badge>
+            </div>
+            <div className="flex flex-shrink-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="buttonOutline"
+                size="sm"
+                className="sm:h-10 sm:px-4"
+                onClick={onClose}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={saving}
+                size="sm"
+                className="min-w-0 sm:h-10 sm:min-w-32 sm:px-4"
+              >
+                {saving ? (
+                  editMode ? (
+                    "Updating…"
+                  ) : (
+                    "Creating…"
+                  )
                 ) : (
-                  "Creating…"
-                )
-              ) : (
-                <>
-                  <span className="sm:hidden">
-                    {editMode ? "Update" : "Create"}
-                  </span>
-                  <span className="hidden sm:inline">
-                    {editMode ? "Update Wedding" : "Create Wedding"}
-                  </span>
-                </>
-              )}
-            </Button>
+                  <>
+                    <span className="sm:hidden">
+                      {editMode ? "Update" : "Create"}
+                    </span>
+                    <span className="hidden sm:inline">
+                      {editMode ? "Update Wedding" : "Create Wedding"}
+                    </span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+          {/* Tablet/desktop top tab strip — the original form layout. Hidden on
+              phones, which use the slide-in sidebar instead. */}
+          <div className="hidden border-t md:block">
+            <Tabs value={currentTab} onValueChange={setCurrentTab}>
+              <TabsList className="grid h-12 w-full grid-cols-6 bg-transparent">
+                <TabsTrigger value="couple" className="text-sm">
+                  Couple &amp; Hosts
+                </TabsTrigger>
+                <TabsTrigger value="functions" className="text-sm">
+                  Functions
+                </TabsTrigger>
+                <TabsTrigger value="media" className="text-sm">
+                  Media
+                </TabsTrigger>
+                <TabsTrigger value="story" className="text-sm">
+                  Story
+                </TabsTrigger>
+                <TabsTrigger value="design" className="text-sm">
+                  Design
+                </TabsTrigger>
+                <TabsTrigger value="settings" className="text-sm">
+                  Settings
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
         </div>
 
-        {/* Tab strip — wraps to a 3×2 grid on phones, single 6-col row from sm
-            up, so no label ever gets cramped. */}
-        <div className="border-t px-2 py-1.5 sm:px-0 sm:py-0">
+        {/* Content */}
+        <div className="mx-auto w-full max-w-5xl flex-1 p-4 sm:p-6">
           <Tabs value={currentTab} onValueChange={setCurrentTab}>
-            <TabsList className="grid h-auto w-full grid-cols-3 gap-1 bg-transparent sm:h-12 sm:grid-cols-6 sm:gap-0">
-              <TabsTrigger
-                value="couple"
-                className="whitespace-nowrap py-2 text-xs sm:text-sm"
-              >
-                Couple &amp; Hosts
-              </TabsTrigger>
-              <TabsTrigger
-                value="functions"
-                className="whitespace-nowrap py-2 text-xs sm:text-sm"
-              >
-                Functions
-              </TabsTrigger>
-              <TabsTrigger
-                value="media"
-                className="whitespace-nowrap py-2 text-xs sm:text-sm"
-              >
-                Media
-              </TabsTrigger>
-              <TabsTrigger
-                value="story"
-                className="whitespace-nowrap py-2 text-xs sm:text-sm"
-              >
-                Story
-              </TabsTrigger>
-              <TabsTrigger
-                value="design"
-                className="whitespace-nowrap py-2 text-xs sm:text-sm"
-              >
-                Design
-              </TabsTrigger>
-              <TabsTrigger
-                value="settings"
-                className="whitespace-nowrap py-2 text-xs sm:text-sm"
-              >
-                Settings
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6">
-        <Tabs value={currentTab} onValueChange={setCurrentTab}>
           {/* COUPLE & HOSTS */}
           <TabsContent value="couple" className="space-y-6">
             <Card>
@@ -1495,6 +1589,21 @@ export function MarriageEventForm({
                   <p className="mt-1 text-xs text-muted-foreground">
                     Leave blank to use “
                     {defaultTitle || "Partner 1 & Partner 2's Wedding"}”.
+                  </p>
+                </div>
+
+                <div>
+                  <Label>Invitation title</Label>
+                  <Input
+                    value={form.invitationTitle}
+                    onChange={(e) =>
+                      setField("invitationTitle", e.target.value)
+                    }
+                    placeholder="e.g., You're Invited to Aarav & Diya's Wedding"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Heading shown on your guests&apos; RSVP / invitation form.
+                    Leave blank to use the couple names.
                   </p>
                 </div>
 
@@ -2221,32 +2330,36 @@ export function MarriageEventForm({
                     </p>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-                      {LAYOUT_TEMPLATES.map((o) => {
-                        const active = theme.layoutTemplate === o.value;
-                        return (
-                          <button
-                            key={o.value}
-                            type="button"
-                            onClick={() =>
-                              patchTheme({ layoutTemplate: o.value })
-                            }
-                            className={`flex flex-col gap-1 rounded-xl border-2 p-3 text-left transition ${
-                              active
-                                ? "border-primary ring-2 ring-primary/20"
-                                : "border-muted hover:border-primary/50"
-                            }`}
-                          >
-                            <span className="text-sm font-semibold">
-                              {o.label}
-                            </span>
-                            <span className="text-[11px] leading-tight text-muted-foreground">
-                              {o.hint}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <Select
+                      value={theme.layoutTemplate}
+                      onValueChange={(v) =>
+                        patchTheme({
+                          layoutTemplate:
+                            v as MarriageTheme["layoutTemplate"],
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LAYOUT_TEMPLATES.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {(() => {
+                      const sel = LAYOUT_TEMPLATES.find(
+                        (t) => t.value === theme.layoutTemplate,
+                      );
+                      return sel ? (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          {sel.hint}
+                        </p>
+                      ) : null;
+                    })()}
                   </CardContent>
                 </Card>
 
@@ -2262,30 +2375,37 @@ export function MarriageEventForm({
                   </CardHeader>
                   <CardContent className="space-y-6">
                     {/* Presets */}
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                      {MARRIAGE_PRESETS.map((p) => {
-                        const active = theme.preset === p.key;
-                        return (
-                          <button
-                            key={p.key}
-                            type="button"
-                            onClick={() => applyPreset(p.key)}
-                            className={`flex flex-col gap-2 rounded-xl border-2 p-3 text-left transition ${
-                              active
-                                ? "border-primary ring-2 ring-primary/20"
-                                : "border-muted hover:border-primary/50"
-                            }`}
-                          >
-                            <span
-                              className="h-10 w-full rounded-md"
-                              style={{
-                                background: `linear-gradient(120deg, ${p.bgColor} 0%, ${p.primaryColor} 60%, ${p.accentColor} 100%)`,
-                              }}
-                            />
-                            <span className="text-xs font-medium">{p.label}</span>
-                          </button>
-                        );
-                      })}
+                    <div>
+                      <Select
+                        value={
+                          theme.preset === "custom" ? "" : (theme.preset ?? "")
+                        }
+                        onValueChange={(v) => applyPreset(v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Pick a palette (or fine-tune below)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MARRIAGE_PRESETS.map((p) => (
+                            <SelectItem key={p.key} value={p.key}>
+                              <span className="flex items-center gap-2">
+                                <span
+                                  className="h-4 w-6 shrink-0 rounded"
+                                  style={{
+                                    background: `linear-gradient(120deg, ${p.bgColor} 0%, ${p.primaryColor} 60%, ${p.accentColor} 100%)`,
+                                  }}
+                                />
+                                {p.label}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {theme.preset === "custom" && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Using custom colors (set below).
+                        </p>
+                      )}
                     </div>
 
                     {/* Custom colors */}
@@ -2864,6 +2984,7 @@ export function MarriageEventForm({
                   }}
                   className="relative mt-2 overflow-hidden border shadow-sm"
                 >
+                  {theme.fallingPetals && <PreviewFallingPetals />}
                   <MiniHeroPreview
                     theme={theme}
                     p1={form.partner1Name.trim() || "Aarav"}
@@ -2977,7 +3098,8 @@ export function MarriageEventForm({
               </CardContent>
             </Card>
           </TabsContent>
-        </Tabs>
+          </Tabs>
+        </div>
       </div>
     </div>
   );

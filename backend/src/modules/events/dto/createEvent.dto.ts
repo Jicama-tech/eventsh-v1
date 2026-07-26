@@ -506,6 +506,8 @@ export class StoryMomentDto {
 export class MarriageDetailsDto {
   @IsString() @IsOptional() partner1Name?: string;
   @IsString() @IsOptional() partner2Name?: string;
+  // Custom heading for the eventfront RSVP/invitation form.
+  @IsString() @IsOptional() invitationTitle?: string;
   @IsString() @IsOptional() hostNames?: string;
   @IsString() @IsOptional() contactName?: string;
   @IsString() @IsOptional() contactPhone?: string;

@@ -243,6 +243,9 @@ class MarriageFunction {
 class MarriageDetails {
   @Prop() partner1Name?: string;
   @Prop() partner2Name?: string;
+  // Custom heading shown on the eventfront RSVP/invitation form. Falls back to
+  // the couple names / event title when empty.
+  @Prop() invitationTitle?: string;
   @Prop() hostNames?: string;
   @Prop() contactName?: string;
   @Prop() contactPhone?: string;

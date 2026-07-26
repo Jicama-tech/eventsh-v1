@@ -296,6 +296,22 @@ export class StallsController {
   }
 
   /**
+   * Start the 24h confirmation window when the organizer opens a stall that is
+   * awaiting payment approval but has no deadline yet (e.g. a pre-feature
+   * booking). PATCH /stalls/:id/start-confirmation-timer
+   */
+  @Patch(":id/start-confirmation-timer")
+  async startConfirmationTimer(
+    @Param("id") id: string,
+    @Body() body: { changedBy?: string },
+  ) {
+    return await this.stallsService.startConfirmationTimer(
+      id,
+      body?.changedBy,
+    );
+  }
+
+  /**
    * Scan QR code for check-in/check-out
    * POST /stalls/scan-qr
    */
