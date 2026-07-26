@@ -17,24 +17,16 @@ import { renderGuidePdf } from "./guide-pdf.util";
 
 // Personal event sub-types offered to Individual accounts in the chatbot
 // "create event" picker. Mirrors EVENT_TYPE_GROUPS.personal in
-// frontend/src/lib/eventTypes.ts — keep the two lists in sync. The `keywords`
+// frontend/src/lib/eventTypes.ts — keep the two lists in sync. For now we
+// focus on Marriage only; other personal functions (birthday, anniversary,
+// etc.) are intentionally omitted until they're built out. The `keywords`
 // let a user pick by typing naturally ("plan a wedding") as well as by tapping
 // a pill ("Create a Marriage Function event").
 const PERSONAL_EVENT_TYPES: Array<{ category: string; keywords: string[] }> = [
-  { category: "Birthday Party", keywords: ["birthday", "bday"] },
-  {
-    category: "Housewarming Party",
-    keywords: ["housewarming", "house warming", "griha pravesh"],
-  },
   {
     category: "Marriage Function",
     keywords: ["marriage", "wedding", "shaadi", "nikah", "vivah"],
   },
-  { category: "Engagement Ceremony", keywords: ["engagement", "roka"] },
-  { category: "Anniversary", keywords: ["anniversary"] },
-  { category: "Baby Shower", keywords: ["baby shower", "godh bharai"] },
-  { category: "Reunion", keywords: ["reunion"] },
-  { category: "Farewell Party", keywords: ["farewell", "send off", "send-off"] },
 ];
 
 type ConvEntry = {
@@ -3124,7 +3116,7 @@ ${context}
     if (wantsCreateEvent) {
       return {
         text:
-          "What are you celebrating? Pick the kind of personal event and I'll open the form ready for it. Planning something professional with ticketing, stalls or exhibitors instead? Register an organization.",
+          "Let's set up your wedding — tap below and I'll open the invitation form ready for it. Planning something professional with ticketing, stalls or exhibitors instead? Register an organization.",
         quickActions: [
           ...PERSONAL_EVENT_TYPES.map((t) => ({
             label: t.category,

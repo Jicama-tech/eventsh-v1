@@ -1620,12 +1620,13 @@ export function ChatbotWidget({
                 >
                   EventSH AI
                 </p>
+                {/* Status line hidden on mobile, shown on desktop. */}
                 <p
-                  className={
+                  className={`hidden md:block ${
                     isPage
                       ? "text-[11px] sm:text-xs text-slate-500"
                       : "text-[10px] opacity-80"
-                  }
+                  }`}
                 >
                   <span className="inline-block h-1.5 w-1.5 bg-emerald-400 rounded-full mr-1" />
                   Your smart event assistant · Online
@@ -1633,30 +1634,17 @@ export function ChatbotWidget({
               </div>
             </div>
             <div className="flex items-center gap-1">
-              {/* Individuals have no settings sidebar — surface "send from my
-                  own email" here so they can configure a custom sender. */}
-              {isIndividual && (
-                <button
-                  onClick={() => setEmailSettingsOpen(true)}
-                  className={
-                    isPage
-                      ? "text-xs text-slate-600 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1"
-                      : "text-[11px] hover:bg-white/10 px-2 py-1 rounded flex items-center gap-1"
-                  }
-                  title="Send guest emails from your own address"
-                >
-                  <SettingsIcon className="h-3 w-3" />
-                  Email
-                </button>
-              )}
-              {analytics && (
+              {/* Stats — organizers only. Individuals reach Settings from the
+                  sidebar / menu, and don't get the analytics panel, so both
+                  Email and Stats are hidden from their assistant top bar. */}
+              {analytics && !isIndividual && (
                 <button
                   onClick={() => setShowAnalytics((v) => !v)}
-                  className={
+                  className={`flex ${
                     isPage
-                      ? "text-xs text-slate-600 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1"
-                      : "text-[11px] hover:bg-white/10 px-2 py-1 rounded flex items-center gap-1"
-                  }
+                      ? "text-xs text-slate-600 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-100 items-center gap-1"
+                      : "text-[11px] hover:bg-white/10 px-2 py-1 rounded items-center gap-1"
+                  }`}
                   title={showAnalytics ? "Hide analytics" : "Show analytics"}
                 >
                   {showAnalytics ? (
@@ -1823,13 +1811,25 @@ export function ChatbotWidget({
                           : "text-xs text-slate-500 mt-1"
                       }
                     >
-                      {renderMarkdown(
-                        isIndividual
-                          ? "Welcome to **EventSH**! I can help you **create an event**, **show your events & participants**, or **register as a full organizer**. What would you like to do?"
-                          : greeting.replace(
-                              /\{ORG\}/g,
-                              orgInfo?.organizationName || "your organization",
-                            ),
+                      {isIndividual ? (
+                        <>
+                          {/* Short on mobile, original long message on desktop. */}
+                          <div className="md:hidden">
+                            {renderMarkdown("Welcome to **EventSH AI** 👋")}
+                          </div>
+                          <div className="hidden md:block">
+                            {renderMarkdown(
+                              "Welcome to **EventSH**! I can help you **create an event**, **show your events & participants**, or **register as a full organizer**. What would you like to do?",
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        renderMarkdown(
+                          greeting.replace(
+                            /\{ORG\}/g,
+                            orgInfo?.organizationName || "your organization",
+                          ),
+                        )
                       )}
                     </div>
 

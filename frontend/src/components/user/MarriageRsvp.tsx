@@ -34,6 +34,9 @@ interface MarriageRsvpProps {
   // The wedding's ceremonies, so the guest can pick which ones they'll attend.
   // Passed down from MarriageEventFront (driven by the event's functions[]).
   functions?: MarriageFunctionOption[];
+  // Optional custom heading for the invitation/RSVP form, set by the organizer
+  // in the Event form (marriage.invitationTitle).
+  invitationTitle?: string;
 }
 
 interface GuestProfile {
@@ -63,7 +66,9 @@ const EMPTY_ATTENDEE: Attendee = { name: "", age: "", contactNumber: "" };
 export default function MarriageRsvp({
   eventId,
   functions = [],
+  invitationTitle,
 }: MarriageRsvpProps) {
+  const inviteHeading = (invitationTitle || "").trim();
   const { toast } = useToast();
   const [profile, setProfile] = useState<GuestProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
@@ -296,6 +301,11 @@ export default function MarriageRsvp({
   if (!profile) {
     return (
       <div className="mx-auto mt-8 max-w-md rounded-3xl border border-rose-100 bg-white p-8 text-center shadow-sm">
+        {inviteHeading && (
+          <h3 className="mb-3 text-xl font-semibold text-stone-800">
+            {inviteHeading}
+          </h3>
+        )}
         <p className="mb-6 text-stone-600">
           Kindly let us know if you’ll be joining us.
         </p>
@@ -324,6 +334,11 @@ export default function MarriageRsvp({
   // Signed in — RSVP form.
   return (
     <div className="mx-auto mt-8 max-w-md rounded-3xl border border-rose-100 bg-white p-7 text-left shadow-sm">
+      {inviteHeading && (
+        <h3 className="mb-4 text-center text-xl font-semibold text-stone-800">
+          {inviteHeading}
+        </h3>
+      )}
       {submitted && (
         <div className="mb-5 flex items-center gap-2 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
           <PartyPopper className="h-4 w-4" />

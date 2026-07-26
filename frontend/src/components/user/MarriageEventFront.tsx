@@ -1618,6 +1618,7 @@ export default function MarriageEventFront({
           ) : (
             <MarriageRsvp
               eventId={eventData._id}
+              invitationTitle={(marriage as any)?.invitationTitle}
               functions={functions
                 .filter((f) => (f?.name || "").trim())
                 .map((f, i) => ({
