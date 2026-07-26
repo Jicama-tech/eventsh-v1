@@ -6,7 +6,7 @@
 // their corresponding callback prop is supplied — that's how the volunteer
 // view stays read-only without forking the markup.
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -329,6 +329,47 @@ export function ExhibitorDetailDialog({
   const [extendHours, setExtendHours] = useState<number>(24);
   const [extendNote, setExtendNote] = useState("");
   const [isExtending, setIsExtending] = useState(false);
+  const [isRemovingHold, setIsRemovingHold] = useState(false);
+
+  // Turn the hold timer off — clears the deadline so the countdown stops and
+  // the space is no longer auto-released.
+  const handleRemoveHold = async () => {
+    if (!stallRequest?._id) return;
+    setIsRemovingHold(true);
+    try {
+      const token = sessionStorage.getItem("token");
+      const res = await fetch(
+        `${apiURL}/stalls/${stallRequest._id}/cancel-confirmation-timer`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ changedBy: derivedUserDisplay || undefined }),
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message || `Failed (${res.status})`);
+      }
+      await onNoteAdded?.(); // refetch so the countdown disappears
+      toast({
+        duration: 4000,
+        title: "Hold removed",
+        description: "The timer is off — this space won't be auto-released.",
+      });
+    } catch (err: any) {
+      toast({
+        duration: 5000,
+        title: "Could not remove hold",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRemovingHold(false);
+    }
+  };
 
   const handleExtendDeadline = async () => {
     if (!stallRequest?._id) return;
@@ -386,48 +427,70 @@ export function ExhibitorDetailDialog({
     }
   };
 
-  // Kick off the 24h confirmation window the moment the organizer opens a stall
-  // that is awaiting payment approval but has no deadline yet (e.g. a booking
-  // made before this feature shipped). New "I have Paid" submissions already
-  // arrive with a deadline, so this only fires for the older/pending ones.
-  const startedTimerRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const s = stallRequest as any;
-    if (!open || !s?._id || !onConfirmPayment) return;
-    const awaiting = s.status === "Processing" && s.paymentStatus !== "Paid";
-    if (!awaiting || s.confirmationDeadline) return;
-    if (startedTimerRef.current.has(s._id)) return;
-    startedTimerRef.current.add(s._id);
-    (async () => {
-      try {
-        const token = sessionStorage.getItem("token");
-        const res = await fetch(
-          `${apiURL}/stalls/${s._id}/start-confirmation-timer`,
-          {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify({ changedBy: derivedUserDisplay || undefined }),
+  // Opt-in payment-confirmation hold. The organizer starts it per stall (only
+  // when a vendor asks for time), via a dialog that takes the hold duration +
+  // an optional note. Once started, the countdown shows and the space is
+  // auto-released if the vendor still hasn't paid by the deadline.
+  const [startHoldOpen, setStartHoldOpen] = useState(false);
+  const [holdHours, setHoldHours] = useState<number>(24);
+  const [holdNote, setHoldNote] = useState("");
+  const [isStartingHold, setIsStartingHold] = useState(false);
+
+  const handleStartHold = async () => {
+    if (!stallRequest?._id) return;
+    const hours = Number(holdHours);
+    if (!Number.isFinite(hours) || hours <= 0 || hours > 720) {
+      toast({
+        duration: 5000,
+        title: "Invalid hours",
+        description: "Enter a hold time between 1 and 720 hours.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsStartingHold(true);
+    try {
+      const token = sessionStorage.getItem("token");
+      const res = await fetch(
+        `${apiURL}/stalls/${stallRequest._id}/start-confirmation-timer`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-        );
-        if (res.ok) {
-          const body = await res.json().catch(() => ({}));
-          if (body?.started) await onNoteAdded?.(); // refetch so the countdown shows
-        }
-      } catch {
-        // best-effort — the hourly scheduler backfills the deadline anyway.
+          body: JSON.stringify({
+            hours,
+            note: holdNote.trim() || undefined,
+            changedBy: derivedUserDisplay || undefined,
+          }),
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message || `Failed (${res.status})`);
       }
-    })();
-  }, [
-    open,
-    (stallRequest as any)?._id,
-    (stallRequest as any)?.status,
-    (stallRequest as any)?.paymentStatus,
-    (stallRequest as any)?.confirmationDeadline,
-    onConfirmPayment,
-  ]);
+      setStartHoldOpen(false);
+      setHoldNote("");
+      await onNoteAdded?.(); // refetch so the countdown shows
+      toast({
+        duration: 4000,
+        title: "Hold started",
+        description: `Space held for ${hours} hour${
+          hours === 1 ? "" : "s"
+        }; the vendor was notified.`,
+      });
+    } catch (err: any) {
+      toast({
+        duration: 5000,
+        title: "Could not start hold",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsStartingHold(false);
+    }
+  };
 
   // "Resend ticket" is an organizer-only recovery action (volunteers get a
   // read-only dialog with no admin callbacks). It re-delivers the QR ticket
@@ -517,19 +580,58 @@ export function ExhibitorDetailDialog({
                     <ConfirmationCountdown
                       deadline={(stallRequest as any).confirmationDeadline}
                       rightSlot={
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="buttonOutline"
+                            className="h-7 border-amber-300 bg-white px-2 text-xs text-amber-800 hover:bg-amber-100"
+                            onClick={() => setExtendDialogOpen(true)}
+                          >
+                            <Clock className="mr-1 h-3.5 w-3.5" />
+                            Extend
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="buttonOutline"
+                            className="h-7 border-red-200 bg-white px-2 text-xs text-red-600 hover:bg-red-50"
+                            disabled={isRemovingHold}
+                            onClick={handleRemoveHold}
+                            title="Turn the hold timer off"
+                          >
+                            {isRemovingHold ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <>
+                                <XCircle className="mr-1 h-3.5 w-3.5" />
+                                Remove
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      }
+                    />
+                  )}
+                  {!(stallRequest as any).confirmationDeadline &&
+                    stallRequest.status === "Processing" && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
+                        <span className="text-xs text-amber-800">
+                          Vendor needs more time to pay? Hold this space with a
+                          timer — it auto-releases if unpaid by then.
+                        </span>
                         <Button
                           type="button"
                           size="sm"
                           variant="buttonOutline"
                           className="h-7 shrink-0 border-amber-300 bg-white px-2 text-xs text-amber-800 hover:bg-amber-100"
-                          onClick={() => setExtendDialogOpen(true)}
+                          onClick={() => setStartHoldOpen(true)}
                         >
                           <Clock className="mr-1 h-3.5 w-3.5" />
-                          Extend
+                          Add hold timer
                         </Button>
-                      }
-                    />
-                  )}
+                      </div>
+                    )}
                   <Card className="border-blue-200 bg-blue-50/50">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
@@ -2000,6 +2102,90 @@ export function ExhibitorDetailDialog({
               )}
             </Button>
           )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Start payment-confirmation hold — opt-in per stall. Organizer sets the
+        hold duration + optional note; the countdown then runs and the space
+        auto-releases if unpaid by the deadline. */}
+    <Dialog open={startHoldOpen} onOpenChange={setStartHoldOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Hold this space</DialogTitle>
+          <DialogDescription>
+            Give this vendor extra time to complete payment. The space is held
+            for the chosen duration and automatically released if they still
+            haven&apos;t paid. The vendor is emailed the deadline and your note.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="hold-hours">Hold for (hours)</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {[6, 12, 24, 48, 72].map((h) => (
+                <button
+                  key={h}
+                  type="button"
+                  onClick={() => setHoldHours(h)}
+                  className={`rounded border px-2.5 py-1 text-xs font-semibold ${
+                    holdHours === h
+                      ? "border-amber-400 bg-amber-100 text-amber-900"
+                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {h}h
+                </button>
+              ))}
+            </div>
+            <Input
+              id="hold-hours"
+              type="number"
+              min={1}
+              max={720}
+              value={holdHours}
+              onChange={(e) => setHoldHours(Number(e.target.value))}
+              className="mt-1"
+              disabled={isStartingHold}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="hold-note">Note (optional)</Label>
+            <Textarea
+              id="hold-note"
+              value={holdNote}
+              onChange={(e) => setHoldNote(e.target.value)}
+              placeholder="e.g. Vendor asked to hold until Friday to arrange the bank transfer."
+              rows={3}
+              disabled={isStartingHold}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="buttonOutline"
+            onClick={() => setStartHoldOpen(false)}
+            disabled={isStartingHold}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleStartHold}
+            disabled={
+              isStartingHold || !holdHours || holdHours <= 0 || holdHours > 720
+            }
+          >
+            {isStartingHold ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Starting…
+              </>
+            ) : (
+              "Start hold & notify vendor"
+            )}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

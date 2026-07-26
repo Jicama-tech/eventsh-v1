@@ -694,11 +694,11 @@ export class StallsService {
             remainingAmount: grandTotal,
             status: "Processing",
             selectionDate: new Date(),
-            // Vendor clicked "I have Paid": start the 24h organizer-confirmation
-            // window. If not confirmed by then, the space is auto-released.
+            // Vendor clicked "I have Paid": record when they submitted. The
+            // payment-confirmation HOLD timer is opt-in — the organizer starts
+            // it per stall (startConfirmationTimer) only if they choose to hold
+            // the space for a vendor who asked for more time. No auto-deadline.
             paymentSubmittedAt: new Date(),
-            confirmationDeadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
-            deadlineRemindersSent: 0,
             notes: selectDto.notes || stall.notes,
             transactionId: selectDto.transactionId || null,
             transactionScreenshot: selectDto.transactionScreenshot || null,
@@ -1589,44 +1589,107 @@ export class StallsService {
   }
 
   /**
-   * Start the 24h confirmation window for a stall that is awaiting payment
-   * approval but has no deadline yet — e.g. a booking submitted before this
-   * feature shipped. Called when the organizer opens the stall's detail dialog,
-   * so the countdown begins "from now". No-op (returns the existing deadline)
-   * if the stall isn't awaiting confirmation or the timer is already running.
+   * Organizer-initiated payment-confirmation hold. The timer is OPT-IN, not
+   * automatic: when a vendor who's clicked "I have Paid" asks for more time,
+   * the organizer holds the space for `hours` from now. Once running, the
+   * dialog shows a countdown and the scheduler auto-releases the space if the
+   * vendor still hasn't paid by the deadline. No-op if the stall isn't awaiting
+   * confirmation or a hold is already running (use extend to lengthen it).
    */
-  async startConfirmationTimer(stallId: string, changedBy?: string) {
+  async startConfirmationTimer(
+    stallId: string,
+    hours: number,
+    note?: string,
+    changedBy?: string,
+  ) {
+    if (!Types.ObjectId.isValid(stallId)) {
+      throw new BadRequestException("Invalid stall ID format");
+    }
+    const hrs = Number(hours);
+    if (!Number.isFinite(hrs) || hrs <= 0 || hrs > 720) {
+      throw new BadRequestException("Hold must be between 1 and 720 hours");
+    }
+
+    const stall = await this.stallModel
+      .findById(stallId)
+      .populate("shopkeeperId")
+      .populate("eventId")
+      .populate("organizerId");
+    if (!stall) throw new NotFoundException("Stall request not found");
+
+    // Only stalls where the vendor has submitted payment ("I have Paid" →
+    // Processing) and it's still unconfirmed can be put on hold.
+    const awaiting =
+      stall.status === "Processing" && stall.paymentStatus !== "Paid";
+    if (!awaiting) {
+      throw new BadRequestException(
+        "This booking is not awaiting payment confirmation.",
+      );
+    }
+    if (stall.confirmationDeadline) {
+      return {
+        started: false,
+        confirmationDeadline: stall.confirmationDeadline,
+        message: "A hold is already running — use Extend to add more time.",
+      };
+    }
+
+    const newDeadline = new Date(Date.now() + hrs * 60 * 60 * 1000);
+    stall.confirmationDeadline = newDeadline;
+    if (!stall.paymentSubmittedAt) {
+      stall.paymentSubmittedAt = (stall as any).selectionDate || new Date();
+    }
+    stall.deadlineRemindersSent = 0;
+
+    const trimmedNote = String(note || "").trim();
+    stall.statusHistory.push({
+      status: stall.status as any,
+      note:
+        `Payment-confirmation hold started — ${hrs} hour${
+          hrs === 1 ? "" : "s"
+        } by ${changedBy || "Organizer"}.` +
+        (trimmedNote ? ` Note: ${trimmedNote}` : ""),
+      changedAt: new Date(),
+      changedBy: changedBy || "Organizer",
+    });
+    await stall.save();
+
+    // Tell the vendor how long the space is held (reuses the extension email).
+    await this.notifyVendorDeadlineExtended(
+      stall,
+      hrs,
+      newDeadline,
+      trimmedNote,
+    );
+
+    return { started: true, confirmationDeadline: stall.confirmationDeadline };
+  }
+
+  /**
+   * Remove an active payment-confirmation hold (organizer turns the timer off).
+   * Clears the deadline so the countdown stops and the scheduler no longer
+   * auto-releases the space — the booking simply stays pending confirmation
+   * with no clock. No-op if there's no hold running.
+   */
+  async cancelConfirmationTimer(stallId: string, changedBy?: string) {
     if (!Types.ObjectId.isValid(stallId)) {
       throw new BadRequestException("Invalid stall ID format");
     }
     const stall = await this.stallModel.findById(stallId);
     if (!stall) throw new NotFoundException("Stall request not found");
-
-    // Only stalls where the vendor has submitted payment ("I have Paid" →
-    // Processing) and it's still unconfirmed get a confirmation window.
-    const awaiting =
-      stall.status === "Processing" && stall.paymentStatus !== "Paid";
-    if (!awaiting || stall.confirmationDeadline) {
-      return {
-        started: false,
-        confirmationDeadline: stall.confirmationDeadline ?? null,
-      };
+    if (!stall.confirmationDeadline) {
+      return { cleared: false, message: "No hold is running." };
     }
-
-    stall.confirmationDeadline = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    if (!stall.paymentSubmittedAt) {
-      stall.paymentSubmittedAt = (stall as any).selectionDate || new Date();
-    }
+    stall.confirmationDeadline = null as any;
     stall.deadlineRemindersSent = 0;
     stall.statusHistory.push({
       status: stall.status as any,
-      note: "24-hour payment-confirmation window started (organizer opened the request).",
+      note: `Payment-confirmation hold removed by ${changedBy || "Organizer"}.`,
       changedAt: new Date(),
-      changedBy: changedBy || "System",
+      changedBy: changedBy || "Organizer",
     });
     await stall.save();
-
-    return { started: true, confirmationDeadline: stall.confirmationDeadline };
+    return { cleared: true };
   }
 
   /**
