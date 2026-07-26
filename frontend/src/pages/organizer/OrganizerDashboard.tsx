@@ -13,6 +13,13 @@ import {
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
   CalendarDays,
   Users,
   Ticket,
@@ -112,6 +119,12 @@ const OrganizerSettings = lazy(() =>
   })),
 );
 const MyEvents = lazy(() => import("@/components/organizer/MyEvents"));
+const IndividualMyEvents = lazy(
+  () => import("@/components/organizer/IndividualMyEvents"),
+);
+const IndividualGuestList = lazy(
+  () => import("@/components/organizer/IndividualGuestList"),
+);
 const OrganizerFeedbackList = lazy(
   () => import("@/components/organizer/OrganizerFeedbackList"),
 );
@@ -126,6 +139,9 @@ const HelpFAQ = lazy(() =>
   import("@/components/organizer/HelpFAQ").then((m) => ({
     default: m.HelpFAQ,
   })),
+);
+const EmailSenderSettings = lazy(
+  () => import("@/components/organizer/EmailSenderSettings"),
 );
 const EventAttendees = lazy(
   () => import("@/components/organizer/EventAttendees"),
@@ -365,6 +381,9 @@ export function OrganizerDashboard({
   const [organizerId, setOrganizerId] = useState("");
   // Chatbot is the landing tab — organizer sees AI panel first.
   const [activeTab, setActiveTab] = useState("chatbot");
+  // Individual "Guest List" tab: event pre-selected when jumping from a My
+  // Events card's Guest List button.
+  const [guestListEventId, setGuestListEventId] = useState<string>("");
   const [selectedRTEventId, setSelectedRTEventId] = useState<string | null>(
     null,
   );
@@ -1084,7 +1103,7 @@ export function OrganizerDashboard({
 
             <CalendarDays className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
             <h1 className="text-lg sm:text-xl font-bold hidden sm:block">
-              {isIndividual ? "Welcome to EventSH" : OrganizationName}
+              {isIndividual ? "EventSH" : OrganizationName}
             </h1>
             <h1 className="text-base font-bold sm:hidden truncate max-w-[150px]">
               {isIndividual ? "EventSH" : OrganizationName}
@@ -1103,10 +1122,57 @@ export function OrganizerDashboard({
                 Need Help?
               </Button>
             )}
-            <Button variant="buttonOutline" size="sm" onClick={logout}>
-              <LogOut className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Logout</span>
-            </Button>
+            {isIndividual ? (
+              // Individuals: on phones (no sidebar) Settings/Help/Logout live
+              // in this dropdown; on desktop/tablet the sidebar carries
+              // Settings & Help, so the header shows a plain Logout instead.
+              <>
+                <div className="md:hidden">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="buttonOutline" size="sm">
+                        <Menu className="h-4 w-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Menu</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuItem
+                        onClick={() => setActiveTab("email-settings")}
+                      >
+                        <Settings className="mr-2 h-4 w-4" />
+                        Settings
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setActiveTab("help")}>
+                        <HelpCircle className="mr-2 h-4 w-4" />
+                        Help
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={logout}
+                        className="text-red-600 focus:text-red-600"
+                      >
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Logout
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                <Button
+                  variant="buttonOutline"
+                  size="sm"
+                  onClick={logout}
+                  className="hidden md:flex"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Logout
+                </Button>
+              </>
+            ) : (
+              <Button variant="buttonOutline" size="sm" onClick={logout}>
+                <LogOut className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Logout</span>
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -1239,6 +1305,36 @@ export function OrganizerDashboard({
             </div>
           </div>
         </aside>
+        )}
+
+        {/* Individual sidebar — desktop/tablet only (md+). Phones use the
+            bottom tab bar instead. Mirrors the bottom-bar nav plus Settings
+            & Help (which move here off the mobile Menu dropdown). */}
+        {isIndividual && (
+          <aside className="hidden md:flex w-56 flex-shrink-0 border-r bg-muted/30">
+            <nav className="flex-1 space-y-1 overflow-y-auto p-4">
+              {[
+                { id: "chatbot", label: "Assistant", icon: Bot },
+                { id: "events", label: "My Events", icon: CalendarDays },
+                { id: "guest-list", label: "Guest List", icon: Users },
+                { id: "email-settings", label: "Settings", icon: Settings },
+                { id: "help", label: "Help", icon: HelpCircle },
+              ].map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Button
+                    key={item.id}
+                    variant={activeTab === item.id ? "default" : "buttonOutline"}
+                    className="w-full justify-start text-sm"
+                    onClick={() => setActiveTab(item.id)}
+                  >
+                    <Icon className="mr-2 h-4 w-4 flex-shrink-0" />
+                    {item.label}
+                  </Button>
+                );
+              })}
+            </nav>
+          </aside>
         )}
 
         {/* Main Content - Scrollable */}
@@ -1392,14 +1488,47 @@ export function OrganizerDashboard({
               </TabsContent>
 
               <TabsContent value="events" className="mt-0">
-                <ModuleGate moduleKey="events" hideWhenLocked>
+                {isIndividual ? (
+                  // Individuals get the lightweight event-card list (same cards
+                  // the assistant shows in chat) — not the professional UI.
                   <Suspense fallback={<TabLoader />}>
-                    <div className="space-y-4">
-                      <MyEvents />
-                    </div>
+                    <IndividualMyEvents
+                      onCreateEvent={() =>
+                        // Individuals only create Marriage events — seed the
+                        // type so the Marriage form opens (not the commercial one).
+                        handleOpenEventForm("create", {
+                          eventType: "personal",
+                          category: "Marriage Function",
+                        })
+                      }
+                      onEditEvent={(eventId, eventTitle) =>
+                        handleOpenEventForm("edit", { eventId, eventTitle })
+                      }
+                      onOpenGuestList={(eventId) => {
+                        setGuestListEventId(eventId);
+                        setActiveTab("guest-list");
+                      }}
+                    />
                   </Suspense>
-                </ModuleGate>
+                ) : (
+                  <ModuleGate moduleKey="events" hideWhenLocked>
+                    <Suspense fallback={<TabLoader />}>
+                      <div className="space-y-4">
+                        <MyEvents />
+                      </div>
+                    </Suspense>
+                  </ModuleGate>
+                )}
               </TabsContent>
+
+              {/* Individual-only: Guest List (RSVPs) for a chosen event. */}
+              {isIndividual && (
+                <TabsContent value="guest-list" className="mt-0">
+                  <Suspense fallback={<TabLoader />}>
+                    <IndividualGuestList initialEventId={guestListEventId} />
+                  </Suspense>
+                </TabsContent>
+              )}
 
               <TabsContent value="feedback" className="mt-0">
                 <ModuleGate moduleKey="feedback" hideWhenLocked>
@@ -1553,7 +1682,18 @@ export function OrganizerDashboard({
               <TabsContent value="help" className="mt-0">
                 <Suspense fallback={<TabLoader />}>
                   <div className="space-y-4">
-                    <HelpFAQ />
+                    <HelpFAQ isIndividual={isIndividual} />
+                  </div>
+                </Suspense>
+              </TabsContent>
+
+              {/* Individual "send from my own email" settings, reachable from
+                  the bottom tab bar. */}
+              <TabsContent value="email-settings" className="mt-0">
+                <Suspense fallback={<TabLoader />}>
+                  <div className="w-full space-y-4">
+                    <h2 className="text-xl font-bold">Email settings</h2>
+                    <EmailSenderSettings />
                   </div>
                 </Suspense>
               </TabsContent>
@@ -1561,6 +1701,41 @@ export function OrganizerDashboard({
           </div>
         </main>
       </div>
+
+      {/* Individual dashboard — mobile-app style bottom tab bar. Phones only
+          (md:hidden — tablets and up get the desktop layout); on those the
+          assistant fills the screen and email settings are in the header. */}
+      {isIndividual && (
+        <nav className="safe-b z-40 flex-shrink-0 border-t bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 md:hidden">
+          <div className="mx-auto flex max-w-md items-stretch">
+            {[
+              // Settings & Help moved to the header menu (near Logout).
+              // Assistant stays as the "home" tab so users can get back.
+              { id: "chatbot", label: "Assistant", icon: Bot },
+              { id: "events", label: "My Events", icon: CalendarDays },
+              { id: "guest-list", label: "Guest List", icon: Users },
+            ].map((it) => {
+              const Icon = it.icon;
+              const active = activeTab === it.id;
+              return (
+                <button
+                  key={it.id}
+                  type="button"
+                  onClick={() => setActiveTab(it.id)}
+                  className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium transition ${
+                    active
+                      ? "text-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="h-5 w-5" />
+                  {it.label}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      )}
 
       {/* --- Modals and Forms (lazy-loaded on demand) --- */}
       <Suspense fallback={null}>
@@ -1683,8 +1858,10 @@ export function OrganizerDashboard({
         )}
       </Suspense>
 
-      {/* Floating EventSH AI bubble — only on non-chatbot tabs (chatbot tab has the full panel) */}
-      {activeTab !== "chatbot" && (
+      {/* Floating EventSH AI bubble — only on non-chatbot tabs (chatbot tab has
+          the full panel). Hidden for individuals, who reach the assistant from
+          the bottom tab bar instead (the bubble would overlap it). */}
+      {activeTab !== "chatbot" && !isIndividual && (
         <ChatbotWidget
           navItems={navigationItems
             .filter((n) => n.id !== "chatbot")

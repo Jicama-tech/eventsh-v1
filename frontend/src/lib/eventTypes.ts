@@ -37,16 +37,7 @@ export const EVENT_TYPE_GROUPS: Record<EventTypeKey, EventTypeGroup> = {
     key: "personal",
     label: "Personal",
     description: "Private celebrations & family functions — invite-led.",
-    subtypes: [
-      "Birthday Party",
-      "Housewarming Party",
-      "Marriage Function",
-      "Engagement Ceremony",
-      "Anniversary",
-      "Baby Shower",
-      "Reunion",
-      "Farewell Party",
-    ],
+    subtypes: ["Marriage Function"],
   },
 };
 
