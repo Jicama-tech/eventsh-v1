@@ -36,6 +36,31 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrencyhook";
+import { jwtDecode } from "jwt-decode";
+
+/**
+ * Who is performing this action, for the request's approval trail.
+ * Operators are named individually so "who approved it" is answerable months
+ * later; the account owner is just "Organizer". Mirrors getActorLabel() on
+ * the Participants screen.
+ */
+const getActorLabel = (): string => {
+  try {
+    const token = sessionStorage.getItem("token");
+    if (!token) return "Organizer";
+    const d: any = jwtDecode(token);
+    if (d?.operatorId) {
+      return (
+        (d.name && String(d.name).trim()) ||
+        (d.email && String(d.email).trim()) ||
+        "Operator"
+      );
+    }
+    return "Organizer";
+  } catch {
+    return "Organizer";
+  }
+};
 import { useCountry } from "@/hooks/useCountry";
 import {
   Mic,
@@ -206,7 +231,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
       const res = await fetch(`${apiURL}/speaker-requests/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, changedBy: "organizer" }),
+        body: JSON.stringify({ status, changedBy: getActorLabel() }),
       });
       const data = await res.json();
       if (data.success) {
@@ -240,7 +265,18 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
 
   const handleConfirmPayment = async (id: string) => {
     try {
-      const res = await fetch(`${apiURL}/speaker-requests/${id}/confirm-payment`, { method: "PATCH" });
+      // Name the actor so the timeline records who confirmed the payment.
+      const res = await fetch(
+        `${apiURL}/speaker-requests/${id}/confirm-payment`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            notes: `Payment confirmed by ${getActorLabel()}.`,
+            changedBy: getActorLabel(),
+          }),
+        },
+      );
       const data = await res.json();
       if (data.success) {
         toast({ title: "Payment confirmed" });

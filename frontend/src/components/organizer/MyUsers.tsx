@@ -40,6 +40,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ExhibitorCategoryPicker } from "@/components/ui/ExhibitorCategoryPicker";
+import SpeakerCRM from "./SpeakerCRM";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -1068,9 +1069,10 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
         className="w-full"
       >
         <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
-          <TabsList className="grid w-full sm:w-[400px] grid-cols-2">
+          <TabsList className="grid w-full sm:w-[520px] grid-cols-3">
             <TabsTrigger value="visitors">Visitors</TabsTrigger>
             <TabsTrigger value="exhibitors">Exhibitors</TabsTrigger>
+            <TabsTrigger value="speakers">Speakers</TabsTrigger>
           </TabsList>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -1546,6 +1548,13 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Speakers Tab Content — the persistent speaker roster. No bulk
+            import/export here: speakers are a curated list, and every
+            eventfront application adds to it on its own. */}
+        <TabsContent value="speakers">
+          <SpeakerCRM />
         </TabsContent>
       </Tabs>
 

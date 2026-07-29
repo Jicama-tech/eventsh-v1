@@ -339,6 +339,11 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   const [eventRoundBookings, setEventRoundBookings] = useState<any[]>([]);
   // New: single-speaker detail view
   const [selectedSpeaker, setSelectedSpeaker] = useState<any | null>(null);
+  // Visitor detail view — replaces the Attendance / Attendance Time columns.
+  const [selectedVisitor, setSelectedVisitor] = useState<any | null>(null);
+  const [resendingTicket, setResendingTicket] = useState(false);
+  // Lets the organizer correct a mistyped address before re-sending.
+  const [resendEmail, setResendEmail] = useState("");
   // Inner-tab state for the unified View dialog
   const [detailTab, setDetailTab] = useState<
     "visitors" | "exhibitors" | "speakers" | "roundtables"
@@ -2794,30 +2799,39 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                           <TableHead>Amount</TableHead>
                           <TableHead>Coupon</TableHead>
                           <TableHead>Purchase Date</TableHead>
-                          <TableHead>Attendance</TableHead>
-                          <TableHead>
-                            Attendance Time
-                            <Select
-                              value={attendanceTimeSort}
-                              onValueChange={(value) =>
-                                setAttendanceTimeSort(
-                                  value as "none" | "latest" | "oldest",
-                                )
-                              }
-                            >
-                              <SelectTrigger className="w-6 h-6 ml-2">
-                                <span>&#8645;</span>
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">Default</SelectItem>
-                                <SelectItem value="latest">
-                                  Latest First
-                                </SelectItem>
-                                <SelectItem value="oldest">
-                                  Oldest First
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
+                          {/* Attendance + its timestamp moved into the View
+                              dialog, which shows them in full alongside the
+                              rest of the visitor's details. The sort control
+                              stays here so ordering by check-in time survives
+                              the column's removal. */}
+                          <TableHead className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <span>Action</span>
+                              <Select
+                                value={attendanceTimeSort}
+                                onValueChange={(value) =>
+                                  setAttendanceTimeSort(
+                                    value as "none" | "latest" | "oldest",
+                                  )
+                                }
+                              >
+                                <SelectTrigger
+                                  className="w-6 h-6"
+                                  title="Sort by attendance time"
+                                >
+                                  <span>&#8645;</span>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">Default</SelectItem>
+                                  <SelectItem value="latest">
+                                    Latest check-in first
+                                  </SelectItem>
+                                  <SelectItem value="oldest">
+                                    Oldest check-in first
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </TableHead>
                         </TableRow>
                       </TableHeader>
@@ -2868,25 +2882,15 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                             <TableCell>
                               {formatDate(ticket.updatedAt)}
                             </TableCell>
-                            <TableCell>
-                              {ticket.attendance ? (
-                                <Badge className="bg-green-100 text-green-800">
-                                  <CheckCircle className="h-3 w-3 mr-1" />
-                                  Present
-                                </Badge>
-                              ) : (
-                                <Badge variant="secondary">
-                                  <XCircle className="h-3 w-3 mr-1" />
-                                  Absent
-                                </Badge>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {ticket.attendance && (
-                                <div className="text-sm">
-                                  {formatDateTime(ticket.updatedAt)}
-                                </div>
-                              )}
+                            <TableCell className="text-right">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                title="View visitor details, attendance and resend the ticket"
+                                onClick={() => setSelectedVisitor(ticket)}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -3762,6 +3766,260 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         </DialogContent>
       </Dialog>
 
+      {/* Visitor detail dialog — opened from the Eye button on the Visitors
+          tab. Carries what the Attendance / Attendance Time columns used to
+          show, plus the ticket breakdown and a way to re-send the ticket
+          email when the original never arrived. */}
+      <Dialog
+        open={!!selectedVisitor}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedVisitor(null);
+            setResendEmail("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedVisitor?.customerName || "Visitor"}
+              {selectedVisitor?.attendance ? (
+                <Badge className="bg-green-100 text-green-800">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Attended
+                </Badge>
+              ) : (
+                <Badge variant="secondary">
+                  <XCircle className="h-3 w-3 mr-1" />
+                  Not checked in
+                </Badge>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              Booking details, attendance and ticket delivery.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedVisitor && (
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Visitor</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <div className="font-medium">Name</div>
+                    <div className="text-muted-foreground">
+                      {selectedVisitor.customerName || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium">Email</div>
+                    <div className="text-muted-foreground break-all">
+                      {selectedVisitor.customerEmail || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium">Phone</div>
+                    <div className="text-muted-foreground">
+                      {selectedVisitor.customerPhone ||
+                        selectedVisitor.whatsAppNumber ||
+                        "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium">Ticket ID</div>
+                    <div className="text-muted-foreground font-mono text-xs">
+                      {selectedVisitor.ticketId || "—"}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Booking</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  {Array.isArray(selectedVisitor.ticketDetails) &&
+                    selectedVisitor.ticketDetails.length > 0 && (
+                      <div className="space-y-1">
+                        {selectedVisitor.ticketDetails.map(
+                          (t: any, i: number) => (
+                            <div
+                              key={i}
+                              className="flex items-center justify-between border rounded-md px-3 py-2"
+                            >
+                              <span>
+                                {t.ticketType} × {t.quantity}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {formatPrice(t.price || 0)}
+                              </span>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    )}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div>
+                      <div className="font-medium">Total paid</div>
+                      <div className="text-muted-foreground">
+                        {formatPrice(selectedVisitor.totalAmount || 0)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-medium">Coupon</div>
+                      <div className="text-muted-foreground">
+                        {selectedVisitor.coupon ||
+                          selectedVisitor.couponCode ||
+                          "—"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-medium">Status</div>
+                      <Badge variant="secondary">
+                        {selectedVisitor.status || "—"}
+                      </Badge>
+                    </div>
+                    <div>
+                      <div className="font-medium">Purchased</div>
+                      <div className="text-muted-foreground">
+                        {formatDate(
+                          selectedVisitor.purchaseDate ||
+                            selectedVisitor.createdAt,
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Attendance</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <div className="font-medium">Checked in</div>
+                    <div className="text-muted-foreground">
+                      {selectedVisitor.attendance ? "Yes" : "No"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium">Check-in time</div>
+                    <div className="text-muted-foreground">
+                      {selectedVisitor.attendance
+                        ? formatDateTime(
+                            selectedVisitor.usedAt ||
+                              selectedVisitor.updatedAt,
+                          )
+                        : "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium">Ticket used</div>
+                    <div className="text-muted-foreground">
+                      {selectedVisitor.isUsed ? "Yes" : "No"}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Ticket email</CardTitle>
+                  <CardDescription>
+                    Sends the very same ticket generated at payment — same QR,
+                    same PDF. The existing ticket stays valid.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Input
+                      type="email"
+                      placeholder={
+                        selectedVisitor.customerEmail || "visitor@example.com"
+                      }
+                      value={resendEmail}
+                      onChange={(e) => setResendEmail(e.target.value)}
+                    />
+                    <Button
+                      disabled={resendingTicket}
+                      onClick={async () => {
+                        setResendingTicket(true);
+                        try {
+                          const res = await fetch(
+                            `${apiURL}/tickets/${selectedVisitor._id || selectedVisitor.ticketId}/resend-email`,
+                            {
+                              method: "POST",
+                              headers: {
+                                "Content-Type": "application/json",
+                                // The route is JWT-guarded: it mails the QR
+                                // and can rewrite the booking's address.
+                                Authorization: `Bearer ${sessionStorage.getItem("token") || ""}`,
+                              },
+                              body: JSON.stringify(
+                                resendEmail.trim()
+                                  ? { email: resendEmail.trim() }
+                                  : {},
+                              ),
+                            },
+                          );
+                          const json = await res.json().catch(() => ({}));
+                          if (!res.ok || json?.success === false) {
+                            throw new Error(
+                              json?.message || "Couldn't send the ticket",
+                            );
+                          }
+                          toast({
+                            title: "Ticket sent",
+                            description: json?.message,
+                          });
+                          // A corrected address is saved server-side; mirror it
+                          // here so the dialog doesn't show the stale one.
+                          if (resendEmail.trim()) {
+                            setSelectedVisitor((v: any) => ({
+                              ...v,
+                              customerEmail: resendEmail.trim(),
+                            }));
+                            setResendEmail("");
+                          }
+                        } catch (err: any) {
+                          toast({
+                            title: "Couldn't send the ticket",
+                            description: err?.message,
+                            variant: "destructive",
+                          });
+                        } finally {
+                          setResendingTicket(false);
+                        }
+                      }}
+                    >
+                      {resendingTicket ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Sending…
+                        </>
+                      ) : (
+                        "Resend ticket"
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Leave the box empty to send to{" "}
+                    <span className="font-medium">
+                      {selectedVisitor.customerEmail || "—"}
+                    </span>
+                    , or type a corrected address (it will be saved).
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Speaker detail dialog — opened from the Eye button on the Speakers tab */}
       <Dialog
         open={!!selectedSpeaker}
@@ -3769,14 +4027,47 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       >
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {selectedSpeaker?.name || "Speaker"}
-              {selectedSpeaker?.isKeynote && (
-                <Badge className="bg-purple-100 text-purple-700">Keynote</Badge>
-              )}
+            <DialogTitle className="flex items-center gap-3">
+              {/* The photo the speaker uploaded with their application. */}
+              <div className="w-12 h-12 rounded-full overflow-hidden bg-muted flex items-center justify-center flex-shrink-0">
+                {selectedSpeaker?.image ? (
+                  <img
+                    src={
+                      String(selectedSpeaker.image).startsWith("/")
+                        ? `${apiURL?.replace("/api", "") || ""}${selectedSpeaker.image}`
+                        : selectedSpeaker.image
+                    }
+                    alt={selectedSpeaker?.name || "Speaker"}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-base font-bold text-muted-foreground">
+                    {selectedSpeaker?.name?.charAt(0)?.toUpperCase() || "S"}
+                  </span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="truncate">
+                    {selectedSpeaker?.name || "Speaker"}
+                  </span>
+                  {selectedSpeaker?.isKeynote && (
+                    <Badge className="bg-purple-100 text-purple-700">
+                      Keynote
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs font-normal text-muted-foreground truncate">
+                  {[selectedSpeaker?.title, selectedSpeaker?.organization]
+                    .filter(Boolean)
+                    .join(" · ") ||
+                    selectedSpeaker?.email ||
+                    ""}
+                </p>
+              </div>
             </DialogTitle>
             <DialogDescription>
-              Full speaker request details
+              Everything this speaker submitted, and the full approval trail.
             </DialogDescription>
           </DialogHeader>
 
@@ -3827,6 +4118,18 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       {selectedSpeaker.source || "—"}
                     </div>
                   </div>
+                  <div>
+                    <div className="font-medium">Area of expertise</div>
+                    <div className="text-muted-foreground">
+                      {selectedSpeaker.expertise || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium">Speaker space</div>
+                    <div className="text-muted-foreground">
+                      {selectedSpeaker.selectedSlotName || "—"}
+                    </div>
+                  </div>
                   {selectedSpeaker.bio && (
                     <div className="md:col-span-2">
                       <div className="font-medium">Bio</div>
@@ -3835,6 +4138,53 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       </div>
                     </div>
                   )}
+                  {selectedSpeaker.previousSpeakingExperience && (
+                    <div className="md:col-span-2">
+                      <div className="font-medium">
+                        Previous speaking experience
+                      </div>
+                      <div className="text-muted-foreground whitespace-pre-line">
+                        {selectedSpeaker.previousSpeakingExperience}
+                      </div>
+                    </div>
+                  )}
+                  {selectedSpeaker.equipmentNeeded && (
+                    <div className="md:col-span-2">
+                      <div className="font-medium">Equipment needed</div>
+                      <div className="text-muted-foreground">
+                        {selectedSpeaker.equipmentNeeded}
+                      </div>
+                    </div>
+                  )}
+                  {selectedSpeaker.notes && (
+                    <div className="md:col-span-2">
+                      <div className="font-medium">Notes from the speaker</div>
+                      <div className="text-muted-foreground whitespace-pre-line">
+                        {selectedSpeaker.notes}
+                      </div>
+                    </div>
+                  )}
+                  {selectedSpeaker.socialLinks &&
+                    Object.values(selectedSpeaker.socialLinks).some(Boolean) && (
+                      <div className="md:col-span-2">
+                        <div className="font-medium">Links</div>
+                        <div className="flex flex-wrap gap-3 mt-1">
+                          {Object.entries(selectedSpeaker.socialLinks)
+                            .filter(([, v]) => !!v)
+                            .map(([k, v]) => (
+                              <a
+                                key={k}
+                                href={String(v)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs text-blue-600 hover:underline capitalize"
+                              >
+                                {k}
+                              </a>
+                            ))}
+                        </div>
+                      </div>
+                    )}
                 </CardContent>
               </Card>
 
@@ -3913,6 +4263,90 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                         : "Free"}
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Approval trail — who did what, and when. Built from the
+                  request's statusHistory, which every status change appends
+                  to (application, approval, payment confirmation, pass
+                  issued). Newest last so it reads top-to-bottom as it
+                  happened. */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Timeline</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {(() => {
+                    const history = Array.isArray(selectedSpeaker.statusHistory)
+                      ? [...selectedSpeaker.statusHistory]
+                      : [];
+                    // Fall back to createdAt so a request with no recorded
+                    // history still shows when it came in.
+                    if (history.length === 0 && selectedSpeaker.createdAt) {
+                      history.push({
+                        status: "Pending",
+                        note: "Application submitted",
+                        changedAt: selectedSpeaker.createdAt,
+                        changedBy: selectedSpeaker.name || "Applicant",
+                      });
+                    }
+                    if (history.length === 0) {
+                      return (
+                        <p className="text-sm text-muted-foreground">
+                          No activity recorded yet.
+                        </p>
+                      );
+                    }
+                    const dotFor = (status: string) =>
+                      status === "Completed"
+                        ? "bg-green-500"
+                        : status === "Confirmed"
+                          ? "bg-blue-500"
+                          : status === "Rejected" || status === "Cancelled"
+                            ? "bg-red-500"
+                            : status === "Processing"
+                              ? "bg-amber-500"
+                              : "bg-gray-400";
+                    return (
+                      <ol className="relative border-l pl-4 space-y-4">
+                        {history
+                          .slice()
+                          .sort(
+                            (a: any, b: any) =>
+                              new Date(a.changedAt || 0).getTime() -
+                              new Date(b.changedAt || 0).getTime(),
+                          )
+                          .map((h: any, i: number) => (
+                            <li key={i} className="relative">
+                              <span
+                                className={`absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full ring-2 ring-background ${dotFor(
+                                  h.status,
+                                )}`}
+                              />
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="secondary">
+                                  {h.status || "Updated"}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {h.changedAt
+                                    ? new Date(h.changedAt).toLocaleString()
+                                    : "—"}
+                                </span>
+                              </div>
+                              {h.note && (
+                                <p className="text-sm mt-1">{h.note}</p>
+                              )}
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                by{" "}
+                                <span className="font-medium">
+                                  {h.changedBy || "System"}
+                                </span>
+                              </p>
+                            </li>
+                          ))}
+                      </ol>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             </div>

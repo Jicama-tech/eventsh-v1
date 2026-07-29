@@ -141,7 +141,15 @@ export default function ImageCropModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      {/* Always sits ABOVE whatever opened it. The cropper is only ever a
+          nested modal — launched from an event form, a CRM dialog, or the
+          eventfront's speaker wizard (a hand-rolled overlay at z-[60]). At the
+          default z-50 it rendered *underneath* those, and its backdrop swallowed
+          clicks the parent then treated as "click outside → close". */}
+      <DialogContent
+        className="max-w-2xl z-[200]"
+        overlayClassName="z-[200]"
+      >
         <DialogHeader>Crop Image</DialogHeader>
 
         {/* Drag any of the 8 handles (corners + edges) to crop. */}

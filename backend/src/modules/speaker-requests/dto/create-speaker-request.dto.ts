@@ -59,6 +59,15 @@ export class CreateSpeakerRequestDto {
   @IsOptional()
   organization?: string;
 
+  // The speaker space picked in step 3. Its price becomes the frozen fee.
+  @IsString()
+  @IsOptional()
+  selectedSlotId?: string;
+
+  @IsString()
+  @IsOptional()
+  selectedSlotName?: string;
+
   @IsString()
   @IsOptional()
   bio?: string;
