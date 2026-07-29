@@ -4549,17 +4549,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       ];
     }
 
+    // The cart holds ONE event at a time — a checkout is per-event, so mixing
+    // two would be unbuyable. Picking tickets for a different event now
+    // REPLACES what was there (it used to refuse with an alert and strand the
+    // visitor, who had no way to clear the old cart from this page).
     const existingCart = JSON.parse(localStorage.getItem("ticketCart") || "{}");
     const existingItems = existingCart.items || [];
     const existingEventId =
       existingItems.length > 0 ? existingItems[0].eventId : null;
-
-    if (existingEventId && existingEventId !== eventData._id) {
-      alert(
-        "Please complete your ticket purchase for the current event before purchasing tickets for another event.",
-      );
-      return;
-    }
+    const replacedEventTitle =
+      existingEventId && existingEventId !== eventData._id
+        ? existingCart?.eventInfo?.title || "another event"
+        : null;
 
     const newCartData = {
       items: cartItems,
@@ -4584,7 +4585,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       timestamp: Date.now(),
     };
 
+    // Overwrites wholesale, so nothing from the previous event survives.
     localStorage.setItem("ticketCart", JSON.stringify(newCartData));
+    if (replacedEventTitle) {
+      // Say it plainly — a silently emptied cart is worse than a refusal.
+      toast({
+        duration: 6000,
+        title: "Cart updated",
+        description: `Your tickets for "${replacedEventTitle}" were removed — a cart can only hold one event at a time.`,
+      });
+    }
     navigate(`/ticket-cart/${newCartData.eventInfo.organizerId}`);
   };
 
@@ -7137,8 +7147,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     Speaker Lineup
                   </p>
 
-                  {eventData.speakers.filter((s: any) => s.isKeynote).length >
-                    0 && (
+                  {/* Gate on the whole line-up, not on keynotes. The list
+                      below renders EVERY speaker, so keying the section off
+                      `isKeynote` hid the entire tab whenever nobody was
+                      flagged as a keynote — which is the normal case for
+                      speakers added through the Create Event form (they only
+                      get isKeynote when their space is the main stage). */}
+                  {eventData.speakers.length > 0 && (
                     <div className="mb-8">
                       <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
                         Speakers
