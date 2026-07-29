@@ -8,8 +8,12 @@ import {
   Delete,
   Query,
   Res,
+  HttpCode,
+  HttpStatus,
   BadRequestException,
 } from "@nestjs/common";
+import { UseGuards } from "@nestjs/common";
+import { AuthGuard } from "@nestjs/passport";
 import { TicketsService } from "./tickets.service";
 import { CreateTicketDto } from "./dto/create-ticket.dto";
 import { UpdateTicketDto } from "./dto/update-ticket.dto";
@@ -77,5 +81,24 @@ export class TicketsController {
     } catch (error) {
       throw error;
     }
+  }
+
+  /**
+   * Re-send a visitor's ticket email (the one generated at payment time).
+   * Accepts the mongo _id or the human ticketId. An optional `email` in the
+   * body corrects a mistyped address and is saved back onto the ticket.
+   */
+  @Post(":id/resend-email")
+  // Guarded, unlike the rest of this controller. Re-sending mails the ticket
+  // PDF *and its QR* — the entry credential — and an `email` override also
+  // rewrites the address on the booking. Unauthenticated, anyone who learned a
+  // ticket id could redirect someone else's ticket to their own inbox.
+  @UseGuards(AuthGuard("jwt"))
+  @HttpCode(HttpStatus.OK)
+  async resendTicketEmail(
+    @Param("id") id: string,
+    @Body() body?: { email?: string },
+  ) {
+    return await this.ticketsService.resendTicketEmail(id, body?.email);
   }
 }

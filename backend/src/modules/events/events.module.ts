@@ -6,6 +6,7 @@ import { EventsController } from "./events.controller";
 import { EventImportService } from "./event-import.service";
 import { Event, EventSchema } from "./schemas/event.schema";
 import { TemplatesModule } from "../templates/templates.module";
+import { SpeakerRequestsModule } from "../speaker-requests/speaker-requests.module";
 import { OtpModule } from "../otp/otp.module";
 import { OrganizersModule } from "../organizers/organizers.module";
 import {
@@ -31,6 +32,9 @@ import {
     }),
     TemplatesModule,
     OtpModule,
+    // Speakers named in the Create Event form are folded into the organizer's
+    // speaker roster (CRM) on save, so both entry points feed one list.
+    SpeakerRequestsModule,
     // OrganizersModule exports the Organizer + Plan models so the events
     // controller can lazy-create an Organizer record on first publish for
     // an Individual user (Google sign-in only, no manual registration yet).

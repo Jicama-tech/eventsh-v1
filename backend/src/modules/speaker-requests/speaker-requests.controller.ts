@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   HttpCode,
   HttpStatus,
   Res,
@@ -16,6 +17,8 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { diskStorage } from "multer";
 import { v4 as uuidv4 } from "uuid";
 import * as path from "path";
+import { UseGuards } from "@nestjs/common";
+import { AuthGuard } from "@nestjs/passport";
 import { Response } from "express";
 import { SpeakerRequestsService } from "./speaker-requests.service";
 import {
@@ -77,6 +80,88 @@ export class SpeakerRequestsController {
   @Get("organizer/:organizerId")
   async findByOrganizer(@Param("organizerId") organizerId: string) {
     return this.service.findByOrganizer(organizerId);
+  }
+
+  // ===== PERSISTENT SPEAKER PROFILES (the reusable roster) =====
+  // Declared BEFORE @Get(":id") so "profiles" isn't swallowed as an id.
+
+  /**
+   * One speaker's saved profile, looked up by their (Google-verified) email.
+   * The eventfront calls this right after sign-in to prefill step 1, so a
+   * returning speaker never retypes their bio, role or company.
+   */
+  @Get("profiles/by-email/:email")
+  async findSpeakerProfile(
+    @Param("email") email: string,
+    @Query("organizerId") organizerId?: string,
+  ) {
+    return this.service.findSpeakerProfile(email, organizerId);
+  }
+
+  /** The organizer's whole speaker roster, reusable on future events. */
+  // Guarded: the roster carries contact numbers and organizer-private notes.
+  @UseGuards(AuthGuard("jwt"))
+  @Get("profiles/organizer/:organizerId")
+  async findSpeakerProfiles(@Param("organizerId") organizerId: string) {
+    return this.service.findSpeakersByOrganizer(organizerId);
+  }
+
+  /**
+   * Add or edit a speaker in the CRM by hand — the organizer building their
+   * roster directly instead of waiting for someone to apply. Multipart so the
+   * headshot can come with it; `id` in the body switches this to an edit.
+   */
+  @Post("profiles")
+  // Guarded: writes into the organizer's own CRM.
+  @UseGuards(AuthGuard("jwt"))
+  @UseInterceptors(
+    FileInterceptor("image", {
+      storage: diskStorage({
+        destination: "./uploads/speakers",
+        filename: (_req, file, cb) => {
+          const ext = path.extname(file.originalname);
+          cb(null, `${uuidv4()}${ext}`);
+        },
+      }),
+      fileFilter: (_req, file, cb) => {
+        if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
+          cb(new Error("Only image files are allowed!"), false);
+        } else {
+          cb(null, true);
+        }
+      },
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  async saveSpeakerProfile(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: any,
+  ) {
+    if (typeof body.socialLinks === "string") {
+      try {
+        body.socialLinks = JSON.parse(body.socialLinks);
+      } catch {
+        body.socialLinks = undefined;
+      }
+    }
+    if (file) body.image = `/uploads/speakers/${file.filename}`;
+    return this.service.saveSpeakerProfile(body);
+  }
+
+  /**
+   * One speaker's full history with this organizer: the events they've been
+   * on the line-up for, and every application they've made.
+   */
+  @UseGuards(AuthGuard("jwt"))
+  @Get("profiles/:id/history")
+  async getSpeakerHistory(@Param("id") id: string) {
+    return this.service.getSpeakerHistory(id);
+  }
+
+  @UseGuards(AuthGuard("jwt"))
+  @Delete("profiles/:id")
+  async removeSpeakerProfile(@Param("id") id: string) {
+    return this.service.removeSpeakerProfile(id);
   }
 
   // Get all requests for an event
@@ -168,9 +253,10 @@ export class SpeakerRequestsController {
   @Patch(":id/confirm-payment")
   async confirmPayment(
     @Param("id") id: string,
-    @Body() body: { notes?: string },
+    // changedBy names the operator (or "Organizer") for the approval trail.
+    @Body() body: { notes?: string; changedBy?: string },
   ) {
-    return this.service.confirmPayment(id, body?.notes);
+    return this.service.confirmPayment(id, body?.notes, body?.changedBy);
   }
 
   // QR Scan - check-in/check-out

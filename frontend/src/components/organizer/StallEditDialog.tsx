@@ -504,7 +504,13 @@ export function StallEditDialog({
       if (!res.ok || j?.success === false) {
         throw new Error(j?.message || "Failed to resend the ticket");
       }
-      toast({ title: "Ticket resent to the vendor" });
+      // The server reports what actually went out — a missing QR it had to
+      // generate first, or the QR inline when the ticket PDF couldn't render.
+      toast({
+        duration: 6000,
+        title: "Ticket resent to the vendor",
+        description: j?.message,
+      });
     } catch (e: any) {
       toast({
         title: "Couldn't resend",

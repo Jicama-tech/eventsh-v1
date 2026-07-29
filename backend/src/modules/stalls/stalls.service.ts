@@ -694,11 +694,11 @@ export class StallsService {
             remainingAmount: grandTotal,
             status: "Processing",
             selectionDate: new Date(),
-            // Vendor clicked "I have Paid": start the 24h organizer-confirmation
-            // window. If not confirmed by then, the space is auto-released.
+            // Vendor clicked "I have Paid": record when they submitted. The
+            // payment-confirmation HOLD timer is opt-in — the organizer starts
+            // it per stall (startConfirmationTimer) only if they choose to hold
+            // the space for a vendor who asked for more time. No auto-deadline.
             paymentSubmittedAt: new Date(),
-            confirmationDeadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
-            deadlineRemindersSent: 0,
             notes: selectDto.notes || stall.notes,
             transactionId: selectDto.transactionId || null,
             transactionScreenshot: selectDto.transactionScreenshot || null,
@@ -1084,6 +1084,7 @@ export class StallsService {
         if (wasCompleted) stall.paymentStatus = "Partial" as any;
         (stall as any).qrCodePath = null;
         (stall as any).qrCodeData = null;
+        (stall as any).qrCodeImage = null;
       }
       stall.statusHistory.push({
         status: stall.status,
@@ -1299,7 +1300,18 @@ export class StallsService {
       stall.remainingAmount = 0;
       // Confirmed in time — cancel the 24h auto-release window.
       stall.confirmationDeadline = null as any;
-      stall.qrCodePath = qrCodeBase64;
+      // Persist the check-in payload HERE, before any PDF work. The ticket PDF
+      // needs headless Chromium and can fail for environmental reasons (a
+      // read-only /tmp, a missing browser); when it does, the vendor loses an
+      // attachment — never the ability to be scanned at the gate. qrCodePath
+      // stays null until a render actually lands the file on disk.
+      stall.qrCodeData = JSON.stringify(qrPayload);
+      stall.qrCodeImage = qrCodeBase64;
+      stall.qrCodePath = null as any;
+      // Any PDF left from an earlier confirmation carries the OLD issuedAt,
+      // which scanning now rejects as superseded. Drop it so a download
+      // regenerates from this payload instead of serving a dead ticket.
+      await this.discardStallTicketPdf(stallId);
       stall.statusHistory.push({
         status: "Completed" as any,
         note: notes || "Payment confirmed. Stall completed.",
@@ -1589,51 +1601,116 @@ export class StallsService {
   }
 
   /**
-   * Start the 24h confirmation window for a stall that is awaiting payment
-   * approval but has no deadline yet — e.g. a booking submitted before this
-   * feature shipped. Called when the organizer opens the stall's detail dialog,
-   * so the countdown begins "from now". No-op (returns the existing deadline)
-   * if the stall isn't awaiting confirmation or the timer is already running.
+   * Organizer-initiated payment-confirmation hold. The timer is OPT-IN, not
+   * automatic: when a vendor who's clicked "I have Paid" asks for more time,
+   * the organizer holds the space for `hours` from now. Once running, the
+   * dialog shows a countdown and the scheduler auto-releases the space if the
+   * vendor still hasn't paid by the deadline. No-op if the stall isn't awaiting
+   * confirmation or a hold is already running (use extend to lengthen it).
    */
-  async startConfirmationTimer(stallId: string, changedBy?: string) {
+  async startConfirmationTimer(
+    stallId: string,
+    hours: number,
+    note?: string,
+    changedBy?: string,
+  ) {
     if (!Types.ObjectId.isValid(stallId)) {
       throw new BadRequestException("Invalid stall ID format");
     }
-    const stall = await this.stallModel.findById(stallId);
+    const hrs = Number(hours);
+    if (!Number.isFinite(hrs) || hrs <= 0 || hrs > 720) {
+      throw new BadRequestException("Hold must be between 1 and 720 hours");
+    }
+
+    const stall = await this.stallModel
+      .findById(stallId)
+      .populate("shopkeeperId")
+      .populate("eventId")
+      .populate("organizerId");
     if (!stall) throw new NotFoundException("Stall request not found");
 
     // Only stalls where the vendor has submitted payment ("I have Paid" →
-    // Processing) and it's still unconfirmed get a confirmation window.
+    // Processing) and it's still unconfirmed can be put on hold.
     const awaiting =
       stall.status === "Processing" && stall.paymentStatus !== "Paid";
-    if (!awaiting || stall.confirmationDeadline) {
+    if (!awaiting) {
+      throw new BadRequestException(
+        "This booking is not awaiting payment confirmation.",
+      );
+    }
+    if (stall.confirmationDeadline) {
       return {
         started: false,
-        confirmationDeadline: stall.confirmationDeadline ?? null,
+        confirmationDeadline: stall.confirmationDeadline,
+        message: "A hold is already running — use Extend to add more time.",
       };
     }
 
-    stall.confirmationDeadline = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const newDeadline = new Date(Date.now() + hrs * 60 * 60 * 1000);
+    stall.confirmationDeadline = newDeadline;
     if (!stall.paymentSubmittedAt) {
       stall.paymentSubmittedAt = (stall as any).selectionDate || new Date();
     }
     stall.deadlineRemindersSent = 0;
+
+    const trimmedNote = String(note || "").trim();
     stall.statusHistory.push({
       status: stall.status as any,
-      note: "24-hour payment-confirmation window started (organizer opened the request).",
+      note:
+        `Payment-confirmation hold started — ${hrs} hour${
+          hrs === 1 ? "" : "s"
+        } by ${changedBy || "Organizer"}.` +
+        (trimmedNote ? ` Note: ${trimmedNote}` : ""),
       changedAt: new Date(),
-      changedBy: changedBy || "System",
+      changedBy: changedBy || "Organizer",
     });
     await stall.save();
+
+    // Tell the vendor how long the space is held (reuses the extension email).
+    await this.notifyVendorDeadlineExtended(
+      stall,
+      hrs,
+      newDeadline,
+      trimmedNote,
+    );
 
     return { started: true, confirmationDeadline: stall.confirmationDeadline };
   }
 
   /**
+   * Remove an active payment-confirmation hold (organizer turns the timer off).
+   * Clears the deadline so the countdown stops and the scheduler no longer
+   * auto-releases the space — the booking simply stays pending confirmation
+   * with no clock. No-op if there's no hold running.
+   */
+  async cancelConfirmationTimer(stallId: string, changedBy?: string) {
+    if (!Types.ObjectId.isValid(stallId)) {
+      throw new BadRequestException("Invalid stall ID format");
+    }
+    const stall = await this.stallModel.findById(stallId);
+    if (!stall) throw new NotFoundException("Stall request not found");
+    if (!stall.confirmationDeadline) {
+      return { cleared: false, message: "No hold is running." };
+    }
+    stall.confirmationDeadline = null as any;
+    stall.deadlineRemindersSent = 0;
+    stall.statusHistory.push({
+      status: stall.status as any,
+      note: `Payment-confirmation hold removed by ${changedBy || "Organizer"}.`,
+      changedAt: new Date(),
+      changedBy: changedBy || "Organizer",
+    });
+    await stall.save();
+    return { cleared: true };
+  }
+
+  /**
    * Render the stall ticket PDF and deliver it (WhatsApp text + email/WhatsApp
-   * attachment), falling back to a plain email when the PDF render fails. Also
-   * persists qrCodePath (the PDF url) + qrCodeData on the stall. Self-contained
-   * so both initial payment confirmation and an amendment re-issue can call it.
+   * attachment), falling back to a plain email when the PDF render fails.
+   * Persists qrCodePath (the PDF url) only — qrCodeData/qrCodeImage are already
+   * written by the caller before this runs, so a render failure costs an
+   * attachment and nothing else. Self-contained so both initial payment
+   * confirmation and an amendment re-issue can call it.
    * Best-effort — never throws to the caller (run fire-and-forget).
    */
   private async deliverStallTicketPdf(
@@ -1688,14 +1765,19 @@ export class StallsService {
       pdfPath = path.join(pdfDir, pdfFileName);
       await fs.promises.writeFile(pdfPath, pdfBuffer);
       stall.qrCodePath = `/uploads/stallTickets/${pdfFileName}`;
-      stall.qrCodeData = JSON.stringify(qrPayload);
+      // Defensive: the caller persists these first, but if this is ever
+      // reached with them unset, don't leave the booking unscannable.
+      if (!stall.qrCodeData) stall.qrCodeData = JSON.stringify(qrPayload);
+      if (!stall.qrCodeImage) stall.qrCodeImage = qrCodeBase64;
       await stall.save();
     } catch (pdfErr) {
       pdfPath = null;
       this.logger.error(
         `Stall ticket PDF generation failed for stall ${stallId}: ${
           (pdfErr as any)?.message || pdfErr
-        }. Sending a plain confirmation instead.`,
+        }. Sending a plain confirmation instead. The QR payload is stored, so ` +
+          `the booking stays scannable and "Resend ticket" will attach the PDF ` +
+          `once the render issue is fixed.`,
       );
     }
 
@@ -2033,8 +2115,10 @@ export class StallsService {
       margin: 2,
     });
     await this.saveQRToDisk(qrCodeBase64, String(stall._id));
-    stall.qrCodePath = qrCodeBase64;
     stall.qrCodeData = JSON.stringify(qrPayload);
+    stall.qrCodeImage = qrCodeBase64;
+    stall.qrCodePath = null as any;
+    await this.discardStallTicketPdf(String(stall._id));
     await stall.save();
 
     // Clear the pending amendment reliably.
@@ -2723,6 +2807,83 @@ export class StallsService {
   }
 
   // ===== SAVE QR TO DISK (Same as tickets.service.ts) =====
+  /**
+   * Guarantee the stall has a scannable check-in payload, creating and saving
+   * one when it's missing — the state left behind by bookings confirmed while
+   * the ticket PDF render was failing. Returns the payload and its QR image
+   * either way, so callers can deliver something scannable without caring
+   * which case they're in.
+   *
+   * Callers MUST check the payment precondition first: this mints a live
+   * check-in credential and has no business running on an unpaid booking.
+   */
+  private async ensureStallQrPayload(stall: any): Promise<{
+    qrPayload: any;
+    qrCodeData: string;
+    qrCodeImage: string;
+    created: boolean;
+  }> {
+    if (stall.qrCodeData) {
+      return {
+        qrPayload: JSON.parse(stall.qrCodeData),
+        qrCodeData: stall.qrCodeData,
+        // Legacy rows predate qrCodeImage — re-render it from the stored
+        // payload, which yields the same QR the vendor already holds.
+        qrCodeImage:
+          stall.qrCodeImage ||
+          (await QRCode.toDataURL(stall.qrCodeData, { width: 200, margin: 2 })),
+        created: false,
+      };
+    }
+
+    const qrPayload = {
+      warning: "❌ Normal scanners not allowed. Please use the Eventsh app.",
+      type: "eventsh-stall-checkin",
+      stallId: String(stall._id),
+      shopkeeperId: String(
+        (stall.shopkeeperId as any)?._id || stall.shopkeeperId,
+      ),
+      eventId: String((stall.eventId as any)?._id || stall.eventId),
+      // Anchored to the payment, not to "now", so re-running this never
+      // invalidates a QR someone already scanned or holds.
+      issuedAt: new Date(stall.paymentConfirmedDate || Date.now()).toISOString(),
+    };
+    const qrCodeData = JSON.stringify(qrPayload);
+    const qrCodeImage = await QRCode.toDataURL(qrCodeData, {
+      width: 200,
+      margin: 2,
+    });
+
+    stall.qrCodeData = qrCodeData;
+    stall.qrCodeImage = qrCodeImage;
+    await stall.save();
+    this.logger.log(`Created the missing QR payload for stall ${stall._id}.`);
+
+    return { qrPayload, qrCodeData, qrCodeImage, created: true };
+  }
+
+  /**
+   * Remove a stall's rendered ticket PDF. Called whenever the QR payload is
+   * re-stamped, because the file on disk still encodes the previous issuedAt
+   * and downloadStallTicket serves it verbatim when present — which would hand
+   * the vendor a ticket that scanning rejects as superseded.
+   * Best-effort: a missing file is the expected case, not an error.
+   */
+  private async discardStallTicketPdf(stallId: string) {
+    try {
+      await fs.promises.unlink(
+        path.join(
+          process.cwd(),
+          "uploads",
+          "stallTickets",
+          `stall_ticket_${stallId}.pdf`,
+        ),
+      );
+    } catch {
+      // Nothing on disk (or already gone) — regeneration handles it.
+    }
+  }
+
   private async saveQRToDisk(
     base64Data: string,
     stallId: string,
@@ -2731,6 +2892,10 @@ export class StallsService {
     const fileName = `qr_${stallId}.png`;
     const filePath = path.join(qrDir, fileName);
 
+    // The directory is absent on a fresh deploy (uploads/ isn't in git), and
+    // this runs inside confirmPayment — an ENOENT here would fail the whole
+    // confirmation, not just the QR copy.
+    await fs.promises.mkdir(qrDir, { recursive: true });
     const buffer = Buffer.from(base64Data.split(",")[1], "base64");
     await fs.promises.writeFile(filePath, buffer);
 
@@ -4586,23 +4751,12 @@ export class StallsService {
         `PDF missing on disk for stall ${stallId}. Regenerating...`,
       );
 
-      // Reconstruct QR Payload
-      const qrPayload = stall.qrCodeData
-        ? JSON.parse(stall.qrCodeData)
-        : {
-            warning:
-              "❌ Normal scanners not allowed. Please use the Eventsh app.",
-            type: "eventsh-stall-checkin",
-            stallId: stallId,
-            shopkeeperId: (stall.shopkeeperId as any)._id.toString(),
-            eventId: (stall.eventId as any)._id.toString(),
-            issuedAt: stall.paymentConfirmedDate || new Date().toISOString(),
-          };
-
-      const qrCodeBase64 = await QRCode.toDataURL(JSON.stringify(qrPayload), {
-        width: 200,
-        margin: 2,
-      });
+      // Reconstruct the QR payload — and persist it when the stall has none (a
+      // booking confirmed while the PDF render was failing). Without that
+      // write the vendor gets a nice-looking ticket whose QR matches nothing
+      // in the database and is rejected at the gate.
+      const { qrCodeImage: qrCodeBase64 } =
+        await this.ensureStallQrPayload(stall);
 
       // Construct coupon object for HTML template using the saved code, gated
       // by the event's live coupon toggle (off ⇒ omit it from the PDF).
@@ -4622,9 +4776,14 @@ export class StallsService {
         dlCountry,
       );
 
-      // Save it back to disk to speed up future downloads
+      // Save it back to disk to speed up future downloads, and record the url
+      // so the stall reflects that a ticket now exists.
       if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
       await fs.promises.writeFile(pdfPath, pdfBuffer);
+      if (stall.qrCodePath !== `/uploads/stallTickets/${pdfFileName}`) {
+        stall.qrCodePath = `/uploads/stallTickets/${pdfFileName}`;
+        await stall.save();
+      }
 
       return {
         buffer: pdfBuffer,
@@ -4640,18 +4799,22 @@ export class StallsService {
   }
 
   // ============ RESEND STALL TICKET (QR) EMAIL ============
-  // Re-deliver the QR stall ticket for an already-Paid stall. Unlike the
-  // best-effort send inside confirmPayment, this SURFACES the real failure
-  // (SMTP timeout / auth / blocked port / bad organizer email config) so the
-  // organizer sees exactly why it didn't go out — and can retry once fixed.
+  // Re-deliver the QR stall ticket for an already-Paid stall, and repair it on
+  // the way: a booking with no QR payload gets one created and saved first, so
+  // "Resend" doubles as the organizer's one-click fix for stalls confirmed
+  // while the PDF render was broken.
+  //
+  // Failure policy, deliberately split:
+  //   • PDF render fails  → NOT an error. The QR goes inline in the email so
+  //     the vendor is still scannable; the organizer sees a success telling
+  //     them the PDF is missing.
+  //   • Email send fails  → SURFACED (SMTP timeout / auth / blocked port / bad
+  //     organizer email config). Swallowing this would tell the organizer the
+  //     ticket went out when nothing did.
   async resendStallTicket(stallId: string) {
     if (!Types.ObjectId.isValid(stallId)) {
       throw new BadRequestException("Invalid stall ID format");
     }
-
-    // Reuse the canonical PDF path: returns the saved ticket, or regenerates it
-    // on the fly, and enforces the "Paid" precondition.
-    const { buffer } = await this.downloadStallTicket(stallId);
 
     const stall: any = await this.stallModel
       .findById(stallId)
@@ -4660,6 +4823,29 @@ export class StallsService {
       .populate("organizerId");
     if (!stall) {
       throw new NotFoundException("Stall not found");
+    }
+    // Same precondition downloadStallTicket enforces — checked up front
+    // because what follows mints a live check-in credential.
+    if (stall.paymentStatus !== "Paid") {
+      throw new BadRequestException(
+        "Stall ticket can only be sent after the payment is completed (Paid status).",
+      );
+    }
+
+    // Create the QR payload if this booking never got one. Then try for the
+    // PDF, but treat a render failure as a downgrade, not an error: the
+    // vendor still gets the scannable QR inline, and the organizer sees a
+    // success instead of a dead end.
+    const { qrCodeImage, created } = await this.ensureStallQrPayload(stall);
+    let buffer: Buffer | null = null;
+    try {
+      ({ buffer } = await this.downloadStallTicket(stallId));
+    } catch (pdfErr) {
+      this.logger.warn(
+        `Resend: ticket PDF unavailable for ${stallId} (${
+          (pdfErr as any)?.message || pdfErr
+        }) — emailing the QR image instead.`,
+      );
     }
 
     const vendorObj = stall.shopkeeperId as any;
@@ -4687,6 +4873,16 @@ export class StallsService {
       "Your Stall Ticket",
       coupon,
     );
+    // No PDF? Put the QR in the email body (and attach it as a PNG) so the
+    // vendor can still be scanned in at the gate from their phone.
+    const qrBlock = buffer
+      ? ""
+      : `<div style="text-align:center;padding:8px 0 16px">
+            <img src="cid:stallqr" alt="Stall check-in QR" style="width:200px;height:200px"/>
+            <p style="color:#64748b;font-size:12px;margin:8px 0 0">
+              Show this QR at the entrance. It's also attached as an image.
+            </p>
+          </div>`;
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
         <div style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:24px;text-align:center">
@@ -4694,15 +4890,26 @@ export class StallsService {
         </div>
         <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
           <p>${message.replace(/\*/g, "").replace(/\n/g, "<br/>")}</p>
+          ${qrBlock}
         </div>
       </div>`;
+
+    const attachments = buffer
+      ? [{ filename: "stall-ticket.pdf", content: buffer }]
+      : [
+          {
+            filename: "stall-qr.png",
+            content: Buffer.from(qrCodeImage.split(",")[1], "base64"),
+            cid: "stallqr",
+          },
+        ];
 
     try {
       await this.mailService.sendEmail({
         to: vendorEmail,
         subject: `Your stall ticket for ${eventTitle}`,
         html,
-        attachments: [{ filename: "stall-ticket.pdf", content: buffer }],
+        attachments,
         senderConfig,
       });
     } catch (err: any) {
@@ -4714,9 +4921,10 @@ export class StallsService {
       );
     }
 
-    // Best-effort WhatsApp mirror (never fails the resend).
+    // Best-effort WhatsApp mirror (never fails the resend). Skipped when the
+    // PDF couldn't be rendered — there'd be no file on disk to attach.
     const wa = vendorObj?.whatsAppNumber || vendorObj?.whatsappNumber;
-    if (wa) {
+    if (wa && buffer) {
       try {
         const pdfPath = path.join(
           process.cwd(),
@@ -4739,10 +4947,19 @@ export class StallsService {
       }
     }
 
-    this.logger.log(`Stall ticket re-sent for ${stallId} to ${vendorEmail}`);
+    this.logger.log(
+      `Stall ticket re-sent for ${stallId} to ${vendorEmail}` +
+        (buffer ? "" : " (QR image — PDF render unavailable)") +
+        (created ? " [QR payload was missing and has been created]" : ""),
+    );
     return {
       success: true,
-      message: `Stall ticket re-sent to ${vendorEmail}`,
+      message: buffer
+        ? `Stall ticket re-sent to ${vendorEmail}.${
+            created ? " The missing QR was generated first." : ""
+          }`
+        : `QR sent to ${vendorEmail}. The ticket PDF couldn't be generated on the ` +
+          `server, so the scannable QR is in the email body instead.`,
     };
   }
 }

@@ -6507,6 +6507,52 @@ const VenueDesigner = ({
   );
 };
 
+// The speaker a session maps to. Sessions and speakers are two views of the
+// same person: `speakers[]` is what the eventfront renders, sessions are what
+// the form edits, and this id is the join key between them (built identically
+// where builtSpeakers is assembled on submit).
+const speakerIdForSession = (spaceId: any, sessionId: any) =>
+  `session-${spaceId}-${sessionId}`;
+
+/**
+ * Fold the saved speaker photos back onto their sessions.
+ *
+ * The saved image lives on `speakers[].image`, but the form edits sessions —
+ * which carry no photo of their own. Without this the submit builder reads
+ * `sess.photo` as undefined and sends `image: ""`, silently WIPING a photo
+ * that uploaded fine on an earlier save.
+ *
+ * Also drops the transient pick-time fields: `photoFile` is a File (it can't
+ * survive the JSON round-trip into the database anyway) and `photoPreview` is
+ * a `blob:` URL that means nothing outside the browser tab that made it —
+ * older saves persisted those into the event document.
+ */
+const hydrateSpeakerSlotTemplates = (templates: any[], speakers: any[]) => {
+  const byId = new Map(
+    (speakers || []).map((s: any) => [String(s.id), s]),
+  );
+  return (templates || []).map((space: any) => ({
+    ...space,
+    sessions: (space.sessions || []).map((sess: any) => {
+      const { photoFile, photoPreview, ...rest } = sess || {};
+      const saved = byId.get(speakerIdForSession(space.id, sess?.id));
+      // Older events stored the session AGENDA in speakers[].title (the field
+      // that everywhere else means job title). Only treat a stored title as a
+      // role when it isn't just a copy of the agenda, so editing a legacy
+      // event shows an empty Role rather than a talk title masquerading as one.
+      const storedTitle = saved?.title || "";
+      const looksLikeAgenda =
+        !!storedTitle && storedTitle === (sess?.agenda || "");
+      return {
+        ...rest,
+        photo: saved?.image || sess?.photo || "",
+        role: sess?.role || (looksLikeAgenda ? "" : storedTitle),
+        companyName: sess?.companyName || saved?.organization || "",
+      };
+    }),
+  }));
+};
+
 export function CreateEventForm({
   onClose,
   onSave,
@@ -7159,8 +7205,64 @@ export function CreateEventForm({
 
   // Speaker Slot Templates (like table templates but for speaker zones)
   const [speakerSlotTemplates, setSpeakerSlotTemplates] = useState<any[]>(
-    initialData?.speakerSlotTemplates?.map((s: any) => ({ ...s })) ?? [],
+    hydrateSpeakerSlotTemplates(
+      initialData?.speakerSlotTemplates ?? [],
+      initialData?.speakers ?? [],
+    ),
   );
+
+  /**
+   * Patch fields on a single session.
+   *
+   * Functional update on purpose: the per-row helpers used to copy
+   * `speakerSlotTemplates` out of the render closure, so two calls in one
+   * event handler both started from the SAME pre-update array and the second
+   * silently discarded the first. That's how a picked speaker photo lost its
+   * File while keeping its preview. Patch every field of an interaction in one
+   * call, and let React compose the rest.
+   */
+  const patchSpeakerSession = (
+    spaceIdx: number,
+    sessIdx: number,
+    fields: Record<string, any>,
+  ) => {
+    setSpeakerSlotTemplates((prev) => {
+      const space = prev[spaceIdx];
+      if (!space?.sessions?.[sessIdx]) return prev;
+      const updated = [...prev];
+      const sessions = [...space.sessions];
+      sessions[sessIdx] = { ...sessions[sessIdx], ...fields };
+      updated[spaceIdx] = { ...space, sessions };
+      return updated;
+    });
+  };
+
+  // Speaker photo cropping — same ImageCropModal the banner and gallery use.
+  // Holds which session is being cropped plus the object URL of the picked
+  // file; the modal hands back a cropped File which becomes the upload.
+  const [speakerCrop, setSpeakerCrop] = useState<{
+    spaceIdx: number;
+    sessIdx: number;
+    url: string;
+  } | null>(null);
+
+  const closeSpeakerCropper = () => {
+    setSpeakerCrop((cur) => {
+      if (cur?.url?.startsWith("blob:")) URL.revokeObjectURL(cur.url);
+      return null;
+    });
+  };
+
+  const applySpeakerCrop = (croppedFile: File) => {
+    if (!speakerCrop) return;
+    const { spaceIdx, sessIdx } = speakerCrop;
+    // Both fields in ONE patch — see patchSpeakerSession above.
+    patchSpeakerSession(spaceIdx, sessIdx, {
+      photoFile: croppedFile,
+      photoPreview: URL.createObjectURL(croppedFile),
+    });
+    closeSpeakerCropper();
+  };
   const [currentSpeakerSlot, setCurrentSpeakerSlot] = useState({
     name: "",
     startTime: "",
@@ -7411,7 +7513,14 @@ export function CreateEventForm({
         setVisitorTypes(initialData.visitorTypes);
       }
       if (initialData.speakerSlotTemplates) {
-        setSpeakerSlotTemplates(initialData.speakerSlotTemplates);
+        // Carry the saved speaker photos back onto their sessions, or the next
+        // save sends image:"" for every speaker and erases them.
+        setSpeakerSlotTemplates(
+          hydrateSpeakerSlotTemplates(
+            initialData.speakerSlotTemplates,
+            initialData.speakers ?? [],
+          ),
+        );
       }
       if (initialData.venueLayoutImage) {
         setVenueLayoutImages(initialData.venueLayoutImage);
@@ -8434,22 +8543,63 @@ export function CreateEventForm({
       // organizer (override) instead of the admin's own token subject.
       data.append("organizerId", organizerIdOverride || organizer.sub);
 
-      // Build speakers array ONLY from session slots (single source of truth)
+      // A session showing a fresh preview but holding no File means the picked
+      // photo was lost from state before submit (a File can't survive a JSON
+      // round-trip). Saving here would upload nothing and look successful, so
+      // stop and say which speaker needs re-picking rather than fail silently.
+      const lostPhotoFor = speakerSlotTemplates.flatMap((space: any) =>
+        (space.sessions || [])
+          .filter(
+            (sess: any) =>
+              sess.speakerName && sess.photoPreview && !sess.photoFile,
+          )
+          .map((sess: any) => sess.speakerName),
+      );
+      if (lostPhotoFor.length > 0) {
+        toast({
+          duration: 8000,
+          title: "Re-select the speaker photo",
+          description: `The photo for ${lostPhotoFor.join(
+            ", ",
+          )} didn't stay attached. Pick it again before saving — nothing else you changed is lost.`,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Build speakers array ONLY from session slots (single source of truth).
+      // Each speaker with a new photo records WHICH uploaded file is theirs
+      // (newImageIndex) instead of relying on the backend re-deriving it from
+      // array order — order-based binding attaches the wrong face to the wrong
+      // speaker the moment one upload is dropped or filtered out.
       const builtSpeakers: any[] = [];
+      let speakerImageIndex = 0;
       speakerSlotTemplates.forEach((space) => {
         (space.sessions || []).forEach((sess: any) => {
           if (sess.speakerName) {
             // Append speaker photo file if exists
+            let newImageIndex = -1;
             if (sess.photoFile) {
               data.append("speakerImages", sess.photoFile);
+              newImageIndex = speakerImageIndex++;
             }
             builtSpeakers.push({
-              id: `session-${space.id}-${sess.id}`,
+              id: speakerIdForSession(space.id, sess.id),
               name: sess.speakerName,
-              title: sess.agenda || "",
+              // The speaker's ROLE — "CTO", "Professor" — matching what the
+              // eventfront application and the Speaker CRM mean by `title`.
+              // This used to be filled with the session agenda, which put a
+              // talk title where a job title belongs (and carried that into
+              // the CRM). The agenda stays where it belongs: slots[].topic.
+              title: sess.role || "",
               organization: sess.companyName || "",
               bio: sess.description || "",
               hasNewImage: !!sess.photoFile,
+              newImageIndex,
+              // Carries the previously saved url forward (hydrated back onto
+              // the session on load), so a save without a new upload keeps the
+              // existing photo instead of blanking it.
               image: sess.photo || "",
               email: sess.email || "",
               socialLinks: {
@@ -8477,7 +8627,22 @@ export function CreateEventForm({
       data.append("speakers", JSON.stringify(builtSpeakers));
 
       // Add speaker slot templates and zones
-      data.append("speakerSlotTemplates", JSON.stringify(speakerSlotTemplates));
+      // Strip the pick-time fields before persisting: photoFile is a File that
+      // JSON.stringify silently drops, and photoPreview is a `blob:` URL that
+      // is meaningless outside this tab — earlier saves stored those blob URLs
+      // in the event document. The saved photo lives on speakers[].image.
+      data.append(
+        "speakerSlotTemplates",
+        JSON.stringify(
+          speakerSlotTemplates.map((space: any) => ({
+            ...space,
+            sessions: (space.sessions || []).map((sess: any) => {
+              const { photoFile, photoPreview, ...rest } = sess || {};
+              return rest;
+            }),
+          })),
+        ),
+      );
       const allSpeakerZones = Object.entries(venueSpeakerZones).flatMap(
         ([configId, zones]) =>
           zones.map((z: any) => ({ ...z, venueConfigId: configId })),
@@ -10667,6 +10832,7 @@ export function CreateEventForm({
                             sessions.push({
                               id: Math.random().toString(36).slice(2, 10),
                               speakerName: "",
+                              role: "",
                               companyName: "",
                               agenda: "",
                               description: "",
@@ -10702,39 +10868,26 @@ export function CreateEventForm({
                       )}
 
                       {space.sessions?.map((session: any, sessIdx: number) => {
-                        const updateSession = (field: string, value: any) => {
-                          const updated = [...speakerSlotTemplates];
-                          const sessions = [
-                            ...(updated[spaceIdx].sessions || []),
-                          ];
-                          sessions[sessIdx] = {
-                            ...sessions[sessIdx],
+                        const updateSession = (field: string, value: any) =>
+                          patchSpeakerSession(spaceIdx, sessIdx, {
                             [field]: value,
-                          };
-                          updated[spaceIdx] = {
-                            ...updated[spaceIdx],
-                            sessions,
-                          };
-                          setSpeakerSlotTemplates(updated);
-                        };
-                        const updateSocial = (field: string, value: string) => {
-                          const updated = [...speakerSlotTemplates];
-                          const sessions = [
-                            ...(updated[spaceIdx].sessions || []),
-                          ];
-                          sessions[sessIdx] = {
-                            ...sessions[sessIdx],
-                            socialLinks: {
-                              ...sessions[sessIdx].socialLinks,
-                              [field]: value,
-                            },
-                          };
-                          updated[spaceIdx] = {
-                            ...updated[spaceIdx],
-                            sessions,
-                          };
-                          setSpeakerSlotTemplates(updated);
-                        };
+                          });
+                        const updateSocial = (field: string, value: string) =>
+                          setSpeakerSlotTemplates((prev) => {
+                            const space = prev[spaceIdx];
+                            if (!space?.sessions?.[sessIdx]) return prev;
+                            const updated = [...prev];
+                            const sessions = [...space.sessions];
+                            sessions[sessIdx] = {
+                              ...sessions[sessIdx],
+                              socialLinks: {
+                                ...sessions[sessIdx].socialLinks,
+                                [field]: value,
+                              },
+                            };
+                            updated[spaceIdx] = { ...space, sessions };
+                            return updated;
+                          });
                         const removeSession = () => {
                           const updated = [...speakerSlotTemplates];
                           const sessions = [
@@ -10805,12 +10958,16 @@ export function CreateEventForm({
                                   onChange={(e) => {
                                     const file = e.target.files?.[0];
                                     if (file) {
-                                      updateSession("photoFile", file);
-                                      updateSession(
-                                        "photoPreview",
-                                        URL.createObjectURL(file),
-                                      );
+                                      setSpeakerCrop({
+                                        spaceIdx,
+                                        sessIdx,
+                                        url: URL.createObjectURL(file),
+                                      });
                                     }
+                                    // Clear the input so re-picking the SAME
+                                    // file fires change again (e.g. after
+                                    // cancelling the cropper).
+                                    e.target.value = "";
                                   }}
                                 />
                                 <span className="text-[9px] text-muted-foreground">
@@ -10831,6 +10988,18 @@ export function CreateEventForm({
                                       )
                                     }
                                     placeholder="Full name of the speaker"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-xs">
+                                    Role / Title
+                                  </Label>
+                                  <Input
+                                    value={session.role || ""}
+                                    onChange={(e) =>
+                                      updateSession("role", e.target.value)
+                                    }
+                                    placeholder="e.g. CTO, Professor"
                                   />
                                 </div>
                                 <div>
@@ -11720,6 +11889,19 @@ export function CreateEventForm({
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Speaker photo cropper. Square by default because the eventfront
+          renders speakers in circular avatars — a free crop would show the
+          subject off-centre there. The ratio lock can still be changed. */}
+      {speakerCrop && (
+        <ImageCropModal
+          open
+          image={speakerCrop.url}
+          defaultAspect={1}
+          onClose={closeSpeakerCropper}
+          onCropComplete={applySpeakerCrop}
+        />
+      )}
     </div>
   );
 }

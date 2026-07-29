@@ -601,19 +601,28 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   >({});
   const [showGuestForm, setShowGuestForm] = useState(false);
 
-  // Speaker Application States (WhatsApp-first flow like stalls)
+  // Speaker Application States (Google-auth-first flow, like Rent a Stall).
+  // The WhatsApp number is NEVER used to sign in any more — identity comes
+  // from the Google-verified email; the phone is only an optional contact
+  // detail captured on the application form.
   const [showSpeakerDialog, setShowSpeakerDialog] = useState(false);
-  const [speakerWhatsApp, setSpeakerWhatsApp] = useState("");
-  const [speakerOtp, setSpeakerOtp] = useState("");
-  const [speakerOtpSent, setSpeakerOtpSent] = useState(false);
+  const [speakerGoogleLoading, setSpeakerGoogleLoading] = useState(false);
+  const [speakerAuthedEmail, setSpeakerAuthedEmail] = useState("");
   const [speakerVerified, setSpeakerVerified] = useState(false);
-  const [sendingSpeakerOtp, setSendingSpeakerOtp] = useState(false);
-  const [verifyingSpeakerOtp, setVerifyingSpeakerOtp] = useState(false);
   const [existingSpeakerRequest, setExistingSpeakerRequest] =
     useState<any>(null);
+  // auth → details → topic → slot → (submit) → status → done.
+  // "timeslot" is the legacy post-approval time picker, kept for requests
+  // created before slot selection moved into the application itself.
   const [speakerStep, setSpeakerStep] = useState<
-    "whatsapp" | "status" | "form" | "timeslot" | "done"
-  >("whatsapp");
+    "auth" | "status" | "details" | "topic" | "slot" | "timeslot" | "done"
+  >("auth");
+  // True when the signed-in email already had a saved speaker profile, so the
+  // wizard can say "welcome back" instead of silently pre-filling.
+  const [speakerProfileFound, setSpeakerProfileFound] = useState(false);
+  // Speaker headshot cropping. Its own state rather than the stall flow's
+  // crop queue above, which carries stall-specific completion logic.
+  const [speakerPhotoCrop, setSpeakerPhotoCrop] = useState<string | null>(null);
   const [speakerFormData, setSpeakerFormData] = useState<any>({
     name: "",
     email: "",
@@ -631,6 +640,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     preferredEndTime: "",
     selectedSlotId: "",
     selectedSlotName: "",
+    // Mirrors the chosen slot's price so the wizard can explain what happens
+    // after approval. The server re-resolves it from the event on submit —
+    // this copy is for display only and is never trusted for billing.
+    selectedSlotPrice: 0,
     socialLinks: { linkedin: "", twitter: "", website: "" },
   });
   const [speakerSubmitting, setSpeakerSubmitting] = useState(false);
@@ -2117,6 +2130,397 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showWhatsAppDialog, stallGoogleLoading]);
+
+  // --- Google sign-in path for "Apply as Speaker" ---
+  // Speaker applications used to open with a WhatsApp OTP gate. They are now
+  // Google-only, mirroring Rent a Stall: the verified Google email IS the
+  // identity, and every existing-application lookup keys off that email
+  // instead of a phone number.
+  const speakerPopupRef = useRef<Window | null>(null);
+
+  const handleGoogleSpeakerLogin = () => {
+    const url = `${apiURL}/auth/google-member`;
+    const w = 480;
+    const h = 600;
+    const left =
+      typeof window !== "undefined"
+        ? window.screenX + (window.outerWidth - w) / 2
+        : 0;
+    const top =
+      typeof window !== "undefined"
+        ? window.screenY + (window.outerHeight - h) / 2
+        : 0;
+    const popup = window.open(
+      url,
+      "eventsh-google-speaker",
+      `width=${w},height=${h},left=${left},top=${top}`,
+    );
+    if (!popup) {
+      toast({
+        duration: 5000,
+        title: "Popup blocked",
+        description: "Allow pop-ups for this site and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    speakerPopupRef.current = popup;
+    setSpeakerGoogleLoading(true);
+  };
+
+  // Speaker spaces the organizer opened to outside applicants, with their
+  // prices — the menu for step 3 of the wizard.
+  const openSpeakerSlots = useMemo(
+    () =>
+      ((eventData as any)?.speakerSlotTemplates || []).filter(
+        (s: any) => s?.openForApplications,
+      ),
+    [eventData],
+  );
+
+  // PhoneInput hands back bare digits with the dial code prepended; the
+  // notification senders expect an E.164 string. Empty stays empty — the
+  // phone is optional now that Google carries the identity.
+  const speakerPhoneE164 = () => {
+    const raw = String(speakerFormData.phone || "").trim();
+    if (!raw) return "";
+    return raw.startsWith("+") ? raw : `+${raw}`;
+  };
+
+  /**
+   * Submit the speaker application (end of step 3).
+   *
+   * Sends the chosen speaker space so the SERVER can price it — the fee is
+   * resolved from the event's slot templates and frozen on the request, so a
+   * later price change can't re-bill an application already in flight. What
+   * happens after approval follows from that fee: free slots issue the pass
+   * automatically, paid slots wait for payment.
+   */
+  const submitSpeakerApplication = async () => {
+    if (isEventOver(eventData)) {
+      toast({
+        title: "This event has ended",
+        description: "Speaker applications are closed for this event.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSpeakerSubmitting(true);
+    try {
+      const sessions = [
+        {
+          topic: speakerFormData.sessionTopic,
+          description: speakerFormData.sessionDescription,
+          preferredStartTime: speakerFormData.preferredStartTime || "",
+          preferredEndTime: speakerFormData.preferredEndTime || "",
+        },
+      ];
+      const email = speakerFormData.email || speakerAuthedEmail;
+      const organizerId = String(
+        (eventData as any)?.organizer?._id || (eventData as any)?.organizer || "",
+      );
+
+      let res: Response;
+      if (speakerFormData.photoFile) {
+        const fd = new FormData();
+        fd.append("image", speakerFormData.photoFile);
+        fd.append("eventId", eventData?._id || "");
+        fd.append("organizerId", organizerId);
+        fd.append("name", speakerFormData.name);
+        fd.append("email", email);
+        fd.append("phone", speakerPhoneE164());
+        fd.append("title", speakerFormData.title || "");
+        fd.append("organization", speakerFormData.organization || "");
+        fd.append("bio", speakerFormData.bio || "");
+        fd.append("expertise", speakerFormData.expertise || "");
+        fd.append(
+          "previousSpeakingExperience",
+          speakerFormData.previousSpeakingExperience || "",
+        );
+        fd.append("equipmentNeeded", speakerFormData.equipmentNeeded || "");
+        fd.append("notes", speakerFormData.notes || "");
+        fd.append("selectedSlotId", speakerFormData.selectedSlotId || "");
+        fd.append("selectedSlotName", speakerFormData.selectedSlotName || "");
+        fd.append("socialLinks", JSON.stringify(speakerFormData.socialLinks));
+        fd.append("source", "external");
+        fd.append("sessions", JSON.stringify(sessions));
+        res = await fetch(`${apiURL}/speaker-requests/apply-with-image`, {
+          method: "POST",
+          body: fd,
+        });
+      } else {
+        res = await fetch(`${apiURL}/speaker-requests/apply`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            eventId: eventData?._id,
+            organizerId,
+            name: speakerFormData.name,
+            email,
+            phone: speakerPhoneE164(),
+            title: speakerFormData.title,
+            organization: speakerFormData.organization,
+            bio: speakerFormData.bio,
+            expertise: speakerFormData.expertise,
+            previousSpeakingExperience:
+              speakerFormData.previousSpeakingExperience,
+            equipmentNeeded: speakerFormData.equipmentNeeded,
+            notes: speakerFormData.notes,
+            selectedSlotId: speakerFormData.selectedSlotId,
+            selectedSlotName: speakerFormData.selectedSlotName,
+            socialLinks: speakerFormData.socialLinks,
+            source: "external",
+            sessions,
+          }),
+        });
+      }
+
+      const data = await res.json();
+      if (!res.ok || data.success === false) {
+        throw new Error(data.message || "Failed to submit");
+      }
+
+      // Land on the status screen rather than closing: the applicant sees
+      // "pending approval" and what comes next, matching the email they're
+      // about to receive.
+      setExistingSpeakerRequest(data.data || null);
+      setSpeakerStep("status");
+      toast({
+        title: "Application submitted!",
+        description:
+          "You'll get an email confirming it's pending the organizer's approval.",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setSpeakerSubmitting(false);
+    }
+  };
+
+  /** Send an approved speaker to the payment page for their slot fee. */
+  const goToSpeakerPayment = (request: any) => {
+    const ev: any = eventData || {};
+    navigate("/speaker-payment", {
+      state: {
+        speakerRequestId: request._id,
+        organizerId: String(ev?.organizer?._id || ev?.organizer || ""),
+        speakerName: request.name,
+        eventTitle: ev?.title,
+        eventDate: ev?.startDate
+          ? new Date(ev.startDate).toLocaleDateString()
+          : "",
+        eventLocation: ev?.location,
+        sessionTopic: request.sessions?.[0]?.topic,
+        sessionTime: request.sessions?.[0]?.preferredStartTime
+          ? `${request.sessions[0].preferredStartTime} - ${request.sessions[0].preferredEndTime || ""}`
+          : "",
+        isCharged: request.isCharged,
+        fee: request.fee,
+      },
+    });
+  };
+
+  // Google sign-in result handler for the speaker flow. Finds any live
+  // application this email already owns for the event and routes the
+  // applicant to the matching step (status / time slot / pass), otherwise
+  // opens a blank form with the verified email locked in.
+  const lookupSpeakerByEmail = async (email: string, name?: string) => {
+    const clean = String(email || "")
+      .trim()
+      .toLowerCase();
+    if (!clean) {
+      setSpeakerGoogleLoading(false);
+      toast({
+        duration: 5000,
+        title: "Sign-in failed",
+        description: "Couldn't read your Google email.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSpeakerAuthedEmail(clean);
+    setSpeakerVerified(true);
+    setSpeakerFormData((p: any) => ({
+      ...p,
+      email: clean,
+      name: p.name || name || "",
+    }));
+
+    // Pull the saved speaker profile so a returning speaker doesn't retype
+    // their role, company and bio. Best-effort — a miss just means an empty
+    // step 1.
+    try {
+      const orgId = String(
+        (eventData as any)?.organizer?._id ||
+          (eventData as any)?.organizer ||
+          "",
+      );
+      const pRes = await fetch(
+        `${apiURL}/speaker-requests/profiles/by-email/${encodeURIComponent(
+          clean,
+        )}${orgId ? `?organizerId=${orgId}` : ""}`,
+      );
+      const pJson = pRes.ok ? await pRes.json() : null;
+      const profile = pJson?.data;
+      if (profile) {
+        setSpeakerProfileFound(true);
+        setSpeakerFormData((p: any) => ({
+          ...p,
+          name: profile.name || p.name || name || "",
+          phone: p.phone || profile.phone || "",
+          title: p.title || profile.title || "",
+          organization: p.organization || profile.organization || "",
+          bio: p.bio || profile.bio || "",
+          expertise: p.expertise || profile.expertise || "",
+          image: profile.image || "",
+          previousSpeakingExperience:
+            p.previousSpeakingExperience ||
+            profile.previousSpeakingExperience ||
+            "",
+          equipmentNeeded:
+            p.equipmentNeeded || profile.equipmentNeeded || "",
+          socialLinks: {
+            linkedin:
+              p.socialLinks?.linkedin || profile.socialLinks?.linkedin || "",
+            twitter:
+              p.socialLinks?.twitter || profile.socialLinks?.twitter || "",
+            website:
+              p.socialLinks?.website || profile.socialLinks?.website || "",
+          },
+        }));
+      } else {
+        setSpeakerProfileFound(false);
+      }
+    } catch {
+      setSpeakerProfileFound(false);
+    }
+
+    // Sessions already locked in by OTHER applicants — used to warn about
+    // clashes on the time-slot step.
+    const liveSlots = (requests: any[], excludeId?: string) =>
+      requests
+        .filter(
+          (r: any) =>
+            !["Cancelled", "Rejected"].includes(r.status) &&
+            (!excludeId || r._id !== excludeId),
+        )
+        .flatMap((r: any) =>
+          (r.sessions || []).filter((s: any) => s.confirmedStartTime),
+        );
+
+    try {
+      if (!eventData?._id) {
+        setSpeakerStep("details");
+        return;
+      }
+      const checkRes = await fetch(
+        `${apiURL}/speaker-requests/event/${eventData._id}`,
+      );
+      const checkData = await checkRes.json();
+      const allRequests: any[] = checkData.data || [];
+      const existing = allRequests.find(
+        (r: any) =>
+          String(r.email || "")
+            .trim()
+            .toLowerCase() === clean &&
+          !["Cancelled", "Rejected"].includes(r.status),
+      );
+
+      if (existing) {
+        setExistingSpeakerRequest(existing);
+        setBookedSpeakerSlots(liveSlots(allRequests, existing._id));
+        // Carry the phone we already hold so the applicant doesn't retype it.
+        if (existing.phone)
+          setSpeakerFormData((p: any) => ({ ...p, phone: existing.phone }));
+
+        // Completed → the pass is ready. Everything else lands on the status
+        // screen, which itself decides whether to show "awaiting approval" or
+        // a Pay button (approved + a slot fee still outstanding).
+        if (existing.status === "Completed") setSpeakerStep("done");
+        else if (
+          existing.status === "Confirmed" &&
+          !existing.isCharged &&
+          !existing.selectedSlotId
+        )
+          // Legacy request from before slot selection moved into the
+          // application — send them to the old post-approval time picker.
+          setSpeakerStep("timeslot");
+        else setSpeakerStep("status");
+      } else {
+        setBookedSpeakerSlots(liveSlots(allRequests));
+        setSpeakerStep("details");
+      }
+    } catch (err) {
+      console.error("Speaker application lookup failed:", err);
+      setSpeakerStep("details");
+    } finally {
+      setSpeakerGoogleLoading(false);
+    }
+  };
+
+  // Listen for the Google profile while the speaker dialog is open and a
+  // sign-in is in flight. Same dual-channel handshake as the stall flow
+  // (postMessage + polled localStorage) so the result lands even when the
+  // browser severs window.opener on the cross-origin popup navigation.
+  useEffect(() => {
+    if (!showSpeakerDialog || !speakerGoogleLoading) return;
+    const KEY = "eventsh:google-member";
+    const prev = (() => {
+      try {
+        return localStorage.getItem(KEY) || "";
+      } catch {
+        return "";
+      }
+    })();
+    let handled = false;
+    let sawPopupClosed = false;
+
+    const onMessage = (ev: MessageEvent) => {
+      const data = ev?.data;
+      if (!data || data.kind !== "eventsh:google-member" || handled) return;
+      handled = true;
+      lookupSpeakerByEmail(data.email || "", data.name || "");
+    };
+    window.addEventListener("message", onMessage);
+
+    const t = window.setInterval(() => {
+      try {
+        const raw = localStorage.getItem(KEY);
+        if (raw && raw !== prev && !handled) {
+          handled = true;
+          window.clearInterval(t);
+          localStorage.removeItem(KEY);
+          const parsed = JSON.parse(raw);
+          lookupSpeakerByEmail(parsed?.email || "", parsed?.name || "");
+          return;
+        }
+      } catch {
+        // ignore — private mode, quota, etc.
+      }
+      if (
+        speakerPopupRef.current &&
+        speakerPopupRef.current.closed &&
+        !handled
+      ) {
+        if (sawPopupClosed) {
+          window.clearInterval(t);
+          setSpeakerGoogleLoading(false);
+        } else {
+          sawPopupClosed = true;
+        }
+      }
+    }, 500);
+
+    return () => {
+      window.removeEventListener("message", onMessage);
+      window.clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showSpeakerDialog, speakerGoogleLoading]);
 
   const allMandatoryTermsAccepted = () => {
     const terms = eventData?.termsAndConditionsforStalls || [];
@@ -4450,12 +4854,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const openSpeakerApply = () => {
     if (!guardEventOpen("Speaker applications")) return;
     setShowSpeakerDialog(true);
-    setSpeakerStep("whatsapp");
-    setSpeakerWhatsApp("");
-    setSpeakerOtp("");
-    setSpeakerOtpSent(false);
+    setSpeakerStep("auth");
+    setSpeakerGoogleLoading(false);
+    setSpeakerAuthedEmail("");
     setSpeakerVerified(false);
     setExistingSpeakerRequest(null);
+    setSpeakerProfileFound(false);
+    setSpeakerFormData((p: any) => ({ ...p, email: "" }));
   };
 
   // Open the round-table booking flow: jump to the Venue tab and reveal the
@@ -5509,11 +5914,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           <h3 className="font-bold text-gray-900 text-sm truncate">
                             {speaker.name}
                           </h3>
-                          {speaker.isKeynote && (
+                          {/* {speaker.isKeynote && (
                             <span className="flex-shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800">
                               KEYNOTE
                             </span>
-                          )}
+                          )} */}
                         </div>
                         {(speaker.title || speaker.organization) && (
                           <p className="text-xs text-gray-500 truncate">
@@ -6732,127 +7137,121 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     Speaker Lineup
                   </p>
 
-                  {/* Keynote Speakers */}
                   {eventData.speakers.filter((s: any) => s.isKeynote).length >
                     0 && (
                     <div className="mb-8">
                       <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
-                        Keynote Speakers
+                        Speakers
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {eventData.speakers
-                          .filter((s: any) => s.isKeynote)
-                          .map((speaker: any) => (
-                            <div
-                              key={speaker.id}
-                              className="flex gap-4 p-4 rounded-xl bg-gradient-to-br from-gray-50 to-white border border-gray-100 shadow-sm"
-                            >
-                              <div className="flex-shrink-0">
-                                {speaker.image ? (
-                                  <img
-                                    src={
-                                      speaker.image.startsWith("/")
-                                        ? `${apiURL?.replace("/api", "") || ""}${speaker.image}`
-                                        : speaker.image
-                                    }
-                                    alt={speaker.name}
-                                    className="w-20 h-20 rounded-full object-cover border-2 border-white shadow-md"
-                                  />
-                                ) : (
-                                  <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-2xl font-bold border-2 border-white shadow-md">
-                                    {speaker.name?.charAt(0)?.toUpperCase()}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <h4 className="font-bold text-gray-900 truncate">
-                                    {speaker.name}
-                                  </h4>
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800">
-                                    KEYNOTE
-                                  </span>
+                        {eventData.speakers.map((speaker: any) => (
+                          <div
+                            key={speaker.id}
+                            className="flex gap-4 p-4 rounded-xl bg-gradient-to-br from-gray-50 to-white border border-gray-100 shadow-sm"
+                          >
+                            <div className="flex-shrink-0">
+                              {speaker.image ? (
+                                <img
+                                  src={
+                                    speaker.image.startsWith("/")
+                                      ? `${apiURL?.replace("/api", "") || ""}${speaker.image}`
+                                      : speaker.image
+                                  }
+                                  alt={speaker.name}
+                                  className="w-20 h-20 rounded-full object-cover border-2 border-white shadow-md"
+                                />
+                              ) : (
+                                <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-2xl font-bold border-2 border-white shadow-md">
+                                  {speaker.name?.charAt(0)?.toUpperCase()}
                                 </div>
-                                {speaker.title && (
-                                  <p className="text-sm text-gray-600">
-                                    {speaker.title}
-                                    {speaker.organization
-                                      ? ` at ${speaker.organization}`
-                                      : ""}
-                                  </p>
-                                )}
-                                {speaker.bio && (
-                                  <p className="text-xs text-gray-500 mt-2 line-clamp-2">
-                                    {speaker.bio}
-                                  </p>
-                                )}
-                                {speaker.socialLinks && (
-                                  <div className="flex gap-3 mt-2">
-                                    {speaker.socialLinks.linkedin && (
-                                      <a
-                                        href={speaker.socialLinks.linkedin}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-blue-600 hover:text-blue-800 text-xs font-medium"
-                                      >
-                                        LinkedIn
-                                      </a>
-                                    )}
-                                    {speaker.socialLinks.twitter && (
-                                      <a
-                                        href={speaker.socialLinks.twitter}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-gray-600 hover:text-gray-800 text-xs font-medium"
-                                      >
-                                        X / Twitter
-                                      </a>
-                                    )}
-                                    {speaker.socialLinks.website && (
-                                      <a
-                                        href={speaker.socialLinks.website}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-indigo-600 hover:text-indigo-800 text-xs font-medium"
-                                      >
-                                        Website
-                                      </a>
-                                    )}
-                                  </div>
-                                )}
-                                {speaker.slots && speaker.slots.length > 0 && (
-                                  <div className="mt-3 space-y-1">
-                                    {speaker.slots.map(
-                                      (slot: any, si: number) => (
-                                        <div
-                                          key={si}
-                                          className="flex items-center gap-2 text-xs bg-white rounded-lg px-2 py-1 border"
-                                        >
-                                          {slot.startTime && (
-                                            <span className="font-mono text-gray-500">
-                                              {slot.startTime}
-                                              {slot.endTime
-                                                ? ` - ${slot.endTime}`
-                                                : ""}
-                                            </span>
-                                          )}
-                                          <span className="font-medium text-gray-800">
-                                            {slot.topic}
-                                          </span>
-                                        </div>
-                                      ),
-                                    )}
-                                  </div>
-                                )}
-                              </div>
+                              )}
                             </div>
-                          ))}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-bold text-gray-900 truncate">
+                                  {speaker.name}
+                                </h4>
+                              </div>
+                              {speaker.title && (
+                                <p className="text-sm text-gray-600">
+                                  {speaker.title}
+                                  {speaker.organization
+                                    ? ` at ${speaker.organization}`
+                                    : ""}
+                                </p>
+                              )}
+                              {speaker.bio && (
+                                <p className="text-xs text-gray-500 mt-2 line-clamp-2">
+                                  {speaker.bio}
+                                </p>
+                              )}
+                              {speaker.socialLinks && (
+                                <div className="flex gap-3 mt-2">
+                                  {speaker.socialLinks.linkedin && (
+                                    <a
+                                      href={speaker.socialLinks.linkedin}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                                    >
+                                      LinkedIn
+                                    </a>
+                                  )}
+                                  {speaker.socialLinks.twitter && (
+                                    <a
+                                      href={speaker.socialLinks.twitter}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-gray-600 hover:text-gray-800 text-xs font-medium"
+                                    >
+                                      X / Twitter
+                                    </a>
+                                  )}
+                                  {speaker.socialLinks.website && (
+                                    <a
+                                      href={speaker.socialLinks.website}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-indigo-600 hover:text-indigo-800 text-xs font-medium"
+                                    >
+                                      Website
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+                              {speaker.slots && speaker.slots.length > 0 && (
+                                <div className="mt-3 space-y-1">
+                                  {speaker.slots.map(
+                                    (slot: any, si: number) => (
+                                      <div
+                                        key={si}
+                                        className="flex items-center gap-2 text-xs bg-white rounded-lg px-2 py-1 border"
+                                      >
+                                        {slot.startTime && (
+                                          <span className="font-mono text-gray-500">
+                                            {slot.startTime}
+                                            {slot.endTime
+                                              ? ` - ${slot.endTime}`
+                                              : ""}
+                                          </span>
+                                        )}
+                                        <span className="font-medium text-gray-800">
+                                          {slot.topic}
+                                        </span>
+                                      </div>
+                                    ),
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
 
                   {/* Other Speakers */}
-                  {eventData.speakers.filter((s: any) => !s.isKeynote).length >
+                  {/* {eventData.speakers.filter((s: any) => !s.isKeynote).length >
                     0 && (
                     <div>
                       {eventData.speakers.filter((s: any) => s.isKeynote)
@@ -6920,7 +7319,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           ))}
                       </div>
                     </div>
-                  )}
+                  )} */}
                 </div>
               )}
             </TabsContent>
@@ -8534,7 +8933,33 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       </div>
 
       {/* WhatsApp Verification Dialog */}
-      {/* Speaker WhatsApp Flow Dialog */}
+      {/* Speaker headshot cropper. Top level, NOT inside the stall form —
+          the speaker dialog opens independently of it. Square by default to
+          match the circular avatars the eventfront renders speakers in. */}
+      {speakerPhotoCrop && (
+        <ImageCropModal
+          open
+          image={speakerPhotoCrop}
+          defaultAspect={1}
+          onClose={() => {
+            if (speakerPhotoCrop.startsWith("blob:"))
+              URL.revokeObjectURL(speakerPhotoCrop);
+            setSpeakerPhotoCrop(null);
+          }}
+          onCropComplete={(croppedFile: File) => {
+            setSpeakerFormData((p: any) => ({
+              ...p,
+              photoFile: croppedFile,
+              photoPreview: URL.createObjectURL(croppedFile),
+            }));
+            if (speakerPhotoCrop.startsWith("blob:"))
+              URL.revokeObjectURL(speakerPhotoCrop);
+            setSpeakerPhotoCrop(null);
+          }}
+        />
+      )}
+
+      {/* Speaker Application Dialog — Google-auth gated */}
       {showSpeakerDialog && (
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
@@ -8548,15 +8973,19 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               <div>
                 <h3 className="text-lg font-bold">Apply as Speaker</h3>
                 <p className="text-xs text-muted-foreground">
-                  {speakerStep === "whatsapp"
-                    ? "Verify your WhatsApp number to continue"
+                  {speakerStep === "auth"
+                    ? "Sign in with Google to continue"
                     : speakerStep === "status"
                       ? "Your application status"
                       : speakerStep === "timeslot"
                         ? "Select your session time slot"
                         : speakerStep === "done"
                           ? "Your speaker pass is ready"
-                          : "Submit your application"}
+                          : speakerStep === "details"
+                            ? "Step 1 of 3 — about you"
+                            : speakerStep === "topic"
+                              ? "Step 2 of 3 — your session"
+                              : "Step 3 of 3 — pick your slot"}
                 </p>
               </div>
               <button
@@ -8567,273 +8996,150 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               </button>
             </div>
             <div className="p-6 space-y-4">
-              {/* STEP 1: WhatsApp Verification */}
-              {speakerStep === "whatsapp" && (
+              {/* STEP 1: Google sign-in — replaces the old WhatsApp OTP gate.
+                  A phone number is no longer an identity here; it is collected
+                  further down the form as an optional contact detail only. */}
+              {speakerStep === "auth" && (
                 <div className="space-y-4">
-                  <div>
-                    <label className="text-xs font-medium text-gray-700 block mb-1">
-                      WhatsApp Number *
-                    </label>
-                    <PhoneInput
-                      value={speakerWhatsApp}
-                      onChange={setSpeakerWhatsApp}
-                      disabled={speakerOtpSent}
-                      enableSearch={true}
-                      countryCodeEditable={false}
-                      preferredCountries={["in", "sg", "us", "gb"]}
-                      inputProps={{
-                        name: "speakerWhatsApp",
-                        required: true,
-                      }}
-                      inputStyle={{
-                        width: "100%",
-                        height: "44px",
-                        fontSize: "14px",
-                        paddingLeft: "48px",
-                        borderRadius: "8px",
-                        border: "1px solid #e2e8f0",
-                      }}
-                      containerStyle={{ width: "100%" }}
-                      buttonStyle={{
-                        borderRadius: "8px 0 0 8px",
-                        border: "1px solid #e2e8f0",
-                        borderRight: "none",
-                      }}
-                    />
-                  </div>
-
-                  {!speakerOtpSent ? (
-                    <button
-                      disabled={
-                        sendingSpeakerOtp ||
-                        !speakerWhatsApp ||
-                        speakerWhatsApp.length < 10
-                      }
-                      onClick={async () => {
-                        setSendingSpeakerOtp(true);
-                        try {
-                          const res = await fetch(
-                            `${apiURL}/otp/send-whatsapp-otp`,
-                            {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                whatsappNumber: speakerWhatsApp,
-                                role: "speaker",
-                              }),
-                            },
-                          );
-                          if (!res.ok) throw new Error("Failed to send OTP");
-                          const data = await res.json();
-                          if (data.message === "OTP sent to WhatsApp") {
-                            setSpeakerOtpSent(true);
-                            toast({
-                              title: "OTP Sent",
-                              description: "Check your WhatsApp",
-                            });
-                          }
-                        } catch (err: any) {
-                          toast({
-                            title: "Error",
-                            description: err.message,
-                            variant: "destructive",
-                          });
-                        } finally {
-                          setSendingSpeakerOtp(false);
-                        }
-                      }}
-                      className="w-full h-11 rounded-xl font-semibold text-sm text-white disabled:opacity-50"
-                      style={{
-                        backgroundColor: design?.primaryColor || "#6366f1",
-                      }}
-                    >
-                      {sendingSpeakerOtp
-                        ? "Sending..."
-                        : "Send OTP via WhatsApp"}
-                    </button>
+                  {speakerGoogleLoading ? (
+                    <div className="py-8 text-center space-y-2">
+                      <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" />
+                      <p className="text-sm text-muted-foreground">
+                        Looking you up…
+                      </p>
+                    </div>
                   ) : (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="text-xs font-medium text-gray-700 block mb-1">
-                          Enter OTP
-                        </label>
-                        <input
-                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none text-center tracking-[0.5em] font-mono text-lg"
-                          placeholder="------"
-                          maxLength={6}
-                          value={speakerOtp}
-                          onChange={(e) => setSpeakerOtp(e.target.value)}
-                        />
-                      </div>
+                    <>
+                      <p className="text-sm text-gray-600">
+                        Sign in with your Google account to apply as a speaker.
+                      </p>
                       <button
-                        disabled={verifyingSpeakerOtp || speakerOtp.length < 4}
-                        onClick={async () => {
-                          setVerifyingSpeakerOtp(true);
-                          try {
-                            const res = await fetch(
-                              `${apiURL}/otp/verify-chat-otp`,
-                              {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  whatsappNumber: speakerWhatsApp.startsWith(
-                                    "+",
-                                  )
-                                    ? speakerWhatsApp
-                                    : `+${speakerWhatsApp}`,
-                                  otp: speakerOtp,
-                                  role: "speaker",
-                                }),
-                              },
-                            );
-                            const data = await res.json();
-                            if (!res.ok)
-                              throw new Error(data.message || "Invalid OTP");
-
-                            setSpeakerVerified(true);
-                            setSpeakerFormData((p: any) => ({
-                              ...p,
-                              phone: speakerWhatsApp,
-                            }));
-
-                            // Check for existing speaker request
-                            if (eventData?._id) {
-                              const checkRes = await fetch(
-                                `${apiURL}/speaker-requests/event/${eventData._id}`,
-                              );
-                              const checkData = await checkRes.json();
-                              const existing = (checkData.data || []).find(
-                                (r: any) =>
-                                  r.phone === speakerWhatsApp &&
-                                  !["Cancelled", "Rejected"].includes(r.status),
-                              );
-
-                              if (existing) {
-                                setExistingSpeakerRequest(existing);
-                                // Fetch booked slots for time validation
-                                const allRequests = checkData.data || [];
-                                setBookedSpeakerSlots(
-                                  allRequests
-                                    .filter(
-                                      (r: any) =>
-                                        r.status !== "Cancelled" &&
-                                        r.status !== "Rejected" &&
-                                        r._id !== existing._id,
-                                    )
-                                    .flatMap((r: any) =>
-                                      (r.sessions || []).filter(
-                                        (s: any) => s.confirmedStartTime,
-                                      ),
-                                    ),
-                                );
-
-                                if (existing.status === "Pending")
-                                  setSpeakerStep("status");
-                                else if (existing.status === "Confirmed")
-                                  setSpeakerStep("timeslot");
-                                else if (existing.status === "Processing")
-                                  setSpeakerStep("status");
-                                else if (existing.status === "Completed")
-                                  setSpeakerStep("done");
-                                else setSpeakerStep("form");
-                              } else {
-                                // Fetch booked slots
-                                setBookedSpeakerSlots(
-                                  (checkData.data || [])
-                                    .filter(
-                                      (r: any) =>
-                                        !["Cancelled", "Rejected"].includes(
-                                          r.status,
-                                        ),
-                                    )
-                                    .flatMap((r: any) =>
-                                      (r.sessions || []).filter(
-                                        (s: any) => s.confirmedStartTime,
-                                      ),
-                                    ),
-                                );
-                                setSpeakerStep("form");
-                              }
-                            } else {
-                              setSpeakerStep("form");
-                            }
-
-                            toast({
-                              title: "Verified!",
-                              description: "WhatsApp number verified",
-                            });
-                          } catch (err: any) {
-                            toast({
-                              title: "Error",
-                              description: err.message,
-                              variant: "destructive",
-                            });
-                          } finally {
-                            setVerifyingSpeakerOtp(false);
-                          }
-                        }}
-                        className="w-full h-11 rounded-xl font-semibold text-sm text-white disabled:opacity-50"
+                        onClick={handleGoogleSpeakerLogin}
+                        className="w-full h-11 rounded-xl font-semibold text-sm text-white transition-all hover:opacity-90 flex items-center justify-center gap-2"
                         style={{
                           backgroundColor: design?.primaryColor || "#6366f1",
                         }}
                       >
-                        {verifyingSpeakerOtp ? "Verifying..." : "Verify OTP"}
+                        <Mail className="h-4 w-4" />
+                        Continue with Google
                       </button>
-                    </div>
+                      <p className="text-[11px] text-gray-400 text-center">
+                        Your email is only used to identify your application.
+                      </p>
+                    </>
                   )}
                 </div>
               )}
 
-              {/* STEP: STATUS (Pending/Processing) */}
-              {speakerStep === "status" && existingSpeakerRequest && (
-                <div className="text-center py-6 space-y-4">
-                  <div
-                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold ${
-                      existingSpeakerRequest.status === "Pending"
-                        ? "bg-yellow-100 text-yellow-800"
-                        : "bg-blue-100 text-blue-800"
-                    }`}
-                  >
-                    {existingSpeakerRequest.status === "Pending" ? "⏳" : "⚙️"}{" "}
-                    {existingSpeakerRequest.status}
-                  </div>
-                  <h3 className="text-lg font-bold">
-                    {existingSpeakerRequest.status === "Pending"
-                      ? "Your Application is Under Review"
-                      : "Your Session is Being Processed"}
-                  </h3>
-                  <p className="text-sm text-gray-500">
-                    {existingSpeakerRequest.status === "Pending"
-                      ? "The organizer will review your application and notify you via WhatsApp."
-                      : "Your time slot has been selected. Waiting for payment confirmation."}
-                  </p>
-                  {existingSpeakerRequest.sessions?.length > 0 && (
-                    <div className="bg-gray-50 rounded-lg p-3 text-left text-sm">
-                      <p className="font-medium mb-1">
-                        Session: {existingSpeakerRequest.sessions[0].topic}
+              {/* STEP: STATUS — pending review, or approved and awaiting the
+                  slot fee. Which one shows is decided by the frozen fee on the
+                  request, the same rule the backend used when it emailed. */}
+              {speakerStep === "status" &&
+                existingSpeakerRequest &&
+                (() => {
+                  const req = existingSpeakerRequest;
+                  const fee = Number(req.fee) || 0;
+                  const awaitingPayment =
+                    req.status === "Confirmed" &&
+                    !!req.isCharged &&
+                    fee > 0 &&
+                    req.paymentStatus !== "Paid";
+                  const paymentSubmitted =
+                    req.status === "Processing" ||
+                    (req.isCharged && req.paymentStatus === "Partial");
+                  return (
+                    <div className="text-center py-4 space-y-4">
+                      <div
+                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold ${
+                          awaitingPayment
+                            ? "bg-blue-100 text-blue-800"
+                            : req.status === "Pending"
+                              ? "bg-yellow-100 text-yellow-800"
+                              : "bg-blue-100 text-blue-800"
+                        }`}
+                      >
+                        {awaitingPayment
+                          ? "💳 Approved — payment due"
+                          : req.status === "Pending"
+                            ? "⏳ Pending approval"
+                            : `⚙️ ${req.status}`}
+                      </div>
+
+                      <h3 className="text-lg font-bold">
+                        {awaitingPayment
+                          ? "You're approved! One step left"
+                          : paymentSubmitted
+                            ? "Payment submitted"
+                            : "Your application is under review"}
+                      </h3>
+
+                      <p className="text-sm text-gray-500">
+                        {awaitingPayment
+                          ? `Pay the ${formatPrice(fee)} slot fee to confirm your session. Your speaker pass with QR code is issued once the organizer confirms the payment.`
+                          : paymentSubmitted
+                            ? "The organizer is verifying your payment. Your speaker pass will be emailed as soon as it's confirmed."
+                            : "The organizer will review your application and notify you by email."}
                       </p>
-                      {existingSpeakerRequest.sessions[0]
-                        .confirmedStartTime && (
-                        <p className="text-gray-500">
-                          Time:{" "}
-                          {
-                            existingSpeakerRequest.sessions[0]
-                              .confirmedStartTime
-                          }{" "}
-                          -{" "}
-                          {existingSpeakerRequest.sessions[0].confirmedEndTime}
+
+                      <div className="bg-gray-50 rounded-lg p-3 text-left text-sm space-y-1">
+                        {req.selectedSlotName && (
+                          <p>
+                            <span className="text-gray-500">
+                              Speaker space:
+                            </span>{" "}
+                            <span className="font-medium">
+                              {req.selectedSlotName}
+                            </span>
+                          </p>
+                        )}
+                        {req.sessions?.[0]?.topic && (
+                          <p>
+                            <span className="text-gray-500">Session:</span>{" "}
+                            <span className="font-medium">
+                              {req.sessions[0].topic}
+                            </span>
+                          </p>
+                        )}
+                        {(req.sessions?.[0]?.confirmedStartTime ||
+                          req.sessions?.[0]?.preferredStartTime) && (
+                          <p>
+                            <span className="text-gray-500">Time:</span>{" "}
+                            {req.sessions[0].confirmedStartTime ||
+                              req.sessions[0].preferredStartTime}{" "}
+                            -{" "}
+                            {req.sessions[0].confirmedEndTime ||
+                              req.sessions[0].preferredEndTime}
+                          </p>
+                        )}
+                        <p>
+                          <span className="text-gray-500">Slot fee:</span>{" "}
+                          <span className="font-medium">
+                            {fee > 0 ? formatPrice(fee) : "Free"}
+                          </span>
                         </p>
-                      )}
+                      </div>
+
+                      {awaitingPayment ? (
+                        <button
+                          onClick={() => goToSpeakerPayment(req)}
+                          className="w-full h-11 rounded-xl font-semibold text-sm text-white transition-all hover:opacity-90"
+                          style={{
+                            backgroundColor: design?.primaryColor || "#6366f1",
+                          }}
+                        >
+                          Pay {formatPrice(fee)} now
+                        </button>
+                      ) : null}
+
+                      <button
+                        onClick={() => setShowSpeakerDialog(false)}
+                        className="w-full h-11 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold text-sm"
+                      >
+                        Close
+                      </button>
                     </div>
-                  )}
-                  <button
-                    onClick={() => setShowSpeakerDialog(false)}
-                    className="w-full h-11 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold text-sm"
-                  >
-                    Close
-                  </button>
-                </div>
-              )}
+                  );
+                })()}
 
               {/* STEP: TIME SLOT SELECTION (After Approval) */}
               {speakerStep === "timeslot" && existingSpeakerRequest && (
@@ -9087,8 +9393,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     Your Speaker Pass is Ready!
                   </h3>
                   <p className="text-sm text-gray-500">
-                    Your QR code has been sent to your WhatsApp. You can also
-                    download it below.
+                    Your QR code has been emailed to{" "}
+                    {speakerAuthedEmail || existingSpeakerRequest.email}. You
+                    can also download it below.
                   </p>
                   <button
                     onClick={() =>
@@ -9114,508 +9421,637 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               )}
 
               {/* STEP: APPLICATION FORM (New applicant) */}
-              {speakerStep === "form" && (
+              {/* ══ APPLICATION WIZARD — 3 steps, mirroring the stall flow ══
+                  1. details : who you are (role, company, bio, contact)
+                  2. topic   : what you'll talk about
+                  3. slot    : which speaker space + when → Submit
+                  Details are prefilled from the saved speaker profile, so a
+                  returning speaker only really fills steps 2 and 3. */}
+              {(speakerStep === "details" ||
+                speakerStep === "topic" ||
+                speakerStep === "slot") && (
                 <div className="space-y-4">
-                  {/* Photo Upload */}
-                  <div className="flex items-center gap-4">
-                    <div
-                      className="w-20 h-20 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-gray-50 flex-shrink-0"
-                      onClick={() =>
-                        document.getElementById("speaker-apply-photo")?.click()
-                      }
-                    >
-                      {speakerFormData.photoPreview ? (
-                        <img
-                          src={speakerFormData.photoPreview}
-                          alt="Your photo"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="text-center">
-                          <svg
-                            className="mx-auto h-6 w-6 text-gray-400"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
+                  {/* Stepper */}
+                  <div className="flex items-center gap-2">
+                    {[
+                      { key: "details", n: 1, label: "Your details" },
+                      { key: "topic", n: 2, label: "Your session" },
+                      { key: "slot", n: 3, label: "Slot & timing" },
+                    ].map((s, i) => {
+                      const order = ["details", "topic", "slot"];
+                      const current = order.indexOf(speakerStep);
+                      const done = i < current;
+                      const active = i === current;
+                      return (
+                        <div
+                          key={s.key}
+                          className="flex items-center gap-2 flex-1"
+                        >
+                          <div
+                            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                              done || active ? "text-white" : "text-gray-400"
+                            }`}
+                            style={{
+                              backgroundColor:
+                                done || active
+                                  ? design?.primaryColor || "#6366f1"
+                                  : "#e5e7eb",
+                            }}
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                            />
-                          </svg>
-                          <span className="text-[9px] text-gray-400">
-                            Photo
+                            {done ? "✓" : s.n}
+                          </div>
+                          <span
+                            className={`text-[11px] font-medium hidden sm:block ${
+                              active ? "text-gray-900" : "text-gray-400"
+                            }`}
+                          >
+                            {s.label}
                           </span>
+                          {i < 2 && (
+                            <div className="h-px flex-1 bg-gray-200 min-w-[8px]" />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* ─────────────── STEP 1: PERSONAL DETAILS ─────────────── */}
+                  {speakerStep === "details" && (
+                    <div className="space-y-4">
+                      {speakerProfileFound && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-800">
+                          Welcome back — we've filled in your saved details.
+                          Update anything that's changed.
                         </div>
                       )}
-                    </div>
-                    <input
-                      id="speaker-apply-photo"
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file)
-                          setSpeakerFormData({
-                            ...speakerFormData,
-                            photoFile: file,
-                            photoPreview: URL.createObjectURL(file),
-                          });
-                      }}
-                    />
-                    <div className="text-xs text-gray-500">
-                      <p className="font-medium text-gray-700">
-                        Upload your photo
-                      </p>
-                      <p>This will be displayed on the event page</p>
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-medium text-gray-700 block mb-1">
-                        Full Name *
-                      </label>
-                      <input
-                        className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                        placeholder="Your name"
-                        value={speakerFormData.name}
-                        onChange={(e) =>
-                          setSpeakerFormData({
-                            ...speakerFormData,
-                            name: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-700 block mb-1">
-                        Email *
-                      </label>
-                      <input
-                        type="email"
-                        className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                        placeholder="you@example.com"
-                        value={speakerFormData.email}
-                        onChange={(e) =>
-                          setSpeakerFormData({
-                            ...speakerFormData,
-                            email: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-medium text-gray-700 block mb-1">
-                        Title / Role
-                      </label>
-                      <input
-                        className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                        placeholder="e.g. CTO, Professor"
-                        value={speakerFormData.title}
-                        onChange={(e) =>
-                          setSpeakerFormData({
-                            ...speakerFormData,
-                            title: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-700 block mb-1">
-                        Organization
-                      </label>
-                      <input
-                        className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                        placeholder="Company / University"
-                        value={speakerFormData.organization}
-                        onChange={(e) =>
-                          setSpeakerFormData({
-                            ...speakerFormData,
-                            organization: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-700 block mb-1">
-                      Bio
-                    </label>
-                    <textarea
-                      rows={2}
-                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
-                      placeholder="Brief bio about yourself..."
-                      value={speakerFormData.bio}
-                      onChange={(e) =>
-                        setSpeakerFormData({
-                          ...speakerFormData,
-                          bio: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-700 block mb-1">
-                      Area of Expertise
-                    </label>
-                    <input
-                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                      placeholder="e.g. AI/ML, Marketing, Finance"
-                      value={speakerFormData.expertise}
-                      onChange={(e) =>
-                        setSpeakerFormData({
-                          ...speakerFormData,
-                          expertise: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-
-                  <div className="border-t pt-4">
-                    <p className="text-sm font-semibold text-gray-700 mb-3">
-                      Proposed Session
-                    </p>
-
-                    {/* Show available speaker slots from event */}
-                    {eventData?.speakerSlotTemplates?.filter(
-                      (s: any) => s.openForApplications,
-                    ).length > 0 && (
-                      <div className="mb-3">
-                        <label className="text-xs font-medium text-gray-700 block mb-1">
-                          Apply for Speaker Space
-                        </label>
-                        <select
-                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none bg-white"
-                          value={speakerFormData.selectedSlotId || ""}
-                          onChange={(e) => {
-                            const slotId = e.target.value;
-                            const slot = eventData?.speakerSlotTemplates?.find(
-                              (s: any) => s.id === slotId,
-                            );
-                            setSpeakerFormData({
-                              ...speakerFormData,
-                              selectedSlotId: slotId,
-                              selectedSlotName: slot?.name || "",
-                            });
-                          }}
+                      {/* Photo */}
+                      <div className="flex items-center gap-4">
+                        <div
+                          className="w-20 h-20 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-gray-50 flex-shrink-0"
+                          onClick={() =>
+                            document
+                              .getElementById("speaker-apply-photo")
+                              ?.click()
+                          }
                         >
-                          <option value="">
-                            Select a speaker space (optional)
-                          </option>
-                          {eventData.speakerSlotTemplates
-                            .filter((s: any) => s.openForApplications)
-                            .map((slot: any) => (
-                              <option key={slot.id} value={slot.id}>
-                                {slot.name}{" "}
-                                {slot.isMainStage ? "(Main Stage)" : ""}{" "}
-                                {slot.slotPrice > 0
-                                  ? `- Fee applies`
-                                  : "- Free"}
-                              </option>
-                            ))}
-                        </select>
+                          {speakerFormData.photoPreview ||
+                          speakerFormData.image ? (
+                            <img
+                              src={
+                                speakerFormData.photoPreview ||
+                                (speakerFormData.image?.startsWith("/")
+                                  ? `${apiURL?.replace("/api", "")}${speakerFormData.image}`
+                                  : speakerFormData.image)
+                              }
+                              alt="Your photo"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="text-center">
+                              <svg
+                                className="mx-auto h-6 w-6 text-gray-400"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                                />
+                              </svg>
+                              <span className="text-[9px] text-gray-400">
+                                Photo
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <input
+                          id="speaker-apply-photo"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            // Crop before keeping it — the photo ends up in a
+                            // circular avatar on the event page.
+                            if (file)
+                              setSpeakerPhotoCrop(URL.createObjectURL(file));
+                            // Let the same file be re-picked after a cancel.
+                            e.target.value = "";
+                          }}
+                        />
+                        <div className="text-xs text-gray-500">
+                          <p className="font-medium text-gray-700">
+                            Upload your photo
+                          </p>
+                          <p>This will be displayed on the event page</p>
+                        </div>
                       </div>
-                    )}
 
-                    <div>
-                      <label className="text-xs font-medium text-gray-700 block mb-1">
-                        Session Topic *
-                      </label>
-                      <input
-                        className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                        placeholder="What will you speak about?"
-                        value={speakerFormData.sessionTopic}
-                        onChange={(e) =>
-                          setSpeakerFormData({
-                            ...speakerFormData,
-                            sessionTopic: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="mt-3">
-                      <label className="text-xs font-medium text-gray-700 block mb-1">
-                        Session Description
-                      </label>
-                      <textarea
-                        rows={2}
-                        className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
-                        placeholder="Brief description of your session..."
-                        value={speakerFormData.sessionDescription}
-                        onChange={(e) =>
-                          setSpeakerFormData({
-                            ...speakerFormData,
-                            sessionDescription: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">
+                            Full Name *
+                          </label>
+                          <input
+                            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                            placeholder="Your name"
+                            value={speakerFormData.name}
+                            onChange={(e) =>
+                              setSpeakerFormData((p: any) => ({
+                                ...p,
+                                name: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">
+                            Email *
+                          </label>
+                          {/* Google-verified — locked so the application is
+                              always filed under the identity we authenticated,
+                              and so the speaker can sign back in to pay. */}
+                          <input
+                            type="email"
+                            readOnly
+                            className="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-600 outline-none cursor-not-allowed"
+                            value={speakerFormData.email || speakerAuthedEmail}
+                          />
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            Verified with Google
+                          </p>
+                        </div>
+                      </div>
 
-                  <div className="border-t pt-4">
-                    <p className="text-sm font-semibold text-gray-700 mb-3">
-                      Additional Info
-                    </p>
-                    <div>
-                      <label className="text-xs font-medium text-gray-700 block mb-1">
-                        Previous Speaking Experience
-                      </label>
-                      <textarea
-                        rows={2}
-                        className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
-                        placeholder="List conferences, events, or talks you've given..."
-                        value={speakerFormData.previousSpeakingExperience}
-                        onChange={(e) =>
-                          setSpeakerFormData({
-                            ...speakerFormData,
-                            previousSpeakingExperience: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="mt-3">
-                      <label className="text-xs font-medium text-gray-700 block mb-1">
-                        Equipment Needed
-                      </label>
-                      <input
-                        className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                        placeholder="e.g. Projector, Whiteboard, Microphone"
-                        value={speakerFormData.equipmentNeeded}
-                        onChange={(e) =>
-                          setSpeakerFormData({
-                            ...speakerFormData,
-                            equipmentNeeded: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 mt-3">
-                      <input
-                        className="border rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary"
-                        placeholder="LinkedIn URL"
-                        value={speakerFormData.socialLinks.linkedin}
-                        onChange={(e) =>
-                          setSpeakerFormData({
-                            ...speakerFormData,
-                            socialLinks: {
-                              ...speakerFormData.socialLinks,
-                              linkedin: e.target.value,
-                            },
-                          })
-                        }
-                      />
-                      <input
-                        className="border rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary"
-                        placeholder="Twitter URL"
-                        value={speakerFormData.socialLinks.twitter}
-                        onChange={(e) =>
-                          setSpeakerFormData({
-                            ...speakerFormData,
-                            socialLinks: {
-                              ...speakerFormData.socialLinks,
-                              twitter: e.target.value,
-                            },
-                          })
-                        }
-                      />
-                      <input
-                        className="border rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary"
-                        placeholder="Website URL"
-                        value={speakerFormData.socialLinks.website}
-                        onChange={(e) =>
-                          setSpeakerFormData({
-                            ...speakerFormData,
-                            socialLinks: {
-                              ...speakerFormData.socialLinks,
-                              website: e.target.value,
-                            },
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-700 block mb-1">
+                          Phone / WhatsApp (optional)
+                        </label>
+                        {/* Contact detail only — never used to sign in. */}
+                        <PhoneInput
+                          value={speakerFormData.phone}
+                          onChange={(v: string) =>
+                            setSpeakerFormData((p: any) => ({ ...p, phone: v }))
+                          }
+                          enableSearch={true}
+                          countryCodeEditable={false}
+                          preferredCountries={["in", "sg", "us", "gb"]}
+                          inputProps={{ name: "speakerPhone" }}
+                          inputStyle={{
+                            width: "100%",
+                            height: "40px",
+                            fontSize: "14px",
+                            paddingLeft: "48px",
+                            borderRadius: "8px",
+                            border: "1px solid #e2e8f0",
+                          }}
+                          containerStyle={{ width: "100%" }}
+                          buttonStyle={{
+                            borderRadius: "8px 0 0 8px",
+                            border: "1px solid #e2e8f0",
+                            borderRight: "none",
+                          }}
+                        />
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          So the organizer can reach you about your session.
+                        </p>
+                      </div>
 
-                  <div className="flex gap-3 pt-2">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">
+                            Role / Title
+                          </label>
+                          <input
+                            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                            placeholder="e.g. CTO, Professor"
+                            value={speakerFormData.title}
+                            onChange={(e) =>
+                              setSpeakerFormData((p: any) => ({
+                                ...p,
+                                title: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">
+                            Company / Organization
+                          </label>
+                          <input
+                            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                            placeholder="Company / University"
+                            value={speakerFormData.organization}
+                            onChange={(e) =>
+                              setSpeakerFormData((p: any) => ({
+                                ...p,
+                                organization: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-medium text-gray-700 block mb-1">
+                          Bio
+                        </label>
+                        <textarea
+                          rows={2}
+                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
+                          placeholder="Brief bio about yourself..."
+                          value={speakerFormData.bio}
+                          onChange={(e) =>
+                            setSpeakerFormData((p: any) => ({
+                              ...p,
+                              bio: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-medium text-gray-700 block mb-1">
+                          Area of Expertise
+                        </label>
+                        <input
+                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                          placeholder="e.g. AI/ML, Marketing, Finance"
+                          value={speakerFormData.expertise}
+                          onChange={(e) =>
+                            setSpeakerFormData((p: any) => ({
+                              ...p,
+                              expertise: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <input
+                          className="border rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary"
+                          placeholder="LinkedIn URL"
+                          value={speakerFormData.socialLinks.linkedin}
+                          onChange={(e) =>
+                            setSpeakerFormData((p: any) => ({
+                              ...p,
+                              socialLinks: {
+                                ...p.socialLinks,
+                                linkedin: e.target.value,
+                              },
+                            }))
+                          }
+                        />
+                        <input
+                          className="border rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary"
+                          placeholder="Twitter URL"
+                          value={speakerFormData.socialLinks.twitter}
+                          onChange={(e) =>
+                            setSpeakerFormData((p: any) => ({
+                              ...p,
+                              socialLinks: {
+                                ...p.socialLinks,
+                                twitter: e.target.value,
+                              },
+                            }))
+                          }
+                        />
+                        <input
+                          className="border rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary"
+                          placeholder="Website URL"
+                          value={speakerFormData.socialLinks.website}
+                          onChange={(e) =>
+                            setSpeakerFormData((p: any) => ({
+                              ...p,
+                              socialLinks: {
+                                ...p.socialLinks,
+                                website: e.target.value,
+                              },
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ───────────────── STEP 2: YOUR SESSION ───────────────── */}
+                  {speakerStep === "topic" && (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-xs font-medium text-gray-700 block mb-1">
+                          Session Topic *
+                        </label>
+                        <input
+                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                          placeholder="What will you speak about?"
+                          value={speakerFormData.sessionTopic}
+                          onChange={(e) =>
+                            setSpeakerFormData((p: any) => ({
+                              ...p,
+                              sessionTopic: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-700 block mb-1">
+                          Session Description
+                        </label>
+                        <textarea
+                          rows={3}
+                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
+                          placeholder="What will the audience take away?"
+                          value={speakerFormData.sessionDescription}
+                          onChange={(e) =>
+                            setSpeakerFormData((p: any) => ({
+                              ...p,
+                              sessionDescription: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-700 block mb-1">
+                          Previous Speaking Experience
+                        </label>
+                        <textarea
+                          rows={2}
+                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
+                          placeholder="List conferences, events, or talks you've given..."
+                          value={speakerFormData.previousSpeakingExperience}
+                          onChange={(e) =>
+                            setSpeakerFormData((p: any) => ({
+                              ...p,
+                              previousSpeakingExperience: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-700 block mb-1">
+                          Equipment Needed
+                        </label>
+                        <input
+                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                          placeholder="e.g. Projector, Whiteboard, Microphone"
+                          value={speakerFormData.equipmentNeeded}
+                          onChange={(e) =>
+                            setSpeakerFormData((p: any) => ({
+                              ...p,
+                              equipmentNeeded: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ─────────────── STEP 3: SLOT & TIMING ─────────────── */}
+                  {speakerStep === "slot" && (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-xs font-medium text-gray-700 block mb-1">
+                          Speaker Space *
+                        </label>
+                        <div className="space-y-2">
+                          {openSpeakerSlots.map((slot: any) => {
+                            const price = Number(slot.slotPrice) || 0;
+                            const selected =
+                              speakerFormData.selectedSlotId === slot.id;
+                            return (
+                              <button
+                                key={slot.id}
+                                type="button"
+                                onClick={() =>
+                                  setSpeakerFormData((p: any) => ({
+                                    ...p,
+                                    selectedSlotId: slot.id,
+                                    selectedSlotName: slot.name || "",
+                                    selectedSlotPrice: price,
+                                  }))
+                                }
+                                className={`w-full text-left border-2 rounded-xl p-3 transition-all ${
+                                  selected
+                                    ? "bg-primary/5"
+                                    : "border-gray-200 hover:border-gray-300"
+                                }`}
+                                style={
+                                  selected
+                                    ? {
+                                        borderColor:
+                                          design?.primaryColor || "#6366f1",
+                                      }
+                                    : undefined
+                                }
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div>
+                                    <p className="text-sm font-semibold text-gray-900">
+                                      {slot.name}
+                                      {slot.isMainStage && (
+                                        <span className="ml-2 text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                                          Main Stage
+                                        </span>
+                                      )}
+                                    </p>
+                                    {(slot.startTime || slot.description) && (
+                                      <p className="text-[11px] text-gray-500 mt-0.5">
+                                        {slot.startTime
+                                          ? `${slot.startTime} - ${slot.endTime || ""}`
+                                          : ""}
+                                        {slot.startTime && slot.description
+                                          ? " · "
+                                          : ""}
+                                        {slot.description || ""}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <span
+                                    className={`text-sm font-bold flex-shrink-0 ${
+                                      price > 0
+                                        ? "text-gray-900"
+                                        : "text-green-600"
+                                    }`}
+                                  >
+                                    {price > 0
+                                      ? formatPrice(price)
+                                      : "Free"}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                          {openSpeakerSlots.length === 0 && (
+                            <p className="text-xs text-gray-500">
+                              The organizer hasn't opened any speaker space for
+                              applications yet.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">
+                            Preferred Start Time
+                          </label>
+                          <input
+                            type="time"
+                            className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                            value={speakerFormData.preferredStartTime}
+                            min={eventData?.time || undefined}
+                            max={eventData?.endTime || undefined}
+                            onChange={(e) =>
+                              setSpeakerFormData((p: any) => ({
+                                ...p,
+                                preferredStartTime: e.target.value,
+                              }))
+                            }
+                          />
+                          {eventData?.time && (
+                            <p className="text-[10px] text-gray-400 mt-0.5">
+                              Event runs {eventData.time} - {eventData.endTime}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">
+                            Preferred End Time
+                          </label>
+                          <input
+                            type="time"
+                            className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                            value={speakerFormData.preferredEndTime}
+                            min={
+                              speakerFormData.preferredStartTime ||
+                              eventData?.time ||
+                              undefined
+                            }
+                            max={eventData?.endTime || undefined}
+                            onChange={(e) =>
+                              setSpeakerFormData((p: any) => ({
+                                ...p,
+                                preferredEndTime: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      {bookedSpeakerSlots.length > 0 && (
+                        <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                          <p className="text-xs font-semibold text-orange-800 mb-2">
+                            Already taken by other speakers:
+                          </p>
+                          {bookedSpeakerSlots.map((s: any, i: number) => (
+                            <p key={i} className="text-xs text-orange-700">
+                              {s.confirmedStartTime} - {s.confirmedEndTime}:{" "}
+                              {s.topic}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* What happens next depends on the slot's price —
+                          exactly the stall rule, spelled out before they
+                          commit so approval isn't a surprise. */}
+                      <div className="bg-gray-50 border rounded-lg p-3 text-xs text-gray-600">
+                        {Number(speakerFormData.selectedSlotPrice) > 0 ? (
+                          <>
+                            <strong className="text-gray-900">
+                              This is a paid slot (
+                              {formatPrice(
+                                Number(speakerFormData.selectedSlotPrice),
+                              )}
+                              ).
+                            </strong>{" "}
+                            After the organizer approves you, sign back in here
+                            with the same email to pay. Your speaker pass with
+                            QR code arrives once the organizer confirms the
+                            payment.
+                          </>
+                        ) : (
+                          <>
+                            <strong className="text-gray-900">
+                              This slot is free.
+                            </strong>{" "}
+                            Once the organizer approves your application, your
+                            speaker pass with QR code is emailed to you
+                            automatically.
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ─────────── WIZARD NAVIGATION ─────────── */}
+                  <div className="flex gap-3 pt-2 border-t">
                     <button
-                      onClick={() => setShowSpeakerDialog(false)}
+                      onClick={() => {
+                        if (speakerStep === "details") {
+                          setShowSpeakerDialog(false);
+                        } else {
+                          setSpeakerStep(
+                            speakerStep === "slot" ? "topic" : "details",
+                          );
+                        }
+                      }}
                       className="flex-1 h-11 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold text-sm hover:bg-gray-50 transition-colors"
                     >
-                      Cancel
+                      {speakerStep === "details" ? "Cancel" : "Back"}
                     </button>
-                    <button
-                      disabled={
-                        speakerSubmitting ||
-                        !speakerFormData.name ||
-                        !speakerFormData.email ||
-                        !speakerFormData.sessionTopic
-                      }
-                      onClick={async () => {
-                        if (isEventOver(eventData)) {
-                          toast({
-                            title: "This event has ended",
-                            description:
-                              "Speaker applications are closed for this event.",
-                            variant: "destructive",
-                          });
-                          return;
-                        }
-                        setSpeakerSubmitting(true);
-                        try {
-                          let res;
-                          if (speakerFormData.photoFile) {
-                            // Use FormData with image upload
-                            const fd = new FormData();
-                            fd.append("image", speakerFormData.photoFile);
-                            fd.append("eventId", eventData?._id || "");
-                            fd.append(
-                              "organizerId",
-                              String(
-                                eventData?.organizer?._id ||
-                                  eventData?.organizer ||
-                                  "",
-                              ),
-                            );
-                            fd.append("name", speakerFormData.name);
-                            fd.append("email", speakerFormData.email);
-                            fd.append("phone", speakerFormData.phone || "");
-                            fd.append("title", speakerFormData.title || "");
-                            fd.append(
-                              "organization",
-                              speakerFormData.organization || "",
-                            );
-                            fd.append("bio", speakerFormData.bio || "");
-                            fd.append(
-                              "expertise",
-                              speakerFormData.expertise || "",
-                            );
-                            fd.append(
-                              "previousSpeakingExperience",
-                              speakerFormData.previousSpeakingExperience || "",
-                            );
-                            fd.append(
-                              "equipmentNeeded",
-                              speakerFormData.equipmentNeeded || "",
-                            );
-                            fd.append("notes", speakerFormData.notes || "");
-                            fd.append(
-                              "socialLinks",
-                              JSON.stringify(speakerFormData.socialLinks),
-                            );
-                            fd.append("source", "external");
-                            fd.append(
-                              "sessions",
-                              JSON.stringify([
-                                {
-                                  topic: speakerFormData.sessionTopic,
-                                  description:
-                                    speakerFormData.sessionDescription,
-                                },
-                              ]),
-                            );
-                            res = await fetch(
-                              `${apiURL}/speaker-requests/apply-with-image`,
-                              { method: "POST", body: fd },
-                            );
+                    {speakerStep !== "slot" ? (
+                      <button
+                        onClick={() => {
+                          if (speakerStep === "details") {
+                            if (!speakerFormData.name?.trim()) {
+                              toast({
+                                title: "Your name is required",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+                            setSpeakerStep("topic");
                           } else {
-                            // JSON without image
-                            res = await fetch(
-                              `${apiURL}/speaker-requests/apply`,
-                              {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  eventId: eventData?._id,
-                                  organizerId:
-                                    eventData?.organizer?._id ||
-                                    eventData?.organizer,
-                                  name: speakerFormData.name,
-                                  email: speakerFormData.email,
-                                  phone: speakerFormData.phone,
-                                  title: speakerFormData.title,
-                                  organization: speakerFormData.organization,
-                                  bio: speakerFormData.bio,
-                                  expertise: speakerFormData.expertise,
-                                  previousSpeakingExperience:
-                                    speakerFormData.previousSpeakingExperience,
-                                  equipmentNeeded:
-                                    speakerFormData.equipmentNeeded,
-                                  notes: speakerFormData.notes,
-                                  socialLinks: speakerFormData.socialLinks,
-                                  source: "external",
-                                  sessions: [
-                                    {
-                                      topic: speakerFormData.sessionTopic,
-                                      description:
-                                        speakerFormData.sessionDescription,
-                                    },
-                                  ],
-                                }),
-                              },
-                            );
+                            if (!speakerFormData.sessionTopic?.trim()) {
+                              toast({
+                                title: "A session topic is required",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+                            setSpeakerStep("slot");
                           }
-                          const data = await res.json();
-                          if (data.success) {
-                            toast({
-                              title: "Application submitted!",
-                              description:
-                                "The organizer will review your application.",
-                            });
-                            setShowSpeakerDialog(false);
-                            setSpeakerFormData({
-                              name: "",
-                              email: "",
-                              phone: "",
-                              title: "",
-                              organization: "",
-                              bio: "",
-                              expertise: "",
-                              previousSpeakingExperience: "",
-                              equipmentNeeded: "",
-                              notes: "",
-                              sessionTopic: "",
-                              sessionDescription: "",
-                              preferredStartTime: "",
-                              preferredEndTime: "",
-                              selectedSlotId: "",
-                              selectedSlotName: "",
-                              socialLinks: {
-                                linkedin: "",
-                                twitter: "",
-                                website: "",
-                              },
-                            });
-                          } else {
-                            toast({
-                              title: "Error",
-                              description: data.message || "Failed to submit",
-                              variant: "destructive",
-                            });
-                          }
-                        } catch (err: any) {
-                          toast({
-                            title: "Error",
-                            description: err.message || "Something went wrong",
-                            variant: "destructive",
-                          });
-                        } finally {
-                          setSpeakerSubmitting(false);
+                        }}
+                        className="flex-1 h-11 rounded-xl font-semibold text-sm text-white transition-all hover:opacity-90"
+                        style={{
+                          backgroundColor: design?.primaryColor || "#6366f1",
+                        }}
+                      >
+                        Next
+                      </button>
+                    ) : (
+                      <button
+                        disabled={
+                          speakerSubmitting ||
+                          (openSpeakerSlots.length > 0 &&
+                            !speakerFormData.selectedSlotId)
                         }
-                      }}
-                      className="flex-1 h-11 rounded-xl font-semibold text-sm text-white transition-all hover:opacity-90 disabled:opacity-50"
-                      style={{
-                        backgroundColor: design?.primaryColor || "#6366f1",
-                      }}
-                    >
-                      {speakerSubmitting
-                        ? "Submitting..."
-                        : "Submit Application"}
-                    </button>
+                        onClick={submitSpeakerApplication}
+                        className="flex-1 h-11 rounded-xl font-semibold text-sm text-white transition-all hover:opacity-90 disabled:opacity-50"
+                        style={{
+                          backgroundColor: design?.primaryColor || "#6366f1",
+                        }}
+                      >
+                        {speakerSubmitting
+                          ? "Submitting..."
+                          : "Submit Application"}
+                      </button>
+                    )}
                   </div>
                 </div>
               )}

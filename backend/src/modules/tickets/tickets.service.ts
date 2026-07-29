@@ -685,4 +685,87 @@ Thank you for choosing Eventsh! 🎊`;
       throw error;
     }
   }
+
+  /**
+   * Re-send a visitor's ticket email — the recovery path for the one that got
+   * lost, spam-filtered, or never arrived because the address had a typo the
+   * buyer later corrected.
+   *
+   * Deliberately reuses sendTicketViaEmail(), the SAME generator that runs at
+   * payment time, so the re-sent mail is byte-for-byte the original: same QR,
+   * same PDF, same organizer branding. Nothing about the ticket changes — the
+   * stored qrCode is reused, so any pass already in the buyer's inbox stays
+   * valid and scannable.
+   *
+   * Failures are SURFACED rather than swallowed (unlike delivery at purchase
+   * time, which must not fail the payment): the organizer clicked this to fix
+   * a delivery problem, so a silent second failure would be useless.
+   */
+  async resendTicketEmail(id: string, overrideEmail?: string) {
+    const ticket = await this.ticketModel.findOne(
+      Types.ObjectId.isValid(id) ? { _id: id } : { ticketId: id },
+    );
+    if (!ticket) throw new NotFoundException("Ticket not found");
+
+    const to = String(overrideEmail || ticket.customerEmail || "").trim();
+    if (!to) {
+      throw new BadRequestException(
+        "This ticket has no email address on file, so there's nothing to send to.",
+      );
+    }
+
+    const organizer = await this.organizerModel.findById(ticket.organizerId);
+    const country = (organizer as any)?.country || "IN";
+    const orgName =
+      (organizer as any)?.organizationName ||
+      (organizer as any)?.name ||
+      "EventSH";
+
+    // Reuse the stored QR so the re-sent ticket matches the original exactly.
+    // Only regenerate when the ticket predates QR storage.
+    let qrCodeBase64 = ticket.qrCode;
+    if (!qrCodeBase64) {
+      qrCodeBase64 = await QRCode.toDataURL(
+        JSON.stringify({
+          ticketId: ticket.ticketId,
+          eventId: ticket.eventId,
+          customerName: ticket.customerName,
+        }),
+        { width: 300, margin: 2 },
+      );
+      ticket.qrCode = qrCodeBase64;
+      await ticket.save();
+    }
+
+    // Honour a corrected address by persisting it — otherwise the next resend
+    // (and any other mail for this ticket) would go back to the bad one.
+    if (overrideEmail && overrideEmail !== ticket.customerEmail) {
+      ticket.customerEmail = to;
+      await ticket.save();
+    }
+
+    const original = ticket.customerEmail;
+    try {
+      // sendTicketViaEmail reads the recipient off the ticket.
+      (ticket as any).customerEmail = to;
+      await this.sendTicketViaEmail(
+        ticket,
+        qrCodeBase64,
+        country,
+        (organizer as any)?.emailConfig,
+        orgName,
+      );
+    } catch (err: any) {
+      (ticket as any).customerEmail = original;
+      throw new InternalServerErrorException(
+        `Couldn't email the ticket: ${err?.message || "mail server error"}`,
+      );
+    }
+
+    return {
+      success: true,
+      message: `Ticket ${ticket.ticketId} re-sent to ${to}`,
+      data: { ticketId: ticket.ticketId, sentTo: to },
+    };
+  }
 }

@@ -95,6 +95,21 @@ export class SpeakerRequest {
     website?: string;
   };
 
+  // Link to the persistent speaker profile (the `speakers` collection). Set
+  // on application; lets the organizer see everything this person has ever
+  // applied to without matching on strings.
+  @Prop({ type: Types.ObjectId, ref: "Speaker" })
+  speakerId?: Types.ObjectId;
+
+  // The speaker space the applicant chose, captured at apply time. The fee
+  // below is frozen from this slot's price so later edits to the event's
+  // templates can't re-price an application already in flight.
+  @Prop()
+  selectedSlotId?: string;
+
+  @Prop()
+  selectedSlotName?: string;
+
   // Session Details
   @Prop({ type: [Object], default: [] })
   sessions: SessionSlot[];
@@ -149,12 +164,18 @@ export class SpeakerRequest {
   @Prop()
   rejectionDate?: Date;
 
-  // QR Code
-  @Prop({ default: null })
-  qrCodePath: string;
-
+  // QR / pass. Same contract as the stall ticket fields: qrCodeData is the
+  // scannable payload and the source of truth, qrCodeImage is the rendered QR,
+  // and qrCodePath is the pass PDF's url — null until a render succeeds, so a
+  // failed PDF costs an attachment and never the ability to check in.
   @Prop({ default: null })
   qrCodeData: string;
+
+  @Prop({ default: null })
+  qrCodeImage: string;
+
+  @Prop({ default: null })
+  qrCodePath: string;
 
   // Attendance
   @Prop({ default: null })

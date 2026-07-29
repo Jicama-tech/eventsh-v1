@@ -27,6 +27,7 @@ import {
 import { diskStorage } from "multer";
 import { AuthGuard } from "@nestjs/passport";
 import { EventsService } from "./events.service";
+import { SpeakerRequestsService } from "../speaker-requests/speaker-requests.service";
 import { EventImportService } from "./event-import.service";
 import { CreateEventDto } from "./dto/createEvent.dto";
 import { UpdateEventDto } from "./dto/updateEvent.dto";
@@ -83,6 +84,9 @@ export class EventsController {
   constructor(
     private readonly eventsService: EventsService,
     private readonly eventImportService: EventImportService,
+    // Speakers named in the event form are folded into the organizer's
+    // speaker roster on save — one CRM, both entry points.
+    private readonly speakerRequestsService: SpeakerRequestsService,
     @InjectModel("Organizer") private readonly organizerModel: Model<any>,
     @InjectModel("Plan") private readonly planModel: Model<any>,
     @InjectModel("OrganizerStore")
@@ -525,7 +529,10 @@ export class EventsController {
         });
       }
 
-      // Handle speaker images
+      // Handle speaker images. The form tells us WHICH uploaded file belongs to
+      // each speaker (newImageIndex) so a dropped or filtered-out upload can't
+      // shift every later photo onto the wrong speaker. Older clients don't
+      // send it — they fall back to the original in-order consumption.
       if (
         files.speakerImages &&
         files.speakerImages.length > 0 &&
@@ -533,11 +540,24 @@ export class EventsController {
       ) {
         let imgIdx = 0;
         body.speakers = body.speakers.map((speaker) => {
-          if (speaker.hasNewImage && imgIdx < files.speakerImages.length) {
+          const explicit = Number(speaker.newImageIndex);
+          if (Number.isInteger(explicit) && explicit >= 0) {
+            const file = files.speakerImages[explicit];
+            if (file) speaker.image = `/uploads/events/${file.filename}`;
+          } else if (speaker.hasNewImage && imgIdx < files.speakerImages.length) {
             speaker.image = `/uploads/events/${files.speakerImages[imgIdx].filename}`;
             imgIdx++;
           }
           delete speaker.hasNewImage;
+          delete speaker.newImageIndex;
+          return speaker;
+        });
+      } else if (Array.isArray(body.speakers)) {
+        // No files in this request: drop the transport-only flags so they don't
+        // get persisted onto the speaker documents.
+        body.speakers = body.speakers.map((speaker) => {
+          delete speaker.hasNewImage;
+          delete speaker.newImageIndex;
           return speaker;
         });
       }
@@ -558,6 +578,13 @@ export class EventsController {
       }
 
       const event = await this.eventsService.create(body);
+
+      // Fold this event's speakers into the organizer's roster (CRM). Matched
+      // on email, or on name when there is none, so the same person never
+      // appears twice. Fire-and-forget: a roster hiccup must not fail a save.
+      void this.speakerRequestsService
+        .syncEventSpeakersToRoster(event)
+        .catch(() => undefined);
 
       return {
         success: true,
@@ -1025,7 +1052,10 @@ export class EventsController {
         });
       }
 
-      // Handle speaker images
+      // Handle speaker images. The form tells us WHICH uploaded file belongs to
+      // each speaker (newImageIndex) so a dropped or filtered-out upload can't
+      // shift every later photo onto the wrong speaker. Older clients don't
+      // send it — they fall back to the original in-order consumption.
       if (
         files.speakerImages &&
         files.speakerImages.length > 0 &&
@@ -1033,11 +1063,24 @@ export class EventsController {
       ) {
         let imgIdx = 0;
         body.speakers = body.speakers.map((speaker) => {
-          if (speaker.hasNewImage && imgIdx < files.speakerImages.length) {
+          const explicit = Number(speaker.newImageIndex);
+          if (Number.isInteger(explicit) && explicit >= 0) {
+            const file = files.speakerImages[explicit];
+            if (file) speaker.image = `/uploads/events/${file.filename}`;
+          } else if (speaker.hasNewImage && imgIdx < files.speakerImages.length) {
             speaker.image = `/uploads/events/${files.speakerImages[imgIdx].filename}`;
             imgIdx++;
           }
           delete speaker.hasNewImage;
+          delete speaker.newImageIndex;
+          return speaker;
+        });
+      } else if (Array.isArray(body.speakers)) {
+        // No files in this request: drop the transport-only flags so they don't
+        // get persisted onto the speaker documents.
+        body.speakers = body.speakers.map((speaker) => {
+          delete speaker.hasNewImage;
+          delete speaker.newImageIndex;
           return speaker;
         });
       }
@@ -1058,6 +1101,12 @@ export class EventsController {
       }
 
       const event = await this.eventsService.update(id, body);
+
+      // Same roster sync as create — an edit that adds a speaker should show
+      // up in the CRM, and re-saving an unchanged line-up changes nothing.
+      void this.speakerRequestsService
+        .syncEventSpeakersToRoster(event)
+        .catch(() => undefined);
 
       return {
         success: true,

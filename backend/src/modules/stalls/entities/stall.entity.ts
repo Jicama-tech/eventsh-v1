@@ -220,12 +220,24 @@ export class Stall {
   @Prop({ default: 0 })
   remainingAmount: number;
 
-  // QR Code Fields - NEW
+  // ===== QR / TICKET FIELDS =====
+  // These three are deliberately independent so a failed PDF render can never
+  // cost the booking its scannable identity:
+  //   qrCodeData  — the signed check-in payload. THE source of truth for
+  //                 scanning (scanStallQR matches against it). Written the
+  //                 moment payment is confirmed, before any PDF work.
+  //   qrCodeImage — the QR itself as a base64 data URL, so the ticket can be
+  //                 re-rendered later byte-identically.
+  //   qrCodePath  — URL of the rendered ticket PDF under /uploads. Null until
+  //                 a render actually succeeds. Never holds base64.
   @Prop({ default: null })
-  qrCodePath: string; // Path to saved QR code image
+  qrCodeData: string; // JSON check-in payload (source of truth for scanning)
 
   @Prop({ default: null })
-  qrCodeData: string; // Encrypted QR data string
+  qrCodeImage: string; // base64 data URL of the QR image
+
+  @Prop({ default: null })
+  qrCodePath: string; // /uploads/stallTickets/<file>.pdf — set only on success
 
   // Attendance Tracking Fields - NEW
   @Prop({ default: null })

@@ -303,9 +303,26 @@ export class StallsController {
   @Patch(":id/start-confirmation-timer")
   async startConfirmationTimer(
     @Param("id") id: string,
-    @Body() body: { changedBy?: string },
+    @Body() body: { hours: number; note?: string; changedBy?: string },
   ) {
     return await this.stallsService.startConfirmationTimer(
+      id,
+      body.hours,
+      body.note,
+      body?.changedBy,
+    );
+  }
+
+  /**
+   * Remove an active payment-confirmation hold (turn the timer off).
+   * PATCH /stalls/:id/cancel-confirmation-timer
+   */
+  @Patch(":id/cancel-confirmation-timer")
+  async cancelConfirmationTimer(
+    @Param("id") id: string,
+    @Body() body: { changedBy?: string },
+  ) {
+    return await this.stallsService.cancelConfirmationTimer(
       id,
       body?.changedBy,
     );
