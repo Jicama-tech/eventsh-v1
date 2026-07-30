@@ -9,39 +9,49 @@ import {
   CheckCircle2,
   Loader2,
   GraduationCap,
-  CreditCard,
+  QrCode,
   Clock,
   Calendar,
   MapPin,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrencyhook";
-import { useCountry } from "@/hooks/useCountry";
 import QRCode from "react-qr-code";
 import PaymentFeedbackDialog from "./PaymentFeedbackDialog";
+import jsQR from "jsqr";
+import { buildPayNowQrUrl } from "@/lib/paynowQr";
 
 const WorkshopRequestPaymentPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
   const apiURL = __API_URL__;
-  const { country } = useCountry();
-  const { formatPrice } = useCurrency(country);
 
   const orderData = location.state as any;
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
-  const [paymentQRCode, setPaymentQRCode] = useState<string | null>(null);
+
   const [paymentStatus, setPaymentStatus] = useState<
-    "loading" | "ready" | "success" | "failed"
+    "loading" | "ready" | "failed"
   >("loading");
+  const [organizer, setOrganizer] = useState<any>(null);
+  const [country, setCountry] = useState("");
+  const { formatPrice } = useCurrency(country);
+  const [upiId, setUpiId] = useState("");
   const [dynamicQR, setDynamicQR] = useState(false);
   const [dynamicUpiString, setDynamicUpiString] = useState("");
-  const [organizer, setOrganizer] = useState<any>(null);
+  const [mobileId, setMobileId] = useState("");
+  const [dynamicUENString, setDynamicUENString] = useState("");
+  const [showQR, setShowQR] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [timeLeft, setTimeLeft] = useState(24 * 60 * 60);
 
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  const isMobile = isIOS || isAndroid;
+
   const fee = Number(orderData?.fee) || 0;
   const isFree = !orderData?.isCharged || fee <= 0;
 
@@ -53,18 +63,13 @@ const WorkshopRequestPaymentPage = () => {
         variant: "destructive",
       });
       navigate(-1);
-      return;
-    }
-    if (isFree) {
-      setPaymentStatus("ready");
-    } else {
-      fetchOrganizerPayment();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Timer
   useEffect(() => {
-    if (!dynamicUpiString && !paymentQRCode) return;
+    if (!dynamicUpiString && !dynamicUENString) return;
     setTimeLeft(24 * 60 * 60);
     const interval = setInterval(() => {
       setTimeLeft((prev) => {
@@ -76,49 +81,136 @@ const WorkshopRequestPaymentPage = () => {
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [dynamicUpiString, paymentQRCode]);
+  }, [dynamicUpiString, dynamicUENString]);
 
-  const formatTime = (seconds: number) => {
+  function formatTime(seconds: number) {
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
     return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  };
+  }
 
-  const fetchOrganizerPayment = async () => {
-    try {
-      setPaymentStatus("loading");
-      const res = await fetch(
-        `${apiURL}/organizers/profile-get/${orderData.organizerId}`,
-      );
-      const result = await res.json();
-      if (result.data) {
-        setOrganizer(result.data);
-        setPaymentQRCode(result.data.paymentURL);
-        setDynamicQR(result.data.dynamicQR);
-        setPaymentStatus("ready");
-
-        if (result.data.dynamicQR) {
-          const upiId = result.data.phone || "";
-          const name = encodeURIComponent(
-            result.data.organizationName || "EventSH",
-          );
-          setDynamicUpiString(
-            `upi://pay?pa=${upiId}&pn=${name}&am=${fee}&cu=INR`,
-          );
+  // Fetch organizer payment info
+  useEffect(() => {
+    if (!orderData?.organizerId) return;
+    const fetchOrganizer = async () => {
+      try {
+        setPaymentStatus("loading");
+        const res = await fetch(
+          `${apiURL}/organizers/profile-get/${orderData.organizerId}`,
+        );
+        const result = await res.json();
+        if (result.data) {
+          setOrganizer(result.data);
+          setDynamicQR(result.data.dynamicQR || false);
+          setMobileId(result.data.phone || "");
+          setCountry(result.data.country || "IN");
+          setPaymentStatus("ready");
+        } else {
+          setPaymentStatus("failed");
         }
-      } else {
+      } catch {
         setPaymentStatus("failed");
       }
-    } catch {
-      setPaymentStatus("failed");
-    }
-  };
+    };
+    fetchOrganizer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderData?.organizerId]);
+
+  // Build full payment QR URL
+  const paymentQRImageUrl = organizer?.paymentURL
+    ? organizer.paymentURL.startsWith("http")
+      ? organizer.paymentURL
+      : `${apiURL}${organizer.paymentURL}`
+    : "";
+
+  // Extract UPI from organizer's payment QR image
+  useEffect(() => {
+    if (!paymentQRImageUrl || upiId || country !== "IN") return;
+    const extractUpi = async () => {
+      try {
+        setLoading(true);
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = paymentQRImageUrl;
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx?.drawImage(img, 0, 0);
+        const imageData = ctx?.getImageData(0, 0, canvas.width, canvas.height);
+        if (imageData) {
+          const code = jsQR(imageData.data, imageData.width, imageData.height);
+          if (code?.data?.startsWith("upi://pay")) {
+            const params = new URLSearchParams(
+              code.data.replace("upi://pay?", ""),
+            );
+            const extracted = params.get("pa");
+            if (extracted) setUpiId(extracted);
+          }
+        }
+        setLoading(false);
+      } catch {
+        setLoading(false);
+      }
+    };
+    extractUpi();
+  }, [paymentQRImageUrl, upiId, country]);
+
+  // Generate dynamic UPI string (India)
+  function generateDynamicUpi(): string {
+    if (!upiId || !fee) return "";
+    return `upi://pay?pa=${upiId}&pn=${encodeURIComponent(
+      organizer?.organizationName || "Payment",
+    )}&am=${fee}&cu=INR&tn=${encodeURIComponent(
+      `Workshop hosting fee - ${orderData?.workshopName || ""}`,
+    )}`;
+  }
+
+  // Generate PayNow QR for SG (UEN-first; mobile proxy fallback)
+  async function generateDynamicPayNowQR(): Promise<string> {
+    if (!fee) return "";
+    return (
+      buildPayNowQrUrl({
+        organizer: {
+          UENNumber: organizer?.UENNumber,
+          payNowId: organizer?.payNowId || organizer?.phone || mobileId,
+        },
+        amount: fee,
+      }) || ""
+    );
+  }
+
+  // Auto-generate QR when showQR or dependencies change
+  useEffect(() => {
+    const loadDynamic = async () => {
+      if (showQR && fee > 0) {
+        if (upiId && country === "IN") {
+          setDynamicUpiString(generateDynamicUpi());
+        }
+        if (mobileId && country === "SG") {
+          const qr = await generateDynamicPayNowQR();
+          setDynamicUENString(qr);
+        }
+      }
+    };
+    loadDynamic();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [upiId, fee, country, showQR, mobileId]);
 
   const handlePayClick = () => {
-    if (!isMobile) return;
-    const paymentUrl = dynamicUpiString || "";
-    if (paymentUrl) window.location.href = paymentUrl;
+    if (!isMobile) {
+      setShowQR(true);
+      return;
+    }
+    const paymentUrl = dynamicUpiString || dynamicUENString || "";
+    if (!paymentUrl) return;
+    if (isIOS) window.location.assign(paymentUrl);
+    else window.location.href = paymentUrl;
   };
 
   const handleConfirmPayment = async () => {
@@ -130,11 +222,12 @@ const WorkshopRequestPaymentPage = () => {
       );
       const data = await res.json();
       if (data.success) {
-        setPaymentStatus("success");
+        setConfirmed(true);
         toast({
           title: "Payment Submitted!",
           description:
             "The organizer will verify and publish your workshop.",
+          duration: 8000,
         });
         setShowFeedback(true);
       } else {
@@ -170,7 +263,7 @@ const WorkshopRequestPaymentPage = () => {
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
-        {paymentStatus === "success" && (
+        {confirmed && (
           <Card className="border-green-200 bg-green-50">
             <CardContent className="py-8 text-center space-y-4">
               <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto" />
@@ -188,7 +281,7 @@ const WorkshopRequestPaymentPage = () => {
           </Card>
         )}
 
-        {paymentStatus !== "success" && (
+        {!confirmed && (
           <>
             <Card>
               <CardHeader className="pb-3">
@@ -228,7 +321,7 @@ const WorkshopRequestPaymentPage = () => {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <CreditCard className="h-5 w-5" />
+                  <QrCode className="h-5 w-5" />
                   {isFree ? "Booking Summary" : "Payment Summary"}
                 </CardTitle>
               </CardHeader>
@@ -239,44 +332,10 @@ const WorkshopRequestPaymentPage = () => {
                     {isFree ? "Free" : formatPrice(fee)}
                   </span>
                 </div>
-                {!isFree && (
-                  <>
-                    <Separator />
-                    <div className="flex justify-between items-center">
-                      <span className="font-semibold">Total Amount</span>
-                      <span className="font-bold text-xl text-primary">
-                        {formatPrice(fee)}
-                      </span>
-                    </div>
-                  </>
-                )}
               </CardContent>
             </Card>
 
-            {!isFree && (
-              <div className="flex items-center justify-center gap-2 text-sm">
-                <Clock className="h-4 w-4 text-orange-500" />
-                <span className="text-muted-foreground">
-                  Payment expires in
-                </span>
-                <Badge variant="outline" className="font-mono">
-                  {formatTime(timeLeft)}
-                </Badge>
-              </div>
-            )}
-
-            {paymentStatus === "loading" && !isFree && (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    Loading payment details...
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
-            {isFree && paymentStatus === "ready" && (
+            {isFree ? (
               <Card>
                 <CardContent className="py-6 space-y-4">
                   <div className="text-center">
@@ -308,97 +367,255 @@ const WorkshopRequestPaymentPage = () => {
                   </Button>
                 </CardContent>
               </Card>
-            )}
-
-            {paymentStatus === "ready" && !isFree && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base text-center">
-                    {organizer?.organizationName || "Organizer"} - Payment
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {dynamicQR && dynamicUpiString ? (
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="bg-white p-4 rounded-xl border-2 shadow-sm">
-                        <QRCode value={dynamicUpiString} size={200} />
-                      </div>
-                      <p className="text-xs text-muted-foreground text-center">
-                        Scan with any UPI app to pay
+            ) : (
+              <>
+                {paymentStatus === "loading" && (
+                  <Card className="rounded-2xl border-blue-200 bg-blue-50">
+                    <CardContent className="pt-6 flex flex-col items-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-4" />
+                      <p className="text-blue-900">
+                        Loading payment details...
                       </p>
-                      {isMobile && (
+                    </CardContent>
+                  </Card>
+                )}
+
+                {paymentStatus === "ready" && (
+                  <Card className="rounded-2xl shadow-sm">
+                    <CardHeader className="text-center">
+                      <CardTitle className="flex items-center justify-center gap-2">
+                        <QrCode className="w-5 h-5 text-blue-600" />
+                        Pay {formatPrice(fee)}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-center space-y-4">
+                      {!showQR ? (
                         <Button
-                          onClick={handlePayClick}
-                          className="w-full"
-                          style={{ backgroundColor: "#6366f1" }}
+                          className="w-full py-6 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-xl"
+                          onClick={() => setShowQR(true)}
                         >
-                          Pay {formatPrice(fee)} via UPI
+                          Generate Payment QR for {formatPrice(fee)}
                         </Button>
+                      ) : (
+                        <div className="space-y-4">
+                          {(dynamicUpiString || dynamicUENString) && (
+                            <div className="bg-gray-100 rounded-lg px-4 py-2 inline-block">
+                              <span className="text-xs text-gray-500">
+                                Expires in:{" "}
+                              </span>
+                              <span className="font-mono font-bold text-sm">
+                                {formatTime(timeLeft)}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Case 1: India + Dynamic QR + UPI extracted */}
+                          {country === "IN" && dynamicQR && dynamicUpiString && (
+                            <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-xl shadow-lg border-2 border-blue-200">
+                              <QRCode
+                                value={dynamicUpiString}
+                                size={260}
+                                fgColor="#000000"
+                                bgColor="#ffffff"
+                              />
+                              <Button
+                                className="w-full py-4 text-base font-semibold"
+                                onClick={handlePayClick}
+                              >
+                                {isMobile
+                                  ? "Tap to Pay"
+                                  : "Scan with any UPI App"}
+                              </Button>
+                              <p className="text-xs text-gray-500">
+                                Google Pay, PhonePe, Paytm, etc.
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Case 2: India + Dynamic QR ON but UPI not yet extracted */}
+                          {country === "IN" &&
+                            dynamicQR &&
+                            !dynamicUpiString &&
+                            loading && (
+                              <div className="flex justify-center animate-pulse">
+                                <div className="w-64 h-64 bg-gray-100 rounded-xl border-4 border-dashed border-gray-300 flex items-center justify-center">
+                                  <div className="text-center text-gray-500">
+                                    <QrCode className="w-12 h-12 mx-auto mb-2" />
+                                    <p>Generating Dynamic QR...</p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                          {/* Case 3: India + Dynamic QR ON but extraction failed */}
+                          {country === "IN" &&
+                            dynamicQR &&
+                            !dynamicUpiString &&
+                            !loading &&
+                            paymentQRImageUrl && (
+                              <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-xl shadow-lg border-2 border-blue-200">
+                                <img
+                                  src={paymentQRImageUrl}
+                                  alt="Payment QR"
+                                  className="w-64 h-64 object-contain"
+                                />
+                                <p className="font-bold text-lg text-green-700">
+                                  Pay {formatPrice(fee)}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Scan QR and enter the amount manually
+                                </p>
+                              </div>
+                            )}
+
+                          {/* Case 4: India + Dynamic QR OFF — static image */}
+                          {country === "IN" &&
+                            !dynamicQR &&
+                            paymentQRImageUrl && (
+                              <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-xl shadow-lg border-2 border-blue-200">
+                                <img
+                                  src={paymentQRImageUrl}
+                                  alt="Payment QR"
+                                  className="w-64 h-64 object-contain"
+                                />
+                                <p className="font-bold text-lg text-green-700">
+                                  Pay {formatPrice(fee)}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Scan QR and enter the amount manually
+                                </p>
+                              </div>
+                            )}
+
+                          {/* Case 5: Singapore + PayNow dynamic QR ready. dynamicUENString
+                              is already a rendered QR image URL (sgqrcode.com), not raw
+                              payload text — render it directly, don't re-encode it. */}
+                          {country === "SG" && dynamicUENString && (
+                            <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-xl shadow-lg border-2 border-blue-200">
+                              <img
+                                src={dynamicUENString}
+                                alt="PayNow QR"
+                                className="w-64 h-64 object-contain rounded-xl"
+                              />
+                              <p className="font-bold text-lg text-green-700">
+                                Pay {formatPrice(fee)}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Scan with PayNow / DBS / OCBC
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Case 6: Singapore but no phone for PayNow — static fallback */}
+                          {country === "SG" &&
+                            !dynamicUENString &&
+                            paymentQRImageUrl && (
+                              <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-xl shadow-lg border-2 border-blue-200">
+                                <img
+                                  src={paymentQRImageUrl}
+                                  alt="Payment QR"
+                                  className="w-64 h-64 object-contain"
+                                />
+                                <p className="font-bold text-lg text-green-700">
+                                  Pay {formatPrice(fee)}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Scan QR and enter the amount manually
+                                </p>
+                              </div>
+                            )}
+
+                          {/* Case 7: Other countries — static if available */}
+                          {country !== "IN" &&
+                            country !== "SG" &&
+                            paymentQRImageUrl && (
+                              <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-xl shadow-lg border-2 border-blue-200">
+                                <img
+                                  src={paymentQRImageUrl}
+                                  alt="Payment QR"
+                                  className="w-64 h-64 object-contain"
+                                />
+                                <p className="font-bold text-lg text-green-700">
+                                  Pay {formatPrice(fee)}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Scan QR to make payment
+                                </p>
+                              </div>
+                            )}
+
+                          {/* Case 8: No QR at all */}
+                          {!paymentQRImageUrl &&
+                            !dynamicUpiString &&
+                            !dynamicUENString &&
+                            !loading && (
+                              <div className="p-6 bg-yellow-50 border-2 border-yellow-200 rounded-xl text-center">
+                                <p className="text-yellow-800 font-semibold">
+                                  No payment QR configured
+                                </p>
+                                <p className="text-yellow-600 text-sm mt-1">
+                                  Please contact the organizer for payment
+                                  instructions.
+                                </p>
+                              </div>
+                            )}
+                        </div>
                       )}
-                    </div>
-                  ) : paymentQRCode ? (
-                    <div className="flex flex-col items-center gap-3">
-                      <img
-                        src={
-                          paymentQRCode.startsWith("/")
-                            ? `${apiURL?.replace("/api", "")}${paymentQRCode}`
-                            : paymentQRCode
-                        }
-                        alt="Payment QR"
-                        className="w-52 h-52 object-contain border rounded-xl"
-                      />
-                      <p className="text-xs text-muted-foreground text-center">
-                        Scan the organizer's payment QR code
+
+                      {showQR && (
+                        <div className="border-t pt-4 mt-4">
+                          <p className="text-sm text-gray-600 mb-3">
+                            After completing payment, click below to notify
+                            the organizer:
+                          </p>
+                          <Button
+                            className="w-full py-5 rounded-xl text-base font-bold bg-green-600 hover:bg-green-700"
+                            onClick={handleConfirmPayment}
+                            disabled={isProcessing}
+                          >
+                            {isProcessing ? (
+                              <>
+                                <Loader2
+                                  size={18}
+                                  className="mr-2 animate-spin"
+                                />{" "}
+                                Submitting...
+                              </>
+                            ) : (
+                              "I've Completed the Payment"
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {paymentStatus === "failed" && (
+                  <Card className="border-red-200">
+                    <CardContent className="py-8 text-center space-y-3">
+                      <p className="text-red-600 font-medium">
+                        Failed to load payment details
                       </p>
-                    </div>
-                  ) : (
-                    <div className="text-center py-6 text-muted-foreground">
-                      <p>
-                        Payment QR code not available. Please contact the
-                        organizer directly.
-                      </p>
-                    </div>
-                  )}
-
-                  <Separator />
-
-                  <Button
-                    className="w-full h-12 text-base font-semibold"
-                    style={{ backgroundColor: "#6366f1" }}
-                    disabled={isProcessing}
-                    onClick={handleConfirmPayment}
-                  >
-                    {isProcessing ? (
-                      <>
-                        <Loader2 className="h-5 w-5 animate-spin mr-2" />{" "}
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="h-5 w-5 mr-2" /> I've
-                        Completed the Payment
-                      </>
-                    )}
-                  </Button>
-                  <p className="text-[10px] text-center text-muted-foreground">
-                    After clicking, the organizer will verify your payment and
-                    publish your workshop.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
-            {paymentStatus === "failed" && (
-              <Card className="border-red-200">
-                <CardContent className="py-8 text-center space-y-3">
-                  <p className="text-red-600 font-medium">
-                    Failed to load payment details
-                  </p>
-                  <Button variant="outline" onClick={fetchOrganizerPayment}>
-                    Retry
-                  </Button>
-                </CardContent>
-              </Card>
+                      <Button
+                        className="w-full h-12 text-base font-semibold"
+                        style={{ backgroundColor: "#6366f1" }}
+                        disabled={isProcessing}
+                        onClick={handleConfirmPayment}
+                      >
+                        {isProcessing ? (
+                          <>
+                            <Loader2 className="h-5 w-5 animate-spin mr-2" />{" "}
+                            Submitting...
+                          </>
+                        ) : (
+                          "I've Already Paid — Notify Organizer"
+                        )}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
             )}
           </>
         )}
