@@ -602,25 +602,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   >({});
   const [showGuestForm, setShowGuestForm] = useState(false);
 
-  // Workshop Booking States — a visitor picks one or more workshop sessions
-  // (or a whole package) and books all of them in one combined checkout,
-  // same shape as the round-table selection flow above.
-  const [workshopSelections, setWorkshopSelections] = useState<
-    {
-      bookingType: "session" | "package";
-      sessionId?: string;
-      packageId?: string;
-      name: string;
-      unitPrice: number;
-      quantity: number;
-    }[]
-  >([]);
-  const [wsVisitorInfo, setWsVisitorInfo] = useState({
-    name: "",
-    email: "",
-    phone: "",
-  });
-  const [wsBookingLoading, setWsBookingLoading] = useState(false);
+  // Workshop Booking — picking a session or a combo navigates to a
+  // dedicated checkout page (same one-item-at-a-time flow as Visitor
+  // Tickets), so the only local state needed here is the "Buy Combo" dialog.
+  const [showWorkshopCombos, setShowWorkshopCombos] = useState(false);
 
   // Speaker Application States (Google-auth-first flow, like Rent a Stall).
   // The WhatsApp number is NEVER used to sign in any more — identity comes
@@ -6014,17 +5999,26 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             )}
 
             {/* Workshops */}
-            {((eventData?.workshopSessions &&
-              eventData.workshopSessions.length > 0) ||
-              (eventData?.workshopPackages &&
-                eventData.workshopPackages.length > 0)) && (
-              <section>
-                <h2 className="text-lg sm:text-2xl font-bold text-gray-900 mb-4">
-                  Workshops
-                </h2>
+            {eventData?.workshopSessions &&
+              eventData.workshopSessions.length > 0 && (
+                <section>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg sm:text-2xl font-bold text-gray-900">
+                      Workshops
+                    </h2>
+                    {eventData?.workshopPackages &&
+                      eventData.workshopPackages.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowWorkshopCombos(true)}
+                          className="text-sm font-semibold hover:underline flex items-center gap-1"
+                          style={{ color: design?.primaryColor || "#3b82f6" }}
+                        >
+                          <Package size={14} /> Buy Combo
+                        </button>
+                      )}
+                  </div>
 
-                {/* Individual sessions */}
-                {eventData.workshopSessions?.length > 0 && (
                   <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide">
                     {eventData.workshopSessions.map((session: any) => {
                       const seatsLeft =
@@ -6035,11 +6029,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             )
                           : null;
                       const soldOut = seatsLeft === 0;
-                      const sel = workshopSelections.find(
-                        (s) =>
-                          s.bookingType === "session" &&
-                          s.sessionId === session.id,
-                      );
                       return (
                         <div
                           key={session.id}
@@ -6085,451 +6074,134 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 </span>
                               )}
                             </div>
-                            {sel ? (
-                              <div className="flex items-center justify-between gap-2 pt-1">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setWorkshopSelections((prev) =>
-                                      prev
-                                        .map((s) =>
-                                          s === sel
-                                            ? { ...s, quantity: s.quantity - 1 }
-                                            : s,
-                                        )
-                                        .filter((s) => s.quantity > 0),
-                                    )
-                                  }
-                                  className="w-7 h-7 rounded-full border flex items-center justify-center text-gray-500 hover:bg-gray-50"
-                                >
-                                  <Minus size={12} />
-                                </button>
-                                <span className="text-sm font-semibold">
-                                  {sel.quantity}
-                                </span>
-                                <button
-                                  type="button"
-                                  disabled={
-                                    seatsLeft !== null &&
-                                    sel.quantity >= seatsLeft
-                                  }
-                                  onClick={() =>
-                                    setWorkshopSelections((prev) =>
-                                      prev.map((s) =>
-                                        s === sel
-                                          ? { ...s, quantity: s.quantity + 1 }
-                                          : s,
-                                      ),
-                                    )
-                                  }
-                                  className="w-7 h-7 rounded-full border flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-40"
-                                >
-                                  <Plus size={12} />
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled={soldOut}
-                                onClick={() =>
-                                  setWorkshopSelections((prev) => [
-                                    ...prev,
-                                    {
-                                      bookingType: "session",
-                                      sessionId: session.id,
-                                      name: session.name,
-                                      unitPrice: session.price || 0,
-                                      quantity: 1,
-                                    },
-                                  ])
-                                }
-                                className="w-full py-2 rounded-xl text-xs font-bold text-white transition-all disabled:opacity-40"
-                                style={{
-                                  background: `linear-gradient(135deg, ${design?.primaryColor || "#3b82f6"}, ${design?.secondaryColor || "#6366f1"})`,
-                                }}
-                              >
-                                {soldOut ? "Sold Out" : "Select"}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Packages */}
-                {eventData.workshopPackages?.length > 0 && (
-                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {eventData.workshopPackages.map((pkg: any) => {
-                      const included = (eventData.workshopSessions || []).filter(
-                        (s: any) => (pkg.sessionIds || []).includes(s.id),
-                      );
-                      const individualTotal = included.reduce(
-                        (sum: number, s: any) => sum + (s.price || 0),
-                        0,
-                      );
-                      const sel = workshopSelections.find(
-                        (s) =>
-                          s.bookingType === "package" && s.packageId === pkg.id,
-                      );
-                      return (
-                        <div
-                          key={pkg.id}
-                          className="rounded-2xl border border-gray-200 bg-white shadow-sm p-4 space-y-2"
-                        >
-                          <div className="flex items-center gap-2">
-                            <Package className="h-4 w-4 text-indigo-500" />
-                            <h3 className="font-bold text-gray-900 text-sm">
-                              {pkg.name}
-                            </h3>
-                          </div>
-                          {pkg.description && (
-                            <p className="text-xs text-gray-500">
-                              {pkg.description}
-                            </p>
-                          )}
-                          <div className="flex flex-wrap gap-1.5">
-                            {included.map((s: any) => (
-                              <Badge
-                                key={s.id}
-                                variant="secondary"
-                                className="text-[10px]"
-                              >
-                                {s.name}
-                              </Badge>
-                            ))}
-                          </div>
-                          <div className="flex items-center justify-between pt-1">
-                            <span className="font-bold text-sm text-gray-800">
-                              {formatPrice(pkg.price)}
-                            </span>
-                            {individualTotal > pkg.price && (
-                              <span className="text-[10px] text-green-600 font-medium">
-                                Save {formatPrice(individualTotal - pkg.price)}
-                              </span>
-                            )}
-                          </div>
-                          {sel ? (
-                            <div className="flex items-center justify-between gap-2 pt-1">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setWorkshopSelections((prev) =>
-                                    prev
-                                      .map((s) =>
-                                        s === sel
-                                          ? { ...s, quantity: s.quantity - 1 }
-                                          : s,
-                                      )
-                                      .filter((s) => s.quantity > 0),
-                                  )
-                                }
-                                className="w-7 h-7 rounded-full border flex items-center justify-center text-gray-500 hover:bg-gray-50"
-                              >
-                                <Minus size={12} />
-                              </button>
-                              <span className="text-sm font-semibold">
-                                {sel.quantity}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setWorkshopSelections((prev) =>
-                                    prev.map((s) =>
-                                      s === sel
-                                        ? { ...s, quantity: s.quantity + 1 }
-                                        : s,
-                                    ),
-                                  )
-                                }
-                                className="w-7 h-7 rounded-full border flex items-center justify-center text-gray-500 hover:bg-gray-50"
-                              >
-                                <Plus size={12} />
-                              </button>
-                            </div>
-                          ) : (
                             <button
                               type="button"
+                              disabled={soldOut || isEventOver(eventData)}
                               onClick={() =>
-                                setWorkshopSelections((prev) => [
-                                  ...prev,
-                                  {
-                                    bookingType: "package",
-                                    packageId: pkg.id,
-                                    name: pkg.name,
-                                    unitPrice: pkg.price || 0,
-                                    quantity: 1,
+                                navigate("/workshop-checkout", {
+                                  state: {
+                                    eventId: eventId || id,
+                                    organizerId: eventData?.organizer?._id,
+                                    eventTitle: eventData?.title,
+                                    bookingType: "session",
+                                    sessionId: session.id,
+                                    name: session.name,
+                                    description: session.description,
+                                    unitPrice: session.price || 0,
+                                    seatsRemaining: seatsLeft,
                                   },
-                                ])
+                                })
                               }
-                              className="w-full py-2 rounded-xl text-xs font-bold text-white transition-all"
+                              className="w-full py-2 rounded-xl text-xs font-bold text-white transition-all disabled:opacity-40"
                               style={{
                                 background: `linear-gradient(135deg, ${design?.primaryColor || "#3b82f6"}, ${design?.secondaryColor || "#6366f1"})`,
                               }}
                             >
-                              Select Package
+                              {soldOut ? "Sold Out" : "Book Now"}
                             </button>
-                          )}
+                          </div>
                         </div>
                       );
                     })}
                   </div>
-                )}
+                </section>
+              )}
 
-                {/* Booking Summary & Checkout */}
-                {workshopSelections.length > 0 && (
-                  <div className="mt-5 rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                    <div
-                      className="px-5 py-4 border-b"
-                      style={{
-                        background: `linear-gradient(135deg, ${design?.primaryColor}08, ${design?.secondaryColor}08)`,
-                      }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-7 h-7 rounded-lg flex items-center justify-center"
+            {/* Buy Combo dialog — packages only, same checkout flow as a
+                single workshop once one is picked. */}
+            <Dialog
+              open={showWorkshopCombos}
+              onOpenChange={setShowWorkshopCombos}
+            >
+              <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Workshop Combos</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3">
+                  {(eventData?.workshopPackages || []).map((pkg: any) => {
+                    const included = (
+                      eventData.workshopSessions || []
+                    ).filter((s: any) => (pkg.sessionIds || []).includes(s.id));
+                    const individualTotal = included.reduce(
+                      (sum: number, s: any) => sum + (s.price || 0),
+                      0,
+                    );
+                    return (
+                      <div
+                        key={pkg.id}
+                        className="rounded-2xl border border-gray-200 p-4 space-y-2"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Package className="h-4 w-4 text-indigo-500" />
+                          <h3 className="font-bold text-gray-900 text-sm">
+                            {pkg.name}
+                          </h3>
+                        </div>
+                        {pkg.description && (
+                          <p className="text-xs text-gray-500">
+                            {pkg.description}
+                          </p>
+                        )}
+                        <div className="flex flex-wrap gap-1.5">
+                          {included.map((s: any) => (
+                            <Badge
+                              key={s.id}
+                              variant="secondary"
+                              className="text-[10px]"
+                            >
+                              {s.name}
+                            </Badge>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="font-bold text-sm text-gray-800">
+                            {formatPrice(pkg.price)}
+                          </span>
+                          {individualTotal > pkg.price && (
+                            <span className="text-[10px] text-green-600 font-medium">
+                              Save {formatPrice(individualTotal - pkg.price)}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={isEventOver(eventData)}
+                          onClick={() => {
+                            setShowWorkshopCombos(false);
+                            navigate("/workshop-checkout", {
+                              state: {
+                                eventId: eventId || id,
+                                organizerId: eventData?.organizer?._id,
+                                eventTitle: eventData?.title,
+                                bookingType: "package",
+                                packageId: pkg.id,
+                                name: pkg.name,
+                                description: pkg.description,
+                                unitPrice: pkg.price || 0,
+                                seatsRemaining: null,
+                                included: included.map((s: any) => s.name),
+                              },
+                            });
+                          }}
+                          className="w-full py-2 rounded-xl text-xs font-bold text-white transition-all disabled:opacity-40"
                           style={{
-                            backgroundColor: design?.primaryColor,
-                            color: "white",
+                            background: `linear-gradient(135deg, ${design?.primaryColor || "#3b82f6"}, ${design?.secondaryColor || "#6366f1"})`,
                           }}
                         >
-                          <GraduationCap className="h-3.5 w-3.5" />
-                        </div>
-                        <span className="font-bold text-sm text-gray-800">
-                          Your Workshop Selection
-                        </span>
+                          Select Combo
+                        </button>
                       </div>
-                    </div>
-
-                    <div className="p-5 space-y-5">
-                      <div className="space-y-2">
-                        {workshopSelections.map((sel, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-gray-50/50"
-                          >
-                            <div>
-                              <p className="font-semibold text-sm text-gray-800">
-                                {sel.name}
-                              </p>
-                              <p className="text-[11px] text-gray-400">
-                                {sel.bookingType === "package"
-                                  ? "Package"
-                                  : "Workshop"}{" "}
-                                &middot; Qty {sel.quantity}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="font-bold text-sm text-gray-800">
-                                {formatPrice(sel.unitPrice * sel.quantity)}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setWorkshopSelections((prev) =>
-                                    prev.filter((_, i) => i !== idx),
-                                  )
-                                }
-                                className="w-6 h-6 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all text-sm"
-                              >
-                                &times;
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="flex justify-between items-center py-3 border-y border-gray-100">
-                        <span className="font-bold text-gray-800">
-                          Total Amount
-                        </span>
-                        <span
-                          className="text-xl font-black"
-                          style={{ color: design?.primaryColor }}
-                        >
-                          {formatPrice(
-                            workshopSelections.reduce(
-                              (sum, s) => sum + s.unitPrice * s.quantity,
-                              0,
-                            ),
-                          )}
-                        </span>
-                      </div>
-
-                      <div className="space-y-4">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                          Contact Details
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <div>
-                            <label className="text-[11px] font-medium text-gray-500 mb-1 block">
-                              Full Name *
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="John Doe"
-                              value={wsVisitorInfo.name}
-                              onChange={(e) =>
-                                setWsVisitorInfo({
-                                  ...wsVisitorInfo,
-                                  name: e.target.value,
-                                })
-                              }
-                              className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:border-transparent transition-shadow"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[11px] font-medium text-gray-500 mb-1 block">
-                              Email *
-                            </label>
-                            <input
-                              type="email"
-                              placeholder="john@email.com"
-                              value={wsVisitorInfo.email}
-                              onChange={(e) =>
-                                setWsVisitorInfo({
-                                  ...wsVisitorInfo,
-                                  email: e.target.value,
-                                })
-                              }
-                              className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:border-transparent transition-shadow"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[11px] font-medium text-gray-500 mb-1 block">
-                              Phone *
-                            </label>
-                            <PhoneInput
-                              value={wsVisitorInfo.phone}
-                              onChange={(value) =>
-                                setWsVisitorInfo({
-                                  ...wsVisitorInfo,
-                                  phone: value,
-                                })
-                              }
-                              enableSearch={true}
-                              countryCodeEditable={false}
-                              preferredCountries={[
-                                "in",
-                                "sg",
-                                "us",
-                                "gb",
-                                "ae",
-                              ]}
-                              inputProps={{ name: "wsPhone", required: true }}
-                              inputStyle={{
-                                width: "100%",
-                                height: "42px",
-                                borderRadius: "12px",
-                                fontSize: "14px",
-                                border: "1px solid #e5e7eb",
-                              }}
-                              containerStyle={{ width: "100%" }}
-                              buttonStyle={{
-                                borderRadius: "12px 0 0 12px",
-                                border: "1px solid #e5e7eb",
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        disabled={
-                          wsBookingLoading ||
-                          !wsVisitorInfo.name ||
-                          !wsVisitorInfo.email ||
-                          !wsVisitorInfo.phone
-                        }
-                        onClick={async () => {
-                          if (isEventOver(eventData)) {
-                            toast({
-                              title: "This event has ended",
-                              description:
-                                "Workshop bookings are closed for this event.",
-                              variant: "destructive",
-                            });
-                            return;
-                          }
-                          setWsBookingLoading(true);
-                          try {
-                            const organizerId = eventData?.organizer?._id;
-                            const eid = eventId || id;
-                            const bookingPromises = workshopSelections.map(
-                              (sel) =>
-                                fetch(`${apiURL}/workshop-bookings/create`, {
-                                  method: "POST",
-                                  headers: {
-                                    "Content-Type": "application/json",
-                                  },
-                                  body: JSON.stringify({
-                                    eventId: eid,
-                                    organizerId,
-                                    bookingType: sel.bookingType,
-                                    sessionId: sel.sessionId,
-                                    packageId: sel.packageId,
-                                    quantity: sel.quantity,
-                                    visitorName: wsVisitorInfo.name,
-                                    visitorEmail: wsVisitorInfo.email,
-                                    visitorPhone: wsVisitorInfo.phone,
-                                  }),
-                                }).then((r) => r.json()),
-                            );
-                            const results = await Promise.all(bookingPromises);
-                            const failed = results.filter((r) => !r.success);
-                            if (failed.length > 0) {
-                              toast({
-                                title: "Some bookings failed",
-                                description: failed
-                                  .map((f) => f.message)
-                                  .join(", "),
-                                variant: "destructive",
-                                duration: 5000,
-                              });
-                            }
-                            const successful = results.filter(
-                              (r) => r.success,
-                            );
-                            if (successful.length > 0) {
-                              navigate("/workshop-payment", {
-                                state: {
-                                  bookings: successful.map((r) => r.data),
-                                  eventTitle: eventData?.title,
-                                  totalAmount: successful.reduce(
-                                    (sum, r) => sum + r.data.amount,
-                                    0,
-                                  ),
-                                  organizerId: eventData?.organizer?._id,
-                                },
-                              });
-                            }
-                          } catch (err: any) {
-                            toast({
-                              title: "Booking failed",
-                              description: err.message,
-                              variant: "destructive",
-                              duration: 5000,
-                            });
-                          } finally {
-                            setWsBookingLoading(false);
-                          }
-                        }}
-                        className="w-full py-3.5 rounded-xl font-bold text-white text-sm transition-all disabled:opacity-50 shadow-lg hover:shadow-xl hover:opacity-95"
-                        style={{
-                          background: `linear-gradient(135deg, ${design?.primaryColor || "#3b82f6"}, ${design?.secondaryColor || "#6366f1"})`,
-                        }}
-                      >
-                        {wsBookingLoading
-                          ? "Processing..."
-                          : "Proceed to Payment"}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </section>
-            )}
+                    );
+                  })}
+                  {(!eventData?.workshopPackages ||
+                    eventData.workshopPackages.length === 0) && (
+                    <p className="text-sm text-gray-400 text-center py-6">
+                      No combos available for this event.
+                    </p>
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
 
             {/* Visitor Types */}
             {visitorTypes && visitorTypes.length > 0 && (

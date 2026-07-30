@@ -58,6 +58,7 @@ export class WorkshopBookingsService {
     private readonly bookingModel: Model<WorkshopBookingDocument>,
     @InjectModel("Event") private readonly eventModel: Model<any>,
     @InjectModel("Organizer") private readonly organizerModel: Model<any>,
+    @InjectModel("Ticket") private readonly ticketModel: Model<any>,
     private readonly otpService: OtpService,
   ) {}
 
@@ -287,12 +288,28 @@ export class WorkshopBookingsService {
     booking.qrCodePath = qrCodeBase64;
 
     try {
-      const pdfBuffer = await this.generateTicketPDF(
-        booking,
-        eventDoc,
-        qrCodeBase64,
-        country,
-      );
+      // A package booking gets ONE PDF with one ticket page per bundled
+      // workshop (all sharing this booking's QR — check-in is per-booking,
+      // not per-session) so the visitor still gets a single email/attachment
+      // covering every workshop in the combo.
+      const sessionNames =
+        booking.bookingType === "package"
+          ? booking.sessionIds.map(
+              (sid) =>
+                sessions.find((s: any) => s.id === sid)?.name || "Workshop",
+            )
+          : [booking.itemName];
+
+      const pdfBuffer =
+        booking.bookingType === "package"
+          ? await this.generatePackageTicketPDF(
+              booking,
+              eventDoc,
+              sessionNames,
+              qrCodeBase64,
+              country,
+            )
+          : await this.generateTicketPDF(booking, eventDoc, qrCodeBase64, country);
 
       const pdfDir = path.join(process.cwd(), "uploads", "workshopTickets");
       await fs.promises.mkdir(pdfDir, { recursive: true });
@@ -303,6 +320,11 @@ export class WorkshopBookingsService {
 
       booking.qrCodePath = `/uploads/workshopTickets/${pdfFileName}`;
 
+      const itemsLine =
+        booking.bookingType === "package"
+          ? `Includes: ${sessionNames.join(", ")}\n`
+          : "";
+
       if (booking.visitorPhone || booking.visitorEmail) {
         try {
           await this.otpService.sendWhatsAppMessage(
@@ -310,9 +332,10 @@ export class WorkshopBookingsService {
             `*Workshop Booking Confirmed!*\n\n` +
               `Event: *${eventDoc.title}*\n` +
               `Workshop: *${booking.itemName}*\n` +
+              itemsLine +
               `Quantity: ${booking.quantity}\n` +
               `Amount: *${formatCurrency(booking.amount, country)}*\n\n` +
-              `Your ticket with QR code is attached.`,
+              `Your ticket${booking.bookingType === "package" ? "s are" : " is"} attached.`,
           );
 
           await this.otpService.sendMediaMessage(
@@ -327,9 +350,10 @@ export class WorkshopBookingsService {
               message:
                 `Event: ${eventDoc.title}\n` +
                 `Workshop: ${booking.itemName}\n` +
+                itemsLine +
                 `Quantity: ${booking.quantity}\n` +
                 `Amount: ${formatCurrency(booking.amount, country)}\n\n` +
-                `Your ticket with QR code is attached.`,
+                `Your ticket${booking.bookingType === "package" ? "s are" : " is"} attached.`,
               senderConfig: (organizerDoc as any)?.emailConfig,
             },
           );
@@ -342,6 +366,43 @@ export class WorkshopBookingsService {
     }
 
     await booking.save();
+
+    // Mirror this booking into the Tickets collection — purely so the buyer
+    // shows up alongside every other visitor in the organizer's Visitors tab
+    // and cross-event CRM (both already query Tickets). Best-effort: this
+    // read-model write must never fail a confirmed workshop payment.
+    try {
+      await this.ticketModel.create({
+        ticketId: `WS-${booking._id}`,
+        eventId: booking.eventId,
+        organizerId: booking.organizerId,
+        eventTitle: eventDoc.title,
+        eventDate: eventDoc.startDate,
+        eventTime: eventDoc.time || "",
+        eventVenue: eventDoc.location || eventDoc.address || "TBA",
+        customerName: booking.visitorName,
+        customerEmail: booking.visitorEmail,
+        customerWhatsapp: booking.visitorPhone,
+        ticketDetails: [
+          {
+            ticketType: `Workshop: ${booking.itemName}`,
+            quantity: booking.quantity,
+            price: booking.amount,
+          },
+        ],
+        totalAmount: booking.amount,
+        paymentConfirmed: true,
+        status: "confirmed",
+        purchaseDate: new Date(),
+        qrCode: booking.qrCodeData,
+        pdfPath: booking.qrCodePath,
+      });
+    } catch (mirrorErr) {
+      this.logger.warn(
+        "Failed to mirror workshop booking into Tickets (Visitors/CRM listing)",
+        mirrorErr,
+      );
+    }
 
     this.logger.log(`Workshop payment confirmed for booking ${bookingId}`);
 
@@ -485,12 +546,23 @@ export class WorkshopBookingsService {
         });
 
     const event = await this.eventModel.findById(booking.eventId);
-    const pdfBuffer = await this.generateTicketPDF(
-      booking,
-      event,
-      qrCodeBase64,
-      country,
-    );
+    const sessions: any[] = event?.workshopSessions || [];
+    const sessionNames =
+      booking.bookingType === "package"
+        ? booking.sessionIds.map(
+            (sid) => sessions.find((s: any) => s.id === sid)?.name || "Workshop",
+          )
+        : [booking.itemName];
+    const pdfBuffer =
+      booking.bookingType === "package"
+        ? await this.generatePackageTicketPDF(
+            booking,
+            event,
+            sessionNames,
+            qrCodeBase64,
+            country,
+          )
+        : await this.generateTicketPDF(booking, event, qrCodeBase64, country);
 
     const pdfDir = path.join(process.cwd(), "uploads", "workshopTickets");
     await fs.promises.mkdir(pdfDir, { recursive: true });
@@ -591,6 +663,140 @@ export class WorkshopBookingsService {
     const orgName =
       (org as any)?.organizationName || (org as any)?.name || "EventSH";
     const html = this.generateTicketHTML(booking, event, qrBase64, country, orgName);
+
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+
+    try {
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: "networkidle0", timeout: 20000 });
+      const pdfBuffer = await page.pdf({
+        format: "A4",
+        printBackground: true,
+        margin: { top: "10mm", right: "0mm", bottom: "0mm", left: "0mm" },
+      });
+      return Buffer.from(pdfBuffer);
+    } finally {
+      await browser.close();
+    }
+  }
+
+  // One ticket page per bundled workshop, all sharing this booking's QR
+  // (check-in is per-booking, not per-session) — joined with a hard page
+  // break so each prints/displays as its own ticket inside one PDF.
+  private generatePackageTicketHTML(
+    booking: WorkshopBooking,
+    event: any,
+    sessionNames: string[],
+    qrBase64: string,
+    country: string,
+    orgName?: string,
+  ): string {
+    const eventDate = new Date(event.startDate).toLocaleDateString();
+    const pages = sessionNames
+      .map(
+        (name, idx) => `
+        <div class="container" style="${idx > 0 ? "page-break-before: always;" : ""}">
+          <div class="header">
+            <h1>${escapeHtml(orgName || "EventSH")}</h1>
+            <p>Workshop Package Booking Confirmation</p>
+          </div>
+
+          <div class="event-title">${escapeHtml(event.title)}</div>
+
+          <div class="details-section">
+            <h3>Event Details</h3>
+            <div class="detail-row"><span class="label">Date</span><span class="value">${eventDate}</span></div>
+            <div class="detail-row"><span class="label">Location</span><span class="value">${escapeHtml(event.location || "TBA")}</span></div>
+          </div>
+
+          <div class="details-section">
+            <h3>Visitor Details</h3>
+            <div class="detail-row"><span class="label">Name</span><span class="value">${escapeHtml(booking.visitorName)}</span></div>
+            <div class="detail-row"><span class="label">Email</span><span class="value">${escapeHtml(booking.visitorEmail)}</span></div>
+            <div class="detail-row"><span class="label">Phone</span><span class="value">${escapeHtml(booking.visitorPhone)}</span></div>
+          </div>
+
+          <div class="details-section">
+            <h3>Workshop ${idx + 1} of ${sessionNames.length}</h3>
+            <div class="detail-row"><span class="label">Workshop</span><span class="value">${escapeHtml(name)}</span></div>
+            <div class="detail-row"><span class="label">Package</span><span class="value">${escapeHtml(booking.itemName)}</span></div>
+            <div class="detail-row"><span class="label">Quantity</span><span class="value">${booking.quantity}</span></div>
+          </div>
+
+          ${
+            idx === 0
+              ? `<div class="details-section">
+                  <div class="total-row">
+                    <span>Total Amount Paid (Package)</span>
+                    <span>${formatCurrency(booking.amount, country)}</span>
+                  </div>
+                </div>`
+              : ""
+          }
+
+          <div class="qr-section">
+            <img src="${qrBase64}" alt="QR Code" />
+            <p>Scan at Workshop Entrance - Use Eventsh App Only</p>
+          </div>
+
+          <div class="footer">
+            <p>Powered by EventSH</p>
+          </div>
+        </div>`,
+      )
+      .join("");
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 0; padding: 10px 15px; background-color: #f5f5f5; font-size: 10px; }
+          .container { max-width: 600px; margin: 0 auto; background-color: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+          .header h1 { font-size: 22px; color: #0891b2; margin-bottom: 5px; }
+          .header p { font-size: 12px; color: #666; margin-top: 0; }
+          .event-title { font-size: 20px; margin: 15px 0; font-weight: bold; }
+          .details-section { margin: 15px 0; }
+          .details-section h3 { font-size: 12px; color: #666; margin-bottom: 6px; text-transform: uppercase; border-bottom: 2px solid #0891b2; display: inline-block; }
+          .detail-row { padding: 5px 0; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; font-size: 10px; }
+          .detail-row .label { color: #666; }
+          .detail-row .value { font-weight: bold; }
+          .total-row { padding: 8px 0; font-size: 14px; font-weight: bold; color: #0891b2; border-top: 2px solid #0891b2; margin-top: 8px; display: flex; justify-content: space-between; }
+          .qr-section { text-align: center; margin: 15px 0; }
+          .qr-section img { width: 160px; height: 160px; }
+          .qr-section p { font-size: 9px; color: #999; margin-top: 4px; }
+          .footer { text-align: center; font-size: 8px; color: #999; margin-top: 15px; padding-top: 10px; border-top: 1px solid #eee; }
+          @media print { body { background: white; } .container { box-shadow: none; } }
+        </style>
+      </head>
+      <body>
+        ${pages}
+      </body>
+      </html>
+    `;
+  }
+
+  private async generatePackageTicketPDF(
+    booking: WorkshopBooking,
+    event: any,
+    sessionNames: string[],
+    qrBase64: string,
+    country: string,
+  ): Promise<Buffer> {
+    const org = await this.organizerModel.findById(booking.organizerId);
+    const orgName =
+      (org as any)?.organizationName || (org as any)?.name || "EventSH";
+    const html = this.generatePackageTicketHTML(
+      booking,
+      event,
+      sessionNames,
+      qrBase64,
+      country,
+      orgName,
+    );
 
     const browser = await puppeteer.launch({
       headless: true,

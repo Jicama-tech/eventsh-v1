@@ -31,6 +31,7 @@ const TicketPaymentPage = lazy(() => import("./components/user/ticketPaymentPage
 const TicketCart = lazy(() => import("./components/user/ticketCart"));
 const RoundTablePaymentPage = lazy(() => import("./components/user/roundTablePaymentPage"));
 const WorkshopPaymentPage = lazy(() => import("./components/user/workshopPaymentPage"));
+const WorkshopCheckoutPage = lazy(() => import("./components/user/workshopCheckoutPage"));
 
 // Auth pages
 const AdminLogs = lazy(() => import("./components/auth/loginAdmin").then(m => ({ default: m.AdminLogs })));
@@ -99,6 +100,7 @@ function CleanStorefrontUrl() {
       "/speaker-payment",
       "/round-table-payment",
       "/workshop-payment",
+      "/workshop-checkout",
       "/events",
       "/organizer-dashboard",
       "/organizer",
@@ -276,6 +278,7 @@ function AppContent() {
           <Route path="/speaker-payment" element={<SpeakerPaymentPage />} />
           <Route path="/round-table-payment" element={<RoundTablePaymentPage />} />
           <Route path="/workshop-payment" element={<WorkshopPaymentPage />} />
+          <Route path="/workshop-checkout" element={<WorkshopCheckoutPage />} />
           <Route
             path="/event-login"
             element={<Navigate to="/organizer/login" replace />}
@@ -406,6 +409,7 @@ function AppContent() {
           <Route path="/speaker-payment" element={<SpeakerPaymentPage />} />
           <Route path="/round-table-payment" element={<RoundTablePaymentPage />} />
           <Route path="/workshop-payment" element={<WorkshopPaymentPage />} />
+          <Route path="/workshop-checkout" element={<WorkshopCheckoutPage />} />
                   <Route
                     path="/organizer-dashboard"
                     element={
@@ -488,6 +492,7 @@ function AppContent() {
           <Route path="/speaker-payment" element={<SpeakerPaymentPage />} />
           <Route path="/round-table-payment" element={<RoundTablePaymentPage />} />
           <Route path="/workshop-payment" element={<WorkshopPaymentPage />} />
+          <Route path="/workshop-checkout" element={<WorkshopCheckoutPage />} />
 
                   <Route
                     path="/login"

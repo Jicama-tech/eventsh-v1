@@ -8,6 +8,7 @@ import {
 } from "./entities/workshop-booking.entity";
 import { EventSchema } from "../events/schemas/event.schema";
 import { OrganizerSchema } from "../organizers/schemas/organizer.schema";
+import { TicketSchema } from "../tickets/entities/ticket.entity";
 import { OtpModule } from "../otp/otp.module";
 
 @Module({
@@ -16,6 +17,7 @@ import { OtpModule } from "../otp/otp.module";
       { name: WorkshopBooking.name, schema: WorkshopBookingSchema },
       { name: "Event", schema: EventSchema },
       { name: "Organizer", schema: OrganizerSchema },
+      { name: "Ticket", schema: TicketSchema },
     ]),
     OtpModule,
   ],
