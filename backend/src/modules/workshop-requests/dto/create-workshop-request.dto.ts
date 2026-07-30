@@ -35,6 +35,14 @@ export class CreateWorkshopRequestDto {
   hostImage?: string;
 
   @IsString()
+  @IsOptional()
+  hostAccountName?: string;
+
+  @IsString()
+  @IsOptional()
+  hostAccountDetails?: string;
+
+  @IsString()
   workshopName: string;
 
   @IsString()

@@ -88,7 +88,6 @@ import {
 } from "@/lib/revenue";
 import { stallStage } from "@/lib/stallStatus";
 import RoundTableBookings from "@/components/organizer/RoundTableBookings";
-import WorkshopBookings from "@/components/organizer/WorkshopBookings";
 import WorkshopHostRequests from "@/components/organizer/WorkshopHostRequests";
 import { useCountry } from "@/hooks/useCountry";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
@@ -2183,7 +2182,6 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         exhibitors: false,
         speakers: false,
         roundtables: false,
-        workshops: false,
         workshopRequests: false,
       };
     }
@@ -2201,15 +2199,17 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       Array.isArray(e.speakerSlotTemplates) && e.speakerSlotTemplates.length > 0;
     const roundtables =
       Array.isArray(e.venueRoundTables) && e.venueRoundTables.length > 0;
-    const workshops =
-      Array.isArray(e.workshopSessions) && e.workshopSessions.length > 0;
-    const workshopRequests = !!e.workshopHostingOpen;
+    // Single consolidated "Workshop" tab — shows whenever host applications
+    // are open OR the event already has workshop sessions (organizer-added
+    // or previously approved from a host application).
+    const workshopRequests =
+      !!e.workshopHostingOpen ||
+      (Array.isArray(e.workshopSessions) && e.workshopSessions.length > 0);
     return {
       visitors,
       exhibitors,
       speakers,
       roundtables,
-      workshops,
       workshopRequests,
     };
   };
@@ -2223,7 +2223,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     // full event loads in case Layout / Speakers / etc. become available.
     const provisional = eventHasSection(event);
     const provisionalFirst = (
-      ["visitors", "exhibitors", "speakers", "roundtables", "workshops"] as const
+      ["visitors", "exhibitors", "speakers", "roundtables", "workshopRequests"] as const
     ).find((k) => provisional[k]);
     setDetailTab(provisionalFirst ?? "visitors");
 
@@ -2244,7 +2244,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     // 2) Re-pick landing tab now that we know what the event actually has.
     const sections = eventHasSection(fullEvent);
     const firstAvailable = (
-      ["visitors", "exhibitors", "speakers", "roundtables", "workshops"] as const
+      ["visitors", "exhibitors", "speakers", "roundtables", "workshopRequests"] as const
     ).find((k) => sections[k]);
     if (firstAvailable && !sections[provisionalFirst as keyof typeof sections]) {
       setDetailTab(firstAvailable);
@@ -2748,7 +2748,6 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   (sections.exhibitors ? 1 : 0) +
                   (sections.speakers ? 1 : 0) +
                   (sections.roundtables ? 1 : 0) +
-                  (sections.workshops ? 1 : 0) +
                   (sections.workshopRequests ? 1 : 0);
                 if (visibleCount === 0) {
                   return (
@@ -2769,8 +2768,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     4: "grid-cols-4",
                     5: "grid-cols-5",
                     6: "grid-cols-6",
-                    7: "grid-cols-7",
-                  } as Record<number, string>)[visibleCount] || "grid-cols-7";
+                  } as Record<number, string>)[visibleCount] || "grid-cols-6";
                 return (
               <Tabs
                 value={detailTab}
@@ -2791,13 +2789,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   {sections.roundtables && (
                     <TabsTrigger value="roundtables">Round Tables</TabsTrigger>
                   )}
-                  {sections.workshops && (
-                    <TabsTrigger value="workshops">Workshops</TabsTrigger>
-                  )}
                   {sections.workshopRequests && (
-                    <TabsTrigger value="workshopRequests">
-                      Workshop Requests
-                    </TabsTrigger>
+                    <TabsTrigger value="workshopRequests">Workshop</TabsTrigger>
                   )}
                 </TabsList>
 
@@ -3456,14 +3449,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 </TabsContent>
                 )}
 
-                {/* WORKSHOPS TAB — reuses the dedicated component */}
-                {sections.workshops && (
-                <TabsContent value="workshops" className="pt-4">
-                  <WorkshopBookings eventId={selectedEvent._id} />
-                </TabsContent>
-                )}
-
-                {/* WORKSHOP REQUESTS TAB — host self-applications */}
+                {/* WORKSHOP TAB — host self-applications */}
                 {sections.workshopRequests && (
                 <TabsContent value="workshopRequests" className="pt-4">
                   <WorkshopHostRequests eventId={selectedEvent._id} />

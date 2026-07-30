@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -233,14 +233,6 @@ const WorkshopHostRequests = ({ eventId }: WorkshopHostRequestsProps) => {
     }
   };
 
-  const { pendingCount, liveCount } = useMemo(
-    () => ({
-      pendingCount: requests.filter((r) => r.status === "Pending").length,
-      liveCount: requests.filter((r) => r.status === "Completed").length,
-    }),
-    [requests],
-  );
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -279,31 +271,6 @@ const WorkshopHostRequests = ({ eventId }: WorkshopHostRequestsProps) => {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-gray-800">
-              {requests.length}
-            </p>
-            <p className="text-xs text-gray-500">Total Applications</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-yellow-600">
-              {pendingCount}
-            </p>
-            <p className="text-xs text-gray-500">Pending Review</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-green-600">{liveCount}</p>
-            <p className="text-xs text-gray-500">Live Workshops</p>
-          </CardContent>
-        </Card>
-      </div>
-
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -439,6 +406,24 @@ const WorkshopHostRequests = ({ eventId }: WorkshopHostRequestsProps) => {
                   </p>
                 )}
               </div>
+
+              {(selected.hostAccountName || selected.hostAccountDetails) && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-1">
+                  <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">
+                    Payout Account
+                  </p>
+                  {selected.hostAccountName && (
+                    <p className="text-sm text-gray-800">
+                      {selected.hostAccountName}
+                    </p>
+                  )}
+                  {selected.hostAccountDetails && (
+                    <p className="text-sm text-gray-600">
+                      {selected.hostAccountDetails}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {selected.workshopDescription && (
                 <div className="rounded-lg border p-3">

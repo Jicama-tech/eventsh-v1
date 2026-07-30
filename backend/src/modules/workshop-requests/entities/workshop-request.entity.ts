@@ -51,6 +51,15 @@ export class WorkshopRequest {
   @Prop()
   hostImage?: string;
 
+  // Where to pay the host — only collected when the workshop is priced
+  // (visitors pay to attend), so the organizer has somewhere to send the
+  // host's share. Free-text: bank account, UPI ID, PayNow, etc.
+  @Prop()
+  hostAccountName?: string;
+
+  @Prop()
+  hostAccountDetails?: string;
+
   // The proposed workshop itself.
   @Prop({ required: true })
   workshopName: string;

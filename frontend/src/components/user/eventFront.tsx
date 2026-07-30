@@ -628,6 +628,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     proposedStartTime: "",
     proposedEndTime: "",
     maxSeats: "",
+    // Only collected/required when proposedPrice > 0 — where the organizer
+    // should send the host's payout.
+    hostAccountName: "",
+    hostAccountDetails: "",
     photoFile: null as File | null,
     photoPreview: "",
   });
@@ -2551,6 +2555,20 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       });
       return;
     }
+    const isPaidWorkshop = (Number(workshopHostFormData.proposedPrice) || 0) > 0;
+    if (
+      isPaidWorkshop &&
+      (!workshopHostFormData.hostAccountName ||
+        !workshopHostFormData.hostAccountDetails)
+    ) {
+      toast({
+        title: "Payout account required",
+        description:
+          "Since visitors will pay for this workshop, add an account name and payment details so the organizer knows where to pay you.",
+        variant: "destructive",
+      });
+      return;
+    }
     setWorkshopHostSubmitting(true);
     try {
       const organizerId = String(
@@ -2590,6 +2608,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           "maxSeats",
           String(Number(workshopHostFormData.maxSeats) || 0),
         );
+        fd.append(
+          "hostAccountName",
+          isPaidWorkshop ? workshopHostFormData.hostAccountName : "",
+        );
+        fd.append(
+          "hostAccountDetails",
+          isPaidWorkshop ? workshopHostFormData.hostAccountDetails : "",
+        );
         res = await fetch(`${apiURL}/workshop-requests/apply-with-image`, {
           method: "POST",
           body: fd,
@@ -2611,6 +2637,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             proposedStartTime: workshopHostFormData.proposedStartTime,
             proposedEndTime: workshopHostFormData.proposedEndTime,
             maxSeats: Number(workshopHostFormData.maxSeats) || 0,
+            hostAccountName: isPaidWorkshop
+              ? workshopHostFormData.hostAccountName
+              : "",
+            hostAccountDetails: isPaidWorkshop
+              ? workshopHostFormData.hostAccountDetails
+              : "",
           }),
         });
       }
@@ -11005,6 +11037,52 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       />
                     </div>
                   </div>
+
+                  {/* Only relevant once the host has priced the workshop —
+                      that's when the organizer needs somewhere to pay them. */}
+                  {(Number(workshopHostFormData.proposedPrice) || 0) > 0 && (
+                    <div className="border-t pt-4 space-y-3">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        Payout Account (this is a paid workshop)
+                      </p>
+                      <div>
+                        <label className="text-xs font-medium text-gray-700 block mb-1">
+                          Account Holder Name *
+                        </label>
+                        <input
+                          className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                          value={workshopHostFormData.hostAccountName}
+                          onChange={(e) =>
+                            setWorkshopHostFormData((p) => ({
+                              ...p,
+                              hostAccountName: e.target.value,
+                            }))
+                          }
+                          placeholder="Name on the account"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-700 block mb-1">
+                          Account Details *
+                        </label>
+                        <input
+                          className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                          value={workshopHostFormData.hostAccountDetails}
+                          onChange={(e) =>
+                            setWorkshopHostFormData((p) => ({
+                              ...p,
+                              hostAccountDetails: e.target.value,
+                            }))
+                          }
+                          placeholder="Bank account, UPI ID, or PayNow number"
+                        />
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          The organizer will use this to pay you for the
+                          workshop.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
