@@ -88,6 +88,7 @@ const EVENT_TAB_SECTIONS: { key: string; label: string }[] = [
   { key: "tables", label: "Space / AddOns" },
   { key: "speakers", label: "Speakers" },
   { key: "workshops", label: "Workshops" },
+  { key: "workshopRequests", label: "Workshop Requests" },
   { key: "roundtables", label: "Round Tables" },
   { key: "layout", label: "Space Layout" },
 ];

@@ -412,6 +412,8 @@ export class EventsController {
         body.isShowcase = body.isShowcase === "true";
       if (typeof body.isDemo === "string")
         body.isDemo = body.isDemo === "true";
+      if (typeof body.workshopHostingOpen === "string")
+        body.workshopHostingOpen = body.workshopHostingOpen === "true";
       if (typeof body.features === "string")
         body.features = JSON.parse(body.features);
       if (typeof body.socialMedia === "string")
@@ -946,6 +948,8 @@ export class EventsController {
         body.isShowcase = body.isShowcase === "true";
       if (typeof body.isDemo === "string")
         body.isDemo = body.isDemo === "true";
+      if (typeof body.workshopHostingOpen === "string")
+        body.workshopHostingOpen = body.workshopHostingOpen === "true";
       if (typeof body.features === "string")
         body.features = JSON.parse(body.features);
       if (typeof body.socialMedia === "string")

@@ -729,6 +729,12 @@ export class Event {
   @Prop({ type: [Object], default: [] })
   workshopPackages: WorkshopPackage[];
 
+  // Public "Host a Workshop" self-application entry point on the eventfront.
+  // Off by default — the organizer opts in per event, same as hasSpeakers/
+  // hasRoundTables gate their respective sections.
+  @Prop({ default: false })
+  workshopHostingOpen: boolean;
+
   @Prop({ type: [Object], default: [] })
   termsAndConditionsforStalls?: termsAndConditionsforStalls[];
 

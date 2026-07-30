@@ -607,6 +607,38 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // Tickets), so the only local state needed here is the "Buy Combo" dialog.
   const [showWorkshopCombos, setShowWorkshopCombos] = useState(false);
 
+  // Workshop Host Application States — same Google-auth-first, self-service
+  // pattern as Apply-as-Speaker / Rent-a-Stall, minus any physical
+  // placement: apply -> organizer reviews -> (optional hosting fee) -> live.
+  const [showWorkshopHostDialog, setShowWorkshopHostDialog] = useState(false);
+  const [workshopHostStep, setWorkshopHostStep] = useState<
+    "auth" | "details" | "status"
+  >("auth");
+  const [workshopHostGoogleLoading, setWorkshopHostGoogleLoading] =
+    useState(false);
+  const [workshopHostAuthedEmail, setWorkshopHostAuthedEmail] = useState("");
+  const [workshopHostFormData, setWorkshopHostFormData] = useState({
+    hostName: "",
+    hostEmail: "",
+    hostPhone: "",
+    hostBio: "",
+    workshopName: "",
+    workshopDescription: "",
+    proposedPrice: "0",
+    proposedStartTime: "",
+    proposedEndTime: "",
+    maxSeats: "",
+    photoFile: null as File | null,
+    photoPreview: "",
+  });
+  const [workshopHostSubmitting, setWorkshopHostSubmitting] = useState(false);
+  const [existingWorkshopHostRequest, setExistingWorkshopHostRequest] =
+    useState<any>(null);
+  const workshopHostPopupRef = useRef<Window | null>(null);
+  const [workshopHostCrop, setWorkshopHostCrop] = useState<{
+    url: string;
+  } | null>(null);
+
   // Speaker Application States (Google-auth-first flow, like Rent a Stall).
   // The WhatsApp number is NEVER used to sign in any more — identity comes
   // from the Google-verified email; the phone is only an optional contact
@@ -2326,6 +2358,301 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           : "",
         isCharged: request.isCharged,
         fee: request.fee,
+      },
+    });
+  };
+
+  // ══════════════ WORKSHOP HOST APPLICATION ══════════════
+  const openWorkshopHostApply = () => {
+    setWorkshopHostStep("auth");
+    setWorkshopHostAuthedEmail("");
+    setExistingWorkshopHostRequest(null);
+    setWorkshopHostFormData({
+      hostName: "",
+      hostEmail: "",
+      hostPhone: "",
+      hostBio: "",
+      workshopName: "",
+      workshopDescription: "",
+      proposedPrice: "0",
+      proposedStartTime: "",
+      proposedEndTime: "",
+      maxSeats: "",
+      photoFile: null,
+      photoPreview: "",
+    });
+    setShowWorkshopHostDialog(true);
+  };
+
+  const handleGoogleWorkshopHostLogin = () => {
+    const url = `${apiURL}/auth/google-member`;
+    const w = 480;
+    const h = 600;
+    const left =
+      typeof window !== "undefined"
+        ? window.screenX + (window.outerWidth - w) / 2
+        : 0;
+    const top =
+      typeof window !== "undefined"
+        ? window.screenY + (window.outerHeight - h) / 2
+        : 0;
+    const popup = window.open(
+      url,
+      "eventsh-google-workshop-host",
+      `width=${w},height=${h},left=${left},top=${top}`,
+    );
+    if (!popup) {
+      toast({
+        duration: 5000,
+        title: "Popup blocked",
+        description: "Allow pop-ups for this site and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    workshopHostPopupRef.current = popup;
+    setWorkshopHostGoogleLoading(true);
+  };
+
+  // Finds any live application this email already owns for the event and
+  // routes to the status screen; otherwise opens a blank form with the
+  // verified email locked in.
+  const lookupWorkshopHostByEmail = async (email: string, name?: string) => {
+    const clean = String(email || "").trim().toLowerCase();
+    if (!clean) {
+      setWorkshopHostGoogleLoading(false);
+      toast({
+        duration: 5000,
+        title: "Sign-in failed",
+        description: "Couldn't read your Google email. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setWorkshopHostAuthedEmail(clean);
+    setWorkshopHostFormData((p) => ({
+      ...p,
+      hostEmail: clean,
+      hostName: p.hostName || name || "",
+    }));
+    try {
+      const eid = eventId || id;
+      const res = await fetch(`${apiURL}/workshop-requests/event/${eid}`);
+      const data = await res.json();
+      const mine = (data?.data || []).find(
+        (r: any) =>
+          String(r.hostEmail || "").toLowerCase() === clean &&
+          r.status !== "Rejected" &&
+          r.status !== "Cancelled",
+      );
+      if (mine) {
+        setExistingWorkshopHostRequest(mine);
+        setWorkshopHostStep("status");
+      } else {
+        setWorkshopHostStep("details");
+      }
+    } catch (err) {
+      console.error("Workshop host application lookup failed:", err);
+      setWorkshopHostStep("details");
+    } finally {
+      setWorkshopHostGoogleLoading(false);
+    }
+  };
+
+  // Same dual-channel handshake (postMessage + polled localStorage) as the
+  // speaker/stall Google flows, so the result lands even when the browser
+  // severs window.opener on the cross-origin popup navigation.
+  useEffect(() => {
+    if (!showWorkshopHostDialog || !workshopHostGoogleLoading) return;
+    const KEY = "eventsh:google-member";
+    const prev = (() => {
+      try {
+        return localStorage.getItem(KEY) || "";
+      } catch {
+        return "";
+      }
+    })();
+    let handled = false;
+    let sawPopupClosed = false;
+
+    const onMessage = (ev: MessageEvent) => {
+      const data = ev?.data;
+      if (!data || data.kind !== "eventsh:google-member" || handled) return;
+      handled = true;
+      lookupWorkshopHostByEmail(data.email || "", data.name || "");
+    };
+    window.addEventListener("message", onMessage);
+
+    const t = window.setInterval(() => {
+      try {
+        const raw = localStorage.getItem(KEY);
+        if (raw && raw !== prev && !handled) {
+          handled = true;
+          window.clearInterval(t);
+          localStorage.removeItem(KEY);
+          const parsed = JSON.parse(raw);
+          lookupWorkshopHostByEmail(parsed?.email || "", parsed?.name || "");
+          return;
+        }
+      } catch {
+        // ignore — private mode, quota, etc.
+      }
+      if (
+        workshopHostPopupRef.current &&
+        workshopHostPopupRef.current.closed &&
+        !handled
+      ) {
+        if (sawPopupClosed) {
+          window.clearInterval(t);
+          setWorkshopHostGoogleLoading(false);
+        } else {
+          sawPopupClosed = true;
+        }
+      }
+    }, 500);
+
+    return () => {
+      window.removeEventListener("message", onMessage);
+      window.clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showWorkshopHostDialog, workshopHostGoogleLoading]);
+
+  const closeWorkshopHostCropper = () => {
+    setWorkshopHostCrop((cur) => {
+      if (cur?.url?.startsWith("blob:")) URL.revokeObjectURL(cur.url);
+      return null;
+    });
+  };
+
+  const applyWorkshopHostCrop = (croppedFile: File) => {
+    setWorkshopHostFormData((p) => ({
+      ...p,
+      photoFile: croppedFile,
+      photoPreview: URL.createObjectURL(croppedFile),
+    }));
+    closeWorkshopHostCropper();
+  };
+
+  const submitWorkshopHostApplication = async () => {
+    if (isEventOver(eventData)) {
+      toast({
+        title: "This event has ended",
+        description: "Workshop host applications are closed for this event.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!workshopHostFormData.hostName || !workshopHostFormData.workshopName) {
+      toast({
+        title: "Missing details",
+        description: "Your name and a workshop title are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setWorkshopHostSubmitting(true);
+    try {
+      const organizerId = String(
+        (eventData as any)?.organizer?._id || (eventData as any)?.organizer || "",
+      );
+      const eid = eventId || id;
+      const email = workshopHostFormData.hostEmail || workshopHostAuthedEmail;
+
+      let res: Response;
+      if (workshopHostFormData.photoFile) {
+        const fd = new FormData();
+        fd.append("image", workshopHostFormData.photoFile);
+        fd.append("eventId", eid || "");
+        fd.append("organizerId", organizerId);
+        fd.append("hostName", workshopHostFormData.hostName);
+        fd.append("hostEmail", email);
+        fd.append("hostPhone", workshopHostFormData.hostPhone || "");
+        fd.append("hostBio", workshopHostFormData.hostBio || "");
+        fd.append("workshopName", workshopHostFormData.workshopName);
+        fd.append(
+          "workshopDescription",
+          workshopHostFormData.workshopDescription || "",
+        );
+        fd.append(
+          "proposedPrice",
+          String(Number(workshopHostFormData.proposedPrice) || 0),
+        );
+        fd.append(
+          "proposedStartTime",
+          workshopHostFormData.proposedStartTime || "",
+        );
+        fd.append(
+          "proposedEndTime",
+          workshopHostFormData.proposedEndTime || "",
+        );
+        fd.append(
+          "maxSeats",
+          String(Number(workshopHostFormData.maxSeats) || 0),
+        );
+        res = await fetch(`${apiURL}/workshop-requests/apply-with-image`, {
+          method: "POST",
+          body: fd,
+        });
+      } else {
+        res = await fetch(`${apiURL}/workshop-requests/apply`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            eventId: eid,
+            organizerId,
+            hostName: workshopHostFormData.hostName,
+            hostEmail: email,
+            hostPhone: workshopHostFormData.hostPhone,
+            hostBio: workshopHostFormData.hostBio,
+            workshopName: workshopHostFormData.workshopName,
+            workshopDescription: workshopHostFormData.workshopDescription,
+            proposedPrice: Number(workshopHostFormData.proposedPrice) || 0,
+            proposedStartTime: workshopHostFormData.proposedStartTime,
+            proposedEndTime: workshopHostFormData.proposedEndTime,
+            maxSeats: Number(workshopHostFormData.maxSeats) || 0,
+          }),
+        });
+      }
+
+      const data = await res.json();
+      if (!res.ok || data.success === false) {
+        throw new Error(data.message || "Failed to submit");
+      }
+
+      setExistingWorkshopHostRequest(data.data || null);
+      setWorkshopHostStep("status");
+      toast({
+        title: "Application submitted!",
+        description:
+          "You'll get an email confirming it's pending the organizer's approval.",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setWorkshopHostSubmitting(false);
+    }
+  };
+
+  const goToWorkshopHostPayment = (request: any) => {
+    const ev: any = eventData || {};
+    navigate("/workshop-request-payment", {
+      state: {
+        workshopRequestId: request._id,
+        organizerId: String(ev?.organizer?._id || ev?.organizer || ""),
+        hostName: request.hostName,
+        workshopName: request.workshopName,
+        eventTitle: ev?.title,
+        eventDate: ev?.startDate
+          ? new Date(ev.startDate).toLocaleDateString()
+          : "",
+        eventLocation: ev?.location,
+        isCharged: request.isCharged,
+        fee: request.hostingFee,
       },
     });
   };
@@ -6640,6 +6967,28 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
                 )}
 
+              {/* ── Host a Workshop — only if the organizer opted in ── */}
+              {(eventData as any)?.workshopHostingOpen && (
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <p className="text-gray-700 font-semibold text-sm mb-1">
+                    Host a Workshop
+                  </p>
+                  <p className="text-gray-400 text-xs mb-4">
+                    Got a workshop to run? Apply to host one at this event.
+                  </p>
+                  <button
+                    onClick={openWorkshopHostApply}
+                    className="w-full h-11 rounded-xl border-2 font-semibold text-sm transition-all hover:opacity-90"
+                    style={{
+                      borderColor: design?.primaryColor || "#6366f1",
+                      color: design?.primaryColor || "#6366f1",
+                    }}
+                  >
+                    Host a Workshop
+                  </button>
+                </div>
+              )}
+
               {/* ── Contact Organizer ── */}
               {(() => {
                 // Resolve the list of phones to render. Prefer the new
@@ -10284,6 +10633,442 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Host a Workshop — self-service application dialog, same
+          Google-auth-first / status-screen pattern as Apply as Speaker. */}
+      {showWorkshopHostDialog && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+          onClick={() => setShowWorkshopHostDialog(false)}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-white border-b px-6 py-4 rounded-t-2xl flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold">Host a Workshop</h3>
+                <p className="text-xs text-muted-foreground">
+                  {workshopHostStep === "auth"
+                    ? "Sign in with Google to continue"
+                    : workshopHostStep === "status"
+                      ? "Your application status"
+                      : "Tell us about your workshop"}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowWorkshopHostDialog(false)}
+                className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* STEP: Google sign-in */}
+              {workshopHostStep === "auth" && (
+                <div className="space-y-4">
+                  {workshopHostGoogleLoading ? (
+                    <div className="py-8 text-center space-y-2">
+                      <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" />
+                      <p className="text-sm text-muted-foreground">
+                        Looking you up…
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-sm text-gray-600">
+                        Sign in with your Google account to apply to host a
+                        workshop.
+                      </p>
+                      <button
+                        onClick={handleGoogleWorkshopHostLogin}
+                        className="w-full h-11 rounded-xl font-semibold text-sm text-white transition-all hover:opacity-90 flex items-center justify-center gap-2"
+                        style={{
+                          backgroundColor: design?.primaryColor || "#6366f1",
+                        }}
+                      >
+                        <Mail className="h-4 w-4" />
+                        Continue with Google
+                      </button>
+                      <p className="text-[11px] text-gray-400 text-center">
+                        Your email is only used to identify your application.
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* STEP: STATUS — pending review, approved+free (going live
+                  automatically), or approved+fee (payment due). */}
+              {workshopHostStep === "status" &&
+                existingWorkshopHostRequest &&
+                (() => {
+                  const req = existingWorkshopHostRequest;
+                  const fee = Number(req.hostingFee) || 0;
+                  const awaitingPayment =
+                    req.status === "Confirmed" &&
+                    !!req.isCharged &&
+                    fee > 0 &&
+                    req.paymentStatus !== "Paid";
+                  const paymentSubmitted =
+                    req.isCharged && req.paymentStatus === "Paid";
+                  return (
+                    <div className="text-center py-4 space-y-4">
+                      <div
+                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold ${
+                          req.status === "Completed"
+                            ? "bg-green-100 text-green-800"
+                            : awaitingPayment
+                              ? "bg-blue-100 text-blue-800"
+                              : req.status === "Pending"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : "bg-blue-100 text-blue-800"
+                        }`}
+                      >
+                        {req.status === "Completed"
+                          ? "🎉 Live on the event page"
+                          : awaitingPayment
+                            ? "💳 Approved — hosting fee due"
+                            : req.status === "Pending"
+                              ? "⏳ Pending approval"
+                              : `⚙️ ${req.status}`}
+                      </div>
+
+                      <h3 className="text-lg font-bold">
+                        {req.status === "Completed"
+                          ? "Your workshop is live!"
+                          : awaitingPayment
+                            ? "You're approved! One step left"
+                            : paymentSubmitted
+                              ? "Payment submitted"
+                              : "Your application is under review"}
+                      </h3>
+
+                      <p className="text-sm text-gray-500">
+                        {req.status === "Completed"
+                          ? `"${req.workshopName}" is published and visitors can book it.`
+                          : awaitingPayment
+                            ? `Pay the ${formatPrice(fee)} hosting fee to confirm your slot. Your workshop goes live once the organizer confirms the payment.`
+                            : paymentSubmitted
+                              ? "The organizer is verifying your payment. Your workshop goes live as soon as it's confirmed."
+                              : "The organizer will review your application and notify you by email."}
+                      </p>
+
+                      <div className="bg-gray-50 rounded-lg p-3 text-left text-sm space-y-1">
+                        <p>
+                          <span className="text-gray-500">Workshop:</span>{" "}
+                          <span className="font-medium">
+                            {req.workshopName}
+                          </span>
+                        </p>
+                        {(req.proposedStartTime || req.proposedEndTime) && (
+                          <p>
+                            <span className="text-gray-500">Time:</span>{" "}
+                            {req.proposedStartTime} - {req.proposedEndTime}
+                          </p>
+                        )}
+                        <p>
+                          <span className="text-gray-500">
+                            Visitor price:
+                          </span>{" "}
+                          <span className="font-medium">
+                            {req.finalPrice > 0
+                              ? formatPrice(req.finalPrice)
+                              : "Free"}
+                          </span>
+                        </p>
+                        <p>
+                          <span className="text-gray-500">Hosting fee:</span>{" "}
+                          <span className="font-medium">
+                            {fee > 0 ? formatPrice(fee) : "Free"}
+                          </span>
+                        </p>
+                      </div>
+
+                      {awaitingPayment ? (
+                        <button
+                          onClick={() => goToWorkshopHostPayment(req)}
+                          className="w-full h-11 rounded-xl font-semibold text-sm text-white transition-all hover:opacity-90"
+                          style={{
+                            backgroundColor: design?.primaryColor || "#6366f1",
+                          }}
+                        >
+                          Pay {formatPrice(fee)} now
+                        </button>
+                      ) : null}
+
+                      <button
+                        onClick={() => setShowWorkshopHostDialog(false)}
+                        className="w-full h-11 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold text-sm"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  );
+                })()}
+
+              {/* STEP: APPLICATION FORM */}
+              {workshopHostStep === "details" && (
+                <div className="space-y-4">
+                  {/* Photo */}
+                  <div className="flex flex-col items-center gap-1">
+                    <div
+                      className="w-20 h-20 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-gray-50"
+                      onClick={() =>
+                        document
+                          .getElementById("workshop-host-photo")
+                          ?.click()
+                      }
+                    >
+                      {workshopHostFormData.photoPreview ? (
+                        <img
+                          src={workshopHostFormData.photoPreview}
+                          alt="Host"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Upload className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                    <input
+                      id="workshop-host-photo"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setWorkshopHostCrop({
+                            url: URL.createObjectURL(file),
+                          });
+                        }
+                        e.target.value = "";
+                      }}
+                    />
+                    <span className="text-[9px] text-muted-foreground">
+                      Your photo (optional)
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 block mb-1">
+                      Your Name *
+                    </label>
+                    <input
+                      className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                      value={workshopHostFormData.hostName}
+                      onChange={(e) =>
+                        setWorkshopHostFormData((p) => ({
+                          ...p,
+                          hostName: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 block mb-1">
+                      Email
+                    </label>
+                    <input
+                      readOnly
+                      className="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-600 outline-none cursor-not-allowed"
+                      value={
+                        workshopHostFormData.hostEmail ||
+                        workshopHostAuthedEmail
+                      }
+                    />
+                    <p className="text-[10px] text-gray-400 mt-0.5">
+                      Verified with Google
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 block mb-1">
+                      Phone / WhatsApp (optional)
+                    </label>
+                    <PhoneInput
+                      value={workshopHostFormData.hostPhone}
+                      onChange={(v: string) =>
+                        setWorkshopHostFormData((p) => ({
+                          ...p,
+                          hostPhone: v,
+                        }))
+                      }
+                      enableSearch={true}
+                      countryCodeEditable={false}
+                      preferredCountries={["in", "sg", "us", "gb"]}
+                      inputProps={{ name: "workshopHostPhone" }}
+                      inputStyle={{
+                        width: "100%",
+                        height: "40px",
+                        fontSize: "14px",
+                        paddingLeft: "48px",
+                        borderRadius: "8px",
+                        border: "1px solid #e2e8f0",
+                      }}
+                      containerStyle={{ width: "100%" }}
+                      buttonStyle={{
+                        borderRadius: "8px 0 0 8px",
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 block mb-1">
+                      Your Bio
+                    </label>
+                    <textarea
+                      className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                      rows={2}
+                      value={workshopHostFormData.hostBio}
+                      onChange={(e) =>
+                        setWorkshopHostFormData((p) => ({
+                          ...p,
+                          hostBio: e.target.value,
+                        }))
+                      }
+                      placeholder="Who you are and why you're a good fit to run this workshop"
+                    />
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <label className="text-xs font-medium text-gray-700 block mb-1">
+                      Workshop Title *
+                    </label>
+                    <input
+                      className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                      value={workshopHostFormData.workshopName}
+                      onChange={(e) =>
+                        setWorkshopHostFormData((p) => ({
+                          ...p,
+                          workshopName: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 block mb-1">
+                      Workshop Description
+                    </label>
+                    <textarea
+                      className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                      rows={3}
+                      value={workshopHostFormData.workshopDescription}
+                      onChange={(e) =>
+                        setWorkshopHostFormData((p) => ({
+                          ...p,
+                          workshopDescription: e.target.value,
+                        }))
+                      }
+                      placeholder="What visitors will learn, bring, or need to know"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-1">
+                        Suggested Visitor Price
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                        value={workshopHostFormData.proposedPrice}
+                        onChange={(e) =>
+                          setWorkshopHostFormData((p) => ({
+                            ...p,
+                            proposedPrice: e.target.value,
+                          }))
+                        }
+                        placeholder="0 = Free"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-1">
+                        Max Seats
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                        value={workshopHostFormData.maxSeats}
+                        onChange={(e) =>
+                          setWorkshopHostFormData((p) => ({
+                            ...p,
+                            maxSeats: e.target.value,
+                          }))
+                        }
+                        placeholder="Blank = unlimited"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-1">
+                        Start Time
+                      </label>
+                      <input
+                        type="time"
+                        className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                        value={workshopHostFormData.proposedStartTime}
+                        onChange={(e) =>
+                          setWorkshopHostFormData((p) => ({
+                            ...p,
+                            proposedStartTime: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-1">
+                        End Time
+                      </label>
+                      <input
+                        type="time"
+                        className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                        value={workshopHostFormData.proposedEndTime}
+                        onChange={(e) =>
+                          setWorkshopHostFormData((p) => ({
+                            ...p,
+                            proposedEndTime: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    disabled={workshopHostSubmitting}
+                    onClick={submitWorkshopHostApplication}
+                    className="w-full h-11 rounded-xl font-semibold text-sm text-white transition-all hover:opacity-90 disabled:opacity-50"
+                    style={{
+                      backgroundColor: design?.primaryColor || "#6366f1",
+                    }}
+                  >
+                    {workshopHostSubmitting
+                      ? "Submitting..."
+                      : "Submit Application"}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Workshop host photo cropper. */}
+      {workshopHostCrop && (
+        <ImageCropModal
+          open
+          image={workshopHostCrop.url}
+          defaultAspect={1}
+          onClose={closeWorkshopHostCropper}
+          onCropComplete={applyWorkshopHostCrop}
+        />
       )}
 
       {/* Google-verified Member dialog — entry point lives on the

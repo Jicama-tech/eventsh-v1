@@ -885,6 +885,10 @@ export class CreateEventDto {
   @Type(() => WorkshopPackageDto)
   workshopPackages?: WorkshopPackageDto[];
 
+  @IsBoolean()
+  @IsOptional()
+  workshopHostingOpen?: boolean;
+
   @ValidateNested({ each: true })
   @IsOptional()
   @Type(() => RoundTableTemplateDto)

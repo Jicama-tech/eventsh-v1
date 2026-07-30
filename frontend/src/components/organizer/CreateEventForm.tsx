@@ -7149,6 +7149,7 @@ export function CreateEventForm({
     },
     status: initialData?.status ?? "published",
     featured: initialData?.featured ?? false,
+    workshopHostingOpen: initialData?.workshopHostingOpen ?? false,
     setupTime: initialData?.setupTime ?? "",
     breakdownTime: initialData?.breakdownTime ?? "",
     termsForStalls:
@@ -11509,6 +11510,34 @@ export function CreateEventForm({
           {/* WORKSHOPS TAB */}
           <TabsContent value="workshops" className="space-y-6">
             <ModuleGate moduleKey="events" sectionKey="workshops">
+              {/* Public self-application entry point */}
+              <Card>
+                <CardContent className="pt-6">
+                  <label className="flex items-start gap-3 border rounded-lg p-3 cursor-pointer hover:bg-muted/30">
+                    <Switch
+                      checked={!!formData.workshopHostingOpen}
+                      onCheckedChange={(checked) =>
+                        setFormData((old) => ({
+                          ...old,
+                          workshopHostingOpen: checked,
+                        }))
+                      }
+                    />
+                    <div>
+                      <p className="font-medium text-sm">
+                        Accept Workshop Host Applications
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Lets outside hosts apply on the public event page to
+                        run a workshop here. You review and approve each
+                        application before it goes live — same as Speakers
+                        and Exhibitors.
+                      </p>
+                    </div>
+                  </label>
+                </CardContent>
+              </Card>
+
               {/* SECTION 1: Workshop Sessions */}
               <Card>
                 <CardHeader>
