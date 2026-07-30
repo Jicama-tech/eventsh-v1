@@ -8405,21 +8405,20 @@ export function CreateEventForm({
   };
 
   const resetWorkshopSessionForm = () => {
-    setCurrentWorkshopSession((p) => {
-      if (p.photoPreview?.startsWith("blob:"))
-        URL.revokeObjectURL(p.photoPreview);
-      return {
-        name: "",
-        description: "",
-        price: "0",
-        facilitator: "",
-        startTime: "",
-        endTime: "",
-        maxSeats: "",
-        image: "",
-        photoFile: null,
-        photoPreview: "",
-      };
+    // Deliberately NOT revoking p.photoPreview here: addWorkshopSession just
+    // copied that same blob: URL onto the saved session card, so revoking it
+    // would blank out the image we're about to show in the list below.
+    setCurrentWorkshopSession({
+      name: "",
+      description: "",
+      price: "0",
+      facilitator: "",
+      startTime: "",
+      endTime: "",
+      maxSeats: "",
+      image: "",
+      photoFile: null,
+      photoPreview: "",
     });
     setEditingWorkshopSessionId(null);
   };
