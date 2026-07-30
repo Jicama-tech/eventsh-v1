@@ -159,7 +159,10 @@ export class WorkshopBookingsService {
   }
 
   /**
-   * Customer marks payment as submitted (awaiting organizer confirmation)
+   * Customer marks payment as done. Trusted immediately — same as the
+   * Visitor Ticket flow (no organizer approval step): this directly
+   * finalizes the booking and releases the ticket, instead of parking it
+   * at "Submitted" for the organizer to confirm.
    */
   async submitPayment(bookingId: string) {
     if (!Types.ObjectId.isValid(bookingId)) {
@@ -180,40 +183,13 @@ export class WorkshopBookingsService {
       );
     }
 
-    booking.paymentStatus = WorkshopPaymentStatus.Submitted;
-    await booking.save();
-
-    try {
-      const eventDoc = await this.eventModel
-        .findById(booking.eventId)
-        .populate("organizer");
-      const orgPhone =
-        eventDoc?.organizer?.whatsAppNumber || eventDoc?.organizer?.phone;
-      if (orgPhone) {
-        await this.otpService.sendWhatsAppMessage(
-          orgPhone,
-          `*New Workshop Payment Submitted*\n\n` +
-            `Visitor: *${booking.visitorName}*\n` +
-            `Workshop: *${booking.itemName}*\n` +
-            `Quantity: ${booking.quantity}\n` +
-            `Amount: ${booking.amount}\n\n` +
-            `Please confirm this payment from your organizer dashboard.`,
-        );
-      }
-    } catch {
-      this.logger.warn("Failed to notify organizer about submitted payment");
-    }
-
-    return {
-      success: true,
-      message:
-        "Payment submitted. The organizer will confirm and your ticket will be sent.",
-      data: booking,
-    };
+    return this.finalizeConfirmedBooking(booking);
   }
 
   /**
-   * Organizer confirms payment — marks seats booked, generates QR + PDF, sends ticket
+   * Manual fallback for a booking stuck at "Submitted" (e.g. from before
+   * this auto-confirm change, or a retried request) — organizer-triggered,
+   * same finalize logic as submitPayment's auto-confirm.
    */
   async confirmPayment(bookingId: string) {
     if (!Types.ObjectId.isValid(bookingId)) {
@@ -228,10 +204,20 @@ export class WorkshopBookingsService {
     }
     if (booking.paymentStatus !== WorkshopPaymentStatus.Submitted) {
       throw new BadRequestException(
-        `Cannot confirm. Customer has not submitted payment yet. Status: ${booking.paymentStatus}`,
+        `Cannot confirm. Current status: ${booking.paymentStatus}`,
       );
     }
 
+    return this.finalizeConfirmedBooking(booking);
+  }
+
+  /**
+   * Marks seats booked, generates QR + PDF, sends the ticket, and mirrors
+   * the booking into Tickets. Shared by the auto-confirm path (submitPayment)
+   * and the manual fallback (confirmPayment).
+   */
+  private async finalizeConfirmedBooking(booking: WorkshopBookingDocument) {
+    const bookingId = String(booking._id);
     const eventDoc = await this.eventModel.findById(booking.eventId);
     if (!eventDoc) throw new NotFoundException("Event not found");
 

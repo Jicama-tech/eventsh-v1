@@ -205,7 +205,7 @@ const WorkshopPaymentPage = () => {
       if (successful.length > 0) {
         setConfirmed(true);
         setConfirmedBookings(successful.map((r) => r.data));
-        toast({ title: "Payment Submitted!", description: "The organizer will review and confirm your payment. Your ticket will be emailed to you.", duration: 8000 });
+        toast({ title: "Payment Confirmed!", description: "Your ticket has been generated and emailed to you.", duration: 8000 });
         setShowFeedback(true);
       }
     } catch (err: any) {
@@ -400,7 +400,7 @@ const WorkshopPaymentPage = () => {
                   {showQR && (
                     <div className="border-t pt-4 mt-4">
                       <p className="text-sm text-gray-600 mb-3">
-                        After completing payment, click below to notify the organizer:
+                        After completing payment, click below to get your ticket:
                       </p>
                       <Button
                         className="w-full py-5 rounded-xl text-base font-bold bg-green-600 hover:bg-green-700"
@@ -408,9 +408,9 @@ const WorkshopPaymentPage = () => {
                         disabled={confirming}
                       >
                         {confirming ? (
-                          <><Loader2 size={18} className="mr-2 animate-spin" /> Submitting...</>
+                          <><Loader2 size={18} className="mr-2 animate-spin" /> Confirming...</>
                         ) : (
-                          "I Have Paid - Submit for Confirmation"
+                          "I Have Paid - Get My Ticket"
                         )}
                       </Button>
                     </div>
@@ -423,7 +423,7 @@ const WorkshopPaymentPage = () => {
               <Card className="rounded-2xl shadow-sm">
                 <CardContent className="p-6 space-y-4">
                   <p className="text-sm text-gray-600">
-                    Could not load payment QR. You can still submit your booking for organizer confirmation:
+                    Could not load payment QR. If you've already paid, you can still get your ticket:
                   </p>
                   <Button
                     className="w-full py-5 rounded-xl text-base font-bold bg-blue-600 hover:bg-blue-700"
@@ -431,9 +431,9 @@ const WorkshopPaymentPage = () => {
                     disabled={confirming}
                   >
                     {confirming ? (
-                      <><Loader2 size={18} className="mr-2 animate-spin" /> Submitting...</>
+                      <><Loader2 size={18} className="mr-2 animate-spin" /> Confirming...</>
                     ) : (
-                      "Submit Payment for Confirmation"
+                      "I Have Paid - Get My Ticket"
                     )}
                   </Button>
                 </CardContent>
@@ -441,31 +441,15 @@ const WorkshopPaymentPage = () => {
             )}
           </>
         ) : (
-          <Card className="rounded-2xl shadow-sm border-amber-200">
+          <Card className="rounded-2xl shadow-sm border-green-200">
             <CardContent className="p-6 text-center space-y-4">
-              <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mx-auto">
-                <CheckCircle2 size={32} className="text-amber-500" />
+              <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+                <CheckCircle2 size={32} className="text-green-600" />
               </div>
-              <h3 className="text-lg font-bold text-amber-700">Payment Submitted!</h3>
+              <h3 className="text-lg font-bold text-green-700">Payment Confirmed!</h3>
               <p className="text-sm text-gray-600 max-w-sm mx-auto">
-                Your payment has been submitted for review. Once the organizer confirms, your QR ticket will be emailed to you automatically.
+                Your workshop ticket has been generated and emailed to you — no further approval needed.
               </p>
-
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left space-y-2">
-                <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">What happens next?</p>
-                <div className="flex items-start gap-2">
-                  <div className="w-5 h-5 rounded-full bg-amber-200 text-amber-700 flex items-center justify-center text-[10px] font-bold mt-0.5 flex-shrink-0">1</div>
-                  <p className="text-xs text-gray-600">Organizer reviews your payment</p>
-                </div>
-                <div className="flex items-start gap-2">
-                  <div className="w-5 h-5 rounded-full bg-amber-200 text-amber-700 flex items-center justify-center text-[10px] font-bold mt-0.5 flex-shrink-0">2</div>
-                  <p className="text-xs text-gray-600">Payment is confirmed</p>
-                </div>
-                <div className="flex items-start gap-2">
-                  <div className="w-5 h-5 rounded-full bg-amber-200 text-amber-700 flex items-center justify-center text-[10px] font-bold mt-0.5 flex-shrink-0">3</div>
-                  <p className="text-xs text-gray-600">QR ticket is emailed to you</p>
-                </div>
-              </div>
 
               {confirmedBookings.length > 0 && (
                 <div className="space-y-2">
@@ -475,7 +459,7 @@ const WorkshopPaymentPage = () => {
                         <p className="font-semibold text-sm text-gray-800">{booking.itemName}</p>
                         <p className="text-xs text-gray-500">Qty {booking.quantity}</p>
                       </div>
-                      <Badge className="bg-amber-100 text-amber-700 text-xs">Awaiting Confirmation</Badge>
+                      <Badge className="bg-green-100 text-green-700 text-xs">Confirmed</Badge>
                     </div>
                   ))}
                 </div>
