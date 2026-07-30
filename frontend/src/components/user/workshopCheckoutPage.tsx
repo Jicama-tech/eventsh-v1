@@ -17,8 +17,6 @@ import {
   ArrowLeft,
   GraduationCap,
   Package,
-  Minus,
-  Plus,
   Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -71,7 +69,8 @@ const WorkshopCheckoutPage = () => {
     }
   }, [location.state]);
 
-  const [quantity, setQuantity] = useState(1);
+  // Workshops are booked one at a time — no quantity stepper.
+  const quantity = 1;
 
   // Customer details
   const [firstName, setFirstName] = useState("");
@@ -297,7 +296,6 @@ const WorkshopCheckoutPage = () => {
     );
   }
 
-  const maxQty = item.seatsRemaining != null ? item.seatsRemaining : 20;
   const total = item.unitPrice * quantity;
 
   const handleProceed = async () => {
@@ -423,24 +421,9 @@ const WorkshopCheckoutPage = () => {
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  className="w-8 h-8 rounded-full border flex items-center justify-center text-gray-500 hover:bg-gray-100"
-                >
-                  <Minus size={14} />
-                </button>
-                <span className="font-semibold w-6 text-center">{quantity}</span>
-                <button
-                  type="button"
-                  disabled={quantity >= maxQty}
-                  onClick={() => setQuantity((q) => Math.min(maxQty, q + 1))}
-                  className="w-8 h-8 rounded-full border flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-40"
-                >
-                  <Plus size={14} />
-                </button>
-              </div>
+              <Badge variant="secondary" className="text-xs">
+                Qty 1
+              </Badge>
             </div>
 
             <div className="flex justify-between items-center pt-2 border-t">
