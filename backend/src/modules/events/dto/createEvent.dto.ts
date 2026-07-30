@@ -67,6 +67,22 @@ export class FeaturesDto {
   @IsBoolean()
   @IsOptional()
   accessibility?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  hasStalls?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  hasRoundTables?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  hasSpeakers?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  hasWorkshops?: boolean;
 }
 
 // One custom age restriction: a heading (e.g. "Vendors") + an age (e.g. "18+").
@@ -361,6 +377,78 @@ export class SpeakerDto {
   @IsBoolean()
   @IsOptional()
   isKeynote?: boolean;
+
+  @IsNumber()
+  @IsOptional()
+  order?: number;
+}
+
+// Workshop sessions — a single priced, bookable workshop (like a Speaker
+// card, but sellable on its own or bundled into a WorkshopPackage).
+export class WorkshopSessionDto {
+  @IsString()
+  id: string;
+
+  @IsString()
+  name: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsString()
+  @IsOptional()
+  image?: string;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  price?: number;
+
+  @IsString()
+  @IsOptional()
+  facilitator?: string;
+
+  @IsString()
+  @IsOptional()
+  startTime?: string;
+
+  @IsString()
+  @IsOptional()
+  endTime?: string;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  maxSeats?: number;
+
+  @IsNumber()
+  @IsOptional()
+  order?: number;
+}
+
+// Workshop packages — a named bundle of WorkshopSession ids sold at its own
+// price (independent of the sum of the individual session prices).
+export class WorkshopPackageDto {
+  @IsString()
+  id: string;
+
+  @IsString()
+  name: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  price?: number;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  sessionIds?: string[];
 
   @IsNumber()
   @IsOptional()
@@ -786,6 +874,16 @@ export class CreateEventDto {
   @IsOptional()
   @Type(() => SpeakerDto)
   speakers?: SpeakerDto[];
+
+  @ValidateNested({ each: true })
+  @IsOptional()
+  @Type(() => WorkshopSessionDto)
+  workshopSessions?: WorkshopSessionDto[];
+
+  @ValidateNested({ each: true })
+  @IsOptional()
+  @Type(() => WorkshopPackageDto)
+  workshopPackages?: WorkshopPackageDto[];
 
   @ValidateNested({ each: true })
   @IsOptional()

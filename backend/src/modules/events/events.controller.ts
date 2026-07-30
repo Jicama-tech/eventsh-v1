@@ -327,6 +327,7 @@ export class EventsController {
         { name: "sponsorLogos", maxCount: 50 },
         { name: "addOnImages", maxCount: 100 },
         { name: "speakerImages", maxCount: 20 },
+        { name: "workshopImages", maxCount: 50 },
         { name: "storyImages", maxCount: 50 },
       ],
       {
@@ -354,6 +355,7 @@ export class EventsController {
       sponsorLogos?: Express.Multer.File[];
       addOnImages?: Express.Multer.File[];
       speakerImages?: Express.Multer.File[];
+      workshopImages?: Express.Multer.File[];
       storyImages?: Express.Multer.File[];
     },
     @Body() body: any,
@@ -448,6 +450,10 @@ export class EventsController {
         body.speakers = JSON.parse(body.speakers);
       if (typeof body.speakerSlotTemplates === "string")
         body.speakerSlotTemplates = JSON.parse(body.speakerSlotTemplates);
+      if (typeof body.workshopSessions === "string")
+        body.workshopSessions = JSON.parse(body.workshopSessions);
+      if (typeof body.workshopPackages === "string")
+        body.workshopPackages = JSON.parse(body.workshopPackages);
       if (typeof body.venueSpeakerZones === "string")
         body.venueSpeakerZones = JSON.parse(body.venueSpeakerZones);
       if (typeof body.roundTableTemplates === "string")
@@ -559,6 +565,38 @@ export class EventsController {
           delete speaker.hasNewImage;
           delete speaker.newImageIndex;
           return speaker;
+        });
+      }
+
+      // Handle workshop session images — same newImageIndex-first, in-order
+      // fallback pattern as speakerImages above.
+      if (
+        files.workshopImages &&
+        files.workshopImages.length > 0 &&
+        Array.isArray(body.workshopSessions)
+      ) {
+        let wImgIdx = 0;
+        body.workshopSessions = body.workshopSessions.map((session) => {
+          const explicit = Number(session.newImageIndex);
+          if (Number.isInteger(explicit) && explicit >= 0) {
+            const file = files.workshopImages[explicit];
+            if (file) session.image = `/uploads/events/${file.filename}`;
+          } else if (
+            session.hasNewImage &&
+            wImgIdx < files.workshopImages.length
+          ) {
+            session.image = `/uploads/events/${files.workshopImages[wImgIdx].filename}`;
+            wImgIdx++;
+          }
+          delete session.hasNewImage;
+          delete session.newImageIndex;
+          return session;
+        });
+      } else if (Array.isArray(body.workshopSessions)) {
+        body.workshopSessions = body.workshopSessions.map((session) => {
+          delete session.hasNewImage;
+          delete session.newImageIndex;
+          return session;
         });
       }
 
@@ -856,6 +894,7 @@ export class EventsController {
         { name: "sponsorLogos", maxCount: 50 },
         { name: "addOnImages", maxCount: 100 },
         { name: "speakerImages", maxCount: 20 },
+        { name: "workshopImages", maxCount: 50 },
         { name: "storyImages", maxCount: 50 },
       ],
       {
@@ -882,6 +921,7 @@ export class EventsController {
       sponsorLogos?: Express.Multer.File[];
       addOnImages?: Express.Multer.File[];
       speakerImages?: Express.Multer.File[];
+      workshopImages?: Express.Multer.File[];
       storyImages?: Express.Multer.File[];
     },
     @Body() body: any,
@@ -943,6 +983,10 @@ export class EventsController {
         body.speakers = JSON.parse(body.speakers);
       if (typeof body.speakerSlotTemplates === "string")
         body.speakerSlotTemplates = JSON.parse(body.speakerSlotTemplates);
+      if (typeof body.workshopSessions === "string")
+        body.workshopSessions = JSON.parse(body.workshopSessions);
+      if (typeof body.workshopPackages === "string")
+        body.workshopPackages = JSON.parse(body.workshopPackages);
       if (typeof body.venueSpeakerZones === "string")
         body.venueSpeakerZones = JSON.parse(body.venueSpeakerZones);
       if (typeof body.roundTableTemplates === "string")
@@ -1082,6 +1126,38 @@ export class EventsController {
           delete speaker.hasNewImage;
           delete speaker.newImageIndex;
           return speaker;
+        });
+      }
+
+      // Handle workshop session images — same newImageIndex-first, in-order
+      // fallback pattern as speakerImages above.
+      if (
+        files.workshopImages &&
+        files.workshopImages.length > 0 &&
+        Array.isArray(body.workshopSessions)
+      ) {
+        let wImgIdx = 0;
+        body.workshopSessions = body.workshopSessions.map((session) => {
+          const explicit = Number(session.newImageIndex);
+          if (Number.isInteger(explicit) && explicit >= 0) {
+            const file = files.workshopImages[explicit];
+            if (file) session.image = `/uploads/events/${file.filename}`;
+          } else if (
+            session.hasNewImage &&
+            wImgIdx < files.workshopImages.length
+          ) {
+            session.image = `/uploads/events/${files.workshopImages[wImgIdx].filename}`;
+            wImgIdx++;
+          }
+          delete session.hasNewImage;
+          delete session.newImageIndex;
+          return session;
+        });
+      } else if (Array.isArray(body.workshopSessions)) {
+        body.workshopSessions = body.workshopSessions.map((session) => {
+          delete session.hasNewImage;
+          delete session.newImageIndex;
+          return session;
         });
       }
 
