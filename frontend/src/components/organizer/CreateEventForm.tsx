@@ -8872,6 +8872,10 @@ export function CreateEventForm({
           startTime: session.startTime || "",
           endTime: session.endTime || "",
           maxSeats: session.maxSeats ? Number(session.maxSeats) : undefined,
+          // Carries forward server-managed booking state — this form has no
+          // field for it, but silently dropping it here would zero out real
+          // confirmed bookings on every unrelated event save.
+          bookedSeats: session.bookedSeats || 0,
           hasNewImage: !!session.photoFile,
           newImageIndex,
           // Carries the previously saved url forward so a save without a new

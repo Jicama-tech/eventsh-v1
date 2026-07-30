@@ -88,6 +88,7 @@ import {
 } from "@/lib/revenue";
 import { stallStage } from "@/lib/stallStatus";
 import RoundTableBookings from "@/components/organizer/RoundTableBookings";
+import WorkshopBookings from "@/components/organizer/WorkshopBookings";
 import { useCountry } from "@/hooks/useCountry";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { StallRequest } from "./shopKeeper";
@@ -2181,6 +2182,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         exhibitors: false,
         speakers: false,
         roundtables: false,
+        workshops: false,
       };
     }
     const e: any = event;
@@ -2197,7 +2199,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       Array.isArray(e.speakerSlotTemplates) && e.speakerSlotTemplates.length > 0;
     const roundtables =
       Array.isArray(e.venueRoundTables) && e.venueRoundTables.length > 0;
-    return { visitors, exhibitors, speakers, roundtables };
+    const workshops =
+      Array.isArray(e.workshopSessions) && e.workshopSessions.length > 0;
+    return { visitors, exhibitors, speakers, roundtables, workshops };
   };
 
   const handleViewAttendance = async (event: Event) => {
@@ -2209,7 +2213,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     // full event loads in case Layout / Speakers / etc. become available.
     const provisional = eventHasSection(event);
     const provisionalFirst = (
-      ["visitors", "exhibitors", "speakers", "roundtables"] as const
+      ["visitors", "exhibitors", "speakers", "roundtables", "workshops"] as const
     ).find((k) => provisional[k]);
     setDetailTab(provisionalFirst ?? "visitors");
 
@@ -2230,7 +2234,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     // 2) Re-pick landing tab now that we know what the event actually has.
     const sections = eventHasSection(fullEvent);
     const firstAvailable = (
-      ["visitors", "exhibitors", "speakers", "roundtables"] as const
+      ["visitors", "exhibitors", "speakers", "roundtables", "workshops"] as const
     ).find((k) => sections[k]);
     if (firstAvailable && !sections[provisionalFirst as keyof typeof sections]) {
       setDetailTab(firstAvailable);
@@ -2733,14 +2737,15 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   (sections.visitors ? 1 : 0) +
                   (sections.exhibitors ? 1 : 0) +
                   (sections.speakers ? 1 : 0) +
-                  (sections.roundtables ? 1 : 0);
+                  (sections.roundtables ? 1 : 0) +
+                  (sections.workshops ? 1 : 0);
                 if (visibleCount === 0) {
                   return (
                     <Card>
                       <CardContent className="py-12 text-center text-muted-foreground">
-                        This event has no visitor, exhibitor, speaker or round
-                        table sections enabled. Add at least one in the event
-                        editor to see attendance data here.
+                        This event has no visitor, exhibitor, speaker, round
+                        table or workshop sections enabled. Add at least one
+                        in the event editor to see attendance data here.
                       </CardContent>
                     </Card>
                   );
@@ -2752,7 +2757,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     3: "grid-cols-3",
                     4: "grid-cols-4",
                     5: "grid-cols-5",
-                  } as Record<number, string>)[visibleCount] || "grid-cols-5";
+                    6: "grid-cols-6",
+                  } as Record<number, string>)[visibleCount] || "grid-cols-6";
                 return (
               <Tabs
                 value={detailTab}
@@ -2772,6 +2778,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   )}
                   {sections.roundtables && (
                     <TabsTrigger value="roundtables">Round Tables</TabsTrigger>
+                  )}
+                  {sections.workshops && (
+                    <TabsTrigger value="workshops">Workshops</TabsTrigger>
                   )}
                 </TabsList>
 
@@ -3427,6 +3436,13 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 {sections.roundtables && (
                 <TabsContent value="roundtables" className="pt-4">
                   <RoundTableBookings eventId={selectedEvent._id} />
+                </TabsContent>
+                )}
+
+                {/* WORKSHOPS TAB — reuses the dedicated component */}
+                {sections.workshops && (
+                <TabsContent value="workshops" className="pt-4">
+                  <WorkshopBookings eventId={selectedEvent._id} />
                 </TabsContent>
                 )}
               </Tabs>

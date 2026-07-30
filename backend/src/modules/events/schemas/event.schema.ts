@@ -174,6 +174,12 @@ class WorkshopSession {
   @Prop({ default: 0 })
   maxSeats: number;
 
+  // How many seats are already confirmed-paid against maxSeats. Only
+  // incremented on booking confirmation, same as round tables' bookedChairs
+  // — a Pending/Submitted booking does not yet hold a seat.
+  @Prop({ default: 0 })
+  bookedSeats: number;
+
   @Prop({ default: 0 })
   order: number;
 }
