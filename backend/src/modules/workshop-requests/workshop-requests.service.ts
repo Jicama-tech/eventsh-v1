@@ -34,6 +34,8 @@ export class WorkshopRequestsService {
     private readonly requestModel: Model<WorkshopRequestDocument>,
     @InjectModel("Event") private readonly eventModel: Model<any>,
     @InjectModel("Organizer") private readonly organizerModel: Model<any>,
+    @InjectModel("WorkshopBooking")
+    private readonly workshopBookingModel: Model<any>,
     private readonly otpService: OtpService,
     private readonly mailService: MailService,
   ) {}
@@ -131,7 +133,57 @@ export class WorkshopRequestsService {
     const requests = await this.requestModel
       .find({ eventId: new Types.ObjectId(eventId) })
       .sort({ createdAt: -1 });
-    return { success: true, data: requests };
+
+    const withEarnings = await this.attachEarnings(eventId, requests);
+    return { success: true, data: withEarnings };
+  }
+
+  /**
+   * Totals up what the organizer owes each live workshop's host from paid
+   * visitor tickets — ticketsSold (seats) and amountOwed (₹/$/etc). Only
+   * single-session bookings are attributed to a host; a package spans
+   * multiple sessions (possibly different hosts), so package revenue isn't
+   * split here and is left out of amountOwed.
+   */
+  private async attachEarnings(eventId: string, requests: WorkshopRequestDocument[]) {
+    const sessionIds = requests
+      .map((r) => r.workshopSessionId)
+      .filter((id): id is string => !!id);
+
+    const earningsBySession: Record<
+      string,
+      { ticketsSold: number; amountOwed: number }
+    > = {};
+
+    if (sessionIds.length > 0) {
+      const bookings = await this.workshopBookingModel
+        .find({
+          eventId: new Types.ObjectId(eventId),
+          bookingType: "session",
+          sessionId: { $in: sessionIds },
+          paymentStatus: "Paid",
+        })
+        .lean();
+
+      for (const b of bookings as any[]) {
+        const entry =
+          earningsBySession[b.sessionId] ||
+          (earningsBySession[b.sessionId] = { ticketsSold: 0, amountOwed: 0 });
+        entry.ticketsSold += Number(b.quantity) || 0;
+        entry.amountOwed += Number(b.amount) || 0;
+      }
+    }
+
+    return requests.map((r) => {
+      const earnings = r.workshopSessionId
+        ? earningsBySession[r.workshopSessionId]
+        : undefined;
+      return {
+        ...(r.toObject ? r.toObject() : r),
+        ticketsSold: earnings?.ticketsSold || 0,
+        amountOwed: earnings?.amountOwed || 0,
+      };
+    });
   }
 
   async findOne(id: string) {

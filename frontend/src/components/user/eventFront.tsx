@@ -10818,6 +10818,27 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         </p>
                       </div>
 
+                      {req.status === "Completed" && req.finalPrice > 0 && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-left">
+                          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">
+                            Ticket Sales
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm text-gray-600">
+                              {req.ticketsSold || 0} ticket
+                              {req.ticketsSold === 1 ? "" : "s"} sold so far
+                            </p>
+                            <p className="text-lg font-bold text-amber-700">
+                              {formatPrice(req.amountOwed || 0)}
+                            </p>
+                          </div>
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            This is what the organizer owes you so far —
+                            they'll pay it to the account you provided.
+                          </p>
+                        </div>
+                      )}
+
                       {awaitingPayment ? (
                         <button
                           onClick={() => goToWorkshopHostPayment(req)}

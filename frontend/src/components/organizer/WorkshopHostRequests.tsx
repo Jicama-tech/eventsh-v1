@@ -311,6 +311,7 @@ const WorkshopHostRequests = ({ eventId }: WorkshopHostRequestsProps) => {
                   <th className="pb-3 pr-4 font-medium">Workshop</th>
                   <th className="pb-3 pr-4 font-medium">Visitor Price</th>
                   <th className="pb-3 pr-4 font-medium">Hosting Fee</th>
+                  <th className="pb-3 pr-4 font-medium">Owed to Host</th>
                   <th className="pb-3 pr-4 font-medium">Status</th>
                   <th className="pb-3 font-medium">Action</th>
                 </tr>
@@ -318,7 +319,7 @@ const WorkshopHostRequests = ({ eventId }: WorkshopHostRequestsProps) => {
               <tbody>
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-gray-500">
+                    <td colSpan={7} className="py-8 text-center text-gray-500">
                       No applications match your filters.
                     </td>
                   </tr>
@@ -346,6 +347,27 @@ const WorkshopHostRequests = ({ eventId }: WorkshopHostRequestsProps) => {
                       {req.isCharged && req.hostingFee > 0
                         ? `${formatPrice(req.hostingFee)} (${req.paymentStatus})`
                         : "—"}
+                    </td>
+                    <td className="py-3 pr-4">
+                      {req.finalPrice > 0 ? (
+                        req.amountOwed > 0 ? (
+                          <div>
+                            <p className="font-semibold text-amber-700">
+                              {formatPrice(req.amountOwed)}
+                            </p>
+                            <p className="text-[10px] text-gray-400">
+                              {req.ticketsSold} ticket
+                              {req.ticketsSold === 1 ? "" : "s"} sold
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">
+                            No sales yet
+                          </span>
+                        )
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="py-3 pr-4">
                       <Badge className={`text-xs ${getStatusColor(req.status)}`}>
@@ -422,6 +444,23 @@ const WorkshopHostRequests = ({ eventId }: WorkshopHostRequestsProps) => {
                       {selected.hostAccountDetails}
                     </p>
                   )}
+                </div>
+              )}
+
+              {selected.finalPrice > 0 && selected.status === "Completed" && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">
+                      Owed to Host
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {selected.ticketsSold || 0} ticket
+                      {selected.ticketsSold === 1 ? "" : "s"} sold
+                    </p>
+                  </div>
+                  <p className="text-lg font-bold text-amber-700">
+                    {formatPrice(selected.amountOwed || 0)}
+                  </p>
                 </div>
               )}
 
