@@ -145,6 +145,67 @@ class Speaker {
   order: number;
 }
 
+class WorkshopSession {
+  @Prop({ required: true })
+  id: string;
+
+  @Prop({ required: true })
+  name: string;
+
+  @Prop()
+  description: string;
+
+  @Prop()
+  image: string;
+
+  // Price a visitor pays to attend this workshop individually.
+  @Prop({ default: 0 })
+  price: number;
+
+  @Prop()
+  facilitator: string;
+
+  @Prop()
+  startTime: string;
+
+  @Prop()
+  endTime: string;
+
+  @Prop({ default: 0 })
+  maxSeats: number;
+
+  // How many seats are already confirmed-paid against maxSeats. Only
+  // incremented on booking confirmation, same as round tables' bookedChairs
+  // — a Pending/Submitted booking does not yet hold a seat.
+  @Prop({ default: 0 })
+  bookedSeats: number;
+
+  @Prop({ default: 0 })
+  order: number;
+}
+
+class WorkshopPackage {
+  @Prop({ required: true })
+  id: string;
+
+  @Prop({ required: true })
+  name: string;
+
+  @Prop()
+  description: string;
+
+  // Bundle price — what a visitor pays for all included sessions together.
+  @Prop({ default: 0 })
+  price: number;
+
+  // Ids of WorkshopSession entries bundled into this package.
+  @Prop({ type: [String], default: [] })
+  sessionIds: string[];
+
+  @Prop({ default: 0 })
+  order: number;
+}
+
 class RoundTableTemplate {
   @Prop({ required: true }) id: string;
   @Prop({ required: true }) name: string;
@@ -661,6 +722,18 @@ export class Event {
 
   @Prop({ type: [Object], default: [] })
   speakers: Speaker[];
+
+  @Prop({ type: [Object], default: [] })
+  workshopSessions: WorkshopSession[];
+
+  @Prop({ type: [Object], default: [] })
+  workshopPackages: WorkshopPackage[];
+
+  // Public "Host a Workshop" self-application entry point on the eventfront.
+  // Off by default — the organizer opts in per event, same as hasSpeakers/
+  // hasRoundTables gate their respective sections.
+  @Prop({ default: false })
+  workshopHostingOpen: boolean;
 
   @Prop({ type: [Object], default: [] })
   termsAndConditionsforStalls?: termsAndConditionsforStalls[];

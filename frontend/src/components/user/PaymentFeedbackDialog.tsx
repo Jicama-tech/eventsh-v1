@@ -18,7 +18,8 @@ export type PaymentFeedbackType =
   | "stall_edit"
   | "visitor"
   | "speaker"
-  | "round_table";
+  | "round_table"
+  | "workshop";
 
 interface PaymentFeedbackDialogProps {
   open: boolean;
