@@ -11830,12 +11830,17 @@ export function CreateEventForm({
                   <p className="text-sm text-gray-500">
                     Bundle two or more workshops into a package sold at its
                     own price — a discount incentive over booking each
-                    workshop separately.
+                    workshop separately. Only workshops you added yourself are
+                    eligible — sessions from outside host applications can't
+                    be bundled, since a combo's revenue can't be split back
+                    out to an individual host's payout.
                   </p>
-                  {workshopSessions.length < 2 ? (
+                  {workshopSessions.filter((s: any) => !s.requestId).length <
+                  2 ? (
                     <div className="text-sm text-gray-400 border border-dashed rounded-lg p-6 text-center">
                       Add at least 2 workshop sessions above before creating a
-                      package.
+                      package. (Workshops from outside host applications
+                      can't be bundled into a package.)
                     </div>
                   ) : (
                     <div className="border rounded-lg p-4 bg-slate-50 space-y-4">
@@ -11893,31 +11898,33 @@ export function CreateEventForm({
                           Included Workshops * (select at least 2)
                         </Label>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                          {workshopSessions.map((session) => (
-                            <label
-                              key={session.id}
-                              className="flex items-center gap-2 border rounded-lg p-2 cursor-pointer hover:bg-white"
-                            >
-                              <Checkbox
-                                checked={currentWorkshopPackage.sessionIds.includes(
-                                  session.id,
-                                )}
-                                onCheckedChange={() =>
-                                  toggleWorkshopPackageSession(session.id)
-                                }
-                              />
-                              <span className="text-sm truncate">
-                                {session.name}{" "}
-                                <span className="text-gray-400">
-                                  (
-                                  {session.price === 0
-                                    ? "Free"
-                                    : formatPrice(session.price)}
-                                  )
+                          {workshopSessions
+                            .filter((session: any) => !session.requestId)
+                            .map((session) => (
+                              <label
+                                key={session.id}
+                                className="flex items-center gap-2 border rounded-lg p-2 cursor-pointer hover:bg-white"
+                              >
+                                <Checkbox
+                                  checked={currentWorkshopPackage.sessionIds.includes(
+                                    session.id,
+                                  )}
+                                  onCheckedChange={() =>
+                                    toggleWorkshopPackageSession(session.id)
+                                  }
+                                />
+                                <span className="text-sm truncate">
+                                  {session.name}{" "}
+                                  <span className="text-gray-400">
+                                    (
+                                    {session.price === 0
+                                      ? "Free"
+                                      : formatPrice(session.price)}
+                                    )
+                                  </span>
                                 </span>
-                              </span>
-                            </label>
-                          ))}
+                              </label>
+                            ))}
                         </div>
                         {currentWorkshopPackage.sessionIds.length > 0 && (
                           <p className="text-xs text-muted-foreground mt-2">

@@ -456,6 +456,22 @@ export class EventsController {
         body.workshopSessions = JSON.parse(body.workshopSessions);
       if (typeof body.workshopPackages === "string")
         body.workshopPackages = JSON.parse(body.workshopPackages);
+      // Belt-and-suspenders: a package's bundle can only reference
+      // organizer-added sessions. Host-application sessions carry a
+      // "wsreq-" id (see workshop-requests.service.ts finalizeWorkshopRequest)
+      // — a combo spanning multiple hosts has no defined revenue split, so
+      // the create/edit form already excludes them; strip any that slip
+      // through via a direct API call instead of rejecting the whole save.
+      if (Array.isArray(body.workshopPackages)) {
+        body.workshopPackages = body.workshopPackages.map((pkg: any) => ({
+          ...pkg,
+          sessionIds: Array.isArray(pkg.sessionIds)
+            ? pkg.sessionIds.filter(
+                (sid: string) => !String(sid).startsWith("wsreq-"),
+              )
+            : pkg.sessionIds,
+        }));
+      }
       if (typeof body.venueSpeakerZones === "string")
         body.venueSpeakerZones = JSON.parse(body.venueSpeakerZones);
       if (typeof body.roundTableTemplates === "string")
@@ -991,6 +1007,22 @@ export class EventsController {
         body.workshopSessions = JSON.parse(body.workshopSessions);
       if (typeof body.workshopPackages === "string")
         body.workshopPackages = JSON.parse(body.workshopPackages);
+      // Belt-and-suspenders: a package's bundle can only reference
+      // organizer-added sessions. Host-application sessions carry a
+      // "wsreq-" id (see workshop-requests.service.ts finalizeWorkshopRequest)
+      // — a combo spanning multiple hosts has no defined revenue split, so
+      // the create/edit form already excludes them; strip any that slip
+      // through via a direct API call instead of rejecting the whole save.
+      if (Array.isArray(body.workshopPackages)) {
+        body.workshopPackages = body.workshopPackages.map((pkg: any) => ({
+          ...pkg,
+          sessionIds: Array.isArray(pkg.sessionIds)
+            ? pkg.sessionIds.filter(
+                (sid: string) => !String(sid).startsWith("wsreq-"),
+              )
+            : pkg.sessionIds,
+        }));
+      }
       if (typeof body.venueSpeakerZones === "string")
         body.venueSpeakerZones = JSON.parse(body.venueSpeakerZones);
       if (typeof body.roundTableTemplates === "string")
