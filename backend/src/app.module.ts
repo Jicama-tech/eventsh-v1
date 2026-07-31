@@ -23,6 +23,8 @@ import { CouponModule } from "./modules/coupon/coupon.module";
 import { OperatorsModule } from "./modules/operators/operators.module";
 import { SpeakerRequestsModule } from "./modules/speaker-requests/speaker-requests.module";
 import { RoundTableBookingsModule } from "./modules/round-table-bookings/round-table-bookings.module";
+import { WorkshopBookingsModule } from "./modules/workshop-bookings/workshop-bookings.module";
+import { WorkshopRequestsModule } from "./modules/workshop-requests/workshop-requests.module";
 import { AgentsModule } from "./modules/agents/agents.module";
 import { ChatbotModule } from "./modules/chatbot/chatbot.module";
 import { VenueDesignerModule } from "./modules/venue-designer/venue-designer.module";
@@ -39,6 +41,7 @@ import { BillingPaymentsModule } from "./modules/billing-payments/billing-paymen
 import { MembershipsModule } from "./modules/memberships/memberships.module";
 import { RsvpModule } from "./modules/rsvp/rsvp.module";
 import { SuppliersModule } from "./modules/suppliers/suppliers.module";
+import { FilesModule } from "./modules/files/files.module";
 
 @Module({
   imports: [
@@ -57,6 +60,7 @@ import { SuppliersModule } from "./modules/suppliers/suppliers.module";
     AuthModule,
     UsersModule,
     OtpModule,
+    FilesModule,
     EventsModule,
     OrganizersModule,
     // UploadsModule,
@@ -74,6 +78,8 @@ import { SuppliersModule } from "./modules/suppliers/suppliers.module";
     OperatorsModule,
     SpeakerRequestsModule,
     RoundTableBookingsModule,
+    WorkshopBookingsModule,
+    WorkshopRequestsModule,
     AgentsModule,
     ChatbotModule,
     VenueDesignerModule,

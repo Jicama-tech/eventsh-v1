@@ -15,6 +15,7 @@ import {
 import { AuthService } from "./auth.service";
 import { LocalDto } from "./dto/local.dto";
 import { GoogleAuthGuard } from "./guards/google.guard";
+import { GoogleBuyerAuthGuard } from "./guards/google-buyer.guard";
 import { InstagramAuthGuard } from "./guards/instagram.guard";
 import { Request, Response } from "express";
 import { CreateUserDto } from "../users/dto/create-users.dto";
@@ -120,9 +121,9 @@ export class AuthController {
     }
   }
 
-  // ===== Google Buyer Auth (for ticket cart) =====
+  // ===== Google Buyer Auth (for ticket cart, workshop checkout, ...) =====
   @Get("google-buyer")
-  @UseGuards(AuthGuard("google-buyer"))
+  @UseGuards(GoogleBuyerAuthGuard)
   async googleBuyerAuth() {
     // Redirects to Google consent screen
   }

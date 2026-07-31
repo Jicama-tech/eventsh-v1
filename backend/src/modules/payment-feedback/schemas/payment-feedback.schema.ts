@@ -8,7 +8,8 @@ export type PaymentFeedbackType =
   | "stall_edit" // stall "Edit Request" difference payment
   | "visitor" // ticket purchase
   | "speaker" // speaker fee payment
-  | "round_table"; // round-table booking payment
+  | "round_table" // round-table booking payment
+  | "workshop"; // workshop session/package booking payment
 
 /**
  * Star-rating + comment captured right after a payment is submitted, for ANY
@@ -31,7 +32,7 @@ export class PaymentFeedback {
 
   @Prop({
     required: true,
-    enum: ["vendor", "stall_edit", "visitor", "speaker", "round_table"],
+    enum: ["vendor", "stall_edit", "visitor", "speaker", "round_table", "workshop"],
     index: true,
   })
   paymentType: PaymentFeedbackType;

@@ -73,6 +73,14 @@ export class StallsController {
     return { success: true, message: "Payment check completed" };
   }
 
+  // Manual trigger for the 24h organizer-confirmation deadline sweep (testing).
+  @Post("run-deadline-check")
+  @HttpCode(HttpStatus.OK)
+  async runDeadlineCheck() {
+    const result = await this.stallsService.processConfirmationDeadlines();
+    return { success: true, message: "Deadline check completed", data: result };
+  }
+
   @Post("upload-transaction-screenshot")
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(
@@ -267,6 +275,56 @@ export class StallsController {
       confirmPaymentDto.stallId,
       confirmPaymentDto.notes,
       confirmPaymentDto.changedBy,
+    );
+  }
+
+  /**
+   * Extend a stall's confirmation deadline by N hours (organizer action).
+   * PATCH /stalls/:id/extend-deadline
+   */
+  @Patch(":id/extend-deadline")
+  async extendDeadline(
+    @Param("id") id: string,
+    @Body() body: { hours: number; note?: string; changedBy?: string },
+  ) {
+    return await this.stallsService.extendConfirmationDeadline(
+      id,
+      body.hours,
+      body.note,
+      body.changedBy,
+    );
+  }
+
+  /**
+   * Start the 24h confirmation window when the organizer opens a stall that is
+   * awaiting payment approval but has no deadline yet (e.g. a pre-feature
+   * booking). PATCH /stalls/:id/start-confirmation-timer
+   */
+  @Patch(":id/start-confirmation-timer")
+  async startConfirmationTimer(
+    @Param("id") id: string,
+    @Body() body: { hours: number; note?: string; changedBy?: string },
+  ) {
+    return await this.stallsService.startConfirmationTimer(
+      id,
+      body.hours,
+      body.note,
+      body?.changedBy,
+    );
+  }
+
+  /**
+   * Remove an active payment-confirmation hold (turn the timer off).
+   * PATCH /stalls/:id/cancel-confirmation-timer
+   */
+  @Patch(":id/cancel-confirmation-timer")
+  async cancelConfirmationTimer(
+    @Param("id") id: string,
+    @Body() body: { changedBy?: string },
+  ) {
+    return await this.stallsService.cancelConfirmationTimer(
+      id,
+      body?.changedBy,
     );
   }
 

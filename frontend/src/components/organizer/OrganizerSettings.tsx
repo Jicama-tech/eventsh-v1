@@ -466,27 +466,6 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
   const APPYFLOW_KEY = import.meta.env.VITE_APPYFLOW_KEY_SECRET;
 
-  const COUNTRIES = [
-    {
-      code: "IN",
-      name: "India",
-      countryCode: "+91",
-      docType: "GST",
-      transactionLimit: "INR 100,000",
-      contactEmail: "support@eventsh.com",
-      contactPhone: "+91-XXX-XXX-XXXX",
-    },
-    {
-      code: "SG",
-      name: "Singapore",
-      countryCode: "+65",
-      docType: "UEN",
-      transactionLimit: "SGD 50,000",
-      contactEmail: "support@eventsh.com",
-      contactPhone: "+65-XXXX-XXXX",
-    },
-  ];
-
   const { country: globalCountry, setCountry: setGlobalCountry } = useCountry();
   const [selectedCountry, setSelectedCountry] = useState(globalCountry || "IN");
   const { formatPrice, getSymbol } = useCurrency(selectedCountry);
@@ -502,7 +481,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     UENNumber: "",
   });
 
-  const currentCountry = COUNTRIES.find((c) => c.code === selectedCountry);
+  const currentCountry = countries.find((c) => c.code === selectedCountry);
 
   const [gstVerified, setGstVerified] = useState(false);
   const [gstVerifying, setGstVerifying] = useState(false);
@@ -1876,11 +1855,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     <div className="flex items-center gap-3 p-3 bg-white border rounded-md opacity-60">
                       <Globe className="w-4 h-4 text-gray-400" />
                       <span className="font-medium text-gray-700">
-                        {COUNTRIES.find((c) => c.code === selectedCountry)
+                        {countries.find((c) => c.code === selectedCountry)
                           ?.name || "India"}
                         (
-                        {COUNTRIES.find((c) => c.code === selectedCountry)
-                          ?.countryCode || "+91"}
+                        {countries.find((c) => c.code === selectedCountry)
+                          ?.dialCode || "+91"}
                         )
                       </span>
                     </div>
@@ -1935,9 +1914,9 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                         <SelectValue placeholder="Select a country" />
                       </SelectTrigger>
                       <SelectContent>
-                        {COUNTRIES.map((country) => (
+                        {countries.map((country) => (
                           <SelectItem key={country.code} value={country.code}>
-                            {country.name} ({country.countryCode})
+                            {country.name} ({country.dialCode})
                           </SelectItem>
                         ))}
                       </SelectContent>

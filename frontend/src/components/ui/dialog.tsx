@@ -37,10 +37,26 @@ const DialogContent = React.forwardRef<
      * any centering/size classes a call site passes in `className`.
      */
     fullScreenOnMobile?: boolean
+    /**
+     * Extra classes for the backdrop. Needed when this dialog opens on top of
+     * another modal: the overlay is z-50 by default, so a parent sitting at a
+     * higher z-index would cover it — and clicks meant for this dialog's
+     * backdrop would land on the parent instead.
+     */
+    overlayClassName?: string
   }
->(({ className, children, fullScreenOnMobile = false, ...props }, ref) => (
+>((
+  {
+    className,
+    children,
+    fullScreenOnMobile = false,
+    overlayClassName,
+    ...props
+  },
+  ref,
+) => (
   <DialogPortal>
-    <DialogOverlay />
+    <DialogOverlay className={overlayClassName} />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(

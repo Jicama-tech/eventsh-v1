@@ -36,6 +36,7 @@ import { CouponService } from "../coupon/coupon.service";
 import { CreateCouponDto } from "../coupon/dto/create-coupon.dto";
 import { FeedbackService } from "../feedback/feedback.service";
 import { MailService } from "../roles/mail.service";
+import { formatMoney } from "../../common/currency.util";
 
 // Parse a JSON-encoded string[] (multipart sends arrays as a string). Falls
 // back to a single legacy value when the array form isn't present, so older
@@ -184,7 +185,8 @@ export class StallsService {
       subStep: dto.subStep,
       form: dto.form,
     };
-    if (dto.emailVerified !== undefined) update.emailVerified = dto.emailVerified;
+    if (dto.emailVerified !== undefined)
+      update.emailVerified = dto.emailVerified;
     // termsAcceptedAt is write-once: set when the vendor accepts the gate,
     // never cleared by later autosaves that omit the flag.
     if (dto.termsAccepted) update.termsAcceptedAt = new Date();
@@ -310,8 +312,7 @@ export class StallsService {
         if (createStallDto.shopkeeperBusinessEmail)
           updateFields.businessEmail = createStallDto.shopkeeperBusinessEmail;
         if (createStallDto.shopkeeperWhatsAppNumber)
-          updateFields.whatsAppNumber =
-            createStallDto.shopkeeperWhatsAppNumber;
+          updateFields.whatsAppNumber = createStallDto.shopkeeperWhatsAppNumber;
         if (createStallDto.shopkeeperPhoneNumber)
           updateFields.phoneNumber = createStallDto.shopkeeperPhoneNumber;
         if (createStallDto.businessName)
@@ -400,7 +401,8 @@ export class StallsService {
             phoneNumber: createStallDto.shopkeeperPhoneNumber,
             businessName: createStallDto.businessName,
             businessType: createStallDto.businessType,
-            businessCategory: createStallDto.businessCategory || createStallDto.businessType,
+            businessCategory:
+              createStallDto.businessCategory || createStallDto.businessType,
             businessDescription: createStallDto.businessDescription,
             address: createStallDto.businessAddress,
             city: createStallDto.businessCity,
@@ -692,6 +694,11 @@ export class StallsService {
             remainingAmount: grandTotal,
             status: "Processing",
             selectionDate: new Date(),
+            // Vendor clicked "I have Paid": record when they submitted. The
+            // payment-confirmation HOLD timer is opt-in — the organizer starts
+            // it per stall (startConfirmationTimer) only if they choose to hold
+            // the space for a vendor who asked for more time. No auto-deadline.
+            paymentSubmittedAt: new Date(),
             notes: selectDto.notes || stall.notes,
             transactionId: selectDto.transactionId || null,
             transactionScreenshot: selectDto.transactionScreenshot || null,
@@ -757,6 +764,12 @@ export class StallsService {
           const senderConfig = await this.getOrganizerSenderConfig(
             stall.organizerId,
           );
+          const orgCountry = (
+            (await this.organizerModel
+              .findById(stall.organizerId)
+              .select("country")
+              .lean()) as any
+          )?.country as string | undefined;
           const tableNames = selectDto.selectedTables
             .map((t) => t.tableName)
             .join(", ");
@@ -773,7 +786,7 @@ export class StallsService {
                   submitted.</p>
                 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin:14px 0">
                   <p style="margin:0 0 6px"><strong>Spaces:</strong> ${tableNames || "—"}</p>
-                  <p style="margin:0 0 6px"><strong>Grand Total:</strong> ${updatedStall.grandTotal}</p>
+                  <p style="margin:0 0 6px"><strong>Grand Total:</strong> ${formatMoney(updatedStall.grandTotal, orgCountry)}</p>
                   <p style="margin:0"><strong>Status:</strong> Awaiting organizer payment approval</p>
                 </div>
                 <p><strong>What happens next?</strong> Please wait for the
@@ -850,7 +863,8 @@ export class StallsService {
       if (!stall) throw new NotFoundException("Stall request not found");
 
       const eventDoc: any = stall.eventId;
-      if (!eventDoc) throw new NotFoundException("Event not found for this stall.");
+      if (!eventDoc)
+        throw new NotFoundException("Event not found for this stall.");
       if (eventHasEnded(eventDoc)) {
         throw new BadRequestException(EVENT_ENDED_MESSAGE);
       }
@@ -949,7 +963,11 @@ export class StallsService {
         }
       }
       const maxTotal = Number(event.maxSpacesPerVendor);
-      if (Number.isFinite(maxTotal) && maxTotal > 0 && newTables.length > maxTotal) {
+      if (
+        Number.isFinite(maxTotal) &&
+        maxTotal > 0 &&
+        newTables.length > maxTotal
+      ) {
         throw new BadRequestException(
           `At most ${maxTotal} space${maxTotal === 1 ? "" : "s"} for this event.`,
         );
@@ -1066,6 +1084,7 @@ export class StallsService {
         if (wasCompleted) stall.paymentStatus = "Partial" as any;
         (stall as any).qrCodePath = null;
         (stall as any).qrCodeData = null;
+        (stall as any).qrCodeImage = null;
       }
       stall.statusHistory.push({
         status: stall.status,
@@ -1208,11 +1227,7 @@ export class StallsService {
    * status. Used by exhibitor / organizer / operator / volunteer to leave
    * timeline entries at any time from the Stall Dialog.
    */
-  async addNote(
-    stallId: string,
-    note: string,
-    addedBy?: string,
-  ) {
+  async addNote(stallId: string, note: string, addedBy?: string) {
     if (!Types.ObjectId.isValid(stallId)) {
       throw new BadRequestException("Invalid stall ID format");
     }
@@ -1283,7 +1298,20 @@ export class StallsService {
       stall.status = "Completed";
       stall.completionDate = new Date();
       stall.remainingAmount = 0;
-      stall.qrCodePath = qrCodeBase64;
+      // Confirmed in time — cancel the 24h auto-release window.
+      stall.confirmationDeadline = null as any;
+      // Persist the check-in payload HERE, before any PDF work. The ticket PDF
+      // needs headless Chromium and can fail for environmental reasons (a
+      // read-only /tmp, a missing browser); when it does, the vendor loses an
+      // attachment — never the ability to be scanned at the gate. qrCodePath
+      // stays null until a render actually lands the file on disk.
+      stall.qrCodeData = JSON.stringify(qrPayload);
+      stall.qrCodeImage = qrCodeBase64;
+      stall.qrCodePath = null as any;
+      // Any PDF left from an earlier confirmation carries the OLD issuedAt,
+      // which scanning now rejects as superseded. Drop it so a download
+      // regenerates from this payload instead of serving a dead ticket.
+      await this.discardStallTicketPdf(stallId);
       stall.statusHistory.push({
         status: "Completed" as any,
         note: notes || "Payment confirmed. Stall completed.",
@@ -1342,7 +1370,9 @@ export class StallsService {
           // confirmation with an E11000 duplicate-key error.
           const isDuplicate =
             couponErr?.code === 11000 ||
-            /E11000|duplicate key/i.test(String(couponErr?.message || couponErr));
+            /E11000|duplicate key/i.test(
+              String(couponErr?.message || couponErr),
+            );
           if (isDuplicate) {
             this.logger.warn(
               `Coupon "${couponName}" already exists — reusing it for stall ${stallId}.`,
@@ -1400,10 +1430,287 @@ export class StallsService {
   }
 
   /**
+   * Organizer-initiated extension of a stall's 24h confirmation window. Adds
+   * `hours` to the current deadline (or to "now" if it has already lapsed), so
+   * the auto-release scheduler holds off and the dialog counter shows the new
+   * time. Only valid while the stall is still awaiting confirmation.
+   */
+  async extendConfirmationDeadline(
+    stallId: string,
+    hours: number,
+    note?: string,
+    changedBy?: string,
+  ) {
+    if (!Types.ObjectId.isValid(stallId)) {
+      throw new BadRequestException("Invalid stall ID format");
+    }
+    const hrs = Number(hours);
+    if (!Number.isFinite(hrs) || hrs <= 0 || hrs > 720) {
+      throw new BadRequestException(
+        "Extension must be between 1 and 720 hours",
+      );
+    }
+
+    const stall = await this.stallModel
+      .findById(stallId)
+      .populate("shopkeeperId")
+      .populate("eventId")
+      .populate("organizerId");
+    if (!stall) throw new NotFoundException("Stall request not found");
+
+    // Only stalls still awaiting organizer confirmation have a live window.
+    if (stall.paymentStatus === "Paid" || stall.status === "Cancelled") {
+      throw new BadRequestException(
+        "This booking is no longer awaiting confirmation.",
+      );
+    }
+
+    const now = Date.now();
+    const base = stall.confirmationDeadline
+      ? Math.max(now, new Date(stall.confirmationDeadline).getTime())
+      : now;
+    const newDeadline = new Date(base + hrs * 60 * 60 * 1000);
+    stall.confirmationDeadline = newDeadline;
+
+    // Recompute how many reminder thresholds are already crossed for the NEW
+    // deadline so extending doesn't re-fire reminders the team already saw.
+    const REMINDER_HOURS = [12, 6, 1];
+    const hoursRemaining = (newDeadline.getTime() - now) / 3_600_000;
+    stall.deadlineRemindersSent = REMINDER_HOURS.filter(
+      (h) => hoursRemaining <= h,
+    ).length;
+
+    const trimmedNote = String(note || "").trim();
+    stall.statusHistory.push({
+      status: stall.status as any,
+      note:
+        `Confirmation deadline extended by ${hrs} hour${
+          hrs === 1 ? "" : "s"
+        } by ${changedBy || "Organizer"}.` +
+        (trimmedNote ? ` Note: ${trimmedNote}` : ""),
+      changedAt: new Date(),
+      changedBy: changedBy || "Organizer",
+    });
+
+    await stall.save();
+
+    // Tell the vendor their confirmation window was extended (best-effort).
+    await this.notifyVendorDeadlineExtended(
+      stall,
+      hrs,
+      newDeadline,
+      trimmedNote,
+    );
+
+    return {
+      success: true,
+      message: `Deadline extended by ${hrs} hour${hrs === 1 ? "" : "s"}.`,
+      confirmationDeadline: stall.confirmationDeadline,
+      data: stall,
+    };
+  }
+
+  /**
+   * Emails the vendor that the organizer extended their payment-confirmation
+   * window — showing how much time was added, the new deadline + total time
+   * remaining, and the organizer's extension note. Best-effort; never throws.
+   */
+  private async notifyVendorDeadlineExtended(
+    stall: any,
+    hoursAdded: number,
+    newDeadline: Date,
+    note: string,
+  ) {
+    try {
+      const vendor = (stall.shopkeeperId as any) || {};
+      const to = this.vendorEmailRecipients(vendor);
+      if (!to) return;
+
+      const event = (stall.eventId as any) || {};
+      const senderConfig = await this.getOrganizerSenderConfig(
+        stall.organizerId,
+      );
+
+      const totalHoursLeft = Math.max(
+        0,
+        Math.round((newDeadline.getTime() - Date.now()) / 3_600_000),
+      );
+      const deadlineStr =
+        newDeadline.toLocaleString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+          timeZone: "Asia/Singapore",
+        }) + " SGT";
+      const businessName =
+        vendor?.businessName ||
+        vendor?.shopName ||
+        vendor?.brandName ||
+        vendor?.name ||
+        "there";
+
+      const html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+          <div style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:24px;text-align:center">
+            <h1 style="margin:0;font-size:20px">⏳ More time to confirm your payment</h1>
+            <p style="margin:6px 0 0;opacity:.9">${event?.title || "Your event"}</p>
+          </div>
+          <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+            <p>Hi ${businessName},</p>
+            <p>Good news — the organizer has <strong>extended your payment
+              confirmation window by ${hoursAdded} hour${
+                hoursAdded === 1 ? "" : "s"
+              }</strong>.</p>
+            <div style="border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;padding:16px;margin:16px 0;text-align:center">
+              <div style="font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#15803d">New confirmation deadline</div>
+              <div style="font-size:20px;font-weight:800;color:#16a34a;margin:6px 0">${deadlineStr}</div>
+              <div style="font-size:13px;color:#166534">You now have about <strong>${totalHoursLeft} hour${
+                totalHoursLeft === 1 ? "" : "s"
+              }</strong> remaining to confirm your payment.</div>
+            </div>
+            ${
+              note
+                ? `<div style="border-left:3px solid #16a34a;background:#f8fafc;padding:10px 14px;margin:14px 0">
+                     <p style="margin:0;color:#334155"><strong>Message from the organizer:</strong><br/>${note}</p>
+                   </div>`
+                : ""
+            }
+            <p style="color:#64748b;font-size:12px;margin-top:16px">Please make sure to connect with Organizer and Complete Payment (IF NOT DONE) before the new deadline so your space is secured.</p>
+          </div>
+        </div>`;
+
+      await this.mailService.sendEmail({
+        to,
+        subject: `Your payment confirmation window was extended — ${
+          event?.title || "Event"
+        }`,
+        html,
+        senderConfig,
+      });
+      this.logger.log(
+        `Deadline-extension email sent to vendor for stall ${stall._id}`,
+      );
+    } catch (e: any) {
+      this.logger.warn(
+        `[stalls] notifyVendorDeadlineExtended failed: ${e?.message || e}`,
+      );
+    }
+  }
+
+  /**
+   * Organizer-initiated payment-confirmation hold. The timer is OPT-IN, not
+   * automatic: when a vendor who's clicked "I have Paid" asks for more time,
+   * the organizer holds the space for `hours` from now. Once running, the
+   * dialog shows a countdown and the scheduler auto-releases the space if the
+   * vendor still hasn't paid by the deadline. No-op if the stall isn't awaiting
+   * confirmation or a hold is already running (use extend to lengthen it).
+   */
+  async startConfirmationTimer(
+    stallId: string,
+    hours: number,
+    note?: string,
+    changedBy?: string,
+  ) {
+    if (!Types.ObjectId.isValid(stallId)) {
+      throw new BadRequestException("Invalid stall ID format");
+    }
+    const hrs = Number(hours);
+    if (!Number.isFinite(hrs) || hrs <= 0 || hrs > 720) {
+      throw new BadRequestException("Hold must be between 1 and 720 hours");
+    }
+
+    const stall = await this.stallModel
+      .findById(stallId)
+      .populate("shopkeeperId")
+      .populate("eventId")
+      .populate("organizerId");
+    if (!stall) throw new NotFoundException("Stall request not found");
+
+    // Only stalls where the vendor has submitted payment ("I have Paid" →
+    // Processing) and it's still unconfirmed can be put on hold.
+    const awaiting =
+      stall.status === "Processing" && stall.paymentStatus !== "Paid";
+    if (!awaiting) {
+      throw new BadRequestException(
+        "This booking is not awaiting payment confirmation.",
+      );
+    }
+    if (stall.confirmationDeadline) {
+      return {
+        started: false,
+        confirmationDeadline: stall.confirmationDeadline,
+        message: "A hold is already running — use Extend to add more time.",
+      };
+    }
+
+    const newDeadline = new Date(Date.now() + hrs * 60 * 60 * 1000);
+    stall.confirmationDeadline = newDeadline;
+    if (!stall.paymentSubmittedAt) {
+      stall.paymentSubmittedAt = (stall as any).selectionDate || new Date();
+    }
+    stall.deadlineRemindersSent = 0;
+
+    const trimmedNote = String(note || "").trim();
+    stall.statusHistory.push({
+      status: stall.status as any,
+      note:
+        `Payment-confirmation hold started — ${hrs} hour${
+          hrs === 1 ? "" : "s"
+        } by ${changedBy || "Organizer"}.` +
+        (trimmedNote ? ` Note: ${trimmedNote}` : ""),
+      changedAt: new Date(),
+      changedBy: changedBy || "Organizer",
+    });
+    await stall.save();
+
+    // Tell the vendor how long the space is held (reuses the extension email).
+    await this.notifyVendorDeadlineExtended(
+      stall,
+      hrs,
+      newDeadline,
+      trimmedNote,
+    );
+
+    return { started: true, confirmationDeadline: stall.confirmationDeadline };
+  }
+
+  /**
+   * Remove an active payment-confirmation hold (organizer turns the timer off).
+   * Clears the deadline so the countdown stops and the scheduler no longer
+   * auto-releases the space — the booking simply stays pending confirmation
+   * with no clock. No-op if there's no hold running.
+   */
+  async cancelConfirmationTimer(stallId: string, changedBy?: string) {
+    if (!Types.ObjectId.isValid(stallId)) {
+      throw new BadRequestException("Invalid stall ID format");
+    }
+    const stall = await this.stallModel.findById(stallId);
+    if (!stall) throw new NotFoundException("Stall request not found");
+    if (!stall.confirmationDeadline) {
+      return { cleared: false, message: "No hold is running." };
+    }
+    stall.confirmationDeadline = null as any;
+    stall.deadlineRemindersSent = 0;
+    stall.statusHistory.push({
+      status: stall.status as any,
+      note: `Payment-confirmation hold removed by ${changedBy || "Organizer"}.`,
+      changedAt: new Date(),
+      changedBy: changedBy || "Organizer",
+    });
+    await stall.save();
+    return { cleared: true };
+  }
+
+  /**
    * Render the stall ticket PDF and deliver it (WhatsApp text + email/WhatsApp
-   * attachment), falling back to a plain email when the PDF render fails. Also
-   * persists qrCodePath (the PDF url) + qrCodeData on the stall. Self-contained
-   * so both initial payment confirmation and an amendment re-issue can call it.
+   * attachment), falling back to a plain email when the PDF render fails.
+   * Persists qrCodePath (the PDF url) only — qrCodeData/qrCodeImage are already
+   * written by the caller before this runs, so a render failure costs an
+   * attachment and nothing else. Self-contained so both initial payment
+   * confirmation and an amendment re-issue can call it.
    * Best-effort — never throws to the caller (run fire-and-forget).
    */
   private async deliverStallTicketPdf(
@@ -1433,7 +1740,13 @@ export class StallsService {
     const vendorEmail = this.vendorEmailRecipients(vendor);
     const eventObj = stall.eventId as any;
     const message = this.buildBookingSummaryMessage(
-      stall, vendor, eventObj, country, headingText, coupon, isReissue,
+      stall,
+      vendor,
+      eventObj,
+      country,
+      headingText,
+      coupon,
+      isReissue,
     );
 
     // Render the ticket PDF. If headless Chromium fails (common on constrained
@@ -1452,14 +1765,19 @@ export class StallsService {
       pdfPath = path.join(pdfDir, pdfFileName);
       await fs.promises.writeFile(pdfPath, pdfBuffer);
       stall.qrCodePath = `/uploads/stallTickets/${pdfFileName}`;
-      stall.qrCodeData = JSON.stringify(qrPayload);
+      // Defensive: the caller persists these first, but if this is ever
+      // reached with them unset, don't leave the booking unscannable.
+      if (!stall.qrCodeData) stall.qrCodeData = JSON.stringify(qrPayload);
+      if (!stall.qrCodeImage) stall.qrCodeImage = qrCodeBase64;
       await stall.save();
     } catch (pdfErr) {
       pdfPath = null;
       this.logger.error(
         `Stall ticket PDF generation failed for stall ${stallId}: ${
           (pdfErr as any)?.message || pdfErr
-        }. Sending a plain confirmation instead.`,
+        }. Sending a plain confirmation instead. The QR payload is stored, so ` +
+          `the booking stays scannable and "Resend ticket" will attach the PDF ` +
+          `once the render issue is fixed.`,
       );
     }
 
@@ -1571,7 +1889,9 @@ export class StallsService {
     );
 
     const bookedTables = stall.selectedTables || [];
-    const proposed = Array.isArray(dto.selectedAddOns) ? dto.selectedAddOns : [];
+    const proposed = Array.isArray(dto.selectedAddOns)
+      ? dto.selectedAddOns
+      : [];
     const seen = new Set<string>();
     const normalized: any[] = [];
 
@@ -1795,8 +2115,10 @@ export class StallsService {
       margin: 2,
     });
     await this.saveQRToDisk(qrCodeBase64, String(stall._id));
-    stall.qrCodePath = qrCodeBase64;
     stall.qrCodeData = JSON.stringify(qrPayload);
+    stall.qrCodeImage = qrCodeBase64;
+    stall.qrCodePath = null as any;
+    await this.discardStallTicketPdf(String(stall._id));
     await stall.save();
 
     // Clear the pending amendment reliably.
@@ -1907,10 +2229,7 @@ export class StallsService {
    * cancel the booking, invalidate the QR + coupon, and email the vendor the
    * organizer's note (e.g. refund timing). On reject: email the vendor why.
    */
-  async decideCancellation(
-    stallId: string,
-    dto: CancellationDecisionDto,
-  ) {
+  async decideCancellation(stallId: string, dto: CancellationDecisionDto) {
     if (!Types.ObjectId.isValid(stallId)) {
       throw new BadRequestException("Invalid stall ID format");
     }
@@ -2069,7 +2388,8 @@ export class StallsService {
     // Organizer contact card ("Event Management") so the vendor knows who to
     // call — uses the contact numbers the organizer published in Settings
     // (contactPhones/contactPhoneNames), falling back to their primary phone.
-    const orgIdForPdf = (stall as any).organizerId?._id || (stall as any).organizerId;
+    const orgIdForPdf =
+      (stall as any).organizerId?._id || (stall as any).organizerId;
     let organizer: any = {};
     if (orgIdForPdf) {
       organizer =
@@ -2095,7 +2415,9 @@ export class StallsService {
           .join("")
       : organizer.phone || organizer.businessPhone || organizer.whatsAppNumber
         ? `<div class="detail-row"><span class="detail-label">📞 Phone:</span><span class="detail-value">${
-            organizer.phone || organizer.businessPhone || organizer.whatsAppNumber
+            organizer.phone ||
+            organizer.businessPhone ||
+            organizer.whatsAppNumber
           }</span></div>`
         : "";
 
@@ -2318,7 +2640,9 @@ export class StallsService {
             </div>
           </div>
 
-          ${qrBase64 ? `
+          ${
+            qrBase64
+              ? `
           <div class="qr-section">
             <p class="qr-head">Your Stall QR Code</p>
             <p class="qr-label">Scan at Event Entrance</p>
@@ -2327,11 +2651,13 @@ export class StallsService {
           <div class="warning">
             ⚠️ <strong>Important:</strong> Use Official EventSH App to scan QR code, to Check-In and Check-Out.
           </div>
-          ` : `
+          `
+              : `
           <div class="warning" style="background: #fef3c7; border-color: #f59e0b; color: #92400e;">
             ⏳ <strong>Awaiting Full Payment</strong> — Your QR code will be released once the organizer confirms full payment.
           </div>
-          `}
+          `
+          }
 
           ${
             coupon?.code
@@ -2391,7 +2717,10 @@ export class StallsService {
     });
 
     const page = await browser.newPage();
-    await page.setContent(await html, { waitUntil: "networkidle0", timeout: 20000 });
+    await page.setContent(await html, {
+      waitUntil: "networkidle0",
+      timeout: 20000,
+    });
 
     const uint8arrayBuffer = await page.pdf({
       format: "A4",
@@ -2433,7 +2762,10 @@ export class StallsService {
       const vendorObj = stall.shopkeeperId as any;
       // coupon is already passed in as a parameter — use it as-is.
       const message = this.buildBookingSummaryMessage(
-        stall, vendorObj, eventObj, country,
+        stall,
+        vendorObj,
+        eventObj,
+        country,
         "Your Stall Confirmation is Ready!",
         coupon,
       );
@@ -2443,7 +2775,8 @@ export class StallsService {
 
       // Resolve the owning organizer's custom-sender config (if any) so the
       // confirmation email goes from their address.
-      const orgId2 = (stall as any).organizerId?._id || (stall as any).organizerId;
+      const orgId2 =
+        (stall as any).organizerId?._id || (stall as any).organizerId;
       let orgEmailCfg: any = (stall as any).organizerId?.emailConfig;
       if (!orgEmailCfg && orgId2) {
         const od = await this.organizerModel
@@ -2474,6 +2807,83 @@ export class StallsService {
   }
 
   // ===== SAVE QR TO DISK (Same as tickets.service.ts) =====
+  /**
+   * Guarantee the stall has a scannable check-in payload, creating and saving
+   * one when it's missing — the state left behind by bookings confirmed while
+   * the ticket PDF render was failing. Returns the payload and its QR image
+   * either way, so callers can deliver something scannable without caring
+   * which case they're in.
+   *
+   * Callers MUST check the payment precondition first: this mints a live
+   * check-in credential and has no business running on an unpaid booking.
+   */
+  private async ensureStallQrPayload(stall: any): Promise<{
+    qrPayload: any;
+    qrCodeData: string;
+    qrCodeImage: string;
+    created: boolean;
+  }> {
+    if (stall.qrCodeData) {
+      return {
+        qrPayload: JSON.parse(stall.qrCodeData),
+        qrCodeData: stall.qrCodeData,
+        // Legacy rows predate qrCodeImage — re-render it from the stored
+        // payload, which yields the same QR the vendor already holds.
+        qrCodeImage:
+          stall.qrCodeImage ||
+          (await QRCode.toDataURL(stall.qrCodeData, { width: 200, margin: 2 })),
+        created: false,
+      };
+    }
+
+    const qrPayload = {
+      warning: "❌ Normal scanners not allowed. Please use the Eventsh app.",
+      type: "eventsh-stall-checkin",
+      stallId: String(stall._id),
+      shopkeeperId: String(
+        (stall.shopkeeperId as any)?._id || stall.shopkeeperId,
+      ),
+      eventId: String((stall.eventId as any)?._id || stall.eventId),
+      // Anchored to the payment, not to "now", so re-running this never
+      // invalidates a QR someone already scanned or holds.
+      issuedAt: new Date(stall.paymentConfirmedDate || Date.now()).toISOString(),
+    };
+    const qrCodeData = JSON.stringify(qrPayload);
+    const qrCodeImage = await QRCode.toDataURL(qrCodeData, {
+      width: 200,
+      margin: 2,
+    });
+
+    stall.qrCodeData = qrCodeData;
+    stall.qrCodeImage = qrCodeImage;
+    await stall.save();
+    this.logger.log(`Created the missing QR payload for stall ${stall._id}.`);
+
+    return { qrPayload, qrCodeData, qrCodeImage, created: true };
+  }
+
+  /**
+   * Remove a stall's rendered ticket PDF. Called whenever the QR payload is
+   * re-stamped, because the file on disk still encodes the previous issuedAt
+   * and downloadStallTicket serves it verbatim when present — which would hand
+   * the vendor a ticket that scanning rejects as superseded.
+   * Best-effort: a missing file is the expected case, not an error.
+   */
+  private async discardStallTicketPdf(stallId: string) {
+    try {
+      await fs.promises.unlink(
+        path.join(
+          process.cwd(),
+          "uploads",
+          "stallTickets",
+          `stall_ticket_${stallId}.pdf`,
+        ),
+      );
+    } catch {
+      // Nothing on disk (or already gone) — regeneration handles it.
+    }
+  }
+
   private async saveQRToDisk(
     base64Data: string,
     stallId: string,
@@ -2482,6 +2892,10 @@ export class StallsService {
     const fileName = `qr_${stallId}.png`;
     const filePath = path.join(qrDir, fileName);
 
+    // The directory is absent on a fresh deploy (uploads/ isn't in git), and
+    // this runs inside confirmPayment — an ENOENT here would fail the whole
+    // confirmation, not just the QR copy.
+    await fs.promises.mkdir(qrDir, { recursive: true });
     const buffer = Buffer.from(base64Data.split(",")[1], "base64");
     await fs.promises.writeFile(filePath, buffer);
 
@@ -2551,7 +2965,7 @@ export class StallsService {
           `Your stall is now open. Enjoy the event! 🎉`;
 
         await this.otpService.sendWhatsAppMessage(
-          (vendor.whatsAppNumber || vendor.whatsappNumber),
+          vendor.whatsAppNumber || vendor.whatsappNumber,
           message,
         );
 
@@ -2594,7 +3008,7 @@ export class StallsService {
           `Thank you for participating! 🙏`;
 
         await this.otpService.sendWhatsAppMessage(
-          (vendor.whatsAppNumber || vendor.whatsappNumber),
+          vendor.whatsAppNumber || vendor.whatsappNumber,
           message,
         );
 
@@ -2900,7 +3314,9 @@ export class StallsService {
       // Collect unique recipient emails: organizer (login + business) + ops.
       const recipients = new Set<string>();
       const add = (e?: string) => {
-        const v = String(e || "").trim().toLowerCase();
+        const v = String(e || "")
+          .trim()
+          .toLowerCase();
         if (v) recipients.add(v);
       };
       add(organizer?.email);
@@ -3008,7 +3424,9 @@ export class StallsService {
 
       const recipients = new Set<string>();
       const add = (e?: string) => {
-        const v = String(e || "").trim().toLowerCase();
+        const v = String(e || "")
+          .trim()
+          .toLowerCase();
         if (v) recipients.add(v);
       };
       add((organizer as any)?.email);
@@ -3035,6 +3453,27 @@ export class StallsService {
         (vendor as any)?.brandName ||
         (vendor as any)?.name ||
         "An exhibitor";
+
+      // 24h organizer-confirmation window — show the countdown + deadline so
+      // reviewers know they're on the clock before the space auto-releases.
+      const deadlineDate = stall.confirmationDeadline
+        ? new Date(stall.confirmationDeadline)
+        : new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const hoursLeft = Math.max(
+        0,
+        Math.round((deadlineDate.getTime() - Date.now()) / 3_600_000),
+      );
+      const deadlineStr =
+        deadlineDate.toLocaleString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+          timeZone: "Asia/Singapore",
+        }) + " SGT";
+
       const row = (label: string, value: any) =>
         `<tr><td style="padding:4px 14px 4px 0;color:#64748b">${label}</td><td style="padding:4px 0;font-weight:600;color:#0f172a">${
           value || "—"
@@ -3050,11 +3489,17 @@ export class StallsService {
             <p><strong>${businessName}</strong> has submitted their payment and is
               waiting for your approval. Please verify the payment and release
               their stall ticket on priority so they aren't kept waiting.</p>
+            <div style="border:1px solid #fcd34d;background:#fffbeb;border-radius:10px;padding:16px;margin:16px 0;text-align:center">
+              <div style="font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#b45309">Confirmation deadline</div>
+              <div style="font-size:26px;font-weight:800;color:#d97706;margin:6px 0">⏳ ${hoursLeft} hours to approve</div>
+              <div style="font-size:13px;color:#92400e">Please confirm by <strong>${deadlineStr}</strong>.<br/>If it isn't confirmed within 24 hours, this booking is <strong>automatically cancelled</strong> and the space is released for re-booking.</div>
+            </div>
             <table style="border-collapse:collapse;margin:12px 0">
               ${row("Exhibitor", businessName)}
               ${row("Email", (vendor as any)?.email || (vendor as any)?.businessEmail)}
               ${row("Event", event?.title)}
-              ${row("Grand Total", grandTotal)}
+              ${row("Grand Total", formatMoney(grandTotal, (organizer as any)?.country))}
+              ${row("Confirm by", deadlineStr)}
               ${row("Status", "Payment submitted — awaiting approval")}
             </table>
             <div style="text-align:center;margin:22px 0 6px">
@@ -3092,6 +3537,253 @@ export class StallsService {
     }
   }
 
+  // ============ 24-HOUR CONFIRMATION DEADLINE (auto-release) ============
+
+  // Organizer + opted-in operator emails for a stall's organizer.
+  private async getStallReviewerEmails(
+    orgId: any,
+  ): Promise<{ recipients: string[]; senderConfig: any }> {
+    const [organizer, operators] = await Promise.all([
+      this.organizerModel.findById(orgId).lean(),
+      this.operatorModel.find({ organizerId: String(orgId) }).lean(),
+    ]);
+    const set = new Set<string>();
+    const add = (e?: string) => {
+      const v = String(e || "")
+        .trim()
+        .toLowerCase();
+      if (v) set.add(v);
+    };
+    add((organizer as any)?.email);
+    add((organizer as any)?.businessEmail);
+    for (const op of operators as any[]) {
+      if (!op.allowEmails) continue;
+      add(op.email);
+      add(op.companyEmail);
+    }
+    const senderConfig = await this.getOrganizerSenderConfig(orgId);
+    return { recipients: Array.from(set), senderConfig };
+  }
+
+  /**
+   * Cron-driven. For stalls where the vendor clicked "I have Paid" and the
+   * organizer hasn't confirmed yet, email reminders as the 24h window closes,
+   * then auto-release the space (soft-cancel) once it expires. Email-first.
+   */
+  async processConfirmationDeadlines() {
+    const REMINDER_HOURS = [12, 6, 1]; // remind when <= this many hours remain
+    const now = Date.now();
+    // Only stalls whose confirmation window has ALREADY been started — either by
+    // the vendor clicking "I have Paid" or by the organizer opening the request
+    // (startConfirmationTimer). We deliberately do NOT auto-start the timer for
+    // pre-feature stalls here; that only happens when the organizer opens the
+    // dialog, so the clock begins when a human actually looks at the request.
+    const stalls = await this.stallModel
+      .find({
+        status: "Processing",
+        paymentStatus: "Unpaid",
+        confirmationDeadline: { $ne: null, $exists: true },
+      })
+      .populate("shopkeeperId")
+      .populate("eventId")
+      .populate("organizerId");
+
+    let released = 0;
+    let reminded = 0;
+    for (const stall of stalls) {
+      try {
+        const deadline = new Date(stall.confirmationDeadline).getTime();
+        if (!deadline) continue;
+        const msRemaining = deadline - now;
+
+        if (msRemaining <= 0) {
+          await this.autoReleaseUnconfirmedStall(stall);
+          released++;
+          continue;
+        }
+        const hoursRemaining = msRemaining / 3_600_000;
+        const crossed = REMINDER_HOURS.filter(
+          (h) => hoursRemaining <= h,
+        ).length;
+        if (crossed > (stall.deadlineRemindersSent || 0)) {
+          await this.sendConfirmationReminder(stall, Math.ceil(hoursRemaining));
+          stall.deadlineRemindersSent = crossed;
+          await stall.save();
+          reminded++;
+        }
+      } catch (e: any) {
+        this.logger.warn(
+          `[stalls] deadline processing failed for ${stall._id}: ${
+            e?.message || e
+          }`,
+        );
+      }
+    }
+    return { checked: stalls.length, released, reminded };
+  }
+
+  // Space freed + soft-cancelled (matches the manual delete convention).
+  private async autoReleaseUnconfirmedStall(stall: any) {
+    await this.releaseStallTables(stall);
+    stall.status = "Cancelled";
+    stall.confirmationDeadline = null;
+    stall.statusHistory.push({
+      status: "Cancelled" as any,
+      note: "Auto-released — the organizer did not confirm the payment within 24 hours. Space freed for re-booking.",
+      changedAt: new Date(),
+      changedBy: "System",
+    });
+    await stall.save();
+    await this.notifyDeadlineRelease(stall);
+    this.logger.log(`Auto-released unconfirmed stall ${stall._id}`);
+  }
+
+  private async sendConfirmationReminder(stall: any, hoursRemaining: number) {
+    try {
+      const event = stall.eventId as any;
+      const orgId = (stall.organizerId as any)?._id || stall.organizerId;
+      if (!orgId) return;
+      const vendor: any = await this.vendorModel
+        .findById(stall.shopkeeperId)
+        .lean();
+      const { recipients, senderConfig } =
+        await this.getStallReviewerEmails(orgId);
+      if (recipients.length === 0) return;
+      const businessName =
+        vendor?.businessName ||
+        vendor?.shopName ||
+        vendor?.brandName ||
+        vendor?.name ||
+        "An exhibitor";
+      const fe = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
+      const dashboardUrl = `${fe}/organizer/login?redirect=${encodeURIComponent(
+        "/organizer-dashboard",
+      )}`;
+      const html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+          <div style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;padding:24px;text-align:center">
+            <h1 style="margin:0;font-size:20px">⏳ ${hoursRemaining} hour(s) left to approve</h1>
+            <p style="margin:6px 0 0;opacity:.9">${event?.title || "Your event"}</p>
+          </div>
+          <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+            <p><strong>${businessName}</strong> submitted their payment and is waiting for your approval.</p>
+            <p style="font-weight:600;color:#b45309">Please confirm within <strong>${hoursRemaining} hour(s)</strong>, or their booking will be automatically cancelled and the space released for re-booking.</p>
+            <div style="text-align:center;margin:22px 0 6px">
+              <a href="${dashboardUrl}" style="display:inline-block;background:#d97706;color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px">Review &amp; Approve Payment</a>
+            </div>
+          </div>
+        </div>`;
+      await Promise.all(
+        recipients.map((to) =>
+          this.mailService
+            .sendEmail({
+              to,
+              subject: `⏳ ${hoursRemaining}h left to approve: ${businessName} — ${
+                event?.title || "Event"
+              }`,
+              html,
+              senderConfig,
+            })
+            .catch((e: any) =>
+              this.logger.warn(
+                `[stalls] deadline reminder failed for ${to}: ${e?.message || e}`,
+              ),
+            ),
+        ),
+      );
+      this.logger.log(
+        `Deadline reminder (${hoursRemaining}h) emailed to ${recipients.length} reviewer(s) for stall ${stall._id}`,
+      );
+    } catch (e: any) {
+      this.logger.warn(
+        `[stalls] sendConfirmationReminder failed: ${e?.message || e}`,
+      );
+    }
+  }
+
+  private async notifyDeadlineRelease(stall: any) {
+    try {
+      const event = stall.eventId as any;
+      const orgId = (stall.organizerId as any)?._id || stall.organizerId;
+      const vendor: any = await this.vendorModel
+        .findById(stall.shopkeeperId)
+        .lean();
+      const senderConfig = orgId
+        ? await this.getOrganizerSenderConfig(orgId)
+        : undefined;
+
+      // Vendor — booking released.
+      const vendorEmail = this.vendorEmailRecipients(vendor);
+      if (vendorEmail) {
+        const html = `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+            <div style="background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;padding:24px;text-align:center">
+              <h1 style="margin:0;font-size:20px">Booking released</h1>
+              <p style="margin:6px 0 0;opacity:.9">${event?.title || "Event"}</p>
+            </div>
+            <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+              <p>Dear ${vendor?.name || "Exhibitor"},</p>
+              <p>Your stall booking for <strong>${event?.title || "the event"}</strong> was <strong>not confirmed by the organizer within 24 hours</strong>, so the space has been released.</p>
+              <p>If you have already paid, please contact the organizer to resolve this or re-book.</p>
+            </div>
+          </div>`;
+        await this.mailService
+          .sendEmail({
+            to: vendorEmail,
+            subject: `Your stall booking was released — ${event?.title || "Event"}`,
+            html,
+            senderConfig,
+          })
+          .catch((e: any) =>
+            this.logger.warn(
+              `[stalls] release vendor email failed: ${e?.message || e}`,
+            ),
+          );
+      }
+
+      // Organizer + operators — space freed.
+      if (orgId) {
+        const { recipients } = await this.getStallReviewerEmails(orgId);
+        const businessName =
+          vendor?.businessName || vendor?.name || "An exhibitor";
+        const html = `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+            <div style="background:linear-gradient(135deg,#64748b,#475569);color:#fff;padding:24px;text-align:center">
+              <h1 style="margin:0;font-size:20px">Stall space released</h1>
+              <p style="margin:6px 0 0;opacity:.9">${event?.title || "Event"}</p>
+            </div>
+            <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+              <p><strong>${businessName}</strong>'s payment was not confirmed within 24 hours, so their booking was cancelled and the space is now available for re-booking.</p>
+            </div>
+          </div>`;
+        await Promise.all(
+          recipients.map((to) =>
+            this.mailService
+              .sendEmail({
+                to,
+                subject: `Stall space released (unconfirmed): ${businessName} — ${
+                  event?.title || "Event"
+                }`,
+                html,
+                senderConfig,
+              })
+              .catch((e: any) =>
+                this.logger.warn(
+                  `[stalls] release reviewer email failed for ${to}: ${
+                    e?.message || e
+                  }`,
+                ),
+              ),
+          ),
+        );
+      }
+    } catch (e: any) {
+      this.logger.warn(
+        `[stalls] notifyDeadlineRelease failed: ${e?.message || e}`,
+      );
+    }
+  }
+
   private async sendStatusUpdateNotification(
     stall: any,
     oldStatus: string,
@@ -3125,7 +3817,7 @@ export class StallsService {
       if (message) {
         try {
           await this.otpService.sendWhatsAppMessage(
-            (vendor.whatsAppNumber || vendor.whatsappNumber),
+            vendor.whatsAppNumber || vendor.whatsappNumber,
             message,
           );
         } catch (waErr) {
@@ -3167,7 +3859,7 @@ export class StallsService {
                 </ol>
                 <div style="margin:16px 0;padding:12px 14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px">
                   <p style="margin:0;color:#b45309;font-weight:700">
-                    ⚠️ Important: Selecting a space does not reserve it. You must select and pay for your space, upload your transaction screenshot and reference ID, then tap the "I have Paid" button. Until you do, your space is not reserved and may be given to another vendor.
+                    ⚠️ Selecting isn't reserving. Pay, upload proof &amp; tap "I have Paid" — else your space may go to another vendor.
                   </p>
                 </div>
                 <div style="text-align:center;margin:22px 0 6px">
@@ -3259,7 +3951,7 @@ export class StallsService {
 
       if (message) {
         await this.otpService.sendWhatsAppMessage(
-          (vendor.whatsAppNumber || vendor.whatsappNumber),
+          vendor.whatsAppNumber || vendor.whatsappNumber,
           message,
         );
       }
@@ -3387,7 +4079,8 @@ export class StallsService {
 
             if (populatedStall) {
               const orgDoc = await this.organizerModel.findById(
-                (populatedStall.organizerId as any)?._id || populatedStall.organizerId,
+                (populatedStall.organizerId as any)?._id ||
+                  populatedStall.organizerId,
               );
               const ctry = orgDoc?.country || "IN";
 
@@ -3399,28 +4092,37 @@ export class StallsService {
                 ctry,
               );
 
-              const pdfDir = path.join(process.cwd(), "uploads", "stallTickets");
-              if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
+              const pdfDir = path.join(
+                process.cwd(),
+                "uploads",
+                "stallTickets",
+              );
+              if (!fs.existsSync(pdfDir))
+                fs.mkdirSync(pdfDir, { recursive: true });
               const pdfFileName = `stall_booking_${stallId}.pdf`;
               const pdfPath = path.join(pdfDir, pdfFileName);
               await fs.promises.writeFile(pdfPath, pdfBuffer);
 
               const vendor = populatedStall.shopkeeperId as any;
-              const vendorWhatsApp = vendor?.whatsAppNumber || vendor?.whatsappNumber;
+              const vendorWhatsApp =
+                vendor?.whatsAppNumber || vendor?.whatsappNumber;
               const eventObj = populatedStall.eventId as any;
 
               const waText =
                 `*Partial Payment Received — ${eventObj?.title || "Event"}*\n\n` +
                 `We have received your partial payment.\n\n` +
-                `Paid: ${populatedStall.paidAmount}\n` +
-                `Remaining: ${populatedStall.remainingAmount}\n` +
-                `Grand Total: ${populatedStall.grandTotal}\n\n` +
+                `Paid: ${formatMoney(populatedStall.paidAmount, ctry)}\n` +
+                `Remaining: ${formatMoney(populatedStall.remainingAmount, ctry)}\n` +
+                `Grand Total: ${formatMoney(populatedStall.grandTotal, ctry)}\n\n` +
                 `Please complete the remaining payment. Your stall QR ticket will be released once full payment is confirmed by the organizer.\n\n` +
                 `Your booking details PDF is attached.`;
 
               // WhatsApp text only when a number is on file.
               if (vendorWhatsApp) {
-                await this.otpService.sendWhatsAppMessage(vendorWhatsApp, waText);
+                await this.otpService.sendWhatsAppMessage(
+                  vendorWhatsApp,
+                  waText,
+                );
               }
 
               // Always email the booking-details PDF (WhatsApp too when a
@@ -3436,16 +4138,19 @@ export class StallsService {
                   heading: "Partial Payment Received",
                   message:
                     `We have received your partial payment for ${eventObj?.title || "your event"}.\n\n` +
-                    `Paid: ${populatedStall.paidAmount}\n` +
-                    `Remaining: ${populatedStall.remainingAmount}\n` +
-                    `Grand Total: ${populatedStall.grandTotal}\n\n` +
+                    `Paid: ${formatMoney(populatedStall.paidAmount, ctry)}\n` +
+                    `Remaining: ${formatMoney(populatedStall.remainingAmount, ctry)}\n` +
+                    `Grand Total: ${formatMoney(populatedStall.grandTotal, ctry)}\n\n` +
                     `Your stall QR ticket will be released once full payment is confirmed by the organizer. Your booking details PDF is attached.`,
                   senderConfig: (orgDoc as any)?.emailConfig,
                 },
               );
             }
           } catch (partialErr) {
-            this.logger.warn("Failed to send partial payment notification", partialErr);
+            this.logger.warn(
+              "Failed to send partial payment notification",
+              partialErr,
+            );
           }
         }
         updateData.paymentDate = new Date();
@@ -3779,9 +4484,12 @@ export class StallsService {
     }
     const updateData: any = {};
     if (transactionId) updateData.transactionId = transactionId;
-    if (transactionScreenshot) updateData.transactionScreenshot = transactionScreenshot;
+    if (transactionScreenshot)
+      updateData.transactionScreenshot = transactionScreenshot;
 
-    return this.stallModel.findByIdAndUpdate(stallId, updateData, { new: true });
+    return this.stallModel.findByIdAndUpdate(stallId, updateData, {
+      new: true,
+    });
   }
 
   async remove(id: string, changedBy?: string) {
@@ -3960,7 +4668,10 @@ export class StallsService {
       stall.depositReturned = true;
       await stall.save();
 
-      await this.otpService.sendWhatsAppMessage((vendor.whatsAppNumber || vendor.whatsappNumber), message);
+      await this.otpService.sendWhatsAppMessage(
+        vendor.whatsAppNumber || vendor.whatsappNumber,
+        message,
+      );
     } catch (error) {
       this.logger.error("Error sending deposit returned notification:", error);
     }
@@ -4040,23 +4751,12 @@ export class StallsService {
         `PDF missing on disk for stall ${stallId}. Regenerating...`,
       );
 
-      // Reconstruct QR Payload
-      const qrPayload = stall.qrCodeData
-        ? JSON.parse(stall.qrCodeData)
-        : {
-            warning:
-              "❌ Normal scanners not allowed. Please use the Eventsh app.",
-            type: "eventsh-stall-checkin",
-            stallId: stallId,
-            shopkeeperId: (stall.shopkeeperId as any)._id.toString(),
-            eventId: (stall.eventId as any)._id.toString(),
-            issuedAt: stall.paymentConfirmedDate || new Date().toISOString(),
-          };
-
-      const qrCodeBase64 = await QRCode.toDataURL(JSON.stringify(qrPayload), {
-        width: 200,
-        margin: 2,
-      });
+      // Reconstruct the QR payload — and persist it when the stall has none (a
+      // booking confirmed while the PDF render was failing). Without that
+      // write the vendor gets a nice-looking ticket whose QR matches nothing
+      // in the database and is rejected at the gate.
+      const { qrCodeImage: qrCodeBase64 } =
+        await this.ensureStallQrPayload(stall);
 
       // Construct coupon object for HTML template using the saved code, gated
       // by the event's live coupon toggle (off ⇒ omit it from the PDF).
@@ -4076,9 +4776,14 @@ export class StallsService {
         dlCountry,
       );
 
-      // Save it back to disk to speed up future downloads
+      // Save it back to disk to speed up future downloads, and record the url
+      // so the stall reflects that a ticket now exists.
       if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
       await fs.promises.writeFile(pdfPath, pdfBuffer);
+      if (stall.qrCodePath !== `/uploads/stallTickets/${pdfFileName}`) {
+        stall.qrCodePath = `/uploads/stallTickets/${pdfFileName}`;
+        await stall.save();
+      }
 
       return {
         buffer: pdfBuffer,
@@ -4094,18 +4799,22 @@ export class StallsService {
   }
 
   // ============ RESEND STALL TICKET (QR) EMAIL ============
-  // Re-deliver the QR stall ticket for an already-Paid stall. Unlike the
-  // best-effort send inside confirmPayment, this SURFACES the real failure
-  // (SMTP timeout / auth / blocked port / bad organizer email config) so the
-  // organizer sees exactly why it didn't go out — and can retry once fixed.
+  // Re-deliver the QR stall ticket for an already-Paid stall, and repair it on
+  // the way: a booking with no QR payload gets one created and saved first, so
+  // "Resend" doubles as the organizer's one-click fix for stalls confirmed
+  // while the PDF render was broken.
+  //
+  // Failure policy, deliberately split:
+  //   • PDF render fails  → NOT an error. The QR goes inline in the email so
+  //     the vendor is still scannable; the organizer sees a success telling
+  //     them the PDF is missing.
+  //   • Email send fails  → SURFACED (SMTP timeout / auth / blocked port / bad
+  //     organizer email config). Swallowing this would tell the organizer the
+  //     ticket went out when nothing did.
   async resendStallTicket(stallId: string) {
     if (!Types.ObjectId.isValid(stallId)) {
       throw new BadRequestException("Invalid stall ID format");
     }
-
-    // Reuse the canonical PDF path: returns the saved ticket, or regenerates it
-    // on the fly, and enforces the "Paid" precondition.
-    const { buffer } = await this.downloadStallTicket(stallId);
 
     const stall: any = await this.stallModel
       .findById(stallId)
@@ -4114,6 +4823,29 @@ export class StallsService {
       .populate("organizerId");
     if (!stall) {
       throw new NotFoundException("Stall not found");
+    }
+    // Same precondition downloadStallTicket enforces — checked up front
+    // because what follows mints a live check-in credential.
+    if (stall.paymentStatus !== "Paid") {
+      throw new BadRequestException(
+        "Stall ticket can only be sent after the payment is completed (Paid status).",
+      );
+    }
+
+    // Create the QR payload if this booking never got one. Then try for the
+    // PDF, but treat a render failure as a downgrade, not an error: the
+    // vendor still gets the scannable QR inline, and the organizer sees a
+    // success instead of a dead end.
+    const { qrCodeImage, created } = await this.ensureStallQrPayload(stall);
+    let buffer: Buffer | null = null;
+    try {
+      ({ buffer } = await this.downloadStallTicket(stallId));
+    } catch (pdfErr) {
+      this.logger.warn(
+        `Resend: ticket PDF unavailable for ${stallId} (${
+          (pdfErr as any)?.message || pdfErr
+        }) — emailing the QR image instead.`,
+      );
     }
 
     const vendorObj = stall.shopkeeperId as any;
@@ -4134,10 +4866,23 @@ export class StallsService {
     const coupon = this.effectiveStallCoupon(stall, eventObj) ?? undefined;
     const eventTitle = eventObj?.title || "Event";
     const message = this.buildBookingSummaryMessage(
-      stall, vendorObj, eventObj, country,
+      stall,
+      vendorObj,
+      eventObj,
+      country,
       "Your Stall Ticket",
       coupon,
     );
+    // No PDF? Put the QR in the email body (and attach it as a PNG) so the
+    // vendor can still be scanned in at the gate from their phone.
+    const qrBlock = buffer
+      ? ""
+      : `<div style="text-align:center;padding:8px 0 16px">
+            <img src="cid:stallqr" alt="Stall check-in QR" style="width:200px;height:200px"/>
+            <p style="color:#64748b;font-size:12px;margin:8px 0 0">
+              Show this QR at the entrance. It's also attached as an image.
+            </p>
+          </div>`;
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
         <div style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:24px;text-align:center">
@@ -4145,15 +4890,26 @@ export class StallsService {
         </div>
         <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
           <p>${message.replace(/\*/g, "").replace(/\n/g, "<br/>")}</p>
+          ${qrBlock}
         </div>
       </div>`;
+
+    const attachments = buffer
+      ? [{ filename: "stall-ticket.pdf", content: buffer }]
+      : [
+          {
+            filename: "stall-qr.png",
+            content: Buffer.from(qrCodeImage.split(",")[1], "base64"),
+            cid: "stallqr",
+          },
+        ];
 
     try {
       await this.mailService.sendEmail({
         to: vendorEmail,
         subject: `Your stall ticket for ${eventTitle}`,
         html,
-        attachments: [{ filename: "stall-ticket.pdf", content: buffer }],
+        attachments,
         senderConfig,
       });
     } catch (err: any) {
@@ -4165,9 +4921,10 @@ export class StallsService {
       );
     }
 
-    // Best-effort WhatsApp mirror (never fails the resend).
+    // Best-effort WhatsApp mirror (never fails the resend). Skipped when the
+    // PDF couldn't be rendered — there'd be no file on disk to attach.
     const wa = vendorObj?.whatsAppNumber || vendorObj?.whatsappNumber;
-    if (wa) {
+    if (wa && buffer) {
       try {
         const pdfPath = path.join(
           process.cwd(),
@@ -4190,10 +4947,19 @@ export class StallsService {
       }
     }
 
-    this.logger.log(`Stall ticket re-sent for ${stallId} to ${vendorEmail}`);
+    this.logger.log(
+      `Stall ticket re-sent for ${stallId} to ${vendorEmail}` +
+        (buffer ? "" : " (QR image — PDF render unavailable)") +
+        (created ? " [QR payload was missing and has been created]" : ""),
+    );
     return {
       success: true,
-      message: `Stall ticket re-sent to ${vendorEmail}`,
+      message: buffer
+        ? `Stall ticket re-sent to ${vendorEmail}.${
+            created ? " The missing QR was generated first." : ""
+          }`
+        : `QR sent to ${vendorEmail}. The ticket PDF couldn't be generated on the ` +
+          `server, so the scannable QR is in the email body instead.`,
     };
   }
 }

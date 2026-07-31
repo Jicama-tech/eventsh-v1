@@ -443,6 +443,108 @@ export class OtpService implements OnModuleInit {
   }
 
   // =========================
+  // Email OTP LOGIN (organizer) — the email-first replacement for the
+  // WhatsApp login flow. sendEmailLoginOtp confirms an account exists for the
+  // email before emailing a code; verifyEmailLoginOtp validates the code and
+  // returns a JWT (or a requiresSelection payload for multi-org emails).
+  // =========================
+  async sendEmailLoginOtp(email: string, role: string) {
+    if (!email) throw new BadRequestException("Email is required");
+    const identifier = email.trim().toLowerCase();
+    const channel = "business_email";
+
+    // Only email a code if this address is actually linked to an account,
+    // so we don't send login codes to arbitrary addresses.
+    if (role === "organizer") {
+      const exists = await this.organizerService.findByEmailForLogin(
+        identifier,
+      );
+      if (!exists) {
+        throw new NotFoundException(
+          "No organizer account is registered with this email.",
+        );
+      }
+    }
+
+    const existing = await this.otpModel.findOne({ channel, role, identifier });
+    if (
+      existing?.lastSentAt &&
+      Date.now() - new Date(existing.lastSentAt).getTime() <
+        this.RESEND_COOLDOWN_MS
+    ) {
+      throw new BadRequestException("Please wait before requesting a new OTP");
+    }
+
+    const otp = this.generateOtp();
+    const expiresAt = new Date(Date.now() + this.EMAIL_TTL_MS);
+
+    await this.otpModel.findOneAndUpdate(
+      { channel, role, identifier },
+      {
+        email: identifier,
+        otp,
+        expiresAt,
+        attempts: 0,
+        verified: false,
+        lastSentAt: new Date(),
+        channel,
+        identifier,
+        role,
+      } as any,
+      { upsert: true, new: true },
+    );
+
+    await this.mailService.sendOtpEmail(identifier, otp);
+    return { message: "OTP sent to email" };
+  }
+
+  async verifyEmailLoginOtp(
+    email: string,
+    role: string,
+    otp: string,
+    targetId?: string,
+  ) {
+    const identifier = email.trim().toLowerCase();
+    const channel = "business_email";
+
+    const record = await this.otpModel.findOne({ channel, role, identifier });
+    if (!record || record.expiresAt < new Date() || record.otp !== otp) {
+      if (record) {
+        if (record.attempts + 1 >= this.MAX_ATTEMPTS) {
+          await this.otpModel.deleteOne({ channel, role, identifier });
+        } else {
+          record.attempts += 1;
+          await record.save();
+        }
+      }
+      throw new UnauthorizedException("Invalid or expired OTP");
+    }
+
+    if (role !== "organizer") {
+      await this.otpModel.deleteOne({ channel, role, identifier });
+      return { message: "OTP verified", data: { email: identifier } };
+    }
+
+    const result = await this.organizerService.findByEmailForLogin(
+      identifier,
+      targetId,
+    );
+    if (!result) throw new NotFoundException("Organizer not found");
+
+    if ((result as any).requiresSelection) {
+      // Keep the OTP alive so the follow-up selection call can re-validate it.
+      return {
+        message: "Multiple organizations found",
+        requiresSelection: true,
+        organizations: (result as any).organizations,
+      };
+    }
+
+    await this.otpModel.deleteOne({ channel, role, identifier });
+    return { message: "OTP verified", data: (result as any).token };
+  }
+
+  // =========================
   // Stubs (kept)
   // =========================
   findAll() {

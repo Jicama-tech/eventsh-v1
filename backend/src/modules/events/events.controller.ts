@@ -27,6 +27,7 @@ import {
 import { diskStorage } from "multer";
 import { AuthGuard } from "@nestjs/passport";
 import { EventsService } from "./events.service";
+import { SpeakerRequestsService } from "../speaker-requests/speaker-requests.service";
 import { EventImportService } from "./event-import.service";
 import { CreateEventDto } from "./dto/createEvent.dto";
 import { UpdateEventDto } from "./dto/updateEvent.dto";
@@ -83,6 +84,9 @@ export class EventsController {
   constructor(
     private readonly eventsService: EventsService,
     private readonly eventImportService: EventImportService,
+    // Speakers named in the event form are folded into the organizer's
+    // speaker roster on save — one CRM, both entry points.
+    private readonly speakerRequestsService: SpeakerRequestsService,
     @InjectModel("Organizer") private readonly organizerModel: Model<any>,
     @InjectModel("Plan") private readonly planModel: Model<any>,
     @InjectModel("OrganizerStore")
@@ -323,6 +327,7 @@ export class EventsController {
         { name: "sponsorLogos", maxCount: 50 },
         { name: "addOnImages", maxCount: 100 },
         { name: "speakerImages", maxCount: 20 },
+        { name: "workshopImages", maxCount: 50 },
         { name: "storyImages", maxCount: 50 },
       ],
       {
@@ -350,6 +355,7 @@ export class EventsController {
       sponsorLogos?: Express.Multer.File[];
       addOnImages?: Express.Multer.File[];
       speakerImages?: Express.Multer.File[];
+      workshopImages?: Express.Multer.File[];
       storyImages?: Express.Multer.File[];
     },
     @Body() body: any,
@@ -406,6 +412,8 @@ export class EventsController {
         body.isShowcase = body.isShowcase === "true";
       if (typeof body.isDemo === "string")
         body.isDemo = body.isDemo === "true";
+      if (typeof body.workshopHostingOpen === "string")
+        body.workshopHostingOpen = body.workshopHostingOpen === "true";
       if (typeof body.features === "string")
         body.features = JSON.parse(body.features);
       if (typeof body.socialMedia === "string")
@@ -444,6 +452,26 @@ export class EventsController {
         body.speakers = JSON.parse(body.speakers);
       if (typeof body.speakerSlotTemplates === "string")
         body.speakerSlotTemplates = JSON.parse(body.speakerSlotTemplates);
+      if (typeof body.workshopSessions === "string")
+        body.workshopSessions = JSON.parse(body.workshopSessions);
+      if (typeof body.workshopPackages === "string")
+        body.workshopPackages = JSON.parse(body.workshopPackages);
+      // Belt-and-suspenders: a package's bundle can only reference
+      // organizer-added sessions. Host-application sessions carry a
+      // "wsreq-" id (see workshop-requests.service.ts finalizeWorkshopRequest)
+      // — a combo spanning multiple hosts has no defined revenue split, so
+      // the create/edit form already excludes them; strip any that slip
+      // through via a direct API call instead of rejecting the whole save.
+      if (Array.isArray(body.workshopPackages)) {
+        body.workshopPackages = body.workshopPackages.map((pkg: any) => ({
+          ...pkg,
+          sessionIds: Array.isArray(pkg.sessionIds)
+            ? pkg.sessionIds.filter(
+                (sid: string) => !String(sid).startsWith("wsreq-"),
+              )
+            : pkg.sessionIds,
+        }));
+      }
       if (typeof body.venueSpeakerZones === "string")
         body.venueSpeakerZones = JSON.parse(body.venueSpeakerZones);
       if (typeof body.roundTableTemplates === "string")
@@ -525,7 +553,10 @@ export class EventsController {
         });
       }
 
-      // Handle speaker images
+      // Handle speaker images. The form tells us WHICH uploaded file belongs to
+      // each speaker (newImageIndex) so a dropped or filtered-out upload can't
+      // shift every later photo onto the wrong speaker. Older clients don't
+      // send it — they fall back to the original in-order consumption.
       if (
         files.speakerImages &&
         files.speakerImages.length > 0 &&
@@ -533,12 +564,57 @@ export class EventsController {
       ) {
         let imgIdx = 0;
         body.speakers = body.speakers.map((speaker) => {
-          if (speaker.hasNewImage && imgIdx < files.speakerImages.length) {
+          const explicit = Number(speaker.newImageIndex);
+          if (Number.isInteger(explicit) && explicit >= 0) {
+            const file = files.speakerImages[explicit];
+            if (file) speaker.image = `/uploads/events/${file.filename}`;
+          } else if (speaker.hasNewImage && imgIdx < files.speakerImages.length) {
             speaker.image = `/uploads/events/${files.speakerImages[imgIdx].filename}`;
             imgIdx++;
           }
           delete speaker.hasNewImage;
+          delete speaker.newImageIndex;
           return speaker;
+        });
+      } else if (Array.isArray(body.speakers)) {
+        // No files in this request: drop the transport-only flags so they don't
+        // get persisted onto the speaker documents.
+        body.speakers = body.speakers.map((speaker) => {
+          delete speaker.hasNewImage;
+          delete speaker.newImageIndex;
+          return speaker;
+        });
+      }
+
+      // Handle workshop session images — same newImageIndex-first, in-order
+      // fallback pattern as speakerImages above.
+      if (
+        files.workshopImages &&
+        files.workshopImages.length > 0 &&
+        Array.isArray(body.workshopSessions)
+      ) {
+        let wImgIdx = 0;
+        body.workshopSessions = body.workshopSessions.map((session) => {
+          const explicit = Number(session.newImageIndex);
+          if (Number.isInteger(explicit) && explicit >= 0) {
+            const file = files.workshopImages[explicit];
+            if (file) session.image = `/uploads/events/${file.filename}`;
+          } else if (
+            session.hasNewImage &&
+            wImgIdx < files.workshopImages.length
+          ) {
+            session.image = `/uploads/events/${files.workshopImages[wImgIdx].filename}`;
+            wImgIdx++;
+          }
+          delete session.hasNewImage;
+          delete session.newImageIndex;
+          return session;
+        });
+      } else if (Array.isArray(body.workshopSessions)) {
+        body.workshopSessions = body.workshopSessions.map((session) => {
+          delete session.hasNewImage;
+          delete session.newImageIndex;
+          return session;
         });
       }
 
@@ -558,6 +634,13 @@ export class EventsController {
       }
 
       const event = await this.eventsService.create(body);
+
+      // Fold this event's speakers into the organizer's roster (CRM). Matched
+      // on email, or on name when there is none, so the same person never
+      // appears twice. Fire-and-forget: a roster hiccup must not fail a save.
+      void this.speakerRequestsService
+        .syncEventSpeakersToRoster(event)
+        .catch(() => undefined);
 
       return {
         success: true,
@@ -829,6 +912,7 @@ export class EventsController {
         { name: "sponsorLogos", maxCount: 50 },
         { name: "addOnImages", maxCount: 100 },
         { name: "speakerImages", maxCount: 20 },
+        { name: "workshopImages", maxCount: 50 },
         { name: "storyImages", maxCount: 50 },
       ],
       {
@@ -855,6 +939,7 @@ export class EventsController {
       sponsorLogos?: Express.Multer.File[];
       addOnImages?: Express.Multer.File[];
       speakerImages?: Express.Multer.File[];
+      workshopImages?: Express.Multer.File[];
       storyImages?: Express.Multer.File[];
     },
     @Body() body: any,
@@ -879,6 +964,8 @@ export class EventsController {
         body.isShowcase = body.isShowcase === "true";
       if (typeof body.isDemo === "string")
         body.isDemo = body.isDemo === "true";
+      if (typeof body.workshopHostingOpen === "string")
+        body.workshopHostingOpen = body.workshopHostingOpen === "true";
       if (typeof body.features === "string")
         body.features = JSON.parse(body.features);
       if (typeof body.socialMedia === "string")
@@ -916,6 +1003,26 @@ export class EventsController {
         body.speakers = JSON.parse(body.speakers);
       if (typeof body.speakerSlotTemplates === "string")
         body.speakerSlotTemplates = JSON.parse(body.speakerSlotTemplates);
+      if (typeof body.workshopSessions === "string")
+        body.workshopSessions = JSON.parse(body.workshopSessions);
+      if (typeof body.workshopPackages === "string")
+        body.workshopPackages = JSON.parse(body.workshopPackages);
+      // Belt-and-suspenders: a package's bundle can only reference
+      // organizer-added sessions. Host-application sessions carry a
+      // "wsreq-" id (see workshop-requests.service.ts finalizeWorkshopRequest)
+      // — a combo spanning multiple hosts has no defined revenue split, so
+      // the create/edit form already excludes them; strip any that slip
+      // through via a direct API call instead of rejecting the whole save.
+      if (Array.isArray(body.workshopPackages)) {
+        body.workshopPackages = body.workshopPackages.map((pkg: any) => ({
+          ...pkg,
+          sessionIds: Array.isArray(pkg.sessionIds)
+            ? pkg.sessionIds.filter(
+                (sid: string) => !String(sid).startsWith("wsreq-"),
+              )
+            : pkg.sessionIds,
+        }));
+      }
       if (typeof body.venueSpeakerZones === "string")
         body.venueSpeakerZones = JSON.parse(body.venueSpeakerZones);
       if (typeof body.roundTableTemplates === "string")
@@ -1025,7 +1132,10 @@ export class EventsController {
         });
       }
 
-      // Handle speaker images
+      // Handle speaker images. The form tells us WHICH uploaded file belongs to
+      // each speaker (newImageIndex) so a dropped or filtered-out upload can't
+      // shift every later photo onto the wrong speaker. Older clients don't
+      // send it — they fall back to the original in-order consumption.
       if (
         files.speakerImages &&
         files.speakerImages.length > 0 &&
@@ -1033,12 +1143,57 @@ export class EventsController {
       ) {
         let imgIdx = 0;
         body.speakers = body.speakers.map((speaker) => {
-          if (speaker.hasNewImage && imgIdx < files.speakerImages.length) {
+          const explicit = Number(speaker.newImageIndex);
+          if (Number.isInteger(explicit) && explicit >= 0) {
+            const file = files.speakerImages[explicit];
+            if (file) speaker.image = `/uploads/events/${file.filename}`;
+          } else if (speaker.hasNewImage && imgIdx < files.speakerImages.length) {
             speaker.image = `/uploads/events/${files.speakerImages[imgIdx].filename}`;
             imgIdx++;
           }
           delete speaker.hasNewImage;
+          delete speaker.newImageIndex;
           return speaker;
+        });
+      } else if (Array.isArray(body.speakers)) {
+        // No files in this request: drop the transport-only flags so they don't
+        // get persisted onto the speaker documents.
+        body.speakers = body.speakers.map((speaker) => {
+          delete speaker.hasNewImage;
+          delete speaker.newImageIndex;
+          return speaker;
+        });
+      }
+
+      // Handle workshop session images — same newImageIndex-first, in-order
+      // fallback pattern as speakerImages above.
+      if (
+        files.workshopImages &&
+        files.workshopImages.length > 0 &&
+        Array.isArray(body.workshopSessions)
+      ) {
+        let wImgIdx = 0;
+        body.workshopSessions = body.workshopSessions.map((session) => {
+          const explicit = Number(session.newImageIndex);
+          if (Number.isInteger(explicit) && explicit >= 0) {
+            const file = files.workshopImages[explicit];
+            if (file) session.image = `/uploads/events/${file.filename}`;
+          } else if (
+            session.hasNewImage &&
+            wImgIdx < files.workshopImages.length
+          ) {
+            session.image = `/uploads/events/${files.workshopImages[wImgIdx].filename}`;
+            wImgIdx++;
+          }
+          delete session.hasNewImage;
+          delete session.newImageIndex;
+          return session;
+        });
+      } else if (Array.isArray(body.workshopSessions)) {
+        body.workshopSessions = body.workshopSessions.map((session) => {
+          delete session.hasNewImage;
+          delete session.newImageIndex;
+          return session;
         });
       }
 
@@ -1058,6 +1213,12 @@ export class EventsController {
       }
 
       const event = await this.eventsService.update(id, body);
+
+      // Same roster sync as create — an edit that adds a speaker should show
+      // up in the CRM, and re-saving an unchanged line-up changes nothing.
+      void this.speakerRequestsService
+        .syncEventSpeakersToRoster(event)
+        .catch(() => undefined);
 
       return {
         success: true,

@@ -65,6 +65,9 @@ interface Props {
   organizerId: string;
 }
 
+import { symbolForCode } from "@/data/currencies";
+// Local overrides (e.g. the padded "AED ") take priority; any other currency
+// falls through to the shared table via symbolForCode.
 const CURRENCY_SYMBOLS: Record<string, string> = {
   INR: "₹",
   USD: "$",
@@ -455,7 +458,7 @@ export function EventfrontMemberDialog({ open, onClose, organizerId }: Props) {
     plans[0]?.currency ||
     active?.currency ||
     "USD";
-  const planSymbol = CURRENCY_SYMBOLS[planCurrency] || planCurrency;
+  const planSymbol = CURRENCY_SYMBOLS[planCurrency] || symbolForCode(planCurrency);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -628,7 +631,7 @@ export function EventfrontMemberDialog({ open, onClose, organizerId }: Props) {
                   a member yet — pick a plan to join.
                 </p>
                 {plans.map((p) => {
-                  const sym = CURRENCY_SYMBOLS[p.currency] || p.currency;
+                  const sym = CURRENCY_SYMBOLS[p.currency] || symbolForCode(p.currency);
                   return (
                     <button
                       key={p._id}

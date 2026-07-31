@@ -107,6 +107,27 @@ export class OtpController {
     );
   }
 
+  // Email OTP LOGIN (organizer) — email-first replacement for WhatsApp login.
+  @Post("send-email-login-otp")
+  async sendEmailLoginOtp(
+    @Body() body: { email: string; role: string },
+  ) {
+    return this.otpService.sendEmailLoginOtp(body.email, body.role);
+  }
+
+  @Post("verify-email-login-otp")
+  async verifyEmailLoginOtp(
+    @Body()
+    body: { email: string; role: string; otp: string; shopId?: string },
+  ) {
+    return this.otpService.verifyEmailLoginOtp(
+      body.email,
+      body.role,
+      body.otp,
+      body.shopId,
+    );
+  }
+
   @Post("verify-chat-otp")
   async verifyChatOTP(
     @Body()

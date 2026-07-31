@@ -55,6 +55,8 @@ interface Props {
   organizerId: string;
 }
 
+import { symbolForCode } from "@/data/currencies";
+// Local overrides take priority; other currencies fall through to the shared table.
 const CURRENCY_SYMBOLS: Record<string, string> = {
   INR: "₹",
   USD: "$",
@@ -103,7 +105,7 @@ export function MembershipPurchaseDialog({
     LookupResult["activeMembership"] | null
   >(null);
 
-  const symbol = CURRENCY_SYMBOLS[plan.currency] || plan.currency;
+  const symbol = CURRENCY_SYMBOLS[plan.currency] || symbolForCode(plan.currency);
 
   const reset = () => {
     setStep("phone");

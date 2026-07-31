@@ -351,10 +351,16 @@ const RoundTablePaymentPage = () => {
                         </div>
                       )}
 
-                      {/* Case 5: Singapore + PayNow dynamic QR ready */}
+                      {/* Case 5: Singapore + PayNow dynamic QR ready. dynamicUENString is
+                          already a rendered QR image URL (sgqrcode.com), not raw payload
+                          text — render it directly, don't re-encode it as a new QR. */}
                       {country === "SG" && dynamicUENString && (
                         <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-xl shadow-lg border-2 border-blue-200">
-                          <QRCode value={dynamicUENString} size={260} fgColor="#000000" bgColor="#ffffff" />
+                          <img
+                            src={dynamicUENString}
+                            alt="PayNow QR"
+                            className="w-64 h-64 object-contain rounded-xl"
+                          />
                           <p className="font-bold text-lg text-green-700">Pay {formatPrice(totalAmount)}</p>
                           <p className="text-xs text-gray-500">Scan with PayNow / DBS / OCBC</p>
                         </div>

@@ -22,6 +22,8 @@ interface Props {
   primaryColor?: string;
 }
 
+import { symbolForCode } from "@/data/currencies";
+// Local overrides take priority; other currencies fall through to the shared table.
 const CURRENCY_SYMBOLS: Record<string, string> = {
   INR: "₹",
   USD: "$",
@@ -104,7 +106,7 @@ export function StorefrontMembershipSection({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
           {plans.map((plan) => {
-            const symbol = CURRENCY_SYMBOLS[plan.currency] || plan.currency;
+            const symbol = CURRENCY_SYMBOLS[plan.currency] || symbolForCode(plan.currency);
             return (
               <div
                 key={plan._id}

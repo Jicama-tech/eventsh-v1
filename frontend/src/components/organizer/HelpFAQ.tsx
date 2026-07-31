@@ -50,7 +50,7 @@ const faqData: FAQSection[] = [
       },
       {
         q: "How do I change my organization's country/currency?",
-        a: "Go to Settings → select your country (India or Singapore). The currency symbol (₹ or SG$) will update instantly across all pages — no logout needed.",
+        a: "Go to Settings → select your country. EventSH supports organizers worldwide, and your country's currency symbol (₹, SG$, $, €, £, and more) updates instantly across all pages — no logout needed.",
       },
     ],
   },
@@ -165,7 +165,7 @@ const faqData: FAQSection[] = [
       },
       {
         q: "How does currency work?",
-        a: "Your country setting determines the currency symbol. India → ₹ (INR), Singapore → SG$ (SGD). Change it in Settings — the currency updates instantly across all pages without logout.",
+        a: "Your country setting determines the currency shown everywhere. EventSH supports every country — e.g. India → ₹ (INR), Singapore → SG$ (SGD), United States → $ (USD), UK → £ (GBP), Eurozone → € (EUR). Change it in Settings and the currency updates instantly across all pages without logout.",
       },
       {
         q: "How are speaker/stall payments processed?",
@@ -232,12 +232,108 @@ const faqData: FAQSection[] = [
   },
 ];
 
-export function HelpFAQ() {
+// Individual (personal / wedding) accounts don't have the professional tooling
+// (venue designer, stalls, speakers, operators). Their Help is scoped to what
+// they actually do: create an event with the Assistant, share the invitation,
+// and manage the guest list.
+const individualFaqData: FAQSection[] = [
+  {
+    title: "Getting Started",
+    icon: HelpCircle,
+    color: "text-blue-600",
+    items: [
+      {
+        q: "How do I create my event?",
+        a: "Just tell the Assistant what you're planning (e.g. \"I'm having a wedding on 12 December\") and it will set up your event and open the event form. You can also tap 'My Events' → 'Create' to open the form directly.",
+      },
+      {
+        q: "What kind of events can I create?",
+        a: "Individual accounts are built for personal functions — weddings and marriage celebrations — with multiple ceremonies (Haldi, Mehndi, Sangeet, Wedding, Reception), an invitation page, and an RSVP guest list. You don't need to register a company.",
+      },
+      {
+        q: "How do I publish and share my invitation?",
+        a: "Open your event from 'My Events', fill in the details, and publish it. You then get a public invitation link (your Eventfront) you can share with guests over WhatsApp, message, or email — they open it and RSVP.",
+      },
+      {
+        q: "Do my guests need an account?",
+        a: "No. Guests open your invitation link and RSVP by signing in with Google once — only to confirm their response. There's nothing for them to install.",
+      },
+    ],
+  },
+  {
+    title: "Your Event & Invitation",
+    icon: Calendar,
+    color: "text-rose-600",
+    items: [
+      {
+        q: "How do I edit my event?",
+        a: "Go to 'My Events' and tap 'Edit' on the event card. You can update the couple names, dates, ceremonies (functions), venue, gallery photos, and your story.",
+      },
+      {
+        q: "How do I set the invitation heading?",
+        a: "In the event form, use the 'Invitation title' field. Whatever you type there shows as the heading on your guests' RSVP / invitation form (e.g. \"You're Invited to Aarav & Diya's Wedding\"). Leave it blank to use the couple's names.",
+      },
+      {
+        q: "Can I add more than one ceremony?",
+        a: "Yes. Add each function (Haldi, Mehndi, Sangeet, Wedding, Reception) with its own date, time, and venue. Guests can pick which ceremonies they'll attend when they RSVP.",
+      },
+      {
+        q: "Can I personalise the look of the invitation?",
+        a: "Yes — the invitation page uses a wedding design with your banner, gallery, colours and 'Our Story'. Set these in the event form's media and story sections.",
+      },
+    ],
+  },
+  {
+    title: "Guest List & RSVPs",
+    icon: Users,
+    color: "text-purple-600",
+    items: [
+      {
+        q: "Where do I see who's coming?",
+        a: "Open the 'Guest List' tab, pick your event, and tap 'View'. You'll see every RSVP — who's attending, headcount, contact details, which ceremonies they picked, and their messages.",
+      },
+      {
+        q: "How is the total headcount calculated?",
+        a: "Each guest lists everyone in their party (name + age), so the guest list shows the true total number of people attending, with an age-group breakdown, not just the number of responses.",
+      },
+      {
+        q: "Can I allot rooms to guests?",
+        a: "Yes. In the Guest List, open a guest to assign a room — you can also mark a room as shared between guests. It keeps your accommodation planning in one place.",
+      },
+      {
+        q: "Can I export my guest list?",
+        a: "Yes — the Guest List has an export option that downloads the full list (names, ages, contacts, ceremonies) so you can share it with your planner or caterer.",
+      },
+    ],
+  },
+  {
+    title: "Settings & Account",
+    icon: Settings,
+    color: "text-slate-600",
+    items: [
+      {
+        q: "Where are Settings and Help?",
+        a: "On a phone they're in the ☰ Menu at the top right (next to Logout). On desktop they're in the left sidebar. Settings is where you set the email your guests receive messages from.",
+      },
+      {
+        q: "How does currency show up?",
+        a: "Your country determines the currency symbol shown anywhere money appears. EventSH supports organizers worldwide — pick your country in Settings and it updates everywhere.",
+      },
+      {
+        q: "Can I upgrade to a full organizer account later?",
+        a: "Yes. If you move beyond personal events (selling tickets, hosting exhibitions with stalls, managing speakers), you can register as an organizer and unlock the full professional dashboard — your existing events come with you.",
+      },
+    ],
+  },
+];
+
+export function HelpFAQ({ isIndividual = false }: { isIndividual?: boolean }) {
+  const data = isIndividual ? individualFaqData : faqData;
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedSection, setExpandedSection] = useState<string | null>("Getting Started");
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
 
-  const filteredSections = faqData
+  const filteredSections = data
     .map((section) => ({
       ...section,
       items: section.items.filter(
@@ -249,7 +345,7 @@ export function HelpFAQ() {
     }))
     .filter((section) => section.items.length > 0);
 
-  const totalQuestions = faqData.reduce((sum, s) => sum + s.items.length, 0);
+  const totalQuestions = data.reduce((sum, s) => sum + s.items.length, 0);
 
   return (
     <div className="space-y-6">
@@ -258,7 +354,9 @@ export function HelpFAQ() {
         <HelpCircle className="h-12 w-12 text-primary mx-auto" />
         <h2 className="text-2xl font-bold">Help Center</h2>
         <p className="text-muted-foreground">
-          Everything you need to know about managing your events
+          {isIndividual
+            ? "Everything you need to plan your event and manage your guest list"
+            : "Everything you need to know about managing your events"}
         </p>
         <Badge variant="outline">{totalQuestions} articles</Badge>
       </div>
