@@ -19,7 +19,7 @@ export class CreatePaymentFeedbackDto {
   @IsString()
   eventTitle?: string;
 
-  @IsIn(["vendor", "stall_edit", "visitor", "speaker", "round_table"])
+  @IsIn(["vendor", "stall_edit", "visitor", "speaker", "round_table", "workshop"])
   paymentType: string;
 
   @IsNumber()

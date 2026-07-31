@@ -61,6 +61,8 @@ import {
   Square,
   ArrowUpRight,
   Eye,
+  GraduationCap,
+  Package,
 } from "lucide-react";
 import {
   HoverCard,
@@ -7110,6 +7112,10 @@ export function CreateEventForm({
         initialData?.features?.hasSpeakers ??
         (Array.isArray(initialData?.speakerSlotTemplates) &&
           initialData.speakerSlotTemplates.length > 0),
+      hasWorkshops:
+        initialData?.features?.hasWorkshops ??
+        (Array.isArray(initialData?.workshopSessions) &&
+          initialData.workshopSessions.length > 0),
     },
     ageRestriction: initialData?.ageRestriction ?? "All Ages",
     ageRestrictions: Array.isArray(initialData?.ageRestrictions)
@@ -7143,6 +7149,7 @@ export function CreateEventForm({
     },
     status: initialData?.status ?? "published",
     featured: initialData?.featured ?? false,
+    workshopHostingOpen: initialData?.workshopHostingOpen ?? false,
     setupTime: initialData?.setupTime ?? "",
     breakdownTime: initialData?.breakdownTime ?? "",
     termsForStalls:
@@ -7164,6 +7171,66 @@ export function CreateEventForm({
   );
 
   const [speakers, setSpeakers] = useState<any[]>(initialData?.speakers ?? []);
+
+  // Workshop Sessions — individually priced, bookable workshops (like a
+  // Speaker card: image + name + details) that can also be bundled into a
+  // WorkshopPackage below.
+  const [workshopSessions, setWorkshopSessions] = useState<any[]>(
+    (initialData?.workshopSessions ?? []).map((w: any) => ({ ...w })),
+  );
+  const [currentWorkshopSession, setCurrentWorkshopSession] = useState({
+    name: "",
+    description: "",
+    price: "0",
+    facilitator: "",
+    startTime: "",
+    endTime: "",
+    maxSeats: "",
+    image: "",
+    photoFile: null as File | null,
+    photoPreview: "",
+  });
+  // When set, the workshop-session form edits this existing session in place.
+  const [editingWorkshopSessionId, setEditingWorkshopSessionId] = useState<
+    string | null
+  >(null);
+
+  // Workshop session photo cropping — same ImageCropModal the banner,
+  // gallery and speaker photos use.
+  const [workshopCrop, setWorkshopCrop] = useState<{ url: string } | null>(
+    null,
+  );
+  const closeWorkshopCropper = () => {
+    setWorkshopCrop((cur) => {
+      if (cur?.url?.startsWith("blob:")) URL.revokeObjectURL(cur.url);
+      return null;
+    });
+  };
+  const applyWorkshopCrop = (croppedFile: File) => {
+    if (!workshopCrop) return;
+    setCurrentWorkshopSession((p) => ({
+      ...p,
+      photoFile: croppedFile,
+      photoPreview: URL.createObjectURL(croppedFile),
+    }));
+    closeWorkshopCropper();
+  };
+
+  // Workshop Packages — a named bundle of Workshop Sessions sold at its own
+  // price, independent of the sum of the individual session prices.
+  const [workshopPackages, setWorkshopPackages] = useState<any[]>(
+    (initialData?.workshopPackages ?? []).map((p: any) => ({ ...p })),
+  );
+  const [currentWorkshopPackage, setCurrentWorkshopPackage] = useState({
+    name: "",
+    description: "",
+    price: "0",
+    sessionIds: [] as string[],
+  });
+  const [editingWorkshopPackageId, setEditingWorkshopPackageId] = useState<
+    string | null
+  >(null);
+
   // Volunteers allow-listed to sign in to the scanner page via Google.
   const [volunteers, setVolunteers] = useState<
     { name: string; email: string; phoneNumber: string }[]
@@ -8018,6 +8085,7 @@ export function CreateEventForm({
       (currentTab === "tables" && !f.hasStalls) ||
       (currentTab === "speakers" && !f.hasSpeakers) ||
       (currentTab === "roundtables" && !f.hasRoundTables) ||
+      (currentTab === "workshops" && !f.hasWorkshops) ||
       (currentTab === "layout" &&
         !f.hasStalls &&
         !f.hasSpeakers &&
@@ -8029,6 +8097,7 @@ export function CreateEventForm({
     formData.features.hasStalls,
     formData.features.hasSpeakers,
     formData.features.hasRoundTables,
+    formData.features.hasWorkshops,
     venueConfigurations,
   ]);
 
@@ -8336,6 +8405,164 @@ export function CreateEventForm({
     if (editingVisitorId === id) resetVisitorForm();
   };
 
+  const resetWorkshopSessionForm = () => {
+    // Deliberately NOT revoking p.photoPreview here: addWorkshopSession just
+    // copied that same blob: URL onto the saved session card, so revoking it
+    // would blank out the image we're about to show in the list below.
+    setCurrentWorkshopSession({
+      name: "",
+      description: "",
+      price: "0",
+      facilitator: "",
+      startTime: "",
+      endTime: "",
+      maxSeats: "",
+      image: "",
+      photoFile: null,
+      photoPreview: "",
+    });
+    setEditingWorkshopSessionId(null);
+  };
+
+  const addWorkshopSession = () => {
+    if (!currentWorkshopSession.name.trim()) {
+      toast({ title: "Workshop name is required", variant: "destructive" });
+      return;
+    }
+    const price = parseFloat(currentWorkshopSession.price) || 0;
+    const maxSeats = currentWorkshopSession.maxSeats
+      ? parseInt(currentWorkshopSession.maxSeats)
+      : undefined;
+    const shared = {
+      name: currentWorkshopSession.name.trim(),
+      description: currentWorkshopSession.description,
+      price,
+      facilitator: currentWorkshopSession.facilitator,
+      startTime: currentWorkshopSession.startTime,
+      endTime: currentWorkshopSession.endTime,
+      maxSeats,
+      image: currentWorkshopSession.image,
+      photoFile: currentWorkshopSession.photoFile,
+      photoPreview: currentWorkshopSession.photoPreview,
+    };
+
+    if (editingWorkshopSessionId) {
+      setWorkshopSessions((prev) =>
+        prev.map((s) =>
+          s.id === editingWorkshopSessionId ? { ...s, ...shared } : s,
+        ),
+      );
+    } else {
+      setWorkshopSessions((prev) => [
+        ...prev,
+        { id: Math.random().toString(36).slice(2, 10), order: prev.length, ...shared },
+      ]);
+    }
+    resetWorkshopSessionForm();
+  };
+
+  // Load an existing workshop session back into the form for editing.
+  const editWorkshopSession = (id: string) => {
+    const s = workshopSessions.find((w) => w.id === id);
+    if (!s) return;
+    setCurrentWorkshopSession({
+      name: s.name ?? "",
+      description: s.description ?? "",
+      price: String(s.price ?? 0),
+      facilitator: s.facilitator ?? "",
+      startTime: s.startTime ?? "",
+      endTime: s.endTime ?? "",
+      maxSeats: s.maxSeats != null ? String(s.maxSeats) : "",
+      image: s.image ?? "",
+      photoFile: s.photoFile ?? null,
+      photoPreview: s.photoPreview ?? "",
+    });
+    setEditingWorkshopSessionId(id);
+  };
+
+  const removeWorkshopSession = (id: string) => {
+    setWorkshopSessions((prev) => prev.filter((s) => s.id !== id));
+    // Drop the removed session from any package that had bundled it.
+    setWorkshopPackages((prev) =>
+      prev.map((p) => ({
+        ...p,
+        sessionIds: (p.sessionIds ?? []).filter((sid: string) => sid !== id),
+      })),
+    );
+    if (editingWorkshopSessionId === id) resetWorkshopSessionForm();
+  };
+
+  const resetWorkshopPackageForm = () => {
+    setCurrentWorkshopPackage({
+      name: "",
+      description: "",
+      price: "0",
+      sessionIds: [],
+    });
+    setEditingWorkshopPackageId(null);
+  };
+
+  const toggleWorkshopPackageSession = (sessionId: string) => {
+    setCurrentWorkshopPackage((p) => ({
+      ...p,
+      sessionIds: p.sessionIds.includes(sessionId)
+        ? p.sessionIds.filter((id) => id !== sessionId)
+        : [...p.sessionIds, sessionId],
+    }));
+  };
+
+  const addWorkshopPackage = () => {
+    if (!currentWorkshopPackage.name.trim()) {
+      toast({ title: "Package name is required", variant: "destructive" });
+      return;
+    }
+    if (currentWorkshopPackage.sessionIds.length < 2) {
+      toast({
+        title: "Select at least 2 workshops to bundle into a package",
+        variant: "destructive",
+      });
+      return;
+    }
+    const price = parseFloat(currentWorkshopPackage.price) || 0;
+    const shared = {
+      name: currentWorkshopPackage.name.trim(),
+      description: currentWorkshopPackage.description,
+      price,
+      sessionIds: currentWorkshopPackage.sessionIds,
+    };
+
+    if (editingWorkshopPackageId) {
+      setWorkshopPackages((prev) =>
+        prev.map((p) =>
+          p.id === editingWorkshopPackageId ? { ...p, ...shared } : p,
+        ),
+      );
+    } else {
+      setWorkshopPackages((prev) => [
+        ...prev,
+        { id: Math.random().toString(36).slice(2, 10), order: prev.length, ...shared },
+      ]);
+    }
+    resetWorkshopPackageForm();
+  };
+
+  const editWorkshopPackage = (id: string) => {
+    const p = workshopPackages.find((pkg) => pkg.id === id);
+    if (!p) return;
+    setCurrentWorkshopPackage({
+      name: p.name ?? "",
+      description: p.description ?? "",
+      price: String(p.price ?? 0),
+      sessionIds: Array.isArray(p.sessionIds) ? [...p.sessionIds] : [],
+    });
+    setEditingWorkshopPackageId(id);
+  };
+
+  const removeWorkshopPackage = (id: string) => {
+    setWorkshopPackages((prev) => prev.filter((p) => p.id !== id));
+    if (editingWorkshopPackageId === id) resetWorkshopPackageForm();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -8626,6 +8853,55 @@ export function CreateEventForm({
       });
       data.append("speakers", JSON.stringify(builtSpeakers));
 
+      // Build workshop sessions — same newImageIndex-first pattern as
+      // speakers above, so a dropped/filtered upload can't shift a later
+      // photo onto the wrong workshop.
+      const builtWorkshopSessions: any[] = [];
+      let workshopImageIndex = 0;
+      workshopSessions.forEach((session: any) => {
+        let newImageIndex = -1;
+        if (session.photoFile) {
+          data.append("workshopImages", session.photoFile);
+          newImageIndex = workshopImageIndex++;
+        }
+        builtWorkshopSessions.push({
+          id: session.id,
+          name: session.name,
+          description: session.description || "",
+          price: Number(session.price) || 0,
+          facilitator: session.facilitator || "",
+          startTime: session.startTime || "",
+          endTime: session.endTime || "",
+          maxSeats: session.maxSeats ? Number(session.maxSeats) : undefined,
+          // Carries forward server-managed booking state — this form has no
+          // field for it, but silently dropping it here would zero out real
+          // confirmed bookings on every unrelated event save.
+          bookedSeats: session.bookedSeats || 0,
+          hasNewImage: !!session.photoFile,
+          newImageIndex,
+          // Carries the previously saved url forward so a save without a new
+          // upload keeps the existing photo instead of blanking it.
+          image: session.image || "",
+          order: builtWorkshopSessions.length,
+        });
+      });
+      data.append("workshopSessions", JSON.stringify(builtWorkshopSessions));
+
+      // Workshop packages just reference session ids — no images of their own.
+      data.append(
+        "workshopPackages",
+        JSON.stringify(
+          workshopPackages.map((pkg: any, idx: number) => ({
+            id: pkg.id,
+            name: pkg.name,
+            description: pkg.description || "",
+            price: Number(pkg.price) || 0,
+            sessionIds: pkg.sessionIds || [],
+            order: idx,
+          })),
+        ),
+      );
+
       // Add speaker slot templates and zones
       // Strip the pick-time fields before persisting: photoFile is a File that
       // JSON.stringify silently drops, and photoPreview is a `blob:` URL that
@@ -8757,6 +9033,7 @@ export function CreateEventForm({
         const showStalls = !!formData.features.hasStalls;
         const showRoundTables = !!formData.features.hasRoundTables;
         const showSpeakers = !!formData.features.hasSpeakers;
+        const showWorkshops = !!formData.features.hasWorkshops;
         // Layout tab is also useful when any door type is defined (per venue),
         // since the user needs the canvas to place those door markers.
         const anyDoorsEnabled = venueConfigurations.some(
@@ -8771,6 +9048,7 @@ export function CreateEventForm({
           (showStalls ? 1 : 0) +
           (showSpeakers ? 1 : 0) +
           (showRoundTables ? 1 : 0) +
+          (showWorkshops ? 1 : 0) +
           (showLayout ? 1 : 0);
         const colsClass =
           (
@@ -8780,8 +9058,9 @@ export function CreateEventForm({
               7: "grid-cols-7",
               8: "grid-cols-8",
               9: "grid-cols-9",
+              10: "grid-cols-10",
             } as Record<number, string>
-          )[visibleCount] || "grid-cols-9";
+          )[visibleCount] || "grid-cols-10";
         return (
           <div className="sticky top-[73px] z-40 bg-white border-b">
             <Tabs value={currentTab} onValueChange={setCurrentTab}>
@@ -8815,6 +9094,11 @@ export function CreateEventForm({
                 {showSpeakers && (
                   <TabsTrigger value="speakers" className="text-sm">
                     Speakers
+                  </TabsTrigger>
+                )}
+                {showWorkshops && (
+                  <TabsTrigger value="workshops" className="text-sm">
+                    Workshops
                   </TabsTrigger>
                 )}
                 {showRoundTables && (
@@ -11223,6 +11507,551 @@ export function CreateEventForm({
             </ModuleGate>
           </TabsContent>
 
+          {/* WORKSHOPS TAB */}
+          <TabsContent value="workshops" className="space-y-6">
+            <ModuleGate moduleKey="events" sectionKey="workshops">
+              {/* Public self-application entry point */}
+              <Card>
+                <CardContent className="pt-6">
+                  <label className="flex items-start gap-3 border rounded-lg p-3 cursor-pointer hover:bg-muted/30">
+                    <Switch
+                      checked={!!formData.workshopHostingOpen}
+                      onCheckedChange={(checked) =>
+                        setFormData((old) => ({
+                          ...old,
+                          workshopHostingOpen: checked,
+                        }))
+                      }
+                    />
+                    <div>
+                      <p className="font-medium text-sm">
+                        Accept Workshop Host Applications
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Lets outside hosts apply on the public event page to
+                        run a workshop here. You review and approve each
+                        application before it goes live — same as Speakers
+                        and Exhibitors.
+                      </p>
+                    </div>
+                  </label>
+                </CardContent>
+              </Card>
+
+              {/* SECTION 1: Workshop Sessions */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <GraduationCap size={20} />
+                    Workshop Sessions
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <p className="text-sm text-gray-500">
+                    Add the workshops visitors can book for this event. Each
+                    one has its own price — you can also bundle several into a
+                    Workshop Package below.
+                  </p>
+                  <div className="border rounded-lg p-4 bg-slate-50 space-y-4">
+                    <Label className="text-sm font-semibold text-slate-700">
+                      {editingWorkshopSessionId
+                        ? "Edit Workshop"
+                        : "Add New Workshop"}
+                    </Label>
+                    <div className="grid grid-cols-1 md:grid-cols-[96px_1fr] gap-4">
+                      {/* Photo Upload */}
+                      <div className="flex flex-col items-center gap-1">
+                        <div
+                          className="w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-gray-50"
+                          onClick={() =>
+                            document
+                              .getElementById("workshop-session-img")
+                              ?.click()
+                          }
+                        >
+                          {currentWorkshopSession.photoPreview ||
+                          currentWorkshopSession.image ? (
+                            <img
+                              src={
+                                currentWorkshopSession.photoPreview ||
+                                (currentWorkshopSession.image?.startsWith("/")
+                                  ? `${__API_URL__?.replace("/api", "") || ""}${currentWorkshopSession.image}`
+                                  : currentWorkshopSession.image)
+                              }
+                              alt={currentWorkshopSession.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <Upload className="h-6 w-6 text-muted-foreground" />
+                          )}
+                        </div>
+                        <input
+                          id="workshop-session-img"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setWorkshopCrop({
+                                url: URL.createObjectURL(file),
+                              });
+                            }
+                            e.target.value = "";
+                          }}
+                        />
+                        <span className="text-[9px] text-muted-foreground">
+                          Photo
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label>Workshop Name *</Label>
+                          <Input
+                            value={currentWorkshopSession.name}
+                            onChange={(e) =>
+                              setCurrentWorkshopSession((p) => ({
+                                ...p,
+                                name: e.target.value,
+                              }))
+                            }
+                            placeholder="e.g. Intro to Pottery"
+                          />
+                        </div>
+                        <div>
+                          <Label>Price for Visitors *</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            value={currentWorkshopSession.price}
+                            onChange={(e) =>
+                              setCurrentWorkshopSession((p) => ({
+                                ...p,
+                                price: e.target.value,
+                              }))
+                            }
+                            placeholder="0 = Free"
+                          />
+                        </div>
+                        <div>
+                          <Label>Facilitator</Label>
+                          <Input
+                            value={currentWorkshopSession.facilitator}
+                            onChange={(e) =>
+                              setCurrentWorkshopSession((p) => ({
+                                ...p,
+                                facilitator: e.target.value,
+                              }))
+                            }
+                            placeholder="Who's running it"
+                          />
+                        </div>
+                        <div>
+                          <Label>
+                            Max Seats{" "}
+                            <span className="text-gray-400 text-xs">
+                              (blank = unlimited)
+                            </span>
+                          </Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={currentWorkshopSession.maxSeats}
+                            onChange={(e) =>
+                              setCurrentWorkshopSession((p) => ({
+                                ...p,
+                                maxSeats: e.target.value,
+                              }))
+                            }
+                            placeholder="e.g. 30"
+                          />
+                        </div>
+                        <div>
+                          <Label>Start Time</Label>
+                          <Input
+                            type="time"
+                            value={currentWorkshopSession.startTime}
+                            onChange={(e) =>
+                              setCurrentWorkshopSession((p) => ({
+                                ...p,
+                                startTime: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <Label>End Time</Label>
+                          <Input
+                            type="time"
+                            value={currentWorkshopSession.endTime}
+                            onChange={(e) =>
+                              setCurrentWorkshopSession((p) => ({
+                                ...p,
+                                endTime: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Details</Label>
+                      <Textarea
+                        value={currentWorkshopSession.description}
+                        onChange={(e) =>
+                          setCurrentWorkshopSession((p) => ({
+                            ...p,
+                            description: e.target.value,
+                          }))
+                        }
+                        placeholder="What visitors will learn / bring / need to know"
+                        rows={3}
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        onClick={addWorkshopSession}
+                        className="w-full md:w-auto"
+                      >
+                        {editingWorkshopSessionId ? (
+                          <>
+                            <Pencil size={16} className="mr-2" /> Update
+                            Workshop
+                          </>
+                        ) : (
+                          <>
+                            <Plus size={16} className="mr-2" /> Add Workshop
+                          </>
+                        )}
+                      </Button>
+                      {editingWorkshopSessionId && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={resetWorkshopSessionForm}
+                          className="w-full md:w-auto"
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  {workshopSessions.length === 0 && (
+                    <div className="text-sm text-gray-400 border border-dashed rounded-lg p-6 text-center">
+                      No workshops added yet. Add at least one above.
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {workshopSessions.map((session) => (
+                      <div
+                        key={session.id}
+                        className={`border rounded-lg p-4 bg-white flex gap-3 ${
+                          editingWorkshopSessionId === session.id
+                            ? "ring-2 ring-primary border-primary"
+                            : ""
+                        }`}
+                      >
+                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-50 border flex items-center justify-center shrink-0">
+                          {session.photoPreview || session.image ? (
+                            <img
+                              src={
+                                session.photoPreview ||
+                                (session.image?.startsWith("/")
+                                  ? `${__API_URL__?.replace("/api", "") || ""}${session.image}`
+                                  : session.image)
+                              }
+                              alt={session.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <GraduationCap className="h-6 w-6 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="font-semibold truncate">
+                                {session.name}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {session.price === 0
+                                  ? "Free"
+                                  : formatPrice(session.price)}
+                                {session.facilitator
+                                  ? ` · ${session.facilitator}`
+                                  : ""}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-primary hover:text-primary/80"
+                                onClick={() => editWorkshopSession(session.id)}
+                              >
+                                <Pencil size={14} />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-500 hover:text-red-600"
+                                onClick={() =>
+                                  removeWorkshopSession(session.id)
+                                }
+                              >
+                                <Trash2 size={14} />
+                              </Button>
+                            </div>
+                          </div>
+                          {session.description && (
+                            <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                              {session.description}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* SECTION 2: Workshop Packages */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Package size={20} />
+                    Workshop Packages
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <p className="text-sm text-gray-500">
+                    Bundle two or more workshops into a package sold at its
+                    own price — a discount incentive over booking each
+                    workshop separately.
+                  </p>
+                  {workshopSessions.length < 2 ? (
+                    <div className="text-sm text-gray-400 border border-dashed rounded-lg p-6 text-center">
+                      Add at least 2 workshop sessions above before creating a
+                      package.
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg p-4 bg-slate-50 space-y-4">
+                      <Label className="text-sm font-semibold text-slate-700">
+                        {editingWorkshopPackageId
+                          ? "Edit Package"
+                          : "Add New Package"}
+                      </Label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label>Package Name *</Label>
+                          <Input
+                            value={currentWorkshopPackage.name}
+                            onChange={(e) =>
+                              setCurrentWorkshopPackage((p) => ({
+                                ...p,
+                                name: e.target.value,
+                              }))
+                            }
+                            placeholder="e.g. Full Craft Bundle"
+                          />
+                        </div>
+                        <div>
+                          <Label>Package Price *</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            value={currentWorkshopPackage.price}
+                            onChange={(e) =>
+                              setCurrentWorkshopPackage((p) => ({
+                                ...p,
+                                price: e.target.value,
+                              }))
+                            }
+                            placeholder="Price for the whole bundle"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label>Description</Label>
+                        <Textarea
+                          value={currentWorkshopPackage.description}
+                          onChange={(e) =>
+                            setCurrentWorkshopPackage((p) => ({
+                              ...p,
+                              description: e.target.value,
+                            }))
+                          }
+                          placeholder="What's included in this bundle"
+                          rows={2}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium mb-2 block">
+                          Included Workshops * (select at least 2)
+                        </Label>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {workshopSessions.map((session) => (
+                            <label
+                              key={session.id}
+                              className="flex items-center gap-2 border rounded-lg p-2 cursor-pointer hover:bg-white"
+                            >
+                              <Checkbox
+                                checked={currentWorkshopPackage.sessionIds.includes(
+                                  session.id,
+                                )}
+                                onCheckedChange={() =>
+                                  toggleWorkshopPackageSession(session.id)
+                                }
+                              />
+                              <span className="text-sm truncate">
+                                {session.name}{" "}
+                                <span className="text-gray-400">
+                                  (
+                                  {session.price === 0
+                                    ? "Free"
+                                    : formatPrice(session.price)}
+                                  )
+                                </span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                        {currentWorkshopPackage.sessionIds.length > 0 && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Sum of individual prices:{" "}
+                            {formatPrice(
+                              workshopSessions
+                                .filter((s) =>
+                                  currentWorkshopPackage.sessionIds.includes(
+                                    s.id,
+                                  ),
+                                )
+                                .reduce(
+                                  (sum, s) => sum + (Number(s.price) || 0),
+                                  0,
+                                ),
+                            )}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          onClick={addWorkshopPackage}
+                          className="w-full md:w-auto"
+                        >
+                          {editingWorkshopPackageId ? (
+                            <>
+                              <Pencil size={16} className="mr-2" /> Update
+                              Package
+                            </>
+                          ) : (
+                            <>
+                              <Plus size={16} className="mr-2" /> Add Package
+                            </>
+                          )}
+                        </Button>
+                        {editingWorkshopPackageId && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={resetWorkshopPackageForm}
+                            className="w-full md:w-auto"
+                          >
+                            Cancel
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {workshopPackages.length === 0 && workshopSessions.length >= 2 && (
+                    <div className="text-sm text-gray-400 border border-dashed rounded-lg p-6 text-center">
+                      No packages added yet.
+                    </div>
+                  )}
+                  <div className="space-y-3">
+                    {workshopPackages.map((pkg) => {
+                      const included = workshopSessions.filter((s) =>
+                        (pkg.sessionIds ?? []).includes(s.id),
+                      );
+                      const individualTotal = included.reduce(
+                        (sum, s) => sum + (Number(s.price) || 0),
+                        0,
+                      );
+                      return (
+                        <div
+                          key={pkg.id}
+                          className={`border rounded-lg p-4 bg-white space-y-2 ${
+                            editingWorkshopPackageId === pkg.id
+                              ? "ring-2 ring-primary border-primary"
+                              : ""
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-semibold">{pkg.name}</div>
+                              <div className="text-sm text-gray-500">
+                                {pkg.price === 0
+                                  ? "Free"
+                                  : formatPrice(pkg.price)}
+                                {individualTotal > pkg.price && (
+                                  <span className="text-green-600">
+                                    {" "}
+                                    · saves{" "}
+                                    {formatPrice(individualTotal - pkg.price)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-primary hover:text-primary/80"
+                                onClick={() => editWorkshopPackage(pkg.id)}
+                              >
+                                <Pencil size={14} />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-500 hover:text-red-600"
+                                onClick={() => removeWorkshopPackage(pkg.id)}
+                              >
+                                <Trash2 size={14} />
+                              </Button>
+                            </div>
+                          </div>
+                          {pkg.description && (
+                            <p className="text-sm text-gray-600 bg-gray-50 rounded px-3 py-2">
+                              {pkg.description}
+                            </p>
+                          )}
+                          <div className="flex flex-wrap gap-2">
+                            {included.map((s) => (
+                              <Badge
+                                key={s.id}
+                                variant="secondary"
+                                className="text-xs"
+                              >
+                                {s.name}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </ModuleGate>
+          </TabsContent>
+
           {/* VENUE SETUP TAB */}
           <TabsContent value="venue" className="space-y-6">
             <ModuleGate moduleKey="events" sectionKey="venue">
@@ -11289,6 +12118,21 @@ export function CreateEventForm({
                           <p className="font-medium text-sm">Speaker Spaces</p>
                           <p className="text-xs text-muted-foreground">
                             Sessions, keynotes, panels
+                          </p>
+                        </div>
+                      </label>
+                      <label className="flex items-start gap-3 border rounded-lg p-3 cursor-pointer hover:bg-muted/30">
+                        <Switch
+                          checked={!!formData.features.hasWorkshops}
+                          onCheckedChange={(checked) =>
+                            handleFeatureChange("hasWorkshops", checked)
+                          }
+                        />
+                        <div>
+                          <p className="font-medium text-sm">Workshops</p>
+                          <p className="text-xs text-muted-foreground">
+                            Priced sessions, sellable individually or as
+                            packages
                           </p>
                         </div>
                       </label>
@@ -11900,6 +12744,18 @@ export function CreateEventForm({
           defaultAspect={1}
           onClose={closeSpeakerCropper}
           onCropComplete={applySpeakerCrop}
+        />
+      )}
+
+      {/* Workshop photo cropper. Landscape by default — workshops render as
+          cards, not circular avatars. */}
+      {workshopCrop && (
+        <ImageCropModal
+          open
+          image={workshopCrop.url}
+          defaultAspect={4 / 3}
+          onClose={closeWorkshopCropper}
+          onCropComplete={applyWorkshopCrop}
         />
       )}
     </div>
