@@ -87,6 +87,7 @@ import {
   roundTablesRevenue as calcRoundTablesRevenue,
 } from "@/lib/revenue";
 import { stallStage } from "@/lib/stallStatus";
+import { isFieldEnabled } from "@/lib/registrationFormFields";
 import RoundTableBookings from "@/components/organizer/RoundTableBookings";
 import WorkshopHostRequests from "@/components/organizer/WorkshopHostRequests";
 import { useCountry } from "@/hooks/useCountry";
@@ -307,6 +308,12 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   // Add this state to manage which tab is currently active
   const [activeTab, setActiveTab] = useState("user");
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const speakerFieldOn = (key: string) =>
+    isFieldEnabled(
+      (selectedEvent as any)?.registrationFormFields,
+      "speaker",
+      key,
+    );
   // Stalls deep-linked from the chatbot pending-pills get a brief pulse ring so
   // the operator's eye lands on the exact exhibitor that needs action.
   const [highlightStallIds, setHighlightStallIds] = useState<string[]>([]);
@@ -949,8 +956,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       labelValuePair(
         "Owner Name",
         stallRequest.shopkeeperId?.name,
-        "Business Name",
-        stallRequest.shopkeeperId?.shopName,
+        "Registered Business Name",
+        stallRequest.shopkeeperId?.businessName ||
+          stallRequest.shopkeeperId?.shopName,
       );
       labelValuePair(
         "Business Email",
@@ -1642,6 +1650,20 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
   const handleUpdatePaymentStatus = async () => {
     if (!selectedRequest || !selectedEvent) return;
+    // Payment is already confirmed — this dialog is only being reopened to
+    // add/update the transaction proof, not to re-confirm payment. Skip the
+    // status PATCH entirely: it would re-run the full "Paid" pipeline
+    // (regenerate QR/coupon, resend the WhatsApp/email ticket) for no reason.
+    const alreadyPaid = selectedRequest.paymentStatus === "Paid";
+    if (alreadyPaid && !payTxnId.trim() && !payScreenshot) {
+      toast({
+        duration: 5000,
+        title: "Nothing to save",
+        description: "Add a transaction ID or screenshot first.",
+        variant: "destructive",
+      });
+      return;
+    }
     setIsSubmitting(true);
     try {
       // If the organizer attached proof (transaction ID and/or screenshot the
@@ -1657,31 +1679,35 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         }).catch(() => {});
       }
 
-      const response = await fetch(
-        `${apiURL}/stalls/${selectedRequest._id}/payment-status`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            paymentStatus: paymentStatusUpdate,
-            notes: actionNotes,
-            changedBy: getActorLabel(),
-          }),
-        },
-      );
-      const result = await response.json();
-      if (result.success) {
-        toast({
-          duration: 5000,
-          title: "Success",
-          description: "Payment status updated successfully",
-        });
-        setShowPaymentDialog(false);
-        setActionNotes("");
-        setPayTxnId("");
-        setPayScreenshot(null);
-        await fetchStallTickets(selectedEvent._id);
-      } else throw new Error(result.message);
+      if (!alreadyPaid) {
+        const response = await fetch(
+          `${apiURL}/stalls/${selectedRequest._id}/payment-status`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              paymentStatus: paymentStatusUpdate,
+              notes: actionNotes,
+              changedBy: getActorLabel(),
+            }),
+          },
+        );
+        const result = await response.json();
+        if (!result.success) throw new Error(result.message);
+      }
+
+      toast({
+        duration: 5000,
+        title: "Success",
+        description: alreadyPaid
+          ? "Payment proof updated"
+          : "Payment status updated successfully",
+      });
+      setShowPaymentDialog(false);
+      setActionNotes("");
+      setPayTxnId("");
+      setPayScreenshot(null);
+      await fetchStallTickets(selectedEvent._id);
     } catch (error: any) {
       toast({
         duration: 5000,
@@ -1984,12 +2010,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       .toString()
       .toLowerCase();
   const exhibitorBusiness = (s: any) =>
-    (
-      s.shopkeeperId?.shopName ||
-      s.businessName ||
-      s.brandName ||
-      ""
-    )
+    (s.shopkeeperId?.businessName || s.shopkeeperId?.shopName || "")
       .toString()
       .toLowerCase();
   const sortedStalls = [...filteredStalls].sort((a: any, b: any) => {
@@ -2051,7 +2072,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     const header = [
       "#",
       "Owner Name",
-      "Business Name",
+      "Registered Business Name",
       "Primary Email",
       "Business Email",
       "WhatsApp",
@@ -2098,7 +2119,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       rows.push([
         idx + 1,
         v.name || s.nameOfApplicant || s.brandName || "", // Owner Name
-        v.shopName || s.brandName || v.businessName || s.businessName || "", // Business Name
+        v.businessName || v.shopName || "", // Registered Business Name
         v.email || s.email || "", // Primary Email
         v.businessEmail || "", // Business Email
         v.whatsappNumber ||
@@ -3070,9 +3091,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                 </TableCell>
                                 <TableCell>
                                   <div className="font-medium">
-                                    {s.shopkeeperId?.shopName ||
-                                      s.businessName ||
-                                      s.brandName ||
+                                    {s.shopkeeperId?.businessName ||
+                                      s.shopkeeperId?.shopName ||
                                       "—"}
                                   </div>
                                 </TableCell>
@@ -3445,14 +3465,20 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 {/* ROUND TABLES TAB — reuses the dedicated component */}
                 {sections.roundtables && (
                 <TabsContent value="roundtables" className="pt-4">
-                  <RoundTableBookings eventId={selectedEvent._id} />
+                  <RoundTableBookings
+                    eventId={selectedEvent._id}
+                    registrationFormFields={(selectedEvent as any)?.registrationFormFields}
+                  />
                 </TabsContent>
                 )}
 
                 {/* WORKSHOP TAB — host self-applications */}
                 {sections.workshopRequests && (
                 <TabsContent value="workshopRequests" className="pt-4">
-                  <WorkshopHostRequests eventId={selectedEvent._id} />
+                  <WorkshopHostRequests
+                    eventId={selectedEvent._id}
+                    registrationFormFields={(selectedEvent as any)?.registrationFormFields}
+                  />
                 </TabsContent>
                 )}
               </Tabs>
@@ -3612,10 +3638,10 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                             <div className="font-bold text-sm">
                               {stall.shopkeeperId?.name || stall.nameOfApplicant || "—"}
                             </div>
-                            {(stall.shopkeeperId?.shopName || stall.shopkeeperId?.businessName || stall.brandName) && (
+                            {(stall.shopkeeperId?.businessName || stall.shopkeeperId?.shopName) && (
                               <div className="text-xs text-muted-foreground flex items-center gap-1">
                                 <ShoppingCartIcon className="h-3 w-3" />{" "}
-                                {stall.shopkeeperId?.shopName || stall.shopkeeperId?.businessName || stall.brandName}
+                                {stall.shopkeeperId?.businessName || stall.shopkeeperId?.shopName}
                               </div>
                             )}
                             {stall.shopkeeperId?.whatsappNumber && (
@@ -4110,24 +4136,29 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       {selectedSpeaker.name || "—"}
                     </div>
                   </div>
+                  {speakerFieldOn("title") && (
                   <div>
                     <div className="font-medium">Title</div>
                     <div className="text-muted-foreground">
                       {selectedSpeaker.title || "—"}
                     </div>
                   </div>
+                  )}
+                  {speakerFieldOn("organization") && (
                   <div>
                     <div className="font-medium">Organization</div>
                     <div className="text-muted-foreground">
                       {selectedSpeaker.organization || "—"}
                     </div>
                   </div>
+                  )}
                   <div>
                     <div className="font-medium">Email</div>
                     <div className="text-muted-foreground break-all">
                       {selectedSpeaker.email || "—"}
                     </div>
                   </div>
+                  {speakerFieldOn("phone") && (
                   <div>
                     <div className="font-medium">Phone</div>
                     <div className="text-muted-foreground">
@@ -4138,18 +4169,21 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                         "—"}
                     </div>
                   </div>
+                  )}
                   <div>
                     <div className="font-medium">Source</div>
                     <div className="text-muted-foreground">
                       {selectedSpeaker.source || "—"}
                     </div>
                   </div>
+                  {speakerFieldOn("expertise") && (
                   <div>
                     <div className="font-medium">Area of expertise</div>
                     <div className="text-muted-foreground">
                       {selectedSpeaker.expertise || "—"}
                     </div>
                   </div>
+                  )}
                   <div>
                     <div className="font-medium">Speaker space</div>
                     <div className="text-muted-foreground">
@@ -4384,6 +4418,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         open={showStallDetailDialog}
         onOpenChange={(open) => (open ? setShowStallDetailDialog(true) : closeStallDialog())}
         stallRequest={stallRequest}
+        registrationFormFields={(selectedEvent as any)?.registrationFormFields}
         detailRef={stallDetailRef}
         isGeneratingPDF={isGeneratingPDF}
         onSharePDF={handleSharePDF}
@@ -4640,43 +4675,55 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         </DialogContent>
       </Dialog>
 
-      {/* Payment Dialog */}
+      {/* Payment Dialog — also reopened (by the "Add/update payment proof"
+          button) for stalls that are already Paid, purely to let the
+          organizer attach a transaction ID/screenshot after the fact. In
+          that case the Payment Status selector is irrelevant (nothing to
+          change) and handleUpdatePaymentStatus skips the status PATCH. */}
       <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Update Payment Status</DialogTitle>
+            <DialogTitle>
+              {selectedRequest?.paymentStatus === "Paid"
+                ? "Update Payment Proof"
+                : "Update Payment Status"}
+            </DialogTitle>
             <DialogDescription>
-              Update the payment status for this stall booking
+              {selectedRequest?.paymentStatus === "Paid"
+                ? "Attach or replace the transaction ID / screenshot for this already-confirmed payment."
+                : "Update the payment status for this stall booking"}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            <div>
-              <Label htmlFor="payment-status">Payment Status</Label>
-              <Select
-                value={paymentStatusUpdate}
-                onValueChange={(value: "Partial" | "Paid") =>
-                  setPaymentStatusUpdate(value)
-                }
-              >
-                <SelectTrigger id="payment-status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {/* Partial payment disabled for now — only full payment. */}
-                  <SelectItem value="Paid">Fully Paid</SelectItem>
-                </SelectContent>
-              </Select>
-              {!selectedStallAllowsMinimum && (
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Minimum payment is disabled for the booked space
-                  {(selectedRequest?.selectedTables?.length || 0) === 1
-                    ? ""
-                    : "s"}{" "}
-                  — only full payment can be recorded.
-                </p>
-              )}
-            </div>
+            {selectedRequest?.paymentStatus !== "Paid" && (
+              <div>
+                <Label htmlFor="payment-status">Payment Status</Label>
+                <Select
+                  value={paymentStatusUpdate}
+                  onValueChange={(value: "Partial" | "Paid") =>
+                    setPaymentStatusUpdate(value)
+                  }
+                >
+                  <SelectTrigger id="payment-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* Partial payment disabled for now — only full payment. */}
+                    <SelectItem value="Paid">Fully Paid</SelectItem>
+                  </SelectContent>
+                </Select>
+                {!selectedStallAllowsMinimum && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Minimum payment is disabled for the booked space
+                    {(selectedRequest?.selectedTables?.length || 0) === 1
+                      ? ""
+                      : "s"}{" "}
+                    — only full payment can be recorded.
+                  </p>
+                )}
+              </div>
+            )}
             <div>
               <Label htmlFor="payment-notes">Notes (Optional)</Label>
               <Textarea
@@ -4688,12 +4735,11 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
               />
             </div>
 
-            {/* Optional proof — lets the organizer record the transaction ID
-                and/or the screenshot the vendor sent over WhatsApp. Both are
-                optional, so a payment can be confirmed with neither. */}
+            {/* Either field is enough — the organizer might only have the
+                transaction ID, or only a screenshot, or both. */}
             <div className="rounded-lg border bg-gray-50/60 p-3 space-y-3">
               <p className="text-xs text-muted-foreground">
-                Payment proof (optional) — attach if the vendor sent a
+                Payment proof{selectedRequest?.paymentStatus !== "Paid" && " (optional)"} — attach if the vendor sent a
                 transaction ID or screenshot on WhatsApp.
               </p>
               <div>
@@ -4740,12 +4786,16 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Updating...
+                  {selectedRequest?.paymentStatus === "Paid"
+                    ? "Saving..."
+                    : "Updating..."}
                 </>
               ) : (
                 <>
                   <CreditCard className="mr-2 h-4 w-4" />
-                  Update Payment
+                  {selectedRequest?.paymentStatus === "Paid"
+                    ? "Save Proof"
+                    : "Update Payment"}
                 </>
               )}
             </Button>

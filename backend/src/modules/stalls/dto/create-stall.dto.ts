@@ -59,9 +59,9 @@ export class CreateStallDto {
   @IsString()
   shopkeeperPhoneNumber?: string;
 
-  @IsOptional()
+  @IsNotEmpty()
   @IsString()
-  businessName?: string;
+  businessName: string;
 
   @IsOptional()
   @IsString()
@@ -119,12 +119,12 @@ export class CreateStallDto {
   @IsString()
   notes?: string;
 
-  @IsNotEmpty()
-  noOfOperators: string;
+  @IsOptional()
+  noOfOperators?: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  brandName: string;
+  brandName?: string;
 
   @IsNotEmpty()
   @IsString()

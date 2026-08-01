@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { stallStage } from "@/lib/stallStatus";
+import { isFieldEnabled } from "@/lib/registrationFormFields";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -234,6 +235,10 @@ export interface ExhibitorDetailDialogProps {
   /** Display string the caller wants attached to notes ("Jane (organizer)").
    * If omitted, the dialog derives one from the JWT in sessionStorage. */
   currentUserDisplay?: string;
+  /** The event's Registration Forms config (Event.registrationFormFields) —
+   * fields the organizer toggled off don't render here either, even if the
+   * stall document happens to carry stale data for them. */
+  registrationFormFields?: { stall?: Record<string, boolean> } | null;
 }
 
 export function ExhibitorDetailDialog({
@@ -249,7 +254,10 @@ export function ExhibitorDetailDialog({
   isGeneratingPDF,
   onNoteAdded,
   currentUserDisplay,
+  registrationFormFields,
 }: ExhibitorDetailDialogProps) {
+  const stallFieldOn = (key: string) =>
+    isFieldEnabled(registrationFormFields, "stall", key);
   const { country } = useCountry();
   const { formatPrice } = useCurrency(country);
 
@@ -900,31 +908,49 @@ export function ExhibitorDetailDialog({
                         vendor
                       </p>
                     </div>
-                    {canManage && (
-                      <Button
-                        size="sm"
-                        variant="buttonOutline"
-                        onClick={handleResendTicket}
-                        disabled={isResending}
-                        className="h-8"
-                      >
-                        {isResending ? (
-                          <>
-                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                            Sending…
-                          </>
-                        ) : (
-                          <>
-                            <Send className="mr-1.5 h-3.5 w-3.5" />
-                            Resend ticket
-                          </>
-                        )}
-                      </Button>
-                    )}
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {onConfirmPayment && (
+                        <Button
+                          size="sm"
+                          variant="buttonOutline"
+                          className="h-8"
+                          onClick={() => onConfirmPayment(stallRequest)}
+                        >
+                          <CreditCard className="mr-1.5 h-3.5 w-3.5" />
+                          {(stallRequest as any).transactionId ||
+                          (stallRequest as any).transactionScreenshot
+                            ? "Update proof"
+                            : "Add payment proof"}
+                        </Button>
+                      )}
+                      {canManage && (
+                        <Button
+                          size="sm"
+                          variant="buttonOutline"
+                          onClick={handleResendTicket}
+                          disabled={isResending}
+                          className="h-8"
+                        >
+                          {isResending ? (
+                            <>
+                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                              Sending…
+                            </>
+                          ) : (
+                            <>
+                              <Send className="mr-1.5 h-3.5 w-3.5" />
+                              Resend ticket
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   {canManage && (
                     <p className="mt-2 text-xs text-green-700/80">
                       Didn't arrive? Re-send the QR ticket email to the vendor.
+                      Missing a transaction ID or screenshot? Add it without
+                      affecting the confirmed payment.
                     </p>
                   )}
                 </CardContent>
@@ -973,10 +999,12 @@ export function ExhibitorDetailDialog({
                   </div>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground">Business Name</Label>
+                  <Label className="text-muted-foreground">
+                    Registered Business Name
+                  </Label>
                   <p className="font-medium">
-                    {stallRequest.shopkeeperId?.shopName ||
-                      stallRequest.brandName ||
+                    {stallRequest.shopkeeperId?.businessName ||
+                      stallRequest.shopkeeperId?.shopName ||
                       "—"}
                   </p>
                 </div>
@@ -1147,12 +1175,14 @@ export function ExhibitorDetailDialog({
                     );
                   })()}
                 </div>
+                {stallFieldOn("businessCategory") && (
                 <div>
                   <Label className="text-muted-foreground">Category</Label>
                   <p className="font-medium">
                     {stallRequest.shopkeeperId?.businessCategory || "—"}
                   </p>
                 </div>
+                )}
 
                 <div>
                   <Label className="text-muted-foreground">
@@ -1160,6 +1190,7 @@ export function ExhibitorDetailDialog({
                   </Label>
                   <p className="font-medium">{stallRequest.nameOfApplicant}</p>
                 </div>
+                {stallFieldOn("businessOwnerNationality") && (
                 <div>
                   <Label className="text-muted-foreground">
                     Owner Nationality
@@ -1168,10 +1199,14 @@ export function ExhibitorDetailDialog({
                     {stallRequest.businessOwnerNationality || "—"}
                   </p>
                 </div>
+                )}
+                {stallFieldOn("residency") && (
                 <div>
                   <Label className="text-muted-foreground">Residency</Label>
                   <p className="font-medium">{stallRequest.residency || "—"}</p>
                 </div>
+                )}
+                {stallFieldOn("noOfOperators") && (
                 <div>
                   <Label className="text-muted-foreground">
                     No. Of Operators
@@ -1180,6 +1215,7 @@ export function ExhibitorDetailDialog({
                     {stallRequest.noOfOperators || "Not Provided"}
                   </p>
                 </div>
+                )}
 
                 <div>
                   <Label className="text-muted-foreground">
