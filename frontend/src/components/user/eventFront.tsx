@@ -515,6 +515,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // immediately matches what kioscart-v1's storefront does once its
   // observer fires anyway.
   const reelMarqueeRef = useRef<HTMLDivElement | null>(null);
+  // Speakers/Workshops horizontal card rows — native touch-swipe works on
+  // a real phone, but there was no visible affordance hinting more cards
+  // exist, and no way at all to advance on a mouse-driven "mobile view"
+  // (desktop responsive mode, no touch emulation). These refs back the
+  // explicit Prev/Next buttons added alongside each row, mirroring the
+  // Gallery's existing chevron pattern.
+  const speakersScrollRef = useRef<HTMLDivElement | null>(null);
+  const workshopsScrollRef = useRef<HTMLDivElement | null>(null);
   // Collapsible Venue Layout — defaults to closed so the heavy canvas
   // (and the multi-layout selector / stats grid) only render after the
   // user explicitly opts in by clicking the chevron header.
@@ -5044,6 +5052,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }
   };
 
+  // Scrolls a horizontal card row by roughly one card-width (w-64 = 256px
+  // + gap-4 = 16px). Used by the Speakers/Workshops Prev/Next buttons.
+  const scrollRowByCard = (
+    ref: React.RefObject<HTMLDivElement>,
+    direction: 1 | -1,
+  ) => {
+    ref.current?.scrollBy({ left: direction * 272, behavior: "smooth" });
+  };
+
   async function handleDownload(stall: any) {
     // 1. Safety check before calling API
     if (stall.paymentStatus !== "Paid") {
@@ -5817,9 +5834,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           to   { opacity: 1; transform: translateY(0); }
         }
         .anim-fade-up { animation: fadeSlideUp 0.55s ease-out both; }
+        /* Transform-only — deliberately does NOT animate opacity. The
+           image is remounted (key={currentImageIndex}) on every slide
+           change; an opacity:0 -> 1 keyframe left the image stuck
+           invisible on some mobile browsers when the animation didn't
+           resolve cleanly after a remount (seen on real devices as a
+           permanently blank gallery frame). Sliding the position in is
+           purely cosmetic and safe even if the animation never plays. */
         @keyframes gallerySlideIn {
-          from { opacity: 0; transform: translateX(40px); }
-          to   { opacity: 1; transform: translateX(0); }
+          from { transform: translateX(40px); }
+          to   { transform: translateX(0); }
         }
         .anim-gallery-slide { animation: gallerySlideIn 0.5s ease-out both; }
         /* Continuous right-to-left scroll for the reel carousel inside
@@ -6158,7 +6182,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
         <div className="flex flex-col lg:flex-row gap-8 lg:gap-10 items-start">
           {/* ── LEFT: Main Content ── */}
-          <div className="flex-1 min-w-0 space-y-8 anim-fade-up order-2 lg:order-1">
+          {/* w-full is load-bearing: the row uses items-start (not
+              items-stretch) so on mobile (flex-col) this column would
+              otherwise size to its widest child's natural content width
+              instead of the viewport — and the horizontally-scrollable
+              Workshops/Speakers rows want to be wider than the screen,
+              ballooning the whole column (Gallery included, since it's
+              w-full *relative to this column*) past the right edge. */}
+          <div className="w-full flex-1 min-w-0 space-y-8 anim-fade-up order-2 lg:order-1">
             {/* About Section */}
             <section>
               <h2 className="text-lg sm:text-2xl font-bold text-gray-900 mb-3">
@@ -6260,8 +6291,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 <h2 className="text-lg sm:text-2xl font-bold text-gray-900 mb-4">
                   Speakers
                 </h2>
-                <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide">
-                  {eventData.speakers.map((speaker: any, idx: number) => (
+                <div className="relative">
+                  <div
+                    ref={speakersScrollRef}
+                    className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide"
+                    style={{ WebkitOverflowScrolling: "touch" }}
+                  >
+                    {eventData.speakers.map((speaker: any, idx: number) => (
                     <div
                       key={speaker.id || idx}
                       className="flex-shrink-0 w-64 snap-center rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden hover:shadow-md transition-shadow"
@@ -6353,6 +6389,27 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       </div>
                     </div>
                   ))}
+                  </div>
+                  {eventData.speakers.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => scrollRowByCard(speakersScrollRef, -1)}
+                        aria-label="Scroll speakers left"
+                        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/3 z-10 w-8 h-8 rounded-full bg-white/95 hover:bg-white flex items-center justify-center transition-all shadow-md border border-gray-200"
+                      >
+                        <ChevronLeft className="h-4 w-4 text-gray-700" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => scrollRowByCard(speakersScrollRef, 1)}
+                        aria-label="Scroll speakers right"
+                        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/3 z-10 w-8 h-8 rounded-full bg-white/95 hover:bg-white flex items-center justify-center transition-all shadow-md border border-gray-200"
+                      >
+                        <ChevronRight className="h-4 w-4 text-gray-700" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </section>
             )}
@@ -6378,7 +6435,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       )}
                   </div>
 
-                  <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide">
+                  <div className="relative">
+                  <div
+                    ref={workshopsScrollRef}
+                    className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide"
+                    style={{ WebkitOverflowScrolling: "touch" }}
+                  >
                     {eventData.workshopSessions.map((session: any) => {
                       const seatsLeft =
                         session.maxSeats > 0
@@ -6462,6 +6524,27 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         </div>
                       );
                     })}
+                  </div>
+                  {eventData.workshopSessions.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => scrollRowByCard(workshopsScrollRef, -1)}
+                        aria-label="Scroll workshops left"
+                        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/3 z-10 w-8 h-8 rounded-full bg-white/95 hover:bg-white flex items-center justify-center transition-all shadow-md border border-gray-200"
+                      >
+                        <ChevronLeft className="h-4 w-4 text-gray-700" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => scrollRowByCard(workshopsScrollRef, 1)}
+                        aria-label="Scroll workshops right"
+                        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/3 z-10 w-8 h-8 rounded-full bg-white/95 hover:bg-white flex items-center justify-center transition-all shadow-md border border-gray-200"
+                      >
+                        <ChevronRight className="h-4 w-4 text-gray-700" />
+                      </button>
+                    </>
+                  )}
                   </div>
                 </section>
               )}
@@ -6572,7 +6655,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   {visitorTypes.map((vt: any, idx: number) => (
                     <div
                       key={vt.id || idx}
-                      className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm hover:shadow-md transition-shadow"
+                      className="rounded-2xl border-2 border-gray-200 bg-gray-50/70 p-5 shadow-sm hover:shadow-md hover:border-gray-300 transition-all"
                     >
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="font-bold text-gray-900">{vt.name}</h3>
