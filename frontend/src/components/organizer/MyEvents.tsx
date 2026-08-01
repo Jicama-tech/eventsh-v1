@@ -1249,23 +1249,20 @@ const MyEvents: React.FC = () => {
                         {isEventPast(event) ? (
                           <Button
                             variant="buttonOutline"
-                            size="sm"
+                            size="icon"
                             onClick={() => handleDuplicateEvent(event)}
-                            className="flex-1 lg:flex-none"
                             title="Use this past event as a template for a new one"
                           >
-                            <Copy size={16} className="mr-1" />
-                            Duplicate
+                            <Copy size={16} />
                           </Button>
                         ) : (
                           <Button
                             variant="buttonOutline"
-                            size="sm"
+                            size="icon"
                             onClick={() => handleEditEvent(event)}
-                            className="flex-1 lg:flex-none"
+                            title="Edit event"
                           >
-                            <Edit size={16} className="mr-1" />
-                            Edit
+                            <Edit size={16} />
                           </Button>
                         )}
                         <div
@@ -1287,28 +1284,24 @@ const MyEvents: React.FC = () => {
                         </div>
                         <Button
                           variant="buttonOutline"
-                          size="sm"
+                          size="icon"
                           onClick={() => handleShareEvent(event)}
                           disabled={event.published === false}
-                          className="flex-1 lg:flex-none"
                           title={
                             event.published === false
                               ? "Publish the event to share its link"
                               : "Copy or share the public event link"
                           }
                         >
-                          <Share2 size={16} className="mr-1" />
-                          Share
+                          <Share2 size={16} />
                         </Button>
                         <Button
                           variant="buttonOutline"
-                          size="sm"
+                          size="icon"
                           onClick={() => handleShareScannerLink(event)}
-                          className="flex-1 lg:flex-none"
                           title="Copy the operator scanner link to share — operator opens it and signs in with OTP"
                         >
-                          <QrCode size={16} className="mr-1" />
-                          Scanner
+                          <QrCode size={16} />
                         </Button>
                         {(event.features?.hasStalls ||
                           event.features?.hasSpeakers ||
@@ -1316,39 +1309,35 @@ const MyEvents: React.FC = () => {
                           event.features?.hasWorkshops) && (
                           <Button
                             variant="buttonOutline"
-                            size="sm"
+                            size="icon"
                             onClick={() => setRegFormsForEvent(event)}
-                            className="flex-1 lg:flex-none"
-                            title="Choose which fields appear on this event's public application forms"
+                            title="Registration Forms — choose which fields appear on this event's public application forms"
                           >
-                            <ClipboardList size={16} className="mr-1" />
-                            Registration Forms
+                            <ClipboardList size={16} />
                           </Button>
                         )}
                         {canCollectFeedback && (
                           <Button
                             variant="buttonOutline"
-                            size="sm"
+                            size="icon"
                             onClick={() => setFeedbackForEvent(event)}
-                            className="flex-1 lg:flex-none"
-                            title="View ratings + comments and toggle deposit refund status"
+                            title="Feedback — view ratings + comments and toggle deposit refund status"
                           >
-                            <MessageSquare size={16} className="mr-1" />
-                            Feedback
+                            <MessageSquare size={16} />
                           </Button>
                         )}
                         {canDeleteEvents && (
                           <Button
                             variant="buttonOutline"
-                            size="sm"
+                            size="icon"
                             onClick={() => {
                               setDeleteEventTarget(event);
                               setDeleteEventConfirmText("");
                             }}
-                            className="text-red-600 hover:text-red-700 hover:border-red-300 flex-1 lg:flex-none"
+                            className="text-red-600 hover:text-red-700 hover:border-red-300"
+                            title="Delete event"
                           >
-                            <Trash2 size={16} className="mr-1" />
-                            Delete
+                            <Trash2 size={16} />
                           </Button>
                         )}
                       </div>
