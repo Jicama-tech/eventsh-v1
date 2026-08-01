@@ -89,6 +89,20 @@ class VisitorType {
   @Prop({ default: true }) isActive: boolean;
 }
 
+/**
+ * A sponsorship tier the organizer offers for this event (Gold / Silver /
+ * Community, etc.). Deliberately minimal — a name, what it costs, and what
+ * the sponsor gets. Distinct from `Event.sponsors`, which is just the list of
+ * logo URLs shown in the eventfront marquee.
+ */
+class SponsorType {
+  @Prop() id: string;
+  @Prop() name: string;
+  @Prop() price: number;
+  @Prop() description?: string;
+  @Prop({ default: true }) isActive: boolean;
+}
+
 class SpeakerSlot {
   @Prop({ required: true })
   topic: string;
@@ -525,6 +539,13 @@ export class Event {
   @Prop({ type: [String], default: [] })
   sponsors?: string[];
 
+  // Whether the sponsor ad bar renders on the eventfront at all. Confirmed
+  // sponsors' logos flow into it automatically, so this is the organizer's
+  // switch for showing the strip publicly. Legacy events have no value —
+  // the eventfront treats only an explicit `false` as hidden.
+  @Prop({ default: true })
+  showSponsorBar?: boolean;
+
   // Instagram reel URLs (e.g. https://www.instagram.com/reel/<id>/).
   // Surfaced as a carousel on the eventfront; clicking a tile opens
   // the official Instagram /embed iframe inside a dialog so the reel
@@ -719,6 +740,11 @@ export class Event {
 
   @Prop({ type: [Object], default: [] })
   visitorTypes: VisitorType[];
+
+  // Sponsorship tiers on offer. Businesses apply against one of these from
+  // the eventfront; see the `sponsors` module for the applications themselves.
+  @Prop({ type: [Object], default: [] })
+  sponsorTypes: SponsorType[];
 
   @Prop({ type: [Object], default: [] })
   speakers: Speaker[];

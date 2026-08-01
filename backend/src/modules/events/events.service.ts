@@ -418,6 +418,8 @@ export class EventsService {
         venueTables: createEventDto.venueTables || [],
         addOnItems: createEventDto.addOnItems || [],
         visitorTypes: createEventDto.visitorTypes || [],
+        sponsorTypes: createEventDto.sponsorTypes || [],
+        showSponsorBar: createEventDto.showSponsorBar ?? true,
         speakers: createEventDto.speakers || [],
         speakerSlotTemplates: createEventDto.speakerSlotTemplates || [],
         venueSpeakerZones: createEventDto.venueSpeakerZones || [],

@@ -49,10 +49,14 @@ export class PendingBillingPayment {
   ref: string;
 
   // Counts at the time of initiate (audit snapshot).
+  @Prop({ type: Number, default: 0 }) ticketsSold: number;
   @Prop({ type: Number, default: 0 }) stallsSold: number;
   @Prop({ type: Number, default: 0 }) tablesBooked: number;
   @Prop({ type: Number, default: 0 }) chairsBooked: number;
   @Prop({ type: Number, default: 0 }) speakersBooked: number;
+  @Prop({ type: Number, default: 0 }) workshopsBooked: number;
+  @Prop({ type: Number, default: 0 }) sponsorsConfirmed: number;
+  @Prop({ type: Number, default: 0 }) suppliersConfirmed: number;
 
   @Prop({ type: Date }) submittedAt?: Date;
   @Prop({ type: Date }) confirmedAt?: Date;

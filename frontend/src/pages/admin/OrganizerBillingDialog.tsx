@@ -15,62 +15,71 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Receipt, Plus, X, QrCode, ExternalLink } from "lucide-react";
+import {
+  ArrowDownCircle,
+  ArrowUpCircle,
+  Coins,
+  History,
+  Loader2,
+  Wallet,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { adminFetch } from "@/lib/adminFetch";
 
 const apiURL = __API_URL__;
 
-interface BillingResponse {
+interface EventRow {
+  eventId: string;
+  title: string;
+  startDate: string;
+  endDate?: string;
+  status?: string;
+  ticketsSold: number;
+  stallsSold: number;
+  tablesBooked: number;
+  chairsBooked: number;
+  speakersBooked: number;
+  workshopsBooked: number;
+  sponsorsConfirmed: number;
+  suppliersConfirmed: number;
+  amount: number;
+}
+
+interface MembershipRow {
+  _id: string;
+  exhibitorName: string;
+  planName: string;
+  amountPaid: number;
+  fee: number;
+}
+
+interface LedgerEntry {
+  _id: string;
+  type: "topup" | "debit" | "credit" | "admin_adjust" | "baseline";
+  amount: number;
+  balanceAfter: number;
+  eventId: string | null;
+  category?: string;
+  description?: string;
+  createdAt: string;
+}
+
+interface WalletResponse {
   organizer: {
     _id: string;
-    name: string;
-    organizationName: string;
-    email: string;
+    name?: string;
+    organizationName?: string;
     country?: string;
-    createdAt?: string;
   };
-  rates: {
-    stall: number;
-    roundTable: number;
-    chair: number;
-    speaker: number;
-    membership: number;
-    currency: string;
-  };
-  events: Array<{
-    eventId: string;
-    title: string;
-    startDate: string;
-    endDate?: string;
-    status?: string;
-    stallsSold: number;
-    tablesBooked: number;
-    chairsBooked: number;
-    speakersBooked: number;
-    amount: number;
-  }>;
-  // Active membership count + membership-tier amount for this organizer.
-  // Surfaced separately from the per-event rows because memberships are
-  // organizer-scoped, not event-scoped.
-  memberships?: { active: number; amount: number };
-  totals: {
-    eventsBillable?: number;
-    membershipsBillable?: number;
-    billable: number;
-    paid: number;
-    owed: number;
-  };
-  payments: Array<{
-    _id: string;
-    amount: number;
-    paidOn: string;
-    note: string;
-    recordedBy: string | null;
-  }>;
+  wallet: { organizerId: string; balance: number };
+  events: EventRow[];
+  memberships?: { totalOwed: number; rows: MembershipRow[] };
+  ledger: LedgerEntry[];
+  region: { scheme: "UPI" | "PAYNOW"; currency: string } | null;
 }
 
 interface BreakdownResponse {
@@ -91,37 +100,13 @@ interface BreakdownResponse {
   }>;
 }
 
-const fmtUsd = (v: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(
-    v || 0,
-  );
-
-interface PaymentConfig {
-  companyName: string;
-  companyUEN: string;
-  platformUPIId: string;
-}
-
-/**
- * Map the organizer's stored country to a QR scheme + currency. Registration
- * writes 2-letter ISO codes ("IN" / "SG", see organizerRegister.tsx:28), but
- * older rows occasionally hold the full name — accept both.
- */
-type Region =
-  | { scheme: "UPI"; currency: "INR"; label: "UPI · India" }
-  | { scheme: "PAYNOW"; currency: "SGD"; label: "PayNow · Singapore" }
-  | null;
-
-function regionFromCountry(country?: string): Region {
-  const c = (country || "").trim().toLowerCase();
-  if (c === "in" || c === "india") {
-    return { scheme: "UPI", currency: "INR", label: "UPI · India" };
-  }
-  if (c === "sg" || c === "singapore" || c === "sgp") {
-    return { scheme: "PAYNOW", currency: "SGD", label: "PayNow · Singapore" };
-  }
-  return null;
-}
+const LEDGER_LABEL: Record<LedgerEntry["type"], string> = {
+  topup: "Top-up",
+  debit: "Fee",
+  credit: "Refund",
+  admin_adjust: "Adjustment",
+  baseline: "Baseline",
+};
 
 export function OrganizerBillingDialog({
   organizerId,
@@ -132,44 +117,30 @@ export function OrganizerBillingDialog({
 }) {
   const { toast } = useToast();
   const open = !!organizerId;
-  const [data, setData] = useState<BillingResponse | null>(null);
+  const [data, setData] = useState<WalletResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [breakdown, setBreakdown] = useState<BreakdownResponse | null>(null);
   const [breakdownLoading, setBreakdownLoading] = useState(false);
 
-  const [showPay, setShowPay] = useState(false);
-  const [payAmount, setPayAmount] = useState("");
-  const [payDate, setPayDate] = useState(() =>
-    new Date().toISOString().slice(0, 10),
-  );
-  const [payNote, setPayNote] = useState("");
-  const [posting, setPosting] = useState(false);
+  const [showAdjust, setShowAdjust] = useState(false);
+  const [adjustDelta, setAdjustDelta] = useState("");
+  const [adjustNote, setAdjustNote] = useState("");
+  const [adjusting, setAdjusting] = useState(false);
 
-  // Pay-by-QR state. Scheme is auto-derived from organizer.country, proxy is
-  // pulled from the singleton platform PaymentConfig (set by super-admin in
-  // Settings → Payment Settings). Amount defaults to totals.owed but is
-  // editable in case partial payment is being collected.
-  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
-  const [qrAmount, setQrAmount] = useState("");
-  const [qrLoading, setQrLoading] = useState(false);
-  const [qrImage, setQrImage] = useState<string | null>(null);
-  const [qrIntent, setQrIntent] = useState<string | null>(null);
-  const [qrError, setQrError] = useState<string | null>(null);
-
-  const fetchBilling = async () => {
+  const fetchWallet = async () => {
     if (!organizerId) return;
     setLoading(true);
     try {
       const res = await adminFetch(
-        `${apiURL}/admin/organizers/${organizerId}/billing`,
+        `${apiURL}/tokens/admin/organizer/${organizerId}`,
       );
       if (res.status === 401) return;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as BillingResponse;
+      const json = (await res.json()) as WalletResponse;
       setData(json);
     } catch (e: any) {
       toast({
-        title: "Failed to load billing",
+        title: "Failed to load token wallet",
         description: e?.message,
         variant: "destructive",
       });
@@ -178,41 +149,17 @@ export function OrganizerBillingDialog({
     }
   };
 
-  const fetchPaymentConfig = async () => {
-    try {
-      const res = await adminFetch(`${apiURL}/admin/payment-config`);
-      if (!res.ok) return;
-      const json = (await res.json()) as PaymentConfig;
-      setPaymentConfig(json);
-    } catch {
-      // Non-fatal — QR panel will surface a clear "not configured" message.
-    }
-  };
-
   useEffect(() => {
     if (open) {
       setData(null);
       setBreakdown(null);
-      setShowPay(false);
-      setPaymentConfig(null);
-      setQrImage(null);
-      setQrIntent(null);
-      setQrError(null);
-      setQrAmount("");
-      fetchBilling();
-      fetchPaymentConfig();
+      setShowAdjust(false);
+      setAdjustDelta("");
+      setAdjustNote("");
+      fetchWallet();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizerId]);
-
-  // Keep the QR amount in sync with the live "owed" value the first time it
-  // loads — but let the operator override it for partial payments.
-  useEffect(() => {
-    if (data && !qrAmount) {
-      setQrAmount(String(data.totals.owed || 0));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
 
   const openBreakdown = async (eventId: string) => {
     if (!organizerId) return;
@@ -236,21 +183,25 @@ export function OrganizerBillingDialog({
     }
   };
 
-  const submitPayment = async () => {
+  const submitAdjust = async () => {
     if (!organizerId) return;
-    const amount = Number(payAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast({ title: "Enter a positive amount", variant: "destructive" });
+    const delta = Number(adjustDelta);
+    if (!Number.isFinite(delta) || delta === 0) {
+      toast({
+        title: "Enter a non-zero amount",
+        description: "Positive credits tokens, negative debits them.",
+        variant: "destructive",
+      });
       return;
     }
-    setPosting(true);
+    setAdjusting(true);
     try {
       const res = await adminFetch(
-        `${apiURL}/admin/organizers/${organizerId}/payments`,
+        `${apiURL}/tokens/admin/organizer/${organizerId}/adjust`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ amount, paidOn: payDate, note: payNote }),
+          body: JSON.stringify({ delta, note: adjustNote }),
         },
       );
       if (res.status === 401) return;
@@ -258,96 +209,51 @@ export function OrganizerBillingDialog({
         const err = await res.text();
         throw new Error(err);
       }
-      toast({ title: "Payment recorded" });
-      setShowPay(false);
-      setPayAmount("");
-      setPayNote("");
-      await fetchBilling();
+      toast({ title: "Wallet adjusted" });
+      setShowAdjust(false);
+      setAdjustDelta("");
+      setAdjustNote("");
+      await fetchWallet();
     } catch (e: any) {
       toast({
-        title: "Couldn't record payment",
+        title: "Couldn't adjust wallet",
         description: e?.message,
         variant: "destructive",
       });
     } finally {
-      setPosting(false);
+      setAdjusting(false);
     }
   };
 
-  const region = useMemo(
-    () => regionFromCountry(data?.organizer.country),
-    [data?.organizer.country],
+  const balance = data?.wallet?.balance ?? 0;
+  const ledger = data?.ledger || [];
+  const lifetimeToppedUp = ledger
+    .filter((l) => l.type === "topup")
+    .reduce((s, l) => s + l.amount, 0);
+  const lifetimeUsed = ledger
+    .filter((l) => l.type === "debit")
+    .reduce((s, l) => s + l.amount, 0);
+
+  const summary = useMemo(
+    () => [
+      {
+        label: "Balance",
+        value: `${balance} tokens`,
+        color: balance < 0 ? "text-rose-600" : "text-emerald-600",
+      },
+      {
+        label: "Lifetime topped up",
+        value: `${lifetimeToppedUp} tokens`,
+        color: "text-slate-900",
+      },
+      {
+        label: "Lifetime used",
+        value: `${lifetimeUsed} tokens`,
+        color: "text-slate-900",
+      },
+    ],
+    [balance, lifetimeToppedUp, lifetimeUsed],
   );
-
-  // The payee proxy (UPI VPA for India, corporate UEN for Singapore) comes
-  // from the singleton PaymentConfig the super-admin maintains. If the
-  // matching field isn't set, surface a pointer to Settings rather than
-  // silently letting the QR endpoint reject the request.
-  const proxy = useMemo(() => {
-    if (!region || !paymentConfig) return "";
-    return region.scheme === "UPI"
-      ? paymentConfig.platformUPIId
-      : paymentConfig.companyUEN;
-  }, [region, paymentConfig]);
-
-  const generateQr = async () => {
-    if (!region) return;
-    const amt = Number(qrAmount);
-    if (!Number.isFinite(amt) || amt <= 0) {
-      setQrError("Enter a positive amount");
-      return;
-    }
-    if (!proxy) {
-      setQrError(
-        region.scheme === "UPI"
-          ? "Platform UPI ID isn't set. Configure it in Settings → Payment Settings."
-          : "Company UEN isn't set. Configure it in Settings → Payment Settings.",
-      );
-      return;
-    }
-    if (!paymentConfig?.companyName) {
-      setQrError(
-        "Company Name isn't set. Configure it in Settings → Payment Settings.",
-      );
-      return;
-    }
-    setQrLoading(true);
-    setQrError(null);
-    setQrImage(null);
-    setQrIntent(null);
-    try {
-      const params = new URLSearchParams({
-        scheme: region.scheme,
-        payeeId: proxy,
-        payeeName: paymentConfig.companyName,
-        amount: amt.toFixed(2),
-        billNumber: `ORG-${organizerId?.slice(-6) || "BILL"}`,
-        currency: region.currency,
-      });
-      // /payments/generate-qr is public (no JWT guard) — fetch directly.
-      const res = await fetch(`${apiURL}/payments/generate-qr?${params}`);
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(txt || `HTTP ${res.status}`);
-      }
-      const json = (await res.json()) as { qr: string; intent: string };
-      setQrImage(json.qr);
-      setQrIntent(json.intent);
-    } catch (e: any) {
-      setQrError(e?.message || "Failed to generate QR");
-    } finally {
-      setQrLoading(false);
-    }
-  };
-
-  const summary = useMemo(() => {
-    if (!data) return null;
-    return [
-      { label: "Total billable", value: data.totals.billable, color: "text-slate-900" },
-      { label: "Total paid", value: data.totals.paid, color: "text-emerald-600" },
-      { label: "Outstanding", value: data.totals.owed, color: "text-rose-600" },
-    ];
-  }, [data]);
 
   return (
     <>
@@ -355,17 +261,15 @@ export function OrganizerBillingDialog({
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Receipt className="h-5 w-5 text-amber-600" />
+              <Wallet className="h-5 w-5 text-amber-600" />
               {data?.organizer.organizationName ||
                 data?.organizer.name ||
-                "Organizer billing"}
+                "Organizer tokens"}
             </DialogTitle>
             <DialogDescription>
-              Platform fee: ${data?.rates.stall ?? 20}/stall · $
-              {data?.rates.roundTable ?? 20}/booked-table · $
-              {data?.rates.chair ?? 5}/chair · ${data?.rates.speaker ?? 20}
-              /speaker · ${data?.rates.membership ?? 5}/active-membership
-              /speaker
+              One prepaid token wallet shared across every event this
+              organizer runs — 1 token = 1 unit of{" "}
+              {data?.region?.currency || "their local currency"}.
             </DialogDescription>
           </DialogHeader>
 
@@ -379,7 +283,7 @@ export function OrganizerBillingDialog({
             <div className="space-y-6">
               {/* Summary */}
               <div className="grid grid-cols-3 gap-3">
-                {summary?.map((s) => (
+                {summary.map((s) => (
                   <div
                     key={s.label}
                     className="rounded-lg border bg-slate-50 px-4 py-3"
@@ -388,7 +292,7 @@ export function OrganizerBillingDialog({
                       {s.label}
                     </div>
                     <div className={`text-2xl font-bold ${s.color}`}>
-                      {fmtUsd(s.value)}
+                      {s.value}
                     </div>
                   </div>
                 ))}
@@ -411,11 +315,15 @@ export function OrganizerBillingDialog({
                       <TableHeader>
                         <TableRow>
                           <TableHead>Event</TableHead>
+                          <TableHead className="text-center">Tickets</TableHead>
                           <TableHead className="text-center">Stalls sold</TableHead>
                           <TableHead className="text-center">Tables booked</TableHead>
                           <TableHead className="text-center">Chairs</TableHead>
                           <TableHead className="text-center">Speakers</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-center">Workshops</TableHead>
+                          <TableHead className="text-center">Sponsors</TableHead>
+                          <TableHead className="text-center">Suppliers</TableHead>
+                          <TableHead className="text-right">Tokens used</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -435,6 +343,9 @@ export function OrganizerBillingDialog({
                               </div>
                             </TableCell>
                             <TableCell className="text-center">
+                              {e.ticketsSold}
+                            </TableCell>
+                            <TableCell className="text-center">
                               {e.stallsSold}
                             </TableCell>
                             <TableCell className="text-center">
@@ -446,8 +357,17 @@ export function OrganizerBillingDialog({
                             <TableCell className="text-center">
                               {e.speakersBooked}
                             </TableCell>
+                            <TableCell className="text-center">
+                              {e.workshopsBooked}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {e.sponsorsConfirmed}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {e.suppliersConfirmed}
+                            </TableCell>
                             <TableCell className="text-right font-semibold">
-                              {fmtUsd(e.amount)}
+                              {e.amount.toFixed(2)}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -457,10 +377,10 @@ export function OrganizerBillingDialog({
                 )}
               </div>
 
-              {/* Memberships — organizer-scoped fee, separate from the
+              {/* Memberships — organizer-scoped usage, separate from the
                   per-event grid above. Only rendered when there's at
                   least one active membership for this organizer. */}
-              {data.memberships && data.memberships.active > 0 && (
+              {data.memberships && data.memberships.rows.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
@@ -471,34 +391,35 @@ export function OrganizerBillingDialog({
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Tier</TableHead>
-                          <TableHead className="text-center">
-                            Active count
-                          </TableHead>
-                          <TableHead className="text-center">
-                            Rate
-                          </TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead>Exhibitor</TableHead>
+                          <TableHead>Plan</TableHead>
+                          <TableHead className="text-right">Paid to organizer</TableHead>
+                          <TableHead className="text-right">Tokens used</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        <TableRow>
-                          <TableCell>
-                            <div className="font-medium">
-                              Active exhibitor memberships
-                            </div>
-                            <div className="text-xs text-slate-500">
-                              Flat per-active-membership fee
-                            </div>
+                        {data.memberships.rows.map((m) => (
+                          <TableRow key={m._id}>
+                            <TableCell>{m.exhibitorName || "—"}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{m.planName}</Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {m.amountPaid.toFixed(2)}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold">
+                              {m.fee.toFixed(2)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow className="bg-muted/40">
+                          <TableCell colSpan={3} className="text-right">
+                            <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                              Total
+                            </span>
                           </TableCell>
-                          <TableCell className="text-center">
-                            {data.memberships.active}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {fmtUsd(data.rates.membership)}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold">
-                            {fmtUsd(data.memberships.amount)}
+                          <TableCell className="text-right font-bold">
+                            {data.memberships.totalOwed.toFixed(2)}
                           </TableCell>
                         </TableRow>
                       </TableBody>
@@ -507,232 +428,141 @@ export function OrganizerBillingDialog({
                 </div>
               )}
 
-              {/* Pay-by-QR panel — scheme auto-picked from organizer.country */}
+              {/* Adjust wallet — direct credit/debit + note. Also the tool
+                  for one-time legacy-balance seeding at cutover. */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600 flex items-center gap-2">
-                    <QrCode className="h-4 w-4" />
-                    Pay by QR
-                  </h3>
-                  {region ? (
-                    <span className="text-xs font-medium rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5">
-                      {region.label}
-                    </span>
-                  ) : (
-                    <span className="text-xs font-medium rounded-full bg-slate-100 text-slate-600 border px-2 py-0.5">
-                      {data.organizer.country || "No country set"}
-                    </span>
-                  )}
-                </div>
-
-                {!region ? (
-                  <div className="rounded-md border bg-slate-50 p-3 text-sm text-slate-600">
-                    QR payment isn't available for this organizer's region (
-                    {data.organizer.country || "country not set"}). Use{" "}
-                    <em>Record payment</em> below to log a manual settlement.
-                  </div>
-                ) : (
-                  <div className="rounded-md border bg-slate-50 p-3 space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
-                      <div className="sm:col-span-2">
-                        <Label className="text-xs">
-                          Amount ({region.currency})
-                        </Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={qrAmount}
-                          onChange={(e) => setQrAmount(e.target.value)}
-                          placeholder="0.00"
-                          disabled={qrLoading}
-                        />
-                      </div>
-                      <div className="sm:col-span-2 flex justify-end">
-                        <Button onClick={generateQr} disabled={qrLoading}>
-                          {qrLoading ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                              Generating…
-                            </>
-                          ) : (
-                            <>
-                              <QrCode className="h-4 w-4 mr-2" />
-                              {qrImage ? "Regenerate" : "Generate QR"}
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="text-xs text-slate-500">
-                      Payee:{" "}
-                      <span className="font-mono text-slate-700">
-                        {proxy || "— not configured —"}
-                      </span>
-                      {paymentConfig?.companyName && (
-                        <>
-                          {" · "}
-                          <span>{paymentConfig.companyName}</span>
-                        </>
-                      )}
-                    </div>
-
-                    {qrError && (
-                      <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded px-3 py-2">
-                        {qrError}
-                      </div>
-                    )}
-
-                    {qrImage && (
-                      <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start">
-                        <img
-                          src={qrImage}
-                          alt={`${region.label} payment QR`}
-                          className="w-48 h-48 rounded-md border bg-white p-2"
-                        />
-                        <div className="flex-1 space-y-2 text-sm">
-                          <div>
-                            Scan this QR with any{" "}
-                            <strong>
-                              {region.scheme === "UPI"
-                                ? "UPI app (GPay, PhonePe, Paytm…)"
-                                : "PayNow-enabled bank app"}
-                            </strong>{" "}
-                            to pay{" "}
-                            <strong>
-                              {Number(qrAmount).toFixed(2)} {region.currency}
-                            </strong>
-                            .
-                          </div>
-                          {qrIntent && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              asChild
-                            >
-                              <a
-                                href={qrIntent}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                <ExternalLink className="h-4 w-4 mr-2" />
-                                Open in payment app
-                              </a>
-                            </Button>
-                          )}
-                          <div className="text-xs text-slate-500">
-                            Once the transfer completes, click{" "}
-                            <em>Record payment</em> below to log it against
-                            this bill.
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Payments + record-payment form */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
-                    Payment history ({data.payments.length})
+                    <Coins className="h-4 w-4" />
+                    Adjust wallet
                   </h3>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setShowPay((v) => !v)}
+                    onClick={() => setShowAdjust((v) => !v)}
                   >
-                    {showPay ? (
-                      <>
-                        <X className="h-3 w-3 mr-1" /> Cancel
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="h-3 w-3 mr-1" /> Record payment
-                      </>
-                    )}
+                    {showAdjust ? "Cancel" : "Adjust"}
                   </Button>
                 </div>
-
-                {showPay && (
-                  <div className="rounded-md border bg-slate-50 p-3 mb-3 grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
-                    <div>
-                      <Label className="text-xs">Amount (USD)</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={payAmount}
-                        onChange={(e) => setPayAmount(e.target.value)}
-                        placeholder="0.00"
-                        disabled={posting}
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Paid on</Label>
-                      <Input
-                        type="date"
-                        value={payDate}
-                        onChange={(e) => setPayDate(e.target.value)}
-                        disabled={posting}
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <Label className="text-xs">Note (optional)</Label>
-                      <Input
-                        value={payNote}
-                        onChange={(e) => setPayNote(e.target.value)}
-                        placeholder="Wire ref, conversation, etc."
-                        disabled={posting}
-                      />
-                    </div>
-                    <div className="sm:col-span-4 flex justify-end">
-                      <Button onClick={submitPayment} disabled={posting}>
-                        {posting ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            Saving…
-                          </>
-                        ) : (
-                          "Save payment"
-                        )}
-                      </Button>
+                {showAdjust && (
+                  <div className="rounded-md border bg-slate-50 p-3 space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
+                      <div>
+                        <Label className="text-xs">
+                          Delta (+ credit / − debit)
+                        </Label>
+                        <Input
+                          type="number"
+                          step="1"
+                          value={adjustDelta}
+                          onChange={(e) => setAdjustDelta(e.target.value)}
+                          placeholder="e.g. 500 or -200"
+                          disabled={adjusting}
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <Label className="text-xs">Note</Label>
+                        <Input
+                          value={adjustNote}
+                          onChange={(e) => setAdjustNote(e.target.value)}
+                          placeholder="Reason for this adjustment"
+                          disabled={adjusting}
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        <Button onClick={submitAdjust} disabled={adjusting}>
+                          {adjusting ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              Saving…
+                            </>
+                          ) : (
+                            "Save"
+                          )}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}
+              </div>
 
-                {data.payments.length === 0 ? (
+              {/* Ledger */}
+              <div>
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600 flex items-center gap-2 mb-2">
+                  <History className="h-4 w-4" />
+                  Recent activity ({ledger.length})
+                </h3>
+                {ledger.length === 0 ? (
                   <div className="text-sm text-slate-500 italic">
-                    No payments recorded.
+                    No wallet activity yet.
                   </div>
                 ) : (
                   <div className="rounded-md border overflow-hidden">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Note</TableHead>
+                          <TableHead>When</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Description</TableHead>
                           <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-right">Balance</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {data.payments.map((p) => (
-                          <TableRow key={p._id}>
-                            <TableCell>
-                              {new Date(p.paidOn).toLocaleDateString()}
-                            </TableCell>
-                            <TableCell className="text-sm text-slate-700">
-                              {p.note || (
-                                <span className="italic text-slate-400">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right font-semibold text-emerald-700">
-                              {fmtUsd(p.amount)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {ledger.map((l) => {
+                          const isBaseline = l.type === "baseline";
+                          const isCredit =
+                            l.type === "topup" || l.type === "credit";
+                          return (
+                            <TableRow key={l._id}>
+                              <TableCell className="text-xs text-slate-500">
+                                {new Date(l.createdAt).toLocaleString()}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    isBaseline
+                                      ? "text-slate-500 border-slate-200"
+                                      : isCredit
+                                        ? "text-emerald-600 border-emerald-200"
+                                        : "text-rose-600 border-rose-200"
+                                  }
+                                >
+                                  {isBaseline ? null : isCredit ? (
+                                    <ArrowUpCircle className="h-3 w-3 mr-1" />
+                                  ) : (
+                                    <ArrowDownCircle className="h-3 w-3 mr-1" />
+                                  )}
+                                  {LEDGER_LABEL[l.type]}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-sm text-slate-600">
+                                {l.description || "—"}
+                                {isBaseline && (
+                                  <div className="text-xs text-slate-400">
+                                    Not charged
+                                  </div>
+                                )}
+                              </TableCell>
+                              <TableCell
+                                className={`text-right font-semibold ${
+                                  isBaseline
+                                    ? "text-slate-400 font-normal"
+                                    : isCredit
+                                      ? "text-emerald-600"
+                                      : "text-rose-600"
+                                }`}
+                              >
+                                {isBaseline ? "" : isCredit ? "+" : "-"}
+                                {l.amount}
+                              </TableCell>
+                              <TableCell className="text-right text-slate-500">
+                                {l.balanceAfter}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>

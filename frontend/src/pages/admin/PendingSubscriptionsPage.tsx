@@ -32,8 +32,8 @@ import {
   Loader2,
   RefreshCw,
   Hourglass,
-  Receipt,
-  CreditCard,
+  Wallet,
+  Coins,
   Package,
 } from "lucide-react";
 import { adminFetch } from "@/lib/adminFetch";
@@ -41,7 +41,7 @@ import { useToast } from "@/hooks/use-toast";
 
 const apiURL = __API_URL__;
 
-type RowType = "subscription" | "event_fee";
+type RowType = "subscription" | "token_topup";
 
 interface UnifiedRow {
   _id: string;
@@ -54,7 +54,7 @@ interface UnifiedRow {
     whatsAppNumber?: string;
     country?: string;
   } | null;
-  // For subscription rows: plan; for event_fee rows: event title shows here.
+  // For subscription rows: plan; for token_topup rows: "Token top-up".
   itemLabel: string;
   itemSub?: string;
   amount: number;
@@ -89,15 +89,15 @@ export function PendingSubscriptionsPage() {
   const fetchRows = async () => {
     setLoading(true);
     try {
-      const [subRes, evRes] = await Promise.all([
+      const [subRes, tokRes] = await Promise.all([
         adminFetch(`${apiURL}/subscriptions/admin/pending`),
-        adminFetch(`${apiURL}/billing-payments/admin/pending`),
+        adminFetch(`${apiURL}/tokens/admin/pending`),
       ]);
       // 401 on either kicks the global session-expired listener — bail.
-      if (subRes.status === 401 || evRes.status === 401) return;
-      const [subData, evData] = await Promise.all([
+      if (subRes.status === 401 || tokRes.status === 401) return;
+      const [subData, tokData] = await Promise.all([
         subRes.ok ? subRes.json() : [],
-        evRes.ok ? evRes.json() : [],
+        tokRes.ok ? tokRes.json() : [],
       ]);
       const subRows: UnifiedRow[] = (subData || []).map((r: any) => ({
         _id: r._id,
@@ -115,31 +115,21 @@ export function PendingSubscriptionsPage() {
         submittedAt: r.submittedAt,
         createdAt: r.createdAt,
       }));
-      const evRows: UnifiedRow[] = (evData || []).map((r: any) => {
-        const counts = [
-          r.stallsSold ? `${r.stallsSold} stalls` : null,
-          r.tablesBooked ? `${r.tablesBooked} tables` : null,
-          r.chairsBooked ? `${r.chairsBooked} chairs` : null,
-          r.speakersBooked ? `${r.speakersBooked} speakers` : null,
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        return {
-          _id: r._id,
-          type: "event_fee",
-          organizer: r.organizer,
-          itemLabel: r.event?.title || "Event",
-          itemSub: counts || undefined,
-          amount: r.amount,
-          currency: r.currency,
-          scheme: r.scheme,
-          status: r.status,
-          ref: r.ref,
-          submittedAt: r.submittedAt,
-          createdAt: r.createdAt,
-        };
-      });
-      const merged = [...subRows, ...evRows].sort((a, b) => {
+      const tokRows: UnifiedRow[] = (tokData || []).map((r: any) => ({
+        _id: r._id,
+        type: "token_topup",
+        organizer: r.organizer,
+        itemLabel: "Token top-up",
+        itemSub: `${r.tokensRequested} tokens`,
+        amount: r.amount,
+        currency: r.currency,
+        scheme: r.scheme,
+        status: r.status,
+        ref: r.ref,
+        submittedAt: r.submittedAt,
+        createdAt: r.createdAt,
+      }));
+      const merged = [...subRows, ...tokRows].sort((a, b) => {
         const ax = new Date(a.submittedAt || a.createdAt || 0).getTime();
         const bx = new Date(b.submittedAt || b.createdAt || 0).getTime();
         return bx - ax;
@@ -164,7 +154,7 @@ export function PendingSubscriptionsPage() {
   const confirmBase = (type: RowType) =>
     type === "subscription"
       ? `${apiURL}/subscriptions/admin`
-      : `${apiURL}/billing-payments/admin`;
+      : `${apiURL}/tokens/admin`;
 
   const confirm = async (row: UnifiedRow) => {
     const verb =
@@ -246,11 +236,11 @@ export function PendingSubscriptionsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Receipt className="h-6 w-6" /> Pending Payments
+            <Wallet className="h-6 w-6" /> Pending Payments
           </h1>
           <p className="text-sm text-muted-foreground">
             Verify organizer-submitted payments — subscription purchases and
-            per-event platform fees — and trigger receipts.
+            token top-ups — and trigger receipts.
           </p>
         </div>
         <Button
@@ -308,7 +298,7 @@ export function PendingSubscriptionsPage() {
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="text-amber-700 border-amber-200">
-                            <CreditCard className="h-3 w-3 mr-1" /> Event Fee
+                            <Coins className="h-3 w-3 mr-1" /> Token Top-up
                           </Badge>
                         )}
                       </TableCell>

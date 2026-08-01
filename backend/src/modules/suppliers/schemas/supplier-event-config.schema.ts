@@ -20,10 +20,6 @@ export class RequirementItem {
   // Free-text quantity so it can hold "200 pax", "2 stages", etc.
   @Prop({ default: "" })
   quantity: string;
-
-  // Optional budget hint shown to the supplier (in the event currency).
-  @Prop()
-  budget?: number;
 }
 
 export type SupplierEventConfigDocument = SupplierEventConfig & Document;

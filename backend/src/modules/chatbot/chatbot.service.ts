@@ -209,8 +209,8 @@ const QUICK_ACTIONS_BY_TAB: Record<Tab, QuickActionSpec[]> = {
     { label: "My profile", action: "Show my organization profile", requires: "settings" },
   ],
   platformFees: [
-    { label: "What do I owe?", action: "How much do I owe in platform fees?", requires: "settings" },
-    { label: "Open platform fees", action: "Take me to platform fees", requires: "settings" },
+    { label: "My token balance", action: "What's my token balance?", requires: "settings" },
+    { label: "Buy tokens", action: "I want to buy tokens", requires: "settings" },
   ],
   feedback: [
     { label: "Open feedback", action: "Take me to feedback", requires: "settings" },
@@ -1383,9 +1383,9 @@ export class ChatbotService {
       "get_membership_plans",
       "navigate_to",
     ],
-    // Platform Fees: no dedicated tools yet — the bot describes the tab,
-    // routes the user there, and can surface event counts via existing
-    // analytics tools when asked "how much do I owe per event?".
+    // Tokens: no dedicated tools yet — the bot describes the wallet, routes
+    // the user there, and can surface per-event usage via existing
+    // analytics tools when asked "how many tokens has each event used?".
     platformFees: [
       "get_events_breakdown",
       "get_stalls_analytics",
@@ -1595,7 +1595,7 @@ ACTIONS (only on an EXPLICIT request that names a Ref from a list above):
 - NOTE on deleted stalls: approving a cancellation (or deleting a stall) does NOT erase it — the booking is marked **Cancelled**, its space is freed and its QR voided, but it STAYS in the list so the organizer can still settle the refund/deposit. If asked "where did the deleted stall go", explain it's kept and shows as Cancelled.
 - "Return the deposit for <ref>" → return_stall_deposit(ref).
 - After the tool returns, report its "message" verbatim. NEVER perform an action without a Ref the user explicitly gave — if they say "confirm the payment" with no ref, first call list_exhibitor_pending and ask WHICH one (by Ref).
-- For editing a stall's fields, call navigate_to(users) ("Open Exhibitors/Visitors tab").
+- For editing a stall's fields, call navigate_to(users) ("Open CRM tab").
 
 EMPTY RESULTS:
 - If list_stalls returns an empty array, render this exact reply and STOP:
@@ -1634,16 +1634,16 @@ Focus: subscription plan, operators, profile, organization configuration.
 - "Show all my settings" / "organization details" / "my org configuration" / "organization settings" → get_organization_settings. Render as a 2-column key-value table with sections: Profile (Name / Org Name / Email / Country / WhatsApp), Plan (Plan Name / Price / Expiry / Subscribed), Payment Methods (UPI / Bank / PayNow / QR — show ✓ or ✗), Other (Operators count / Slug / Commission %). Use **bold** for section headers between rows or render as 4 separate small tables.
 - To CHANGE plan / add operator / edit profile, call navigate_to(settings).`,
 
-    platformFees: `You are the Platform Fees specialist for "{ORG}" on EventSH.
-The Platform Fees tab shows what the organizer owes EventSH **per event** for their bookings (stalls, round-table seats, chairs, and confirmed speakers). The organizer pays via a dynamic QR (UPI for India, PayNow for Singapore) generated from the platform's PaymentConfig. After paying externally, the organizer clicks "I have paid" and an admin confirms the payment, after which a PDF receipt is sent to their WhatsApp + email.
+    platformFees: `You are the Tokens specialist for "{ORG}" on EventSH.
+The Tokens tab shows the organizer's prepaid token wallet — one balance shared across every event they run, not a per-event bill. 1 token = 1 unit of their local currency. As attendees, exhibitors, and speakers confirm across ANY of their events, the matching platform fee is deducted from the wallet automatically. The organizer tops up by buying tokens: they pick a quantity, pay via a dynamic QR (UPI for India, PayNow for Singapore) generated from the platform's PaymentConfig, click "I have paid", and an admin confirms the payment — after which the tokens are credited and a PDF receipt is sent to their WhatsApp + email. When they publish an event (or use the "Tokens" action on an event row), EventSH estimates that event's likely fees from its pricing and nudges them to top up if their balance looks short — this is always skippable and never blocks publishing.
 
 Common questions:
-- "What are platform fees?" / "How much do I owe?" / "Explain platform fees" → Answer in 2–3 sentences (what they are, how they're calculated, how to pay), then call navigate_to({tab:"platformFees"}) so they can see the per-event breakdown.
-- "Open platform fees" / "Take me to billing" / "Go to fees" → call navigate_to({tab:"platformFees"}). No tool data needed.
-- "How many stalls / speakers / round tables across all my events?" → call get_stalls_analytics / get_speakers_analytics / get_round_tables_analytics for the totals (these drive the fee calc).
+- "What are tokens?" / "How does the token wallet work?" / "What's my balance?" → Answer in 2–3 sentences (shared wallet, 1 token = 1 currency unit, auto-deducted as fees accrue), then call navigate_to({tab:"platformFees"}) so they can see their balance and usage history.
+- "I want to buy tokens" / "Top up my wallet" / "Open tokens" / "Take me to billing" → call navigate_to({tab:"platformFees"}). No tool data needed.
+- "How many stalls / speakers / round tables across all my events?" → call get_stalls_analytics / get_speakers_analytics / get_round_tables_analytics for the totals (these drive token usage).
 - "Per-event breakdown of bookings" → call get_events_breakdown.
-- "How do I pay?" → Explain: open Platform Fees tab → click Pay on the event row → scan the QR (UPI or PayNow based on your country) → click "I have paid" → admin verifies and a PDF receipt is sent via WhatsApp + email. Then navigate_to({tab:"platformFees"}).
-- Never quote a specific owed amount — that's a live calculation shown only in the tab. Direct the user there.`,
+- "How do I pay my fees?" / "Settle my dues" → Explain there's no per-event bill anymore — instead, buy tokens once and they're spent automatically across all events. Open the Tokens tab → click Buy Tokens → pick a quantity → scan the QR (UPI or PayNow based on your country) → click "I have paid" → admin verifies and tokens are credited, with a PDF receipt via WhatsApp + email. Then navigate_to({tab:"platformFees"}).
+- Never quote a specific balance or fee amount — that's a live calculation shown only in the tab. Direct the user there.`,
 
     feedback: `You are the Feedback specialist for "{ORG}" on EventSH.
 The Feedback tab shows ratings + comments collected from event participants. Audiences supported: **Visitors, Exhibitors, Speakers, Round Tables**. Which audiences a plan can collect feedback from is controlled by the subscription's Feedback module (admin sets per-audience flags on each plan).
@@ -1657,12 +1657,12 @@ Common questions:
 - Never invent ratings or counts — always read them with get_event_feedback, or send the user to the tab.`,
 
     general: `You are the EventSH AI assistant for "{ORG}".
-You help organizers with events, tickets, attendees, vendors, speakers, plans, settings, platform fees, and feedback.
+You help organizers with events, tickets, attendees, vendors, speakers, plans, settings, tokens, and feedback.
 - Always use a tool for factual questions. Never invent values.
 - For UI changes, use navigate_to. Tab IDs include: dashboard, events, kiosk, eventAttendees, platformFees, users, feedback, speakerRequests, roundTableBookings, storefront, settings.
 - For lists, always use a markdown table.
 - For single record, use bold key-value pairs.
-- Platform Fees: per-event amounts owed to EventSH (stalls/chairs/tables/speakers × platform rate); paid via country-aware QR; admin confirms; PDF receipt to WhatsApp+email. Direct users to the platformFees tab.
+- Tokens: a prepaid wallet shared across every event the organizer runs (1 token = 1 currency unit), auto-deducted as stalls/chairs/tables/speakers/tickets/sponsors/workshops/memberships/suppliers confirm; topped up via country-aware QR; admin confirms; PDF receipt to WhatsApp+email. Direct users to the platformFees tab (still labeled "Tokens" in the UI).
 - Feedback: ratings + comments collected per event from visitors, exhibitors, speakers, and round-table guests. Which audiences are visible depends on the active plan's Feedback module. Direct users to the feedback tab.`,
   };
 
@@ -3213,11 +3213,11 @@ ${context}
       return walkin;
     }
 
-    // Deterministic short-circuit: pay platform fees — render an inline
-    // payment widget in the chat bubble. Gated by the same `settings`
-    // operator tab that protects the rest of the platform-fees module, so
-    // operators without settings access get a friendly refusal instead.
-    const feeForm = await this.maybePlatformFeeForm(message, organizerId, {
+    // Deterministic short-circuit: buy tokens / pay platform fees — render
+    // an inline top-up widget in the chat bubble. Gated by the same
+    // `settings` operator tab that protects the rest of the tokens module,
+    // so operators without settings access get a friendly refusal instead.
+    const feeForm = await this.maybeTokenTopUpForm(message, organizerId, {
       orgName,
       operatorAccessTabs,
     });
@@ -3507,11 +3507,12 @@ ${context}
     )
       return "events";
 
-    // Platform fees + Feedback come BEFORE the generic event/settings rules
-    // so prompts like "platform fees" don't get swallowed by "settings" or
-    // "events".
+    // Tokens + Feedback come BEFORE the generic event/settings rules so
+    // prompts like "platform fees" / "buy tokens" don't get swallowed by
+    // "settings" or "events". Old "pay my fees" phrasing is kept working
+    // alongside the new "tokens" vocabulary for continuity.
     if (
-      /\b(platform\s*fees?|owed|outstanding|billing|how\s+much\s+do\s+i\s+owe|what\s+do\s+i\s+owe|pay\s+(?:my\s+)?fees?|event\s+fees?|fees\s+to\s+(?:pay|eventsh))\b/.test(
+      /\b(tokens?|token\s*balance|top\s*up|platform\s*fees?|owed|outstanding|billing|how\s+much\s+do\s+i\s+owe|what\s+do\s+i\s+owe|pay\s+(?:my\s+)?fees?|settle\s+(?:my\s+)?dues|event\s+fees?|fees\s+to\s+(?:pay|eventsh))\b/.test(
         m,
       )
     )
@@ -3558,7 +3559,7 @@ ${context}
           {
             role: "system",
             content:
-              'Classify the user message into ONE tab and reply with ONLY that word. Tabs: dashboard, events, tickets, attendees, stalls, speakers, storefront, settings, platformFees, feedback, general. platformFees covers fees owed to eventsh / billing / how much do i owe. feedback covers ratings / reviews / comments from attendees. Reply only the word.',
+              'Classify the user message into ONE tab and reply with ONLY that word. Tabs: dashboard, events, tickets, attendees, stalls, speakers, storefront, settings, platformFees, feedback, general. platformFees covers the token wallet / buying tokens / fees owed to eventsh / billing / how much do i owe. feedback covers ratings / reviews / comments from attendees. Reply only the word.',
           },
           { role: "user", content: message },
         ],
@@ -3919,16 +3920,20 @@ ${context}
     };
   }
 
-  /** Detect "pay platform fees" intent and return an inline payment-widget
-   *  payload that ChatbotWidget renders as <InlinePlatformFeeForm/> inside
-   *  the bubble. The widget then calls the existing organizer-facing billing
-   *  endpoints (/billing-payments/me, /billing-payments/initiate,
-   *  /billing-payments/:id/mark-paid) — no new routes required.
+  /** Detect "buy tokens" / legacy "pay platform fees" intent and return an
+   *  inline top-up-widget payload that ChatbotWidget renders as
+   *  <InlineTokenTopUpForm/> inside the bubble. The widget then calls the
+   *  organizer-facing token endpoints (/tokens/me, /tokens/topup,
+   *  /tokens/topup/:id/mark-paid) — no new routes required.
+   *
+   *  Old "pay my fees" / "settle my dues" phrasing is kept working (mapped
+   *  onto the same token top-up flow) alongside the new "buy tokens" / "top
+   *  up" vocabulary, so returning users don't have to learn new wording.
    *
    *  Gated by the `settings` operator tab: an operator without that access
    *  hits the same friendly refusal used by the rest of Phase A. Organizers
    *  (no operator profile) always pass. */
-  private async maybePlatformFeeForm(
+  private async maybeTokenTopUpForm(
     message: string,
     organizerId: string,
     opts: {
@@ -3937,16 +3942,18 @@ ${context}
     },
   ): Promise<{
     text: string;
-    platformFeeForm?: {
+    tokenTopUpForm?: {
       organizerName: string;
     };
   } | null> {
     const m = message.toLowerCase();
     const intent =
+      /\b(buy|purchase|top\s*up|get\s+(?:more\s+)?)\s*tokens?\b/.test(m) ||
+      /\btokens?\s+(?:balance|wallet)\b/.test(m) ||
       /\bpay\s+(?:my\s+|the\s+)?(?:platform\s+)?(?:fee|fees|dues?|charges?|bills?|invoices?)\b/.test(
         m,
       ) ||
-      /\bsettle\s+(?:my\s+|the\s+)?(?:platform\s+)?(?:fee|fees|dues?|charges?|bills?|invoices?)\b/.test(
+      /\bsettle\s+(?:my\s+|the\s+)?(?:platform\s+)?(?:fee|fees|dues?|charges?|bills?|invoices?|dues)\b/.test(
         m,
       ) ||
       /\bpay\s+(?:my\s+)?event\s+fee/.test(m) ||
@@ -3955,17 +3962,17 @@ ${context}
     if (!intent) return null;
 
     // Operator access gate — same friendly refusal Phase A uses for any
-    // settings-module request. Keeps the "platform fees lives under
-    // settings" decision consistent across chat and dashboard.
+    // settings-module request. Keeps the "tokens lives under settings"
+    // decision consistent across chat and dashboard.
     if (!this.isOperatorAllowed(opts.operatorAccessTabs, "settings")) {
       return this.accessRefusal("settings");
     }
 
     return {
       text:
-        "Sure — pick the event below to pay its platform fee. " +
-        "I'll generate a QR code; scan it from your bank app, then tap **I have paid** so the admin can verify and confirm.",
-      platformFeeForm: {
+        "Sure — pick how many tokens you'd like to buy below. " +
+        "I'll generate a QR code; scan it from your bank app, then tap **I have paid** so the admin can verify, confirm, and credit your wallet.",
+      tokenTopUpForm: {
         organizerName: opts.orgName,
       },
     };

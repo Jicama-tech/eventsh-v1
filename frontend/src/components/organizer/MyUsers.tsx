@@ -198,6 +198,8 @@ interface ProcessedExhibitor {
 
 import { useCountryCodes } from "@/hooks/useCountryCodes";
 import { phoneNationalLength } from "@/data/countries";
+import SuppliersDirectory from "@/components/organizer/SuppliersDirectory";
+import SponsorsDirectory from "@/components/organizer/SponsorsDirectory";
 
 interface Country {
   name: string;
@@ -1069,10 +1071,12 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
         className="w-full"
       >
         <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
-          <TabsList className="grid w-full sm:w-[520px] grid-cols-3">
+          <TabsList className="grid w-full sm:w-[700px] grid-cols-5">
             <TabsTrigger value="visitors">Visitors</TabsTrigger>
             <TabsTrigger value="exhibitors">Exhibitors</TabsTrigger>
             <TabsTrigger value="speakers">Speakers</TabsTrigger>
+            <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
+            <TabsTrigger value="sponsors">Sponsors</TabsTrigger>
           </TabsList>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -1555,6 +1559,17 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
             eventfront application adds to it on its own. */}
         <TabsContent value="speakers">
           <SpeakerCRM />
+        </TabsContent>
+
+        {/* Suppliers Tab Content — self-contained CRM (own fetch/search) */}
+        <TabsContent value="suppliers">
+          <SuppliersDirectory />
+        </TabsContent>
+
+        {/* The organizer's own sponsor directory. Per-event applications live
+            under Participants → (event) → Sponsors. */}
+        <TabsContent value="sponsors">
+          <SponsorsDirectory />
         </TabsContent>
       </Tabs>
 

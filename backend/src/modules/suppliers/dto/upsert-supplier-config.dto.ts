@@ -3,7 +3,6 @@ import {
   IsArray,
   IsBoolean,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
   IsString,
   ValidateNested,
@@ -25,10 +24,6 @@ export class RequirementItemDto {
   @IsOptional()
   @IsString()
   quantity?: string;
-
-  @IsOptional()
-  @IsNumber()
-  budget?: number;
 }
 
 /**

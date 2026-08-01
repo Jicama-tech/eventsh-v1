@@ -1,15 +1,15 @@
 import { IsNotEmpty, IsOptional, IsString } from "class-validator";
 
 /**
- * Public quotation submission from a supplier via the private link. Sent as
- * multipart/form-data (optional quotation attachment), so the structured
+ * Public quotation submission from a supplier via the shared event link. Sent
+ * as multipart/form-data (optional quotation attachment), so the structured
  * fields (`quotationItems`, `accountDetails`) arrive as JSON strings and are
- * parsed in the service. `token` gates the submission.
+ * parsed in the service. `eventId` identifies the event; the form must be open.
  */
 export class CreateSupplierRequestDto {
   @IsNotEmpty()
   @IsString()
-  token: string;
+  eventId: string;
 
   @IsNotEmpty()
   @IsString()
@@ -18,6 +18,10 @@ export class CreateSupplierRequestDto {
   @IsOptional()
   @IsString()
   email?: string;
+
+  @IsOptional()
+  @IsString()
+  businessEmail?: string;
 
   @IsOptional()
   @IsString()

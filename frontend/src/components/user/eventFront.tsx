@@ -82,7 +82,8 @@ import { useToast } from "@/hooks/use-toast";
 
 import { useCountryCodes } from "@/hooks/useCountryCodes";
 import { phoneNationalLength } from "@/data/countries";
-import SponsorMarquee from "@/components/ui/SponsorMarquee";
+import { EventSponsorMarquee } from "@/components/user/EventSponsorSection";
+import EventfrontSponsorDialog from "@/components/user/EventfrontSponsorDialog";
 
 interface Country {
   name: string;
@@ -730,6 +731,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // Controls the new Google-verified Member dialog mounted under the
   // Rent-a-Stall card. Replaces the old storefront-only entry point.
   const [showMemberDialog, setShowMemberDialog] = useState(false);
+  // "Become a Sponsor" popup — lists the event's sponsorship tiers.
+  const [showSponsorDialog, setShowSponsorDialog] = useState(false);
   // Demo mode: this is an admin-curated showcase event. Any real action
   // (buy ticket, book stall, become member) instead invites the visitor to
   // register / contact us.
@@ -5197,6 +5200,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     (venueTables && Object.keys(venueTables).length > 0) ||
     roundTableData.length > 0;
 
+  // Sponsorship entry points only appear once the organizer publishes tiers.
+  const sponsorTiersAvailable =
+    Array.isArray((eventData as any)?.sponsorTypes) &&
+    (eventData as any).sponsorTypes.length > 0;
+  // The link lives next to "Become a member" inside the stall card. When the
+  // event has no stalls that card never renders, so fall back to a card of
+  // its own rather than leaving sponsors with no way in.
+  const showStallCard = !!venueTables && Object.keys(venueTables).length > 0;
+
   // Jump to a bottom tab section from an info card. Optionally expands the
   // venue map. Scroll is deferred so the (lazily-mounted) tab content exists.
   const goToTab = (tab: string, openVenue = false) => {
@@ -5949,23 +5961,20 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         </div>
       </div>
 
-      {/* ── Sponsors marquee — below the banner, left-to-right ── */}
-      {(() => {
-        const sponsors: string[] = Array.isArray((eventData as any)?.sponsors)
-          ? (eventData as any).sponsors
-          : [];
-        if (sponsors.length === 0) return null;
-        const resolveSrc = (u: string) =>
-          /^https?:\/\//.test(u) || u.startsWith("blob:") ? u : `${apiURL}${u}`;
-        return (
-          <div className="border-b border-gray-100 bg-white py-4">
-            <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-              Our Sponsors
-            </p>
-            <SponsorMarquee logos={sponsors.map(resolveSrc)} />
-          </div>
-        );
-      })()}
+      {/* ── Sponsors marquee — below the banner, left-to-right. Combines the
+             organizer's own logo uploads with confirmed, paid sponsors. ── */}
+      {/* Only an explicit `false` hides it — legacy events with no stored
+          value keep showing their logos. */}
+      {(eventData as any)?.showSponsorBar !== false && (
+        <EventSponsorMarquee
+          eventId={(eventData as any)?._id}
+          staticLogos={
+            Array.isArray((eventData as any)?.sponsors)
+              ? (eventData as any).sponsors
+              : []
+          }
+        />
+      )}
 
       {/* ── Info Cards Row ── */}
       <div className="bg-[#f5f5f5] border-b border-gray-200 mt-6 sm:mt-8">
@@ -6956,7 +6965,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       Clicking opens the Google-verified Member dialog
                       which either shows the existing membership card or
                       lets the exhibitor purchase a plan. */}
-                  <div className="mt-3 text-center">
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center">
                     <button
                       type="button"
                       onClick={() =>
@@ -6971,6 +6980,27 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     >
                       ⭐ Become a member
                     </button>
+                    {/* Sponsor entry point sits alongside the member link when
+                        the organizer has published sponsorship tiers. */}
+                    {sponsorTiersAvailable && (
+                      <>
+                        <span className="text-xs text-gray-300">/</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            (eventData as any)?.isDemo
+                              ? setShowDemoPrompt(true)
+                              : setShowSponsorDialog(true)
+                          }
+                          className="text-xs font-medium hover:underline inline-flex items-center gap-1"
+                          style={{
+                            color: design?.primaryColor || "#f97316",
+                          }}
+                        >
+                          🤝 Become a Sponsor
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -7020,6 +7050,34 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </button>
                 </div>
               )}
+
+              {/* ── Become a Sponsor — fallback card for events with no stall
+                     section, where the link next to "Become a member" has
+                     nowhere to live. ── */}
+              {sponsorTiersAvailable && !showStallCard && (
+                  <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <p className="text-gray-700 font-semibold text-sm mb-1">
+                      Become a Sponsor
+                    </p>
+                    <p className="text-gray-400 text-xs mb-4">
+                      Put your brand in front of everyone at this event.
+                    </p>
+                    <button
+                      onClick={() =>
+                        (eventData as any)?.isDemo
+                          ? setShowDemoPrompt(true)
+                          : setShowSponsorDialog(true)
+                      }
+                      className="w-full h-11 rounded-xl border-2 font-semibold text-sm transition-all hover:opacity-90"
+                      style={{
+                        borderColor: design?.primaryColor || "#f97316",
+                        color: design?.primaryColor || "#f97316",
+                      }}
+                    >
+                      🤝 Become a Sponsor
+                    </button>
+                  </div>
+                )}
 
               {/* ── Contact Organizer ── */}
               {(() => {
@@ -11188,6 +11246,21 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           />
         );
       })()}
+
+      {/* "Become a Sponsor" popup — the tier list. Picking one hands off to
+          the sponsor application page one path segment deeper. */}
+      <EventfrontSponsorDialog
+        open={showSponsorDialog}
+        onClose={() => setShowSponsorDialog(false)}
+        eventId={(eventData as any)?._id}
+        organizerId={
+          (eventData as any)?.organizer?._id ||
+          (typeof (eventData as any)?.organizer === "string"
+            ? (eventData as any).organizer
+            : undefined)
+        }
+        primaryColor={design?.primaryColor || "#f97316"}
+      />
 
       <Dialog open={showWhatsAppDialog} onOpenChange={setShowWhatsAppDialog}>
         <DialogContent

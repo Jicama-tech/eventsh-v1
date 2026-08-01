@@ -420,6 +420,161 @@ export class MailService {
   }
 
   // ✅ Receipt of plan switch / purchase
+  /**
+   * Sponsorship invoice, sent once the organizer verifies the transfer.
+   *
+   * `senderConfig` is the organizer's email config — when they've set up their
+   * own SMTP the invoice comes from their address, otherwise it falls back to
+   * the shared EventSH sender.
+   */
+  async sendSponsorshipInvoice(
+    data: {
+      to: string | string[];
+      /** Invoice PDF to attach, built by the caller. */
+      pdf?: Buffer;
+      companyName: string;
+      contactName?: string;
+      eventTitle: string;
+      eventDate?: Date | string;
+      tierName: string;
+      amount: number;
+      currencySymbol: string;
+      invoiceNumber: string;
+      transactionId?: string;
+      paidOn?: Date;
+      organizationName?: string;
+      organizerEmail?: string;
+    },
+    senderConfig?: OrgEmailConfig,
+  ): Promise<void> {
+    const { transporter, from } = this.resolveSender(senderConfig);
+    const money = `${data.currencySymbol}${Number(data.amount || 0).toLocaleString()}`;
+    const issuer = data.organizationName || "the organizer";
+    const row = (label: string, value: string) =>
+      `<tr><td style="padding:6px 14px;color:#6b7280;">${label}</td><td style="padding:6px 14px;font-weight:600;">${value}</td></tr>`;
+
+    const subject = `Sponsorship invoice ${data.invoiceNumber} — ${data.eventTitle}`;
+    const body = `
+      <div style="font-family: sans-serif; max-width: 600px; color: #1f2937; line-height: 1.6;">
+        <h2 style="margin-bottom:4px;">Sponsorship confirmed 🤝</h2>
+        <p style="color:#6b7280;margin-top:0;">Invoice ${data.invoiceNumber}</p>
+        <p>Hi ${data.contactName || data.companyName},</p>
+        <p>
+          Thank you for sponsoring <strong>${data.eventTitle}</strong>.
+          ${issuer} has verified your payment and your sponsorship is now confirmed.
+        </p>
+        <table style="border-collapse:collapse;margin:16px 0;border:1px solid #e5e7eb;border-radius:8px;">
+          ${row("Sponsor", data.companyName)}
+          ${row("Package", data.tierName)}
+          ${row("Amount paid", money)}
+          ${data.transactionId ? row("Transaction ref", data.transactionId) : ""}
+          ${data.paidOn ? row("Paid on", new Date(data.paidOn).toLocaleDateString()) : ""}
+          ${data.eventDate ? row("Event date", new Date(data.eventDate).toLocaleDateString()) : ""}
+          ${row("Invoice no.", data.invoiceNumber)}
+        </table>
+        <p>Keep this email as your receipt.${
+          data.organizerEmail
+            ? ` Any questions, reply here or write to <a href="mailto:${data.organizerEmail}">${data.organizerEmail}</a>.`
+            : ""
+        }</p>
+        <p style="color:#6b7280;font-size:13px;">— ${data.organizationName || "EventSH"}</p>
+      </div>`;
+
+    // Both addresses on one send — the sponsor's sign-in Gmail and their
+    // company/accounts address — so finance and the contact both get it.
+    const recipients = (Array.isArray(data.to) ? data.to : [data.to])
+      .map((e) => (e || "").trim().toLowerCase())
+      .filter(Boolean);
+    const to = [...new Set(recipients)].join(", ");
+
+    await transporter.sendMail({
+      from,
+      to,
+      subject,
+      html: body,
+      attachments: data.pdf
+        ? [
+            {
+              filename: `${data.invoiceNumber}.pdf`,
+              content: data.pdf,
+              contentType: "application/pdf",
+            },
+          ]
+        : [],
+    });
+  }
+
+  /**
+   * One email shape for every step of a supplier quotation — new quote,
+   * counter-offer, approval, rejection, part/full payment, and the supplier's
+   * own invoice confirmation.
+   *
+   * Negotiations can run for many rounds, so each message leads with what
+   * just changed and carries the current figures underneath. Sent from the
+   * organizer's own SMTP when configured, otherwise the shared EventSH sender.
+   */
+  async sendSupplierUpdate(
+    data: {
+      to: string[];
+      heading: string;
+      /** One-line summary of what just happened. */
+      summary: string;
+      supplierName: string;
+      eventTitle: string;
+      status: string;
+      /** Label → value rows rendered as a table (already formatted). */
+      rows?: Array<[string, string]>;
+      /** Free-text note from whoever made the change. */
+      note?: string;
+      organizationName?: string;
+      ctaLabel?: string;
+      ctaUrl?: string;
+    },
+    senderConfig?: OrgEmailConfig,
+  ): Promise<void> {
+    const recipients = [...new Set(
+      (data.to || [])
+        .map((e) => String(e || "").trim().toLowerCase())
+        .filter(Boolean),
+    )];
+    if (recipients.length === 0) return;
+
+    const { transporter, from } = this.resolveSender(senderConfig);
+    const row = ([label, value]: [string, string]) =>
+      `<tr><td style="padding:5px 14px 5px 0;color:#64748b">${label}</td><td style="padding:5px 0;font-weight:600;color:#0f172a">${value || "—"}</td></tr>`;
+
+    const subject = `${data.heading} — ${data.eventTitle}`;
+    const html = `
+      <div style="font-family: sans-serif; max-width: 620px; color: #1f2937; line-height: 1.6;">
+        <h2 style="margin-bottom:4px;">${data.heading}</h2>
+        <p style="margin-top:0;color:#6b7280;">${data.summary}</p>
+        <table style="border-collapse:collapse;margin:14px 0;">
+          ${row(["Supplier", data.supplierName])}
+          ${row(["Event", data.eventTitle])}
+          ${row(["Status", data.status])}
+          ${(data.rows || []).map(row).join("")}
+        </table>
+        ${
+          data.note
+            ? `<p style="background:#f1f5f9;border-radius:8px;padding:10px 12px;margin:12px 0;"><strong>Note:</strong> ${data.note}</p>`
+            : ""
+        }
+        ${
+          data.ctaUrl
+            ? `<p style="margin:18px 0;"><a href="${data.ctaUrl}" style="background:#6366f1;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;">${data.ctaLabel || "Open"}</a></p>`
+            : ""
+        }
+        <p style="color:#6b7280;font-size:13px;">— ${data.organizationName || "EventSH"}</p>
+      </div>`;
+
+    await transporter.sendMail({
+      from,
+      to: recipients.join(", "),
+      subject,
+      html,
+    });
+  }
+
   async sendPlanPurchaseConfirmation(data: {
     name: string;
     email: string;

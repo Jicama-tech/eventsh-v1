@@ -111,6 +111,7 @@ interface Operator {
   accessTabs?: string[];
   // When false, this operator does not receive notification emails.
   allowEmails?: boolean;
+  canApproveExpenses?: boolean;
 }
 
 interface ShopkeeperSettingsProps {
@@ -1089,6 +1090,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     accessTabs: string[];
     // When off, this operator does not receive notification emails.
     allowEmails: boolean;
+    canApproveExpenses: boolean;
   }>({
     name: "",
     operatorCountryCode: "+91",
@@ -1097,6 +1099,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     operatorLocalNumber: "",
     accessTabs: [],
     allowEmails: false,
+    canApproveExpenses: false,
   });
   const [isSavingOperators, setIsSavingOperators] = useState(false);
 
@@ -1209,6 +1212,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           companyEmail,
           accessTabs: operatorForm.accessTabs,
           allowEmails: operatorForm.allowEmails,
+          canApproveExpenses: operatorForm.canApproveExpenses,
         }),
       });
 
@@ -1231,6 +1235,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
         operatorLocalNumber: "",
         accessTabs: [],
         allowEmails: false,
+    canApproveExpenses: false,
       });
       setEditingOperatorIndex(null);
     } catch (err: any) {
@@ -3244,6 +3249,9 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       operatorEmail: "",
                       operatorLocalNumber: "",
                       accessTabs: [],
+                    
+                      allowEmails: false,
+                      canApproveExpenses: false,
                     });
                     setEditingOperatorIndex(null);
                     setOperatorDialogOpen(true);
@@ -3298,6 +3306,9 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                                 operatorLocalNumber: splitLocal,
                                 accessTabs: op.accessTabs ?? [],
                                 allowEmails: op.allowEmails === true,
+                              
+                                canApproveExpenses:
+                                  !!(op as any).canApproveExpenses,
                               });
                               setEditingOperatorIndex(index);
                               setOperatorDialogOpen(true);
@@ -3472,6 +3483,25 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     }
                   />
                 </div>
+                <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                  <div>
+                    <Label>Expenses Approval</Label>
+                    <p className="text-xs text-muted-foreground">
+                      When on, this operator can approve or reject expenses the
+                      team logs against an event. Off by default.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={operatorForm.canApproveExpenses}
+                    onCheckedChange={(checked) =>
+                      setOperatorForm((prev) => ({
+                        ...prev,
+                        canApproveExpenses: checked,
+                      }))
+                    }
+                  />
+                </div>
+
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2">
                     <Lock className="w-3 h-3" />
@@ -3490,8 +3520,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       { id: "dashboard", label: "Analytics" },
                       { id: "kiosk", label: "In-Person Booking" },
                       { id: "eventAttendees", label: "Participants" },
-                      { id: "platformFees", label: "Platform Fees" },
-                      { id: "users", label: "Exhibitors/Visitors" },
+                      { id: "platformFees", label: "Tokens" },
+                      { id: "users", label: "CRM" },
                       { id: "events", label: "Events/Coupons" },
                       { id: "feedback", label: "Feedback" },
                       { id: "membership", label: "Membership" },

@@ -4,6 +4,10 @@ import { IsOptional, IsString } from "class-validator";
  * Organizer logs a payment made to the supplier (manual bank transfer). Sent
  * as multipart/form-data with an optional proof screenshot, so numeric fields
  * arrive as strings and are coerced in the service.
+ *
+ * Payments are cumulative: each call records one instalment (an advance, then
+ * the balance later). Omitting `amountPaid` settles the whole outstanding
+ * balance in one go.
  */
 export class RecordSupplierPaymentDto {
   @IsOptional()

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { buildPayNowQrUrl } from "@/lib/paynowQr";
+import QRCodeLib from "qrcode";
 
 const apiURL = __API_URL__;
 
@@ -153,21 +154,26 @@ export function SubscriptionCheckoutDialog({
         return;
       }
 
-      const params = new URLSearchParams({
-        scheme: row.scheme,
-        payeeId: proxy,
-        payeeName: cfg.companyName,
-        amount: row.amount.toFixed(2),
-        billNumber: row.ref,
-        currency: row.currency,
+      // UPI: build the plain deep-link URI and encode it into a QR
+      // client-side (same approach the working ticket/table/speaker
+      // payment pages use). The backend's /payments/generate-qr route
+      // builds an EMVCo TLV+CRC payload — the same hand-rolled builder
+      // that produced invalid PayNow QRs (see above) — and UPI apps
+      // don't decode that format either, so it never worked here.
+      const upiUri = `upi://pay?pa=${encodeURIComponent(
+        proxy,
+      )}&pn=${encodeURIComponent(cfg.companyName)}&am=${row.amount.toFixed(
+        2,
+      )}&cu=${row.currency}&tn=${encodeURIComponent(
+        planName,
+      )}&tr=${encodeURIComponent(row.ref)}`;
+      const dataUrl = await QRCodeLib.toDataURL(upiUri, {
+        errorCorrectionLevel: "M",
+        margin: 2,
+        scale: 6,
       });
-      const qrRes = await fetch(`${apiURL}/payments/generate-qr?${params}`);
-      const qrJson = await qrRes.json();
-      if (!qrRes.ok) {
-        throw new Error(qrJson?.message || `HTTP ${qrRes.status}`);
-      }
-      setQrImage(qrJson.qr);
-      setQrIntent(qrJson.intent);
+      setQrImage(dataUrl);
+      setQrIntent(upiUri);
     } catch (e: any) {
       setQrError(e?.message || "Failed to generate QR");
     } finally {

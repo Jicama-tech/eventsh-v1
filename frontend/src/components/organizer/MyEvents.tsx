@@ -1,4 +1,11 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import {
+  useEffect,
+  useState,
+  useMemo,
+  useCallback,
+  lazy,
+  Suspense,
+} from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -10,6 +17,8 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -35,7 +44,13 @@ import { CreateEventForm } from "./CreateEventForm";
 import { MarriageEventForm } from "./MarriageEventForm";
 import { EventTypeChooser } from "./EventTypeChooser";
 import { CouponsManager } from "./CouponsManager";
-import { EventFeedbackDialog } from "./EventFeedbackDialog";
+const SupplierRequests = lazy(
+  () => import("@/components/organizer/SupplierRequests"),
+);
+const EventExpensesDialog = lazy(
+  () => import("@/components/organizer/EventExpensesDialog"),
+);
+import { BuyTokensDialog } from "./BuyTokensDialog";
 import type { EventTypeKey } from "@/lib/eventTypes";
 import {
   Plus,
@@ -56,14 +71,17 @@ import {
   Copy,
   Share2,
   QrCode,
-  MessageSquare,
+  Truck,
+  Receipt,
   Loader2,
+  Coins,
 } from "lucide-react";
 import { format } from "date-fns";
 import { jwtDecode } from "jwt-decode";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";
 import { useSubscription as useEventshSubscription } from "@/hooks/useSubscription";
+import { symbolForCode } from "@/data/currencies";
 
 export interface Event {
   _id: string;
@@ -165,6 +183,21 @@ const MyEvents: React.FC = () => {
   const apiURL = __API_URL__;
   const { toast } = useToast();
   const [feedbackForEvent, setFeedbackForEvent] = useState<Event | null>(null);
+  // Supplier requirements + quotations for one event, shown in a dialog.
+  const [suppliesForEvent, setSuppliesForEvent] = useState<Event | null>(null);
+  // Expenses + approvals for one event.
+  const [expensesForEvent, setExpensesForEvent] = useState<Event | null>(null);
+  // Token estimate dialog — shown either from the standing per-row "Tokens"
+  // action, or as a soft (skippable) nudge right after publishing.
+  const [tokenEstimateFor, setTokenEstimateFor] = useState<Event | null>(null);
+  const [tokenEstimate, setTokenEstimate] = useState<{
+    estimatedFee: number;
+    currency: string;
+    walletBalance: number;
+    shortfall: number;
+  } | null>(null);
+  const [tokenEstimateLoading, setTokenEstimateLoading] = useState(false);
+  const [buyTokensOpen, setBuyTokensOpen] = useState(false);
 
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -699,6 +732,12 @@ const MyEvents: React.FC = () => {
           ? "The public event link is now live."
           : "The public link is now disabled — visitors can't open it.",
       });
+      // Soft, skippable nudge — never gates publishing itself, which has
+      // already happened by the time this fires. Only interrupts when
+      // there's an actual shortfall to flag.
+      if (next) {
+        void maybePromptTokens(event);
+      }
     } catch (err: any) {
       // revert
       setEvents((prev) =>
@@ -715,6 +754,37 @@ const MyEvents: React.FC = () => {
       setPublishBusyId(null);
     }
   };
+
+  // Fetches the token estimate for one event. `force` always opens the
+  // dialog (the standing per-row "Tokens" action); otherwise it only opens
+  // when there's an actual shortfall (the post-publish soft nudge).
+  const fetchTokenEstimate = async (event: Event, force: boolean) => {
+    setTokenEstimateLoading(true);
+    if (force) {
+      setTokenEstimateFor(event);
+      setTokenEstimate(null);
+    }
+    try {
+      const token = sessionStorage.getItem("token");
+      const res = await fetch(`${apiURL}/tokens/estimate/${event._id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Failed to estimate");
+      const data = await res.json();
+      if (force || data?.shortfall > 0) {
+        setTokenEstimateFor(event);
+        setTokenEstimate(data);
+      }
+    } catch {
+      // Silent — this is a best-effort nudge, never worth surfacing an
+      // error toast over (especially for the automatic post-publish check).
+      if (force) setTokenEstimateFor(null);
+    } finally {
+      setTokenEstimateLoading(false);
+    }
+  };
+  const openTokenEstimate = (event: Event) => fetchTokenEstimate(event, true);
+  const maybePromptTokens = (event: Event) => fetchTokenEstimate(event, false);
 
   /**
    * Try the Web Share API first (native dialog on mobile, OS share sheet on
@@ -1297,18 +1367,39 @@ const MyEvents: React.FC = () => {
                           <QrCode size={16} className="mr-1" />
                           Scanner
                         </Button>
-                        {canCollectFeedback && (
-                          <Button
-                            variant="buttonOutline"
-                            size="sm"
-                            onClick={() => setFeedbackForEvent(event)}
-                            className="flex-1 lg:flex-none"
-                            title="View ratings + comments and toggle deposit refund status"
-                          >
-                            <MessageSquare size={16} className="mr-1" />
-                            Feedback
-                          </Button>
-                        )}
+                        <Button
+                          variant="buttonOutline"
+                          size="sm"
+                          onClick={() => openTokenEstimate(event)}
+                          className="flex-1 lg:flex-none"
+                          title="Estimate this event's platform fees and buy tokens"
+                        >
+                          <Coins size={16} className="mr-1" />
+                          Tokens
+                        </Button>
+                        {/* Requirements + quotations for this event, in place
+                            — no need to leave for a separate Suppliers tab. */}
+                        <Button
+                          variant="buttonOutline"
+                          size="sm"
+                          onClick={() => setSuppliesForEvent(event)}
+                          className="flex-1 lg:flex-none"
+                          title="Set requirements, share the supplier link, and review quotations"
+                        >
+                          <Truck size={16} className="mr-1" />
+                          Supplies
+                        </Button>
+                        {/* Out-of-pocket spend, with its approval cycle. */}
+                        <Button
+                          variant="buttonOutline"
+                          size="sm"
+                          onClick={() => setExpensesForEvent(event)}
+                          className="flex-1 lg:flex-none"
+                          title="Log expenses and approve what the team has submitted"
+                        >
+                          <Receipt size={16} className="mr-1" />
+                          Expense
+                        </Button>
                         {canDeleteEvents && (
                           <Button
                             variant="buttonOutline"
@@ -1390,11 +1481,136 @@ const MyEvents: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      <EventFeedbackDialog
-        eventId={feedbackForEvent?._id ?? null}
-        eventTitle={feedbackForEvent?.title}
-        open={!!feedbackForEvent}
-        onOpenChange={(o) => !o && setFeedbackForEvent(null)}
+      {/* Team expenses for the chosen event, with approvals */}
+      <Suspense fallback={null}>
+        <EventExpensesDialog
+          open={!!expensesForEvent}
+          onClose={() => setExpensesForEvent(null)}
+          eventId={expensesForEvent?._id}
+          eventTitle={expensesForEvent?.title}
+        />
+      </Suspense>
+
+      {/* Supplier requirements + quotations for the chosen event */}
+      <Dialog
+        open={!!suppliesForEvent}
+        onOpenChange={(o) => !o && setSuppliesForEvent(null)}
+      >
+        <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-4xl">
+          <DialogHeader className="shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              <Truck size={18} />
+              Supplies — {suppliesForEvent?.title}
+            </DialogTitle>
+            <DialogDescription>
+              Set what you need, share the private supplier link, and review
+              every quotation for this event.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="-mr-2 flex-1 overflow-y-auto pr-2">
+            {suppliesForEvent && (
+              <Suspense
+                fallback={
+                  <div className="flex justify-center py-10">
+                    <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-primary" />
+                  </div>
+                }
+              >
+                <SupplierRequests eventId={suppliesForEvent._id} />
+              </Suspense>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Token estimate — pre-sale turnover estimate + shortfall vs wallet */}
+      <Dialog
+        open={!!tokenEstimateFor}
+        onOpenChange={(o) => {
+          if (!o) {
+            setTokenEstimateFor(null);
+            setTokenEstimate(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Coins className="h-5 w-5" />
+              Tokens — {tokenEstimateFor?.title}
+            </DialogTitle>
+            <DialogDescription>
+              Estimated platform fees for this event, based on its current
+              pricing. Tokens are shared across all your events.
+            </DialogDescription>
+          </DialogHeader>
+          {tokenEstimateLoading || !tokenEstimate ? (
+            <div className="flex items-center justify-center py-8 gap-2 text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" /> Estimating…
+            </div>
+          ) : (
+            <div className="space-y-3 py-2">
+              <div className="rounded-lg border bg-slate-50 px-4 py-3 flex items-center justify-between">
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">
+                    Estimated fee
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900">
+                    {symbolForCode(tokenEstimate.currency)}
+                    {tokenEstimate.estimatedFee}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs uppercase tracking-wide text-slate-500">
+                    Wallet balance
+                  </div>
+                  <div className="text-xl font-semibold text-slate-700">
+                    {tokenEstimate.walletBalance} tokens
+                  </div>
+                </div>
+              </div>
+              {tokenEstimate.shortfall > 0 ? (
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                  Your wallet is short by ~{tokenEstimate.shortfall} tokens for
+                  this event's estimated fees. Buying is optional — fees still
+                  accrue and you can top up any time.
+                </p>
+              ) : (
+                <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
+                  Your wallet already covers this event's estimated fees.
+                </p>
+              )}
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setTokenEstimateFor(null);
+                setTokenEstimate(null);
+              }}
+            >
+              Close
+            </Button>
+            <Button
+              disabled={!tokenEstimate}
+              onClick={() => setBuyTokensOpen(true)}
+            >
+              <Coins className="h-4 w-4 mr-2" />
+              Buy tokens
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <BuyTokensDialog
+        open={buyTokensOpen}
+        onClose={() => setBuyTokensOpen(false)}
+        defaultTokens={tokenEstimate?.shortfall}
+        onSubmitted={() => {
+          setBuyTokensOpen(false);
+          setTokenEstimateFor(null);
+          setTokenEstimate(null);
+        }}
       />
 
       {/* Delete Event confirmation (type-to-confirm) */}

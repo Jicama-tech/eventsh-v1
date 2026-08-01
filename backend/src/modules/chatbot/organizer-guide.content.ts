@@ -45,12 +45,12 @@ This is the breadth you're working with. Each item is covered in detail in its o
 - **Stalls** — sellable space templates, add-ons, deposits, member pricing, an application-and-approval workflow, visual table selection on a floor plan, linked vendor accounts, and QR stall tickets.
 - **Round tables** — banquet/gala seating with per-chair or whole-table booking, per-guest tickets, and organizer payment confirmation.
 - **Speakers** — speaker slot templates, an application flow with photo/bio/expertise, approval, self-service time-slot scheduling, optional paid slots, and QR speaker passes.
-- **Memberships & pricing** — exhibitor memberships with member pricing and receipts, your own subscription plan, prorated co-terminus add-ons, and platform-fee payments with receipts.
+- **Memberships & pricing** — exhibitor memberships with member pricing and receipts, your own subscription plan, prorated co-terminus add-ons, and a token wallet for platform fees.
 - **Venue designer** — drag-and-drop floor plans with stalls, round tables, speaker zones, doors and annotations, shareable with your team and exhibitors.
 - **Analytics** — live revenue by day/week/month/year, top events, capacity usage, pending approvals, participant lists and participation reports.
 - **Team & operations** — operators with per-tab access control, event volunteers for door duty, bulk import/export of visitors and exhibitors.
 - **Storefront** — a public page listing all your published events under your brand.
-- **The chatbot** — an assistant (that's me) that pulls analytics, opens forms, lists data, takes walk-in bookings, processes platform fees and generates this guide.
+- **The chatbot** — an assistant (that's me) that pulls analytics, opens forms, lists data, takes walk-in bookings, sells tokens and generates this guide.
 - **Notifications** — automated email and WhatsApp delivery of tickets, passes, receipts and status updates, optionally from your own sender address.
 
 ## The three pillars
@@ -202,7 +202,7 @@ Tickets are how visitors register and pay to attend — and the ticketing engine
 3. Add as many types as you need — each has its own independent price and capacity, so you can run **tiered pricing**.
 4. Save and publish.
 
-> **Individual vs Organizer accounts:** Individual-tier accounts can't accept payment, so every visitor-type price is forced to 0. To charge for tickets, use an Organizer account. See "Memberships, Plans & Platform Fees".
+> **Individual vs Organizer accounts:** Individual-tier accounts can't accept payment, so every visitor-type price is forced to 0. To charge for tickets, use an Organizer account. See "Memberships, Plans & Tokens".
 
 ### Pricing strategy
 
@@ -403,11 +403,11 @@ If your event has talks, panels or sessions, the speakers module runs the whole 
   },
   {
     slug: "memberships-pricing",
-    title: "Memberships, Plans & Platform Fees",
-    summary: "Exhibitor memberships, member pricing, your subscription, prorated add-ons and fees.",
-    markdown: `# Memberships, Plans & Platform Fees
+    title: "Memberships, Plans & Tokens",
+    summary: "Exhibitor memberships, member pricing, your subscription, prorated add-ons and the token wallet.",
+    markdown: `# Memberships, Plans & Tokens
 
-Three money systems live here: **memberships** you sell to exhibitors, **your own subscription plan** and add-ons, and **platform fees**. They're separate — read each part for what it does.
+Three money systems live here: **memberships** you sell to exhibitors, **your own subscription plan** and add-ons, and your **token wallet**. They're separate — read each part for what it does.
 
 ## Part 1 — Exhibitor memberships
 
@@ -440,21 +440,23 @@ Your organization runs on a **plan**:
 - Add-ons are **co-terminus** — billed **prorated** so they always expire on the same day as your main plan.
 - This keeps billing aligned to a single renewal date instead of many staggered ones.
 
-## Part 3 — Platform fees
+## Part 3 — Tokens
 
-Some platform activity accrues **platform fees**.
+Platform fees are paid from a **prepaid token wallet** — one balance shared across **every event you run**, not a bill per event. 1 token = 1 unit of your local currency.
 
-1. Ask the chatbot to **"pay platform fees"** — an inline payment widget opens right in the chat.
-2. Complete the payment.
-3. A **receipt** is generated for your records.
+- As tickets, stalls, speakers, sponsors, tables, chairs, workshops, memberships and suppliers confirm across any of your events, the matching fee is **deducted from your wallet automatically**.
+- When you publish an event (or use the **Tokens** action on an event row in My Events), EventSH estimates that event's likely fees from its pricing and nudges you to top up if your balance looks short — this is always **skippable** and never blocks publishing.
+- To top up: open the **Tokens** tab, click **Buy Tokens**, pick a quantity, and pay via QR (UPI for India, PayNow for Singapore). Ask the chatbot to **"buy tokens"** for the same flow inline in chat.
+- After paying, click **I have paid**; an admin verifies and confirms, your wallet is credited, and a **receipt** is sent to your email and WhatsApp.
 
-> Operators need the **settings** permission to pay platform fees; without it they get a friendly refusal. See "Settings, Team & Venue Designer".
+> Operators need the **settings** permission to buy tokens; without it they get a friendly refusal. See "Settings, Team & Venue Designer".
 
 ## Common questions
 
 - **Do members pay less automatically?** Yes — once their membership is active and you've set member prices, the discount shows on the EventFront with no extra steps.
 - **What happens when my plan expires?** Renew before the expiry date to avoid interruption. Check "show my subscription" for the exact date.
-- **Where are my receipts?** Membership, subscription and platform-fee payments each generate a receipt — keep the PDFs for accounting.
+- **Where are my receipts?** Membership, subscription and token top-up payments each generate a receipt — keep the PDFs for accounting.
+- **What if my token balance goes negative?** Fees still accrue even if you haven't topped up — nothing is blocked. Top up whenever it's convenient; the balance just catches up.
 
 ## Features at a glance
 
@@ -542,7 +544,7 @@ Operators are team members you invite, with **scoped access**.
 - When an operator signs in, their dashboard and chatbot are **limited to their permissions**; out-of-scope actions are politely refused.
 - Delegate day-to-day work without handing over full control.
 
-> Example: give front-desk staff access to tickets and scanning, but not to settings or platform fees.
+> Example: give front-desk staff access to tickets and scanning, but not to settings or tokens.
 
 ## Volunteers
 
@@ -892,8 +894,8 @@ They sign in with **Google** using the Gmail you enter — **no password, no inv
    - **Allow Emails** — turn on to send this operator notification emails.
 4. Under **Tab Access**, pick which dashboard tabs they may use:
    - **Leave everything unchecked = full access** (they see all tabs).
-   - Check specific tabs to **restrict** — e.g. only **In-Person Booking** for a door/kiosk operator, or **Participants** + **Exhibitors/Visitors** for a front-desk operator.
-   - Tabs: **Chatbot, Analytics, In-Person Booking, Participants, Platform Fees, Exhibitors/Visitors, Events/Coupons, Feedback, Membership, Support, Eventfront, Settings**. Fine-grained extras (e.g. **Allow deleting exhibitor stalls**, delete events) appear under a tab once you grant it.
+   - Check specific tabs to **restrict** — e.g. only **In-Person Booking** for a door/kiosk operator, or **Participants** + **CRM** for a front-desk operator.
+   - Tabs: **Chatbot, Analytics, In-Person Booking, Participants, Tokens, CRM, Events/Coupons, Feedback, Membership, Support, Eventfront, Settings**. Fine-grained extras (e.g. **Allow deleting exhibitor stalls**, delete events) appear under a tab once you grant it.
 5. Click **Save**. Edit or delete the operator later from the same tab.
 
 ## Part B — Organizer: give them access

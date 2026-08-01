@@ -11,25 +11,19 @@ import { OtpService } from "../otp/otp.service";
 import { MailService } from "../roles/mail.service";
 import * as fs from "fs";
 import * as path from "path";
+import {
+  billForCategory,
+  resolveEffectiveRates,
+  resolvePlanForCountry,
+  EffectiveBillingRates,
+} from "../admin/billing-rate-calc.util";
+import {
+  computeEventBillables,
+  amountForBillables,
+} from "../admin/billables.util";
 const PDFDocument = require("pdfkit");
 
-export interface BillingRates {
-  stallRate: number;
-  roundTableRate: number;
-  chairRate: number;
-  speakerRate: number;
-  membershipRate: number;
-  currency: string;
-}
-
-const DEFAULT_RATES: BillingRates = {
-  stallRate: 20,
-  roundTableRate: 20,
-  chairRate: 5,
-  speakerRate: 20,
-  membershipRate: 5,
-  currency: "USD",
-};
+export type BillingRates = EffectiveBillingRates;
 
 @Injectable()
 export class BillingPaymentsService {
@@ -42,6 +36,8 @@ export class BillingPaymentsService {
     @InjectModel("SpeakerRequest") private speakerRequestModel: Model<any>,
     @InjectModel("OrganizerPayment") private organizerPaymentModel: Model<any>,
     @InjectModel("PlatformBillingRates") private ratesModel: Model<any>,
+    @InjectModel("OrganizerBillingRateOverride")
+    private rateOverrideModel: Model<any>,
     // Active memberships drive the new Memberships tab on the
     // organizer-facing PlatformFeesPanel. Injected by class-name so we
     // don't pull MembershipsModule into a cycle here.
@@ -49,6 +45,14 @@ export class BillingPaymentsService {
     private exhibitorMembershipModel: Model<any>,
     @InjectModel("MembershipPlan")
     private membershipPlanModel: Model<any>,
+    @InjectModel("WorkshopBooking")
+    private workshopBookingModel: Model<any>,
+    @InjectModel("SponsorRequest")
+    private sponsorRequestModel: Model<any>,
+    @InjectModel("SupplierRequest")
+    private supplierRequestModel: Model<any>,
+    @InjectModel("Ticket")
+    private ticketModel: Model<any>,
     private readonly otpService: OtpService,
     private readonly mailService: MailService,
   ) {}
@@ -56,29 +60,21 @@ export class BillingPaymentsService {
   // ---------------------------------------------------------------------------
   //  Per-event amount calc (mirrors admin.service.getOrganizerBilling so the
   //  numbers match exactly when admin opens OrganizerBillingDialog).
+  //  computeEventBillables/amountForBillables now live in
+  //  ../admin/billables.util.ts so tokens.service.ts can reuse them too.
   // ---------------------------------------------------------------------------
-  private flatten(v: any): any[] {
-    if (Array.isArray(v)) return v;
-    if (v && typeof v === "object") return Object.values(v).flat() as any[];
-    return [];
-  }
-
-  private async loadRates(): Promise<BillingRates> {
-    const doc = (await this.ratesModel.findOne({}).lean()) as any;
-    if (!doc) return { ...DEFAULT_RATES };
-    return {
-      stallRate: Number(doc.stallRate) || DEFAULT_RATES.stallRate,
-      roundTableRate:
-        Number(doc.roundTableRate) || DEFAULT_RATES.roundTableRate,
-      chairRate: Number(doc.chairRate) || DEFAULT_RATES.chairRate,
-      speakerRate: Number(doc.speakerRate) || DEFAULT_RATES.speakerRate,
-      // `?? default` so admins can set to 0 to disable.
-      membershipRate:
-        doc.membershipRate != null
-          ? Number(doc.membershipRate)
-          : DEFAULT_RATES.membershipRate,
-      currency: doc.currency || DEFAULT_RATES.currency,
-    };
+  private async loadRates(
+    organizerId?: string,
+    country?: string,
+  ): Promise<BillingRates> {
+    const [plans, overrideDoc] = await Promise.all([
+      this.ratesModel.find({}).lean(),
+      organizerId
+        ? this.rateOverrideModel.findOne({ organizerId }).lean()
+        : Promise.resolve(null),
+    ]);
+    const plan = resolvePlanForCountry(plans, country);
+    return resolveEffectiveRates(plan, overrideDoc);
   }
 
   private regionFromCountry(country?: string): {
@@ -93,23 +89,6 @@ export class BillingPaymentsService {
     return null;
   }
 
-  private computeEventCounts(event: any, speakers: number) {
-    const tables = this.flatten(event.venueTables);
-    const rounds = this.flatten(event.venueRoundTables);
-    const stallsSold = tables.filter((t: any) => !!t?.isBooked).length;
-    const tablesBooked = rounds.filter(
-      (rt: any) =>
-        !!rt?.isFullyBooked ||
-        (Array.isArray(rt?.bookedChairs) && rt.bookedChairs.length > 0),
-    ).length;
-    const chairsBooked = rounds.reduce(
-      (acc: number, rt: any) =>
-        acc + (Array.isArray(rt?.bookedChairs) ? rt.bookedChairs.length : 0),
-      0,
-    );
-    return { stallsSold, tablesBooked, chairsBooked, speakersBooked: speakers };
-  }
-
   // ---------------------------------------------------------------------------
   //  GET /billing-payments/me  — organizer's own per-event breakdown
   // ---------------------------------------------------------------------------
@@ -119,27 +98,64 @@ export class BillingPaymentsService {
       .lean()) as any;
     if (!organizer) throw new NotFoundException("Organizer not found");
 
-    const rates = await this.loadRates();
+    const rates = await this.loadRates(organizerId, organizer.country);
     const events = (await this.eventModel
       .find({ organizer: organizerId })
       .select("title startDate endDate venueTables venueRoundTables status")
       .lean()) as any[];
 
-    // Speaker counts grouped by event (Confirmed only).
-    const speakerAgg = await this.speakerRequestModel
-      .aggregate([
-        {
-          $match: {
-            organizerId: new Types.ObjectId(organizerId),
-            status: "Confirmed",
-          },
-        },
-        { $group: { _id: "$eventId", n: { $sum: 1 } } },
-      ])
-      .exec();
-    const speakersByEvent = new Map<string, number>(
-      speakerAgg.map((r: any) => [String(r._id), r.n]),
-    );
+    // Confirmed speakers grouped by event, carrying `fee` so percent-mode
+    // rates have a price to apply to (flat mode only needs the count).
+    const speakerDocs = (await this.speakerRequestModel
+      .find({ organizerId: new Types.ObjectId(organizerId), status: "Confirmed" })
+      .select("eventId fee")
+      .lean()) as any[];
+    const speakersByEvent = new Map<string, any[]>();
+    for (const s of speakerDocs) {
+      const k = String(s.eventId);
+      if (!speakersByEvent.has(k)) speakersByEvent.set(k, []);
+      speakersByEvent.get(k)!.push(s);
+    }
+
+    // Paid workshops, confirmed sponsors, paid suppliers — same per-event
+    // grouping pattern as speakers above.
+    const orgObjectId = new Types.ObjectId(organizerId);
+    const [workshopDocs, sponsorDocs, supplierDocs, ticketDocs] =
+      await Promise.all([
+        this.workshopBookingModel
+          .find({ organizerId: orgObjectId, paymentStatus: "Paid" })
+          .select("eventId amount")
+          .lean(),
+        this.sponsorRequestModel
+          .find({ organizerId: orgObjectId, status: "Confirmed" })
+          .select("eventId amount")
+          .lean(),
+        this.supplierRequestModel
+          .find({ organizerId: orgObjectId, status: "Paid" })
+          .select("eventId agreedTotal quotationTotal")
+          .lean(),
+        this.ticketModel
+          .find({
+            organizerId: orgObjectId,
+            paymentConfirmed: true,
+            status: { $ne: "cancelled" },
+          })
+          .select("eventId totalAmount")
+          .lean(),
+      ]);
+    const groupByEvent = (docs: any[]) => {
+      const map = new Map<string, any[]>();
+      for (const d of docs) {
+        const k = String(d.eventId);
+        if (!map.has(k)) map.set(k, []);
+        map.get(k)!.push(d);
+      }
+      return map;
+    };
+    const workshopsByEvent = groupByEvent(workshopDocs);
+    const sponsorsByEvent = groupByEvent(sponsorDocs);
+    const suppliersByEvent = groupByEvent(supplierDocs);
+    const ticketsByEvent = groupByEvent(ticketDocs);
 
     // Per-event payment-state lookup. We pick the most-recent non-rejected
     // row per eventId — that's the active claim driving the row's UI status.
@@ -157,15 +173,15 @@ export class BillingPaymentsService {
     }
 
     const rows = events.map((e: any) => {
-      const counts = this.computeEventCounts(
+      const billables = computeEventBillables(
         e,
-        speakersByEvent.get(String(e._id)) || 0,
+        speakersByEvent.get(String(e._id)) || [],
+        workshopsByEvent.get(String(e._id)) || [],
+        sponsorsByEvent.get(String(e._id)) || [],
+        suppliersByEvent.get(String(e._id)) || [],
+        ticketsByEvent.get(String(e._id)) || [],
       );
-      const amount =
-        counts.stallsSold * rates.stallRate +
-        counts.tablesBooked * rates.roundTableRate +
-        counts.chairsBooked * rates.chairRate +
-        counts.speakersBooked * rates.speakerRate;
+      const amount = amountForBillables(billables, rates);
       const claim = activeClaimByEvent.get(String(e._id));
       return {
         eventId: String(e._id),
@@ -173,7 +189,14 @@ export class BillingPaymentsService {
         startDate: e.startDate,
         endDate: e.endDate,
         status: e.status,
-        ...counts,
+        ticketsSold: billables.ticketsSold,
+        stallsSold: billables.stallsSold,
+        tablesBooked: billables.tablesBooked,
+        chairsBooked: billables.chairsBooked,
+        speakersBooked: billables.speakersBooked,
+        workshopsBooked: billables.workshopsBooked,
+        sponsorsConfirmed: billables.sponsorsConfirmed,
+        suppliersConfirmed: billables.suppliersConfirmed,
         amount,
         claim: claim
           ? {
@@ -192,9 +215,9 @@ export class BillingPaymentsService {
     // ── Memberships block — organizer-scoped, separate tab on the UI ──
     // Lists each ExhibitorMembership currently active for this
     // organizer, with the plan name resolved so the table reads cleanly.
-    // The per-membership platform-fee rate is flat (rates.membershipRate),
-    // and the total is surfaced alongside so the panel can render a
-    // single "Pay membership fees" CTA.
+    // Billed at the shared Money In rate (rates.moneyInRate), same as
+    // every other Money In category. The total is surfaced alongside so
+    // the panel can render a single "Pay membership fees" CTA.
     const activeMemberships = (await this.exhibitorMembershipModel
       .find({
         organizerId: new Types.ObjectId(organizerId),
@@ -203,7 +226,6 @@ export class BillingPaymentsService {
       .populate("planId", "name")
       .sort({ startDate: -1 })
       .lean()) as any[];
-    const membershipRate = Number((rates as any).membershipRate) || 0;
     const membershipRows = activeMemberships.map((m: any) => ({
       _id: String(m._id),
       exhibitorName: m.exhibitorName || "",
@@ -217,10 +239,19 @@ export class BillingPaymentsService {
       endDate: m.endDate,
       amountPaid: m.amountPaid || 0,
       currency: m.currency || rates.currency,
-      // Flat per-membership fee owed to the platform for this row.
-      platformFee: membershipRate,
+      // Per-membership fee owed to the platform for this row — flat $
+      // amount, or rate% of this membership's own amountPaid.
+      platformFee: billForCategory(
+        [m],
+        rates.moneyInRate,
+        rates.moneyInRateMode,
+        (mm: any) => mm.amountPaid,
+      ),
     }));
-    const membershipsTotal = membershipRows.length * membershipRate;
+    const membershipsTotal = membershipRows.reduce(
+      (s, r) => s + r.platformFee,
+      0,
+    );
     // Resolve any in-flight or paid platform-fee claim covering the
     // memberships batch (encoded with `eventId: "memberships"`).
     const membershipClaim = (await this.pendingModel
@@ -244,7 +275,8 @@ export class BillingPaymentsService {
       events: rows,
       memberships: {
         rows: membershipRows,
-        rate: membershipRate,
+        rate: rates.moneyInRate,
+        rateMode: rates.moneyInRateMode,
         total: membershipsTotal,
         claim: membershipClaim
           ? {
@@ -286,18 +318,44 @@ export class BillingPaymentsService {
       );
     }
 
-    const rates = await this.loadRates();
-    const speakerCount = await this.speakerRequestModel.countDocuments({
-      organizerId,
-      eventId: body.eventId,
-      status: "Confirmed",
-    });
-    const counts = this.computeEventCounts(event, speakerCount);
-    const amount =
-      counts.stallsSold * rates.stallRate +
-      counts.tablesBooked * rates.roundTableRate +
-      counts.chairsBooked * rates.chairRate +
-      counts.speakersBooked * rates.speakerRate;
+    const rates = await this.loadRates(organizerId, organizer.country);
+    const [speakerDocs, workshopDocs, sponsorDocs, supplierDocs, ticketDocs] =
+      await Promise.all([
+        this.speakerRequestModel
+          .find({ organizerId, eventId: body.eventId, status: "Confirmed" })
+          .select("fee")
+          .lean(),
+        this.workshopBookingModel
+          .find({ organizerId, eventId: body.eventId, paymentStatus: "Paid" })
+          .select("amount")
+          .lean(),
+        this.sponsorRequestModel
+          .find({ organizerId, eventId: body.eventId, status: "Confirmed" })
+          .select("amount")
+          .lean(),
+        this.supplierRequestModel
+          .find({ organizerId, eventId: body.eventId, status: "Paid" })
+          .select("agreedTotal quotationTotal")
+          .lean(),
+        this.ticketModel
+          .find({
+            organizerId,
+            eventId: body.eventId,
+            paymentConfirmed: true,
+            status: { $ne: "cancelled" },
+          })
+          .select("totalAmount")
+          .lean(),
+      ]);
+    const billables = computeEventBillables(
+      event,
+      speakerDocs,
+      workshopDocs,
+      sponsorDocs,
+      supplierDocs,
+      ticketDocs,
+    );
+    const amount = amountForBillables(billables, rates);
     if (amount <= 0) {
       throw new BadRequestException(
         "Nothing to pay for this event yet.",
@@ -321,6 +379,44 @@ export class BillingPaymentsService {
           "This event has already been paid for.",
         );
       }
+      // An untouched claim can go stale if the organizer's country (and
+      // therefore scheme/currency) changed after it was first created —
+      // e.g. one event initiated back when they were Singapore-based
+      // still shows PayNow after they switch to India, while any event
+      // initiated afterward correctly shows UPI. Self-heal it to the
+      // freshly-computed region/amount above (already recalculated at
+      // the top of this method) whenever it's still just sitting
+      // unpaid — never touch a claim the organizer already marked
+      // "submitted", since by then they've acted on what was shown.
+      if (
+        existing.status === "awaiting_payment" &&
+        (existing.scheme !== region.scheme ||
+          existing.currency !== region.currency ||
+          existing.amount !== amount)
+      ) {
+        await this.pendingModel.updateOne(
+          { _id: existing._id },
+          {
+            $set: {
+              amount,
+              currency: region.currency,
+              scheme: region.scheme,
+              ticketsSold: billables.ticketsSold,
+              stallsSold: billables.stallsSold,
+              tablesBooked: billables.tablesBooked,
+              chairsBooked: billables.chairsBooked,
+              speakersBooked: billables.speakersBooked,
+              workshopsBooked: billables.workshopsBooked,
+              sponsorsConfirmed: billables.sponsorsConfirmed,
+              suppliersConfirmed: billables.suppliersConfirmed,
+            },
+          },
+        );
+        const refreshed = await this.pendingModel
+          .findById(existing._id)
+          .lean();
+        return this.toClient(refreshed, event);
+      }
       return this.toClient(existing, event);
     }
 
@@ -335,7 +431,14 @@ export class BillingPaymentsService {
       scheme: region.scheme,
       ref,
       status: "awaiting_payment",
-      ...counts,
+      ticketsSold: billables.ticketsSold,
+      stallsSold: billables.stallsSold,
+      tablesBooked: billables.tablesBooked,
+      chairsBooked: billables.chairsBooked,
+      speakersBooked: billables.speakersBooked,
+      workshopsBooked: billables.workshopsBooked,
+      sponsorsConfirmed: billables.sponsorsConfirmed,
+      suppliersConfirmed: billables.suppliersConfirmed,
     });
     return this.toClient(doc.toObject(), event);
   }
@@ -356,12 +459,17 @@ export class BillingPaymentsService {
       );
     }
 
-    const rates = await this.loadRates();
-    const count = await this.exhibitorMembershipModel.countDocuments({
-      organizerId: new Types.ObjectId(organizerId),
-      status: "active",
-    });
-    const amount = count * (Number((rates as any).membershipRate) || 0);
+    const rates = await this.loadRates(organizerId, organizer.country);
+    const activeMemberships = (await this.exhibitorMembershipModel
+      .find({ organizerId: new Types.ObjectId(organizerId), status: "active" })
+      .select("amountPaid")
+      .lean()) as any[];
+    const amount = billForCategory(
+      activeMemberships,
+      rates.moneyInRate,
+      rates.moneyInRateMode,
+      (m: any) => m.amountPaid,
+    );
     if (amount <= 0) {
       throw new BadRequestException(
         "No active memberships to charge platform fees for.",
@@ -385,6 +493,23 @@ export class BillingPaymentsService {
         throw new ConflictException(
           "Membership fees have already been paid.",
         );
+      }
+      // Same self-heal as initiate(): a still-unpaid claim can go stale
+      // if the organizer's country changed since it was created.
+      if (
+        existing.status === "awaiting_payment" &&
+        (existing.scheme !== region.scheme ||
+          existing.currency !== region.currency ||
+          existing.amount !== amount)
+      ) {
+        await this.pendingModel.updateOne(
+          { _id: existing._id },
+          { $set: { amount, currency: region.currency, scheme: region.scheme } },
+        );
+        const refreshed = await this.pendingModel
+          .findById(existing._id)
+          .lean();
+        return this.toClient(refreshed, null);
       }
       return this.toClient(existing, null);
     }
@@ -459,10 +584,14 @@ export class BillingPaymentsService {
       scheme: r.scheme,
       status: r.status,
       ref: r.ref,
+      ticketsSold: r.ticketsSold,
       stallsSold: r.stallsSold,
       tablesBooked: r.tablesBooked,
       chairsBooked: r.chairsBooked,
       speakersBooked: r.speakersBooked,
+      workshopsBooked: r.workshopsBooked,
+      sponsorsConfirmed: r.sponsorsConfirmed,
+      suppliersConfirmed: r.suppliersConfirmed,
       submittedAt: r.submittedAt || null,
       createdAt: r.createdAt,
     }));

@@ -3373,7 +3373,7 @@ export class StallsService {
                 Review &amp; Approve / Reject
               </a>
             </div>
-            <p style="color:#64748b;font-size:12px;margin-top:16px">Open your dashboard → Exhibitors/Visitors to approve or reject this request.</p>
+            <p style="color:#64748b;font-size:12px;margin-top:16px">Open your dashboard → CRM to approve or reject this request.</p>
           </div>
         </div>`;
 

@@ -1,8 +1,7 @@
 import { Injectable, BadRequestException } from "@nestjs/common";
 import * as QRCode from "qrcode"; // Fixed import
 import * as crc from "crc";
-import { Jimp } from "jimp";
-const QrCodeReader = require("qrcode-reader");
+import * as sharp from "sharp";
 import { PaymentQrConfig, PaymentScheme } from "./payment-Qr.interface";
 import { URLSearchParams } from "url";
 import fetch from "node-fetch"; // npm install node-fetch
@@ -106,39 +105,73 @@ export class PaymentsService {
     return fullPayload;
   }
 
+  /**
+   * Runs the actual QR decode (zxing, via a canvas-rendered bitmap) on an
+   * already-normalized image buffer. Shared by decodeQrFromFile and
+   * decodeQrFromUrl so both go through the same, more tolerant decoder
+   * (zxing handles rotation/noise/logos far better than a basic reader).
+   */
+  private async decodeQrFromImageBuffer(buffer: Buffer): Promise<any> {
+    const img = await loadImage(buffer);
+    const canvas = createCanvas(img.width, img.height);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, img.width, img.height);
+
+    const imageData = ctx.getImageData(0, 0, img.width, img.height);
+    const hints = new Map();
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
+    // RGBLuminanceSource only computes real luminance when it's handed an
+    // Int32Array of packed 0xRRGGBB pixels (BYTES_PER_ELEMENT === 4) — a
+    // raw Uint8ClampedArray of R,G,B,A bytes (what canvas returns) gets
+    // used as-is with no conversion, which reads as noise and always
+    // fails to decode. Pack the pixels ourselves so it takes that path.
+    const { data, width, height } = imageData;
+    const packed = new Int32Array(width * height);
+    for (let i = 0; i < width * height; i++) {
+      const r = data[i * 4];
+      const g = data[i * 4 + 1];
+      const b = data[i * 4 + 2];
+      packed[i] = (r << 16) | (g << 8) | b;
+    }
+    const luminanceSource = new RGBLuminanceSource(
+      packed,
+      img.width,
+      img.height
+    );
+    const binaryBitmap = new BinaryBitmap(
+      new HybridBinarizer(luminanceSource)
+    );
+    const reader = new MultiFormatReader();
+
+    try {
+      const result = reader.decode(binaryBitmap, hints);
+      if (result.getText().startsWith("upi://")) {
+        const params = new URLSearchParams(
+          result.getText().split("?")[1] || ""
+        );
+        const paramMap: Record<string, string> = {};
+        params.forEach((v, k) => (paramMap[k] = v));
+        return { raw: result.getText(), params: paramMap };
+      }
+      return { raw: result.getText() };
+    } catch (zxingErr) {
+      throw new BadRequestException(
+        "ZXing decode failed: " + zxingErr.message
+      );
+    }
+  }
+
   async decodeQrFromFile(filePath: string): Promise<any> {
     try {
-      const image = await Jimp.read(filePath);
-      const qr = new QrCodeReader();
-
-      const decodedText: string = await new Promise((resolve, reject) => {
-        qr.callback = (err, result) => {
-          if (err || !result) {
-            reject(new BadRequestException("Failed to decode QR"));
-          } else {
-            resolve(result.result);
-          }
-        };
-        qr.decode(image.bitmap);
-      });
-
-      if (decodedText.startsWith("upi://")) {
-        const queryStr = decodedText.split("?")[1] || "";
-        const params = new URLSearchParams(queryStr);
-        const paramMap: Record<string, string> = {};
-        params.forEach((v, k) => {
-          paramMap[k] = v;
-        });
-        return {
-          raw: decodedText,
-          params: paramMap,
-        };
-      }
-
-      return {
-        raw: decodedText,
-      };
-    } catch (e) {
+      // Normalize via sharp first: the canvas loader only reliably
+      // handles PNG/JPEG/GIF, but a phone photo of a printed QR sticker
+      // is often HEIC (iPhone) or WEBP — sharp decodes virtually any
+      // format and re-encodes to PNG. `.rotate()` also applies the
+      // image's EXIF orientation, so a sideways phone photo doesn't trip
+      // up the finder-pattern search.
+      const normalized = await sharp(filePath).rotate().png().toBuffer();
+      return await this.decodeQrFromImageBuffer(normalized);
+    } catch (e: any) {
       throw new BadRequestException("Error decoding QR: " + e.message);
     }
   }
@@ -153,43 +186,9 @@ export class PaymentsService {
         throw new Error(`Failed to fetch image: ${response.statusText}`);
       const arrayBuffer = await response.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
-
-      // Load image with canvas
-      const img = await loadImage(buffer);
-      const canvas = createCanvas(img.width, img.height);
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0, img.width, img.height);
-
-      const imageData = ctx.getImageData(0, 0, img.width, img.height);
-      const hints = new Map();
-      hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
-      const luminanceSource = new RGBLuminanceSource(
-        imageData.data,
-        img.width,
-        img.height
-      );
-      const binaryBitmap = new BinaryBitmap(
-        new HybridBinarizer(luminanceSource)
-      );
-      const reader = new MultiFormatReader();
-
-      try {
-        const result = reader.decode(binaryBitmap, hints);
-        if (result.getText().startsWith("upi://")) {
-          const params = new URLSearchParams(
-            result.getText().split("?")[1] || ""
-          );
-          const paramMap: Record<string, string> = {};
-          params.forEach((v, k) => (paramMap[k] = v));
-          return { raw: result.getText(), params: paramMap };
-        }
-        return { raw: result.getText() };
-      } catch (zxingErr) {
-        throw new BadRequestException(
-          "ZXing decode failed: " + zxingErr.message
-        );
-      }
-    } catch (err) {
+      const normalized = await sharp(buffer).rotate().png().toBuffer();
+      return await this.decodeQrFromImageBuffer(normalized);
+    } catch (err: any) {
       throw new BadRequestException(
         "Failed to decode QR code from URL: " + err.message
       );

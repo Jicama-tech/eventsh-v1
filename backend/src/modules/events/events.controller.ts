@@ -448,6 +448,19 @@ export class EventsController {
         body.ticketPrice = "0";
       }
 
+      if (typeof body.sponsorTypes === "string")
+        body.sponsorTypes = JSON.parse(body.sponsorTypes);
+      if (typeof body.showSponsorBar === "string")
+        body.showSponsorBar = body.showSponsorBar === "true";
+      // Same no-payment rule as visitor types: an Individual can't collect
+      // sponsorship money either, so every tier is forced free.
+      if (isIndividual && Array.isArray(body.sponsorTypes)) {
+        body.sponsorTypes = body.sponsorTypes.map((s: any) => ({
+          ...s,
+          price: 0,
+        }));
+      }
+
       if (typeof body.speakers === "string")
         body.speakers = JSON.parse(body.speakers);
       if (typeof body.speakerSlotTemplates === "string")
@@ -997,6 +1010,18 @@ export class EventsController {
           price: 0,
         }));
         body.ticketPrice = "0";
+      }
+
+      if (typeof body.sponsorTypes === "string")
+        body.sponsorTypes = JSON.parse(body.sponsorTypes);
+      if (typeof body.showSponsorBar === "string")
+        body.showSponsorBar = body.showSponsorBar === "true";
+      // Mirror the create-event rule for sponsorship tiers.
+      if (updateIsIndividual && Array.isArray(body.sponsorTypes)) {
+        body.sponsorTypes = body.sponsorTypes.map((s: any) => ({
+          ...s,
+          price: 0,
+        }));
       }
 
       if (typeof body.speakers === "string")
