@@ -36,6 +36,7 @@ import { MarriageEventForm } from "./MarriageEventForm";
 import { EventTypeChooser } from "./EventTypeChooser";
 import { CouponsManager } from "./CouponsManager";
 import { EventFeedbackDialog } from "./EventFeedbackDialog";
+import { RegistrationFormsDialog } from "./RegistrationFormsDialog";
 import type { EventTypeKey } from "@/lib/eventTypes";
 import {
   Plus,
@@ -58,6 +59,7 @@ import {
   QrCode,
   MessageSquare,
   Loader2,
+  ClipboardList,
 } from "lucide-react";
 import { format } from "date-fns";
 import { jwtDecode } from "jwt-decode";
@@ -91,6 +93,16 @@ export interface Event {
     photography: boolean;
     security: boolean;
     accessibility: boolean;
+    hasStalls?: boolean;
+    hasSpeakers?: boolean;
+    hasRoundTables?: boolean;
+    hasWorkshops?: boolean;
+  };
+  registrationFormFields?: {
+    stall?: Record<string, boolean>;
+    speaker?: Record<string, boolean>;
+    roundTable?: Record<string, boolean>;
+    workshop?: Record<string, boolean>;
   };
   ageRestriction?: string;
   dresscode?: string;
@@ -165,6 +177,7 @@ const MyEvents: React.FC = () => {
   const apiURL = __API_URL__;
   const { toast } = useToast();
   const [feedbackForEvent, setFeedbackForEvent] = useState<Event | null>(null);
+  const [regFormsForEvent, setRegFormsForEvent] = useState<Event | null>(null);
 
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1297,6 +1310,21 @@ const MyEvents: React.FC = () => {
                           <QrCode size={16} className="mr-1" />
                           Scanner
                         </Button>
+                        {(event.features?.hasStalls ||
+                          event.features?.hasSpeakers ||
+                          event.features?.hasRoundTables ||
+                          event.features?.hasWorkshops) && (
+                          <Button
+                            variant="buttonOutline"
+                            size="sm"
+                            onClick={() => setRegFormsForEvent(event)}
+                            className="flex-1 lg:flex-none"
+                            title="Choose which fields appear on this event's public application forms"
+                          >
+                            <ClipboardList size={16} className="mr-1" />
+                            Registration Forms
+                          </Button>
+                        )}
                         {canCollectFeedback && (
                           <Button
                             variant="buttonOutline"
@@ -1395,6 +1423,22 @@ const MyEvents: React.FC = () => {
         eventTitle={feedbackForEvent?.title}
         open={!!feedbackForEvent}
         onOpenChange={(o) => !o && setFeedbackForEvent(null)}
+      />
+
+      <RegistrationFormsDialog
+        event={regFormsForEvent}
+        open={!!regFormsForEvent}
+        onOpenChange={(o) => !o && setRegFormsForEvent(null)}
+        onSaved={(updated) => {
+          setEvents((prev) =>
+            prev.map((e) =>
+              e._id === updated._id
+                ? { ...e, registrationFormFields: updated.registrationFormFields }
+                : e,
+            ),
+          );
+          setRegFormsForEvent(null);
+        }}
       />
 
       {/* Delete Event confirmation (type-to-confirm) */}

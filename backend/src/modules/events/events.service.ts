@@ -698,6 +698,27 @@ export class EventsService {
     return updated;
   }
 
+  async setRegistrationFormFields(
+    id: string,
+    registrationFormFields: {
+      stall?: Record<string, boolean>;
+      speaker?: Record<string, boolean>;
+      roundTable?: Record<string, boolean>;
+      workshop?: Record<string, boolean>;
+    },
+  ): Promise<Event> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException(`Invalid event id: ${id}`);
+    }
+    const updated = await this.eventModel
+      .findByIdAndUpdate(id, { registrationFormFields }, { new: true })
+      .exec();
+    if (!updated) {
+      throw new NotFoundException(`Event with ID ${id} not found`);
+    }
+    return updated;
+  }
+
   async remove(id: string): Promise<Event> {
     try {
       const deletedEvent = await this.eventModel

@@ -98,6 +98,7 @@ interface Shopkeeper {
   phone: string;
   whatsappNumber: string;
   shopName: string;
+  businessName: string;
   businessCategory: string;
   businessDescription: string;
   address: string;

@@ -124,6 +124,7 @@ import MarriageEventFront from "./MarriageEventFront";
 import { StallStepper } from "./StallStepper";
 import DemoPrompt from "./DemoPrompt";
 import { startDemoDashboard } from "@/lib/demoDashboard";
+import { isFieldEnabled as isRegFieldEnabled } from "@/lib/registrationFormFields";
 import StallPaymentPanel from "./StallPaymentPanel";
 import PaymentFeedbackDialog from "./PaymentFeedbackDialog";
 import { EventChatbot } from "./EventChatbot";
@@ -287,6 +288,12 @@ interface FetchedEvent {
     photography: boolean;
     security: boolean;
     accessibility: boolean;
+  };
+  registrationFormFields?: {
+    stall?: Record<string, boolean>;
+    speaker?: Record<string, boolean>;
+    roundTable?: Record<string, boolean>;
+    workshop?: Record<string, boolean>;
   };
   ageRestriction: string;
   dresscode: string;
@@ -498,6 +505,18 @@ function buildEventChatbotGreeting(ev: FetchedEvent): ChatbotPill[] {
 
 export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [eventData, setEventData] = useState<FetchedEvent | null>(null);
+  // Whether a toggleable Stall application field is enabled for this event
+  // (organizer-configured via Registration Forms). Component-scoped so both
+  // the form JSX and handleRentFormSubmit's validation share one source of
+  // truth. See frontend/src/lib/registrationFormFields.ts.
+  const stallOn = (key: string) =>
+    isRegFieldEnabled(eventData?.registrationFormFields, "stall", key);
+  const speakerOn = (key: string) =>
+    isRegFieldEnabled(eventData?.registrationFormFields, "speaker", key);
+  const roundTableOn = (key: string) =>
+    isRegFieldEnabled(eventData?.registrationFormFields, "roundTable", key);
+  const workshopOn = (key: string) =>
+    isRegFieldEnabled(eventData?.registrationFormFields, "workshop", key);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { id } = useParams();
@@ -2563,7 +2582,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       });
       return;
     }
-    const isPaidWorkshop = (Number(workshopHostFormData.proposedPrice) || 0) > 0;
+    // If "Suggested Visitor Price" is toggled off, the input never rendered
+    // so nothing collects a nonzero value — force this to false regardless
+    // of whatever stale value workshopHostFormData.proposedPrice might
+    // still hold (e.g. from a returning host's previous session), so the
+    // payout-account-required branch below can never spuriously fire.
+    const isPaidWorkshop =
+      workshopOn("proposedPrice") &&
+      (Number(workshopHostFormData.proposedPrice) || 0) > 0;
     if (
       isPaidWorkshop &&
       (!workshopHostFormData.hostAccountName ||
@@ -2602,7 +2628,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         );
         fd.append(
           "proposedPrice",
-          String(Number(workshopHostFormData.proposedPrice) || 0),
+          String(
+            workshopOn("proposedPrice")
+              ? Number(workshopHostFormData.proposedPrice) || 0
+              : 0,
+          ),
         );
         fd.append(
           "proposedStartTime",
@@ -2641,7 +2671,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             hostBio: workshopHostFormData.hostBio,
             workshopName: workshopHostFormData.workshopName,
             workshopDescription: workshopHostFormData.workshopDescription,
-            proposedPrice: Number(workshopHostFormData.proposedPrice) || 0,
+            proposedPrice: workshopOn("proposedPrice")
+              ? Number(workshopHostFormData.proposedPrice) || 0
+              : 0,
             proposedStartTime: workshopHostFormData.proposedStartTime,
             proposedEndTime: workshopHostFormData.proposedEndTime,
             maxSeats: Number(workshopHostFormData.maxSeats) || 0,
@@ -4571,35 +4603,54 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     const req = (isMissing: boolean, label: string) => {
       if (isMissing) missing.push(label);
     };
+    // Only enforce a field the organizer has actually kept on the form —
+    // otherwise disabling a field here would make the form permanently
+    // unsubmittable (nothing collects a value for it, so it's always
+    // "missing"). `stallOn` is the component-scoped helper declared near
+    // eventData, shared with the form JSX. See
+    // frontend/src/lib/registrationFormFields.ts.
 
     req(blank(d.nameOfApplicant), "Name of Applicant");
     req(blank(d.name), "Owner Name");
-    req(blank(d.businessOwnerNationality), "Owner Nationality");
-    req(blank(d.residency), "Residency");
-    req(blank(d.brandName), "Brand Name");
+    if (stallOn("businessOwnerNationality"))
+      req(blank(d.businessOwnerNationality), "Owner Nationality");
+    if (stallOn("residency")) req(blank(d.residency), "Residency");
+    if (stallOn("brandName")) req(blank(d.brandName), "Brand Name");
     req(blank(d.shopName), "Registered Business Name");
     if (!shopkeeperExists) req(blank(d.email), "Primary Email");
-    req(blank(d.businessEmail), "Business Email");
-    req(blank(d.whatsappNumber), "WhatsApp Number");
-    req(blank(d.phone), "Phone Number");
-    req(blank(d.businessCategory), "Business Category");
-    req(!d.noOfOperators || Number(d.noOfOperators) < 1, "No. of Operators");
-    req(blank(d.registrationNumber), "Registration Number");
-    req(blank(d.faceBookLink), "Facebook Link");
-    req(blank(d.instagramLink), "Instagram Link");
-    req(blank(d.description), "Business, Products & Brand Description");
-    req(blank(d.refundPaymentDescription), "Refund Payment Description");
-    req(blank(d.address), "Full Address");
+    if (stallOn("businessEmail"))
+      req(blank(d.businessEmail), "Business Email");
+    if (stallOn("whatsappNumber"))
+      req(blank(d.whatsappNumber), "WhatsApp Number");
+    if (stallOn("phone")) req(blank(d.phone), "Phone Number");
+    if (stallOn("businessCategory"))
+      req(blank(d.businessCategory), "Business Category");
+    if (stallOn("noOfOperators"))
+      req(!d.noOfOperators || Number(d.noOfOperators) < 1, "No. of Operators");
+    if (stallOn("registrationNumber"))
+      req(blank(d.registrationNumber), "Registration Number");
+    if (stallOn("faceBookLink"))
+      req(blank(d.faceBookLink), "Facebook Link");
+    if (stallOn("instagramLink"))
+      req(blank(d.instagramLink), "Instagram Link");
+    if (stallOn("description"))
+      req(blank(d.description), "Business, Products & Brand Description");
+    if (stallOn("refundPaymentDescription"))
+      req(blank(d.refundPaymentDescription), "Refund Payment Description");
+    if (stallOn("address")) req(blank(d.address), "Full Address");
 
     // Document uploads + at least one product image are mandatory. A returning
     // vendor's stored images are loaded as previews, so an existing preview
     // satisfies the requirement (no forced re-upload); a new file overrides it.
-    req(!regImageFile && !regImagePreview, "Business Registration Document");
-    req(!logoFile && !logoPreview, "Company Logo");
-    req(
-      productFiles.length < 1 && existingProductImages.length < 1,
-      "at least 1 Product Image",
-    );
+    if (stallOn("registrationImage"))
+      req(!regImageFile && !regImagePreview, "Business Registration Document");
+    if (stallOn("companyLogo"))
+      req(!logoFile && !logoPreview, "Company Logo");
+    if (stallOn("productImage"))
+      req(
+        productFiles.length < 1 && existingProductImages.length < 1,
+        "at least 1 Product Image",
+      );
 
     // Preferred space type — only required when the event exposes sellable
     // space templates (same condition that renders the picker).
@@ -9312,7 +9363,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         </div>
 
                         {/* Per-seat guest details — collapsible, optional */}
-                        {(() => {
+                        {roundTableOn("seatGuests") && (() => {
                           const totalSeats = roundTableSelections.reduce(
                             (s, sel) => s + sel.selectedChairIndices.length,
                             0,
@@ -10176,6 +10227,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       )}
 
                       {/* Photo */}
+                      {speakerOn("image") && (
                       <div className="flex items-center gap-4">
                         <div
                           className="w-20 h-20 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-gray-50 flex-shrink-0"
@@ -10240,6 +10292,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           <p>This will be displayed on the event page</p>
                         </div>
                       </div>
+                      )}
 
                       <div className="grid grid-cols-2 gap-3">
                         <div>
@@ -10277,6 +10330,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         </div>
                       </div>
 
+                      {speakerOn("phone") && (
                       <div>
                         <label className="text-xs font-medium text-gray-700 block mb-1">
                           Phone / WhatsApp (optional)
@@ -10310,8 +10364,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           So the organizer can reach you about your session.
                         </p>
                       </div>
+                      )}
 
+                      {(speakerOn("title") || speakerOn("organization")) && (
                       <div className="grid grid-cols-2 gap-3">
+                        {speakerOn("title") && (
                         <div>
                           <label className="text-xs font-medium text-gray-700 block mb-1">
                             Role / Title
@@ -10328,6 +10385,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             }
                           />
                         </div>
+                        )}
+                        {speakerOn("organization") && (
                         <div>
                           <label className="text-xs font-medium text-gray-700 block mb-1">
                             Company / Organization
@@ -10344,8 +10403,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             }
                           />
                         </div>
+                        )}
                       </div>
+                      )}
 
+                      {speakerOn("bio") && (
                       <div>
                         <label className="text-xs font-medium text-gray-700 block mb-1">
                           Bio
@@ -10363,7 +10425,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           }
                         />
                       </div>
+                      )}
 
+                      {speakerOn("expertise") && (
                       <div>
                         <label className="text-xs font-medium text-gray-700 block mb-1">
                           Area of Expertise
@@ -10380,8 +10444,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           }
                         />
                       </div>
+                      )}
 
+                      {(speakerOn("linkedin") ||
+                        speakerOn("twitter") ||
+                        speakerOn("website")) && (
                       <div className="grid grid-cols-3 gap-2">
+                        {speakerOn("linkedin") && (
                         <input
                           className="border rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary"
                           placeholder="LinkedIn URL"
@@ -10396,6 +10465,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             }))
                           }
                         />
+                        )}
+                        {speakerOn("twitter") && (
                         <input
                           className="border rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary"
                           placeholder="Twitter URL"
@@ -10410,6 +10481,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             }))
                           }
                         />
+                        )}
+                        {speakerOn("website") && (
                         <input
                           className="border rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary"
                           placeholder="Website URL"
@@ -10424,7 +10497,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             }))
                           }
                         />
+                        )}
                       </div>
+                      )}
                     </div>
                   )}
 
@@ -10447,6 +10522,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           }
                         />
                       </div>
+                      {speakerOn("sessionDescription") && (
                       <div>
                         <label className="text-xs font-medium text-gray-700 block mb-1">
                           Session Description
@@ -10464,6 +10540,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           }
                         />
                       </div>
+                      )}
+                      {speakerOn("previousSpeakingExperience") && (
                       <div>
                         <label className="text-xs font-medium text-gray-700 block mb-1">
                           Previous Speaking Experience
@@ -10481,6 +10559,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           }
                         />
                       </div>
+                      )}
+                      {speakerOn("equipmentNeeded") && (
                       <div>
                         <label className="text-xs font-medium text-gray-700 block mb-1">
                           Equipment Needed
@@ -10497,6 +10577,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           }
                         />
                       </div>
+                      )}
                     </div>
                   )}
 
@@ -10584,7 +10665,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         </div>
                       </div>
 
+                      {(speakerOn("preferredStartTime") ||
+                        speakerOn("preferredEndTime")) && (
                       <div className="grid grid-cols-2 gap-3">
+                        {speakerOn("preferredStartTime") && (
                         <div>
                           <label className="text-xs font-medium text-gray-700 block mb-1">
                             Preferred Start Time
@@ -10608,6 +10692,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             </p>
                           )}
                         </div>
+                        )}
+                        {speakerOn("preferredEndTime") && (
                         <div>
                           <label className="text-xs font-medium text-gray-700 block mb-1">
                             Preferred End Time
@@ -10630,7 +10716,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             }
                           />
                         </div>
+                        )}
                       </div>
+                      )}
 
                       {bookedSpeakerSlots.length > 0 && (
                         <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
@@ -10948,6 +11036,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               {workshopHostStep === "details" && (
                 <div className="space-y-4">
                   {/* Photo */}
+                  {workshopOn("photoFile") && (
                   <div className="flex flex-col items-center gap-1">
                     <div
                       className="w-20 h-20 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-gray-50"
@@ -10986,6 +11075,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       Your photo (optional)
                     </span>
                   </div>
+                  )}
 
                   <div>
                     <label className="text-xs font-medium text-gray-700 block mb-1">
@@ -11020,6 +11110,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     </p>
                   </div>
 
+                  {workshopOn("hostPhone") && (
                   <div>
                     <label className="text-xs font-medium text-gray-700 block mb-1">
                       Phone / WhatsApp (optional)
@@ -11050,7 +11141,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       }}
                     />
                   </div>
+                  )}
 
+                  {workshopOn("hostBio") && (
                   <div>
                     <label className="text-xs font-medium text-gray-700 block mb-1">
                       Your Bio
@@ -11068,6 +11161,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       placeholder="Who you are and why you're a good fit to run this workshop"
                     />
                   </div>
+                  )}
 
                   <div className="border-t pt-4">
                     <label className="text-xs font-medium text-gray-700 block mb-1">
@@ -11085,6 +11179,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     />
                   </div>
 
+                  {workshopOn("workshopDescription") && (
                   <div>
                     <label className="text-xs font-medium text-gray-700 block mb-1">
                       Workshop Description
@@ -11102,8 +11197,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       placeholder="What visitors will learn, bring, or need to know"
                     />
                   </div>
+                  )}
 
+                  {(workshopOn("proposedPrice") || workshopOn("maxSeats")) && (
                   <div className="grid grid-cols-2 gap-3">
+                    {workshopOn("proposedPrice") && (
                     <div>
                       <label className="text-xs font-medium text-gray-700 block mb-1">
                         Suggested Visitor Price
@@ -11122,6 +11220,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         placeholder="0 = Free"
                       />
                     </div>
+                    )}
+                    {workshopOn("maxSeats") && (
                     <div>
                       <label className="text-xs font-medium text-gray-700 block mb-1">
                         Max Seats
@@ -11140,15 +11240,19 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         placeholder="Blank = unlimited"
                       />
                     </div>
+                    )}
                   </div>
+                  )}
 
                   {/* Only relevant once the host has priced the workshop —
                       that's when the organizer needs somewhere to pay them. */}
-                  {(Number(workshopHostFormData.proposedPrice) || 0) > 0 && (
+                  {workshopOn("proposedPrice") &&
+                    (Number(workshopHostFormData.proposedPrice) || 0) > 0 && (
                     <div className="border-t pt-4 space-y-3">
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                         Payout Account (this is a paid workshop)
                       </p>
+                      {workshopOn("hostAccountName") && (
                       <div>
                         <label className="text-xs font-medium text-gray-700 block mb-1">
                           Account Holder Name *
@@ -11165,6 +11269,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           placeholder="Name on the account"
                         />
                       </div>
+                      )}
+                      {workshopOn("hostAccountDetails") && (
                       <div>
                         <label className="text-xs font-medium text-gray-700 block mb-1">
                           Account Details *
@@ -11185,10 +11291,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           workshop.
                         </p>
                       </div>
+                      )}
                     </div>
                   )}
 
+                  {(workshopOn("proposedStartTime") ||
+                    workshopOn("proposedEndTime")) && (
                   <div className="grid grid-cols-2 gap-3">
+                    {workshopOn("proposedStartTime") && (
                     <div>
                       <label className="text-xs font-medium text-gray-700 block mb-1">
                         Start Time
@@ -11205,6 +11315,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         }
                       />
                     </div>
+                    )}
+                    {workshopOn("proposedEndTime") && (
                     <div>
                       <label className="text-xs font-medium text-gray-700 block mb-1">
                         End Time
@@ -11221,7 +11333,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         }
                       />
                     </div>
+                    )}
                   </div>
+                  )}
 
                   <button
                     disabled={workshopHostSubmitting}
@@ -14266,72 +14380,81 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>
-                      Owner Nationality <span className="text-red-500">*</span>
-                    </Label>
-                    <Select
-                      value={shopkeeperDetails.businessOwnerNationality}
-                      onValueChange={(val) =>
-                        setShopkeeperDetails({
-                          ...shopkeeperDetails,
-                          businessOwnerNationality: val,
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select Country" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {countries.map((c) => (
-                          <SelectItem key={c.code} value={c.name}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                {(stallOn("businessOwnerNationality") || stallOn("residency")) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {stallOn("businessOwnerNationality") && (
+                      <div className="space-y-2">
+                        <Label>
+                          Owner Nationality{" "}
+                          <span className="text-red-500">*</span>
+                        </Label>
+                        <Select
+                          value={shopkeeperDetails.businessOwnerNationality}
+                          onValueChange={(val) =>
+                            setShopkeeperDetails({
+                              ...shopkeeperDetails,
+                              businessOwnerNationality: val,
+                            })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select Country" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {countries.map((c) => (
+                              <SelectItem key={c.code} value={c.name}>
+                                {c.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    {stallOn("residency") && (
+                      <div className="space-y-2">
+                        <Label>
+                          Residency <span className="text-red-500">*</span>
+                        </Label>
+                        <Select
+                          value={shopkeeperDetails.residency}
+                          onValueChange={(val) =>
+                            setShopkeeperDetails({
+                              ...shopkeeperDetails,
+                              residency: val,
+                            })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select Country" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {countries.map((c) => (
+                              <SelectItem key={c.code} value={c.name}>
+                                {c.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                   </div>
-                  <div className="space-y-2">
-                    <Label>
-                      Residency <span className="text-red-500">*</span>
-                    </Label>
-                    <Select
-                      value={shopkeeperDetails.residency}
-                      onValueChange={(val) =>
-                        setShopkeeperDetails({
-                          ...shopkeeperDetails,
-                          residency: val,
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select Country" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {countries.map((c) => (
-                          <SelectItem key={c.code} value={c.name}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>
-                      Brand Name <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      name="brandName"
-                      value={shopkeeperDetails.brandName}
-                      onChange={handleRentFormChange}
-                      placeholder="Brand Name"
-                      required
-                    />
-                  </div>
+                  {stallOn("brandName") && (
+                    <div className="space-y-2">
+                      <Label>
+                        Brand Name <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        name="brandName"
+                        value={shopkeeperDetails.brandName}
+                        onChange={handleRentFormChange}
+                        placeholder="Brand Name"
+                        required
+                      />
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label>
                       Registered Business Name{" "}
@@ -14416,100 +14539,117 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <Label>
-                      Business Email <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      type="email"
-                      name="businessEmail"
-                      value={shopkeeperDetails.businessEmail}
-                      onChange={handleRentFormChange}
-                      required
-                    />
-                  </div>
+                  {stallOn("businessEmail") && (
+                    <div className="space-y-2">
+                      <Label>
+                        Business Email <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        type="email"
+                        name="businessEmail"
+                        value={shopkeeperDetails.businessEmail}
+                        onChange={handleRentFormChange}
+                        required
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* --- SECTION: CONTACT & VERIFICATION --- */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>
-                      WhatsApp Number <span className="text-red-500">*</span>
-                    </Label>
-                    <PhoneInput
-                      value={shopkeeperDetails.whatsappNumber}
-                      onChange={(whatsappNumber, country) => {
-                        setWhatsappCountry(country);
-                        setShopkeeperDetails((prev) => ({
-                          ...prev,
-                          whatsappNumber,
-                        }));
-                      }}
-                      countryCodeEditable={false}
-                      disabled={isStallApproved}
-                      inputStyle={{
-                        width: "100%",
-                        height: "36px",
-                        borderRadius: "6px",
-                      }}
-                    />
-                    {whatsappCountry && !isStallApproved && (
-                      <p className="text-[11px] text-gray-400">
-                        Enter {phoneHint(whatsappCountry)} for{" "}
-                        {whatsappCountry.name}
-                      </p>
+                {(stallOn("whatsappNumber") || stallOn("phone")) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {stallOn("whatsappNumber") && (
+                      <div className="space-y-2">
+                        <Label>
+                          WhatsApp Number{" "}
+                          <span className="text-red-500">*</span>
+                        </Label>
+                        <PhoneInput
+                          value={shopkeeperDetails.whatsappNumber}
+                          onChange={(whatsappNumber, country) => {
+                            setWhatsappCountry(country);
+                            setShopkeeperDetails((prev) => ({
+                              ...prev,
+                              whatsappNumber,
+                            }));
+                          }}
+                          countryCodeEditable={false}
+                          disabled={isStallApproved}
+                          inputStyle={{
+                            width: "100%",
+                            height: "36px",
+                            borderRadius: "6px",
+                          }}
+                        />
+                        {whatsappCountry && !isStallApproved && (
+                          <p className="text-[11px] text-gray-400">
+                            Enter {phoneHint(whatsappCountry)} for{" "}
+                            {whatsappCountry.name}
+                          </p>
+                        )}
+                      </div>
                     )}
-                  </div>
 
-                  <div className="space-y-2">
-                    <Label>
-                      Phone Number <span className="text-red-500">*</span>
-                    </Label>
-                    <PhoneInput
-                      value={shopkeeperDetails.phone}
-                      onChange={(phone, country) => {
-                        setPhoneCountry(country);
-                        setShopkeeperDetails((prev) => ({ ...prev, phone }));
-                      }}
-                      countryCodeEditable={false}
-                      disabled={isStallApproved}
-                      inputStyle={{
-                        width: "100%",
-                        height: "36px",
-                        borderRadius: "6px",
-                      }}
-                    />
-                    {phoneCountry && !isStallApproved && (
-                      <p className="text-[11px] text-gray-400">
-                        Enter {phoneHint(phoneCountry)} for {phoneCountry.name}
-                      </p>
+                    {stallOn("phone") && (
+                      <div className="space-y-2">
+                        <Label>
+                          Phone Number <span className="text-red-500">*</span>
+                        </Label>
+                        <PhoneInput
+                          value={shopkeeperDetails.phone}
+                          onChange={(phone, country) => {
+                            setPhoneCountry(country);
+                            setShopkeeperDetails((prev) => ({ ...prev, phone }));
+                          }}
+                          countryCodeEditable={false}
+                          disabled={isStallApproved}
+                          inputStyle={{
+                            width: "100%",
+                            height: "36px",
+                            borderRadius: "6px",
+                          }}
+                        />
+                        {phoneCountry && !isStallApproved && (
+                          <p className="text-[11px] text-gray-400">
+                            Enter {phoneHint(phoneCountry)} for{" "}
+                            {phoneCountry.name}
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
-                </div>
+                )}
 
                 {/* --- SECTION: STALL CONFIGURATION --- */}
+                {(stallOn("businessCategory") ||
+                  stallOn("noOfOperators") ||
+                  stallOn("registrationNumber")) && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label>
-                      Business Category <span className="text-red-500">*</span>
-                    </Label>
-                    {/* Shared dynamic picker — categories an exhibitor
+                  {stallOn("businessCategory") && (
+                    <div className="space-y-2">
+                      <Label>
+                        Business Category{" "}
+                        <span className="text-red-500">*</span>
+                      </Label>
+                      {/* Shared dynamic picker — categories an exhibitor
                       types here persist to /categories and surface next
                       time in the organizer's Space Layout and Add
                       Exhibitor form. Single-select shape preserves the
                       old required-field semantics. */}
-                    <ExhibitorCategoryPicker
-                      value={shopkeeperDetails.businessCategory}
-                      onChange={(val) =>
-                        setShopkeeperDetails({
-                          ...shopkeeperDetails,
-                          businessCategory: val,
-                        })
-                      }
-                      baseline={BUSINESS_CATEGORIES}
-                      placeholder="Select"
-                    />
-                  </div>
+                      <ExhibitorCategoryPicker
+                        value={shopkeeperDetails.businessCategory}
+                        onChange={(val) =>
+                          setShopkeeperDetails({
+                            ...shopkeeperDetails,
+                            businessCategory: val,
+                          })
+                        }
+                        baseline={BUSINESS_CATEGORIES}
+                        placeholder="Select"
+                      />
+                    </div>
+                  )}
+                  {stallOn("noOfOperators") && (
                   <div className="space-y-2">
                     <Label>
                       No. of Operators <span className="text-red-500">*</span>
@@ -14536,6 +14676,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       required
                     />
                   </div>
+                  )}
+                  {stallOn("registrationNumber") && (
                   <div className="space-y-2 md:col-span-3">
                     <Label>
                       Registration Number ({regConfig.label}){" "}
@@ -14753,42 +14895,55 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       </p>
                     )}
                   </div>
+                  )}
                 </div>
+                )}
 
                 {/* --- SECTION: SOCIAL & IMAGES --- */}
+                {(stallOn("faceBookLink") || stallOn("instagramLink")) && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>
-                      Facebook Link <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      name="faceBookLink"
-                      value={shopkeeperDetails.faceBookLink}
-                      onChange={handleRentFormChange}
-                      placeholder="https://facebook.com/yourbrand"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>
-                      Instagram Link <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      name="instagramLink"
-                      value={shopkeeperDetails.instagramLink}
-                      onChange={handleRentFormChange}
-                      placeholder="@yourbrand"
-                    />
-                  </div>
+                  {stallOn("faceBookLink") && (
+                    <div className="space-y-2">
+                      <Label>
+                        Facebook Link <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        name="faceBookLink"
+                        value={shopkeeperDetails.faceBookLink}
+                        onChange={handleRentFormChange}
+                        placeholder="https://facebook.com/yourbrand"
+                      />
+                    </div>
+                  )}
+                  {stallOn("instagramLink") && (
+                    <div className="space-y-2">
+                      <Label>
+                        Instagram Link <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        name="instagramLink"
+                        value={shopkeeperDetails.instagramLink}
+                        onChange={handleRentFormChange}
+                        placeholder="@yourbrand"
+                      />
+                    </div>
+                  )}
                 </div>
+                )}
 
                 {/* Image Uploads */}
+                {(stallOn("registrationImage") ||
+                  stallOn("companyLogo") ||
+                  stallOn("productImage")) && (
                 <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 space-y-4">
                   <h3 className="font-semibold text-gray-800">
                     Brand Assets & Documents
                   </h3>
 
+                  {(stallOn("registrationImage") || stallOn("companyLogo")) && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Reg Image */}
+                    {stallOn("registrationImage") && (
                     <div className="space-y-2">
                       <Label>
                         Business Registration Document{" "}
@@ -14820,8 +14975,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         )}
                       </div>
                     </div>
+                    )}
 
                     {/* Logo */}
+                    {stallOn("companyLogo") && (
                     <div className="space-y-2">
                       <Label>
                         Company Logo <span className="text-red-500">*</span>
@@ -14852,9 +15009,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         )}
                       </div>
                     </div>
+                    )}
                   </div>
+                  )}
 
                   {/* Product Images */}
+                  {stallOn("productImage") && (
                   <div className="space-y-2 pt-4 border-t border-gray-200">
                     <Label>
                       Product Images (
@@ -14927,9 +15087,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       ))}
                     </div>
                   </div>
+                  )}
                 </div>
+                )}
 
                 {/* Description */}
+                {stallOn("description") && (
                 <div className="space-y-2">
                   <Label>
                     Business, Products & Brand Description{" "}
@@ -14943,7 +15106,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     rows={3}
                   />
                 </div>
+                )}
 
+                {stallOn("refundPaymentDescription") && (
                 <div className="space-y-2">
                   <Label>
                     Refund Payment Description{" "}
@@ -14957,7 +15122,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     rows={3}
                   />
                 </div>
+                )}
 
+                {stallOn("address") && (
                 <div className="space-y-2">
                   <Label>
                     Full Address <span className="text-red-500">*</span>
@@ -14970,6 +15137,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     rows={2}
                   />
                 </div>
+                )}
 
                 {/* Preferred Space Types — with quantity, total capped at the
                   organizer's maxSpacesPerVendor. */}
@@ -15181,9 +15349,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     type="submit"
                     disabled={
                       loading ||
+                      (!shopkeeperExists && !emailVerified) ||
                       (!shopkeeperExists &&
-                        (!shopkeeperDetails.businessEmail || !emailVerified)) ||
-                      !shopkeeperDetails.businessCategory
+                        stallOn("businessEmail") &&
+                        !shopkeeperDetails.businessEmail) ||
+                      (stallOn("businessCategory") &&
+                        !shopkeeperDetails.businessCategory)
                     }
                   >
                     {loading ? "Submitting..." : "Submit Registration"}
