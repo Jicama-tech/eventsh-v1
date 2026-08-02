@@ -18,21 +18,28 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
-  ArrowDownCircle,
-  ArrowUpCircle,
   Award,
-  Coins,
-  History,
+  CheckCircle2,
+  Hourglass,
   Loader2,
   Receipt,
   RefreshCw,
   Wallet,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { BuyTokensDialog } from "./BuyTokensDialog";
-import { symbolForCode } from "@/data/currencies";
+import { BillingPaymentDialog } from "./BillingPaymentDialog";
 
 const apiURL = __API_URL__;
+
+interface Claim {
+  _id: string;
+  status: "awaiting_payment" | "submitted" | "confirmed";
+  amount: number;
+  currency: string;
+  ref: string;
+  submittedAt: string | null;
+  confirmedAt: string | null;
+}
 
 interface EventRow {
   eventId: string;
@@ -40,81 +47,85 @@ interface EventRow {
   startDate: string;
   endDate?: string;
   status?: string;
-  ticketsSold: number;
   stallsSold: number;
   tablesBooked: number;
   chairsBooked: number;
   speakersBooked: number;
-  workshopsBooked: number;
-  sponsorsConfirmed: number;
-  suppliersConfirmed: number;
   amount: number;
+  claim: Claim | null;
 }
 
 interface MembershipRow {
   _id: string;
   exhibitorName: string;
+  exhibitorEmail: string;
+  exhibitorWhatsapp: string;
   planName: string;
+  startDate?: string;
+  endDate?: string;
   amountPaid: number;
-  fee: number;
+  currency: string;
+  platformFee: number;
 }
 
-interface LedgerEntry {
-  _id: string;
-  type: "topup" | "debit" | "credit" | "admin_adjust" | "baseline";
-  amount: number;
-  balanceAfter: number;
-  eventId: string | null;
-  category?: string;
-  description?: string;
-  createdAt: string;
+interface MembershipsBlock {
+  rows: MembershipRow[];
+  rate: number;
+  total: number;
+  claim: Claim | null;
 }
 
-interface WalletResponse {
+interface BillingResponse {
   organizer: {
     _id: string;
     name?: string;
     organizationName?: string;
     country?: string;
   };
-  wallet: { organizerId: string; balance: number };
+  rates: {
+    stallRate: number;
+    roundTableRate: number;
+    chairRate: number;
+    speakerRate: number;
+    membershipRate: number;
+    currency: string;
+  };
   events: EventRow[];
-  memberships?: { totalOwed: number; rows: MembershipRow[] };
-  ledger: LedgerEntry[];
+  memberships?: MembershipsBlock;
   region: { scheme: "UPI" | "PAYNOW"; currency: string } | null;
 }
 
+import { symbolForCode } from "@/data/currencies";
 function symbolFor(currency?: string) {
   return symbolForCode(currency);
 }
 
-const LEDGER_LABEL: Record<LedgerEntry["type"], string> = {
-  topup: "Top-up",
-  debit: "Fee",
-  credit: "Refund",
-  admin_adjust: "Adjustment",
-  baseline: "Baseline",
-};
-
 export function PlatformFeesPanel() {
   const { toast } = useToast();
-  const [data, setData] = useState<WalletResponse | null>(null);
+  const [data, setData] = useState<BillingResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [buyTokensOpen, setBuyTokensOpen] = useState(false);
+  const [payingEvent, setPayingEvent] = useState<{
+    eventId: string;
+    title: string;
+  } | null>(null);
+  // Drives the memberships-batch checkout dialog. The BillingPaymentDialog
+  // is reused with mode="memberships" so QR rendering / status polling /
+  // mark-as-paid all share one code path with the per-event flow.
+  const [payingMemberships, setPayingMemberships] = useState(false);
 
-  const fetchWallet = async () => {
+  const fetchBilling = async () => {
     setLoading(true);
     try {
       const token = sessionStorage.getItem("token");
-      const res = await fetch(`${apiURL}/tokens/me`, {
+      const res = await fetch(`${apiURL}/billing-payments/me`, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as WalletResponse;
+      const json = (await res.json()) as BillingResponse;
       setData(json);
     } catch (e: any) {
       toast({
-        title: "Failed to load token wallet",
+        title: "Failed to load platform fees",
         description: e?.message,
         variant: "destructive",
       });
@@ -124,58 +135,48 @@ export function PlatformFeesPanel() {
   };
 
   useEffect(() => {
-    fetchWallet();
+    fetchBilling();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const currencySymbol = symbolFor(data?.region?.currency);
-  const events = data?.events || [];
-  const memberships = data?.memberships || { totalOwed: 0, rows: [] };
-  const ledger = data?.ledger || [];
-  const balance = data?.wallet?.balance ?? 0;
+  const region = data?.region;
+  const currencySymbol = symbolFor(region?.currency || data?.rates?.currency);
 
-  const usedThisMonth = ledger
-    .filter((l) => {
-      if (l.type !== "debit") return false;
-      const d = new Date(l.createdAt);
-      const now = new Date();
-      return (
-        d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-      );
-    })
-    .reduce((s, l) => s + l.amount, 0);
-  const recentTopUps = ledger.filter((l) => l.type === "topup").length;
+  const events = data?.events || [];
+  const totalOwed = events
+    .filter((e) => !e.claim || e.claim.status !== "confirmed")
+    .reduce((s, e) => s + (e.amount || 0), 0);
+  const totalPaid = events
+    .filter((e) => e.claim?.status === "confirmed")
+    .reduce((s, e) => s + (e.claim?.amount || 0), 0);
+  const pendingCount = events.filter(
+    (e) => e.claim?.status === "submitted" || e.claim?.status === "awaiting_payment",
+  ).length;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
           <h2 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
-            <Wallet className="h-6 w-6" /> Tokens
+            <Wallet className="h-6 w-6" /> Platform Fees
           </h2>
           <p className="text-muted-foreground text-sm">
-            One prepaid balance shared across every event you run. 1 token
-            = 1 {data?.region?.currency || "unit"}. Fees are deducted
-            automatically as attendees, exhibitors, and speakers confirm.
+            Per-event fees owed to Eventsh. Pay each event with a
+            country-specific QR; admin confirms and a receipt is sent to your
+            WhatsApp + email.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchWallet}
-            disabled={loading}
-          >
-            <RefreshCw
-              className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
-            />
-            Refresh
-          </Button>
-          <Button size="sm" onClick={() => setBuyTokensOpen(true)}>
-            <Coins className="h-4 w-4 mr-2" />
-            Buy tokens
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={fetchBilling}
+          disabled={loading}
+        >
+          <RefreshCw
+            className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
+          />
+          Refresh
+        </Button>
       </div>
 
       {/* Stat strip */}
@@ -183,34 +184,32 @@ export function PlatformFeesPanel() {
         <Card>
           <CardContent className="p-4">
             <div className="text-xs uppercase tracking-wide text-muted-foreground">
-              Balance
+              Outstanding
             </div>
-            <div
-              className={`text-2xl font-bold ${
-                balance < 0 ? "text-rose-600" : "text-emerald-600"
-              }`}
-            >
-              {balance} tokens
+            <div className="text-2xl font-bold text-rose-600">
+              {currencySymbol}
+              {totalOwed.toFixed(2)}
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="text-xs uppercase tracking-wide text-muted-foreground">
-              Used this month
+              Paid so far
             </div>
-            <div className="text-2xl font-bold text-slate-700">
-              {usedThisMonth} tokens
+            <div className="text-2xl font-bold text-emerald-600">
+              {currencySymbol}
+              {totalPaid.toFixed(2)}
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="text-xs uppercase tracking-wide text-muted-foreground">
-              Top-ups so far
+              Awaiting confirmation
             </div>
-            <div className="text-2xl font-bold text-slate-700">
-              {recentTopUps}
+            <div className="text-2xl font-bold text-amber-600">
+              {pendingCount}
             </div>
           </CardContent>
         </Card>
@@ -227,132 +226,201 @@ export function PlatformFeesPanel() {
             className="flex items-center gap-1.5"
           >
             <Award className="h-3.5 w-3.5" />
-            Memberships ({memberships.rows.length})
-          </TabsTrigger>
-          <TabsTrigger value="ledger" className="flex items-center gap-1.5">
-            <History className="h-3.5 w-3.5" />
-            History ({ledger.length})
+            Memberships ({data?.memberships?.rows?.length || 0})
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="events" className="mt-0">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Receipt className="h-4 w-4" /> Events
-              </CardTitle>
-              <CardDescription>
-                Token usage per event — tickets, stalls, speakers, sponsors,
-                tables, chairs, workshops, and suppliers all draw from the
-                same wallet.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loading && events.length === 0 ? (
-                <div className="flex items-center justify-center py-10 text-slate-500 gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-                </div>
-              ) : events.length === 0 ? (
-                <div className="py-10 text-center text-slate-500">
-                  No events yet — once attendees, exhibitors, or speakers
-                  register, token usage will appear here.
-                </div>
-              ) : (
-                <div className="rounded-md border overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Event</TableHead>
-                        <TableHead className="text-center">Tickets</TableHead>
-                        <TableHead className="text-center">Stalls</TableHead>
-                        <TableHead className="text-center">Tables</TableHead>
-                        <TableHead className="text-center">Chairs</TableHead>
-                        <TableHead className="text-center">Speakers</TableHead>
-                        <TableHead className="text-center">Workshops</TableHead>
-                        <TableHead className="text-center">Sponsors</TableHead>
-                        <TableHead className="text-center">Suppliers</TableHead>
-                        <TableHead className="text-right">
-                          Tokens used
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {events.map((e) => (
-                        <TableRow key={e.eventId}>
-                          <TableCell>
-                            <div className="font-medium">{e.title}</div>
-                            <div className="text-xs text-slate-500">
-                              {e.startDate
-                                ? new Date(e.startDate).toLocaleDateString()
-                                : ""}
-                              {e.endDate
-                                ? ` – ${new Date(e.endDate).toLocaleDateString()}`
-                                : ""}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Receipt className="h-4 w-4" /> Events
+          </CardTitle>
+          <CardDescription>
+            Rate is {currencySymbol}
+            {data?.rates.stallRate ?? 20}/stall · {currencySymbol}
+            {data?.rates.roundTableRate ?? 20}/booked-table · {currencySymbol}
+            {data?.rates.chairRate ?? 5}/chair · {currencySymbol}
+            {data?.rates.speakerRate ?? 20}/speaker.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading && events.length === 0 ? (
+            <div className="flex items-center justify-center py-10 text-slate-500 gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            </div>
+          ) : events.length === 0 ? (
+            <div className="py-10 text-center text-slate-500">
+              No events yet — once attendees, exhibitors, or speakers
+              register, fees will appear here.
+            </div>
+          ) : (
+            <div className="rounded-md border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Event</TableHead>
+                    <TableHead className="text-center">Stalls</TableHead>
+                    <TableHead className="text-center">Tables</TableHead>
+                    <TableHead className="text-center">Chairs</TableHead>
+                    <TableHead className="text-center">Speakers</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {events.map((e) => {
+                    const claim = e.claim;
+                    const isPaid = claim?.status === "confirmed";
+                    const isSubmitted = claim?.status === "submitted";
+                    const isAwaiting = claim?.status === "awaiting_payment";
+                    return (
+                      <TableRow key={e.eventId}>
+                        <TableCell>
+                          <div className="font-medium">{e.title}</div>
+                          <div className="text-xs text-slate-500">
+                            {e.startDate
+                              ? new Date(e.startDate).toLocaleDateString()
+                              : ""}
+                            {e.endDate
+                              ? ` – ${new Date(e.endDate).toLocaleDateString()}`
+                              : ""}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {e.stallsSold}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {e.tablesBooked}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {e.chairsBooked}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {e.speakersBooked}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold">
+                          {currencySymbol}
+                          {e.amount.toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          {isPaid ? (
+                            <Badge className="bg-emerald-500">
+                              <CheckCircle2 className="h-3 w-3 mr-1" /> Paid
+                            </Badge>
+                          ) : isSubmitted ? (
+                            <Badge className="bg-amber-500">
+                              <Hourglass className="h-3 w-3 mr-1" /> Awaiting
+                              admin
+                            </Badge>
+                          ) : isAwaiting ? (
+                            <Badge variant="outline" className="text-slate-500">
+                              <Hourglass className="h-3 w-3 mr-1" /> In
+                              progress
+                            </Badge>
+                          ) : e.amount > 0 ? (
+                            <Badge variant="outline" className="text-rose-600 border-rose-200">
+                              Owed
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-slate-400">
+                              —
+                            </Badge>
+                          )}
+                          {claim?.ref && (
+                            <div className="text-[10px] font-mono text-slate-400 mt-1">
+                              {claim.ref}
                             </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {e.ticketsSold}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {e.stallsSold}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {e.tablesBooked}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {e.chairsBooked}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {e.speakersBooked}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {e.workshopsBooked}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {e.sponsorsConfirmed}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {e.suppliersConfirmed}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold">
-                            {e.amount.toFixed(2)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-              {!data?.region && data && (
-                <p className="text-xs text-amber-600 mt-2">
-                  Your country doesn't have a QR scheme configured. Contact
-                  support to top up tokens off-band.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            disabled={
+                              e.amount <= 0 ||
+                              isPaid ||
+                              isSubmitted ||
+                              !region
+                            }
+                            onClick={() =>
+                              setPayingEvent({
+                                eventId: e.eventId,
+                                title: e.title,
+                              })
+                            }
+                          >
+                            {isPaid
+                              ? "Paid"
+                              : isSubmitted
+                                ? "Submitted"
+                                : isAwaiting
+                                  ? "Resume"
+                                  : "Pay"}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+          {!region && data && (
+            <p className="text-xs text-amber-600 mt-2">
+              Your country doesn't have a QR scheme configured. Contact
+              support to settle event fees off-band.
+            </p>
+          )}
+        </CardContent>
+      </Card>
         </TabsContent>
 
         <TabsContent value="memberships" className="mt-0">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Award className="h-4 w-4" /> Memberships
-              </CardTitle>
-              <CardDescription>
-                Each active exhibitor membership draws tokens from your
-                wallet, same rate as every other category.
-              </CardDescription>
+            <CardHeader className="flex flex-row items-start justify-between gap-3">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Award className="h-4 w-4" /> Memberships
+                </CardTitle>
+                <CardDescription>
+                  Each active exhibitor membership owes a flat{" "}
+                  {currencySymbol}
+                  {data?.memberships?.rate ?? 5} platform fee. Pay the
+                  batch in one go.
+                </CardDescription>
+              </div>
+              {data?.memberships && data.memberships.total > 0 && (
+                <Button
+                  size="sm"
+                  disabled={
+                    !region ||
+                    data.memberships.claim?.status === "submitted" ||
+                    data.memberships.claim?.status === "confirmed"
+                  }
+                  onClick={() => setPayingMemberships(true)}
+                >
+                  {data.memberships.claim?.status === "confirmed"
+                    ? "Paid"
+                    : data.memberships.claim?.status === "submitted"
+                      ? "Submitted"
+                      : data.memberships.claim?.status === "awaiting_payment"
+                        ? "Resume"
+                        : `Pay ${currencySymbol}${data.memberships.total.toFixed(
+                            2,
+                          )}`}
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
-              {loading && !memberships.rows.length ? (
+              {loading && (!data?.memberships?.rows?.length) ? (
                 <div className="flex items-center justify-center py-10 text-slate-500 gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" /> Loading…
                 </div>
-              ) : !memberships.rows.length ? (
+              ) : !data?.memberships?.rows?.length ? (
                 <div className="py-10 text-center text-slate-500">
                   No active exhibitor memberships yet — once one is
-                  confirmed, token usage appears here.
+                  confirmed, the platform fee row appears here.
                 </div>
               ) : (
                 <div className="rounded-md border overflow-hidden">
@@ -361,152 +429,107 @@ export function PlatformFeesPanel() {
                       <TableRow>
                         <TableHead>Exhibitor</TableHead>
                         <TableHead>Plan</TableHead>
+                        <TableHead>Valid till</TableHead>
                         <TableHead className="text-right">
                           Paid to you
                         </TableHead>
                         <TableHead className="text-right">
-                          Tokens used
+                          Platform fee
                         </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {memberships.rows.map((m) => (
+                      {data.memberships.rows.map((m) => (
                         <TableRow key={m._id}>
                           <TableCell>
                             <div className="font-medium">
-                              {m.exhibitorName || "—"}
+                              {m.exhibitorName || m.exhibitorEmail || "—"}
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {m.exhibitorEmail}
+                              {m.exhibitorWhatsapp
+                                ? ` · ${m.exhibitorWhatsapp}`
+                                : ""}
                             </div>
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline">{m.planName}</Badge>
                           </TableCell>
+                          <TableCell className="text-xs">
+                            {m.endDate
+                              ? new Date(m.endDate).toLocaleDateString()
+                              : "—"}
+                          </TableCell>
                           <TableCell className="text-right">
-                            {m.amountPaid.toFixed(2)}
+                            {m.currency} {m.amountPaid.toFixed(2)}
                           </TableCell>
                           <TableCell className="text-right font-semibold">
-                            {m.fee.toFixed(2)}
+                            {currencySymbol}
+                            {m.platformFee.toFixed(2)}
                           </TableCell>
                         </TableRow>
                       ))}
                       <TableRow className="bg-muted/40">
-                        <TableCell colSpan={3} className="text-right">
+                        <TableCell colSpan={4} className="text-right">
                           <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                            Total tokens used
+                            Total platform fee
                           </span>
                         </TableCell>
                         <TableCell className="text-right font-bold">
-                          {memberships.totalOwed.toFixed(2)}
+                          {currencySymbol}
+                          {data.memberships.total.toFixed(2)}
                         </TableCell>
                       </TableRow>
                     </TableBody>
                   </Table>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
 
-        <TabsContent value="ledger" className="mt-0">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <History className="h-4 w-4" /> Recent activity
-              </CardTitle>
-              <CardDescription>
-                Every top-up, fee deduction, refund, and admin adjustment to
-                your wallet.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loading && !ledger.length ? (
-                <div className="flex items-center justify-center py-10 text-slate-500 gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+              {data?.memberships?.claim && (
+                <div className="mt-3 rounded-md border border-amber-200 bg-amber-50/50 px-3 py-2 text-xs text-amber-800 flex items-center gap-2">
+                  {data.memberships.claim.status === "confirmed" ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  ) : (
+                    <Hourglass className="h-3.5 w-3.5" />
+                  )}
+                  <span className="font-mono">
+                    {data.memberships.claim.ref}
+                  </span>
+                  <span>· {data.memberships.claim.status}</span>
                 </div>
-              ) : !ledger.length ? (
-                <div className="py-10 text-center text-slate-500">
-                  No wallet activity yet.
-                </div>
-              ) : (
-                <div className="rounded-md border overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>When</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                        <TableHead className="text-right">Balance</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {ledger.map((l) => {
-                        const isBaseline = l.type === "baseline";
-                        const isCredit = l.type === "topup" || l.type === "credit";
-                        return (
-                          <TableRow key={l._id}>
-                            <TableCell className="text-xs text-slate-500">
-                              {new Date(l.createdAt).toLocaleString()}
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                variant="outline"
-                                className={
-                                  isBaseline
-                                    ? "text-slate-500 border-slate-200"
-                                    : isCredit
-                                      ? "text-emerald-600 border-emerald-200"
-                                      : "text-rose-600 border-rose-200"
-                                }
-                              >
-                                {isBaseline ? null : isCredit ? (
-                                  <ArrowUpCircle className="h-3 w-3 mr-1" />
-                                ) : (
-                                  <ArrowDownCircle className="h-3 w-3 mr-1" />
-                                )}
-                                {LEDGER_LABEL[l.type]}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-sm text-slate-600">
-                              {l.description || "—"}
-                              {isBaseline && (
-                                <div className="text-xs text-slate-400">
-                                  Not charged
-                                </div>
-                              )}
-                            </TableCell>
-                            <TableCell
-                              className={`text-right font-semibold ${
-                                isBaseline
-                                  ? "text-slate-400 font-normal"
-                                  : isCredit
-                                    ? "text-emerald-600"
-                                    : "text-rose-600"
-                              }`}
-                            >
-                              {isBaseline ? "" : isCredit ? "+" : "-"}
-                              {l.amount}
-                            </TableCell>
-                            <TableCell className="text-right text-slate-500">
-                              {l.balanceAfter}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
+              )}
+
+              {!region && data && (
+                <p className="text-xs text-amber-600 mt-2">
+                  Your country doesn't have a QR scheme configured.
+                  Contact support to settle memberships fees off-band.
+                </p>
               )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      <BuyTokensDialog
-        open={buyTokensOpen}
-        onClose={() => setBuyTokensOpen(false)}
+      <BillingPaymentDialog
+        open={!!payingEvent}
+        onClose={() => setPayingEvent(null)}
+        eventId={payingEvent?.eventId || null}
+        eventTitle={payingEvent?.title || ""}
         onSubmitted={() => {
-          setBuyTokensOpen(false);
-          fetchWallet();
+          setPayingEvent(null);
+          fetchBilling();
+        }}
+      />
+
+      <BillingPaymentDialog
+        open={payingMemberships}
+        onClose={() => setPayingMemberships(false)}
+        eventId="memberships"
+        eventTitle="Membership platform fees"
+        mode="memberships"
+        onSubmitted={() => {
+          setPayingMemberships(false);
+          fetchBilling();
         }}
       />
     </div>

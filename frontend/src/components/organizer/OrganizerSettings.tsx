@@ -3520,7 +3520,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       { id: "dashboard", label: "Analytics" },
                       { id: "kiosk", label: "In-Person Booking" },
                       { id: "eventAttendees", label: "Participants" },
-                      { id: "platformFees", label: "Tokens" },
+                      { id: "platformFees", label: "Platform Fees" },
                       { id: "users", label: "CRM" },
                       { id: "events", label: "Events/Coupons" },
                       { id: "feedback", label: "Feedback" },

@@ -8,34 +8,33 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Loader2,
   QrCode,
   CheckCircle2,
   ExternalLink,
   Hourglass,
-  Coins,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { buildPayNowQrUrl } from "@/lib/paynowQr";
-import { buildUpiQrDataUrl } from "@/lib/upiQr";
-import { symbolForCode } from "@/data/currencies";
 
 const apiURL = __API_URL__;
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  /** Prefills the quantity input — typically the shortfall from an estimate. */
-  defaultTokens?: number;
+  eventId: string | null;
+  eventTitle: string;
   onSubmitted?: () => void;
+  // When "memberships", the dialog kicks off the all-active-memberships
+  // batch claim (POST /billing-payments/initiate-memberships) instead of
+  // the per-event /initiate. Default keeps the existing per-event UX.
+  mode?: "event" | "memberships";
 }
 
-interface TopUpResponse {
+interface PendingResponse {
   _id: string;
-  tokensRequested: number;
+  eventId: string;
+  eventTitle: string;
   amount: number;
   currency: string;
   scheme: "UPI" | "PAYNOW";
@@ -50,25 +49,25 @@ interface PlatformConfig {
   platformUPIId: string;
 }
 
+import { symbolForCode } from "@/data/currencies";
 function symbolFor(currency: string) {
   return symbolForCode(currency);
 }
 
-export function BuyTokensDialog({
+export function BillingPaymentDialog({
   open,
   onClose,
-  defaultTokens,
+  eventId,
+  eventTitle,
   onSubmitted,
+  mode = "event",
 }: Props) {
   const { toast } = useToast();
   const token = sessionStorage.getItem("token");
   const auth = token ? { Authorization: `Bearer ${token}` } : {};
 
-  const [tokens, setTokens] = useState<string>(
-    defaultTokens && defaultTokens > 0 ? String(Math.ceil(defaultTokens)) : "",
-  );
   const [initiating, setInitiating] = useState(false);
-  const [pending, setPending] = useState<TopUpResponse | null>(null);
+  const [pending, setPending] = useState<PendingResponse | null>(null);
   const [qrImage, setQrImage] = useState<string | null>(null);
   const [qrIntent, setQrIntent] = useState<string | null>(null);
   const [qrError, setQrError] = useState<string | null>(null);
@@ -76,59 +75,65 @@ export function BuyTokensDialog({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    // Per-event mode needs an eventId; memberships mode doesn't.
     if (!open) return;
-    setTokens(
-      defaultTokens && defaultTokens > 0 ? String(Math.ceil(defaultTokens)) : "",
-    );
-    setPending(null);
-    setQrImage(null);
-    setQrIntent(null);
-    setQrError(null);
+    if (mode === "event" && !eventId) return;
+    let cancelled = false;
+    (async () => {
+      setInitiating(true);
+      setPending(null);
+      setQrImage(null);
+      setQrIntent(null);
+      setQrError(null);
+      try {
+        const url =
+          mode === "memberships"
+            ? `${apiURL}/billing-payments/initiate-memberships`
+            : `${apiURL}/billing-payments/initiate`;
+        const body =
+          mode === "memberships" ? "{}" : JSON.stringify({ eventId });
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...auth },
+          body,
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data?.message || `HTTP ${res.status}`);
+        }
+        if (cancelled) return;
+        setPending(data as PendingResponse);
+        await generateQr(data as PendingResponse);
+      } catch (e: any) {
+        if (cancelled) return;
+        toast({
+          title: "Couldn't start checkout",
+          description: e?.message || "Try again in a moment.",
+          variant: "destructive",
+        });
+      } finally {
+        if (!cancelled) setInitiating(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, eventId, mode]);
 
-  const startTopUp = async () => {
-    const qty = Number(tokens);
-    if (!qty || qty <= 0) {
-      toast({
-        title: "Enter a token amount",
-        description: "How many tokens would you like to buy?",
-        variant: "destructive",
-      });
-      return;
-    }
-    setInitiating(true);
-    try {
-      const res = await fetch(`${apiURL}/tokens/topup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...auth },
-        body: JSON.stringify({ tokensRequested: qty }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
-      setPending(data as TopUpResponse);
-      await generateQr(data as TopUpResponse);
-    } catch (e: any) {
-      toast({
-        title: "Couldn't start checkout",
-        description: e?.message || "Try again in a moment.",
-        variant: "destructive",
-      });
-    } finally {
-      setInitiating(false);
-    }
-  };
-
-  const generateQr = async (row: TopUpResponse) => {
+  const generateQr = async (row: PendingResponse) => {
     setQrLoading(true);
     setQrError(null);
     try {
       const cfgRes = await fetch(`${apiURL}/admin/payment-config`, {
         headers: { ...auth },
       });
-      if (!cfgRes.ok) throw new Error("Platform payment isn't configured yet.");
+      if (!cfgRes.ok) {
+        throw new Error("Platform payment isn't configured yet.");
+      }
       const cfg = (await cfgRes.json()) as PlatformConfig;
-      const proxy = row.scheme === "UPI" ? cfg.platformUPIId : cfg.companyUEN;
+      const proxy =
+        row.scheme === "UPI" ? cfg.platformUPIId : cfg.companyUEN;
       if (!proxy) {
         throw new Error(
           row.scheme === "UPI"
@@ -136,31 +141,24 @@ export function BuyTokensDialog({
             : "Company UEN isn't configured yet.",
         );
       }
-      if (!cfg.companyName) throw new Error("Company name isn't configured yet.");
-
-      if (row.scheme === "PAYNOW") {
-        const url = buildPayNowQrUrl({
-          organizer: { UENNumber: cfg.companyUEN },
-          amount: row.amount.toFixed(2),
-          refId: row.ref,
-          company: cfg.companyName,
-        });
-        if (!url) throw new Error("Company UEN isn't configured yet.");
-        setQrImage(url);
-        setQrIntent(null);
-        return;
+      if (!cfg.companyName) {
+        throw new Error("Company name isn't configured yet.");
       }
-
-      const { uri, dataUrl } = await buildUpiQrDataUrl({
-        payeeVpa: proxy,
+      const params = new URLSearchParams({
+        scheme: row.scheme,
+        payeeId: proxy,
         payeeName: cfg.companyName,
-        amount: row.amount,
+        amount: row.amount.toFixed(2),
+        billNumber: row.ref,
         currency: row.currency,
-        note: `${row.tokensRequested} tokens`,
-        refId: row.ref,
       });
-      setQrImage(dataUrl);
-      setQrIntent(uri);
+      const qrRes = await fetch(`${apiURL}/payments/generate-qr?${params}`);
+      const qrJson = await qrRes.json();
+      if (!qrRes.ok) {
+        throw new Error(qrJson?.message || `HTTP ${qrRes.status}`);
+      }
+      setQrImage(qrJson.qr);
+      setQrIntent(qrJson.intent);
     } catch (e: any) {
       setQrError(e?.message || "Failed to generate QR");
     } finally {
@@ -172,12 +170,14 @@ export function BuyTokensDialog({
     if (!pending) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`${apiURL}/tokens/topup/${pending._id}/mark-paid`, {
-        method: "POST",
-        headers: { ...auth },
-      });
+      const res = await fetch(
+        `${apiURL}/billing-payments/${pending._id}/mark-paid`,
+        { method: "POST", headers: { ...auth } },
+      );
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
+      if (!res.ok) {
+        throw new Error(data?.message || `HTTP ${res.status}`);
+      }
       setPending({ ...pending, status: "submitted" });
       toast({
         title: "Submitted for confirmation",
@@ -202,31 +202,13 @@ export function BuyTokensDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Coins className="h-5 w-5" />
-            Buy tokens
+            <QrCode className="h-5 w-5" />
+            Pay event fee
           </DialogTitle>
-          <DialogDescription>
-            Tokens are shared across all your events — 1 token = 1 unit of
-            your local currency.
-          </DialogDescription>
+          <DialogDescription>{eventTitle}</DialogDescription>
         </DialogHeader>
 
-        {!pending ? (
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="tokens-qty">How many tokens?</Label>
-              <Input
-                id="tokens-qty"
-                type="number"
-                min={1}
-                value={tokens}
-                onChange={(e) => setTokens(e.target.value)}
-                placeholder="e.g. 500"
-                autoFocus
-              />
-            </div>
-          </div>
-        ) : initiating ? (
+        {initiating || !pending ? (
           <div className="flex items-center justify-center py-10 gap-2 text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" /> Preparing your
             checkout…
@@ -245,8 +227,8 @@ export function BuyTokensDialog({
                   <code className="bg-white border px-1 rounded text-xs">
                     {pending.ref}
                   </code>
-                  ), {pending.tokensRequested} tokens will be added to your
-                  wallet and a receipt sent to your email and WhatsApp number.
+                  ), the event-fee receipt will be sent to your email and
+                  WhatsApp number.
                 </p>
               </div>
             </div>
@@ -256,19 +238,19 @@ export function BuyTokensDialog({
             <div className="rounded-lg border bg-slate-50 px-4 py-3 flex items-center justify-between">
               <div>
                 <div className="text-xs uppercase tracking-wide text-slate-500">
-                  Tokens
+                  Amount due
                 </div>
                 <div className="text-3xl font-bold text-slate-900">
-                  {pending.tokensRequested}
+                  {symbolFor(pending.currency)}
+                  {pending.amount}
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-xs uppercase tracking-wide text-slate-500">
-                  Amount
+                  Reference
                 </div>
-                <div className="text-xl font-bold text-slate-900">
-                  {symbolFor(pending.currency)}
-                  {pending.amount}
+                <div className="font-mono text-sm text-slate-700">
+                  {pending.ref}
                 </div>
                 <div className="text-xs text-slate-500 mt-1">
                   {pending.scheme === "UPI"
@@ -290,7 +272,7 @@ export function BuyTokensDialog({
               <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start">
                 <img
                   src={qrImage}
-                  alt="Token top-up QR"
+                  alt="Event-fee payment QR"
                   className="w-56 h-56 rounded-md border bg-white p-2"
                 />
                 <div className="flex-1 space-y-2 text-sm">
@@ -310,7 +292,11 @@ export function BuyTokensDialog({
                   </p>
                   {qrIntent && (
                     <Button variant="outline" size="sm" asChild>
-                      <a href={qrIntent} target="_blank" rel="noopener noreferrer">
+                      <a
+                        href={qrIntent}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
                         <ExternalLink className="h-4 w-4 mr-2" />
                         Open in payment app
                       </a>
@@ -318,7 +304,7 @@ export function BuyTokensDialog({
                   )}
                   <p className="text-xs text-slate-500">
                     After paying, click <em>I have paid</em> below. The admin
-                    will verify and credit your wallet.
+                    will verify and confirm the payment.
                   </p>
                 </div>
               </div>
@@ -330,22 +316,7 @@ export function BuyTokensDialog({
           <Button variant="outline" onClick={onClose}>
             {isSubmitted ? "Close" : "Cancel"}
           </Button>
-          {!pending && (
-            <Button onClick={startTopUp} disabled={initiating}>
-              {initiating ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Starting…
-                </>
-              ) : (
-                <>
-                  <QrCode className="h-4 w-4 mr-2" />
-                  Continue
-                </>
-              )}
-            </Button>
-          )}
-          {pending && !isSubmitted && (
+          {!isSubmitted && pending && (
             <Button onClick={submitPaid} disabled={submitting || !qrImage}>
               {submitting ? (
                 <>

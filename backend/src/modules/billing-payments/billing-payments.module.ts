@@ -9,7 +9,6 @@ import { EventSchema } from "../events/schemas/event.schema";
 import { SpeakerRequestSchema } from "../speaker-requests/entities/speaker-request.entity";
 import { OrganizerPaymentSchema } from "../admin/entities/organizer-payment.entity";
 import { PlatformBillingRatesSchema } from "../admin/entities/platform-billing-rates.entity";
-import { OrganizerBillingRateOverrideSchema } from "../admin/entities/organizer-billing-rate-override.entity";
 import {
   ExhibitorMembership,
   ExhibitorMembershipSchema,
@@ -18,10 +17,6 @@ import {
   MembershipPlan,
   MembershipPlanSchema,
 } from "../memberships/schemas/membership-plan.schema";
-import { WorkshopBookingSchema } from "../workshop-bookings/entities/workshop-booking.entity";
-import { SponsorRequestSchema } from "../sponsors/entities/sponsor-request.entity";
-import { SupplierRequestSchema } from "../suppliers/entities/supplier-request.entity";
-import { Ticket, TicketSchema } from "../tickets/entities/ticket.entity";
 import { OtpModule } from "../otp/otp.module";
 import { MailModule } from "../roles/mail.module";
 
@@ -39,19 +34,11 @@ import { MailModule } from "../roles/mail.module";
       { name: "SpeakerRequest", schema: SpeakerRequestSchema },
       { name: "OrganizerPayment", schema: OrganizerPaymentSchema },
       { name: "PlatformBillingRates", schema: PlatformBillingRatesSchema },
-      {
-        name: "OrganizerBillingRateOverride",
-        schema: OrganizerBillingRateOverrideSchema,
-      },
       // Memberships drive a separate platform-fee tab in the organizer
       // PlatformFeesPanel — listing each active exhibitor membership +
       // total per-membership fee owed to the platform.
       { name: ExhibitorMembership.name, schema: ExhibitorMembershipSchema },
       { name: MembershipPlan.name, schema: MembershipPlanSchema },
-      { name: "WorkshopBooking", schema: WorkshopBookingSchema },
-      { name: "SponsorRequest", schema: SponsorRequestSchema },
-      { name: "SupplierRequest", schema: SupplierRequestSchema },
-      { name: Ticket.name, schema: TicketSchema },
     ]),
     JwtModule.register({
       secret: process.env.JWT_SECRET || "secretKey",

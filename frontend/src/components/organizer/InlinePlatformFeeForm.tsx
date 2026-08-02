@@ -1,37 +1,63 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Loader2,
   QrCode,
   CheckCircle2,
   ExternalLink,
   Hourglass,
-  Coins,
+  Wallet,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { buildPayNowQrUrl } from "@/lib/paynowQr";
-import { buildUpiQrDataUrl } from "@/lib/upiQr";
-import { symbolForCode } from "@/data/currencies";
 
 const apiURL = __API_URL__;
 
 /** Sibling of InlineWalkinForm — renders inline inside a chatbot bubble.
- *  Drives the token endpoints (/tokens/topup, /tokens/topup/:id/mark-paid)
- *  plus /admin/payment-config — same flow as the dashboard's
- *  BuyTokensDialog, condensed for the chat surface. */
+ *  Drives the existing platform-fees endpoints (/billing-payments/me,
+ *  /billing-payments/initiate, /billing-payments/:id/mark-paid) plus
+ *  /admin/payment-config + /payments/generate-qr — same flow as the
+ *  dashboard's BillingPaymentDialog, condensed for the chat surface. */
 
-export interface TokenTopUpFormPayload {
+export interface PlatformFeeFormPayload {
   /** Organizer name purely for greeting copy. */
   organizerName: string;
 }
 
-type Step = "enter_quantity" | "qr_payment" | "done";
+type Step = "pick_event" | "qr_payment" | "done";
+
+type BillingRow = {
+  eventId: string;
+  title: string;
+  amount: number;
+  claim:
+    | {
+        _id: string;
+        status: "awaiting_payment" | "submitted" | "confirmed" | "rejected";
+        amount: number;
+        currency: string;
+        ref: string;
+      }
+    | null;
+};
+
+interface MyBillingResponse {
+  rates: { currency: string };
+  events: BillingRow[];
+  region: { scheme: "UPI" | "PAYNOW"; currency: string } | null;
+}
 
 interface PendingResponse {
   _id: string;
-  tokensRequested: number;
+  eventId: string;
   amount: number;
   currency: string;
   scheme: "UPI" | "PAYNOW";
@@ -45,21 +71,30 @@ interface PlatformConfig {
   platformUPIId: string;
 }
 
+import { symbolForCode } from "@/data/currencies";
 function symbolFor(currency: string) {
   return symbolForCode(currency);
 }
 
-export function InlineTokenTopUpForm({
+export function InlinePlatformFeeForm({
   payload,
 }: {
-  payload: TokenTopUpFormPayload;
+  payload: PlatformFeeFormPayload;
 }) {
   const { toast } = useToast();
   const token = sessionStorage.getItem("token");
-  const auth = token ? { Authorization: `Bearer ${token}` } : {};
+  const auth = useMemo(
+    () => (token ? { Authorization: `Bearer ${token}` } : {}),
+    [token],
+  );
 
-  const [step, setStep] = useState<Step>("enter_quantity");
-  const [tokens, setTokens] = useState("");
+  const [step, setStep] = useState<Step>("pick_event");
+  const [loadingRows, setLoadingRows] = useState(true);
+  const [rows, setRows] = useState<BillingRow[]>([]);
+  const [region, setRegion] = useState<
+    { scheme: "UPI" | "PAYNOW"; currency: string } | null
+  >(null);
+  const [selectedEventId, setSelectedEventId] = useState("");
 
   const [initiating, setInitiating] = useState(false);
   const [pending, setPending] = useState<PendingResponse | null>(null);
@@ -69,17 +104,52 @@ export function InlineTokenTopUpForm({
   const [qrLoading, setQrLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const initiateAndQr = async () => {
-    const qty = Number(tokens);
-    if (!qty || qty <= 0) {
-      toast({
-        duration: 4000,
-        title: "Enter a token amount",
-        description: "How many tokens would you like to buy?",
-        variant: "destructive",
-      });
-      return;
-    }
+  // Load the organizer's per-event billing breakdown once.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiURL}/billing-payments/me`, {
+          headers: { ...auth },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as MyBillingResponse;
+        if (cancelled) return;
+        setRegion(data.region);
+        // Only show events that have an outstanding amount and aren't
+        // already submitted/confirmed.
+        const payable = (data.events || []).filter(
+          (r) =>
+            r.amount > 0 &&
+            (!r.claim ||
+              r.claim.status === "rejected" ||
+              r.claim.status === "awaiting_payment"),
+        );
+        setRows(payable);
+      } catch (e: any) {
+        if (!cancelled) {
+          toast({
+            duration: 5000,
+            title: "Couldn't load your fees",
+            description: e?.message || "Try again in a moment.",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        if (!cancelled) setLoadingRows(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [auth, toast]);
+
+  const selectedRow = useMemo(
+    () => rows.find((r) => r.eventId === selectedEventId) || null,
+    [rows, selectedEventId],
+  );
+
+  const initiateAndQr = async (eventId: string) => {
     setInitiating(true);
     setPending(null);
     setQrImage(null);
@@ -87,10 +157,10 @@ export function InlineTokenTopUpForm({
     setQrError(null);
     setStep("qr_payment");
     try {
-      const res = await fetch(`${apiURL}/tokens/topup`, {
+      const res = await fetch(`${apiURL}/billing-payments/initiate`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...auth },
-        body: JSON.stringify({ tokensRequested: qty }),
+        body: JSON.stringify({ eventId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
@@ -103,7 +173,7 @@ export function InlineTokenTopUpForm({
         description: e?.message || "Try again in a moment.",
         variant: "destructive",
       });
-      setStep("enter_quantity");
+      setStep("pick_event");
     } finally {
       setInitiating(false);
     }
@@ -116,7 +186,9 @@ export function InlineTokenTopUpForm({
       const cfgRes = await fetch(`${apiURL}/admin/payment-config`, {
         headers: { ...auth },
       });
-      if (!cfgRes.ok) throw new Error("Platform payment isn't configured yet.");
+      if (!cfgRes.ok) {
+        throw new Error("Platform payment isn't configured yet.");
+      }
       const cfg = (await cfgRes.json()) as PlatformConfig;
       const proxy = row.scheme === "UPI" ? cfg.platformUPIId : cfg.companyUEN;
       if (!proxy) {
@@ -126,8 +198,11 @@ export function InlineTokenTopUpForm({
             : "Company UEN isn't configured yet.",
         );
       }
-      if (!cfg.companyName) throw new Error("Company name isn't configured yet.");
+      if (!cfg.companyName) {
+        throw new Error("Company name isn't configured yet.");
+      }
 
+      // PayNow → sgqrcode (same as SubscriptionCheckoutDialog).
       if (row.scheme === "PAYNOW") {
         const url = buildPayNowQrUrl({
           organizer: { UENNumber: cfg.companyUEN },
@@ -141,16 +216,21 @@ export function InlineTokenTopUpForm({
         return;
       }
 
-      const { uri, dataUrl } = await buildUpiQrDataUrl({
-        payeeVpa: proxy,
+      const params = new URLSearchParams({
+        scheme: row.scheme,
+        payeeId: proxy,
         payeeName: cfg.companyName,
-        amount: row.amount,
+        amount: row.amount.toFixed(2),
+        billNumber: row.ref,
         currency: row.currency,
-        note: `${row.tokensRequested} tokens`,
-        refId: row.ref,
       });
-      setQrImage(dataUrl);
-      setQrIntent(uri);
+      const qrRes = await fetch(`${apiURL}/payments/generate-qr?${params}`);
+      const qrJson = await qrRes.json();
+      if (!qrRes.ok) {
+        throw new Error(qrJson?.message || `HTTP ${qrRes.status}`);
+      }
+      setQrImage(qrJson.qr);
+      setQrIntent(qrJson.intent);
     } catch (e: any) {
       setQrError(e?.message || "Failed to generate QR");
     } finally {
@@ -162,10 +242,10 @@ export function InlineTokenTopUpForm({
     if (!pending) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`${apiURL}/tokens/topup/${pending._id}/mark-paid`, {
-        method: "POST",
-        headers: { ...auth },
-      });
+      const res = await fetch(
+        `${apiURL}/billing-payments/${pending._id}/mark-paid`,
+        { method: "POST", headers: { ...auth } },
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
       setStep("done");
@@ -186,26 +266,61 @@ export function InlineTokenTopUpForm({
     }
   };
 
-  // ----- Step 1: enter quantity ---------------------------------------
-  if (step === "enter_quantity") {
+  // ----- Step 1: pick an event ---------------------------------------
+  if (step === "pick_event") {
+    if (loadingRows) {
+      return (
+        <div className="flex items-center gap-2 text-sm text-slate-500 py-3">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading your outstanding fees…
+        </div>
+      );
+    }
+    if (!rows.length) {
+      return (
+        <div className="rounded-md bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800 flex items-start gap-2">
+          <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+          <div>
+            <div className="font-semibold">All clear — nothing to pay.</div>
+            <div className="text-emerald-700 mt-0.5">
+              You have no outstanding platform fees right now.
+            </div>
+          </div>
+        </div>
+      );
+    }
+    const cur = region?.currency || "USD";
+    const sym = symbolFor(cur);
     return (
       <div className="space-y-3">
         <div className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1">
-          <Coins className="h-3.5 w-3.5" /> Buy tokens
+          <Wallet className="h-3.5 w-3.5" /> Pay platform fees
         </div>
         <div className="space-y-2">
-          <Label className="text-sm">How many tokens?</Label>
-          <Input
-            type="number"
-            min={1}
-            value={tokens}
-            onChange={(e) => setTokens(e.target.value)}
-            placeholder="e.g. 500"
-          />
+          <Label className="text-sm">Which event are you paying for?</Label>
+          <Select
+            value={selectedEventId}
+            onValueChange={setSelectedEventId}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Pick an event…" />
+            </SelectTrigger>
+            <SelectContent>
+              {rows.map((r) => (
+                <SelectItem key={r.eventId} value={r.eventId}>
+                  <span className="font-medium">{r.title}</span>
+                  <span className="text-slate-500 ml-2">
+                    — {sym}
+                    {r.amount.toFixed(2)}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <Button
-          onClick={initiateAndQr}
-          disabled={!tokens || initiating}
+          onClick={() => selectedRow && initiateAndQr(selectedRow.eventId)}
+          disabled={!selectedRow || initiating}
           className="w-full"
         >
           {initiating ? (
@@ -230,19 +345,19 @@ export function InlineTokenTopUpForm({
         <div className="rounded-lg border bg-slate-50 px-3 py-2 flex items-center justify-between">
           <div>
             <div className="text-[10px] uppercase tracking-wide text-slate-500">
-              Tokens
+              Amount due
             </div>
             <div className="text-2xl font-bold text-slate-900">
-              {pending ? pending.tokensRequested : "…"}
+              {sym}
+              {pending ? pending.amount.toFixed(2) : "…"}
             </div>
           </div>
           <div className="text-right">
             <div className="text-[10px] uppercase tracking-wide text-slate-500">
-              Amount
+              Reference
             </div>
-            <div className="text-sm font-semibold text-slate-800">
-              {sym}
-              {pending ? pending.amount.toFixed(2) : "…"}
+            <div className="font-mono text-xs text-slate-700">
+              {pending?.ref || "…"}
             </div>
             <div className="text-[10px] text-slate-500 mt-0.5">
               {pending?.scheme === "UPI"
@@ -266,7 +381,7 @@ export function InlineTokenTopUpForm({
           <div className="flex flex-col items-center gap-2">
             <img
               src={qrImage}
-              alt="Token top-up QR"
+              alt="Platform-fee payment QR"
               className="w-48 h-48 rounded-md border bg-white p-2"
             />
             <p className="text-xs text-slate-600 text-center">
@@ -296,7 +411,7 @@ export function InlineTokenTopUpForm({
         <div className="flex gap-2">
           <Button
             variant="outline"
-            onClick={() => setStep("enter_quantity")}
+            onClick={() => setStep("pick_event")}
             className="flex-1"
             disabled={submitting}
           >
@@ -333,8 +448,8 @@ export function InlineTokenTopUpForm({
           <code className="bg-white border px-1 rounded text-xs">
             {pending?.ref}
           </code>
-          . Once verified, your tokens are credited and a receipt is sent to
-          your email and WhatsApp.
+          . Once verified, your event-fee receipt is sent to your email and
+          WhatsApp.
         </div>
       </div>
     </div>

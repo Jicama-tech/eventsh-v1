@@ -38,7 +38,6 @@ import { AppFeedbackModule } from "./modules/app-feedback/app-feedback.module";
 import { PaymentFeedbackModule } from "./modules/payment-feedback/payment-feedback.module";
 import { SubscriptionsModule } from "./modules/subscriptions/subscriptions.module";
 import { BillingPaymentsModule } from "./modules/billing-payments/billing-payments.module";
-import { TokensModule } from "./modules/tokens/tokens.module";
 import { MembershipsModule } from "./modules/memberships/memberships.module";
 import { RsvpModule } from "./modules/rsvp/rsvp.module";
 import { SuppliersModule } from "./modules/suppliers/suppliers.module";
@@ -76,7 +75,6 @@ import { ExpensesModule } from "./modules/expenses/expenses.module";
     PlansModule,
     SubscriptionsModule,
     BillingPaymentsModule,
-    TokensModule,
     EnquiryModule,
     OrganizerStoresModule,
     CouponModule,

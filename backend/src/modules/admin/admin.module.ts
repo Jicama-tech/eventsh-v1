@@ -15,18 +15,11 @@ import { VendorSchema } from "../stalls/schemas/vendor.schema";
 import { SpeakerRequestSchema } from "../speaker-requests/entities/speaker-request.entity";
 import { OrganizerPaymentSchema } from "./entities/organizer-payment.entity";
 import { PlatformBillingRatesSchema } from "./entities/platform-billing-rates.entity";
-import { OrganizerBillingRateOverrideSchema } from "./entities/organizer-billing-rate-override.entity";
 import { PaymentConfigSchema } from "./entities/payment-config.entity";
 import {
   ExhibitorMembership,
   ExhibitorMembershipSchema,
 } from "../memberships/schemas/exhibitor-membership.schema";
-import { PendingBillingPaymentSchema } from "../billing-payments/entities/pending-billing-payment.entity";
-import { PendingSubscriptionPaymentSchema } from "../subscriptions/entities/pending-subscription-payment.entity";
-import { TokenTopUpRequestSchema } from "../tokens/entities/token-topup-request.entity";
-import { WorkshopBookingSchema } from "../workshop-bookings/entities/workshop-booking.entity";
-import { SponsorRequestSchema } from "../sponsors/entities/sponsor-request.entity";
-import { SupplierRequestSchema } from "../suppliers/entities/supplier-request.entity";
 import { MailModule } from "../roles/mail.module";
 import { MailService } from "../roles/mail.service";
 import { PaymentsModule } from "../payments/payments.module";
@@ -47,27 +40,8 @@ import { PaymentsModule } from "../payments/payments.module";
       { name: "SpeakerRequest", schema: SpeakerRequestSchema },
       { name: "OrganizerPayment", schema: OrganizerPaymentSchema },
       { name: "PlatformBillingRates", schema: PlatformBillingRatesSchema },
-      {
-        name: "OrganizerBillingRateOverride",
-        schema: OrganizerBillingRateOverrideSchema,
-      },
       { name: "PaymentConfig", schema: PaymentConfigSchema },
       { name: ExhibitorMembership.name, schema: ExhibitorMembershipSchema },
-      {
-        name: "PendingBillingPayment",
-        schema: PendingBillingPaymentSchema,
-      },
-      {
-        name: "PendingSubscriptionPayment",
-        schema: PendingSubscriptionPaymentSchema,
-      },
-      {
-        name: "TokenTopUpRequest",
-        schema: TokenTopUpRequestSchema,
-      },
-      { name: "WorkshopBooking", schema: WorkshopBookingSchema },
-      { name: "SponsorRequest", schema: SponsorRequestSchema },
-      { name: "SupplierRequest", schema: SupplierRequestSchema },
     ]),
     MailModule,
     JwtModule.register({

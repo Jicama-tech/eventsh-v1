@@ -617,16 +617,6 @@ export function SettingsPage() {
       });
       return;
     }
-    const vpa = paymentConfig.platformUPIId.trim();
-    if (vpa && !/^[\w.+-]+@[\w.-]+$/.test(vpa)) {
-      toast({
-        duration: 5000,
-        title: "Invalid UPI ID",
-        description: "UPI ID must look like a VPA, e.g. yourname@upi.",
-        variant: "destructive",
-      });
-      return;
-    }
     setIsPaymentLoading(true);
     try {
       const res = await adminFetch(`${__API_URL__}/admin/payment-config`, {
@@ -635,7 +625,6 @@ export function SettingsPage() {
         body: JSON.stringify({
           companyName: paymentConfig.companyName,
           companyUEN: uen,
-          platformUPIId: vpa,
         }),
       });
       if (!res.ok) {
@@ -1102,30 +1091,8 @@ export function SettingsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="paymentPlatformUPIId">
-                    Platform UPI ID (India — UPI)
-                  </Label>
-                  <Input
-                    id="paymentPlatformUPIId"
-                    value={paymentConfig.platformUPIId}
-                    onChange={(e) =>
-                      setPaymentConfig((prev) => ({
-                        ...prev,
-                        platformUPIId: e.target.value.trim(),
-                      }))
-                    }
-                    placeholder="yourname@upi"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Type your UPI ID (VPA) directly — this is used to
-                    generate dynamic UPI QRs (with amount baked in) at
-                    checkout. No QR upload needed.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
                   <Label htmlFor="paymentPlatformUPIQr">
-                    Or upload a UPI QR image instead
+                    Platform UPI QR (India — UPI)
                   </Label>
                   <div className="flex flex-col sm:flex-row gap-4 items-start">
                     {paymentConfig.upiQrImagePath ? (
@@ -1176,9 +1143,19 @@ export function SettingsPage() {
                           </>
                         )}
                       </Button>
+                      {paymentConfig.platformUPIId && (
+                        <div className="text-xs text-muted-foreground">
+                          Decoded VPA:{" "}
+                          <code className="text-slate-700">
+                            {paymentConfig.platformUPIId}
+                          </code>
+                        </div>
+                      )}
                       <p className="text-xs text-muted-foreground">
-                        Uploading a QR overwrites the UPI ID above with
-                        whatever VPA is decoded from the image.
+                        Upload your bank-provided static UPI QR. The VPA is
+                        extracted automatically and used to generate dynamic
+                        QRs (with amount baked in) at checkout — same flow
+                        as the rest of Eventsh.
                       </p>
                     </div>
                   </div>

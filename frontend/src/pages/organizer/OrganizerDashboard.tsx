@@ -41,7 +41,7 @@ import {
   Award,
   ChevronRight,
   ChevronLeft,
-  Coins,
+  Receipt,
 } from "lucide-react";
 import {
   Tooltip,
@@ -1002,8 +1002,8 @@ export function OrganizerDashboard({
     },
     {
       id: "platformFees",
-      label: "Tokens",
-      icon: Coins,
+      label: "Platform Fees",
+      icon: Receipt,
       moduleKey: null,
     },
     {

@@ -37,7 +37,7 @@ import {
   Search,
   RefreshCw,
   Eye,
-  Coins,
+  Receipt,
   Phone,
   Mail,
   Calendar,
@@ -608,9 +608,9 @@ export function OrganizersPage() {
                             size="sm"
                             variant="ghost"
                             onClick={() => setBillingFor(o._id)}
-                            title="View tokens & events"
+                            title="View billing & events"
                           >
-                            <Coins className="h-4 w-4" />
+                            <Receipt className="h-4 w-4" />
                           </Button>
                         </div>
                       </TableCell>
@@ -623,7 +623,7 @@ export function OrganizersPage() {
         </CardContent>
       </Card>
 
-      {/* Token wallet dialog (events + usage + ledger + admin adjust) */}
+      {/* Billing dialog (events + amounts + payment ledger) */}
       <OrganizerBillingDialog
         organizerId={billingFor}
         onClose={() => setBillingFor(null)}

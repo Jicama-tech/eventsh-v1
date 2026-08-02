@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InlineWalkinForm } from "./InlineWalkinForm";
 import {
-  InlineTokenTopUpForm,
-  type TokenTopUpFormPayload,
-} from "./InlineTokenTopUpForm";
+  InlinePlatformFeeForm,
+  type PlatformFeeFormPayload,
+} from "./InlinePlatformFeeForm";
 import EventRsvpPanel from "./EventRsvpPanel";
 import EmailSenderSettings from "./EmailSenderSettings";
 import {
@@ -60,7 +60,7 @@ import {
   CalendarCheck,
   Zap,
   AlertTriangle,
-  Coins,
+  Receipt,
   MessageSquare,
   Copy,
   ExternalLink,
@@ -170,7 +170,7 @@ interface Message {
   quickActions?: QuickAction[];
   eventPicker?: EventPicker;
   walkinForm?: WalkinFormPayload;
-  tokenTopUpForm?: TokenTopUpFormPayload;
+  platformFeeForm?: PlatformFeeFormPayload;
   botAction?: BotAction;
   // Individual-mode rich cards. Rendered inline as part of the chat
   // thread when the bot returns event/participant data.
@@ -727,22 +727,22 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
     prompt: "Show all my organization settings",
   },
 
-  // ========== TOKENS ==========
+  // ========== PLATFORM FEES ==========
   {
-    category: "Tokens",
-    Icon: Coins,
+    category: "Platform Fees",
+    Icon: Receipt,
     tint: "text-amber-700 bg-amber-50",
-    title: "My token balance",
-    sub: "Shared wallet + usage across all events",
-    prompt: "What's my token balance?",
+    title: "What I owe EventSH",
+    sub: "Per-event platform fees + QR checkout",
+    prompt: "How much do I owe EventSH for my events?",
   },
   {
-    category: "Tokens",
-    Icon: Coins,
+    category: "Platform Fees",
+    Icon: Receipt,
     tint: "text-orange-600 bg-orange-50",
-    title: "Buy tokens",
-    sub: "Top up via QR checkout",
-    prompt: "I want to buy tokens",
+    title: "Explain platform fees",
+    sub: "How fees are calculated and paid",
+    prompt: "What are platform fees and how do I pay them?",
   },
 
   // ========== FEEDBACK ==========
@@ -774,11 +774,11 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   },
   {
     category: "Jump to",
-    Icon: Coins,
+    Icon: Receipt,
     tint: "text-amber-700 bg-amber-50",
-    title: "Open Tokens",
-    sub: "Wallet balance + QR top-up",
-    prompt: "Open the tokens tab",
+    title: "Open Platform Fees",
+    sub: "Per-event fees + QR payment",
+    prompt: "Open the platform fees tab",
   },
   {
     category: "Jump to",
@@ -1046,7 +1046,7 @@ const DEFAULT_NAV_ITEMS: NavItem[] = [
   { id: "events", label: "Events", icon: Calendar },
   { id: "kiosk", label: "In-Person Booking", icon: Ticket },
   { id: "eventAttendees", label: "Participants", icon: Users },
-  { id: "platformFees", label: "Tokens", icon: Coins },
+  { id: "platformFees", label: "Platform Fees", icon: Receipt },
   { id: "speakerRequests", label: "Speakers", icon: Mic2 },
   { id: "users", label: "CRM", icon: Building2 },
   { id: "feedback", label: "Feedback", icon: MessageSquare },
@@ -1436,7 +1436,7 @@ export function ChatbotWidget({
           quickActions: data.quickActions,
           eventPicker: data.eventPicker,
           walkinForm: data.walkinForm,
-          tokenTopUpForm: data.tokenTopUpForm,
+          platformFeeForm: data.platformFeeForm,
           botAction: data.botAction,
           events: data.events,
           participants: data.participants,
@@ -2182,10 +2182,10 @@ export function ChatbotWidget({
                     />
                   </div>
                 )}
-                {/* Buy-tokens inline form */}
-                {m.role === "assistant" && m.tokenTopUpForm && (
+                {/* Pay platform-fees inline form */}
+                {m.role === "assistant" && m.platformFeeForm && (
                   <div className="ml-9">
-                    <InlineTokenTopUpForm payload={m.tokenTopUpForm} />
+                    <InlinePlatformFeeForm payload={m.platformFeeForm} />
                   </div>
                 )}
                 {/* Individual: event cards (My Events flow) */}

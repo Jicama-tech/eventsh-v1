@@ -47,7 +47,6 @@ import {
 } from "lucide-react";
 import { useFetchWithLoading } from "@/hooks/useFetchWithLoading";
 import { useToast } from "@/hooks/use-toast";
-import { symbolForCode } from "@/data/currencies";
 
 // Lazy-load tab pages — same pattern as OrganizerDashboard
 const OrganizersPage = lazy(() =>
@@ -102,10 +101,6 @@ interface Stats {
   totalTickets: number;
   totalRevenue: number;
   activeSubscriptions: number;
-  /** Money the platform itself has received (confirmed token top-ups +
-   *  legacy platform-fee payments + subscription payments), split by
-   *  currency — e.g. INR and SGD. */
-  revenueByCurrency: { currency: string; total: number; count: number }[];
 }
 
 const initialStats: Stats = {
@@ -123,7 +118,6 @@ const initialStats: Stats = {
   totalTickets: 0,
   totalRevenue: 0,
   activeSubscriptions: 0,
-  revenueByCurrency: [],
 };
 
 function TabLoader() {
@@ -420,19 +414,6 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       bg: "bg-emerald-50",
       note: "Confirmed payments",
     },
-    // Money the platform itself has received (token top-ups + legacy
-    // platform-fee payments + subscriptions), one card per currency — e.g.
-    // India and Singapore stay separate instead of being added together as
-    // if $1 = ₹1 = S$1.
-    ...(stats.revenueByCurrency || []).map((r) => ({
-      title: `Revenue (${r.currency})`,
-      value: `${symbolForCode(r.currency)}${r.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
-      icon: Receipt,
-      color: "text-teal-600",
-      iconColor: "text-teal-500",
-      bg: "bg-teal-50",
-      note: `${r.count} confirmed payment${r.count === 1 ? "" : "s"}`,
-    })),
     {
       title: "Active Subscriptions",
       value: stats.activeSubscriptions,

@@ -77,86 +77,30 @@ export class AdminController {
   // ===========================================================================
   //  Super-admin billing — rate configuration + per-organizer aggregation.
   // ===========================================================================
-  @Get("billing-rates/plans")
+  @Get("billing-rates")
   @UseGuards(JwtAuthGuard)
-  getBillingRatePlans() {
-    return this.adminService.getBillingRatePlans();
+  getBillingRates() {
+    return this.adminService.getBillingRates();
   }
 
-  @Post("billing-rates/plans")
+  @Patch("billing-rates")
   @UseGuards(JwtAuthGuard)
-  addBillingRatePlan(@Body() body: { countryCode: string }) {
-    return this.adminService.addBillingRatePlan(body?.countryCode);
-  }
-
-  @Patch("billing-rates/plans/:countryCode")
-  @UseGuards(JwtAuthGuard)
-  updateBillingRatePlan(
-    @Param("countryCode") countryCode: string,
+  updateBillingRates(
     @Body()
     body: {
-      moneyInRate?: number;
-      moneyInRateMode?: string;
-      moneyOutRate?: number;
-      moneyOutRateMode?: string;
+      stallRate?: number;
+      roundTableRate?: number;
+      chairRate?: number;
+      speakerRate?: number;
+      membershipRate?: number;
       currency?: string;
     },
     @Req() req: any,
   ) {
-    return this.adminService.updateBillingRatePlan(
-      countryCode,
+    return this.adminService.updateBillingRates(
       body,
       req?.user?.userId || req?.user?.sub,
     );
-  }
-
-  @Delete("billing-rates/plans/:countryCode")
-  @UseGuards(JwtAuthGuard)
-  deleteBillingRatePlan(@Param("countryCode") countryCode: string) {
-    return this.adminService.deleteBillingRatePlan(countryCode);
-  }
-
-  // ---------------------------------------------------------------------------
-  //  Per-organizer billing-rate overrides.
-  // ---------------------------------------------------------------------------
-  @Get("billing-rates/organizers")
-  @UseGuards(JwtAuthGuard)
-  getBillingRateOrganizers() {
-    return this.adminService.getBillingRateOrganizers();
-  }
-
-  @Get("billing-rates/organizer/:organizerId")
-  @UseGuards(JwtAuthGuard)
-  getOrganizerBillingRateOverride(@Param("organizerId") organizerId: string) {
-    return this.adminService.getOrganizerBillingRateOverride(organizerId);
-  }
-
-  @Patch("billing-rates/organizer/:organizerId")
-  @UseGuards(JwtAuthGuard)
-  updateOrganizerBillingRateOverride(
-    @Param("organizerId") organizerId: string,
-    @Body()
-    body: {
-      moneyInRate?: number | null;
-      moneyInRateMode?: string | null;
-      moneyOutRate?: number | null;
-      moneyOutRateMode?: string | null;
-    },
-    @Req() req: any,
-  ) {
-    return this.adminService.updateOrganizerBillingRateOverride(
-      organizerId,
-      body,
-      req?.user?.userId || req?.user?.sub,
-    );
-  }
-
-  @Delete("billing-rates/organizer/:organizerId")
-  @UseGuards(JwtAuthGuard)
-  deleteOrganizerBillingRateOverride(
-    @Param("organizerId") organizerId: string,
-  ) {
-    return this.adminService.deleteOrganizerBillingRateOverride(organizerId);
   }
 
   @Get("payment-config")
@@ -172,7 +116,6 @@ export class AdminController {
     body: {
       companyName?: string;
       companyUEN?: string;
-      platformUPIId?: string;
     },
     @Req() req: any,
   ) {
