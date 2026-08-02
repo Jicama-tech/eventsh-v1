@@ -51,6 +51,8 @@ const EventExpensesDialog = lazy(
   () => import("@/components/organizer/EventExpensesDialog"),
 );
 import { BuyTokensDialog } from "./BuyTokensDialog";
+import { EventFeedbackDialog } from "./EventFeedbackDialog";
+import { RegistrationFormsDialog } from "./RegistrationFormsDialog";
 import type { EventTypeKey } from "@/lib/eventTypes";
 import {
   Plus,
@@ -75,6 +77,8 @@ import {
   Receipt,
   Loader2,
   Coins,
+  ClipboardList,
+  MessageSquare,
 } from "lucide-react";
 import { format } from "date-fns";
 import { jwtDecode } from "jwt-decode";
@@ -109,6 +113,16 @@ export interface Event {
     photography: boolean;
     security: boolean;
     accessibility: boolean;
+    hasStalls?: boolean;
+    hasSpeakers?: boolean;
+    hasRoundTables?: boolean;
+    hasWorkshops?: boolean;
+  };
+  registrationFormFields?: {
+    stall?: Record<string, boolean>;
+    speaker?: Record<string, boolean>;
+    roundTable?: Record<string, boolean>;
+    workshop?: Record<string, boolean>;
   };
   ageRestriction?: string;
   dresscode?: string;
@@ -198,6 +212,7 @@ const MyEvents: React.FC = () => {
   } | null>(null);
   const [tokenEstimateLoading, setTokenEstimateLoading] = useState(false);
   const [buyTokensOpen, setBuyTokensOpen] = useState(false);
+  const [regFormsForEvent, setRegFormsForEvent] = useState<Event | null>(null);
 
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1306,23 +1321,20 @@ const MyEvents: React.FC = () => {
                         {isEventPast(event) ? (
                           <Button
                             variant="buttonOutline"
-                            size="sm"
+                            size="icon"
                             onClick={() => handleDuplicateEvent(event)}
-                            className="flex-1 lg:flex-none"
                             title="Use this past event as a template for a new one"
                           >
-                            <Copy size={16} className="mr-1" />
-                            Duplicate
+                            <Copy size={16} />
                           </Button>
                         ) : (
                           <Button
                             variant="buttonOutline"
-                            size="sm"
+                            size="icon"
                             onClick={() => handleEditEvent(event)}
-                            className="flex-1 lg:flex-none"
+                            title="Edit event"
                           >
-                            <Edit size={16} className="mr-1" />
-                            Edit
+                            <Edit size={16} />
                           </Button>
                         )}
                         <div
@@ -1344,28 +1356,24 @@ const MyEvents: React.FC = () => {
                         </div>
                         <Button
                           variant="buttonOutline"
-                          size="sm"
+                          size="icon"
                           onClick={() => handleShareEvent(event)}
                           disabled={event.published === false}
-                          className="flex-1 lg:flex-none"
                           title={
                             event.published === false
                               ? "Publish the event to share its link"
                               : "Copy or share the public event link"
                           }
                         >
-                          <Share2 size={16} className="mr-1" />
-                          Share
+                          <Share2 size={16} />
                         </Button>
                         <Button
                           variant="buttonOutline"
-                          size="sm"
+                          size="icon"
                           onClick={() => handleShareScannerLink(event)}
-                          className="flex-1 lg:flex-none"
                           title="Copy the operator scanner link to share — operator opens it and signs in with OTP"
                         >
-                          <QrCode size={16} className="mr-1" />
-                          Scanner
+                          <QrCode size={16} />
                         </Button>
                         <Button
                           variant="buttonOutline"
@@ -1400,18 +1408,41 @@ const MyEvents: React.FC = () => {
                           <Receipt size={16} className="mr-1" />
                           Expense
                         </Button>
+                        {(event.features?.hasStalls ||
+                          event.features?.hasSpeakers ||
+                          event.features?.hasRoundTables ||
+                          event.features?.hasWorkshops) && (
+                          <Button
+                            variant="buttonOutline"
+                            size="icon"
+                            onClick={() => setRegFormsForEvent(event)}
+                            title="Registration Forms — choose which fields appear on this event's public application forms"
+                          >
+                            <ClipboardList size={16} />
+                          </Button>
+                        )}
+                        {canCollectFeedback && (
+                          <Button
+                            variant="buttonOutline"
+                            size="icon"
+                            onClick={() => setFeedbackForEvent(event)}
+                            title="Feedback — view ratings + comments and toggle deposit refund status"
+                          >
+                            <MessageSquare size={16} />
+                          </Button>
+                        )}
                         {canDeleteEvents && (
                           <Button
                             variant="buttonOutline"
-                            size="sm"
+                            size="icon"
                             onClick={() => {
                               setDeleteEventTarget(event);
                               setDeleteEventConfirmText("");
                             }}
-                            className="text-red-600 hover:text-red-700 hover:border-red-300 flex-1 lg:flex-none"
+                            className="text-red-600 hover:text-red-700 hover:border-red-300"
+                            title="Delete event"
                           >
-                            <Trash2 size={16} className="mr-1" />
-                            Delete
+                            <Trash2 size={16} />
                           </Button>
                         )}
                       </div>
@@ -1480,6 +1511,13 @@ const MyEvents: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <EventFeedbackDialog
+        eventId={feedbackForEvent?._id ?? null}
+        eventTitle={feedbackForEvent?.title}
+        open={!!feedbackForEvent}
+        onOpenChange={(o) => !o && setFeedbackForEvent(null)}
+      />
 
       {/* Team expenses for the chosen event, with approvals */}
       <Suspense fallback={null}>
@@ -1610,6 +1648,22 @@ const MyEvents: React.FC = () => {
           setBuyTokensOpen(false);
           setTokenEstimateFor(null);
           setTokenEstimate(null);
+        }}
+      />
+
+      <RegistrationFormsDialog
+        event={regFormsForEvent}
+        open={!!regFormsForEvent}
+        onOpenChange={(o) => !o && setRegFormsForEvent(null)}
+        onSaved={(updated) => {
+          setEvents((prev) =>
+            prev.map((e) =>
+              e._id === updated._id
+                ? { ...e, registrationFormFields: updated.registrationFormFields }
+                : e,
+            ),
+          );
+          setRegFormsForEvent(null);
         }}
       />
 

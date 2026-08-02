@@ -472,6 +472,13 @@ export class Event {
     photography: boolean;
     security: boolean;
     accessibility: boolean;
+    // Venue Setup "Event Sections" switches — which category modules this
+    // event uses. Persisted here too (Mixed type accepts extra keys) even
+    // though only the six amenity flags above are declared by default.
+    hasStalls?: boolean;
+    hasSpeakers?: boolean;
+    hasRoundTables?: boolean;
+    hasWorkshops?: boolean;
   };
 
   @Prop()
@@ -520,6 +527,20 @@ export class Event {
   // keep showing everything); explicit `false` hides that section.
   @Prop({ type: Object, default: {} })
   sectionVisibility?: Record<string, boolean>;
+
+  // Per-field visibility on the four public application forms (Stall,
+  // Speaker, Round Table, Workshop). Same "missing key = enabled"
+  // convention as sectionVisibility above. Only fields that aren't
+  // required at the schema/DTO level (or hardcoded required by frontend
+  // validation) are ever toggled off — see
+  // frontend/src/lib/registrationFormFields.ts for the canonical list.
+  @Prop({ type: Object, default: {} })
+  registrationFormFields?: {
+    stall?: Record<string, boolean>;
+    speaker?: Record<string, boolean>;
+    roundTable?: Record<string, boolean>;
+    workshop?: Record<string, boolean>;
+  };
 
   @Prop()
   setupTime?: string;

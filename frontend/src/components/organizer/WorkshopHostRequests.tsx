@@ -16,12 +16,19 @@ import { useToast } from "@/hooks/use-toast";
 import { GraduationCap, Loader2, Eye, Check, X } from "lucide-react";
 import { useCountry } from "@/hooks/useCountry";
 import { useCurrency } from "@/hooks/useCurrencyhook";
+import { isFieldEnabled } from "@/lib/registrationFormFields";
 
 interface WorkshopHostRequestsProps {
   eventId: string;
+  registrationFormFields?: { workshop?: Record<string, boolean> } | null;
 }
 
-const WorkshopHostRequests = ({ eventId }: WorkshopHostRequestsProps) => {
+const WorkshopHostRequests = ({
+  eventId,
+  registrationFormFields,
+}: WorkshopHostRequestsProps) => {
+  const workshopFieldOn = (key: string) =>
+    isFieldEnabled(registrationFormFields, "workshop", key);
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<any>(null);
@@ -419,27 +426,31 @@ const WorkshopHostRequests = ({ eventId }: WorkshopHostRequestsProps) => {
                   {selected.hostName}
                 </p>
                 <p className="text-xs text-gray-500">{selected.hostEmail}</p>
-                {selected.hostPhone && (
+                {workshopFieldOn("hostPhone") && selected.hostPhone && (
                   <p className="text-xs text-gray-500">{selected.hostPhone}</p>
                 )}
-                {selected.hostBio && (
+                {workshopFieldOn("hostBio") && selected.hostBio && (
                   <p className="text-sm text-gray-600 mt-1">
                     {selected.hostBio}
                   </p>
                 )}
               </div>
 
-              {(selected.hostAccountName || selected.hostAccountDetails) && (
+              {((workshopFieldOn("hostAccountName") && selected.hostAccountName) ||
+                (workshopFieldOn("hostAccountDetails") &&
+                  selected.hostAccountDetails)) && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-1">
                   <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">
                     Payout Account
                   </p>
-                  {selected.hostAccountName && (
+                  {workshopFieldOn("hostAccountName") &&
+                    selected.hostAccountName && (
                     <p className="text-sm text-gray-800">
                       {selected.hostAccountName}
                     </p>
                   )}
-                  {selected.hostAccountDetails && (
+                  {workshopFieldOn("hostAccountDetails") &&
+                    selected.hostAccountDetails && (
                     <p className="text-sm text-gray-600">
                       {selected.hostAccountDetails}
                     </p>
@@ -464,7 +475,8 @@ const WorkshopHostRequests = ({ eventId }: WorkshopHostRequestsProps) => {
                 </div>
               )}
 
-              {selected.workshopDescription && (
+              {workshopFieldOn("workshopDescription") &&
+                selected.workshopDescription && (
                 <div className="rounded-lg border p-3">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                     Description

@@ -13,12 +13,22 @@ import { useToast } from "@/hooks/use-toast";
 import { Circle, Download, Loader2, Eye } from "lucide-react";
 import { useCountry } from "@/hooks/useCountry";
 import { useCurrency } from "@/hooks/useCurrencyhook";
+import { isFieldEnabled } from "@/lib/registrationFormFields";
 
 interface RoundTableBookingsProps {
   eventId: string;
+  registrationFormFields?: { roundTable?: Record<string, boolean> } | null;
 }
 
-const RoundTableBookings = ({ eventId }: RoundTableBookingsProps) => {
+const RoundTableBookings = ({
+  eventId,
+  registrationFormFields,
+}: RoundTableBookingsProps) => {
+  const guestDetailsOn = isFieldEnabled(
+    registrationFormFields,
+    "roundTable",
+    "seatGuests",
+  );
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
@@ -409,6 +419,7 @@ const RoundTableBookings = ({ eventId }: RoundTableBookingsProps) => {
               </div>
 
               {/* Guest Details */}
+              {guestDetailsOn && (
               <div className="rounded-lg border p-3 space-y-2">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Guest Details</p>
                 {selectedBooking.seatGuests && selectedBooking.seatGuests.length > 0 ? (
@@ -437,6 +448,7 @@ const RoundTableBookings = ({ eventId }: RoundTableBookingsProps) => {
                   <p className="text-sm text-gray-400 italic">No guest details provided.</p>
                 )}
               </div>
+              )}
 
               {/* Payment & Status */}
               <div className="rounded-lg border p-3 space-y-1">

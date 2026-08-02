@@ -1308,6 +1308,30 @@ export class EventsController {
     }
   }
 
+  @Patch(":id/registration-form-fields")
+  @UseGuards(AuthGuard("jwt"))
+  async setRegistrationFormFields(
+    @Param("id") id: string,
+    @Body("registrationFormFields")
+    registrationFormFields: {
+      stall?: Record<string, boolean>;
+      speaker?: Record<string, boolean>;
+      roundTable?: Record<string, boolean>;
+      workshop?: Record<string, boolean>;
+    },
+  ) {
+    try {
+      const event = await this.eventsService.setRegistrationFormFields(
+        id,
+        registrationFormFields || {},
+      );
+      return { success: true, data: event };
+    } catch (error) {
+      console.error("Error in setRegistrationFormFields:", error);
+      throw error;
+    }
+  }
+
   @Delete(":id")
   @UseGuards(AuthGuard("jwt"))
   async deleteEvent(@Param("id") id: string, @Req() req: any) {

@@ -779,6 +779,17 @@ export class CreateEventDto {
   @IsOptional()
   sectionVisibility?: Record<string, boolean>;
 
+  // Per-field visibility on the four public application forms. Missing
+  // key = enabled, same convention as sectionVisibility above.
+  @IsObject()
+  @IsOptional()
+  registrationFormFields?: {
+    stall?: Record<string, boolean>;
+    speaker?: Record<string, boolean>;
+    roundTable?: Record<string, boolean>;
+    workshop?: Record<string, boolean>;
+  };
+
   @IsString()
   @IsOptional()
   setupTime?: string;

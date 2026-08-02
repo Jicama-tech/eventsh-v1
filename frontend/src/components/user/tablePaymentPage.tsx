@@ -63,6 +63,10 @@ const TablePaymentPage = () => {
   const [mobileId, setMobileId] = useState("");
   const [showQR, setShowQR] = useState(false);
   const [loading, setLoading] = useState(true);
+  // Set when the organizer's uploaded UPI QR image can't be read (load
+  // error, CORS-tainted canvas, or no decodable "pa=" UPI id) so the JSX
+  // can fall back to the plain uploaded QR instead of spinning forever.
+  const [upiExtractFailed, setUpiExtractFailed] = useState(false);
   const [timeLeft, setTimeLeft] = useState(24 * 60 * 60);
   const canvasRef = useRef(null);
   const [upiId, setUpiId] = useState("");
@@ -174,7 +178,13 @@ const TablePaymentPage = () => {
 
       if (result.data) {
         setOrganizer(result.data);
-        setPaymentQRCode(result.data.paymentURL);
+        // Always re-fetch this live rather than trusting orderData.paymentURL
+        // (a snapshot passed via navigation state from the eventfront page) —
+        // if the organizer re-uploads their payment QR after that snapshot
+        // was taken, the stale URL 404s.
+        setPaymentQRCode(
+          result.data.paymentURL ? apiURL + result.data.paymentURL : null,
+        );
         setPaymentStatus("ready");
         setDynamicQR(result?.data?.dynamicQR);
         setMobileId(result?.data?.phone);
@@ -443,16 +453,22 @@ const TablePaymentPage = () => {
   }
 
   async function extractUpiFromImage() {
-    if (!orderData?.paymentURL || upiId) return;
+    if (!paymentQRCode || upiId) return;
 
     try {
       setLoading(true);
+      setUpiExtractFailed(false);
       const img = new Image();
       img.crossOrigin = "anonymous";
-      img.src = orderData?.paymentURL;
+      img.src = paymentQRCode;
 
-      await new Promise((resolve) => {
+      // Without an onerror handler (or a timeout) a failed/slow image load
+      // leaves this promise pending forever — the "Generating Payment QR…"
+      // spinner would never resolve. Race the load against both.
+      await new Promise((resolve, reject) => {
         img.onload = resolve;
+        img.onerror = () => reject(new Error("Payment QR image failed to load"));
+        setTimeout(() => reject(new Error("Payment QR image load timed out")), 10000);
       });
 
       const canvas = document.createElement("canvas");
@@ -464,27 +480,31 @@ const TablePaymentPage = () => {
       const imageData = ctx?.getImageData(0, 0, canvas.width, canvas.height);
       const code = jsQR(imageData?.data, imageData?.width, imageData?.height);
 
-      if (code?.data?.startsWith("upi://pay")) {
-        const params = new URLSearchParams(code.data.replace("upi://pay?", ""));
-        const extractedUpi = params.get("pa");
+      const extractedUpi =
+        code?.data?.startsWith("upi://pay")
+          ? new URLSearchParams(code.data.replace("upi://pay?", "")).get("pa")
+          : null;
 
-        if (extractedUpi) {
-          setUpiId(extractedUpi);
-        }
+      if (extractedUpi) {
+        setUpiId(extractedUpi);
+      } else {
+        setUpiExtractFailed(true);
       }
-      setLoading(false);
     } catch (error) {
       console.error("❌ QR decode failed:", error);
+      setUpiExtractFailed(true);
+    } finally {
+      setLoading(false);
     }
   }
 
   async function extractUenFromImage() {
-    if (!orderData?.paymentURL || uenId) return;
+    if (!paymentQRCode || uenId) return;
 
     try {
       const img = new Image();
       img.crossOrigin = "anonymous";
-      img.src = orderData?.paymentURL;
+      img.src = paymentQRCode;
 
       await new Promise((resolve, reject) => {
         img.onload = resolve;
@@ -583,7 +603,7 @@ const TablePaymentPage = () => {
 
   useEffect(() => {
     const loadPaymentData = async () => {
-      if (orderData.paymentURL && !upiId && country === "IN") {
+      if (paymentQRCode && !upiId && country === "IN") {
         extractUpiFromImage();
       }
       if (country === "SG" && mobileId && AmountToBePaid) {
@@ -593,7 +613,7 @@ const TablePaymentPage = () => {
     };
     loadPaymentData();
   }, [
-    orderData?.paymentURL,
+    paymentQRCode,
     upiId,
     country,
     mobileId,
@@ -619,7 +639,7 @@ const TablePaymentPage = () => {
   }, [upiId, AmountToBePaid, uenId, country, showQR]); // Added showQR to dependencies
 
   async function handleDownload() {
-    if (!orderData?.paymentURL) {
+    if (!paymentQRCode) {
       toast({
         duration: 5000,
         title: "No QR code available",
@@ -628,7 +648,7 @@ const TablePaymentPage = () => {
       return;
     }
     try {
-      const response = await fetch(orderData?.paymentURL);
+      const response = await fetch(paymentQRCode);
       if (!response.ok) {
         throw new Error("Failed to fetch image for download.");
       }
@@ -1082,6 +1102,22 @@ const TablePaymentPage = () => {
                         </p> */}
                               </div>
                             </div>
+                          ) : upiExtractFailed && paymentQRCode ? (
+                            // The organizer's QR image couldn't be decoded
+                            // (load error, CORS, or unreadable UPI id) — fall
+                            // back to the plain uploaded QR rather than
+                            // leaving the user stuck on a spinner forever.
+                            <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-xl shadow-lg border-2 border-blue-200">
+                              <img
+                                src={paymentQRCode}
+                                alt="Payment QR Code"
+                                className="w-72 h-72 object-contain"
+                              />
+                              <p className="text-sm text-gray-600 text-center">
+                                Scan this QR with any UPI app and enter the
+                                amount {formatPrice(AmountToBePaid)} manually.
+                              </p>
+                            </div>
                           ) : (
                             <div className="flex justify-center animate-pulse">
                               <div className="w-72 h-72 bg-gray-100 rounded-xl border-4 border-dashed border-gray-300 flex items-center justify-center">
@@ -1096,9 +1132,9 @@ const TablePaymentPage = () => {
                       )}{" "}
                       {!dynamicQR && country === "IN" && (
                         <div>
-                          {!dynamicQR && orderData?.paymentURL ? (
+                          {!dynamicQR && paymentQRCode ? (
                             <img
-                              src={orderData?.paymentURL}
+                              src={paymentQRCode}
                               alt="Payment QR Code"
                               className="mx-auto w-72 h-72 object-contain"
                             />
@@ -1164,9 +1200,9 @@ const TablePaymentPage = () => {
                       )}
                       {!dynamicQR && country === "SG" && (
                         <div>
-                          {!dynamicQR && orderData?.paymentURL ? (
+                          {!dynamicQR && paymentQRCode ? (
                             <img
-                              src={orderData?.paymentURL}
+                              src={paymentQRCode}
                               alt="Payment QR Code"
                               className="mx-auto w-72 h-72 object-contain"
                             />
@@ -1242,7 +1278,7 @@ const TablePaymentPage = () => {
                     <Button
                       onClick={handleDownload}
                       variant="outline"
-                      disabled={!orderData?.paymentURL}
+                      disabled={!paymentQRCode}
                       className="flex-1"
                     >
                       <Download className="mr-2 h-5 w-5" />
