@@ -225,6 +225,9 @@ export interface ExhibitorDetailDialogProps {
   /** When provided, shows the "Deposit Returned" button after checkout
    * (organizer only — volunteers can view but not return deposits). */
   onReturnDeposit?: (stall: StallRequest) => void;
+  /** When provided AND the stall is Cancelled via timer-expiry or manual
+   * delete, shows the "Restore Stall" button (organizer only). */
+  onRestoreStall?: (stall: StallRequest) => void;
   /** When provided, shows the "Share as PDF" footer button. */
   onSharePDF?: () => void;
   /** Drives the loading state of the PDF button. */
@@ -250,6 +253,7 @@ export function ExhibitorDetailDialog({
   onConfirmAmendment,
   onDecideCancellation,
   onReturnDeposit,
+  onRestoreStall,
   onSharePDF,
   isGeneratingPDF,
   onNoteAdded,
@@ -1903,6 +1907,22 @@ export function ExhibitorDetailDialog({
                         </div>
                       </div>
                     )}
+                    {onRestoreStall &&
+                      stallRequest.status === "Cancelled" &&
+                      ["auto-timeout", "manual-delete"].includes(
+                        stallRequest.cancelledVia || "",
+                      ) && (
+                        <div className="flex justify-between gap-3">
+                          <div>
+                            <button
+                              className="bg-primary px-4 py-2 rounded text-white"
+                              onClick={() => onRestoreStall(stallRequest)}
+                            >
+                              Restore Stall
+                            </button>
+                          </div>
+                        </div>
+                      )}
                   </div>
                 )}
               </CardContent>

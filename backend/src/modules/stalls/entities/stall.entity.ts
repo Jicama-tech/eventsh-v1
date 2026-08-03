@@ -296,6 +296,17 @@ export class Stall {
   @Prop()
   cancellationReason?: string;
 
+  // Which code path cancelled this stall (only set when status === "Cancelled").
+  // Drives Restore eligibility — only "auto-timeout" / "manual-delete" stalls can
+  // be restored from the admin UI; organizer-approved vendor cancellations and
+  // plain status-updates have side effects (refund promises, zeroed coupons)
+  // that a blind restore shouldn't undo.
+  @Prop({
+    type: String,
+    enum: ["auto-timeout", "manual-delete", "status-update", "organizer-decision"],
+  })
+  cancelledVia?: string;
+
   // Auto-managed timestamps
   @Prop({ default: Date.now })
   createdAt: Date;

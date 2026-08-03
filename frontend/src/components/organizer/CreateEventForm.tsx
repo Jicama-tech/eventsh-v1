@@ -3242,6 +3242,9 @@ interface VenueDesignerProps {
   >;
   /** Event-level add-ons (id → color/name). Used to color the dots. */
   addOnItems?: AddOnItem[];
+  /** Whether space prices show on the eventfront venue-map tooltip + legend. */
+  showSpacePricesOnEventfront: boolean;
+  setShowSpacePricesOnEventfront: (v: boolean) => void;
 }
 
 // Wraps the venue design surface. When `active`, it renders full-screen
@@ -3422,6 +3425,8 @@ const VenueDesigner = ({
   setVenueDoors,
   stallBookings,
   addOnItems,
+  showSpacePricesOnEventfront,
+  setShowSpacePricesOnEventfront,
 }: VenueDesignerProps) => {
   const { toast } = useToast();
   const [isDragging, setIsDragging] = useState(false);
@@ -4868,6 +4873,33 @@ const VenueDesigner = ({
               }`}
             >
               {venueConfig?.published !== false ? "Published" : "Hidden"}
+            </Label>
+          </div>
+          {/* Event-wide (not per-venue) — controls whether space prices show
+              in the eventfront venue-map tooltip AND whether the
+              space-template color legend appears below the map. */}
+          <div
+            className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 ${
+              showSpacePricesOnEventfront
+                ? "border-emerald-300 bg-emerald-50"
+                : "border-gray-300 bg-gray-50"
+            }`}
+            title="When on, spaces show their price in the eventfront hover tooltip and a color legend appears below the venue map"
+          >
+            <Switch
+              id="show-space-prices-toggle"
+              checked={showSpacePricesOnEventfront}
+              onCheckedChange={setShowSpacePricesOnEventfront}
+            />
+            <Label
+              htmlFor="show-space-prices-toggle"
+              className={`text-xs font-semibold cursor-pointer ${
+                showSpacePricesOnEventfront
+                  ? "text-emerald-700"
+                  : "text-gray-500"
+              }`}
+            >
+              Display price on eventfront
             </Label>
           </div>
           <Button
@@ -6627,6 +6659,10 @@ export function CreateEventForm({
   const [maxSpacesPerVendor, setMaxSpacesPerVendor] = useState<string>("1");
   const [autoGenerateVendorCoupon, setAutoGenerateVendorCoupon] =
     useState(true);
+  // Controls whether space prices show in the eventfront venue-map tooltip
+  // and whether the space-template color legend appears below the map.
+  const [showSpacePricesOnEventfront, setShowSpacePricesOnEventfront] =
+    useState(true);
 
   // Add freshly picked sponsor logo files (multiple, no limit).
   const handleSponsorUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -7612,6 +7648,11 @@ export function CreateEventForm({
       }
       if (initialData.autoGenerateVendorCoupon != null) {
         setAutoGenerateVendorCoupon(initialData.autoGenerateVendorCoupon);
+      }
+      if (initialData.showSpacePricesOnEventfront != null) {
+        setShowSpacePricesOnEventfront(
+          initialData.showSpacePricesOnEventfront,
+        );
       }
       if (initialData.tableTemplates) {
         setTableTemplates(initialData.tableTemplates);
@@ -8829,6 +8870,10 @@ export function CreateEventForm({
       data.append(
         "autoGenerateVendorCoupon",
         autoGenerateVendorCoupon ? "true" : "false",
+      );
+      data.append(
+        "showSpacePricesOnEventfront",
+        showSpacePricesOnEventfront ? "true" : "false",
       );
       sponsorLogos.forEach((s) => {
         if (s.file) data.append("sponsorLogos", s.file);
@@ -13096,6 +13141,10 @@ export function CreateEventForm({
                   setVenueDoors={setVenueDoors}
                   stallBookings={stallBookings}
                   addOnItems={addOnItems}
+                  showSpacePricesOnEventfront={showSpacePricesOnEventfront}
+                  setShowSpacePricesOnEventfront={
+                    setShowSpacePricesOnEventfront
+                  }
                 />
               </BlurOverlay>
             </ModuleGate>

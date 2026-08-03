@@ -620,6 +620,12 @@ export class Event {
   @Prop({ default: true })
   autoGenerateVendorCoupon?: boolean;
 
+  // When false, hides space prices from the eventfront venue-map tooltip AND
+  // hides the space-template color legend below the map. Defaults to true
+  // (existing behavior — prices always shown) so this is non-breaking.
+  @Prop({ default: true })
+  showSpacePricesOnEventfront?: boolean;
+
   // Exhibition/Venue fields with ROW-BASED PRICING
   @Prop({ type: Array, default: [] })
   tableTemplates: {

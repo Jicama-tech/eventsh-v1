@@ -828,6 +828,12 @@ export class CreateEventDto {
   @IsOptional()
   autoGenerateVendorCoupon?: boolean;
 
+  // When false, hides space prices + the space-template legend on the
+  // eventfront venue map.
+  @IsBoolean()
+  @IsOptional()
+  showSpacePricesOnEventfront?: boolean;
+
   // Instagram reel URLs — capped client-side at 10; surfaced as a
   // reel carousel on the eventfront. Loose string validation here so
   // organizers can paste any Instagram link format.
