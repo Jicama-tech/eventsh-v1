@@ -120,12 +120,12 @@ interface SponsorHistory {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  Applied: "bg-amber-100 text-amber-700",
-  Approved: "bg-blue-100 text-blue-700",
-  "Payment Submitted": "bg-purple-100 text-purple-700",
-  Confirmed: "bg-green-100 text-green-700",
-  Rejected: "bg-red-100 text-red-700",
-  Cancelled: "bg-stone-200 text-stone-600",
+  Applied: "bg-warning/15 text-warning",
+  Approved: "bg-primary/15 text-primary",
+  "Payment Submitted": "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+  Confirmed: "bg-success/15 text-success",
+  Rejected: "bg-destructive/15 text-destructive",
+  Cancelled: "bg-muted text-muted-foreground",
 };
 
 function currencySymbol(country?: string): string {
@@ -603,7 +603,7 @@ export default function SponsorsDirectory() {
                           <Button
                             variant="outline"
                             size="icon"
-                            className="text-red-500 hover:text-red-600"
+                            className="text-destructive hover:text-destructive"
                             onClick={() => {
                               setDeleteError(null);
                               setConfirmDelete(s);
@@ -644,7 +644,7 @@ export default function SponsorsDirectory() {
           </AlertDialogHeader>
 
           {deleteError && (
-            <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+            <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
               {deleteError}
             </p>
           )}
@@ -658,7 +658,7 @@ export default function SponsorsDirectory() {
                 confirmRemove();
               }}
               disabled={!!deletingId}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-destructive hover:bg-destructive/90"
             >
               {deletingId && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Remove
@@ -899,7 +899,7 @@ export default function SponsorsDirectory() {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="text-muted-foreground hover:text-red-600"
+                    className="text-muted-foreground hover:text-destructive"
                     onClick={() => pickLogo(null)}
                     title="Clear selection"
                   >

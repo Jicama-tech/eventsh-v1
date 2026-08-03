@@ -103,14 +103,14 @@ interface SupplierHistory {
 }
 
 const QUOTE_STATUS_STYLES: Record<string, string> = {
-  Quoted: "bg-amber-100 text-amber-700",
-  Approved: "bg-blue-100 text-blue-700",
-  Negotiating: "bg-purple-100 text-purple-700",
-  "Partially Paid": "bg-teal-100 text-teal-700",
-  Paid: "bg-green-100 text-green-700",
-  Completed: "bg-green-100 text-green-700",
-  Rejected: "bg-red-100 text-red-700",
-  Cancelled: "bg-stone-200 text-stone-600",
+  Quoted: "bg-warning/15 text-warning",
+  Approved: "bg-primary/15 text-primary",
+  Negotiating: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+  "Partially Paid": "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300",
+  Paid: "bg-success/15 text-success",
+  Completed: "bg-success/15 text-success",
+  Rejected: "bg-destructive/15 text-destructive",
+  Cancelled: "bg-muted text-muted-foreground",
 };
 
 function currencySymbol(country?: string): string {
@@ -539,7 +539,7 @@ export default function SuppliersDirectory() {
                         <Button
                           variant="buttonOutline"
                           size="sm"
-                          className="text-red-500 hover:text-red-600"
+                          className="text-destructive hover:text-destructive"
                           onClick={() => {
                             setDeleteError(null);
                             setConfirmDelete(s);
@@ -591,7 +591,7 @@ export default function SuppliersDirectory() {
           </AlertDialogHeader>
 
           {deleteError && (
-            <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+            <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
               {deleteError}
             </p>
           )}
@@ -605,7 +605,7 @@ export default function SuppliersDirectory() {
                 confirmRemove();
               }}
               disabled={!!deletingId}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-destructive hover:bg-destructive/90"
             >
               {deletingId && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Remove
@@ -755,16 +755,16 @@ export default function SuppliersDirectory() {
           {bulkResult && (
             <div className="space-y-3 text-sm">
               <div className="flex flex-wrap gap-2">
-                <Badge className="bg-green-100 text-green-700 hover:bg-transparent">
+                <Badge className="bg-success/15 text-success hover:bg-transparent">
                   {bulkResult.created} created
                 </Badge>
-                <Badge className="bg-blue-100 text-blue-700 hover:bg-transparent">
+                <Badge className="bg-primary/15 text-primary hover:bg-transparent">
                   {bulkResult.updated || 0} updated
                 </Badge>
-                <Badge className="bg-amber-100 text-amber-700 hover:bg-transparent">
+                <Badge className="bg-warning/15 text-warning hover:bg-transparent">
                   {bulkResult.skipped} skipped
                 </Badge>
-                <Badge className="bg-red-100 text-red-700 hover:bg-transparent">
+                <Badge className="bg-destructive/15 text-destructive hover:bg-transparent">
                   {bulkResult.errors} errors
                 </Badge>
               </div>
@@ -782,7 +782,7 @@ export default function SuppliersDirectory() {
               )}
               {!!bulkResult.errorRows?.length && (
                 <div>
-                  <p className="font-medium text-red-600">Errors</p>
+                  <p className="font-medium text-destructive">Errors</p>
                   <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
                     {bulkResult.errorRows.slice(0, 20).map((r, i) => (
                       <li key={i}>
@@ -944,7 +944,7 @@ function SupplierFormDialog({
               placeholder="Contact person's name"
             />
             {errors.name && (
-              <span className="text-xs text-red-600">{errors.name}</span>
+              <span className="text-xs text-destructive">{errors.name}</span>
             )}
           </div>
 
@@ -975,7 +975,7 @@ function SupplierFormDialog({
               placeholder="supplier@gmail.com"
             />
             {errors.email && (
-              <span className="text-xs text-red-600">{errors.email}</span>
+              <span className="text-xs text-destructive">{errors.email}</span>
             )}
           </div>
 
@@ -988,7 +988,7 @@ function SupplierFormDialog({
               placeholder="contact@company.com"
             />
             {errors.businessEmail && (
-              <span className="text-xs text-red-600">
+              <span className="text-xs text-destructive">
                 {errors.businessEmail}
               </span>
             )}
@@ -1020,7 +1020,7 @@ function SupplierFormDialog({
               />
             </div>
             {errors.phone && (
-              <span className="text-xs text-red-600">{errors.phone}</span>
+              <span className="text-xs text-destructive">{errors.phone}</span>
             )}
           </div>
 
