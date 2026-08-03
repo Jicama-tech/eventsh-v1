@@ -119,9 +119,9 @@ function DownloadableImage({
 
 const getPaymentBadge = (paymentStatus: string) => {
   const variants: Record<string, { variant: any; color: string }> = {
-    Unpaid: { variant: "destructive", color: "text-red-600" },
-    Partial: { variant: "secondary", color: "text-yellow-600" },
-    Paid: { variant: "default", color: "text-green-600" },
+    Unpaid: { variant: "destructive", color: "text-destructive" },
+    Partial: { variant: "secondary", color: "text-warning" },
+    Paid: { variant: "default", color: "text-success" },
   };
   const config = variants[paymentStatus] || variants.Unpaid;
   return <Badge variant={config.variant}>{paymentStatus}</Badge>;
@@ -166,7 +166,7 @@ function ConfirmationCountdown({
   const ms = end - now;
   if (ms <= 0) {
     return (
-      <div className="flex items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+      <div className="flex items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm font-semibold text-destructive">
         <span>
           ⏳ Confirmation window elapsed — this space will be auto-released
           shortly.
@@ -185,8 +185,8 @@ function ConfirmationCountdown({
     <div
       className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm font-semibold ${
         urgent
-          ? "border-red-200 bg-red-50 text-red-700"
-          : "border-amber-200 bg-amber-50 text-amber-700"
+          ? "border-destructive/30 bg-destructive/10 text-destructive"
+          : "border-warning/30 bg-warning/10 text-warning"
       }`}
     >
       <span>
@@ -597,7 +597,7 @@ export function ExhibitorDetailDialog({
                             type="button"
                             size="sm"
                             variant="buttonOutline"
-                            className="h-7 border-amber-300 bg-white px-2 text-xs text-amber-800 hover:bg-amber-100"
+                            className="h-7 border-warning/40 bg-card px-2 text-xs text-warning hover:bg-warning/15"
                             onClick={() => setExtendDialogOpen(true)}
                           >
                             <Clock className="mr-1 h-3.5 w-3.5" />
@@ -607,7 +607,7 @@ export function ExhibitorDetailDialog({
                             type="button"
                             size="sm"
                             variant="buttonOutline"
-                            className="h-7 border-red-200 bg-white px-2 text-xs text-red-600 hover:bg-red-50"
+                            className="h-7 border-destructive/30 bg-card px-2 text-xs text-destructive hover:bg-destructive/10"
                             disabled={isRemovingHold}
                             onClick={handleRemoveHold}
                             title="Turn the hold timer off"
@@ -627,8 +627,8 @@ export function ExhibitorDetailDialog({
                   )}
                   {!(stallRequest as any).confirmationDeadline &&
                     stallRequest.status === "Processing" && (
-                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
-                        <span className="text-xs text-amber-800">
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2">
+                        <span className="text-xs text-warning">
                           Vendor needs more time to pay? Hold this space with a
                           timer — it auto-releases if unpaid by then.
                         </span>
@@ -636,7 +636,7 @@ export function ExhibitorDetailDialog({
                           type="button"
                           size="sm"
                           variant="buttonOutline"
-                          className="h-7 shrink-0 border-amber-300 bg-white px-2 text-xs text-amber-800 hover:bg-amber-100"
+                          className="h-7 shrink-0 border-warning/40 bg-card px-2 text-xs text-warning hover:bg-warning/15"
                           onClick={() => setStartHoldOpen(true)}
                         >
                           <Clock className="mr-1 h-3.5 w-3.5" />
@@ -644,14 +644,14 @@ export function ExhibitorDetailDialog({
                         </Button>
                       </div>
                     )}
-                  <Card className="border-blue-200 bg-blue-50/50">
+                  <Card className="border-primary/30 bg-primary/5">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-semibold text-sm text-blue-900">
+                        <p className="font-semibold text-sm text-primary">
                           Payment Confirmation Required
                         </p>
-                        <p className="text-xs text-blue-700 mt-0.5">
+                        <p className="text-xs text-primary mt-0.5">
                           Grand Total:{" "}
                           <span className="font-bold">
                             {formatPrice(stallRequest.grandTotal)}
@@ -675,7 +675,7 @@ export function ExhibitorDetailDialog({
                       </div>
                       <Button
                         size="sm"
-                        className="bg-blue-600 hover:bg-blue-700"
+                        className="bg-primary hover:bg-primary/90"
                         onClick={() => onConfirmPayment(stallRequest)}
                       >
                         <CreditCard className="h-3.5 w-3.5 mr-1.5" />
@@ -695,35 +695,35 @@ export function ExhibitorDetailDialog({
               (() => {
                 const pa: any = (stallRequest as any).pendingAmendment;
                 return (
-                  <Card className="border-amber-300 bg-amber-50">
+                  <Card className="border-warning/40 bg-warning/10">
                     <CardContent className="p-4 space-y-3">
                       <div className="flex items-center gap-2">
-                        <AlertCircle className="h-4 w-4 text-amber-700" />
-                        <p className="font-semibold text-sm text-amber-900">
+                        <AlertCircle className="h-4 w-4 text-warning" />
+                        <p className="font-semibold text-sm text-warning">
                           Vendor edited this request
                         </p>
-                        <Badge className="bg-amber-200 text-amber-800">
+                        <Badge className="bg-warning/20 text-warning">
                           Approval needed
                         </Badge>
                       </div>
-                      <div className="rounded-lg border border-amber-200 bg-white p-3 text-sm space-y-2">
+                      <div className="rounded-lg border border-warning/30 bg-card p-3 text-sm space-y-2">
                         <div className="flex justify-between">
-                          <span className="text-gray-500">Operators</span>
+                          <span className="text-muted-foreground">Operators</span>
                           <span className="font-medium">
                             {(stallRequest as any).noOfOperators || "—"} →{" "}
-                            <span className="text-amber-700 font-bold">
+                            <span className="text-warning font-bold">
                               {pa.noOfOperators}
                             </span>
                           </span>
                         </div>
                         <div>
-                          <span className="text-gray-500">Updated add-ons</span>
+                          <span className="text-muted-foreground">Updated add-ons</span>
                           <ul className="mt-1 space-y-0.5">
                             {(pa.selectedAddOns || []).map(
                               (a: any, i: number) => (
                                 <li
                                   key={i}
-                                  className="flex justify-between text-gray-700"
+                                  className="flex justify-between text-foreground"
                                 >
                                   <span>
                                     {a.name} × {a.quantity}
@@ -738,17 +738,17 @@ export function ExhibitorDetailDialog({
                             )}
                           </ul>
                         </div>
-                        <div className="flex justify-between border-t border-amber-100 pt-2">
-                          <span className="text-gray-500">
+                        <div className="flex justify-between border-t border-warning/20 pt-2">
+                          <span className="text-muted-foreground">
                             Difference paid by vendor
                           </span>
-                          <span className="font-bold text-green-700">
+                          <span className="font-bold text-success">
                             {formatPrice(pa.amountDue || 0)}
                           </span>
                         </div>
                         {pa.transactionId && (
                           <div className="flex justify-between">
-                            <span className="text-gray-500">Transaction ID</span>
+                            <span className="text-muted-foreground">Transaction ID</span>
                             <span className="font-mono text-xs">
                               {pa.transactionId}
                             </span>
@@ -759,20 +759,20 @@ export function ExhibitorDetailDialog({
                             href={`${apiURL.replace(/\/$/, "")}${pa.transactionScreenshot}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-xs text-blue-600 underline"
+                            className="text-xs text-primary underline"
                           >
                             View payment screenshot
                           </a>
                         )}
                       </div>
                       <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs text-amber-700">
+                        <p className="text-xs text-warning">
                           Approving applies the changes, re-issues a new QR to the
                           vendor by email, and invalidates the old QR.
                         </p>
                         <Button
                           size="sm"
-                          className="bg-amber-600 hover:bg-amber-700 shrink-0"
+                          className="bg-warning hover:bg-warning/90 shrink-0"
                           onClick={() => onConfirmAmendment(stallRequest)}
                         >
                           <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
@@ -789,26 +789,26 @@ export function ExhibitorDetailDialog({
             {onDecideCancellation &&
               (stallRequest as any).pendingCancellation?.status ===
                 "requested" && (
-                <Card className="border-red-300 bg-red-50">
+                <Card className="border-destructive/40 bg-destructive/10">
                   <CardContent className="p-4 space-y-3">
                     <div className="flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4 text-red-700" />
-                      <p className="font-semibold text-sm text-red-900">
+                      <AlertCircle className="h-4 w-4 text-destructive" />
+                      <p className="font-semibold text-sm text-destructive">
                         Vendor requested cancellation
                       </p>
-                      <Badge className="bg-red-200 text-red-800">
+                      <Badge className="bg-destructive/20 text-destructive">
                         Decision needed
                       </Badge>
                     </div>
-                    <div className="rounded-lg border border-red-200 bg-white p-3 text-sm">
-                      <p className="text-xs text-gray-500">Reason</p>
-                      <p className="text-gray-800">
+                    <div className="rounded-lg border border-destructive/30 bg-card p-3 text-sm">
+                      <p className="text-xs text-muted-foreground">Reason</p>
+                      <p className="text-foreground">
                         {(stallRequest as any).pendingCancellation?.reason ||
                           "—"}
                       </p>
                     </div>
                     <div>
-                      <Label className="text-xs text-gray-600">
+                      <Label className="text-xs text-muted-foreground">
                         Note to vendor (e.g. when the refund will be returned) —
                         emailed to them
                       </Label>
@@ -821,7 +821,7 @@ export function ExhibitorDetailDialog({
                       />
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs text-red-700">
+                      <p className="text-xs text-destructive">
                         Approving frees the space and invalidates the QR.
                       </p>
                       <div className="flex gap-2">
@@ -841,7 +841,7 @@ export function ExhibitorDetailDialog({
                         </Button>
                         <Button
                           size="sm"
-                          className="bg-red-600 hover:bg-red-700"
+                          className="bg-destructive hover:bg-destructive/90"
                           onClick={() => {
                             onDecideCancellation(stallRequest, true, cancelNote);
                             setCancelNote("");
@@ -859,36 +859,36 @@ export function ExhibitorDetailDialog({
             {/* Transaction Verification Details */}
             {((stallRequest as any).transactionId ||
               (stallRequest as any).transactionScreenshot) && (
-              <Card className="border-amber-200 bg-amber-50/50">
+              <Card className="border-warning/30 bg-warning/10">
                 <CardContent className="p-4 space-y-3">
-                  <p className="font-semibold text-sm text-amber-900 flex items-center gap-2">
+                  <p className="font-semibold text-sm text-warning flex items-center gap-2">
                     <CreditCard className="h-4 w-4" />
                     Transaction Details from Vendor
                   </p>
                   {(stallRequest as any).transactionId && (
                     <div>
-                      <p className="text-xs text-amber-700">
+                      <p className="text-xs text-warning">
                         Transaction ID / Reference
                       </p>
-                      <p className="font-mono font-bold text-sm text-gray-800 bg-white rounded px-3 py-1.5 border border-amber-200 mt-1">
+                      <p className="font-mono font-bold text-sm text-foreground bg-background rounded px-3 py-1.5 border border-warning/30 mt-1">
                         {(stallRequest as any).transactionId}
                       </p>
                     </div>
                   )}
                   {(stallRequest as any).transactionScreenshot && (
                     <div>
-                      <p className="text-xs text-amber-700 mb-1">
+                      <p className="text-xs text-warning mb-1">
                         Payment Screenshot
                       </p>
                       <DownloadableImage
                         path={(stallRequest as any).transactionScreenshot}
                         alt="Transaction Screenshot"
-                        className="max-w-xs max-h-60 rounded-lg border border-amber-200 shadow-sm"
+                        className="max-w-xs max-h-60 rounded-lg border border-warning/30 shadow-sm"
                       />
                     </div>
                   )}
                   {(stallRequest as any).paymentMethod && (
-                    <p className="text-xs text-amber-700">
+                    <p className="text-xs text-warning">
                       Payment Method:{" "}
                       <span className="font-semibold capitalize">
                         {(stallRequest as any).paymentMethod === "bank"
@@ -902,12 +902,12 @@ export function ExhibitorDetailDialog({
             )}
 
             {stallRequest.paymentStatus === "Paid" && (
-              <Card className="border-green-200 bg-green-50/50">
+              <Card className="border-success/30 bg-success/10">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                      <p className="font-semibold text-sm text-green-800">
+                      <CheckCircle className="h-4 w-4 text-success" />
+                      <p className="font-semibold text-sm text-success">
                         Payment Confirmed — QR ticket generated and sent to
                         vendor
                       </p>
@@ -951,7 +951,7 @@ export function ExhibitorDetailDialog({
                     </div>
                   </div>
                   {canManage && (
-                    <p className="mt-2 text-xs text-green-700/80">
+                    <p className="mt-2 text-xs text-success/80">
                       Didn't arrive? Re-send the QR ticket email to the vendor.
                       Missing a transaction ID or screenshot? Add it without
                       affecting the confirmed payment.
@@ -974,7 +974,7 @@ export function ExhibitorDetailDialog({
                     <DownloadableImage
                       path={stallRequest.companyLogo}
                       alt="Company Logo"
-                      className="w-16 h-16 rounded-md object-contain border bg-gray-50"
+                      className="w-16 h-16 rounded-md object-contain border bg-muted"
                     />
                     <div>
                       <p className="font-bold text-lg">
@@ -995,7 +995,7 @@ export function ExhibitorDetailDialog({
                     {stallRequest.shopkeeperId?.hasDocVerification && (
                       <Badge
                         variant="outline"
-                        className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] h-5"
+                        className="bg-primary/10 text-primary border-primary/30 text-[10px] h-5"
                       >
                         Verified
                       </Badge>
@@ -1020,7 +1020,7 @@ export function ExhibitorDetailDialog({
                     <p className="font-medium">
                       <a
                         href={`mailto:${stallRequest.shopkeeperId?.email}`}
-                        className="text-blue-600 hover:underline block truncate"
+                        className="text-primary hover:underline block truncate"
                         target="_blank"
                         rel="noopener noreferrer"
                       >
@@ -1037,7 +1037,7 @@ export function ExhibitorDetailDialog({
                     <p className="font-medium">
                       <a
                         href={`mailto:${stallRequest.shopkeeperId?.businessEmail}`}
-                        className="text-blue-600 hover:underline block truncate"
+                        className="text-primary hover:underline block truncate"
                         target="_blank"
                         rel="noopener noreferrer"
                       >
@@ -1056,7 +1056,7 @@ export function ExhibitorDetailDialog({
                         ).replace(/\+/g, "")}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-green-600 hover:underline"
+                        className="text-success hover:underline"
                       >
                         {stallRequest.shopkeeperId?.whatsappNumber}
                       </a>
@@ -1246,7 +1246,7 @@ export function ExhibitorDetailDialog({
                       ) && (
                         <Badge
                           variant="outline"
-                          className="border-amber-300 bg-amber-50 text-amber-700"
+                          className="border-warning/40 bg-warning/10 text-warning"
                         >
                           ⚠ Placeholder — no registration provided, contact
                           vendor
@@ -1286,7 +1286,7 @@ export function ExhibitorDetailDialog({
                                 "In BizFile, open the Entity search, paste the UEN and click Search.",
                             });
                           }}
-                          className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                          className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/15"
                           title="Copy the UEN and open the official ACRA BizFile registry"
                         >
                           Verify ↗
@@ -1325,7 +1325,7 @@ export function ExhibitorDetailDialog({
                                 "On the GST portal, paste the GSTIN, enter the captcha and click Search.",
                             });
                           }}
-                          className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                          className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/15"
                           title="Copy the GSTIN and open the official GST portal (Search Taxpayer)"
                         >
                           Verify ↗
@@ -1345,7 +1345,7 @@ export function ExhibitorDetailDialog({
                         <Label className="text-muted-foreground">
                           GST Verification
                         </Label>
-                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+                        <Badge className="bg-success/15 text-success hover:bg-success/15">
                           ✓ Verified
                         </Badge>
                       </div>
@@ -1393,7 +1393,7 @@ export function ExhibitorDetailDialog({
                         <Label className="text-muted-foreground">
                           UEN Verification
                         </Label>
-                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+                        <Badge className="bg-success/15 text-success hover:bg-success/15">
                           ✓ Verified
                         </Badge>
                         <span className="text-[10px] text-muted-foreground">
@@ -1502,7 +1502,7 @@ export function ExhibitorDetailDialog({
                     <Label className="text-muted-foreground">
                       Product Description
                     </Label>
-                    <p className="text-sm mt-1 text-gray-700">
+                    <p className="text-sm mt-1 text-foreground">
                       {stallRequest.productDescription}
                     </p>
                   </div>
@@ -1590,7 +1590,7 @@ export function ExhibitorDetailDialog({
                         {stallRequest.eventId?.features?.parking && (
                           <Badge
                             variant="outline"
-                            className="flex gap-1 items-center bg-green-50"
+                            className="flex gap-1 items-center bg-success/10"
                           >
                             <ParkingCircle className="w-3 h-3" /> Parking
                           </Badge>
@@ -1598,7 +1598,7 @@ export function ExhibitorDetailDialog({
                         {stallRequest.eventId?.features?.wifi && (
                           <Badge
                             variant="outline"
-                            className="flex gap-1 items-center bg-yellow-50"
+                            className="flex gap-1 items-center bg-warning/10"
                           >
                             <Wifi className="w-3 h-3" /> WiFi
                           </Badge>
@@ -1606,7 +1606,7 @@ export function ExhibitorDetailDialog({
                         {stallRequest.eventId?.features?.photography && (
                           <Badge
                             variant="outline"
-                            className="flex gap-1 items-center bg-blue-50"
+                            className="flex gap-1 items-center bg-primary/10"
                           >
                             <Camera className="w-3 h-3" /> Photography
                           </Badge>
@@ -1614,7 +1614,7 @@ export function ExhibitorDetailDialog({
                         {stallRequest.eventId?.features?.security && (
                           <Badge
                             variant="outline"
-                            className="flex gap-1 items-center bg-red-50"
+                            className="flex gap-1 items-center bg-destructive/10"
                           >
                             <ShieldCheck className="w-3 h-3" /> Security
                           </Badge>
@@ -1707,7 +1707,7 @@ export function ExhibitorDetailDialog({
                     {stallRequest.selectedTables.map((table, index) => (
                       <div
                         key={index}
-                        className="flex justify-between items-center p-3 bg-gray-50 rounded"
+                        className="flex justify-between items-center p-3 bg-muted rounded"
                       >
                         <div>
                           <p className="font-medium">{table.tableName}</p>
@@ -1741,7 +1741,7 @@ export function ExhibitorDetailDialog({
                     {stallRequest.selectedAddOns.map((addon, index) => (
                       <div
                         key={index}
-                        className="flex justify-between items-center p-3 bg-gray-50 rounded"
+                        className="flex justify-between items-center p-3 bg-muted rounded"
                       >
                         <div>
                           <p className="font-medium">{addon.name}</p>
@@ -1793,7 +1793,7 @@ export function ExhibitorDetailDialog({
                 <Separator className="my-2" />
                 <div className="flex justify-between text-lg font-bold">
                   <span>Grand Total</span>
-                  <span className="text-green-600">
+                  <span className="text-success">
                     {formatPrice(stallRequest.grandTotal)}
                   </span>
                 </div>
@@ -1807,8 +1807,8 @@ export function ExhibitorDetailDialog({
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-start gap-3">
-                  <div className="bg-blue-100 rounded-full p-2">
-                    <FileText className="h-4 w-4 text-blue-600" />
+                  <div className="bg-primary/15 rounded-full p-2">
+                    <FileText className="h-4 w-4 text-primary" />
                   </div>
                   <div>
                     <p className="font-medium">Request Submitted</p>
@@ -1819,8 +1819,8 @@ export function ExhibitorDetailDialog({
                 </div>
                 {stallRequest.confirmationDate && (
                   <div className="flex items-start gap-3">
-                    <div className="bg-green-100 rounded-full p-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <div className="bg-success/15 rounded-full p-2">
+                      <CheckCircle2 className="h-4 w-4 text-success" />
                     </div>
                     <div>
                       <p className="font-medium">Request Confirmed</p>
@@ -1845,8 +1845,8 @@ export function ExhibitorDetailDialog({
                 )}
                 {stallRequest.paymentDate && (
                   <div className="flex items-start gap-3">
-                    <div className="bg-yellow-100 rounded-full p-2">
-                      <CreditCard className="h-4 w-4 text-yellow-600" />
+                    <div className="bg-warning/15 rounded-full p-2">
+                      <CreditCard className="h-4 w-4 text-warning" />
                     </div>
                     <div>
                       <p className="font-medium">Payment Received</p>
@@ -1858,8 +1858,8 @@ export function ExhibitorDetailDialog({
                 )}
                 {stallRequest.completionDate && (
                   <div className="flex items-start gap-3">
-                    <div className="bg-green-100 rounded-full p-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <div className="bg-success/15 rounded-full p-2">
+                      <CheckCircle2 className="h-4 w-4 text-success" />
                     </div>
                     <div>
                       <p className="font-medium">Booking Completed</p>
@@ -1871,8 +1871,8 @@ export function ExhibitorDetailDialog({
                 )}
                 {stallRequest.hasCheckedIn && stallRequest.checkInTime && (
                   <div className="flex items-start gap-3">
-                    <div className="bg-green-100 rounded-full p-2">
-                      <Clock1 className="h-4 w-4 text-green-600" />
+                    <div className="bg-success/15 rounded-full p-2">
+                      <Clock1 className="h-4 w-4 text-success" />
                     </div>
                     <div>
                       <p className="font-medium">Checked In Time</p>
@@ -1885,8 +1885,8 @@ export function ExhibitorDetailDialog({
                 {stallRequest.hasCheckedOut && stallRequest.checkOutTime && (
                   <div className="flex items-start gap-3 justify-between">
                     <div className="flex items-start gap-3">
-                      <div className="bg-green-100 rounded-full p-2">
-                        <Clock12 className="h-4 w-4 text-green-600" />
+                      <div className="bg-success/15 rounded-full p-2">
+                        <Clock12 className="h-4 w-4 text-success" />
                       </div>
                       <div>
                         <p className="font-medium">Checked Out Time</p>
@@ -2011,7 +2011,7 @@ export function ExhibitorDetailDialog({
                   {stallRequest.statusHistory &&
                     stallRequest.statusHistory.length > 0 && (
                       <div className="relative space-y-0">
-                        <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" />
+                        <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
 
                       {stallRequest.statusHistory.map(
                         (entry: StatusHistoryEntry, index: number) => {
@@ -2020,50 +2020,50 @@ export function ExhibitorDetailDialog({
                             { bg: string; text: string; border: string }
                           > = {
                             Pending: {
-                              bg: "bg-yellow-100",
-                              text: "text-yellow-700",
-                              border: "border-yellow-300",
+                              bg: "bg-warning/15",
+                              text: "text-warning",
+                              border: "border-warning/40",
                             },
                             Confirmed: {
-                              bg: "bg-green-100",
-                              text: "text-green-700",
-                              border: "border-green-300",
+                              bg: "bg-success/15",
+                              text: "text-success",
+                              border: "border-success/40",
                             },
                             Processing: {
-                              bg: "bg-blue-100",
-                              text: "text-blue-700",
-                              border: "border-blue-300",
+                              bg: "bg-primary/15",
+                              text: "text-primary",
+                              border: "border-primary/40",
                             },
                             Partial: {
-                              bg: "bg-orange-100",
-                              text: "text-orange-700",
-                              border: "border-orange-300",
+                              bg: "bg-warning/15",
+                              text: "text-warning",
+                              border: "border-warning/40",
                             },
                             Paid: {
-                              bg: "bg-green-100",
-                              text: "text-green-700",
-                              border: "border-green-300",
+                              bg: "bg-success/15",
+                              text: "text-success",
+                              border: "border-success/40",
                             },
                             Completed: {
-                              bg: "bg-emerald-100",
-                              text: "text-emerald-700",
-                              border: "border-emerald-300",
+                              bg: "bg-success/15",
+                              text: "text-success",
+                              border: "border-success/40",
                             },
                             Cancelled: {
-                              bg: "bg-red-100",
-                              text: "text-red-700",
-                              border: "border-red-300",
+                              bg: "bg-destructive/15",
+                              text: "text-destructive",
+                              border: "border-destructive/40",
                             },
                             Returned: {
-                              bg: "bg-purple-100",
-                              text: "text-purple-700",
-                              border: "border-purple-300",
+                              bg: "bg-purple-100 dark:bg-purple-900/40",
+                              text: "text-purple-700 dark:text-purple-300",
+                              border: "border-purple-300 dark:border-purple-700",
                             },
                           };
                           const config = statusConfig[entry.status] || {
-                            bg: "bg-gray-100",
-                            text: "text-gray-700",
-                            border: "border-gray-300",
+                            bg: "bg-muted",
+                            text: "text-foreground",
+                            border: "border-border",
                           };
 
                           return (
@@ -2121,9 +2121,9 @@ export function ExhibitorDetailDialog({
 
             {/* Cancellation Reason */}
             {stallRequest.cancellationReason && (
-              <Card className="border-red-200">
+              <Card className="border-destructive/30">
                 <CardHeader>
-                  <CardTitle className="text-lg text-red-600">
+                  <CardTitle className="text-lg text-destructive">
                     Cancellation Reason
                   </CardTitle>
                 </CardHeader>
@@ -2143,7 +2143,7 @@ export function ExhibitorDetailDialog({
             <Button
               onClick={onSharePDF}
               disabled={isGeneratingPDF}
-              className="bg-blue-600 hover:bg-blue-700"
+              className="bg-primary hover:bg-primary/90"
             >
               {isGeneratingPDF ? (
                 <>
@@ -2186,8 +2186,8 @@ export function ExhibitorDetailDialog({
                   onClick={() => setHoldHours(h)}
                   className={`rounded border px-2.5 py-1 text-xs font-semibold ${
                     holdHours === h
-                      ? "border-amber-400 bg-amber-100 text-amber-900"
-                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                      ? "border-warning bg-warning/15 text-warning"
+                      : "border-input bg-card text-muted-foreground hover:bg-muted"
                   }`}
                 >
                   {h}h
@@ -2268,8 +2268,8 @@ export function ExhibitorDetailDialog({
                   onClick={() => setExtendHours(h)}
                   className={`rounded border px-2.5 py-1 text-xs font-semibold ${
                     extendHours === h
-                      ? "border-amber-400 bg-amber-100 text-amber-900"
-                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                      ? "border-warning bg-warning/15 text-warning"
+                      : "border-input bg-card text-muted-foreground hover:bg-muted"
                   }`}
                 >
                   {h}h
