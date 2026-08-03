@@ -228,8 +228,9 @@ const MyEvents: React.FC = () => {
     Record<string, { ticketsSold: number; revenue: number }>
   >({});
   // Canonical Total Revenue from GET /organizers/analytics/:id — the single
-  // source of truth (tickets + stalls + round-tables, paid, non-cancelled) so
-  // this tile matches the Analytics tab, Chatbot and Dashboard Overview.
+  // source of truth (tickets + stalls + round-tables + confirmed sponsors,
+  // paid, non-cancelled) so this tile matches the Analytics tab, Chatbot and
+  // Dashboard Overview.
   const [analyticsRevenue, setAnalyticsRevenue] = useState<number | null>(null);
   const { country } = useCountry();
   const { formatPrice } = useCurrency(country);

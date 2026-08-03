@@ -1640,7 +1640,11 @@ export class OrganizersService {
     // so the analytics card reflects ALL income, not just ticket sales.
     const rtbCol = this.organizerModel.db.collection("roundtablebookings");
     const stallsCol = this.organizerModel.db.collection("stalls");
-    const [rtbAgg, stallAgg] = await Promise.all([
+    // Sponsorship money only counts once the organizer has verified it landed
+    // (cash tiers) or auto-confirmed it (non-cash tiers) — same "Confirmed"
+    // rule the P&L report uses, so this total reconciles with that report.
+    const sponsorCol = this.organizerModel.db.collection("sponsorrequests");
+    const [rtbAgg, stallAgg, sponsorAgg] = await Promise.all([
       rtbCol
         .aggregate([
           {
@@ -1677,17 +1681,31 @@ export class OrganizersService {
         ])
         .toArray()
         .catch(() => []),
+      sponsorCol
+        .aggregate([
+          { $match: { organizerId: orgObjId, status: "Confirmed" } },
+          {
+            $group: {
+              _id: null,
+              revenue: { $sum: { $ifNull: ["$amount", 0] } },
+            },
+          },
+        ])
+        .toArray()
+        .catch(() => []),
     ]);
     const ticketRev = totalsAgg[0]?.revenue || 0;
     const roundTableRev = (rtbAgg[0] as any)?.revenue || 0;
     const stallRev = (stallAgg[0] as any)?.revenue || 0;
-    const totalRev = ticketRev + roundTableRev + stallRev;
+    const sponsorRev = (sponsorAgg[0] as any)?.revenue || 0;
+    const totalRev = ticketRev + roundTableRev + stallRev + sponsorRev;
 
     // Per-event revenue map (tickets + stalls + round-tables) using the SAME
     // canonical filters as the totals above, so list views (My Events,
     // Dashboard Overview) can show a per-event number that sums exactly to the
     // Total Revenue card. Keyed by eventId string.
-    const [ticketPerEvent, stallPerEvent, rtPerEvent] = await Promise.all([
+    const [ticketPerEvent, stallPerEvent, rtPerEvent, sponsorPerEvent] =
+      await Promise.all([
       ticketsCol
         .aggregate([
           { $match: { organizerId: orgObjId, status: { $ne: "cancelled" } } },
@@ -1732,12 +1750,25 @@ export class OrganizersService {
         ])
         .toArray()
         .catch(() => []),
+      sponsorCol
+        .aggregate([
+          { $match: { organizerId: orgObjId, status: "Confirmed" } },
+          {
+            $group: {
+              _id: "$eventId",
+              revenue: { $sum: { $ifNull: ["$amount", 0] } },
+            },
+          },
+        ])
+        .toArray()
+        .catch(() => []),
     ]);
     const revenueByEvent: Record<string, number> = {};
     for (const row of [
       ...(ticketPerEvent as any[]),
       ...(stallPerEvent as any[]),
       ...(rtPerEvent as any[]),
+      ...(sponsorPerEvent as any[]),
     ]) {
       const key = String(row?._id);
       if (!key || key === "null" || key === "undefined") continue;
@@ -1759,6 +1790,8 @@ export class OrganizersService {
         roundTableRevenueFormatted: fmt(roundTableRev),
         stallRevenue: stallRev,
         stallRevenueFormatted: fmt(stallRev),
+        sponsorRevenue: sponsorRev,
+        sponsorRevenueFormatted: fmt(sponsorRev),
         revenue: totalRev,
         revenueFormatted: fmt(totalRev),
       },

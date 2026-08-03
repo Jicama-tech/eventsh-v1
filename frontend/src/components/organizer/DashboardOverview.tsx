@@ -193,9 +193,10 @@ export default function DashboardOverview({
       )
       .reduce((sum, stall) => sum + (stall.grandTotal || 0), 0);
 
-    // Canonical per-event revenue (tickets + stalls + round-tables) comes from
-    // the analytics endpoint so it reconciles exactly with the Total Revenue
-    // card. Fall back to the local tickets+stalls sum if it isn't available.
+    // Canonical per-event revenue (tickets + stalls + round-tables + confirmed
+    // sponsors) comes from the analytics endpoint so it reconciles exactly
+    // with the Total Revenue card. Fall back to the local tickets+stalls sum
+    // if it isn't available.
     const canonical = revenueByEvent?.[String(event._id)];
     const totalRevenue =
       typeof canonical === "number" ? canonical : ticketsRevenue + stallsRevenue;
@@ -278,8 +279,9 @@ export default function DashboardOverview({
       .reduce((sum, stall) => sum + (stall.grandTotal || 0), 0);
 
     // Prefer the unified analytics endpoint total (tickets + round-tables +
-    // stalls) so this matches the chatbot's Total Revenue card exactly.
-    // Fall back to local calc if the endpoint isn't reachable.
+    // stalls + confirmed sponsors) so this matches the chatbot's Total
+    // Revenue card exactly. Fall back to local calc if the endpoint isn't
+    // reachable.
     const totalRevenue =
       typeof analyticsTotals?.revenue === "number"
         ? analyticsTotals.revenue
