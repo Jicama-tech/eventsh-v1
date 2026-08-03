@@ -20,6 +20,10 @@ import { getEmbedOrgSlug } from "./lib/embedHost";
 
 // Lazy load all route components for code splitting
 const LandingPage = lazy(() => import("./pages/LandingPage"));
+const SupplierRequestForm = lazy(() => import("./pages/SupplierRequestForm"));
+const SponsorApplicationForm = lazy(
+  () => import("./pages/SponsorApplicationForm"),
+);
 const Events = lazy(() => import("./pages/Events"));
 const Pricing = lazy(() => import("./pages/pricing"));
 const Blog = lazy(() => import("./pages/Blog"));
@@ -295,6 +299,22 @@ function AppContent() {
               catch-all /:organizationName storefront route below. */}
           <Route path="/ticket-cart" element={<TicketCart />} />
           <Route path="/ticket-cart/:organizerId" element={<TicketCart />} />
+          <Route
+            path="/:organizationName/events/:id/supplier"
+            element={<SupplierRequestForm />}
+          />
+          <Route
+            path="/events/:id/supplier"
+            element={<SupplierRequestForm />}
+          />
+          <Route
+            path="/:organizationName/events/:id/sponsor"
+            element={<SponsorApplicationForm />}
+          />
+          <Route
+            path="/events/:id/sponsor"
+            element={<SponsorApplicationForm />}
+          />
           <Route
             path="/:organizationName/events/:id"
             element={<EventFront eventId={""} onBack={() => {}} />}

@@ -1595,7 +1595,7 @@ ACTIONS (only on an EXPLICIT request that names a Ref from a list above):
 - NOTE on deleted stalls: approving a cancellation (or deleting a stall) does NOT erase it — the booking is marked **Cancelled**, its space is freed and its QR voided, but it STAYS in the list so the organizer can still settle the refund/deposit. If asked "where did the deleted stall go", explain it's kept and shows as Cancelled.
 - "Return the deposit for <ref>" → return_stall_deposit(ref).
 - After the tool returns, report its "message" verbatim. NEVER perform an action without a Ref the user explicitly gave — if they say "confirm the payment" with no ref, first call list_exhibitor_pending and ask WHICH one (by Ref).
-- For editing a stall's fields, call navigate_to(users) ("Open Exhibitors/Visitors tab").
+- For editing a stall's fields, call navigate_to(users) ("Open CRM tab").
 
 EMPTY RESULTS:
 - If list_stalls returns an empty array, render this exact reply and STOP:

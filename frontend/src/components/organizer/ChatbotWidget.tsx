@@ -1048,7 +1048,7 @@ const DEFAULT_NAV_ITEMS: NavItem[] = [
   { id: "eventAttendees", label: "Participants", icon: Users },
   { id: "platformFees", label: "Platform Fees", icon: Receipt },
   { id: "speakerRequests", label: "Speakers", icon: Mic2 },
-  { id: "users", label: "Exhibitors/Visitors", icon: Building2 },
+  { id: "users", label: "CRM", icon: Building2 },
   { id: "feedback", label: "Feedback", icon: MessageSquare },
   { id: "storefront", label: "Eventfront", icon: Globe },
   { id: "settings", label: "Settings", icon: SettingsIcon },

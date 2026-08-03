@@ -40,7 +40,11 @@ import { SubscriptionsModule } from "./modules/subscriptions/subscriptions.modul
 import { BillingPaymentsModule } from "./modules/billing-payments/billing-payments.module";
 import { MembershipsModule } from "./modules/memberships/memberships.module";
 import { RsvpModule } from "./modules/rsvp/rsvp.module";
+import { SuppliersModule } from "./modules/suppliers/suppliers.module";
 import { FilesModule } from "./modules/files/files.module";
+import { SponsorsModule } from "./modules/sponsors/sponsors.module";
+import { AnalyticsModule } from "./modules/analytics/analytics.module";
+import { ExpensesModule } from "./modules/expenses/expenses.module";
 
 @Module({
   imports: [
@@ -92,6 +96,10 @@ import { FilesModule } from "./modules/files/files.module";
     PaymentFeedbackModule,
     RsvpModule,
     MembershipsModule,
+    SuppliersModule,
+    SponsorsModule,
+    ExpensesModule,
+    AnalyticsModule,
   ],
   providers: [
     // Read-only demo sessions can never mutate real data via the API.

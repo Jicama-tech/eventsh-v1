@@ -892,8 +892,8 @@ They sign in with **Google** using the Gmail you enter — **no password, no inv
    - **Allow Emails** — turn on to send this operator notification emails.
 4. Under **Tab Access**, pick which dashboard tabs they may use:
    - **Leave everything unchecked = full access** (they see all tabs).
-   - Check specific tabs to **restrict** — e.g. only **In-Person Booking** for a door/kiosk operator, or **Participants** + **Exhibitors/Visitors** for a front-desk operator.
-   - Tabs: **Chatbot, Analytics, In-Person Booking, Participants, Platform Fees, Exhibitors/Visitors, Events/Coupons, Feedback, Membership, Support, Eventfront, Settings**. Fine-grained extras (e.g. **Allow deleting exhibitor stalls**, delete events) appear under a tab once you grant it.
+   - Check specific tabs to **restrict** — e.g. only **In-Person Booking** for a door/kiosk operator, or **Participants** + **CRM** for a front-desk operator.
+   - Tabs: **Chatbot, Analytics, In-Person Booking, Participants, Platform Fees, CRM, Events/Coupons, Feedback, Membership, Support, Eventfront, Settings**. Fine-grained extras (e.g. **Allow deleting exhibitor stalls**, delete events) appear under a tab once you grant it.
 5. Click **Save**. Edit or delete the operator later from the same tab.
 
 ## Part B — Organizer: give them access

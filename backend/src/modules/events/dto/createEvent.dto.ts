@@ -306,6 +306,20 @@ export class VisitorTypeDto {
   @IsBoolean() @IsOptional() isActive?: boolean;
 }
 
+/** One sponsorship tier: name, price, description — nothing more. */
+export class SponsorTypeDto {
+  @IsString() id: string;
+  @IsString() name: string;
+  @IsNumber() @Min(0) price: number;
+  @IsString() @IsOptional() description?: string;
+  @IsBoolean() @IsOptional() isActive?: boolean;
+  // When false, this tier isn't paid — the sponsor picks from
+  // `customOptions` (vouchers, coupons, etc.) instead of being charged, up
+  // to the value of `price`.
+  @IsBoolean() @IsOptional() collectPayment?: boolean;
+  @IsArray() @IsOptional() @IsString({ each: true }) customOptions?: string[];
+}
+
 export class SpeakerSlotDto {
   @IsString()
   topic: string;
@@ -886,6 +900,15 @@ export class CreateEventDto {
   @IsOptional()
   @Type(() => VisitorTypeDto)
   visitorTypes?: VisitorTypeDto[];
+
+  @ValidateNested({ each: true })
+  @IsOptional()
+  @Type(() => SponsorTypeDto)
+  sponsorTypes?: SponsorTypeDto[];
+
+  @IsBoolean()
+  @IsOptional()
+  showSponsorBar?: boolean;
 
   @ValidateNested({ each: true })
   @IsOptional()

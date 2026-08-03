@@ -50,6 +50,44 @@ const EXHIBITOR_FIELDS = [
 ] as const;
 type ExhibitorField = (typeof EXHIBITOR_FIELDS)[number];
 
+const SUPPLIER_FIELDS = [
+  // Stable record id (present in exports) so a re-upload updates the exact
+  // same supplier even when contact fields were edited. Blank = new supplier.
+  "id",
+  // Mirrors the organizer's "Add Supplier" form.
+  "firstName",
+  "lastName",
+  "name",
+  "companyName",
+  // "Service provided" — the supplier's service category.
+  "serviceCategory",
+  // Personal / login email (the Gmail the supplier signs in with).
+  "email",
+  "businessEmail",
+  "country",
+  "whatsAppNumber",
+  "phone",
+  "ignore",
+] as const;
+type SupplierField = (typeof SUPPLIER_FIELDS)[number];
+
+const SPONSOR_FIELDS = [
+  // Stable record id (present in exports) so a re-upload updates the exact
+  // same sponsor even when contact fields were edited. Blank = new sponsor.
+  "id",
+  // Mirrors the organizer's "Add Sponsor" form.
+  "companyName",
+  "contactName",
+  "email",
+  "businessEmail",
+  "country",
+  "phone",
+  "website",
+  "notes",
+  "ignore",
+] as const;
+type SponsorField = (typeof SPONSOR_FIELDS)[number];
+
 type ImportResult = {
   totalRows: number;
   created: number;
@@ -75,6 +113,8 @@ export class BulkImportService {
     @InjectModel("User") private userModel: Model<any>,
     @InjectModel("Vendor") private vendorModel: Model<any>,
     @InjectModel("Stall") private stallModel: Model<any>,
+    @InjectModel("Supplier") private supplierModel: Model<any>,
+    @InjectModel("Sponsor") private sponsorModel: Model<any>,
   ) {
     // Mirror chatbot.service AI client setup so column-mapping uses whichever
     // provider the project is already configured for.
@@ -125,7 +165,7 @@ export class BulkImportService {
     headers: string[],
     sampleRows: Record<string, any>[],
     canonicalFields: readonly T[],
-    target: "visitor" | "exhibitor",
+    target: "visitor" | "exhibitor" | "supplier" | "sponsor",
   ): Promise<Record<string, T>> {
     // Cheap fast-path: if every header already matches a canonical field
     // (case-insensitive), skip the AI call entirely.
@@ -238,6 +278,21 @@ Return ONLY this JSON shape, nothing else:
       businessemail: "businessEmail",
       primaryemail: "email",
       personalemail: "email",
+      // Supplier aliases: Gmail (login email), company + service category, and
+      // "Contact Number" phrasings from the Add Supplier form.
+      gmail: "email",
+      gmailid: "email",
+      loginemail: "email",
+      companyname: "companyName",
+      service: "serviceCategory",
+      serviceprovided: "serviceCategory",
+      servicesprovided: "serviceCategory",
+      serviceoffered: "serviceCategory",
+      servicecategory: "serviceCategory",
+      servicetype: "serviceCategory",
+      contact: "phone",
+      contactnumber: "phone",
+      contactno: "phone",
       // Record-id aliases so an exported sheet round-trips for updates.
       id: "id",
       recordid: "id",
@@ -562,6 +617,358 @@ Return ONLY this JSON shape, nothing else:
     return set;
   }
 
+  // ============================ SUPPLIERS ==============================
+
+  async importSuppliers(
+    organizerId: string,
+    fileBuffer: Buffer,
+  ): Promise<ImportResult> {
+    if (!Types.ObjectId.isValid(organizerId)) {
+      throw new BadRequestException("Invalid organizer id");
+    }
+    const { rows, headers } = this.parseFile(fileBuffer);
+    const mapping = await this.mapColumnsWithAI(
+      headers,
+      rows,
+      SUPPLIER_FIELDS,
+      "supplier",
+    );
+    const orgObjId = new Types.ObjectId(organizerId);
+
+    const result: ImportResult = {
+      totalRows: rows.length,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      errors: 0,
+      mapping,
+      skippedRows: [],
+      errorRows: [],
+    };
+
+    for (let i = 0; i < rows.length; i++) {
+      const raw = rows[i];
+      const mapped = this.applyMapping<SupplierField>(raw, mapping as any);
+      const first = String((mapped as any).firstName || "").trim();
+      const last = String((mapped as any).lastName || "").trim();
+      const name =
+        String(mapped.name || "").trim() || `${first} ${last}`.trim();
+      const email =
+        String(mapped.email || "").trim().toLowerCase() || undefined;
+      const businessEmail =
+        String(mapped.businessEmail || "").trim().toLowerCase() || undefined;
+      const wa = String(mapped.whatsAppNumber || "").trim();
+      const phone = String(mapped.phone || "").trim();
+      const idVal = String((mapped as any).id || "").trim();
+
+      if (!name) {
+        result.skipped++;
+        result.skippedRows.push({ row: i + 2, reason: "Missing name" });
+        continue;
+      }
+      if (!email && !businessEmail && !wa && !phone) {
+        result.skipped++;
+        result.skippedRows.push({
+          row: i + 2,
+          reason: "Need an email or contact number",
+        });
+        continue;
+      }
+
+      try {
+        // Match an existing supplier to update — prefer the exported row id,
+        // else contact fields — all confined to this organizer's suppliers.
+        let existing: any = null;
+        if (idVal && Types.ObjectId.isValid(idVal)) {
+          existing = await this.supplierModel
+            .findOne({ _id: new Types.ObjectId(idVal), organizerId: orgObjId })
+            .lean();
+        }
+        if (!existing) {
+          const dupOr: any[] = [];
+          if (email) dupOr.push({ email });
+          if (businessEmail) dupOr.push({ businessEmail });
+          if (phone) dupOr.push({ phone });
+          if (wa) dupOr.push({ whatsAppNumber: wa });
+          if (dupOr.length) {
+            existing = await this.supplierModel
+              .findOne({ organizerId: orgObjId, $or: dupOr })
+              .lean();
+          }
+        }
+
+        // Only columns present in the row are written, so a partial sheet
+        // never wipes stored data on update.
+        const fields = this.buildSupplierFields(mapped);
+
+        if (existing) {
+          await this.supplierModel.updateOne(
+            { _id: existing._id },
+            { $set: fields },
+          );
+          result.updated++;
+        } else {
+          await this.supplierModel.create({
+            organizerId: orgObjId,
+            isActive: true,
+            ...fields,
+          });
+          result.created++;
+        }
+      } catch (err: any) {
+        result.errors++;
+        result.errorRows.push({
+          row: i + 2,
+          reason: err?.message || "Insert failed",
+        });
+      }
+    }
+
+    return result;
+  }
+
+  // Translate a mapped supplier row into the supplier fields to persist.
+  // Returns ONLY keys whose source cells had a value (blank cells never
+  // clobber stored data on update).
+  async importSponsors(
+    organizerId: string,
+    fileBuffer: Buffer,
+  ): Promise<ImportResult> {
+    if (!Types.ObjectId.isValid(organizerId)) {
+      throw new BadRequestException("Invalid organizer id");
+    }
+    const { rows, headers } = this.parseFile(fileBuffer);
+    const mapping = await this.mapColumnsWithAI(
+      headers,
+      rows,
+      SPONSOR_FIELDS,
+      "sponsor",
+    );
+    const orgObjId = new Types.ObjectId(organizerId);
+
+    const result: ImportResult = {
+      totalRows: rows.length,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      errors: 0,
+      mapping,
+      skippedRows: [],
+      errorRows: [],
+    };
+
+    for (let i = 0; i < rows.length; i++) {
+      const raw = rows[i];
+      const mapped = this.applyMapping<SponsorField>(raw, mapping as any);
+      const companyName = String(mapped.companyName || "").trim();
+      const email =
+        String(mapped.email || "").trim().toLowerCase() || undefined;
+      const phone = String(mapped.phone || "").trim();
+      const idVal = String((mapped as any).id || "").trim();
+
+      // A sponsor is a business first — without a company name there's
+      // nothing meaningful to file it under.
+      if (!companyName) {
+        result.skipped++;
+        result.skippedRows.push({ row: i + 2, reason: "Missing company name" });
+        continue;
+      }
+
+      try {
+        // Prefer the exported row id, else contact fields, else the company
+        // name — all confined to this organizer's sponsors.
+        let existing: any = null;
+        if (idVal && Types.ObjectId.isValid(idVal)) {
+          existing = await this.sponsorModel
+            .findOne({ _id: new Types.ObjectId(idVal), organizerId: orgObjId })
+            .lean();
+        }
+        if (!existing) {
+          const dupOr: any[] = [];
+          if (email) dupOr.push({ email });
+          if (phone) dupOr.push({ phone });
+          dupOr.push({
+            companyName: new RegExp(
+              `^${companyName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+              "i",
+            ),
+          });
+          existing = await this.sponsorModel
+            .findOne({ organizerId: orgObjId, $or: dupOr })
+            .lean();
+        }
+
+        const fields = this.buildSponsorFields(mapped);
+
+        if (existing) {
+          await this.sponsorModel.updateOne(
+            { _id: existing._id },
+            { $set: fields },
+          );
+          result.updated++;
+        } else {
+          await this.sponsorModel.create({
+            organizerId: orgObjId,
+            isActive: true,
+            ...fields,
+          });
+          result.created++;
+        }
+      } catch (err: any) {
+        result.errors++;
+        result.errorRows.push({
+          row: i + 2,
+          reason: err?.message || "Write failed",
+        });
+      }
+    }
+
+    return result;
+  }
+
+  /** Only columns present in the row are written, so a partial sheet never
+   *  wipes stored data on update. */
+  private buildSponsorFields(
+    mapped: Partial<Record<SponsorField, any>>,
+  ): Record<string, any> {
+    const set: Record<string, any> = {};
+    const put = (key: string, val: any) => {
+      const v = typeof val === "string" ? val.trim() : val;
+      if (v !== undefined && v !== null && v !== "") set[key] = v;
+    };
+
+    put("companyName", mapped.companyName);
+    put("contactName", mapped.contactName);
+    put("email", String(mapped.email || "").trim().toLowerCase());
+    put(
+      "businessEmail",
+      String(mapped.businessEmail || "").trim().toLowerCase(),
+    );
+    put("website", mapped.website);
+    put("notes", mapped.notes);
+
+    const country = String(mapped.country || "").trim();
+    const dial = dialCodeFor(country);
+    if (dial) set.countryCode = dial;
+
+    const phone = normalizePhone(mapped.phone, country);
+    if (phone) set.phone = phone;
+
+    return set;
+  }
+
+  async exportSponsors(organizerId: string): Promise<Buffer> {
+    if (!Types.ObjectId.isValid(organizerId)) {
+      throw new BadRequestException("Invalid organizer id");
+    }
+    const sponsors = await this.sponsorModel
+      .find({ organizerId: new Types.ObjectId(organizerId) })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet("Sponsors");
+    // ID first so editing a row and re-uploading updates that exact sponsor;
+    // leave ID blank to create a new one.
+    sheet.columns = [
+      { header: "ID", key: "id", width: 26 },
+      { header: "Company Name", key: "companyName", width: 28 },
+      { header: "Contact Person", key: "contactName", width: 24 },
+      { header: "Email", key: "email", width: 28 },
+      { header: "Business Email", key: "businessEmail", width: 28 },
+      { header: "Contact Number", key: "phone", width: 20 },
+      { header: "Website", key: "website", width: 28 },
+      { header: "Notes", key: "notes", width: 34 },
+      // Read-only metadata (mapped to "ignore" on re-import).
+      { header: "Created At", key: "createdAt", width: 22 },
+    ];
+    sheet.getRow(1).font = { bold: true };
+    for (const s of sponsors as any[]) {
+      sheet.addRow({
+        id: String(s._id || ""),
+        companyName: s.companyName || "",
+        contactName: s.contactName || "",
+        email: s.email || "",
+        businessEmail: s.businessEmail || "",
+        phone: s.phone || "",
+        website: s.website || "",
+        notes: s.notes || "",
+        createdAt: s.createdAt
+          ? new Date(s.createdAt).toISOString().slice(0, 19).replace("T", " ")
+          : "",
+      });
+    }
+    const ab = await wb.xlsx.writeBuffer();
+    return Buffer.from(ab);
+  }
+
+  async sponsorTemplate(): Promise<Buffer> {
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet("Sponsors");
+    sheet.columns = [
+      { header: "Company Name", key: "companyName", width: 28 },
+      { header: "Contact Person", key: "contactName", width: 24 },
+      { header: "Email", key: "email", width: 28 },
+      { header: "Business Email", key: "businessEmail", width: 28 },
+      { header: "Country", key: "country", width: 14 },
+      { header: "Contact Number", key: "phone", width: 20 },
+      { header: "Website", key: "website", width: 28 },
+      { header: "Notes", key: "notes", width: 34 },
+    ];
+    sheet.getRow(1).font = { bold: true };
+    sheet.addRow({
+      companyName: "Northwind Traders",
+      contactName: "Priya Menon",
+      email: "priya@northwind.example",
+      businessEmail: "accounts@northwind.example",
+      country: "India",
+      phone: "9876543210",
+      website: "https://northwind.example",
+      notes: "Also sponsoring the coffee bar",
+    });
+    const ab = await wb.xlsx.writeBuffer();
+    return Buffer.from(ab);
+  }
+
+  private buildSupplierFields(
+    mapped: Partial<Record<SupplierField, any>>,
+  ): Record<string, any> {
+    const set: Record<string, any> = {};
+    const put = (key: string, val: any) => {
+      const v = typeof val === "string" ? val.trim() : val;
+      if (v !== undefined && v !== null && v !== "") set[key] = v;
+    };
+
+    const firstName = String(mapped.firstName || "").trim();
+    const lastName = String(mapped.lastName || "").trim();
+    let name = String(mapped.name || "").trim();
+    if (!name && (firstName || lastName)) {
+      name = `${firstName} ${lastName}`.trim();
+    }
+
+    put("name", name);
+    put("companyName", mapped.companyName);
+    put("serviceCategory", mapped.serviceCategory);
+    put("email", String(mapped.email || "").trim().toLowerCase());
+    put(
+      "businessEmail",
+      String(mapped.businessEmail || "").trim().toLowerCase(),
+    );
+
+    const country = String(mapped.country || "").trim();
+    put("country", country);
+    const dial = dialCodeFor(country);
+    if (dial) set.countryCode = dial;
+
+    const phone = normalizePhone(mapped.phone, country);
+    if (phone) set.phone = phone;
+
+    const wa = normalizePhone(mapped.whatsAppNumber, country);
+    if (wa) set.whatsAppNumber = wa;
+
+    return set;
+  }
+
   // Parse a sheet date cell into a date-only value stored as UTC midnight.
   // This avoids the classic off-by-one: a date parsed at LOCAL midnight and
   // later serialized with toISOString() (UTC) rolls back a day in +offset
@@ -755,6 +1162,53 @@ Return ONLY this JSON shape, nothing else:
     return Buffer.from(ab);
   }
 
+  async exportSuppliers(organizerId: string): Promise<Buffer> {
+    if (!Types.ObjectId.isValid(organizerId)) {
+      throw new BadRequestException("Invalid organizer id");
+    }
+    const suppliers = await this.supplierModel
+      .find({ organizerId: new Types.ObjectId(organizerId) })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet("Suppliers");
+    // ID first so editing a row and re-uploading updates that exact supplier;
+    // leave ID blank to create a new supplier.
+    sheet.columns = [
+      { header: "ID", key: "id", width: 26 },
+      { header: "Name", key: "name", width: 24 },
+      { header: "Company Name", key: "companyName", width: 26 },
+      { header: "Service Provided", key: "serviceCategory", width: 22 },
+      { header: "Gmail", key: "email", width: 28 },
+      { header: "Business Email", key: "businessEmail", width: 28 },
+      { header: "Country", key: "country", width: 14 },
+      { header: "Contact Number", key: "phone", width: 20 },
+      { header: "WhatsApp Number", key: "whatsAppNumber", width: 20 },
+      // Read-only metadata (mapped to "ignore" on re-import).
+      { header: "Created At", key: "createdAt", width: 22 },
+    ];
+    sheet.getRow(1).font = { bold: true };
+    for (const s of suppliers as any[]) {
+      sheet.addRow({
+        id: String(s._id || ""),
+        name: s.name || "",
+        companyName: s.companyName || "",
+        serviceCategory: s.serviceCategory || "",
+        email: s.email || "",
+        businessEmail: s.businessEmail || "",
+        country: s.country || "",
+        phone: s.phone || "",
+        whatsAppNumber: s.whatsAppNumber || "",
+        createdAt: s.createdAt
+          ? new Date(s.createdAt).toISOString().slice(0, 19).replace("T", " ")
+          : "",
+      });
+    }
+    const ab = await wb.xlsx.writeBuffer();
+    return Buffer.from(ab);
+  }
+
   // ============================ TEMPLATES ==============================
 
   async visitorTemplate(): Promise<Buffer> {
@@ -869,6 +1323,77 @@ Return ONLY this JSON shape, nothing else:
     ]);
     info.addRow([
       "• Membership End Date: YYYY-MM-DD. The membership validity period.",
+    ]);
+    info.getRow(1).font = { bold: true, size: 14 };
+    const ab = await wb.xlsx.writeBuffer();
+    return Buffer.from(ab);
+  }
+
+  async supplierTemplate(): Promise<Buffer> {
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet("Suppliers");
+    // Same columns as the export / "Add Supplier" form so template, export
+    // and import all line up. ID is included (blank = new rows).
+    sheet.columns = [
+      { header: "ID", key: "id", width: 26 },
+      { header: "Name", key: "name", width: 24 },
+      { header: "Company Name", key: "companyName", width: 26 },
+      { header: "Service Provided", key: "serviceCategory", width: 22 },
+      { header: "Gmail", key: "email", width: 28 },
+      { header: "Business Email", key: "businessEmail", width: 28 },
+      { header: "Country", key: "country", width: 14 },
+      { header: "Contact Number", key: "phone", width: 20 },
+      { header: "WhatsApp Number", key: "whatsAppNumber", width: 20 },
+    ];
+    sheet.getRow(1).font = { bold: true };
+    sheet.addRow({
+      name: "Priya Nair",
+      companyName: "Tasty Caterers Pvt Ltd",
+      serviceCategory: "Catering",
+      email: "priya@gmail.com",
+      businessEmail: "info@tastycaterers.com",
+      country: "IN",
+      phone: "+919876543210",
+      whatsAppNumber: "+919876543210",
+    });
+    const info = wb.addWorksheet("Instructions");
+    info.addRow(["Bulk Supplier Import Template"]);
+    info.addRow([]);
+    info.addRow(["• Each new row creates one Supplier."]);
+    info.addRow([
+      "• Columns mirror the 'Add Supplier' form: Name, Company Name,",
+    ]);
+    info.addRow([
+      "  Service Provided, Gmail, Business Email, Contact Number.",
+    ]);
+    info.addRow(["• Required: Name + (Gmail / Business Email OR a number)."]);
+    info.addRow([
+      "• Gmail is the email the supplier signs in with on the quotation form.",
+    ]);
+    info.addRow([
+      "• Column headers can be renamed — AI will map common variants like",
+    ]);
+    info.addRow(["  'Company', 'Service', 'Email', 'Mobile', 'Contact No'."]);
+    info.addRow([
+      "• Country: a name or ISO code (e.g. Singapore / SG, India / IN).",
+    ]);
+    info.addRow([
+      "• If Contact / WhatsApp has no country code, it's added automatically",
+    ]);
+    info.addRow([
+      "  from Country (e.g. Country 'SG' + '91234567' -> '+6591234567').",
+    ]);
+    info.addRow([
+      "• Update existing suppliers: export the current list, edit the cells,",
+    ]);
+    info.addRow([
+      "  and re-upload. Rows are matched by the ID column (or by email /",
+    ]);
+    info.addRow([
+      "  number when ID is blank) and updated in place.",
+    ]);
+    info.addRow([
+      "• Only the cells you fill are written — blank cells never erase data.",
     ]);
     info.getRow(1).font = { bold: true, size: 14 };
     const ab = await wb.xlsx.writeBuffer();

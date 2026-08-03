@@ -98,6 +98,7 @@ import { Separator } from "@radix-ui/react-separator";
 import { Textarea } from "../ui/textarea";
 import { ExhibitorDetailDialog } from "./ExhibitorDetailDialog";
 import { StallEditDialog } from "./StallEditDialog";
+import SponsorRequests from "./SponsorRequests";
 // jsPDF and html2canvas are dynamically imported when needed
 
 export interface StatusHistoryEntry {
@@ -355,7 +356,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   const [resendEmail, setResendEmail] = useState("");
   // Inner-tab state for the unified View dialog
   const [detailTab, setDetailTab] = useState<
-    "visitors" | "exhibitors" | "speakers" | "roundtables"
+    "visitors" | "exhibitors" | "speakers" | "roundtables" | "sponsors"
   >("visitors");
   const [stallRequest, setStallRequest] = useState<StallRequest | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -2269,6 +2270,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         speakers: false,
         roundtables: false,
         workshopRequests: false,
+        sponsors: false,
       };
     }
     const e: any = event;
@@ -2291,12 +2293,17 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     const workshopRequests =
       !!e.workshopHostingOpen ||
       (Array.isArray(e.workshopSessions) && e.workshopSessions.length > 0);
+    // Sponsors show as soon as the organizer has published any tier for the
+    // event — applications arrive against those tiers.
+    const sponsors =
+      Array.isArray(e.sponsorTypes) && e.sponsorTypes.length > 0;
     return {
       visitors,
       exhibitors,
       speakers,
       roundtables,
       workshopRequests,
+      sponsors,
     };
   };
 
@@ -2309,7 +2316,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     // full event loads in case Layout / Speakers / etc. become available.
     const provisional = eventHasSection(event);
     const provisionalFirst = (
-      ["visitors", "exhibitors", "speakers", "roundtables", "workshopRequests"] as const
+      ["visitors", "exhibitors", "speakers", "roundtables", "workshopRequests", "sponsors"] as const
     ).find((k) => provisional[k]);
     setDetailTab(provisionalFirst ?? "visitors");
 
@@ -2330,7 +2337,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     // 2) Re-pick landing tab now that we know what the event actually has.
     const sections = eventHasSection(fullEvent);
     const firstAvailable = (
-      ["visitors", "exhibitors", "speakers", "roundtables", "workshopRequests"] as const
+      ["visitors", "exhibitors", "speakers", "roundtables", "workshopRequests", "sponsors"] as const
     ).find((k) => sections[k]);
     if (firstAvailable && !sections[provisionalFirst as keyof typeof sections]) {
       setDetailTab(firstAvailable);
@@ -2834,14 +2841,16 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   (sections.exhibitors ? 1 : 0) +
                   (sections.speakers ? 1 : 0) +
                   (sections.roundtables ? 1 : 0) +
-                  (sections.workshopRequests ? 1 : 0);
+                  (sections.workshopRequests ? 1 : 0) +
+                  (sections.sponsors ? 1 : 0);
                 if (visibleCount === 0) {
                   return (
                     <Card>
                       <CardContent className="py-12 text-center text-muted-foreground">
                         This event has no visitor, exhibitor, speaker, round
-                        table or workshop sections enabled. Add at least one
-                        in the event editor to see attendance data here.
+                        table, workshop or sponsor sections enabled. Add at
+                        least one in the event editor to see attendance data
+                        here.
                       </CardContent>
                     </Card>
                   );
@@ -2878,7 +2887,16 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   {sections.workshopRequests && (
                     <TabsTrigger value="workshopRequests">Workshop</TabsTrigger>
                   )}
+                  {sections.sponsors && (
+                    <TabsTrigger value="sponsors">Sponsors</TabsTrigger>
+                  )}
                 </TabsList>
+
+                {sections.sponsors && (
+                  <TabsContent value="sponsors" className="pt-4">
+                    <SponsorRequests eventId={selectedEvent?._id} />
+                  </TabsContent>
+                )}
 
                 {sections.visitors && (
                 <TabsContent value="visitors" className="pt-4">

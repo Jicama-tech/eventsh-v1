@@ -278,7 +278,7 @@ const SCRIPTS = [
   // ---- CRM (Exhibitors/Visitors) ----
   { url: "/organizer-dashboard", auth: true, steps: [
     { wait: 4500 },
-    { click: "Exhibitors/Visitors" },
+    { click: "CRM" },
     { wait: 3500 },
     { shot: "crm" },
   ]},
@@ -477,7 +477,7 @@ const GUIDE = {
     {
       title: "Your dashboard at a glance",
       blurb:
-        "After login you land on the organizer dashboard. The left sidebar groups every workflow — Chatbot, Analytics, In-Person Booking, Participants, Exhibitors/Visitors, Events/Coupons, Feedback, and Settings.",
+        "After login you land on the organizer dashboard. The left sidebar groups every workflow — Chatbot, Analytics, In-Person Booking, Participants, CRM, Events/Coupons, Feedback, and Settings.",
       sections: [
         {
           heading: "What you see first",
@@ -612,7 +612,7 @@ const GUIDE = {
     {
       title: "Your CRM",
       blurb:
-        "Exhibitors/Visitors is your contact book across every event you've run.",
+        "CRM is your contact book across every event you've run.",
       sections: [
         {
           heading: "Add and bulk-import",
@@ -727,7 +727,7 @@ const _UNUSED_GUIDE_PLACEHOLDER = {
         {
           heading: "Sidebar navigation",
           body:
-            "The left sidebar groups every feature: Chatbot, Analytics, In-Person Booking, Participants, Exhibitors/Visitors, Events/Coupons, Feedback, Eventfront, and Settings. The features available to you depend on the modules included in your plan.",
+            "The left sidebar groups every feature: Chatbot, Analytics, In-Person Booking, Participants, CRM, Events/Coupons, Feedback, Eventfront, and Settings. The features available to you depend on the modules included in your plan.",
         },
         {
           heading: "Built-in chatbot",
@@ -809,7 +809,7 @@ const _UNUSED_GUIDE_PLACEHOLDER = {
     {
       title: "Manage exhibitors and visitors",
       blurb:
-        "The Exhibitors/Visitors tab gives you a contact book across all your events.",
+        "The CRM tab gives you a contact book across all your events.",
       sections: [
         {
           heading: "Add manually or bulk-import",
