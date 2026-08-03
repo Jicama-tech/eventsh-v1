@@ -360,6 +360,7 @@ export class ChatbotService {
     @InjectModel("SpeakerRequest") private speakerRequestModel: Model<any>,
     @InjectModel("RoundTableBooking")
     private roundTableBookingModel: Model<any>,
+    @InjectModel("SponsorRequest") private sponsorRequestModel: Model<any>,
     @InjectModel("Template") private templateModel: Model<any>,
     @InjectModel("User") private userModel: Model<any>,
     @InjectModel("Rsvp") private rsvpModel: Model<any>,
@@ -1490,7 +1491,7 @@ DEEP ANALYTICS TOOLS (use them when the user asks for detailed breakdowns):
 - "Stall analytics" / "stall stats" / "stall revenue" → get_stalls_analytics. Render: a By Status table, a By Payment Status table, totals (Total Stalls, Booking Value, Collected), then a Top Events by Stall Count table.
 - "Speaker analytics" / "speaker stats" → get_speakers_analytics. Render: Status counts, Payment Status counts, totals (Total Requests, Keynote Count, Total Fees), then Top Events by Speaker Count.
 - "Round table analytics" / "round table stats" → get_round_tables_analytics. Render: 1 metrics table (Tables, Chairs, Chairs Booked, Occupancy %, Paid Bookings, Revenue) + Top Events by Round Tables (table).
-- "How is event X doing" / "analytics for event X" / "tell me everything about event X" → get_event_full_analytics(event_name). Render 4 tables: Tickets (Sold, Attended, Attendance %, Capacity, Occupancy %, Revenue), Stalls (totals + status counts), Speakers (status counts), Round Tables (Tables, Chairs, Chairs Booked, Occupancy %, Revenue), then a single bold "Total Revenue" line at the bottom.
+- "How is event X doing" / "analytics for event X" / "tell me everything about event X" → get_event_full_analytics(event_name). Render 5 tables: Tickets (Sold, Attended, Attendance %, Capacity, Occupancy %, Revenue), Stalls (totals + status counts), Speakers (status counts), Round Tables (Tables, Chairs, Chairs Booked, Occupancy %, Revenue), Sponsors (Confirmed, Revenue), then a single bold "Total Revenue" line at the bottom.
 - "Ticket type breakdown for X" / "which ticket tier sells best for X" → get_ticket_type_breakdown(event_name). Render a single table: Type | Sold | Capacity | Occupancy % | Revenue.
 - "Attendance rate" / "how many actually showed up" / "no-shows" → get_attendance_analytics(status). Render: 1 metrics table (Tickets Sold, Attended, No-shows, Attendance %), then Top Events by Sold (table).
 - "My space templates" / "list space templates" / "show reusable spaces" / "what templates do I have" → list_space_templates(). Render: headline "You have **N saved Space templates**." Then a markdown table with columns | # | Name | Size | Table Price | Booking Price | Deposit | (Size = "WxHcm" if both, else "—"). NEVER fabricate rows; only render what the tool returned.
@@ -5454,8 +5455,15 @@ ${context}
           return { error: `No event matching "${args.event_name}"` };
         const evObj: any = ev;
 
-        const [tickAgg, attendAgg, stallStatusAgg, stallTotals, spkAgg, rtBookings] =
-          await Promise.all([
+        const [
+          tickAgg,
+          attendAgg,
+          stallStatusAgg,
+          stallTotals,
+          spkAgg,
+          rtBookings,
+          sponsorAgg,
+        ] = await Promise.all([
             this.ticketModel.aggregate([
               {
                 $match: {
@@ -5534,6 +5542,25 @@ ${context}
                 },
               },
             ]),
+            // Sponsorship money only counts once "Confirmed" (cash tiers
+            // verified, non-cash tiers auto-confirmed) — same rule as the
+            // P&L report and /organizers/analytics, so totals reconcile.
+            this.sponsorRequestModel.aggregate([
+              {
+                $match: {
+                  eventId: evObj._id,
+                  organizerId: orgObjId,
+                  status: "Confirmed",
+                },
+              },
+              {
+                $group: {
+                  _id: null,
+                  count: { $sum: 1 },
+                  revenue: { $sum: { $ifNull: ["$amount", 0] } },
+                },
+              },
+            ]),
           ]);
 
         const ticketsSold = tickAgg[0]?.count || 0;
@@ -5543,6 +5570,7 @@ ${context}
         // reconciles with the rest of the dashboard.
         const stallRevenue = stallTotals[0]?.revenue || 0;
         const rtRevenue = rtBookings[0]?.revenue || 0;
+        const sponsorRevenue = sponsorAgg[0]?.revenue || 0;
         // Capacity
         const capacity =
           (evObj.visitorTypes || []).reduce(
@@ -5604,9 +5632,15 @@ ${context}
             revenue: rtRevenue,
             revenueFormatted: fmt(rtRevenue),
           },
-          totalRevenue: ticketRevenue + stallRevenue + rtRevenue,
+          sponsors: {
+            confirmed: sponsorAgg[0]?.count || 0,
+            revenue: sponsorRevenue,
+            revenueFormatted: fmt(sponsorRevenue),
+          },
+          totalRevenue:
+            ticketRevenue + stallRevenue + rtRevenue + sponsorRevenue,
           totalRevenueFormatted: fmt(
-            ticketRevenue + stallRevenue + rtRevenue,
+            ticketRevenue + stallRevenue + rtRevenue + sponsorRevenue,
           ),
         };
       }

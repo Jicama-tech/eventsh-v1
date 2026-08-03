@@ -11,6 +11,7 @@ import { VendorSchema } from "../stalls/schemas/vendor.schema";
 import { StallSchema } from "../stalls/entities/stall.entity";
 import { SpeakerRequestSchema } from "../speaker-requests/entities/speaker-request.entity";
 import { RoundTableBookingSchema } from "../round-table-bookings/entities/round-table-booking.entity";
+import { SponsorRequestSchema } from "../sponsors/entities/sponsor-request.entity";
 import { TemplateSchema } from "../templates/schemas/template.schema";
 import { UserSchema } from "../users/schemas/user.schema";
 import { RsvpSchema } from "../rsvp/schemas/rsvp.schema";
@@ -43,6 +44,7 @@ import { StallsModule } from "../stalls/stalls.module";
       { name: "Stall", schema: StallSchema },
       { name: "SpeakerRequest", schema: SpeakerRequestSchema },
       { name: "RoundTableBooking", schema: RoundTableBookingSchema },
+      { name: "SponsorRequest", schema: SponsorRequestSchema },
       { name: "Template", schema: TemplateSchema },
       { name: "User", schema: UserSchema },
       // Guest RSVPs for Personal / Marriage events — so the Individual
