@@ -311,40 +311,40 @@ export default function EventPnlDialog({
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border p-4">
                   <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
-                    <ArrowUpRight className="h-3.5 w-3.5 text-green-600" /> Money
+                    <ArrowUpRight className="h-3.5 w-3.5 text-success" /> Money
                     in
                   </div>
-                  <div className="mt-1 text-2xl font-bold text-green-700">
+                  <div className="mt-1 text-2xl font-bold text-success">
                     {money(pnl.totals.revenue, cur)}
                   </div>
                 </div>
                 <div className="rounded-2xl border p-4">
                   <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
-                    <ArrowDownRight className="h-3.5 w-3.5 text-red-600" /> Money
+                    <ArrowDownRight className="h-3.5 w-3.5 text-destructive" /> Money
                     out
                   </div>
-                  <div className="mt-1 text-2xl font-bold text-red-700">
+                  <div className="mt-1 text-2xl font-bold text-destructive">
                     {money(pnl.totals.costs, cur)}
                   </div>
                 </div>
                 <div
                   className={`rounded-2xl border-2 p-4 ${
                     profitable
-                      ? "border-green-200 bg-green-50"
-                      : "border-red-200 bg-red-50"
+                      ? "border-success/30 bg-success/10"
+                      : "border-destructive/30 bg-destructive/10"
                   }`}
                 >
                   <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
                     {profitable ? (
-                      <TrendingUp className="h-3.5 w-3.5 text-green-600" />
+                      <TrendingUp className="h-3.5 w-3.5 text-success" />
                     ) : (
-                      <TrendingDown className="h-3.5 w-3.5 text-red-600" />
+                      <TrendingDown className="h-3.5 w-3.5 text-destructive" />
                     )}
                     Net profit
                   </div>
                   <div
                     className={`mt-1 text-2xl font-bold ${
-                      profitable ? "text-green-700" : "text-red-700"
+                      profitable ? "text-success" : "text-destructive"
                     }`}
                   >
                     {money(net, cur)}
@@ -359,7 +359,7 @@ export default function EventPnlDialog({
 
               <div className="grid gap-3 lg:grid-cols-2">
                 <section className="rounded-xl border">
-                  <h4 className="border-b bg-green-50/60 px-3 py-2 text-sm font-semibold text-green-800">
+                  <h4 className="border-b bg-success/10 px-3 py-2 text-sm font-semibold text-success">
                     Money in
                   </h4>
                   <ul className="divide-y">
@@ -387,7 +387,7 @@ export default function EventPnlDialog({
                 </section>
 
                 <section className="rounded-xl border">
-                  <h4 className="border-b bg-red-50/60 px-3 py-2 text-sm font-semibold text-red-800">
+                  <h4 className="border-b bg-destructive/10 px-3 py-2 text-sm font-semibold text-destructive">
                     Money out
                   </h4>
                   <ul className="divide-y">
@@ -477,7 +477,7 @@ export default function EventPnlDialog({
               )}
 
               {anyPending && e && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                <div className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
                   <p className="mb-1 flex items-center gap-1.5 font-semibold">
                     <Clock className="h-3.5 w-3.5" /> Not counted yet
                   </p>

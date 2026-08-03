@@ -308,7 +308,7 @@ export default function EventRsvpPanel({
             Loading RSVPs…
           </p>
         ) : error ? (
-          <p className="py-8 text-center text-sm text-red-500">{error}</p>
+          <p className="py-8 text-center text-sm text-destructive">{error}</p>
         ) : rows.length === 0 ? (
           <div className="py-10 text-center">
             <Heart className="mx-auto mb-3 h-8 w-8 text-rose-200" />
@@ -367,7 +367,7 @@ export default function EventRsvpPanel({
                             variant="outline"
                             className={
                               r.side === "groom"
-                                ? "border-blue-200 bg-blue-50 text-blue-700"
+                                ? "border-primary/30 bg-primary/10 text-primary"
                                 : "border-pink-200 bg-pink-50 text-pink-700"
                             }
                           >
@@ -387,7 +387,7 @@ export default function EventRsvpPanel({
                       </td>
                       <td className="px-2 py-3 text-center">
                         {r.attending ? (
-                          <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+                          <Badge className="bg-success/15 text-success hover:bg-success/15">
                             <Check className="mr-1 h-3 w-3" /> Attending
                           </Badge>
                         ) : (
@@ -436,7 +436,7 @@ export default function EventRsvpPanel({
                                   a.sharedRsvpIds && a.sharedRsvpIds.length > 0,
                               ) && (
                                 <span
-                                  className="ml-0.5 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-700"
+                                  className="ml-0.5 inline-flex items-center gap-0.5 rounded-full bg-warning/15 px-1.5 text-[10px] font-semibold text-warning"
                                   title="Includes a room shared with another party"
                                 >
                                   <Users className="h-2.5 w-2.5" /> shared
@@ -472,7 +472,7 @@ export default function EventRsvpPanel({
                       </div>
                     </div>
                     {r.attending ? (
-                      <Badge className="flex-shrink-0 bg-green-100 text-green-700 hover:bg-green-100">
+                      <Badge className="flex-shrink-0 bg-success/15 text-success hover:bg-success/15">
                         <Check className="mr-1 h-3 w-3" /> Attending
                       </Badge>
                     ) : (
@@ -488,7 +488,7 @@ export default function EventRsvpPanel({
                         variant="outline"
                         className={
                           r.side === "groom"
-                            ? "border-blue-200 bg-blue-50 text-blue-700"
+                            ? "border-primary/30 bg-primary/10 text-primary"
                             : "border-pink-200 bg-pink-50 text-pink-700"
                         }
                       >
@@ -545,7 +545,7 @@ export default function EventRsvpPanel({
                     {r.roomAllotments?.some(
                       (a) => a.sharedRsvpIds && a.sharedRsvpIds.length > 0,
                     ) && (
-                      <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-700">
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-warning/15 px-1.5 text-[10px] font-semibold text-warning">
                         <Users className="h-2.5 w-2.5" /> shared
                       </span>
                     )}
@@ -618,9 +618,9 @@ function Stat({
   tone?: "default" | "green" | "rose";
 }) {
   const tones: Record<string, string> = {
-    default: "bg-muted/50 text-stone-700",
-    green: "bg-green-50 text-green-700",
-    rose: "bg-rose-50 text-rose-700",
+    default: "bg-muted/50 text-foreground",
+    green: "bg-success/10 text-success",
+    rose: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300",
   };
   return (
     <div className={`rounded-xl p-2 text-center sm:p-4 ${tones[tone]}`}>
