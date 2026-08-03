@@ -1456,7 +1456,7 @@ export function MarriageEventForm({
       {/* Content column */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Sticky header with hamburger + title + actions. */}
-        <div className="sticky top-0 z-20 border-b bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/80">
+        <div className="sticky top-0 z-20 border-b bg-card/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/80">
           <div className="flex items-center justify-between gap-2 p-3 sm:p-4">
             <div className="flex min-w-0 items-center gap-2">
               <Button
@@ -1890,9 +1890,9 @@ export function MarriageEventForm({
                             {(fn.timeline ?? []).map((it, tIdx) => (
                               <div
                                 key={it.id}
-                                className="flex flex-col gap-2 rounded-lg border bg-slate-50 p-2 sm:flex-row sm:items-center"
+                                className="flex flex-col gap-2 rounded-lg border bg-muted p-2 sm:flex-row sm:items-center"
                               >
-                                <span className="hidden w-5 text-center text-xs font-semibold text-slate-400 sm:block">
+                                <span className="hidden w-5 text-center text-xs font-semibold text-muted-foreground sm:block">
                                   {tIdx + 1}
                                 </span>
                                 <Input
@@ -1907,7 +1907,7 @@ export function MarriageEventForm({
                                       ),
                                     })
                                   }
-                                  className="bg-white sm:w-32"
+                                  className="bg-background sm:w-32"
                                 />
                                 <Input
                                   value={it.title}
@@ -1921,7 +1921,7 @@ export function MarriageEventForm({
                                     })
                                   }
                                   placeholder="What's happening (e.g. Welcome drinks)"
-                                  className="flex-1 bg-white"
+                                  className="flex-1 bg-background"
                                 />
                                 <Input
                                   value={it.location}
@@ -1935,13 +1935,13 @@ export function MarriageEventForm({
                                     })
                                   }
                                   placeholder="Where (optional)"
-                                  className="bg-white sm:w-44"
+                                  className="bg-background sm:w-44"
                                 />
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="sm"
-                                  className="h-8 px-2 text-red-500 hover:text-red-600"
+                                  className="h-8 px-2 text-destructive hover:text-destructive"
                                   onClick={() =>
                                     updateFunction(fn.id, {
                                       timeline: (fn.timeline ?? []).filter(
@@ -2133,7 +2133,7 @@ export function MarriageEventForm({
                   </div>
 
                   {storyTimeline.length === 0 && (
-                    <div className="rounded-lg border border-dashed bg-slate-50 p-6 text-center text-sm text-muted-foreground">
+                    <div className="rounded-lg border border-dashed bg-muted p-6 text-center text-sm text-muted-foreground">
                       No moments yet. Click <strong>Add moment</strong> to start
                       your story timeline.
                     </div>
@@ -2142,7 +2142,7 @@ export function MarriageEventForm({
                   {storyTimeline.map((m, idx) => (
                     <div
                       key={m.id}
-                      className="rounded-lg border bg-white p-4 space-y-3"
+                      className="rounded-lg border bg-card p-4 space-y-3"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-rose-100 text-xs font-semibold text-rose-600">
@@ -2175,7 +2175,7 @@ export function MarriageEventForm({
                             type="button"
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-red-500 hover:text-red-600"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
                             onClick={() => removeStoryMoment(m.id)}
                             title="Remove moment"
                           >
@@ -2209,7 +2209,7 @@ export function MarriageEventForm({
 
                       <div>
                         <Label className="text-xs">Story</Label>
-                        <div className="rounded-md bg-white">
+                        <div className="rounded-md bg-card">
                           <Suspense
                             fallback={
                               <div className="h-[150px] animate-pulse rounded-md border bg-muted" />
@@ -2253,7 +2253,7 @@ export function MarriageEventForm({
                             </button>
                           </div>
                         ) : (
-                          <label className="mt-1 flex h-24 w-full max-w-xs cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed bg-slate-50 text-sm text-muted-foreground hover:bg-slate-100">
+                          <label className="mt-1 flex h-24 w-full max-w-xs cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed bg-muted text-sm text-muted-foreground hover:bg-muted">
                             <ImagePlus className="h-5 w-5" />
                             Add a photo
                             <input
