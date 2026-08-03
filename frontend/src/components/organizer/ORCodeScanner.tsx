@@ -1132,7 +1132,7 @@ export default function QRTicketScanner() {
 
   // ─── MAIN RENDER ─────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-primary/10 to-indigo-100 dark:from-primary/5 dark:to-indigo-900/20 p-4">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center mb-6">

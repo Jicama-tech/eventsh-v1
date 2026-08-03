@@ -5516,8 +5516,9 @@ const VenueDesigner = ({
                 minHeight: isCanvasMaximized ? "calc(100vh - 48px)" : "700px",
                 // Neutral backdrop — the venue "sheet" (venueRef) sits on top
                 // of it, so the grid is clearly the venue and not an endless
-                // surface.
-                backgroundColor: "#eef2f7",
+                // surface. Themed via CSS vars (index.css) so it flips with
+                // the dashboard's dark mode toggle.
+                backgroundColor: "var(--venue-backdrop)",
               }}
             >
               <div
@@ -5530,15 +5531,16 @@ const VenueDesigner = ({
                   width: canvasW * venueConfig.scale,
                   height: canvasH * venueConfig.scale,
                   flex: "none",
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid var(--venue-sheet-border)",
                   borderRadius: 6,
                   boxShadow: "0 4px 16px rgba(15,23,42,0.08)",
                   // CAD graph-paper grid: faint minor lines every cell plus
                   // stronger major lines every 5 cells, for a professional
-                  // blueprint feel.
-                  backgroundColor: "#ffffff",
+                  // blueprint feel. Colors come from CSS vars (index.css) so
+                  // the whole sheet flips with the dashboard's dark toggle.
+                  backgroundColor: "var(--venue-sheet)",
                   backgroundImage:
-                    "linear-gradient(to right, rgba(37,99,235,0.16) 1px, transparent 1px), linear-gradient(to bottom, rgba(37,99,235,0.16) 1px, transparent 1px), linear-gradient(to right, rgba(15,23,42,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(15,23,42,0.05) 1px, transparent 1px)",
+                    "linear-gradient(to right, var(--venue-grid-major) 1px, transparent 1px), linear-gradient(to bottom, var(--venue-grid-major) 1px, transparent 1px), linear-gradient(to right, var(--venue-grid-minor) 1px, transparent 1px), linear-gradient(to bottom, var(--venue-grid-minor) 1px, transparent 1px)",
                   // Grid is scaled to match item coordinates (items render at
                   // x*scale), so one cell == gridSize venue-units on screen and
                   // the axis rulers below line up with the major gridlines.

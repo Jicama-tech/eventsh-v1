@@ -1554,7 +1554,7 @@ export function ChatbotWidget({
   };
 
   const panelClasses = isPage
-    ? "flex flex-col bg-gradient-to-b from-slate-50 to-white h-full w-full overflow-hidden"
+    ? "flex flex-col bg-background h-full w-full overflow-hidden"
     : "fixed bottom-3 right-3 sm:bottom-6 sm:right-6 z-50 flex flex-col rounded-2xl bg-card shadow-2xl border border-border overflow-hidden";
   const panelStyle = isPage
     ? undefined

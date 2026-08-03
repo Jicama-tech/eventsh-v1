@@ -2197,7 +2197,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg">
+                      <div className="bg-gradient-to-r from-primary/10 to-indigo-50 dark:from-primary/5 dark:to-indigo-900/20 p-4 rounded-lg">
                         <p className="font-mono text-sm tracking-wide text-foreground">
                           {gstDetails.taxpayerInfo?.pradr?.addr?.bno || ""}{" "}
                           {gstDetails.taxpayerInfo?.pradr?.addr?.st || ""},{" "}

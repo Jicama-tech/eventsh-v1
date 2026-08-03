@@ -642,8 +642,13 @@ function PreviewCanvas({
   return (
     <div className="rounded-md border bg-muted p-2 overflow-auto">
       <div
-        className="relative bg-white border border-gray-200 rounded shadow-inner mx-auto"
-        style={{ width: W, height: H }}
+        className="relative rounded shadow-inner mx-auto"
+        style={{
+          width: W,
+          height: H,
+          backgroundColor: "var(--venue-sheet)",
+          border: "1px solid var(--venue-sheet-border)",
+        }}
       >
         {result.positionedSpeakerZones.map((z) => (
           <div

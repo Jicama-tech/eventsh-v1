@@ -48,6 +48,17 @@
 
     --radius: 0.75rem;
 
+    /* Venue designer canvas — the "sheet" the organizer draws the venue
+       layout on, plus its backdrop and CAD-style graph-paper grid lines.
+       Kept as their own tokens (not reused from card/background) so the
+       canvas can stay a distinct, clearly-bounded "sheet" against its own
+       backdrop in both themes. */
+    --venue-backdrop: #eef2f7;
+    --venue-sheet: #ffffff;
+    --venue-sheet-border: #cbd5e1;
+    --venue-grid-major: rgba(37, 99, 235, 0.16);
+    --venue-grid-minor: rgba(15, 23, 42, 0.05);
+
     /* Custom gradients */
     --gradient-primary: linear-gradient(
       135deg,
@@ -127,6 +138,12 @@
     --border: 217 33% 17%;
     --input: 217 33% 17%;
     --ring: 212 27% 84%;
+
+    --venue-backdrop: #0b1220;
+    --venue-sheet: #1e293b;
+    --venue-sheet-border: #334155;
+    --venue-grid-major: rgba(96, 165, 250, 0.25);
+    --venue-grid-minor: rgba(226, 232, 240, 0.08);
 
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;

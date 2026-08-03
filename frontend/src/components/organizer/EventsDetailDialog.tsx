@@ -169,7 +169,7 @@ export function EnhancedEventsDetailDialog({
 
         {/* Performance Overview Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <Card className="bg-gradient-to-br from-blue-50 to-blue-100">
+          <Card className="bg-gradient-to-br from-primary/10 to-primary/15">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -188,7 +188,7 @@ export function EnhancedEventsDetailDialog({
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-purple-50 to-purple-100">
+          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-900/30">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -207,7 +207,7 @@ export function EnhancedEventsDetailDialog({
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-green-50 to-green-100">
+          <Card className="bg-gradient-to-br from-success/10 to-success/15">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -224,7 +224,7 @@ export function EnhancedEventsDetailDialog({
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-orange-50 to-orange-100">
+          <Card className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-900/30">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
