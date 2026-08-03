@@ -168,11 +168,11 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-[95vw] w-[1200px] h-[90vh] flex flex-col p-0">
-        <DialogHeader className="p-6 border-b bg-slate-50/50">
+        <DialogHeader className="p-6 border-b bg-muted/50">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-                <BarChart3 className="text-blue-600" /> Event Intelligence
+                <BarChart3 className="text-primary" /> Event Intelligence
                 Dashboard
               </DialogTitle>
               <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
@@ -186,29 +186,29 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                 </span>
               </div>
             </div>
-            <div className="bg-white p-3 rounded-xl border shadow-sm flex items-center gap-4">
+            <div className="bg-card p-3 rounded-xl border shadow-sm flex items-center gap-4">
               <div>
                 <p className="text-[10px] uppercase font-bold text-muted-foreground leading-none">
                   Gross Revenue
                 </p>
-                <p className="text-2xl font-black text-green-600">
+                <p className="text-2xl font-black text-success">
                   {formatPrice(grandTotalRevenue)}
                 </p>
               </div>
-              <div className="h-8 w-[1px] bg-slate-200"></div>
-              <TrendingUp className="text-green-500 w-8 h-8" />
+              <div className="h-8 w-[1px] bg-border"></div>
+              <TrendingUp className="text-success w-8 h-8" />
             </div>
           </div>
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
           {/* LEFT SIDEBAR: QUICK STATS */}
-          <div className="w-full md:w-80 border-r bg-slate-50/30 p-4 space-y-4 overflow-y-auto">
-            <h3 className="text-xs font-bold uppercase text-slate-500 mb-2">
+          <div className="w-full md:w-80 border-r bg-muted/30 p-4 space-y-4 overflow-y-auto">
+            <h3 className="text-xs font-bold uppercase text-muted-foreground mb-2">
               Performance Summary
             </h3>
 
-            <Card className="border-none shadow-none bg-blue-600 text-white">
+            <Card className="border-none shadow-none bg-primary text-primary-foreground">
               <CardContent className="p-4">
                 <Ticket className="w-5 h-5 mb-2 opacity-80" />
                 <p className="text-xs opacity-80">Ticket Revenue</p>
@@ -234,7 +234,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
               </CardContent>
             </Card>
 
-            <div className="p-4 rounded-lg border bg-white space-y-3">
+            <div className="p-4 rounded-lg border bg-card space-y-3">
               <h4 className="text-xs font-bold flex items-center gap-1">
                 <Info className="w-3 h-3" /> Event Health
               </h4>
@@ -246,7 +246,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                     {stalls.length > 0 ? Math.round((stallsBooked / stalls.length) * 100) : 0}%
                   </span>
                 </div>
-                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
                   <div
                     className="bg-purple-500 h-full transition-all"
                     style={{ width: `${stalls.length > 0 ? Math.round((stallsBooked / stalls.length) * 100) : 0}%` }}
@@ -262,13 +262,13 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                     <>
                       <div className="flex justify-between text-xs mt-2">
                         <span>Ticket Sales</span>
-                        <span className="font-bold text-blue-600">
+                        <span className="font-bold text-primary">
                           {confirmedTickets}{totalCapacity > 0 ? `/${totalCapacity}` : ""} ({ticketPercent}%)
                         </span>
                       </div>
-                      <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
                         <div
-                          className="bg-blue-500 h-full transition-all"
+                          className="bg-primary h-full transition-all"
                           style={{ width: `${Math.min(ticketPercent, 100)}%` }}
                         ></div>
                       </div>
@@ -284,13 +284,13 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                     <>
                       <div className="flex justify-between text-xs mt-2">
                         <span>Payment Collected</span>
-                        <span className="font-bold text-green-600">
+                        <span className="font-bold text-success">
                           {paidStalls}/{stallsBooked} ({paymentPercent}%)
                         </span>
                       </div>
-                      <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
                         <div
-                          className="bg-green-500 h-full transition-all"
+                          className="bg-success h-full transition-all"
                           style={{ width: `${paymentPercent}%` }}
                         ></div>
                       </div>
@@ -305,7 +305,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                   const ticketScore = totalCapacity > 0 ? (confirmedTickets / totalCapacity) * 100 : (confirmedTickets > 0 ? 100 : 0);
                   const stallScore = stalls.length > 0 ? (stallsBooked / stalls.length) * 100 : 0;
                   const overallHealth = Math.round((ticketScore + stallScore) / 2);
-                  const healthColor = overallHealth >= 70 ? "text-green-600" : overallHealth >= 40 ? "text-yellow-600" : "text-red-600";
+                  const healthColor = overallHealth >= 70 ? "text-success" : overallHealth >= 40 ? "text-warning" : "text-destructive";
                   const healthLabel = overallHealth >= 70 ? "Excellent" : overallHealth >= 40 ? "Good" : "Needs Attention";
                   return (
                     <div className="flex justify-between items-center text-xs mt-3 pt-3 border-t">
@@ -320,7 +320,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
 
           {/* MAIN CONTENT: TABS WITH LISTS */}
           {/* MAIN CONTENT: TABS WITH LISTS */}
-          <div className="flex-1 flex flex-col bg-white overflow-hidden">
+          <div className="flex-1 flex flex-col bg-card overflow-hidden">
             <Tabs
               defaultValue="tickets"
               className="flex-1 flex flex-col overflow-hidden"
@@ -329,7 +329,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                 <TabsList className="bg-transparent gap-6 h-12">
                   <TabsTrigger
                     value="tickets"
-                    className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none bg-transparent px-0 font-bold"
+                    className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none bg-transparent px-0 font-bold"
                   >
                     Ticket Holders
                   </TabsTrigger>
@@ -369,21 +369,21 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
               >
                 <ScrollArea className="h-[calc(90vh-200px)] w-full">
                   <Table>
-                    <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+                    <TableHeader className="bg-muted sticky top-0 z-10 shadow-sm">
                       <TableRow>
-                        <TableHead className="text-[11px] uppercase font-bold bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold bg-muted">
                           Order Date
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase font-bold bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold bg-muted">
                           Customer
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase font-bold bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold bg-muted">
                           Contact
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase font-bold text-right bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold text-right bg-muted">
                           Amount
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase font-bold text-center bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold text-center bg-muted">
                           Status
                         </TableHead>
                       </TableRow>
@@ -398,7 +398,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                         .map((ticket) => (
                           <TableRow
                             key={ticket._id}
-                            className="hover:bg-blue-50/30"
+                            className="hover:bg-primary/5"
                           >
                             <TableCell className="text-xs text-muted-foreground">
                               {new Date(
@@ -416,7 +416,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                             <TableCell className="text-xs italic">
                               {ticket.customerWhatsapp || ticket.customerEmail}
                             </TableCell>
-                            <TableCell className="text-right font-bold text-blue-600">
+                            <TableCell className="text-right font-bold text-primary">
                               {formatPrice(ticket.totalAmount)}
                             </TableCell>
                             <TableCell className="text-center">
@@ -445,21 +445,21 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
               >
                 <ScrollArea className="h-[calc(90vh-200px)] w-full">
                   <Table>
-                    <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+                    <TableHeader className="bg-muted sticky top-0 z-10 shadow-sm">
                       <TableRow>
-                        <TableHead className="text-[11px] uppercase font-bold bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold bg-muted">
                           Shop Name
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase font-bold bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold bg-muted">
                           Exhibitor
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase font-bold bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold bg-muted">
                           Tables
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase font-bold text-right bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold text-right bg-muted">
                           Grand Total
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase font-bold text-center bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold text-center bg-muted">
                           Status
                         </TableHead>
                       </TableRow>
@@ -493,7 +493,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                                   <Badge
                                     key={i}
                                     variant="outline"
-                                    className="text-[9px] bg-white"
+                                    className="text-[9px] bg-card"
                                   >
                                     {t.tableName}
                                   </Badge>
@@ -505,7 +505,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                             </TableCell>
                             <TableCell className="text-center">
                               <Badge
-                                className={`text-[9px] ${stall.paymentStatus === "Paid" ? "bg-green-100 text-green-700 hover:bg-green-100" : "bg-orange-100 text-orange-700 hover:bg-orange-100"}`}
+                                className={`text-[9px] ${stall.paymentStatus === "Paid" ? "bg-success/15 text-success hover:bg-success/15" : "bg-warning/15 text-warning hover:bg-warning/15"}`}
                               >
                                 {stall.paymentStatus}
                               </Badge>
