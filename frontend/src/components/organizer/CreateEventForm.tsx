@@ -9443,7 +9443,7 @@ export function CreateEventForm({
                             style={{
                               maxHeight: "264px",
                               scrollbarWidth: "thin",
-                              scrollbarColor: "#94a3b8 transparent",
+                              scrollbarColor: "hsl(var(--muted-foreground) / 0.5) transparent",
                             }}
                             onWheel={(e) => {
                               // Eat the wheel event so it scrolls the
