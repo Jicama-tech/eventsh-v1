@@ -72,17 +72,17 @@ const RoundTableBookings = ({
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Paid":
-        return "bg-green-100 text-green-700";
+        return "bg-success/15 text-success";
       case "Pending":
-        return "bg-yellow-100 text-yellow-700";
+        return "bg-warning/15 text-warning";
       case "Submitted":
-        return "bg-blue-100 text-blue-700";
+        return "bg-primary/15 text-primary";
       case "Failed":
-        return "bg-red-100 text-red-700";
+        return "bg-destructive/15 text-destructive";
       case "Refunded":
-        return "bg-gray-100 text-gray-700";
+        return "bg-muted text-muted-foreground";
       default:
-        return "bg-gray-100 text-gray-600";
+        return "bg-muted text-muted-foreground";
     }
   };
 
@@ -127,7 +127,7 @@ const RoundTableBookings = ({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="animate-spin text-gray-400" size={24} />
+        <Loader2 className="animate-spin text-muted-foreground" size={24} />
       </div>
     );
   }
@@ -136,8 +136,8 @@ const RoundTableBookings = ({
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <Circle size={48} className="mx-auto mb-3 text-gray-300" />
-          <p className="text-gray-500">No round table bookings yet</p>
+          <Circle size={48} className="mx-auto mb-3 text-muted-foreground/50" />
+          <p className="text-muted-foreground">No round table bookings yet</p>
         </CardContent>
       </Card>
     );
@@ -163,39 +163,39 @@ const RoundTableBookings = ({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-gray-800">
+            <p className="text-2xl font-bold text-foreground">
               {bookings.length}
             </p>
-            <p className="text-xs text-gray-500">Total Bookings</p>
+            <p className="text-xs text-muted-foreground">Total Bookings</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
             {submittedCount > 0 ? (
               <>
-                <p className="text-2xl font-bold text-blue-600">{submittedCount}</p>
-                <p className="text-xs text-blue-500 font-medium">Awaiting Confirmation</p>
+                <p className="text-2xl font-bold text-primary">{submittedCount}</p>
+                <p className="text-xs text-primary font-medium">Awaiting Confirmation</p>
               </>
             ) : (
               <>
-                <p className="text-2xl font-bold text-green-600">{confirmedCount}</p>
-                <p className="text-xs text-gray-500">Confirmed</p>
+                <p className="text-2xl font-bold text-success">{confirmedCount}</p>
+                <p className="text-xs text-muted-foreground">Confirmed</p>
               </>
             )}
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-purple-600">{totalSeats}</p>
-            <p className="text-xs text-gray-500">Seats Booked</p>
+            <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">{totalSeats}</p>
+            <p className="text-xs text-muted-foreground">Seats Booked</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-blue-600">
+            <p className="text-2xl font-bold text-primary">
               {formatPrice(totalRevenue)}
             </p>
-            <p className="text-xs text-gray-500">Revenue</p>
+            <p className="text-xs text-muted-foreground">Revenue</p>
           </CardContent>
         </Card>
       </div>
@@ -230,14 +230,14 @@ const RoundTableBookings = ({
               <option value="Failed">Failed</option>
               <option value="Refunded">Refunded</option>
             </select>
-            <span className="ml-auto text-sm text-gray-500">
+            <span className="ml-auto text-sm text-muted-foreground">
               Showing {filteredBookings.length} of {bookings.length}
             </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-gray-500">
+                <tr className="border-b text-left text-muted-foreground">
                   <th className="pb-3 pr-4 font-medium">Visitor</th>
                   <th className="pb-3 pr-4 font-medium">Table</th>
                   <th className="pb-3 pr-4 font-medium">Seats</th>
@@ -253,7 +253,7 @@ const RoundTableBookings = ({
                   <tr>
                     <td
                       colSpan={8}
-                      className="py-8 text-center text-gray-500"
+                      className="py-8 text-center text-muted-foreground"
                     >
                       No bookings match your filters.
                     </td>
@@ -262,16 +262,16 @@ const RoundTableBookings = ({
                 {filteredBookings.map((booking) => (
                   <tr
                     key={booking._id}
-                    className="border-b last:border-0 hover:bg-gray-50"
+                    className="border-b last:border-0 hover:bg-muted/50"
                   >
                     <td className="py-3 pr-4">
-                      <p className="font-medium text-gray-800">
+                      <p className="font-medium text-foreground">
                         {booking.visitorName}
                       </p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-muted-foreground">
                         {booking.visitorEmail}
                       </p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-muted-foreground">
                         {booking.visitorPhone}
                       </p>
                     </td>
@@ -287,13 +287,13 @@ const RoundTableBookings = ({
                           ? "Whole Table"
                           : `Chair(s): ${booking.selectedChairIndices?.map((c: number) => c + 1).join(", ")}`}
                       </p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-muted-foreground">
                         {booking.numberOfSeats} seat(s)
                       </p>
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 px-2 mt-1 text-xs text-purple-600 hover:text-purple-800 hover:bg-purple-50"
+                        className="h-6 px-2 mt-1 text-xs text-purple-600 hover:text-purple-800 hover:bg-purple-50 dark:text-purple-300 dark:hover:text-purple-200 dark:hover:bg-purple-900/30"
                         onClick={() => setSelectedBooking(booking)}
                       >
                         <Eye size={12} className="mr-1" /> See Details
@@ -311,18 +311,18 @@ const RoundTableBookings = ({
                     </td>
                     <td className="py-3 pr-4">
                       {booking.hasCheckedIn ? (
-                        <Badge className="bg-green-100 text-green-700 text-xs">
+                        <Badge className="bg-success/15 text-success text-xs">
                           {booking.hasCheckedOut ? "Checked Out" : "Checked In"}
                         </Badge>
                       ) : (
-                        <span className="text-xs text-gray-400">-</span>
+                        <span className="text-xs text-muted-foreground">-</span>
                       )}
                     </td>
                     <td className="py-3 pr-4">
                       {booking.paymentStatus === "Submitted" && (
                         <Button
                           size="sm"
-                          className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white"
+                          className="h-7 text-xs bg-success hover:bg-success/90 text-success-foreground"
                           disabled={confirmingId === booking._id}
                           onClick={() => handleConfirmPayment(booking._id)}
                         >
@@ -334,10 +334,10 @@ const RoundTableBookings = ({
                         </Button>
                       )}
                       {booking.paymentStatus === "Pending" && (
-                        <span className="text-xs text-gray-400">Awaiting payment</span>
+                        <span className="text-xs text-muted-foreground">Awaiting payment</span>
                       )}
                       {booking.paymentStatus === "Paid" && (
-                        <span className="text-xs text-green-600 font-medium">Confirmed</span>
+                        <span className="text-xs text-success font-medium">Confirmed</span>
                       )}
                     </td>
                     <td className="py-3">
@@ -397,23 +397,23 @@ const RoundTableBookings = ({
             <div className="space-y-4">
               {/* Visitor */}
               <div className="rounded-lg border p-3 space-y-1">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Visitor</p>
-                <p className="font-semibold text-gray-800">{selectedBooking.visitorName}</p>
-                <p className="text-xs text-gray-500">{selectedBooking.visitorEmail}</p>
-                <p className="text-xs text-gray-500">{selectedBooking.visitorPhone}</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Visitor</p>
+                <p className="font-semibold text-foreground">{selectedBooking.visitorName}</p>
+                <p className="text-xs text-muted-foreground">{selectedBooking.visitorEmail}</p>
+                <p className="text-xs text-muted-foreground">{selectedBooking.visitorPhone}</p>
               </div>
 
               {/* Table Info */}
               <div className="rounded-lg border p-3 space-y-1">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Table</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Table</p>
                 <div className="flex items-center gap-2">
-                  <p className="font-semibold text-gray-800">{selectedBooking.tableName}</p>
+                  <p className="font-semibold text-foreground">{selectedBooking.tableName}</p>
                   <Badge variant="secondary" className="text-[10px]">{selectedBooking.tableCategory}</Badge>
                 </div>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground">
                   {selectedBooking.isWholeTable ? "Whole Table" : "Individual Chairs"} &middot; {selectedBooking.numberOfSeats} seat(s)
                 </p>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground">
                   Chairs: {selectedBooking.selectedChairIndices?.map((c: number) => c + 1).join(", ")}
                 </p>
               </div>
@@ -421,50 +421,50 @@ const RoundTableBookings = ({
               {/* Guest Details */}
               {guestDetailsOn && (
               <div className="rounded-lg border p-3 space-y-2">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Guest Details</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Guest Details</p>
                 {selectedBooking.seatGuests && selectedBooking.seatGuests.length > 0 ? (
                   <div className="space-y-2">
                     {selectedBooking.selectedChairIndices?.map((chairIdx: number) => {
                       const guest = selectedBooking.seatGuests?.find((g: any) => g.chairIndex === chairIdx);
                       return (
-                        <div key={chairIdx} className="flex items-start gap-2 bg-gray-50 rounded-lg px-3 py-2">
-                          <div className="w-7 h-7 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
+                        <div key={chairIdx} className="flex items-start gap-2 bg-muted rounded-lg px-3 py-2">
+                          <div className="w-7 h-7 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
                             {chairIdx + 1}
                           </div>
                           {guest?.name ? (
                             <div className="min-w-0">
-                              <p className="text-sm font-medium text-gray-800">{guest.name}</p>
-                              {guest.whatsApp && <p className="text-xs text-gray-500">{guest.whatsApp}</p>}
-                              {guest.email && <p className="text-xs text-gray-400">{guest.email}</p>}
+                              <p className="text-sm font-medium text-foreground">{guest.name}</p>
+                              {guest.whatsApp && <p className="text-xs text-muted-foreground">{guest.whatsApp}</p>}
+                              {guest.email && <p className="text-xs text-muted-foreground">{guest.email}</p>}
                             </div>
                           ) : (
-                            <span className="text-sm text-gray-400 italic mt-0.5">Not assigned</span>
+                            <span className="text-sm text-muted-foreground italic mt-0.5">Not assigned</span>
                           )}
                         </div>
                       );
                     })}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-400 italic">No guest details provided.</p>
+                  <p className="text-sm text-muted-foreground italic">No guest details provided.</p>
                 )}
               </div>
               )}
 
               {/* Payment & Status */}
               <div className="rounded-lg border p-3 space-y-1">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Payment & Status</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Payment & Status</p>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Amount</span>
-                  <span className="font-bold text-gray-800">{formatPrice(selectedBooking.amount)}</span>
+                  <span className="text-sm text-muted-foreground">Amount</span>
+                  <span className="font-bold text-foreground">{formatPrice(selectedBooking.amount)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Payment</span>
+                  <span className="text-sm text-muted-foreground">Payment</span>
                   <Badge className={`text-xs ${getStatusColor(selectedBooking.paymentStatus)}`}>
                     {selectedBooking.paymentStatus}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Check-In</span>
+                  <span className="text-sm text-muted-foreground">Check-In</span>
                   <span className="text-sm">
                     {selectedBooking.hasCheckedIn
                       ? selectedBooking.hasCheckedOut ? "Checked Out" : "Checked In"
@@ -473,14 +473,14 @@ const RoundTableBookings = ({
                 </div>
                 {selectedBooking.checkInTime && (
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Check-In Time</span>
-                    <span className="text-xs text-gray-500">{new Date(selectedBooking.checkInTime).toLocaleString()}</span>
+                    <span className="text-sm text-muted-foreground">Check-In Time</span>
+                    <span className="text-xs text-muted-foreground">{new Date(selectedBooking.checkInTime).toLocaleString()}</span>
                   </div>
                 )}
                 {selectedBooking.checkOutTime && (
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Check-Out Time</span>
-                    <span className="text-xs text-gray-500">{new Date(selectedBooking.checkOutTime).toLocaleString()}</span>
+                    <span className="text-sm text-muted-foreground">Check-Out Time</span>
+                    <span className="text-xs text-muted-foreground">{new Date(selectedBooking.checkOutTime).toLocaleString()}</span>
                   </div>
                 )}
               </div>
