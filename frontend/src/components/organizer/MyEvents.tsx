@@ -49,7 +49,6 @@ const SupplierRequests = lazy(
 const EventExpensesDialog = lazy(
   () => import("@/components/organizer/EventExpensesDialog"),
 );
-import { EventFeedbackDialog } from "./EventFeedbackDialog";
 import { RegistrationFormsDialog } from "./RegistrationFormsDialog";
 import type { EventTypeKey } from "@/lib/eventTypes";
 import {
@@ -75,13 +74,11 @@ import {
   Receipt,
   Loader2,
   ClipboardList,
-  MessageSquare,
 } from "lucide-react";
 import { format } from "date-fns";
 import { jwtDecode } from "jwt-decode";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";
-import { useSubscription as useEventshSubscription } from "@/hooks/useSubscription";
 
 export interface Event {
   _id: string;
@@ -188,11 +185,8 @@ export interface Event {
 }
 
 const MyEvents: React.FC = () => {
-  const { isModuleEnabled: isPlanModuleEnabled } = useEventshSubscription();
-  const canCollectFeedback = isPlanModuleEnabled("feedback");
   const apiURL = __API_URL__;
   const { toast } = useToast();
-  const [feedbackForEvent, setFeedbackForEvent] = useState<Event | null>(null);
   // Supplier requirements + quotations for one event, shown in a dialog.
   const [suppliesForEvent, setSuppliesForEvent] = useState<Event | null>(null);
   // Expenses + approvals for one event.
@@ -1327,24 +1321,20 @@ const MyEvents: React.FC = () => {
                             — no need to leave for a separate Suppliers tab. */}
                         <Button
                           variant="buttonOutline"
-                          size="sm"
+                          size="icon"
                           onClick={() => setSuppliesForEvent(event)}
-                          className="flex-1 lg:flex-none"
-                          title="Set requirements, share the supplier link, and review quotations"
+                          title="Supplies — set requirements, share the supplier link, and review quotations"
                         >
-                          <Truck size={16} className="mr-1" />
-                          Supplies
+                          <Truck size={16} />
                         </Button>
                         {/* Out-of-pocket spend, with its approval cycle. */}
                         <Button
                           variant="buttonOutline"
-                          size="sm"
+                          size="icon"
                           onClick={() => setExpensesForEvent(event)}
-                          className="flex-1 lg:flex-none"
-                          title="Log expenses and approve what the team has submitted"
+                          title="Expenses — log expenses and approve what the team has submitted"
                         >
-                          <Receipt size={16} className="mr-1" />
-                          Expense
+                          <Receipt size={16} />
                         </Button>
                         {(event.features?.hasStalls ||
                           event.features?.hasSpeakers ||
@@ -1357,16 +1347,6 @@ const MyEvents: React.FC = () => {
                             title="Registration Forms — choose which fields appear on this event's public application forms"
                           >
                             <ClipboardList size={16} />
-                          </Button>
-                        )}
-                        {canCollectFeedback && (
-                          <Button
-                            variant="buttonOutline"
-                            size="icon"
-                            onClick={() => setFeedbackForEvent(event)}
-                            title="Feedback — view ratings + comments and toggle deposit refund status"
-                          >
-                            <MessageSquare size={16} />
                           </Button>
                         )}
                         {canDeleteEvents && (
@@ -1449,13 +1429,6 @@ const MyEvents: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
-
-      <EventFeedbackDialog
-        eventId={feedbackForEvent?._id ?? null}
-        eventTitle={feedbackForEvent?.title}
-        open={!!feedbackForEvent}
-        onOpenChange={(o) => !o && setFeedbackForEvent(null)}
-      />
 
       {/* Team expenses for the chosen event, with approvals */}
       <Suspense fallback={null}>
