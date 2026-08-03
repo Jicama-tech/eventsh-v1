@@ -287,7 +287,7 @@ export function AIVenueDesignerDialog({
       <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col gap-0 p-0">
         <DialogHeader className="px-6 pt-6 pb-3 border-b shrink-0">
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-amber-500" />
+            <Sparkles className="h-5 w-5 text-warning" />
             AI Venue Designer
           </DialogTitle>
           <DialogDescription>
@@ -300,7 +300,7 @@ export function AIVenueDesignerDialog({
 
         {!hasTemplates ? (
           <div className="px-6 py-6">
-            <div className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 flex gap-2">
+            <div className="rounded-md border border-warning/30 bg-warning/10 p-4 text-sm text-warning flex gap-2">
               <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
               <div>
                 Add at least one template (stall, round table, or speaker
@@ -313,7 +313,7 @@ export function AIVenueDesignerDialog({
             {/* Messages */}
             <div
               ref={scrollRef}
-              className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4 min-h-0 bg-slate-50/50"
+              className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4 min-h-0 bg-muted/30"
             >
               {messages.map((m, i) => (
                 <ChatBubble
@@ -330,18 +330,18 @@ export function AIVenueDesignerDialog({
                   <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shrink-0">
                     <Bot className="h-4 w-4 text-white" />
                   </div>
-                  <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-sm shadow-sm px-3 py-2">
+                  <div className="bg-card border rounded-2xl rounded-bl-sm shadow-sm px-3 py-2">
                     <div className="flex gap-1">
                       <span
-                        className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce"
+                        className="h-1.5 w-1.5 bg-muted-foreground rounded-full animate-bounce"
                         style={{ animationDelay: "0ms" }}
                       />
                       <span
-                        className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce"
+                        className="h-1.5 w-1.5 bg-muted-foreground rounded-full animate-bounce"
                         style={{ animationDelay: "120ms" }}
                       />
                       <span
-                        className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce"
+                        className="h-1.5 w-1.5 bg-muted-foreground rounded-full animate-bounce"
                         style={{ animationDelay: "240ms" }}
                       />
                     </div>
@@ -351,11 +351,11 @@ export function AIVenueDesignerDialog({
             </div>
 
             {/* Settings (collapsible) */}
-            <div className="border-t bg-white px-4 sm:px-6">
+            <div className="border-t bg-card px-4 sm:px-6">
               <button
                 type="button"
                 onClick={() => setShowSettings((v) => !v)}
-                className="w-full flex items-center justify-between py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-700"
+                className="w-full flex items-center justify-between py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"
               >
                 <span>Spacing & orientation</span>
                 <ChevronDown
@@ -405,8 +405,8 @@ export function AIVenueDesignerDialog({
                         onClick={() => setStallOrientation("horizontal")}
                         className={`flex-1 text-xs px-2 py-1.5 rounded-md border transition ${
                           stallOrientation === "horizontal"
-                            ? "border-blue-500 bg-blue-50 text-blue-700 font-semibold"
-                            : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                            ? "border-primary bg-primary/10 text-primary font-semibold"
+                            : "border-input bg-card text-muted-foreground hover:bg-muted"
                         } disabled:opacity-50`}
                       >
                         ▭ Horiz.
@@ -417,8 +417,8 @@ export function AIVenueDesignerDialog({
                         onClick={() => setStallOrientation("vertical")}
                         className={`flex-1 text-xs px-2 py-1.5 rounded-md border transition ${
                           stallOrientation === "vertical"
-                            ? "border-blue-500 bg-blue-50 text-blue-700 font-semibold"
-                            : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                            ? "border-primary bg-primary/10 text-primary font-semibold"
+                            : "border-input bg-card text-muted-foreground hover:bg-muted"
                         } disabled:opacity-50`}
                       >
                         ▯ Vert.
@@ -444,17 +444,17 @@ export function AIVenueDesignerDialog({
 
             {/* Blueprint preview strip */}
             {blueprint && (
-              <div className="border-t bg-amber-50/60 px-4 sm:px-6 py-2 flex items-center gap-3">
+              <div className="border-t bg-warning/10 px-4 sm:px-6 py-2 flex items-center gap-3">
                 <img
                   src={blueprint.previewUrl}
                   alt="Blueprint preview"
-                  className="h-12 w-16 object-cover rounded border border-amber-300"
+                  className="h-12 w-16 object-cover rounded border border-warning/40"
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-semibold text-amber-900 truncate">
+                  <div className="text-xs font-semibold text-warning truncate">
                     {blueprint.file.name}
                   </div>
-                  <div className="text-[11px] text-amber-700">
+                  <div className="text-[11px] text-warning">
                     AI will read this blueprint with your next message.
                   </div>
                 </div>
@@ -462,10 +462,10 @@ export function AIVenueDesignerDialog({
                   type="button"
                   onClick={() => pickBlueprint(null)}
                   disabled={loading}
-                  className="p-1 rounded hover:bg-amber-100 disabled:opacity-50"
+                  className="p-1 rounded hover:bg-warning/15 disabled:opacity-50"
                   title="Remove blueprint"
                 >
-                  <XIcon className="h-4 w-4 text-amber-700" />
+                  <XIcon className="h-4 w-4 text-warning" />
                 </button>
               </div>
             )}
@@ -473,7 +473,7 @@ export function AIVenueDesignerDialog({
             {/* Input bar */}
             <form
               onSubmit={handleSubmit}
-              className="p-3 sm:p-4 border-t bg-white flex gap-2 items-center flex-shrink-0"
+              className="p-3 sm:p-4 border-t bg-card flex gap-2 items-center flex-shrink-0"
             >
               <input
                 ref={fileInputRef}
@@ -507,13 +507,13 @@ export function AIVenueDesignerDialog({
                       : "Describe the venue setup…"
                 }
                 disabled={loading}
-                className="flex-1 h-10 rounded-full bg-slate-100 border-0 focus-visible:ring-1 focus-visible:ring-blue-500 text-sm"
+                className="flex-1 h-10 rounded-full bg-muted border-0 focus-visible:ring-1 focus-visible:ring-primary text-sm"
               />
               <Button
                 type="submit"
                 size="icon"
                 disabled={(!input.trim() && !blueprint) || loading}
-                className="h-10 w-10 rounded-full bg-blue-600 hover:bg-blue-700 shrink-0"
+                className="h-10 w-10 rounded-full bg-primary hover:bg-primary/90 shrink-0"
                 title="Send"
               >
                 {loading ? (
@@ -558,7 +558,7 @@ function ChatBubble({
       <div
         className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
           isUser
-            ? "bg-slate-200 text-slate-600"
+            ? "bg-muted text-muted-foreground"
             : "bg-gradient-to-br from-amber-500 to-orange-600"
         }`}
       >
@@ -571,8 +571,8 @@ function ChatBubble({
       <div
         className={`max-w-[85%] sm:max-w-[78%] px-3 py-2 text-sm leading-relaxed break-words ${
           isUser
-            ? "bg-blue-600 text-white rounded-2xl rounded-br-sm"
-            : "bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-bl-sm shadow-sm"
+            ? "bg-primary text-primary-foreground rounded-2xl rounded-br-sm"
+            : "bg-card border text-foreground rounded-2xl rounded-bl-sm shadow-sm"
         }`}
       >
         <span className="whitespace-pre-wrap">{content}</span>
@@ -595,7 +595,7 @@ function ChatBubble({
               />
             </div>
             {layout.warnings && layout.warnings.length > 0 && (
-              <ul className="mt-2 text-[11px] text-amber-700 list-disc ml-4">
+              <ul className="mt-2 text-[11px] text-warning list-disc ml-4">
                 {layout.warnings.map((w, i) => (
                   <li key={i}>{w}</li>
                 ))}
@@ -610,9 +610,9 @@ function ChatBubble({
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded bg-slate-50 border border-slate-200 px-2 py-1 text-center">
-      <div className="font-bold text-sm text-slate-900">{value}</div>
-      <div className="text-[9px] uppercase tracking-wide text-slate-500">
+    <div className="rounded bg-muted border px-2 py-1 text-center">
+      <div className="font-bold text-sm text-foreground">{value}</div>
+      <div className="text-[9px] uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
     </div>
@@ -640,7 +640,7 @@ function PreviewCanvas({
   const stallTplById = new Map(templates.stalls.map((t) => [t.id, t]));
 
   return (
-    <div className="rounded-md border bg-slate-50 p-2 overflow-auto">
+    <div className="rounded-md border bg-muted p-2 overflow-auto">
       <div
         className="relative bg-white border border-gray-200 rounded shadow-inner mx-auto"
         style={{ width: W, height: H }}
