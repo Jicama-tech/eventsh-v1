@@ -113,7 +113,7 @@ export default function IndividualMyEvents({
           Loading your events…
         </div>
       ) : error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50/50 p-6 text-center text-sm text-red-700">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-center text-sm text-destructive">
           {error}
           <div className="mt-3">
             <Button size="sm" variant="buttonOutline" onClick={load}>
@@ -143,18 +143,18 @@ export default function IndividualMyEvents({
           {events.map((ev) => (
             <div
               key={ev.id}
-              className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
+              className="rounded-lg border bg-card p-3 shadow-sm"
             >
               <div className="mb-1 flex items-start justify-between gap-2">
-                <div className="truncate text-sm sm:text-base font-semibold text-slate-900">
+                <div className="truncate text-sm sm:text-base font-semibold text-foreground">
                   {ev.title}
                 </div>
                 {ev.status && (
                   <span
                     className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
                       ev.status === "published"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-amber-100 text-amber-700"
+                        ? "bg-success/15 text-success"
+                        : "bg-warning/15 text-warning"
                     }`}
                   >
                     {ev.status}
@@ -162,20 +162,20 @@ export default function IndividualMyEvents({
                 )}
               </div>
               {ev.date && (
-                <div className="mb-2 flex items-center gap-1 text-xs text-slate-500">
+                <div className="mb-2 flex items-center gap-1 text-xs text-muted-foreground">
                   <Calendar className="h-3 w-3" />
                   {new Date(ev.date).toLocaleDateString()}
                 </div>
               )}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-700">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-foreground">
                 <div className="flex items-center gap-1">
                   {ev.isRsvp ? (
-                    <Users className="h-3 w-3 text-rose-500" />
+                    <Users className="h-3 w-3 text-rose-500 dark:text-rose-300" />
                   ) : (
-                    <Ticket className="h-3 w-3 text-blue-500" />
+                    <Ticket className="h-3 w-3 text-primary" />
                   )}
                   <span className="font-medium">{ev.ticketCount ?? 0}</span>
-                  <span className="text-slate-400">
+                  <span className="text-muted-foreground">
                     {ev.isRsvp ? "RSVPs" : "sold"}
                   </span>
                 </div>
@@ -184,9 +184,9 @@ export default function IndividualMyEvents({
                     className="flex items-center gap-1"
                     title={ev.ticketTypeNames?.join(", ")}
                   >
-                    <Crown className="h-3 w-3 text-amber-500" />
+                    <Crown className="h-3 w-3 text-warning" />
                     <span className="font-medium">{ev.ticketTypeCount}</span>
-                    <span className="text-slate-400">
+                    <span className="text-muted-foreground">
                       {ev.ticketTypeCount === 1 ? "ticket type" : "ticket types"}
                     </span>
                   </div>
@@ -224,7 +224,7 @@ export default function IndividualMyEvents({
                     href={ev.publicUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+                    className="flex items-center gap-1 rounded border border-primary/30 bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/15"
                     title="Open public event page"
                   >
                     <ExternalLink className="h-3 w-3" />

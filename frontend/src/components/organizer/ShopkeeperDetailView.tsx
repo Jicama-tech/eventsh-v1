@@ -108,7 +108,7 @@ export function ShopkeeperDetailView({
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-3">
-                <Mail className="h-4 w-4 text-blue-500" />
+                <Mail className="h-4 w-4 text-primary" />
                 <a
                   href={`mailto:${shopkeeper.businessEmail}`}
                   className="text-sm hover:underline font-medium"
@@ -117,7 +117,7 @@ export function ShopkeeperDetailView({
                 </a>
               </div>
               <div className="flex items-center gap-3">
-                <Phone className="h-4 w-4 text-green-600" />
+                <Phone className="h-4 w-4 text-success" />
                 <a
                   href={`tel:${shopkeeper.phone}`}
                   className="text-sm hover:underline font-medium"
@@ -126,7 +126,7 @@ export function ShopkeeperDetailView({
                 </a>
               </div>
               <div className="flex items-center gap-3">
-                <MessageCircle className="h-4 w-4 text-green-500" />
+                <MessageCircle className="h-4 w-4 text-success" />
                 <a
                   href={`https://wa.me/${shopkeeper.whatsappNumber.replace(/\+/g, "")}`}
                   target="_blank"
@@ -175,7 +175,7 @@ export function ShopkeeperDetailView({
                 </span>
               </div>
               <div className="flex items-start gap-2 pt-2">
-                <MapPin className="h-4 w-4 text-red-500 mt-1" />
+                <MapPin className="h-4 w-4 text-destructive mt-1" />
                 <span className="text-sm leading-relaxed">
                   {shopkeeper.address}
                 </span>

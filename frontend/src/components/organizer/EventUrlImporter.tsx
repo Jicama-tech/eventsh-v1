@@ -169,22 +169,22 @@ export function EventUrlImporter({
   };
 
   return (
-    <Card className="border-blue-200 bg-blue-50/30">
+    <Card className="border-primary/30 bg-primary/5">
       <CardContent className="p-4 space-y-3">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-blue-600" />
-          <span className="text-sm font-semibold text-blue-900">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <span className="text-sm font-semibold text-primary">
             Import event details from a URL
           </span>
         </div>
-        <p className="text-xs text-slate-600">
+        <p className="text-xs text-muted-foreground">
           Paste a JotForm, Eventbrite, Luma, Meetup, or any event landing-page
           link. AI reads the page and pre-fills the empty fields below — you
           can edit anything before saving.
         </p>
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               value={url}
               onChange={(e) => setUrl(e.target.value)}
@@ -231,7 +231,7 @@ export function EventUrlImporter({
           </div>
         )}
         {notes.length > 0 && (
-          <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 flex gap-2">
+          <div className="rounded border border-warning/30 bg-warning/10 p-2 text-xs text-warning flex gap-2">
             <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
             <ul className="space-y-0.5">
               {notes.map((n, i) => (
