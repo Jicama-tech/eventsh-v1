@@ -211,7 +211,7 @@ export function UserDetailView({
                 {user.allergies?.length > 0 && (
                   <div>
                     <p className="text-sm font-medium flex items-center gap-2 mb-2">
-                      <AlertTriangle className="h-3 w-3 text-orange-500" />
+                      <AlertTriangle className="h-3 w-3 text-warning" />
                       Allergies
                     </p>
                     <div className="flex flex-wrap gap-1">

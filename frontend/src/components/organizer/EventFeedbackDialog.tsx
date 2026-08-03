@@ -72,7 +72,7 @@ function Stars({ value }: { value: number }) {
           className={
             value >= n
               ? "fill-yellow-400 text-yellow-400"
-              : "text-gray-300"
+              : "text-muted-foreground/40"
           }
         />
       ))}
@@ -211,9 +211,9 @@ export function EventFeedbackDialog({
           </div>
         ) : allowedAudiences.length === 0 ? (
           <div className="py-10 text-center text-muted-foreground space-y-3">
-            <Lock className="h-8 w-8 mx-auto text-slate-400" />
+            <Lock className="h-8 w-8 mx-auto text-muted-foreground" />
             <div>
-              <p className="font-medium text-slate-700">
+              <p className="font-medium text-foreground">
                 Feedback isn't included in your current plan
               </p>
               <p className="text-xs mt-1">

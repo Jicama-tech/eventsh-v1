@@ -112,33 +112,33 @@ export function OrganizerAnalyticsCharts() {
             label: "Events",
             value: data.totals.events,
             icon: Calendar,
-            color: "text-blue-600",
-            bg: "bg-blue-50",
+            color: "text-primary",
+            bg: "bg-primary/10",
           },
           {
             label: "Tickets Sold",
             value: data.totals.tickets,
             icon: Ticket,
-            color: "text-purple-600",
-            bg: "bg-purple-50",
+            color: "text-purple-600 dark:text-purple-300",
+            bg: "bg-purple-50 dark:bg-purple-900/30",
           },
           {
             label: "Revenue",
             value: `$${data.totals.revenue.toLocaleString()}`,
             icon: DollarSign,
-            color: "text-emerald-600",
-            bg: "bg-emerald-50",
+            color: "text-success",
+            bg: "bg-success/10",
           },
           {
             label: "Last 30 days",
             value: data.revenueTrend.reduce((s, d) => s + d.tickets, 0),
             icon: TrendingUp,
-            color: "text-indigo-600",
-            bg: "bg-indigo-50",
+            color: "text-indigo-600 dark:text-indigo-300",
+            bg: "bg-indigo-50 dark:bg-indigo-900/30",
             note: "tickets",
           },
         ].map((s, i) => (
-          <Card key={i} className="border-slate-100">
+          <Card key={i}>
             <CardContent className="p-3">
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs text-muted-foreground truncate">
@@ -160,7 +160,7 @@ export function OrganizerAnalyticsCharts() {
       {!hasData ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            <TrendingUp className="h-10 w-10 mx-auto mb-2 text-gray-300" />
+            <TrendingUp className="h-10 w-10 mx-auto mb-2 text-muted-foreground/40" />
             <p className="text-sm">No tickets sold yet — charts will appear once you start receiving orders.</p>
           </CardContent>
         </Card>
@@ -254,7 +254,7 @@ export function OrganizerAnalyticsCharts() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-blue-500" />
+                <Calendar className="h-4 w-4 text-primary" />
                 Top Events by Revenue
               </CardTitle>
               <CardDescription>Top 5 events all-time</CardDescription>
@@ -298,7 +298,7 @@ export function OrganizerAnalyticsCharts() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
-                <Ticket className="h-4 w-4 text-purple-500" />
+                <Ticket className="h-4 w-4 text-purple-600 dark:text-purple-300" />
                 Tickets by Status
               </CardTitle>
               <CardDescription>Distribution across all events</CardDescription>
