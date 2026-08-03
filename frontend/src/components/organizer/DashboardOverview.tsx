@@ -487,10 +487,10 @@ export default function DashboardOverview({
     // Single-list phase tag: Live / Upcoming / Past.
     const badgeColor =
       type === "current"
-        ? "bg-green-500"
+        ? "bg-success"
         : type === "upcoming"
-          ? "bg-blue-500"
-          : "bg-gray-500";
+          ? "bg-primary"
+          : "bg-muted-foreground";
 
     const badgeText =
       type === "current"
@@ -764,10 +764,7 @@ export default function DashboardOverview({
                   </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button
-                        size="sm"
-                        className="bg-blue-600 hover:bg-blue-700 text-white"
-                      >
+                      <Button size="sm">
                         <Download className="h-3 w-3 mr-1" />
                         Export Data
                         <ChevronDown className="h-3 w-3 ml-1" />
@@ -776,14 +773,14 @@ export default function DashboardOverview({
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
                         onClick={() => exportEventToCSV(event)}
-                        className="focus:bg-blue-600 focus:text-white cursor-pointer"
+                        className="focus:bg-primary focus:text-primary-foreground cursor-pointer"
                       >
                         <FileSpreadsheet className="h-4 w-4 mr-2" />
                         Export as CSV
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => exportEventToPDF(event)}
-                        className="focus:bg-blue-600 focus:text-white cursor-pointer"
+                        className="focus:bg-primary focus:text-primary-foreground cursor-pointer"
                       >
                         <FileText className="h-4 w-4 mr-2" />
                         Export as PDF
@@ -1371,7 +1368,7 @@ export default function DashboardOverview({
           return (
             <Card
               key={index}
-              className="transition-all hover:bg-gray-50 dark:hover:bg-gray-800"
+              className="transition-all hover:bg-muted/50"
             >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
@@ -1403,16 +1400,16 @@ export default function DashboardOverview({
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">Events</h3>
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 font-medium text-green-700">
-              <span className="h-2 w-2 rounded-full bg-green-500" />
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 font-medium text-success">
+              <span className="h-2 w-2 rounded-full bg-success" />
               {currentEvents.length} Live
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">
-              <span className="h-2 w-2 rounded-full bg-blue-500" />
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 font-medium text-primary">
+              <span className="h-2 w-2 rounded-full bg-primary" />
               {upcomingEvents.length} Upcoming
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-600">
-              <span className="h-2 w-2 rounded-full bg-gray-400" />
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 font-medium text-muted-foreground">
+              <span className="h-2 w-2 rounded-full bg-muted-foreground" />
               {pastEvents.length} Past
             </span>
           </div>

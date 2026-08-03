@@ -42,6 +42,8 @@ import {
   ChevronRight,
   ChevronLeft,
   Receipt,
+  Sun,
+  Moon,
 } from "lucide-react";
 import {
   Tooltip,
@@ -219,7 +221,7 @@ function RoundTableBookingsTab({ apiURL }: { apiURL: string }) {
   return (
     <div className="space-y-4">
       <h2 className="text-2xl sm:text-3xl font-bold">Round Table Bookings</h2>
-      <p className="text-gray-500 text-sm">
+      <p className="text-muted-foreground text-sm">
         View and manage round table seat bookings across your events.
       </p>
 
@@ -251,7 +253,7 @@ function RoundTableBookingsTab({ apiURL }: { apiURL: string }) {
             </Suspense>
           ) : (
             <Card>
-              <CardContent className="py-8 text-center text-gray-500">
+              <CardContent className="py-8 text-center text-muted-foreground">
                 Select an event above to view its round table bookings.
               </CardContent>
             </Card>
@@ -399,6 +401,20 @@ export function OrganizerDashboard({
   useEffect(() => {
     localStorage.setItem("organizerSidebarCollapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed]);
+  // Dark mode — scoped to this dashboard (the "dark" class lands on the
+  // shell's own root div, not <html>), so toggling it here never bleeds
+  // into the public eventfront, admin, or user portals.
+  const [dashboardTheme, setDashboardTheme] = useState<"light" | "dark">(
+    () => {
+      if (typeof window === "undefined") return "light";
+      return localStorage.getItem("organizerDashboardTheme") === "dark"
+        ? "dark"
+        : "light";
+    },
+  );
+  useEffect(() => {
+    localStorage.setItem("organizerDashboardTheme", dashboardTheme);
+  }, [dashboardTheme]);
   const [loading, setLoading] = useState(false);
   const [OrganizationName, setOrganizationName] = useState(() => {
     try {
@@ -1058,7 +1074,9 @@ export function OrganizerDashboard({
   }
 
   return (
-    <div className="app-shell flex flex-col overflow-hidden">
+    <div
+      className={`app-shell flex flex-col overflow-hidden ${dashboardTheme === "dark" ? "dark bg-background text-foreground" : ""}`}
+    >
       <DemoPrompt
         open={showDemoPrompt}
         onClose={() => setShowDemoPrompt(false)}
@@ -1118,6 +1136,27 @@ export function OrganizerDashboard({
           <div className="flex items-center space-x-2 sm:space-x-4">
             {!isIndividual && (
               <Button
+                variant="buttonOutline"
+                size="icon"
+                className="h-8 w-8 sm:h-9 sm:w-9"
+                onClick={() =>
+                  setDashboardTheme((t) => (t === "dark" ? "light" : "dark"))
+                }
+                title={
+                  dashboardTheme === "dark"
+                    ? "Switch to light theme"
+                    : "Switch to dark theme"
+                }
+              >
+                {dashboardTheme === "dark" ? (
+                  <Sun className="h-4 w-4" />
+                ) : (
+                  <Moon className="h-4 w-4" />
+                )}
+              </Button>
+            )}
+            {!isIndividual && (
+              <Button
                 variant="outline"
                 size="sm"
                 className="text-xs sm:text-sm text-muted-foreground hidden sm:flex items-center gap-1 hover:text-primary"
@@ -1154,7 +1193,7 @@ export function OrganizerDashboard({
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         onClick={logout}
-                        className="text-red-600 focus:text-red-600"
+                        className="text-destructive focus:text-destructive"
                       >
                         <LogOut className="mr-2 h-4 w-4" />
                         Logout
@@ -1719,7 +1758,7 @@ export function OrganizerDashboard({
           (md:hidden — tablets and up get the desktop layout); on those the
           assistant fills the screen and email settings are in the header. */}
       {isIndividual && (
-        <nav className="safe-b z-40 flex-shrink-0 border-t bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 md:hidden">
+        <nav className="safe-b z-40 flex-shrink-0 border-t bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 md:hidden">
           <div className="mx-auto flex max-w-md items-stretch">
             {[
               // Settings & Help moved to the header menu (near Logout).

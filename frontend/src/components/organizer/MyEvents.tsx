@@ -929,15 +929,15 @@ const MyEvents: React.FC = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "active":
-        return "bg-green-100 text-green-800 border-green-300";
+        return "bg-success/15 text-success border-success/30";
       case "draft":
-        return "bg-yellow-100 text-yellow-800 border-yellow-300";
+        return "bg-warning/15 text-warning border-warning/30";
       case "cancelled":
-        return "bg-red-100 text-red-800 border-red-300";
+        return "bg-destructive/15 text-destructive border-destructive/30";
       case "completed":
-        return "bg-blue-100 text-blue-800 border-blue-300";
+        return "bg-primary/15 text-primary border-primary/30";
       default:
-        return "bg-gray-100 text-gray-800 border-gray-300";
+        return "bg-muted text-muted-foreground border-border";
     }
   };
 
@@ -1358,7 +1358,7 @@ const MyEvents: React.FC = () => {
                               setDeleteEventTarget(event);
                               setDeleteEventConfirmText("");
                             }}
-                            className="text-red-600 hover:text-red-700 hover:border-red-300"
+                            className="text-destructive hover:text-destructive hover:border-destructive/40"
                             title="Delete event"
                           >
                             <Trash2 size={16} />
@@ -1502,7 +1502,7 @@ const MyEvents: React.FC = () => {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Trash2 className="h-5 w-5 text-red-600" />
+              <Trash2 className="h-5 w-5 text-destructive" />
               Are you sure you want to delete?
             </DialogTitle>
           </DialogHeader>
@@ -1514,7 +1514,7 @@ const MyEvents: React.FC = () => {
           <div className="space-y-2 mt-2">
             <label htmlFor="delete-event-confirm" className="text-sm">
               To confirm, type{" "}
-              <code className="font-mono font-semibold text-red-600">
+              <code className="font-mono font-semibold text-destructive">
                 {DELETE_EVENT_PHRASE}
               </code>{" "}
               below:
