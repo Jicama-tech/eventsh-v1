@@ -256,7 +256,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Guide",
     Icon: BookOpen,
-    tint: "text-indigo-600 bg-indigo-50",
+    tint: "text-indigo-600 bg-indigo-50 dark:text-indigo-300 dark:bg-indigo-900/30",
     title: "Guide",
     sub: "Full how-to: setup, tickets, stalls & more — download as PDF",
     prompt: "Show me the complete organizer guide",
@@ -264,7 +264,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Guide",
     Icon: Ticket,
-    tint: "text-indigo-600 bg-indigo-50",
+    tint: "text-indigo-600 bg-indigo-50 dark:text-indigo-300 dark:bg-indigo-900/30",
     title: "How visitors book tickets",
     sub: "Step-by-step ticket booking flow + PDF",
     prompt: "How do visitors book a ticket?",
@@ -272,7 +272,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Guide",
     Icon: Store,
-    tint: "text-indigo-600 bg-indigo-50",
+    tint: "text-indigo-600 bg-indigo-50 dark:text-indigo-300 dark:bg-indigo-900/30",
     title: "How vendors book stalls",
     sub: "Step-by-step stall rental flow + PDF",
     prompt: "How do vendors rent a stall?",
@@ -280,7 +280,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Guide",
     Icon: Grid3x3,
-    tint: "text-indigo-600 bg-indigo-50",
+    tint: "text-indigo-600 bg-indigo-50 dark:text-indigo-300 dark:bg-indigo-900/30",
     title: "How to reserve round tables",
     sub: "Step-by-step round-table seat booking + PDF",
     prompt: "How do visitors reserve round-table seats?",
@@ -288,7 +288,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Guide",
     Icon: Mic2,
-    tint: "text-indigo-600 bg-indigo-50",
+    tint: "text-indigo-600 bg-indigo-50 dark:text-indigo-300 dark:bg-indigo-900/30",
     title: "How speakers apply",
     sub: "Step-by-step speaker application flow + PDF",
     prompt: "How do speakers apply to speak?",
@@ -297,7 +297,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Analytics",
     Icon: TrendingUp,
-    tint: "text-blue-600 bg-blue-50",
+    tint: "text-primary bg-primary/10",
     title: "Today's revenue",
     sub: "Today's ticket sales + revenue",
     prompt: "Show me today's revenue and ticket sales",
@@ -305,7 +305,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Analytics",
     Icon: TrendingUp,
-    tint: "text-blue-600 bg-blue-50",
+    tint: "text-primary bg-primary/10",
     title: "This week's stats",
     sub: "Revenue + tickets this week",
     prompt: "Show this week's revenue and tickets",
@@ -313,7 +313,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Analytics",
     Icon: TrendingUp,
-    tint: "text-blue-600 bg-blue-50",
+    tint: "text-primary bg-primary/10",
     title: "This month's stats",
     sub: "Monthly performance",
     prompt: "Show this month's revenue and ticket count",
@@ -321,7 +321,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Analytics",
     Icon: TrendingUp,
-    tint: "text-blue-600 bg-blue-50",
+    tint: "text-primary bg-primary/10",
     title: "This year's stats",
     sub: "Year-to-date revenue + tickets",
     prompt: "Show this year's revenue and tickets",
@@ -329,7 +329,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Analytics",
     Icon: Star,
-    tint: "text-amber-600 bg-amber-50",
+    tint: "text-warning bg-warning/10",
     title: "Top events",
     sub: "Best performing by revenue",
     prompt: "Show me top events by revenue",
@@ -337,7 +337,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Analytics",
     Icon: AlertCircle,
-    tint: "text-orange-600 bg-orange-50",
+    tint: "text-orange-600 bg-orange-50 dark:text-orange-300 dark:bg-orange-900/30",
     title: "Pending approvals",
     sub: "Speakers + stalls awaiting review",
     prompt: "How many pending approvals do I have?",
@@ -345,7 +345,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Analytics",
     Icon: TrendingUp,
-    tint: "text-emerald-600 bg-emerald-50",
+    tint: "text-success bg-success/10",
     title: "Platform overview",
     sub: "Events / tickets / revenue summary",
     prompt: "Give me an overview of my platform",
@@ -353,7 +353,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Analytics",
     Icon: Calendar,
-    tint: "text-emerald-600 bg-emerald-50",
+    tint: "text-success bg-success/10",
     title: "Events breakdown",
     sub: "Status / visibility / occupancy / avg price",
     prompt: "Give me a detailed events analytics breakdown",
@@ -361,7 +361,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Analytics",
     Icon: Building2,
-    tint: "text-orange-600 bg-orange-50",
+    tint: "text-orange-600 bg-orange-50 dark:text-orange-300 dark:bg-orange-900/30",
     title: "Stalls analytics",
     sub: "Bookings, payments, revenue per event",
     prompt: "Show me stall analytics",
@@ -369,7 +369,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Analytics",
     Icon: Mic2,
-    tint: "text-purple-600 bg-purple-50",
+    tint: "text-purple-600 bg-purple-50 dark:text-purple-300 dark:bg-purple-900/30",
     title: "Speakers analytics",
     sub: "Requests, fees, keynotes, top events",
     prompt: "Show me speaker analytics",
@@ -387,7 +387,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Events",
     Icon: Plus,
-    tint: "text-blue-600 bg-blue-50",
+    tint: "text-primary bg-primary/10",
     title: "Create new event",
     sub: "Open the blank event form",
     prompt: "Create a new event",
@@ -395,7 +395,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Events",
     Icon: Pencil,
-    tint: "text-purple-600 bg-purple-50",
+    tint: "text-purple-600 bg-purple-50 dark:text-purple-300 dark:bg-purple-900/30",
     title: "Edit an event",
     sub: "Open editor pre-filled (give the title)",
     prompt: "Edit event ",
@@ -403,7 +403,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Events",
     Icon: Calendar,
-    tint: "text-emerald-600 bg-emerald-50",
+    tint: "text-success bg-success/10",
     title: "Upcoming events",
     sub: "What's coming up",
     prompt: "List my upcoming events",
@@ -411,7 +411,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Events",
     Icon: Calendar,
-    tint: "text-emerald-600 bg-emerald-50",
+    tint: "text-success bg-success/10",
     title: "All events",
     sub: "Every event including past",
     prompt: "List all my events",
@@ -419,7 +419,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Events",
     Icon: Calendar,
-    tint: "text-slate-600 bg-slate-50",
+    tint: "text-muted-foreground bg-muted",
     title: "Past events",
     sub: "Completed events",
     prompt: "Show me past events",
@@ -427,7 +427,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Events",
     Icon: Grid3x3,
-    tint: "text-purple-600 bg-purple-50",
+    tint: "text-purple-600 bg-purple-50 dark:text-purple-300 dark:bg-purple-900/30",
     title: "Space templates",
     sub: "Reusable Space configs from past events",
     prompt: "Show my space templates",
@@ -435,7 +435,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   // {
   //   category: "Events",
   //   Icon: Sparkles,
-  //   tint: "text-purple-600 bg-purple-50",
+  //   tint: "text-purple-600 bg-purple-50 dark:text-purple-300 dark:bg-purple-900/30",
   //   title: "Create event (one-shot)",
   //   sub: "Full event with everything in one prompt",
   //   prompt:
@@ -444,7 +444,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   // {
   //   category: "Events",
   //   Icon: Calendar,
-  //   tint: "text-blue-600 bg-blue-50",
+  //   tint: "text-primary bg-primary/10",
   //   title: "Create blank event",
   //   sub: "Just title and date — refine later",
   //   prompt: "Create a basic event with title and date",
@@ -452,7 +452,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   // {
   //   category: "Events",
   //   Icon: Sparkles,
-  //   tint: "text-emerald-600 bg-emerald-50",
+  //   tint: "text-success bg-success/10",
   //   title: "Add ticket types",
   //   sub: "Add tiers to an existing event",
   //   prompt:
@@ -461,7 +461,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   // {
   //   category: "Events",
   //   Icon: Sparkles,
-  //   tint: "text-purple-600 bg-purple-50",
+  //   tint: "text-purple-600 bg-purple-50 dark:text-purple-300 dark:bg-purple-900/30",
   //   title: "Add round tables",
   //   sub: "Auto-place tables on the venue grid",
   //   prompt: "Add 10 round tables of 8 seats each to my latest event",
@@ -469,7 +469,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   // {
   //   category: "Events",
   //   Icon: Building2,
-  //   tint: "text-orange-600 bg-orange-50",
+  //   tint: "text-orange-600 bg-orange-50 dark:text-orange-300 dark:bg-orange-900/30",
   //   title: "Add stalls",
   //   sub: "Auto-place vendor booths",
   //   prompt: "Add 5 stalls at ₹2000 each to my latest event",
@@ -477,7 +477,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   // {
   //   category: "Events",
   //   Icon: Mic2,
-  //   tint: "text-purple-600 bg-purple-50",
+  //   tint: "text-purple-600 bg-purple-50 dark:text-purple-300 dark:bg-purple-900/30",
   //   title: "Add speakers",
   //   sub: "Add speaker profiles",
   //   prompt: "Add speaker John Doe from Microsoft to my latest event",
@@ -485,7 +485,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   // {
   //   category: "Events",
   //   Icon: Globe,
-  //   tint: "text-indigo-600 bg-indigo-50",
+  //   tint: "text-indigo-600 bg-indigo-50 dark:text-indigo-300 dark:bg-indigo-900/30",
   //   title: "Set venue size",
   //   sub: "Resize the venue canvas",
   //   prompt: "Set venue size to 1200x700 for my latest event",
@@ -493,7 +493,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   // {
   //   category: "Events",
   //   Icon: Sparkles,
-  //   tint: "text-emerald-600 bg-emerald-50",
+  //   tint: "text-success bg-success/10",
   //   title: "Publish event",
   //   sub: "Make a draft event live",
   //   prompt: "Publish my latest event",
@@ -503,7 +503,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Tickets",
     Icon: Ticket,
-    tint: "text-blue-600 bg-blue-50",
+    tint: "text-primary bg-primary/10",
     title: "Walk-in booking",
     sub: "Book a ticket for an in-person customer",
     prompt: "Book a walk-in ticket",
@@ -511,7 +511,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Tickets",
     Icon: Ticket,
-    tint: "text-purple-600 bg-purple-50",
+    tint: "text-purple-600 bg-purple-50 dark:text-purple-300 dark:bg-purple-900/30",
     title: "Recent tickets",
     sub: "Last tickets sold",
     prompt: "Show me recent tickets sold",
@@ -519,7 +519,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Tickets",
     Icon: Ticket,
-    tint: "text-amber-600 bg-amber-50",
+    tint: "text-warning bg-warning/10",
     title: "Pending payments",
     sub: "Tickets with unconfirmed payments",
     prompt: "Show tickets with pending payments",
@@ -527,7 +527,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Tickets",
     Icon: Ticket,
-    tint: "text-emerald-600 bg-emerald-50",
+    tint: "text-success bg-success/10",
     title: "Confirmed tickets",
     sub: "Paid tickets ready to use",
     prompt: "Show confirmed tickets",
@@ -535,7 +535,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Tickets",
     Icon: Ticket,
-    tint: "text-blue-600 bg-blue-50",
+    tint: "text-primary bg-primary/10",
     title: "Tickets per event",
     sub: "Pick an event to see its tickets",
     prompt: "Show tickets per event",
@@ -545,7 +545,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Participants",
     Icon: UserPlus,
-    tint: "text-emerald-600 bg-emerald-50",
+    tint: "text-success bg-success/10",
     title: "Add visitor",
     sub: "Open the Add Customer form",
     prompt: "Add a new visitor",
@@ -569,7 +569,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Participants",
     Icon: Users,
-    tint: "text-emerald-600 bg-emerald-50",
+    tint: "text-success bg-success/10",
     title: "Participation report",
     sub: "Visitors, exhibitors, speakers, round tables — pick an event",
     prompt: "Show participation report per event",
@@ -577,7 +577,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Participants",
     Icon: UserPlus,
-    tint: "text-blue-600 bg-blue-50",
+    tint: "text-primary bg-primary/10",
     title: "All my visitors",
     sub: "Every visitor across the org as a table",
     prompt: "List my visitors",
@@ -585,7 +585,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Participants",
     Icon: Store,
-    tint: "text-orange-600 bg-orange-50",
+    tint: "text-orange-600 bg-orange-50 dark:text-orange-300 dark:bg-orange-900/30",
     title: "All my exhibitors",
     sub: "Every exhibitor across the org as a table",
     prompt: "List my exhibitors",
@@ -595,7 +595,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Stalls",
     Icon: Store,
-    tint: "text-orange-600 bg-orange-50",
+    tint: "text-orange-600 bg-orange-50 dark:text-orange-300 dark:bg-orange-900/30",
     title: "Add exhibitor",
     sub: "Open the Add Exhibitor form",
     prompt: "Add a new exhibitor",
@@ -603,7 +603,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Stalls",
     Icon: Building2,
-    tint: "text-orange-600 bg-orange-50",
+    tint: "text-orange-600 bg-orange-50 dark:text-orange-300 dark:bg-orange-900/30",
     title: "Pending stall requests",
     sub: "Vendors awaiting approval",
     prompt: "Show pending stall registrations",
@@ -611,7 +611,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Stalls",
     Icon: Building2,
-    tint: "text-emerald-600 bg-emerald-50",
+    tint: "text-success bg-success/10",
     title: "Approved stalls",
     sub: "Confirmed exhibitors",
     prompt: "Show approved stalls",
@@ -619,7 +619,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Stalls",
     Icon: Building2,
-    tint: "text-blue-600 bg-blue-50",
+    tint: "text-primary bg-primary/10",
     title: "Stalls per event",
     sub: "Pick an event to see its stalls",
     prompt: "Show stalls per event",
@@ -627,7 +627,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Stalls",
     Icon: Grid3x3,
-    tint: "text-purple-600 bg-purple-50",
+    tint: "text-purple-600 bg-purple-50 dark:text-purple-300 dark:bg-purple-900/30",
     title: "Spaces per event",
     sub: "Per-type placed / booked / free breakdown",
     prompt: "Show spaces per event",
@@ -635,7 +635,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Stalls",
     Icon: Store,
-    tint: "text-orange-600 bg-orange-50",
+    tint: "text-orange-600 bg-orange-50 dark:text-orange-300 dark:bg-orange-900/30",
     title: "Exhibitors per event",
     sub: "Who's booked at an event — pick one",
     prompt: "Show exhibitors per event",
@@ -645,7 +645,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Memberships",
     Icon: Star,
-    tint: "text-amber-600 bg-amber-50",
+    tint: "text-warning bg-warning/10",
     title: "Membership plans",
     sub: "Your exhibitor membership tiers + member counts",
     prompt: "Show my membership plans",
@@ -653,7 +653,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Memberships",
     Icon: Users,
-    tint: "text-emerald-600 bg-emerald-50",
+    tint: "text-success bg-success/10",
     title: "My members",
     sub: "Exhibitors with a membership — plan, status, expiry",
     prompt: "List my members",
@@ -661,7 +661,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Memberships",
     Icon: AlertCircle,
-    tint: "text-orange-600 bg-orange-50",
+    tint: "text-orange-600 bg-orange-50 dark:text-orange-300 dark:bg-orange-900/30",
     title: "Pending memberships",
     sub: "Payments awaiting your verification",
     prompt: "Show pending memberships",
@@ -671,7 +671,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Speakers",
     Icon: Mic2,
-    tint: "text-purple-600 bg-purple-50",
+    tint: "text-purple-600 bg-purple-50 dark:text-purple-300 dark:bg-purple-900/30",
     title: "Pending speaker requests",
     sub: "Applicants awaiting review",
     prompt: "Show pending speaker requests",
@@ -679,7 +679,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Speakers",
     Icon: Mic2,
-    tint: "text-purple-600 bg-purple-50",
+    tint: "text-purple-600 bg-purple-50 dark:text-purple-300 dark:bg-purple-900/30",
     title: "Speakers per event",
     sub: "Pick an event to see its speakers",
     prompt: "Show speakers per event",
@@ -697,7 +697,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Settings",
     Icon: SettingsIcon,
-    tint: "text-blue-600 bg-blue-50",
+    tint: "text-primary bg-primary/10",
     title: "All available plans",
     sub: "Plans I could switch to",
     prompt: "Show all available plans",
@@ -713,7 +713,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Settings",
     Icon: SettingsIcon,
-    tint: "text-slate-600 bg-slate-50",
+    tint: "text-muted-foreground bg-muted",
     title: "My profile",
     sub: "Organizer details",
     prompt: "Show my profile",
@@ -721,7 +721,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Settings",
     Icon: SettingsIcon,
-    tint: "text-emerald-600 bg-emerald-50",
+    tint: "text-success bg-success/10",
     title: "Organization settings",
     sub: "Profile + plan + payments + operators",
     prompt: "Show all my organization settings",
@@ -731,7 +731,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Platform Fees",
     Icon: Receipt,
-    tint: "text-amber-700 bg-amber-50",
+    tint: "text-warning bg-warning/10",
     title: "What I owe EventSH",
     sub: "Per-event platform fees + QR checkout",
     prompt: "How much do I owe EventSH for my events?",
@@ -739,7 +739,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Platform Fees",
     Icon: Receipt,
-    tint: "text-orange-600 bg-orange-50",
+    tint: "text-orange-600 bg-orange-50 dark:text-orange-300 dark:bg-orange-900/30",
     title: "Explain platform fees",
     sub: "How fees are calculated and paid",
     prompt: "What are platform fees and how do I pay them?",
@@ -767,7 +767,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Jump to",
     Icon: Calendar,
-    tint: "text-blue-600 bg-blue-50",
+    tint: "text-primary bg-primary/10",
     title: "Open Events",
     sub: "Switch to events tab",
     prompt: "Open the events tab",
@@ -775,7 +775,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Jump to",
     Icon: Receipt,
-    tint: "text-amber-700 bg-amber-50",
+    tint: "text-warning bg-warning/10",
     title: "Open Platform Fees",
     sub: "Per-event fees + QR payment",
     prompt: "Open the platform fees tab",
@@ -791,7 +791,7 @@ const SUGGESTION_CARDS: SuggestionCard[] = [
   {
     category: "Jump to",
     Icon: Globe,
-    tint: "text-indigo-600 bg-indigo-50",
+    tint: "text-indigo-600 bg-indigo-50 dark:text-indigo-300 dark:bg-indigo-900/30",
     title: "Open Storefront",
     sub: "Customize the public site",
     prompt: "Open the storefront customizer",
@@ -827,14 +827,14 @@ const PaginatedTable: React.FC<{ headers: string[]; rows: string[][] }> = ({
   const view = rows.slice(start, end);
 
   return (
-    <div className="overflow-x-auto my-2 rounded-lg border border-slate-200">
+    <div className="overflow-x-auto my-2 rounded-lg border border-border">
       <table className="w-full text-xs">
-        <thead className="bg-slate-50">
+        <thead className="bg-muted">
           <tr>
             {headers.map((h, idx) => (
               <th
                 key={idx}
-                className="px-2 py-1.5 text-left font-semibold text-slate-700 border-b border-slate-200"
+                className="px-2 py-1.5 text-left font-semibold text-foreground border-b border-border"
                 dangerouslySetInnerHTML={{ __html: formatInline(h) }}
               />
             ))}
@@ -844,12 +844,12 @@ const PaginatedTable: React.FC<{ headers: string[]; rows: string[][] }> = ({
           {view.map((row, ri) => (
             <tr
               key={start + ri}
-              className="hover:bg-slate-50/50 border-b border-slate-100 last:border-0"
+              className="hover:bg-muted/50 border-b border-border/50 last:border-0"
             >
               {row.map((c, ci) => (
                 <td
                   key={ci}
-                  className="px-2 py-1.5 text-slate-700"
+                  className="px-2 py-1.5 text-foreground"
                   dangerouslySetInnerHTML={{ __html: formatInline(c) }}
                 />
               ))}
@@ -858,7 +858,7 @@ const PaginatedTable: React.FC<{ headers: string[]; rows: string[][] }> = ({
         </tbody>
       </table>
       {total > TABLE_PAGE_SIZE && (
-        <div className="flex items-center justify-between px-2 py-1.5 border-t border-slate-200 bg-slate-50/50 text-[11px] text-slate-600">
+        <div className="flex items-center justify-between px-2 py-1.5 border-t border-border bg-muted/50 text-[11px] text-muted-foreground">
           <span>
             Showing <span className="font-medium">{start + 1}-{end}</span> of{" "}
             <span className="font-medium">{total}</span>
@@ -868,7 +868,7 @@ const PaginatedTable: React.FC<{ headers: string[]; rows: string[][] }> = ({
               type="button"
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               disabled={safePage === 0}
-              className="px-2 py-0.5 rounded border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-2 py-0.5 rounded border border-input bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Prev
             </button>
@@ -879,7 +879,7 @@ const PaginatedTable: React.FC<{ headers: string[]; rows: string[][] }> = ({
               type="button"
               onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
               disabled={safePage >= pageCount - 1}
-              className="px-2 py-0.5 rounded border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-2 py-0.5 rounded border border-input bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Next
             </button>
@@ -969,10 +969,10 @@ function renderMarkdown(text: string): React.ReactNode {
       const lvl = headingMatch[1].length;
       const cls =
         lvl <= 1
-          ? "text-base font-bold mt-2 mb-1 text-slate-900"
+          ? "text-base font-bold mt-2 mb-1 text-foreground"
           : lvl === 2
             ? "text-sm font-semibold mt-2 mb-1 text-indigo-700"
-            : "text-xs font-semibold mt-1.5 mb-0.5 text-slate-700";
+            : "text-xs font-semibold mt-1.5 mb-0.5 text-foreground";
       out.push(
         <p
           key={`h-${key++}`}
@@ -986,7 +986,7 @@ function renderMarkdown(text: string): React.ReactNode {
     // Horizontal rule.
     if (/^---+$/.test(line.trim())) {
       flushList();
-      out.push(<hr key={`hr-${key++}`} className="my-2 border-slate-200" />);
+      out.push(<hr key={`hr-${key++}`} className="my-2 border-border" />);
       i++;
       continue;
     }
@@ -997,7 +997,7 @@ function renderMarkdown(text: string): React.ReactNode {
       out.push(
         <blockquote
           key={`q-${key++}`}
-          className="border-l-2 border-indigo-300 pl-2 my-1 text-slate-600 italic"
+          className="border-l-2 border-indigo-300 pl-2 my-1 text-muted-foreground italic"
           dangerouslySetInnerHTML={{ __html: formatInline(quoteMatch[1]) }}
         />,
       );
@@ -1037,7 +1037,7 @@ function formatInline(s: string) {
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(
       /`([^`]+)`/g,
-      '<code class="bg-slate-100 px-1 py-0.5 rounded text-[0.85em] font-mono">$1</code>',
+      '<code class="bg-muted px-1 py-0.5 rounded text-[0.85em] font-mono">$1</code>',
     );
 }
 
@@ -1357,22 +1357,22 @@ export function ChatbotWidget({
           label: "Total Revenue",
           value: revenueDisplay,
           icon: TrendingUp,
-          tint: "from-emerald-50 to-emerald-100/60",
-          textTint: "text-emerald-700",
+          tint: "from-success/10 to-success/15",
+          textTint: "text-success",
         },
         {
           label: "Tickets",
           value: a.totals?.tickets || 0,
           icon: Ticket,
-          tint: "from-blue-50 to-blue-100/60",
-          textTint: "text-blue-700",
+          tint: "from-primary/10 to-primary/15",
+          textTint: "text-primary",
         },
         {
           label: "Events",
           value: a.totals?.events || 0,
           icon: Calendar,
-          tint: "from-purple-50 to-purple-100/60",
-          textTint: "text-purple-700",
+          tint: "from-purple-50 to-purple-100/60 dark:from-purple-900/20 dark:to-purple-900/30",
+          textTint: "text-purple-700 dark:text-purple-300",
         },
         {
           label: "Last 30d",
@@ -1381,8 +1381,8 @@ export function ChatbotWidget({
             0,
           ),
           icon: Users,
-          tint: "from-amber-50 to-amber-100/60",
-          textTint: "text-amber-700",
+          tint: "from-warning/10 to-warning/15",
+          textTint: "text-warning",
         },
       ];
       setAnalytics(cards);
@@ -1555,7 +1555,7 @@ export function ChatbotWidget({
 
   const panelClasses = isPage
     ? "flex flex-col bg-gradient-to-b from-slate-50 to-white h-full w-full overflow-hidden"
-    : "fixed bottom-3 right-3 sm:bottom-6 sm:right-6 z-50 flex flex-col rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden";
+    : "fixed bottom-3 right-3 sm:bottom-6 sm:right-6 z-50 flex flex-col rounded-2xl bg-card shadow-2xl border border-border overflow-hidden";
   const panelStyle = isPage
     ? undefined
     : {
@@ -1573,7 +1573,7 @@ export function ChatbotWidget({
             if (onNavigate) onNavigate("chatbot");
             else setOpen(true);
           }}
-          className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center"
+          className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full bg-primary hover:bg-primary/90 shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center"
           title="Open EventSH AI"
         >
           <Bot className="h-7 w-7 text-white" />
@@ -1587,8 +1587,8 @@ export function ChatbotWidget({
           <div
             className={
               isPage
-                ? "border-b border-slate-200 bg-white/95 backdrop-blur px-4 sm:px-6 py-3 flex items-center justify-between flex-shrink-0"
-                : "bg-blue-600 text-white px-4 py-3 flex items-center justify-between flex-shrink-0"
+                ? "border-b border-border bg-card/95 backdrop-blur px-4 sm:px-6 py-3 flex items-center justify-between flex-shrink-0"
+                : "bg-primary text-primary-foreground px-4 py-3 flex items-center justify-between flex-shrink-0"
             }
           >
             <div className="flex items-center gap-3">
@@ -1608,13 +1608,13 @@ export function ChatbotWidget({
                     }
                   />
                 </div>
-                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white" />
+                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-success ring-2 ring-white" />
               </div>
               <div>
                 <p
                   className={
                     isPage
-                      ? "font-bold text-base sm:text-lg text-slate-900"
+                      ? "font-bold text-base sm:text-lg text-foreground"
                       : "font-bold text-sm"
                   }
                 >
@@ -1624,7 +1624,7 @@ export function ChatbotWidget({
                 <p
                   className={`hidden md:block ${
                     isPage
-                      ? "text-[11px] sm:text-xs text-slate-500"
+                      ? "text-[11px] sm:text-xs text-muted-foreground"
                       : "text-[10px] opacity-80"
                   }`}
                 >
@@ -1642,7 +1642,7 @@ export function ChatbotWidget({
                   onClick={() => setShowAnalytics((v) => !v)}
                   className={`flex ${
                     isPage
-                      ? "text-xs text-slate-600 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-100 items-center gap-1"
+                      ? "text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted items-center gap-1"
                       : "text-[11px] hover:bg-white/10 px-2 py-1 rounded items-center gap-1"
                   }`}
                   title={showAnalytics ? "Hide analytics" : "Show analytics"}
@@ -1676,7 +1676,7 @@ export function ChatbotWidget({
             pendCancel.length >
             0 && (
             <div
-              className="relative overflow-hidden border-b border-slate-200 bg-white px-2 py-2 flex-shrink-0"
+              className="relative overflow-hidden border-b border-border bg-card px-2 py-2 flex-shrink-0"
               role="status"
               aria-label="Pending requests"
             >
@@ -1709,8 +1709,8 @@ export function ChatbotWidget({
             <div
               className={
                 isPage
-                  ? "border-b border-slate-200 bg-white px-3 sm:px-4 lg:px-6 py-3 flex-shrink-0 w-full"
-                  : "border-b border-slate-100 bg-white px-3 py-2 flex-shrink-0"
+                  ? "border-b border-border bg-card px-3 sm:px-4 lg:px-6 py-3 flex-shrink-0 w-full"
+                  : "border-b border-border/50 bg-card px-3 py-2 flex-shrink-0"
               }
             >
               <div
@@ -1723,7 +1723,7 @@ export function ChatbotWidget({
                 {analytics.map((c) => (
                   <div
                     key={c.label}
-                    className={`rounded-xl border border-slate-200 bg-gradient-to-br ${c.tint} ${
+                    className={`rounded-xl border border-border bg-gradient-to-br ${c.tint} ${
                       isPage ? "px-3 py-2.5" : "px-2.5 py-1.5"
                     } shadow-sm`}
                   >
@@ -1789,8 +1789,8 @@ export function ChatbotWidget({
                     <span
                       className={
                         isPage
-                          ? "absolute -bottom-0.5 -right-0.5 w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-emerald-500 ring-2 ring-white"
-                          : "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white"
+                          ? "absolute -bottom-0.5 -right-0.5 w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-success ring-2 ring-white"
+                          : "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-success ring-2 ring-white"
                       }
                     />
                   </div>
@@ -1798,8 +1798,8 @@ export function ChatbotWidget({
                     <p
                       className={
                         isPage
-                          ? "text-lg sm:text-xl font-semibold text-slate-900 tracking-tight"
-                          : "text-base font-semibold text-slate-900 tracking-tight"
+                          ? "text-lg sm:text-xl font-semibold text-foreground tracking-tight"
+                          : "text-base font-semibold text-foreground tracking-tight"
                       }
                     >
                       How can I help?
@@ -1807,8 +1807,8 @@ export function ChatbotWidget({
                     <div
                       className={
                         isPage
-                          ? "text-xs sm:text-sm text-slate-500 mt-1"
-                          : "text-xs text-slate-500 mt-1"
+                          ? "text-xs sm:text-sm text-muted-foreground mt-1"
+                          : "text-xs text-muted-foreground mt-1"
                       }
                     >
                       {isIndividual ? (
@@ -1848,10 +1848,10 @@ export function ChatbotWidget({
                             <button
                               type="button"
                               onClick={() => openPending(pendApproval)}
-                              className="animate-flicker inline-flex items-center gap-1.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1 text-xs font-semibold hover:bg-amber-200 transition"
+                              className="animate-flicker inline-flex items-center gap-1.5 rounded-full bg-warning/15 text-warning border border-warning/40 px-3 py-1 text-xs font-semibold hover:bg-warning/25 transition"
                               title="Open the event & approve/reject these exhibitors"
                             >
-                              <span className="w-2 h-2 rounded-full bg-amber-500" />
+                              <span className="w-2 h-2 rounded-full bg-warning" />
                               {pendApproval.length} Pending Approval
                               {pendApproval.length === 1 ? "" : "s"}
                             </button>
@@ -1863,7 +1863,7 @@ export function ChatbotWidget({
                               className="animate-flicker inline-flex items-center gap-1.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1 text-xs font-semibold hover:bg-emerald-200 transition"
                               title="Open the event & confirm these payments"
                             >
-                              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                              <span className="w-2 h-2 rounded-full bg-success" />
                               {pendPayment.length} Pending Payment
                               {pendPayment.length === 1 ? "" : "s"}
                             </button>
@@ -1872,10 +1872,10 @@ export function ChatbotWidget({
                             <button
                               type="button"
                               onClick={() => openPending(pendEdit)}
-                              className="animate-flicker inline-flex items-center gap-1.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300 px-3 py-1 text-xs font-semibold hover:bg-blue-200 transition"
+                              className="animate-flicker inline-flex items-center gap-1.5 rounded-full bg-primary/15 text-primary border border-primary/40 px-3 py-1 text-xs font-semibold hover:bg-primary/25 transition"
                               title="Open the event & review these edit requests"
                             >
-                              <span className="w-2 h-2 rounded-full bg-blue-500" />
+                              <span className="w-2 h-2 rounded-full bg-primary" />
                               {pendEdit.length} Edit Request
                               {pendEdit.length === 1 ? "" : "s"}
                             </button>
@@ -1911,7 +1911,7 @@ export function ChatbotWidget({
                       isPage ? "w-8 h-8" : "w-7 h-7"
                     } rounded-full flex items-center justify-center shrink-0 ${
                       m.role === "user"
-                        ? "bg-slate-200 text-slate-600"
+                        ? "bg-muted text-muted-foreground"
                         : "bg-gradient-to-br from-blue-500 to-sky-600"
                     }`}
                   >
@@ -1930,8 +1930,8 @@ export function ChatbotWidget({
                       isPage ? "px-4 py-3 text-[15px]" : "px-3 py-2 text-sm"
                     } leading-relaxed break-words ${
                       m.role === "user"
-                        ? "bg-blue-600 text-white rounded-2xl rounded-br-sm"
-                        : "bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-bl-sm shadow-sm"
+                        ? "bg-primary text-primary-foreground rounded-2xl rounded-br-sm"
+                        : "bg-card border border-border text-foreground rounded-2xl rounded-bl-sm shadow-sm"
                     }`}
                   >
                     {m.role === "assistant" ? (
@@ -1953,19 +1953,19 @@ export function ChatbotWidget({
                           { dot: string; label: string; border: string }
                         > = {
                           approval: {
-                            dot: "bg-amber-500",
+                            dot: "bg-warning",
                             label: "Approval",
-                            border: "border-l-amber-400",
+                            border: "border-l-warning",
                           },
                           payment: {
-                            dot: "bg-emerald-500",
+                            dot: "bg-success",
                             label: "Payment",
                             border: "border-l-emerald-400",
                           },
                           edit: {
-                            dot: "bg-blue-500",
+                            dot: "bg-primary",
                             label: "Edit",
-                            border: "border-l-blue-400",
+                            border: "border-l-primary",
                           },
                           cancel: {
                             dot: "bg-rose-500",
@@ -1980,16 +1980,16 @@ export function ChatbotWidget({
                             type="button"
                             onClick={() => openRecord(rec)}
                             title="Open this exhibitor in Participants"
-                            className={`w-full text-left flex items-center gap-2 rounded-lg border border-slate-200 border-l-4 ${p.border} bg-white px-3 py-2 hover:bg-slate-50 transition`}
+                            className={`w-full text-left flex items-center gap-2 rounded-lg border border-border border-l-4 ${p.border} bg-card px-3 py-2 hover:bg-muted transition`}
                           >
                             <span
                               className={`w-2 h-2 rounded-full shrink-0 ${p.dot}`}
                             />
                             <span className="min-w-0 flex-1">
-                              <span className="block text-sm font-medium text-slate-800 truncate">
+                              <span className="block text-sm font-medium text-foreground truncate">
                                 {rec.vendor || "Exhibitor"}
                               </span>
-                              <span className="block text-xs text-slate-500 truncate">
+                              <span className="block text-xs text-muted-foreground truncate">
                                 {p.label} · {rec.event || "—"}
                                 {rec.ref ? ` · #${rec.ref}` : ""}
                                 {rec.amountFormatted
@@ -1998,7 +1998,7 @@ export function ChatbotWidget({
                                 {rec.reason ? ` · ${rec.reason}` : ""}
                               </span>
                             </span>
-                            <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
+                            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                           </button>
                         );
                       })}
@@ -2014,7 +2014,7 @@ export function ChatbotWidget({
                           key={idx}
                           onClick={() => sendMessage(qa.action)}
                           disabled={loading}
-                          className="text-xs px-3 py-1 rounded-full border border-blue-200 text-blue-700 bg-blue-50/60 hover:bg-blue-100 transition disabled:opacity-50 font-medium"
+                          className="text-xs px-3 py-1 rounded-full border border-primary/30 text-primary bg-primary/10 hover:bg-primary/15 transition disabled:opacity-50 font-medium"
                         >
                           {qa.label}
                         </button>
@@ -2040,14 +2040,14 @@ export function ChatbotWidget({
                       {m.guide.topics.map((t) => (
                         <div
                           key={t.slug}
-                          className="flex items-center justify-between gap-3 border border-slate-200 rounded-lg p-2.5 bg-white"
+                          className="flex items-center justify-between gap-3 border border-border rounded-lg p-2.5 bg-card"
                         >
                           <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 text-sm font-medium text-slate-900">
+                            <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
                               <FileText className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
                               <span className="truncate">{t.title}</span>
                             </div>
-                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                               {t.summary}
                             </p>
                           </div>
@@ -2078,7 +2078,7 @@ export function ChatbotWidget({
                             .tab,
                         )
                       }
-                      className="text-xs px-3 py-1 rounded-full border border-emerald-200 text-emerald-700 bg-emerald-50/60 hover:bg-emerald-100 transition font-medium inline-flex items-center gap-1"
+                      className="text-xs px-3 py-1 rounded-full border border-success/30 text-success bg-success/10 hover:bg-success/15 transition font-medium inline-flex items-center gap-1"
                     >
                       <ChevronUp className="h-3 w-3 rotate-45" />
                       Open {(m.botAction as any).tab}
@@ -2091,7 +2091,7 @@ export function ChatbotWidget({
                     <div className="ml-9 mt-1.5">
                       <button
                         onClick={() => onOpenEventForm?.("create")}
-                        className="text-xs px-3 py-1 rounded-full border border-blue-200 text-blue-700 bg-blue-50/60 hover:bg-blue-100 transition font-medium inline-flex items-center gap-1"
+                        className="text-xs px-3 py-1 rounded-full border border-primary/30 text-primary bg-primary/10 hover:bg-primary/15 transition font-medium inline-flex items-center gap-1"
                       >
                         <ChevronUp className="h-3 w-3 rotate-45" />
                         Open Create Event Form
@@ -2114,7 +2114,7 @@ export function ChatbotWidget({
                             eventTitle: ba.eventTitle,
                           });
                         }}
-                        className="text-xs px-3 py-1 rounded-full border border-purple-200 text-purple-700 bg-purple-50/60 hover:bg-purple-100 transition font-medium inline-flex items-center gap-1"
+                        className="text-xs px-3 py-1 rounded-full border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 bg-purple-50/60 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition font-medium inline-flex items-center gap-1"
                       >
                         <ChevronUp className="h-3 w-3 rotate-45" />
                         Edit "
@@ -2130,7 +2130,7 @@ export function ChatbotWidget({
                     <div className="ml-9 mt-1.5">
                       <button
                         onClick={() => onOpenAddVisitor?.()}
-                        className="text-xs px-3 py-1 rounded-full border border-emerald-200 text-emerald-700 bg-emerald-50/60 hover:bg-emerald-100 transition font-medium inline-flex items-center gap-1"
+                        className="text-xs px-3 py-1 rounded-full border border-success/30 text-success bg-success/10 hover:bg-success/15 transition font-medium inline-flex items-center gap-1"
                       >
                         <ChevronUp className="h-3 w-3 rotate-45" />
                         Open Add Visitor Form
@@ -2194,18 +2194,18 @@ export function ChatbotWidget({
                     {m.events.map((ev) => (
                       <div
                         key={ev.id}
-                        className="border border-slate-200 rounded-lg p-3 bg-white shadow-sm"
+                        className="border border-border rounded-lg p-3 bg-card shadow-sm"
                       >
                         <div className="flex items-start justify-between gap-2 mb-1">
-                          <div className="font-semibold text-sm text-slate-900 truncate">
+                          <div className="font-semibold text-sm text-foreground truncate">
                             {ev.title}
                           </div>
                           {ev.status && (
                             <span
                               className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full font-medium ${
                                 ev.status === "published"
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-amber-100 text-amber-700"
+                                  ? "bg-success/15 text-success"
+                                  : "bg-warning/15 text-warning"
                               }`}
                             >
                               {ev.status}
@@ -2213,22 +2213,22 @@ export function ChatbotWidget({
                           )}
                         </div>
                         {ev.date && (
-                          <div className="text-xs text-slate-500 flex items-center gap-1 mb-2">
+                          <div className="text-xs text-muted-foreground flex items-center gap-1 mb-2">
                             <Calendar className="h-3 w-3" />
                             {new Date(ev.date).toLocaleDateString()}
                           </div>
                         )}
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-700">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-foreground">
                           <div className="flex items-center gap-1">
                             {ev.isRsvp ? (
                               <Users className="h-3 w-3 text-rose-500" />
                             ) : (
-                              <Ticket className="h-3 w-3 text-blue-500" />
+                              <Ticket className="h-3 w-3 text-primary" />
                             )}
                             <span className="font-medium">
                               {ev.ticketCount ?? 0}
                             </span>
-                            <span className="text-slate-400">
+                            <span className="text-muted-foreground">
                               {ev.isRsvp ? "RSVPs" : "sold"}
                             </span>
                           </div>
@@ -2237,11 +2237,11 @@ export function ChatbotWidget({
                               className="flex items-center gap-1"
                               title={ev.ticketTypeNames?.join(", ")}
                             >
-                              <Crown className="h-3 w-3 text-amber-500" />
+                              <Crown className="h-3 w-3 text-warning" />
                               <span className="font-medium">
                                 {ev.ticketTypeCount}
                               </span>
-                              <span className="text-slate-400">
+                              <span className="text-muted-foreground">
                                 {ev.ticketTypeCount === 1
                                   ? "ticket type"
                                   : "ticket types"}
@@ -2251,7 +2251,7 @@ export function ChatbotWidget({
                           {typeof ev.minPrice === "number" &&
                             typeof ev.maxPrice === "number" && (
                               <div className="flex items-center gap-1">
-                                <span className="text-slate-400">
+                                <span className="text-muted-foreground">
                                   {ev.minPrice === ev.maxPrice
                                     ? ev.minPrice === 0
                                       ? "Free"
@@ -2266,7 +2266,7 @@ export function ChatbotWidget({
                               <span className="font-medium">
                                 {ev.capacityTotal}
                               </span>
-                              <span className="text-slate-400">capacity</span>
+                              <span className="text-muted-foreground">capacity</span>
                             </div>
                           )}
                           {typeof ev.revenue === "number" && ev.revenue > 0 && (
@@ -2288,7 +2288,7 @@ export function ChatbotWidget({
                               })
                             }
                             disabled={loading || !onOpenEventForm}
-                            className="text-[11px] px-2 py-1 rounded border border-emerald-200 hover:bg-emerald-100 text-emerald-700 bg-emerald-50 font-medium disabled:opacity-50 flex items-center gap-1"
+                            className="text-[11px] px-2 py-1 rounded border border-success/30 hover:bg-success/15 text-success bg-success/10 font-medium disabled:opacity-50 flex items-center gap-1"
                             title="Edit event"
                           >
                             <Pencil className="h-3 w-3" />
@@ -2306,7 +2306,7 @@ export function ChatbotWidget({
                                 )
                               }
                               disabled={loading}
-                              className="text-[11px] px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium disabled:opacity-50"
+                              className="text-[11px] px-2 py-1 rounded border border-border hover:bg-muted text-foreground font-medium disabled:opacity-50"
                             >
                               Participants
                             </button>
@@ -2335,7 +2335,7 @@ export function ChatbotWidget({
                                 href={ev.publicUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-[11px] px-2 py-1 rounded border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 font-medium flex items-center gap-1"
+                                className="text-[11px] px-2 py-1 rounded border border-primary/30 text-primary bg-primary/10 hover:bg-primary/15 font-medium flex items-center gap-1"
                                 title="Open public event page"
                               >
                                 <ExternalLink className="h-3 w-3" />
@@ -2346,7 +2346,7 @@ export function ChatbotWidget({
                                   href={ev.storeUrl}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="text-[11px] px-2 py-1 rounded border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 font-medium flex items-center gap-1"
+                                  className="text-[11px] px-2 py-1 rounded border border-warning/30 text-warning bg-warning/10 hover:bg-warning/15 font-medium flex items-center gap-1"
                                   title="Open your storefront page"
                                 >
                                   <Store className="h-3 w-3" />
@@ -2389,33 +2389,33 @@ export function ChatbotWidget({
                 {m.role === "assistant" &&
                   m.participants &&
                   m.participants.length > 0 && (
-                    <div className="ml-9 mt-2 border border-slate-200 rounded-lg bg-white shadow-sm divide-y divide-slate-100">
+                    <div className="ml-9 mt-2 border border-border rounded-lg bg-card shadow-sm divide-y divide-border">
                       {m.participants.map((p) => (
                         <div
                           key={p.id}
                           className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
                         >
                           <div className="min-w-0 flex-1">
-                            <div className="font-medium text-slate-900 truncate">
+                            <div className="font-medium text-foreground truncate">
                               {p.name}
                             </div>
                             {p.email && (
-                              <div className="text-xs text-slate-500 truncate">
+                              <div className="text-xs text-muted-foreground truncate">
                                 {p.email}
                               </div>
                             )}
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
                             {p.ticketType && (
-                              <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
+                              <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">
                                 {p.ticketType}
                               </span>
                             )}
                             <span
                               className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded font-medium ${
                                 (p.statusLabel ? p.statusOk : p.used)
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-slate-100 text-slate-500"
+                                  ? "bg-success/15 text-success"
+                                  : "bg-muted text-muted-foreground"
                               }`}
                             >
                               {p.statusLabel
@@ -2442,21 +2442,21 @@ export function ChatbotWidget({
                   <Bot className="h-4 w-4 text-white" />
                 </div>
                 <div
-                  className={`bg-white border border-slate-200 rounded-2xl rounded-bl-sm shadow-sm ${
+                  className={`bg-card border border-border rounded-2xl rounded-bl-sm shadow-sm ${
                     isPage ? "px-4 py-3" : "px-3 py-2"
                   }`}
                 >
                   <div className="flex gap-1">
                     <span
-                      className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce"
+                      className="h-1.5 w-1.5 bg-muted-foreground rounded-full animate-bounce"
                       style={{ animationDelay: "0ms" }}
                     />
                     <span
-                      className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce"
+                      className="h-1.5 w-1.5 bg-muted-foreground rounded-full animate-bounce"
                       style={{ animationDelay: "120ms" }}
                     />
                     <span
-                      className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce"
+                      className="h-1.5 w-1.5 bg-muted-foreground rounded-full animate-bounce"
                       style={{ animationDelay: "240ms" }}
                     />
                   </div>
@@ -2467,12 +2467,12 @@ export function ChatbotWidget({
 
           {/* JUMP TO SECTION — mirrors the dashboard sidebar tabs */}
           {isPage && messages.length === 0 && navItems.length > 0 && (
-            <div className="border-t border-slate-200 bg-white/60 px-4 sm:px-6 py-2 flex flex-nowrap items-center gap-1.5 flex-shrink-0 overflow-x-auto">
+            <div className="border-t border-border bg-card/60 px-4 sm:px-6 py-2 flex flex-nowrap items-center gap-1.5 flex-shrink-0 overflow-x-auto">
               {navItems.map((n) => (
                 <button
                   key={n.id}
                   onClick={() => onNavigate?.(n.id)}
-                  className="shrink-0 text-xs px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1"
+                  className="shrink-0 text-xs px-2.5 py-1 rounded-full bg-muted hover:bg-muted text-foreground transition flex items-center gap-1"
                   title={`Open ${n.label}`}
                 >
                   <n.icon className="h-3 w-3" />
@@ -2489,7 +2489,7 @@ export function ChatbotWidget({
             messages.length === 0 &&
             isIndividual &&
             navItems.length === 0 && (
-              <div className="border-t border-slate-200 bg-white/60 px-4 sm:px-6 py-2 flex flex-nowrap items-center gap-1.5 flex-shrink-0 overflow-x-auto">
+              <div className="border-t border-border bg-card/60 px-4 sm:px-6 py-2 flex flex-nowrap items-center gap-1.5 flex-shrink-0 overflow-x-auto">
                 {[
                   { Icon: Plus, label: "Create an event", prompt: "I want to create an event" },
                   { Icon: Calendar, label: "My events", prompt: "Show my events" },
@@ -2500,7 +2500,7 @@ export function ChatbotWidget({
                     key={p.label}
                     onClick={() => sendMessage(p.prompt)}
                     disabled={loading}
-                    className="shrink-0 text-xs px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1 disabled:opacity-50"
+                    className="shrink-0 text-xs px-2.5 py-1 rounded-full bg-muted hover:bg-muted text-foreground transition flex items-center gap-1 disabled:opacity-50"
                     title={p.prompt}
                   >
                     <p.Icon className="h-3 w-3" />
@@ -2512,16 +2512,16 @@ export function ChatbotWidget({
 
           {/* PROMPT PANEL — toggled by the lightbulb button below */}
           {showPromptPanel && (
-            <div className="border-t border-slate-200 bg-amber-50/40 px-3 sm:px-4 py-3 flex-shrink-0">
+            <div className="border-t border-border bg-warning/10 px-3 sm:px-4 py-3 flex-shrink-0">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-[11px] uppercase tracking-wide font-semibold text-slate-600 flex items-center gap-1">
-                  <Lightbulb className="h-3 w-3 text-amber-500" />
+                <p className="text-[11px] uppercase tracking-wide font-semibold text-muted-foreground flex items-center gap-1">
+                  <Lightbulb className="h-3 w-3 text-warning" />
                   Try a prompt
                 </p>
                 <button
                   type="button"
                   onClick={() => setShowPromptPanel(false)}
-                  className="text-[11px] text-slate-500 hover:text-slate-800"
+                  className="text-[11px] text-muted-foreground hover:text-foreground"
                 >
                   Close
                 </button>
@@ -2532,7 +2532,7 @@ export function ChatbotWidget({
                       {
                         category: "Onboarding",
                         Icon: Plus,
-                        tint: "text-emerald-600 bg-emerald-50",
+                        tint: "text-success bg-success/10",
                         title: "Create an event",
                         sub: "Open the event creation form",
                         prompt: "I want to create an event",
@@ -2540,7 +2540,7 @@ export function ChatbotWidget({
                       {
                         category: "My Events",
                         Icon: Calendar,
-                        tint: "text-blue-600 bg-blue-50",
+                        tint: "text-primary bg-primary/10",
                         title: "My events",
                         sub: "See published events, tickets, revenue",
                         prompt: "Show my events",
@@ -2556,7 +2556,7 @@ export function ChatbotWidget({
                       {
                         category: "Onboarding",
                         Icon: Building2,
-                        tint: "text-amber-600 bg-amber-50",
+                        tint: "text-warning bg-warning/10",
                         title: "Become an organizer",
                         sub: "Upgrade to a full organizer account",
                         prompt: "I want to register as an organizer",
@@ -2572,7 +2572,7 @@ export function ChatbotWidget({
                       sendMessage(s.prompt);
                     }}
                     disabled={loading}
-                    className="text-xs px-2.5 py-1 rounded-full bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50 text-slate-700 transition disabled:opacity-50 flex items-center gap-1.5"
+                    className="text-xs px-2.5 py-1 rounded-full bg-card border border-border hover:border-primary hover:bg-primary/10 text-foreground transition disabled:opacity-50 flex items-center gap-1.5"
                     title={s.prompt}
                   >
                     <span
@@ -2592,8 +2592,8 @@ export function ChatbotWidget({
             onSubmit={handleSubmit}
             className={
               isPage
-                ? "px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-4 sm:pt-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom))] border-t border-slate-200 bg-white flex gap-2 items-center flex-shrink-0"
-                : "p-2 border-t bg-white flex gap-2 items-center flex-shrink-0"
+                ? "px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-4 sm:pt-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom))] border-t border-border bg-card flex gap-2 items-center flex-shrink-0"
+                : "p-2 border-t bg-card flex gap-2 items-center flex-shrink-0"
             }
           >
             <Button
@@ -2604,7 +2604,7 @@ export function ChatbotWidget({
                 isPage
                   ? "h-11 w-11 sm:h-12 sm:w-12 rounded-xl"
                   : "h-10 w-10 rounded-full"
-              } shrink-0 ${showPromptPanel ? "bg-amber-500 hover:bg-amber-600 text-white border-0" : ""}`}
+              } shrink-0 ${showPromptPanel ? "bg-warning hover:bg-warning/90 text-warning-foreground border-0" : ""}`}
               onClick={() => setShowPromptPanel((v) => !v)}
               title="Show suggested prompts"
             >
@@ -2621,8 +2621,8 @@ export function ChatbotWidget({
                 disabled={loading}
                 className={
                   isPage
-                    ? "w-full h-11 sm:h-12 rounded-xl bg-white border-slate-300 focus-visible:ring-1 focus-visible:ring-blue-500 text-sm sm:text-base pr-10"
-                    : "w-full h-10 rounded-full bg-slate-100 border-0 focus-visible:ring-1 focus-visible:ring-blue-500 text-sm pr-10"
+                    ? "w-full h-11 sm:h-12 rounded-xl bg-card border-input focus-visible:ring-1 focus-visible:ring-primary text-sm sm:text-base pr-10"
+                    : "w-full h-10 rounded-full bg-muted border-0 focus-visible:ring-1 focus-visible:ring-primary text-sm pr-10"
                 }
               />
               <button
@@ -2630,7 +2630,7 @@ export function ChatbotWidget({
                 disabled={loading || messages.length === 0}
                 onClick={() => setResetDialogOpen(true)}
                 title="Reset chat"
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-slate-500 hover:text-red-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-muted-foreground hover:text-destructive hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
               >
                 <RotateCcw className="h-4 w-4" />
               </button>
@@ -2664,7 +2664,7 @@ export function ChatbotWidget({
                 isPage
                   ? "h-11 w-11 sm:h-12 sm:w-12 rounded-xl"
                   : "h-10 w-10 rounded-full"
-              } bg-blue-600 hover:bg-blue-700 shrink-0`}
+              } bg-primary hover:bg-primary/90 shrink-0`}
               title="Send"
             >
               {loading ? (
@@ -2688,7 +2688,7 @@ export function ChatbotWidget({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={performReset}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
             >
               Clear chat
             </AlertDialogAction>
@@ -2754,13 +2754,13 @@ function EventPickerForm({
   const [selected, setSelected] = useState<string>("");
   const [submitted, setSubmitted] = useState(false);
   return (
-    <div className="ml-9 mt-2 max-w-md rounded-xl border border-blue-200 bg-blue-50/40 p-3">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 mb-1.5">
+    <div className="ml-9 mt-2 max-w-md rounded-xl border border-primary/30 bg-primary/10 p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-primary mb-1.5">
         Choose event
       </p>
       <div className="flex gap-2">
         <select
-          className="flex-1 text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
+          className="flex-1 text-sm border border-input rounded-md px-2 py-1.5 bg-card focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
           value={selected}
           onChange={(e) => setSelected(e.target.value)}
           disabled={disabled || submitted}
@@ -2780,7 +2780,7 @@ function EventPickerForm({
             setSubmitted(true);
             onSubmit(selected);
           }}
-          className="text-xs px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-semibold disabled:opacity-50"
+          className="text-xs px-3 py-1.5 rounded-md bg-primary hover:bg-primary/90 text-white font-semibold disabled:opacity-50"
         >
           {submitted ? "…" : "Show"}
         </button>
@@ -2813,7 +2813,7 @@ function PendingMarqueeRow({
   }) => (
     <span
       className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-        tint || "bg-blue-50 text-blue-700"
+        tint || "bg-primary/10 text-primary"
       }`}
     >
       {icon}
@@ -2828,7 +2828,7 @@ function PendingMarqueeRow({
     >
       <Item
         icon={<Clock className="h-3.5 w-3.5" />}
-        tint="bg-slate-100 text-slate-600"
+        tint="bg-muted text-muted-foreground"
       >
         Pending requests
       </Item>
@@ -2836,8 +2836,8 @@ function PendingMarqueeRow({
           Yellow=approval, Green=payment, Blue=update/edit, Red=deletion. */}
       {pending.approval > 0 && (
         <Item
-          icon={<span className="w-2 h-2 rounded-full bg-amber-500" />}
-          tint="bg-amber-50 text-amber-700"
+          icon={<span className="w-2 h-2 rounded-full bg-warning" />}
+          tint="bg-warning/10 text-warning"
         >
           {pending.approval} pending approval
           {pending.approval === 1 ? "" : "s"}
@@ -2845,8 +2845,8 @@ function PendingMarqueeRow({
       )}
       {pending.payment > 0 && (
         <Item
-          icon={<span className="w-2 h-2 rounded-full bg-emerald-500" />}
-          tint="bg-emerald-50 text-emerald-700"
+          icon={<span className="w-2 h-2 rounded-full bg-success" />}
+          tint="bg-success/10 text-success"
         >
           {pending.payment} pending payment
           {pending.payment === 1 ? "" : "s"}
@@ -2854,8 +2854,8 @@ function PendingMarqueeRow({
       )}
       {pending.edit > 0 && (
         <Item
-          icon={<span className="w-2 h-2 rounded-full bg-blue-500" />}
-          tint="bg-blue-50 text-blue-700"
+          icon={<span className="w-2 h-2 rounded-full bg-primary" />}
+          tint="bg-primary/10 text-primary"
         >
           {pending.edit} pending update
           {pending.edit === 1 ? "" : "s"}
@@ -2870,7 +2870,7 @@ function PendingMarqueeRow({
           {pending.cancel === 1 ? "" : "s"}
         </Item>
       )}
-      <span className="text-slate-300">•</span>
+      <span className="text-muted-foreground/50">•</span>
     </div>
   );
 }

@@ -4470,13 +4470,13 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     }
                     const dotFor = (status: string) =>
                       status === "Completed"
-                        ? "bg-success/100"
+                        ? "bg-success"
                         : status === "Confirmed"
-                          ? "bg-primary/100"
+                          ? "bg-primary"
                           : status === "Rejected" || status === "Cancelled"
-                            ? "bg-destructive/100"
+                            ? "bg-destructive"
                             : status === "Processing"
-                              ? "bg-warning/100"
+                              ? "bg-warning"
                               : "bg-muted-foreground";
                     return (
                       <ol className="relative border-l pl-4 space-y-4">
