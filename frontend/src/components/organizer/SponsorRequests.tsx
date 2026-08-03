@@ -81,6 +81,8 @@ interface SponsorApplication {
   status: string;
   sponsorTypeName: string;
   amount: number;
+  collectPayment?: boolean;
+  selectedOptions?: string[];
   companyName: string;
   contactName: string;
   email: string;
@@ -139,7 +141,9 @@ export default function SponsorRequests({ eventId }: { eventId?: string } = {}) 
   const [statusFilter, setStatusFilter] = useState("all");
 
   const [selected, setSelected] = useState<SponsorApplication | null>(null);
-  const [action, setAction] = useState<null | "Approved" | "Rejected">(null);
+  const [action, setAction] = useState<
+    null | "Approved" | "Rejected" | "Cancelled"
+  >(null);
   const [actionNote, setActionNote] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
   const [verifyBusy, setVerifyBusy] = useState(false);
@@ -264,7 +268,9 @@ export default function SponsorRequests({ eventId }: { eventId?: string } = {}) 
         title:
           action === "Approved"
             ? "Sponsor approved — they can now pay"
-            : "Application rejected",
+            : action === "Rejected"
+              ? "Application rejected"
+              : "Sponsorship cancelled",
       });
       setAction(null);
       setActionNote("");
@@ -347,6 +353,7 @@ export default function SponsorRequests({ eventId }: { eventId?: string } = {}) 
                   </SelectItem>
                   <SelectItem value="Confirmed">Confirmed</SelectItem>
                   <SelectItem value="Rejected">Rejected</SelectItem>
+                  <SelectItem value="Cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
               <Button
@@ -418,7 +425,9 @@ export default function SponsorRequests({ eventId }: { eventId?: string } = {}) 
                         {a.sponsorTypeName}
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {money(a.amount, currency)}
+                        {a.collectPayment === false
+                          ? "Non-cash"
+                          : money(a.amount, currency)}
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge
@@ -481,7 +490,10 @@ export default function SponsorRequests({ eventId }: { eventId?: string } = {}) 
                   </Badge>
                 </DialogTitle>
                 <DialogDescription>
-                  {selected.sponsorTypeName} · {money(selected.amount, currency)}{" "}
+                  {selected.sponsorTypeName} ·{" "}
+                  {selected.collectPayment === false
+                    ? "Non-cash"
+                    : money(selected.amount, currency)}{" "}
                   · applied{" "}
                   {selected.createdAt
                     ? new Date(selected.createdAt).toLocaleString()
@@ -574,6 +586,27 @@ export default function SponsorRequests({ eventId }: { eventId?: string } = {}) 
                     </p>
                   )}
                 </section>
+
+                {/* Non-cash tier — what the sponsor chose instead of paying */}
+                {selected.collectPayment === false && (
+                  <section className="rounded-xl border p-3">
+                    <h4 className="mb-2 font-semibold">Chosen rewards</h4>
+                    {selected.selectedOptions &&
+                    selected.selectedOptions.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {selected.selectedOptions.map((opt) => (
+                          <Badge key={opt} variant="outline">
+                            {opt}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        No options selected.
+                      </p>
+                    )}
+                  </section>
+                )}
 
                 {/* Payment */}
                 {(selected.transactionId ||
@@ -707,6 +740,24 @@ export default function SponsorRequests({ eventId }: { eventId?: string } = {}) 
                   </Button>
                 </DialogFooter>
               )}
+
+              {/* Cancel — available any time short of already Rejected/
+                  Cancelled, e.g. a sponsor backs out after paying or the
+                  organizer needs to void an approved sponsorship. */}
+              {!["Rejected", "Cancelled"].includes(selected.status) && (
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    className="w-full border-stone-300 text-stone-600 hover:bg-stone-50"
+                    onClick={() => {
+                      setActionNote("");
+                      setAction("Cancelled");
+                    }}
+                  >
+                    <XCircle className="mr-1.5 h-4 w-4" /> Cancel sponsorship
+                  </Button>
+                </DialogFooter>
+              )}
             </>
           )}
         </DialogContent>
@@ -719,17 +770,23 @@ export default function SponsorRequests({ eventId }: { eventId?: string } = {}) 
             <DialogTitle>
               {action === "Approved"
                 ? "Approve sponsor"
-                : "Reject application"}
+                : action === "Rejected"
+                  ? "Reject application"
+                  : "Cancel sponsorship"}
             </DialogTitle>
             <DialogDescription>
               {action === "Approved"
-                ? "They'll be asked to pay and upload proof. Add a message if you like."
-                : "Let the business know why."}
+                ? selected?.collectPayment === false
+                  ? "This is a non-cash tier — approving confirms the sponsorship directly, no payment step. Add a message if you like."
+                  : "They'll be asked to pay and upload proof. Add a message if you like."
+                : action === "Rejected"
+                  ? "Let the business know why."
+                  : "This voids the sponsorship — the business will be emailed that it's been cancelled. Add a note if you like."}
             </DialogDescription>
           </DialogHeader>
           <div>
             <Label className="text-xs">
-              {action === "Approved" ? "Message (optional)" : "Reason"}
+              {action === "Rejected" ? "Reason" : "Message (optional)"}
             </Label>
             <Textarea
               value={actionNote}
@@ -737,18 +794,28 @@ export default function SponsorRequests({ eventId }: { eventId?: string } = {}) 
               placeholder={
                 action === "Approved"
                   ? "e.g. Delighted to have you on board."
-                  : "Reason for rejection"
+                  : action === "Rejected"
+                    ? "Reason for rejection"
+                    : "e.g. Event postponed, sponsorship no longer needed."
               }
               className="mt-1 min-h-[90px]"
             />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAction(null)}>
-              Cancel
+              Go back
             </Button>
-            <Button onClick={submitAction} disabled={actionBusy}>
+            <Button
+              onClick={submitAction}
+              disabled={actionBusy}
+              variant={action === "Approved" ? "default" : "destructive"}
+            >
               {actionBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {action === "Approved" ? "Approve" : "Reject"}
+              {action === "Approved"
+                ? "Approve"
+                : action === "Rejected"
+                  ? "Reject"
+                  : "Cancel sponsorship"}
             </Button>
           </DialogFooter>
         </DialogContent>

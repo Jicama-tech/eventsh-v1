@@ -118,6 +118,11 @@ interface SponsorType {
   price: number;
   description?: string;
   isActive: boolean;
+  // When false, this tier isn't paid — the sponsor picks from
+  // `customOptions` (vouchers, coupons, etc.) instead of being charged, up
+  // to the value of `price` (shown to sponsors the same way a price is).
+  collectPayment: boolean;
+  customOptions?: string[];
 }
 
 const DEFAULT_VISITOR_FEATURES: VisitorFeatureAccess = {
@@ -7358,8 +7363,13 @@ export function CreateEventForm({
     name: "",
     price: "0",
     description: "",
+    collectPayment: true,
+    customOptions: [] as string[],
   });
   const [editingSponsorId, setEditingSponsorId] = useState<string | null>(null);
+  // Text box for adding one custom option at a time to the tier being
+  // added/edited (Voucher, Coupon, etc.) — not part of the tier itself.
+  const [newSponsorOption, setNewSponsorOption] = useState("");
 
   // Speaker Slot Templates (like table templates but for speaker zones)
   const [speakerSlotTemplates, setSpeakerSlotTemplates] = useState<any[]>(
@@ -8667,8 +8677,37 @@ export function CreateEventForm({
 
   // ── Sponsorship tiers ──────────────────────────────────────────────
   const resetSponsorForm = () => {
-    setCurrentSponsor({ name: "", price: "0", description: "" });
+    setCurrentSponsor({
+      name: "",
+      price: "0",
+      description: "",
+      collectPayment: true,
+      customOptions: [],
+    });
+    setNewSponsorOption("");
     setEditingSponsorId(null);
+  };
+
+  // Add one custom option (Voucher, Coupon, …) to the tier being built.
+  const addSponsorOption = () => {
+    const v = newSponsorOption.trim();
+    if (!v) return;
+    if (currentSponsor.customOptions.includes(v)) {
+      setNewSponsorOption("");
+      return;
+    }
+    setCurrentSponsor((p) => ({
+      ...p,
+      customOptions: [...p.customOptions, v],
+    }));
+    setNewSponsorOption("");
+  };
+
+  const removeSponsorOption = (option: string) => {
+    setCurrentSponsor((p) => ({
+      ...p,
+      customOptions: p.customOptions.filter((o) => o !== option),
+    }));
   };
 
   // Add a new sponsorship tier, or update the one being edited in place.
@@ -8678,10 +8717,27 @@ export function CreateEventForm({
       return;
     }
     // Individuals can't take payment, so tiers are always free for them —
-    // mirrors the visitor-type rule and the server-side guard.
+    // mirrors the visitor-type rule and the server-side guard. The
+    // collect-payment/custom-options toggle doesn't apply to them.
+    const collectPayment = isIndividualAccount
+      ? true
+      : currentSponsor.collectPayment;
+    // Non-cash tiers still carry a real price — it's shown to sponsors the
+    // same way a paid tier's price is, just fulfilled with items instead of
+    // money. Only individual accounts (which can't collect payment at all)
+    // are forced to zero.
     const price = isIndividualAccount
       ? 0
       : parseFloat(currentSponsor.price) || 0;
+    if (!collectPayment && currentSponsor.customOptions.length === 0) {
+      toast({
+        title: "Add at least one option",
+        description:
+          "Since this tier doesn't collect payment, add what sponsors can choose instead (voucher, coupon, etc.).",
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (editingSponsorId) {
       setSponsorTypes((prev) =>
@@ -8692,6 +8748,10 @@ export function CreateEventForm({
                 name: currentSponsor.name.trim(),
                 price,
                 description: currentSponsor.description,
+                collectPayment,
+                customOptions: collectPayment
+                  ? []
+                  : currentSponsor.customOptions,
               }
             : s,
         ),
@@ -8705,6 +8765,8 @@ export function CreateEventForm({
           price,
           description: currentSponsor.description,
           isActive: true,
+          collectPayment,
+          customOptions: collectPayment ? [] : currentSponsor.customOptions,
         },
       ]);
     }
@@ -8718,7 +8780,10 @@ export function CreateEventForm({
       name: s.name,
       price: String(s.price ?? 0),
       description: s.description ?? "",
+      collectPayment: s.collectPayment !== false,
+      customOptions: s.customOptions ?? [],
     });
+    setNewSponsorOption("");
     setEditingSponsorId(id);
   };
 
@@ -12986,27 +13051,127 @@ export function CreateEventForm({
                       />
                     </div>
                     <div>
-                      <Label className="text-xs">Price</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        value={isIndividualAccount ? "0" : currentSponsor.price}
-                        disabled={isIndividualAccount}
-                        onChange={(e) =>
-                          setCurrentSponsor((p) => ({
-                            ...p,
-                            price: e.target.value,
-                          }))
-                        }
-                        placeholder="0"
-                      />
-                      {isIndividualAccount && (
-                        <p className="text-[10px] text-muted-foreground mt-1">
-                          Personal events can't collect payment — tiers are
-                          free.
-                        </p>
+                      {!isIndividualAccount && (
+                        <div className="flex items-center justify-between gap-3 rounded-lg border bg-white px-3 py-2">
+                          <div>
+                            <Label className="text-xs">Collect Payment</Label>
+                            <p className="text-[10px] text-muted-foreground">
+                              Off — sponsors pick from options you offer
+                              instead of paying.
+                            </p>
+                          </div>
+                          <Switch
+                            checked={currentSponsor.collectPayment}
+                            onCheckedChange={(checked) =>
+                              setCurrentSponsor((p) => ({
+                                ...p,
+                                collectPayment: checked,
+                              }))
+                            }
+                          />
+                        </div>
                       )}
+                      <div className="mt-2">
+                        <Label className="text-xs">
+                          {isIndividualAccount || currentSponsor.collectPayment
+                            ? "Price"
+                            : "Value (what the sponsor provides instead)"}
+                        </Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={
+                            isIndividualAccount ? "0" : currentSponsor.price
+                          }
+                          disabled={isIndividualAccount}
+                          onChange={(e) =>
+                            setCurrentSponsor((p) => ({
+                              ...p,
+                              price: e.target.value,
+                            }))
+                          }
+                          placeholder="0"
+                        />
+                        {isIndividualAccount ? (
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            Personal events can't collect payment — tiers are
+                            free.
+                          </p>
+                        ) : (
+                          !currentSponsor.collectPayment && (
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                              Shown to sponsors the same way a price is — but
+                              instead of paying it, they provide items of this
+                              value (pick from the options below).
+                            </p>
+                          )
+                        )}
+                      </div>
+                      {!isIndividualAccount &&
+                        !currentSponsor.collectPayment && (
+                          <div className="mt-2">
+                            <Label className="text-xs">Add Option</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                value={newSponsorOption}
+                                onChange={(e) =>
+                                  setNewSponsorOption(e.target.value)
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    addSponsorOption();
+                                  }
+                                }}
+                                placeholder="e.g. Voucher, Coupon"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={addSponsorOption}
+                              >
+                                <Plus size={16} />
+                              </Button>
+                            </div>
+                            <p className="mt-1 text-[10px] text-muted-foreground">
+                              Examples of what a sponsor could provide to
+                              cover the value above (voucher, product hamper,
+                              service, …).
+                            </p>
+                          </div>
+                        )}
                     </div>
+                    {!isIndividualAccount &&
+                      !currentSponsor.collectPayment && (
+                        <div>
+                          <Label className="text-xs">
+                            Options sponsors can choose
+                          </Label>
+                          {currentSponsor.customOptions.length === 0 ? (
+                            <p className="mt-2 text-xs text-muted-foreground">
+                              No options added yet.
+                            </p>
+                          ) : (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {currentSponsor.customOptions.map((opt) => (
+                                <span
+                                  key={opt}
+                                  className="inline-flex items-center gap-1 rounded-full border bg-white px-3 py-1 text-xs"
+                                >
+                                  {opt}
+                                  <button
+                                    type="button"
+                                    onClick={() => removeSponsorOption(opt)}
+                                    className="text-muted-foreground hover:text-red-600"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     <div className="md:col-span-2">
                       <Label className="text-xs">Description</Label>
                       <Textarea
@@ -13078,6 +13243,8 @@ export function CreateEventForm({
                               {sponsor.price === 0
                                 ? "Free"
                                 : formatPrice(sponsor.price)}
+                              {sponsor.collectPayment === false &&
+                                " (Non-cash)"}
                             </div>
                           </div>
                         </div>
@@ -13102,6 +13269,19 @@ export function CreateEventForm({
                           </Button>
                         </div>
                       </div>
+                      {sponsor.collectPayment === false &&
+                        (sponsor.customOptions?.length ?? 0) > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {sponsor.customOptions!.map((opt) => (
+                              <span
+                                key={opt}
+                                className="rounded-full border bg-gray-50 px-2.5 py-0.5 text-xs text-gray-600"
+                              >
+                                {opt}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       {sponsor.description && (
                         <p className="text-sm text-gray-600 bg-gray-50 rounded px-3 py-2">
                           {sponsor.description}

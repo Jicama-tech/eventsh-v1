@@ -47,4 +47,11 @@ export class CreateSponsorRequestDto {
   @IsOptional()
   @IsString()
   message?: string;
+
+  // JSON-stringified string[] — which of the tier's `customOptions` the
+  // sponsor picked. Only meaningful when the tier isn't collecting payment;
+  // the service re-validates against the tier's own list either way.
+  @IsOptional()
+  @IsString()
+  selectedOptions?: string;
 }

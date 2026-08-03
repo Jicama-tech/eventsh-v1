@@ -157,6 +157,7 @@ export class SuppliersController {
   // ---------- ORGANIZER: supplier CRM (identity list) ----------
 
   @Post("create-by-organizer/:organizerId")
+  @UseGuards(JwtAuthGuard)
   createByOrganizer(
     @Param("organizerId") organizerId: string,
     @Body() dto: CreateSupplierDto,
@@ -165,6 +166,7 @@ export class SuppliersController {
   }
 
   @Patch("update-by-organizer/:organizerId/:supplierId")
+  @UseGuards(JwtAuthGuard)
   updateByOrganizer(
     @Param("organizerId") organizerId: string,
     @Param("supplierId") supplierId: string,
@@ -178,6 +180,7 @@ export class SuppliersController {
   }
 
   @Delete("delete-by-organizer/:organizerId/:supplierId")
+  @UseGuards(JwtAuthGuard)
   async deleteForOrganizer(
     @Param("organizerId") organizerId: string,
     @Param("supplierId") supplierId: string,
@@ -191,6 +194,7 @@ export class SuppliersController {
 
   // Which events this supplier has been engaged for (eye icon in the CRM).
   @Get("history/:organizerId/:supplierId")
+  @UseGuards(JwtAuthGuard)
   async supplierEventHistory(
     @Param("organizerId") organizerId: string,
     @Param("supplierId") supplierId: string,
@@ -203,6 +207,7 @@ export class SuppliersController {
   }
 
   @Get("list-by-organizer/:organizerId")
+  @UseGuards(JwtAuthGuard)
   listSuppliersByOrganizer(@Param("organizerId") organizerId: string) {
     return this.suppliersService.listForOrganizer(organizerId);
   }
@@ -212,6 +217,7 @@ export class SuppliersController {
   // Requirements derived from what actually sold — spaces booked + add-ons
   // purchased — so the organizer doesn't retype what the system already knows.
   @Get("event/:eventId/requirement-suggestions")
+  @UseGuards(JwtAuthGuard)
   async requirementSuggestions(@Param("eventId") eventId: string) {
     const data = await this.suppliersService.requirementSuggestions(eventId);
     return { success: true, message: "Suggestions built", data };
@@ -226,12 +232,14 @@ export class SuppliersController {
   }
 
   @Get("event/:eventId/config")
+  @UseGuards(JwtAuthGuard)
   async getConfig(@Param("eventId") eventId: string) {
     const data = await this.suppliersService.getConfig(eventId);
     return { success: true, message: "Config loaded", data };
   }
 
   @Patch("event/:eventId/config")
+  @UseGuards(JwtAuthGuard)
   async upsertConfig(
     @Param("eventId") eventId: string,
     @Body() dto: UpsertSupplierConfigDto,
@@ -241,6 +249,7 @@ export class SuppliersController {
   }
 
   @Patch("event/:eventId/enabled")
+  @UseGuards(JwtAuthGuard)
   async setEnabled(
     @Param("eventId") eventId: string,
     @Body() body: { enabled: boolean },
@@ -255,18 +264,21 @@ export class SuppliersController {
   // ---------- ORGANIZER: quotations ----------
 
   @Get("event/:eventId")
+  @UseGuards(JwtAuthGuard)
   async listByEvent(@Param("eventId") eventId: string) {
     const data = await this.suppliersService.listByEvent(eventId);
     return { success: true, message: "Supplier quotations fetched", data };
   }
 
   @Get("organizer/:organizerId")
+  @UseGuards(JwtAuthGuard)
   async listByOrganizer(@Param("organizerId") organizerId: string) {
     const data = await this.suppliersService.listByOrganizer(organizerId);
     return { success: true, message: "Supplier quotations fetched", data };
   }
 
   @Get("request/:id")
+  @UseGuards(JwtAuthGuard)
   async getOne(@Param("id") id: string) {
     const data = await this.suppliersService.getOne(id);
     return { success: true, message: "Supplier request fetched", data };
@@ -296,6 +308,7 @@ export class SuppliersController {
   }
 
   @Patch("request/:id/status")
+  @UseGuards(JwtAuthGuard)
   async updateStatus(
     @Param("id") id: string,
     @Body() dto: UpdateSupplierStatusDto,
@@ -305,6 +318,7 @@ export class SuppliersController {
   }
 
   @Post("request/:id/record-payment")
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(supplierUpload("proofScreenshot"))
   async recordPayment(
     @Param("id") id: string,
@@ -319,6 +333,7 @@ export class SuppliersController {
   }
 
   @Post("request/:id/notes")
+  @UseGuards(JwtAuthGuard)
   async addNote(@Param("id") id: string, @Body() dto: AddSupplierNoteDto) {
     const data = await this.suppliersService.addNote(id, dto);
     return { success: true, message: "Note added", data };

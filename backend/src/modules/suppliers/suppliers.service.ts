@@ -987,22 +987,30 @@ export class SuppliersService {
     } as any);
     await req.save();
 
-    const decision =
-      dto.status === "Approved"
-        ? {
-            heading: "Your quotation was approved",
-            summary: "The organizer has accepted your quotation.",
-          }
-        : dto.status === "Rejected"
-          ? {
-              heading: "Your quotation was declined",
-              summary: "The organizer has declined your quotation.",
-            }
-          : {
-              heading: "The organizer sent a counter-offer",
-              summary:
-                "Your quotation is being negotiated — see their message below.",
-            };
+    const DECISIONS: Record<string, { heading: string; summary: string }> = {
+      Approved: {
+        heading: "Your quotation was approved",
+        summary: "The organizer has accepted your quotation.",
+      },
+      Rejected: {
+        heading: "Your quotation was declined",
+        summary: "The organizer has declined your quotation.",
+      },
+      Negotiating: {
+        heading: "The organizer sent a counter-offer",
+        summary:
+          "Your quotation is being negotiated — see their message below.",
+      },
+      Completed: {
+        heading: "Engagement marked complete",
+        summary: "The organizer has marked this booking as completed.",
+      },
+      Cancelled: {
+        heading: "Your booking was cancelled",
+        summary: "The organizer has cancelled this engagement.",
+      },
+    };
+    const decision = DECISIONS[dto.status] || DECISIONS.Negotiating;
     this.notify(req, "supplier", {
       ...decision,
       note: dto.notes || dto.rejectionReason,
@@ -1026,6 +1034,21 @@ export class SuppliersService {
     this.assertId(id);
     const req = await this.requestModel.findById(id);
     if (!req) throw new NotFoundException("Supplier request not found");
+
+    // Same gate as checkItems — a quote that's still Quoted/Negotiating has no
+    // agreed total to pay against, and a Rejected/Cancelled one shouldn't be
+    // payable at all.
+    const PAYABLE = [
+      SupplierRequestStatus.Approved,
+      SupplierRequestStatus.PartiallyPaid,
+      SupplierRequestStatus.Paid,
+      SupplierRequestStatus.Completed,
+    ];
+    if (!PAYABLE.includes(req.status)) {
+      throw new BadRequestException(
+        "Payments can only be recorded once the quotation is approved.",
+      );
+    }
 
     const total = this.payable(req);
     const alreadyPaid = Number(req.payment?.amountPaid) || 0;

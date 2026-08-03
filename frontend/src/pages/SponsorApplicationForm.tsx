@@ -66,6 +66,10 @@ interface Tier {
   name: string;
   price: number;
   description?: string;
+  // When false, this tier isn't paid — pick from `customOptions` instead, up
+  // to the value of `price` (shown to sponsors the same way a price is).
+  collectPayment?: boolean;
+  customOptions?: string[];
 }
 interface TiersData {
   tiers: Tier[];
@@ -134,6 +138,8 @@ export default function SponsorApplicationForm() {
 
   // Application fields
   const [tierId, setTierId] = useState("");
+  // Which of the chosen (non-cash) tier's custom options the sponsor picked.
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [companyName, setCompanyName] = useState("");
   const [contactName, setContactName] = useState("");
   const [countryCode, setCountryCode] = useState(
@@ -283,11 +289,31 @@ export default function SponsorApplicationForm() {
     setLogoPreview(f ? URL.createObjectURL(f) : "");
   };
 
+  const toggleOption = (option: string) => {
+    setSelectedOptions((prev) =>
+      prev.includes(option)
+        ? prev.filter((o) => o !== option)
+        : [...prev, option],
+    );
+  };
+
   const goNext = () => {
     if (step === 1 && !tierId) {
       toast({
         variant: "destructive",
         title: "Please choose a sponsorship tier",
+      });
+      return;
+    }
+    const tier = data?.tiers.find((t) => t.id === tierId);
+    if (
+      step === 1 &&
+      tier?.collectPayment === false &&
+      selectedOptions.length === 0
+    ) {
+      toast({
+        variant: "destructive",
+        title: "Please choose at least one option",
       });
       return;
     }
@@ -314,6 +340,9 @@ export default function SponsorApplicationForm() {
       fd.append("phone", phone.trim());
       fd.append("website", website.trim());
       fd.append("message", message.trim());
+      if (selectedTier?.collectPayment === false) {
+        fd.append("selectedOptions", JSON.stringify(selectedOptions));
+      }
       if (logo) fd.append("logo", logo);
       const res = await fetch(`${apiURL}/sponsors/apply`, {
         method: "POST",
@@ -474,7 +503,8 @@ export default function SponsorApplicationForm() {
       ? myApp.statusHistory
       : [];
     const awaitingPayment =
-      myApp.status === "Approved" || myApp.status === "Payment Submitted";
+      myApp.collectPayment !== false &&
+      (myApp.status === "Approved" || myApp.status === "Payment Submitted");
     return (
       <div className="min-h-screen bg-muted/30 py-6 sm:py-10">
         <div className="mx-auto w-full max-w-2xl space-y-4 px-3 sm:px-4">
@@ -506,7 +536,11 @@ export default function SponsorApplicationForm() {
 
               <div className="flex items-center justify-between border-y py-2 text-sm font-semibold">
                 <span>{myApp.sponsorTypeName}</span>
-                <span>{money(myApp.amount, data?.currency)}</span>
+                <span>
+                  {myApp.collectPayment === false
+                    ? (myApp.selectedOptions || []).join(", ") || "—"
+                    : money(myApp.amount, data?.currency)}
+                </span>
               </div>
 
               {myApp.logo && (
@@ -670,32 +704,72 @@ export default function SponsorApplicationForm() {
             </CardHeader>
             <CardContent className="space-y-3">
               {data?.tiers.map((t) => (
-                <button
+                <div
                   key={t.id}
-                  type="button"
-                  onClick={() => setTierId(t.id)}
-                  className={`w-full rounded-xl border p-4 text-left transition-colors ${
+                  className={`rounded-xl border transition-colors ${
                     tierId === t.id
                       ? "border-primary bg-primary/5 ring-2 ring-primary"
                       : "hover:bg-muted/40"
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="font-semibold">{t.name}</div>
-                      {t.description && (
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {t.description}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTierId(t.id);
+                      setSelectedOptions([]);
+                    }}
+                    className="w-full p-4 text-left"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-semibold">{t.name}</div>
+                        {t.description && (
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {t.description}
+                          </p>
+                        )}
+                      </div>
+                      <div className="shrink-0 text-right font-bold">
+                        <div>
+                          {t.price === 0 ? "Free" : money(t.price, data?.currency)}
+                        </div>
+                        {t.collectPayment === false && (
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            Non-cash
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                  {tierId === t.id &&
+                    t.collectPayment === false &&
+                    (t.customOptions?.length ?? 0) > 0 && (
+                      <div className="space-y-2 border-t px-4 py-3">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Instead of paying{" "}
+                          {t.price === 0 ? "" : money(t.price, data?.currency)},
+                          provide the item(s) below (pick any number):
                         </p>
-                      )}
-                    </div>
-                    <div className="shrink-0 text-right font-bold">
-                      {t.price === 0
-                        ? "Free"
-                        : money(t.price, data?.currency)}
-                    </div>
-                  </div>
-                </button>
+                        {t.customOptions!.map((opt) => {
+                          const checked = selectedOptions.includes(opt);
+                          return (
+                            <label
+                              key={opt}
+                              className="flex cursor-pointer items-center gap-2 text-sm"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleOption(opt)}
+                                className="h-4 w-4 rounded border-gray-300"
+                              />
+                              {opt}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                </div>
               ))}
             </CardContent>
           </Card>
@@ -711,9 +785,11 @@ export default function SponsorApplicationForm() {
               {selectedTier && (
                 <p className="text-sm text-muted-foreground">
                   {selectedTier.name} ·{" "}
-                  {selectedTier.price === 0
-                    ? "Free"
-                    : money(selectedTier.price, data?.currency)}
+                  {selectedTier.collectPayment === false
+                    ? selectedOptions.join(", ")
+                    : selectedTier.price === 0
+                      ? "Free"
+                      : money(selectedTier.price, data?.currency)}
                 </p>
               )}
             </CardHeader>

@@ -101,6 +101,11 @@ class SponsorType {
   @Prop() price: number;
   @Prop() description?: string;
   @Prop({ default: true }) isActive: boolean;
+  // When false, this tier isn't paid — the sponsor picks from
+  // `customOptions` (vouchers, coupons, etc.) instead of being charged, up
+  // to the value of `price` (shown to sponsors the same way a price is).
+  @Prop({ default: true }) collectPayment: boolean;
+  @Prop({ type: [String], default: [] }) customOptions?: string[];
 }
 
 class SpeakerSlot {

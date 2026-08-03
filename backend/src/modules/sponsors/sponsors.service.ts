@@ -141,6 +141,32 @@ export class SponsorsService {
     const businessEmail = (dto.businessEmail || "").trim().toLowerCase();
     const orgObjId = new Types.ObjectId(String(organizerId));
 
+    // Non-cash tier: keep only options the organizer actually offers on
+    // this tier — never trust the client's list wholesale.
+    const collectPayment = tier.collectPayment !== false;
+    let selectedOptions: string[] = [];
+    if (!collectPayment) {
+      const offered = new Set((tier.customOptions || []) as string[]);
+      try {
+        const parsed = dto.selectedOptions
+          ? JSON.parse(dto.selectedOptions)
+          : [];
+        if (Array.isArray(parsed)) {
+          selectedOptions = parsed.filter(
+            (o: any) => typeof o === "string" && offered.has(o),
+          );
+        }
+      } catch {
+        // Malformed JSON — treat as no selection rather than failing the
+        // whole application.
+      }
+      if (selectedOptions.length === 0) {
+        throw new BadRequestException(
+          "Pick at least one of the tier's options.",
+        );
+      }
+    }
+
     // Find-or-create the organizer's directory entry for this business, keyed
     // by email, so an applicant lands in the Sponsors CRM automatically and
     // their applications hang off a real foreign key.
@@ -166,6 +192,8 @@ export class SponsorsService {
         sponsorTypeId: String(tier.id),
         sponsorTypeName: tier.name,
         amount: Number(tier.price) || 0,
+        collectPayment,
+        selectedOptions,
         companyName: dto.companyName,
         contactName: dto.contactName,
         email,
@@ -186,6 +214,20 @@ export class SponsorsService {
         ],
         submittedAt: new Date(),
       });
+
+      // Best-effort — the organizer would otherwise only learn of a new
+      // application by polling the dashboard.
+      this.notifyOrganizer(orgObjId, dto.eventId, {
+        heading: "New sponsorship application",
+        summary: `${dto.companyName} applied for the ${tier.name} tier${
+          collectPayment ? "" : " (non-cash)"
+        }.`,
+      }).catch((err) =>
+        this.logger.warn(
+          `New-application organizer email failed for ${created._id}: ${err?.message || err}`,
+        ),
+      );
+
       return created;
     } catch (err: any) {
       // Unique (eventId, email) → they already applied.
@@ -314,6 +356,18 @@ export class SponsorsService {
       changedBy: req.companyName,
     } as any);
     await req.save();
+
+    // Best-effort — otherwise the organizer only sees the submitted payment
+    // by opening the dashboard themselves.
+    this.notifyOrganizer(req.organizerId, req.eventId, {
+      heading: "Sponsor payment submitted",
+      summary: `${req.companyName} submitted payment for the ${req.sponsorTypeName} tier — verify it to confirm the sponsorship.`,
+    }).catch((err) =>
+      this.logger.warn(
+        `Payment-submitted organizer email failed for ${req._id}: ${err?.message || err}`,
+      ),
+    );
+
     return req;
   }
 
@@ -581,17 +635,37 @@ export class SponsorsService {
     const req = await this.requestModel.findById(id);
     if (!req) throw new NotFoundException("Sponsor application not found");
 
-    req.status = dto.status as SponsorRequestStatus;
+    // Non-cash tier: there's nothing to pay, so "Approved" goes straight to
+    // Confirmed instead of opening a payment step that will never be used.
+    const skipToConfirmed =
+      dto.status === "Approved" && req.collectPayment === false;
+
+    req.status = skipToConfirmed
+      ? SponsorRequestStatus.Confirmed
+      : (dto.status as SponsorRequestStatus);
     if (dto.status === "Rejected") {
       req.rejectionReason = dto.rejectionReason || "";
     }
     req.statusHistory.push({
-      status: dto.status as SponsorRequestStatus,
-      note: dto.notes || dto.rejectionReason || "",
+      status: req.status,
+      note:
+        dto.notes ||
+        dto.rejectionReason ||
+        (skipToConfirmed ? "No payment required — confirmed directly." : ""),
       changedAt: new Date(),
       changedBy: dto.changedBy || "Organizer",
     } as any);
     await req.save();
+
+    // Best-effort — otherwise a sponsor only learns of the decision by
+    // revisiting the public application link themselves.
+    this.notifySponsorDecision(req, dto.notes || dto.rejectionReason).catch(
+      (err) =>
+        this.logger.warn(
+          `Sponsor decision email failed for ${req._id}: ${err?.message || err}`,
+        ),
+    );
+
     return req;
   }
 
@@ -633,6 +707,146 @@ export class SponsorsService {
     );
 
     return req;
+  }
+
+  /**
+   * Alert the organizer (primary + business email, deduped) of something that
+   * needs their attention — a new application or a submitted payment. The
+   * organizer would otherwise only find out by opening the dashboard
+   * themselves. Best-effort: callers catch and log, never let a mail failure
+   * break the request that triggered it.
+   */
+  private async notifyOrganizer(
+    organizerId: Types.ObjectId,
+    eventId: Types.ObjectId | string,
+    decision: { heading: string; summary: string },
+  ) {
+    const [event, organizer] = await Promise.all([
+      this.eventModel.findById(eventId).select("title").lean(),
+      this.organizerModel.findById(organizerId).lean(),
+    ]);
+    if (!organizer) return;
+
+    const recipients = Array.from(
+      new Set(
+        [(organizer as any)?.email, (organizer as any)?.businessEmail]
+          .filter(Boolean)
+          .map((e: string) => e.trim().toLowerCase()),
+      ),
+    );
+    if (recipients.length === 0) return;
+
+    const fe = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
+    const dashboardUrl = `${fe}/organizer/login?redirect=${encodeURIComponent(
+      "/organizer-dashboard",
+    )}`;
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+        <div style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;padding:24px;text-align:center">
+          <h1 style="margin:0;font-size:20px">${decision.heading}</h1>
+          <p style="margin:6px 0 0;opacity:.9">${(event as any)?.title || "Your event"}</p>
+        </div>
+        <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+          <p>${decision.summary}</p>
+          <div style="text-align:center;margin:22px 0 6px">
+            <a href="${dashboardUrl}" style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px">Open Sponsors dashboard</a>
+          </div>
+        </div>
+      </div>`;
+
+    await Promise.all(
+      recipients.map((to) =>
+        this.mailService
+          .sendEmail({
+            to,
+            subject: `${decision.heading} — ${(event as any)?.title || "Event"}`,
+            html,
+            senderConfig: (organizer as any)?.emailConfig,
+          })
+          .catch((err) =>
+            this.logger.warn(
+              `Organizer notify failed for ${to}: ${err?.message || err}`,
+            ),
+          ),
+      ),
+    );
+  }
+
+  /**
+   * Email the sponsor when the organizer approves, rejects, or cancels their
+   * application/sponsorship. Approvals that settle straight to Confirmed
+   * (non-cash tiers) get the "confirmed" message instead of "approved", since
+   * there's no payment step for them to act on next.
+   */
+  private async notifySponsorDecision(
+    req: SponsorRequestDocument,
+    note?: string,
+  ) {
+    const to = [req.email, req.businessEmail].filter(Boolean) as string[];
+    if (to.length === 0) return;
+
+    const organizer = await this.organizerModel
+      .findById(req.organizerId)
+      .lean();
+    const event = await this.eventModel
+      .findById(req.eventId)
+      .select("title")
+      .lean();
+
+    const DECISIONS: Record<string, { heading: string; summary: string }> = {
+      Approved: {
+        heading: "Your sponsorship application was approved",
+        summary: `You're approved as a ${req.sponsorTypeName} sponsor — please complete payment to confirm.`,
+      },
+      Confirmed: {
+        heading: "Your sponsorship is confirmed",
+        summary: `You're confirmed as a ${req.sponsorTypeName} sponsor — no payment required for this tier.`,
+      },
+      Rejected: {
+        heading: "Your sponsorship application was declined",
+        summary: `Your application for the ${req.sponsorTypeName} tier was not accepted this time.`,
+      },
+      Cancelled: {
+        heading: "Your sponsorship was cancelled",
+        summary: `Your ${req.sponsorTypeName} sponsorship has been cancelled by the organizer.`,
+      },
+    };
+    const decision = DECISIONS[req.status] || DECISIONS.Cancelled;
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+        <div style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;padding:24px;text-align:center">
+          <h1 style="margin:0;font-size:20px">${decision.heading}</h1>
+          <p style="margin:6px 0 0;opacity:.9">${(event as any)?.title || "the event"}</p>
+        </div>
+        <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+          <p>${decision.summary}</p>
+          ${
+            note
+              ? `<div style="margin-top:12px;padding:12px;background:#f8fafc;border-left:4px solid #6366f1;border-radius:4px"><b>Note from the organizer:</b><br/>${note
+                  .replace(/</g, "&lt;")
+                  .replace(/\n/g, "<br/>")}</div>`
+              : ""
+          }
+        </div>
+      </div>`;
+
+    await Promise.all(
+      to.map((email) =>
+        this.mailService
+          .sendEmail({
+            to: email,
+            subject: `${decision.heading} — ${(event as any)?.title || "Event"}`,
+            html,
+            senderConfig: (organizer as any)?.emailConfig,
+          })
+          .catch((err) =>
+            this.logger.warn(
+              `Sponsor decision email failed for ${email}: ${err?.message || err}`,
+            ),
+          ),
+      ),
+    );
   }
 
   /**

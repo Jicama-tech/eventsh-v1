@@ -38,6 +38,10 @@ interface Tier {
   name: string;
   price: number;
   description?: string;
+  // When false, this tier isn't paid — pick from `customOptions` instead, up
+  // to the value of `price` (shown to sponsors the same way a price is).
+  collectPayment?: boolean;
+  customOptions?: string[];
 }
 
 function currencySymbol(country?: string): string {
@@ -98,6 +102,8 @@ export default function EventfrontSponsorDialog({
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [currency, setCurrency] = useState("IN");
   const [loading, setLoading] = useState(true);
+  // Which of the chosen (non-cash) tier's custom options the sponsor picked.
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [tier, setTier] = useState<Tier | null>(null);
 
   // Applicant details
@@ -131,6 +137,7 @@ export default function EventfrontSponsorDialog({
     const t = window.setTimeout(() => {
       setStep("tiers");
       setTier(null);
+      setSelectedOptions([]);
       setCompanyName("");
       setContactName("");
       setEmail("");
@@ -272,6 +279,14 @@ export default function EventfrontSponsorDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [googleLoading]);
 
+  const toggleOption = (option: string) => {
+    setSelectedOptions((prev) =>
+      prev.includes(option)
+        ? prev.filter((o) => o !== option)
+        : [...prev, option],
+    );
+  };
+
   const pickLogo = (f: File | null) => {
     setLogoFile(f);
     setLogoPreview((prev) => {
@@ -305,6 +320,9 @@ export default function EventfrontSponsorDialog({
       fd.append("phone", phone.trim());
       fd.append("website", website.trim());
       fd.append("message", message.trim());
+      if (tier.collectPayment === false) {
+        fd.append("selectedOptions", JSON.stringify(selectedOptions));
+      }
       if (logoFile) fd.append("logo", logoFile);
 
       const res = await fetch(`${apiURL}/sponsors/apply`, {
@@ -313,7 +331,7 @@ export default function EventfrontSponsorDialog({
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.message || "Submission failed");
-      setStep(tier.price > 0 ? "pay" : "done");
+      setStep(tier.collectPayment !== false && tier.price > 0 ? "pay" : "done");
     } catch (e: any) {
       toast({
         variant: "destructive",
@@ -406,7 +424,13 @@ export default function EventfrontSponsorDialog({
               "We use your Google account to verify your email and keep your sponsorship details for next time."}
             {step === "form" &&
               tier &&
-              `${tier.name} · ${tier.price === 0 ? "Free" : money(tier.price, currency)}`}
+              `${tier.name} · ${
+                tier.collectPayment === false
+                  ? selectedOptions.join(", ")
+                  : tier.price === 0
+                    ? "Free"
+                    : money(tier.price, currency)
+              }`}
             {step === "pay" &&
               `Scan the QR and pay ${money(amount, currency)}, then confirm below.`}
             {step === "done" && "Thanks — we've passed this to the organizer."}
@@ -425,41 +449,99 @@ export default function EventfrontSponsorDialog({
                 No sponsorship packages are published yet. Check back soon.
               </div>
             ) : (
-              tiers.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => {
-                    setTier(t);
-                    setStep(email ? "form" : "auth");
-                  }}
-                  className="flex w-full flex-col gap-1 rounded-xl border-2 bg-white p-3 text-left transition hover:shadow-md"
-                  style={{ borderColor: `${primaryColor}55` }}
-                >
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="h-3 w-3 rounded-full"
-                      style={{ backgroundColor: primaryColor }}
-                    />
-                    <span className="font-bold" style={{ color: primaryColor }}>
-                      {t.name}
-                    </span>
-                    <span className="ml-auto text-lg font-bold">
-                      {t.price === 0 ? "Free" : money(t.price, currency)}
-                    </span>
-                  </div>
-                  {t.description && (
-                    <div className="whitespace-pre-line text-xs text-muted-foreground">
-                      {t.description}
-                    </div>
-                  )}
+              tiers.map((t) => {
+                const isNonCash = t.collectPayment === false;
+                const isSelected = tier?.id === t.id;
+                return (
                   <div
-                    className="mt-1 inline-flex items-center gap-1 text-xs font-semibold"
-                    style={{ color: primaryColor }}
+                    key={t.id}
+                    className="w-full rounded-xl border-2 bg-white p-3 text-left transition hover:shadow-md"
+                    style={{ borderColor: `${primaryColor}55` }}
                   >
-                    Choose this package <ArrowRight className="h-3 w-3" />
+                    <button
+                      className="flex w-full flex-col gap-1 text-left"
+                      onClick={() => {
+                        setTier(t);
+                        setSelectedOptions([]);
+                        if (!isNonCash) setStep(email ? "form" : "auth");
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-3 w-3 rounded-full"
+                          style={{ backgroundColor: primaryColor }}
+                        />
+                        <span
+                          className="font-bold"
+                          style={{ color: primaryColor }}
+                        >
+                          {t.name}
+                        </span>
+                        <span className="ml-auto flex flex-col items-end">
+                          <span className="text-lg font-bold">
+                            {t.price === 0 ? "Free" : money(t.price, currency)}
+                          </span>
+                          {isNonCash && (
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Non-cash
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      {t.description && (
+                        <div className="whitespace-pre-line text-xs text-muted-foreground">
+                          {t.description}
+                        </div>
+                      )}
+                      {!isNonCash && (
+                        <div
+                          className="mt-1 inline-flex items-center gap-1 text-xs font-semibold"
+                          style={{ color: primaryColor }}
+                        >
+                          Choose this package{" "}
+                          <ArrowRight className="h-3 w-3" />
+                        </div>
+                      )}
+                    </button>
+                    {isNonCash &&
+                      isSelected &&
+                      (t.customOptions?.length ?? 0) > 0 && (
+                        <div className="mt-2 space-y-2 border-t pt-2">
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Instead of paying{" "}
+                            {t.price === 0 ? "" : money(t.price, currency)},
+                            provide the item(s) below (pick any number):
+                          </p>
+                          {t.customOptions!.map((opt) => {
+                            const checked = selectedOptions.includes(opt);
+                            return (
+                              <label
+                                key={opt}
+                                className="flex cursor-pointer items-center gap-2 text-sm"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleOption(opt)}
+                                  className="h-4 w-4 rounded border-gray-300"
+                                />
+                                {opt}
+                              </label>
+                            );
+                          })}
+                          <Button
+                            size="sm"
+                            className="w-full"
+                            disabled={selectedOptions.length === 0}
+                            onClick={() => setStep(email ? "form" : "auth")}
+                          >
+                            Continue <ArrowRight className="ml-1 h-3 w-3" />
+                          </Button>
+                        </div>
+                      )}
                   </div>
-                </button>
-              ))
+                );
+              })
             ))}
 
           {/* ── STEP 1b: Google gate ── */}

@@ -65,6 +65,16 @@ export class SponsorRequest {
   @Prop({ default: 0 })
   amount: number;
 
+  // Snapshotted from the tier at apply time (see `sponsorTypeId` above for
+  // why) — whether this application is a paid tier or a non-cash one.
+  @Prop({ default: true })
+  collectPayment: boolean;
+
+  // For a non-cash tier: which of the tier's `customOptions` the sponsor
+  // chose (vouchers, coupons, etc.). Empty for paid tiers.
+  @Prop({ type: [String], default: [] })
+  selectedOptions: string[];
+
   // ---- The business ----
   @Prop({ required: true })
   companyName: string;
