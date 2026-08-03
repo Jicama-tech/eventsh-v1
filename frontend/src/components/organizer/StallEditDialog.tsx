@@ -560,18 +560,18 @@ export function StallEditDialog({
         ) : step === "edit" ? (
           <div className="space-y-4">
             {/* Tab switcher */}
-            <div className="flex gap-1 rounded-lg bg-slate-100 p-1 text-sm">
+            <div className="flex gap-1 rounded-lg bg-muted p-1 text-sm">
               <button
                 type="button"
                 onClick={() => setTab("details")}
-                className={`flex-1 rounded-md px-3 py-1.5 font-medium ${tab === "details" ? "bg-white shadow" : "text-muted-foreground"}`}
+                className={`flex-1 rounded-md px-3 py-1.5 font-medium ${tab === "details" ? "bg-card shadow" : "text-muted-foreground"}`}
               >
                 Details
               </button>
               <button
                 type="button"
                 onClick={() => setTab("spaces")}
-                className={`flex-1 rounded-md px-3 py-1.5 font-medium ${tab === "spaces" ? "bg-white shadow" : "text-muted-foreground"}`}
+                className={`flex-1 rounded-md px-3 py-1.5 font-medium ${tab === "spaces" ? "bg-card shadow" : "text-muted-foreground"}`}
               >
                 Spaces &amp; Add-ons
               </button>
@@ -609,11 +609,11 @@ export function StallEditDialog({
                         </Label>
                         {form.registrationNumber ? (
                           regVerified ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-600">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-success">
                               <CheckCircle2 className="h-3 w-3" /> Verified
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-warning">
                               <AlertCircle className="h-3 w-3" /> Not verified
                             </span>
                           )
@@ -687,10 +687,10 @@ export function StallEditDialog({
                         onClick={() => toggleSpace(t)}
                         className={`flex items-center justify-between gap-2 rounded-lg border-2 px-3 py-2 text-left text-sm transition-colors ${
                           disabled
-                            ? "border-gray-200 bg-gray-100 opacity-60 cursor-not-allowed"
+                            ? "border-border bg-muted opacity-60 cursor-not-allowed"
                             : checked
-                              ? "border-blue-500 bg-blue-50"
-                              : "border-gray-200 hover:border-blue-300"
+                              ? "border-primary bg-primary/10"
+                              : "border-border hover:border-primary/50"
                         }`}
                       >
                         <div className="min-w-0">
@@ -708,8 +708,8 @@ export function StallEditDialog({
                         <span
                           className={`h-5 w-5 shrink-0 rounded border-2 flex items-center justify-center ${
                             checked
-                              ? "bg-blue-600 border-blue-600"
-                              : "border-gray-300"
+                              ? "bg-primary border-primary"
+                              : "border-input"
                           }`}
                         >
                           {checked && <Check className="h-3 w-3 text-white" />}
@@ -773,7 +773,7 @@ export function StallEditDialog({
             )}
 
             {/* Totals */}
-            <div className="rounded-lg bg-slate-50 border p-3 text-sm space-y-1">
+            <div className="rounded-lg bg-muted border p-3 text-sm space-y-1">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Current total</span>
                 <span className="font-medium">
@@ -787,7 +787,7 @@ export function StallEditDialog({
               <div className="flex justify-between border-t pt-1">
                 <span className="font-semibold">Amount to collect</span>
                 <span
-                  className={`font-bold ${extra > 0 ? "text-orange-600" : "text-green-600"}`}
+                  className={`font-bold ${extra > 0 ? "text-warning" : "text-success"}`}
                 >
                   {formatPrice(extra)}
                 </span>
@@ -799,7 +799,7 @@ export function StallEditDialog({
         ) : (
           // Pay step
           <div className="space-y-3">
-            <div className="rounded-lg bg-orange-50 border border-orange-200 p-3 text-sm">
+            <div className="rounded-lg bg-warning/10 border border-warning/30 p-3 text-sm">
               Amount to collect:{" "}
               <span className="font-bold">{formatPrice(amountDue)}</span>
             </div>
@@ -897,7 +897,7 @@ export function StallEditDialog({
                 Resend ticket
               </Button>
               <Button
-                className="bg-green-600 hover:bg-green-700"
+                className="bg-success hover:bg-success/90"
                 onClick={confirmPaid}
                 disabled={confirming}
               >
