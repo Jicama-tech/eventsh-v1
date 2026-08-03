@@ -317,7 +317,7 @@ export function MembershipPanel({ view = "full" }: MembershipPanelProps = {}) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-4 text-sm text-amber-800">
+          <div className="rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
             Your current subscription doesn't include the Membership module.
             Upgrade your plan to enable it.
           </div>
@@ -337,7 +337,7 @@ export function MembershipPanel({ view = "full" }: MembershipPanelProps = {}) {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-amber-600" /> Pending verification
+              <Clock className="h-5 w-5 text-warning" /> Pending verification
             </CardTitle>
             <CardDescription>
               Exhibitors who paid through the storefront land here. Verify
@@ -356,7 +356,7 @@ export function MembershipPanel({ view = "full" }: MembershipPanelProps = {}) {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-amber-600" />
+              <Clock className="h-5 w-5 text-warning" />
               Pending verification
               <Badge variant="secondary" className="ml-2">
                 {pending.length}
@@ -372,7 +372,7 @@ export function MembershipPanel({ view = "full" }: MembershipPanelProps = {}) {
             {pending.map((m) => (
               <div
                 key={m._id}
-                className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 flex flex-wrap items-center gap-3 text-sm"
+                className="rounded-lg border border-warning/30 bg-warning/10 p-3 flex flex-wrap items-center gap-3 text-sm"
               >
                 <div className="flex-1 min-w-[200px]">
                   <div className="font-semibold">
@@ -383,7 +383,7 @@ export function MembershipPanel({ view = "full" }: MembershipPanelProps = {}) {
                     {m.exhibitorWhatsapp ? ` · ${m.exhibitorWhatsapp}` : ""}
                   </div>
                 </div>
-                <Badge variant="outline" className="bg-white">
+                <Badge variant="outline" className="bg-card">
                   {typeof m.planId === "object" ? m.planId.name : "Plan"}
                 </Badge>
                 <div className="text-sm font-medium">
@@ -442,7 +442,7 @@ export function MembershipPanel({ view = "full" }: MembershipPanelProps = {}) {
               {plans.map((p) => (
                 <div
                   key={p._id}
-                  className="rounded-xl border p-4 bg-white shadow-sm flex flex-col gap-2"
+                  className="rounded-xl border p-4 bg-card shadow-sm flex flex-col gap-2"
                   style={{ borderColor: p.color + "55" }}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -473,7 +473,7 @@ export function MembershipPanel({ view = "full" }: MembershipPanelProps = {}) {
                     {p.durationDays} days
                   </div>
                   {p.perks.length > 0 && (
-                    <ul className="list-disc pl-4 text-xs text-slate-700 space-y-0.5 mt-1">
+                    <ul className="list-disc pl-4 text-xs text-foreground space-y-0.5 mt-1">
                       {p.perks.slice(0, 5).map((perk, i) => (
                         <li key={i}>{perk}</li>
                       ))}
@@ -507,7 +507,7 @@ export function MembershipPanel({ view = "full" }: MembershipPanelProps = {}) {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-red-600 hover:text-red-700"
+                      className="text-destructive hover:text-destructive"
                       onClick={() => archivePlan(p)}
                     >
                       <Trash2 className="h-4 w-4" />
