@@ -172,7 +172,7 @@ export function RegistrationFormsDialog({
                     {toggleable.map((f) => (
                       <div
                         key={f.key}
-                        className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2.5"
+                        className="flex items-center justify-between rounded-lg border px-3 py-2.5"
                       >
                         <Label
                           htmlFor={`${c}-${f.key}`}

@@ -93,7 +93,7 @@ export default function IndividualGuestList({
 
   if (error) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50/50 p-6 text-center text-sm text-red-700">
+      <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-center text-sm text-destructive">
         {error}
       </div>
     );
@@ -126,8 +126,8 @@ export default function IndividualGuestList({
   if (!events.length) {
     return (
       <div className="mx-auto max-w-md py-16 text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-rose-100">
-          <CalendarHeart className="h-7 w-7 text-rose-500" />
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-rose-100 dark:bg-rose-900/30">
+          <CalendarHeart className="h-7 w-7 text-rose-500 dark:text-rose-300" />
         </div>
         <h2 className="text-lg font-semibold text-foreground">No events yet</h2>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -142,8 +142,8 @@ export default function IndividualGuestList({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-100">
-          <Users className="h-5 w-5 text-rose-500" />
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-100 dark:bg-rose-900/30">
+          <Users className="h-5 w-5 text-rose-500 dark:text-rose-300" />
         </div>
         <div>
           <h1 className="text-lg sm:text-xl font-bold leading-tight">
@@ -159,19 +159,19 @@ export default function IndividualGuestList({
         {events.map((ev) => (
           <div
             key={ev.id}
-            className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
+            className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3 shadow-sm"
           >
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <div className="truncate text-sm sm:text-base font-semibold text-slate-900">
+                <div className="truncate text-sm sm:text-base font-semibold text-foreground">
                   {ev.title || "Untitled event"}
                 </div>
                 {ev.status && (
                   <span
                     className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
                       ev.status === "published"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-amber-100 text-amber-700"
+                        ? "bg-success/15 text-success"
+                        : "bg-warning/15 text-warning"
                     }`}
                   >
                     {ev.status}
@@ -179,7 +179,7 @@ export default function IndividualGuestList({
                 )}
               </div>
               {ev.date && (
-                <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
                   <Calendar className="h-3 w-3" />
                   {new Date(ev.date).toLocaleDateString()}
                 </div>

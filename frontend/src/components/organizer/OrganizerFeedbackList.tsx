@@ -124,9 +124,9 @@ export function OrganizerFeedbackList() {
       {!canCollectFeedback ? (
         <Card>
           <CardContent className="py-12 text-center space-y-3">
-            <Lock className="h-8 w-8 mx-auto text-slate-400" />
+            <Lock className="h-8 w-8 mx-auto text-muted-foreground" />
             <div>
-              <p className="font-medium text-slate-700">
+              <p className="font-medium text-foreground">
                 Feedback isn't included in your current plan
               </p>
               <p className="text-xs text-muted-foreground mt-1">
@@ -172,7 +172,7 @@ export function OrganizerFeedbackList() {
                       {event.status === "cancelled" && (
                         <Badge
                           variant="outline"
-                          className="bg-red-50 text-red-700"
+                          className="bg-destructive/10 text-destructive"
                         >
                           Cancelled
                         </Badge>

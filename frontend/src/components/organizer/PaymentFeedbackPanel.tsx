@@ -20,11 +20,11 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 const TYPE_COLOR: Record<string, string> = {
-  vendor: "bg-blue-100 text-blue-700",
-  stall_edit: "bg-amber-100 text-amber-700",
-  visitor: "bg-green-100 text-green-700",
-  speaker: "bg-purple-100 text-purple-700",
-  round_table: "bg-pink-100 text-pink-700",
+  vendor: "bg-primary/15 text-primary",
+  stall_edit: "bg-warning/15 text-warning",
+  visitor: "bg-success/15 text-success",
+  speaker: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+  round_table: "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300",
 };
 
 interface PaymentFeedbackRow {
@@ -48,7 +48,7 @@ function Stars({ value }: { value: number }) {
         <Star
           key={n}
           className={`h-4 w-4 ${
-            value >= n ? "fill-yellow-400 text-yellow-400" : "text-gray-300"
+            value >= n ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/40"
           }`}
         />
       ))}
@@ -172,7 +172,7 @@ export default function PaymentFeedbackPanel({
                   <div className="flex items-center gap-2">
                     <Stars value={f.rating} />
                     <Badge
-                      className={TYPE_COLOR[f.paymentType] || "bg-gray-100"}
+                      className={TYPE_COLOR[f.paymentType] || "bg-muted"}
                     >
                       {TYPE_LABEL[f.paymentType] || f.paymentType}
                     </Badge>
@@ -184,14 +184,14 @@ export default function PaymentFeedbackPanel({
                   </span>
                 </div>
                 {f.comment && (
-                  <p className="text-sm text-gray-700">{f.comment}</p>
+                  <p className="text-sm text-foreground">{f.comment}</p>
                 )}
                 <div className="flex items-center gap-x-3 gap-y-0.5 flex-wrap text-xs text-muted-foreground">
                   {f.payerName && <span>👤 {f.payerName}</span>}
                   {f.payerEmail && <span>{f.payerEmail}</span>}
                   {f.eventTitle && <span>🎪 {f.eventTitle}</span>}
                   {admin && f.organizerId?.organizationName && (
-                    <span className="font-medium text-gray-600">
+                    <span className="font-medium text-muted-foreground">
                       🏢 {f.organizerId.organizationName}
                     </span>
                   )}
