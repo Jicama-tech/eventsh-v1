@@ -831,8 +831,8 @@ export function OrganizerStorefrontCustomizer({
                 onClick={() => setViewMode("settings")}
                 className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   viewMode === "settings"
-                    ? "bg-white shadow-sm text-slate-900"
-                    : "text-slate-500 hover:text-slate-700"
+                    ? "bg-card shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Layout className="h-4 w-4 inline mr-1.5" />
@@ -843,8 +843,8 @@ export function OrganizerStorefrontCustomizer({
                 onClick={() => setViewMode("preview")}
                 className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   viewMode === "preview"
-                    ? "bg-white shadow-sm text-slate-900"
-                    : "text-slate-500 hover:text-slate-700"
+                    ? "bg-card shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Eye className="h-4 w-4 inline mr-1.5" />
@@ -1037,7 +1037,7 @@ export function OrganizerStorefrontCustomizer({
                     <div className="space-y-2">
                       <Label htmlFor="hours">
                         Business Hours:{" "}
-                        <span className="text-l text-gray-400">
+                        <span className="text-l text-muted-foreground">
                           (Mon-Fri: 9AM-6PM, Sat-Sun: 10AM-4PM)
                         </span>
                       </Label>
@@ -2305,7 +2305,7 @@ export function OrganizerStorefrontCustomizer({
                               const f = e.dataTransfer.files?.[0];
                               if (f) uploadSponsorLogo(idx, sp.id, f);
                             }}
-                            className="mt-1 flex items-center gap-3 rounded-lg border-2 border-dashed border-gray-300 p-2"
+                            className="mt-1 flex items-center gap-3 rounded-lg border-2 border-dashed border-muted-foreground/30 p-2"
                           >
                             {sp.imageUrl ? (
                               <img
@@ -2314,11 +2314,11 @@ export function OrganizerStorefrontCustomizer({
                                 className="h-10 w-auto max-w-[120px] object-contain"
                               />
                             ) : (
-                              <span className="text-xs text-gray-400">
+                              <span className="text-xs text-muted-foreground">
                                 Drag &amp; drop a logo
                               </span>
                             )}
-                            <label className="ml-auto cursor-pointer whitespace-nowrap text-xs font-medium text-indigo-600 hover:underline">
+                            <label className="ml-auto cursor-pointer whitespace-nowrap text-xs font-medium text-primary hover:underline">
                               {uploadingSponsor === sp.id
                                 ? "Uploading…"
                                 : sp.imageUrl
@@ -2351,7 +2351,7 @@ export function OrganizerStorefrontCustomizer({
                           variant="outline"
                           size="sm"
                           onClick={() => removeSponsor(idx)}
-                          className="text-red-600"
+                          className="text-destructive"
                         >
                           Remove
                         </Button>
