@@ -477,7 +477,7 @@ export const EventBanner = ({
   return (
     <div className="space-y-3">
       <Label className="text-base font-semibold">Event Banner</Label>
-      <p className="text-sm text-gray-600">
+      <p className="text-sm text-muted-foreground">
         Main banner (recommended: 1920x1080)
       </p>
 
@@ -486,7 +486,7 @@ export const EventBanner = ({
           Clicking the X on the preview clears bannerPreview and the
           dropzone reappears. */}
       {!bannerPreview && (
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+        <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-6">
           <input
             type="file"
             accept="image/*"
@@ -498,8 +498,8 @@ export const EventBanner = ({
             htmlFor="upload-banner"
             className="flex flex-col items-center justify-center cursor-pointer"
           >
-            <Upload className="h-12 w-12 text-gray-400 mb-3" />
-            <span className="text-sm text-gray-600 font-medium">
+            <Upload className="h-12 w-12 text-muted-foreground mb-3" />
+            <span className="text-sm text-muted-foreground font-medium">
               Click to upload event banner
             </span>
           </label>
@@ -676,7 +676,7 @@ export const EventGallery = ({
       </Label>
 
       {galleryImages.length < maxImages && (
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+        <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-4">
           <input
             type="file"
             accept="image/*"
@@ -689,8 +689,8 @@ export const EventGallery = ({
             htmlFor="upload-gallery"
             className="flex flex-col items-center justify-center cursor-pointer"
           >
-            <Upload className="h-8 w-8 text-gray-400 mb-2" />
-            <span className="text-sm text-gray-600">Add gallery images</span>
+            <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+            <span className="text-sm text-muted-foreground">Add gallery images</span>
           </label>
         </div>
       )}
@@ -736,7 +736,7 @@ export const EventGallery = ({
               reorder, and delete individually. The order here is the order
               attendees see in the gallery. */}
           <div className="space-y-2">
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-muted-foreground">
               Drag thumbnails to reorder. Click one to preview it above.
             </p>
             <div className="flex flex-wrap gap-3">
@@ -755,7 +755,7 @@ export const EventGallery = ({
                   className={`relative h-20 w-20 flex-shrink-0 cursor-pointer overflow-hidden rounded-md border-2 transition ${
                     idx === currentImageIndex
                       ? "border-primary ring-2 ring-primary/30"
-                      : "border-transparent hover:border-gray-300"
+                      : "border-transparent hover:border-muted-foreground/30"
                   } ${dragIndex === idx ? "opacity-40" : ""}`}
                 >
                   <img
@@ -779,7 +779,7 @@ export const EventGallery = ({
                       e.stopPropagation();
                       removeImage(img.id);
                     }}
-                    className="absolute right-0.5 top-0.5 rounded-full bg-red-600 p-0.5 text-white hover:bg-red-700"
+                    className="absolute right-0.5 top-0.5 rounded-full bg-destructive p-0.5 text-destructive-foreground hover:bg-destructive/90"
                   >
                     <X size={12} />
                   </button>
@@ -923,7 +923,7 @@ const VenueConfiguration = ({
                   >
                     {config.name}
                     {config.published === false && (
-                      <span className="ml-1.5 rounded bg-gray-200 px-1 text-[10px] font-medium text-gray-600">
+                      <span className="ml-1.5 rounded bg-muted px-1 text-[10px] font-medium text-muted-foreground">
                         Hidden
                       </span>
                     )}
@@ -934,7 +934,7 @@ const VenueConfiguration = ({
                       variant="ghost"
                       size="sm"
                       onClick={() => removeVenueConfig(config.id)}
-                      className="text-red-500 hover:text-red-700"
+                      className="text-destructive hover:text-destructive"
                     >
                       <X size={14} />
                     </Button>
@@ -1040,7 +1040,7 @@ const VenueConfiguration = ({
                 max="10"
                 className="mt-1"
               />
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Number of rows for pricing tiers (1-10)
               </p>
             </div> */}
@@ -1149,7 +1149,7 @@ const VenueConfiguration = ({
                       return (
                         <div
                           key={d.id}
-                          className="rounded-lg border bg-white p-3 space-y-2.5"
+                          className="rounded-lg border bg-card p-3 space-y-2.5"
                         >
                           {/* Line 1 — colour swatch + name + remove */}
                           <div className="flex items-center gap-2">
@@ -1159,7 +1159,7 @@ const VenueConfiguration = ({
                               onChange={(e) =>
                                 update({ color: e.target.value })
                               }
-                              className="h-9 w-9 flex-shrink-0 cursor-pointer rounded border border-gray-300 p-0"
+                              className="h-9 w-9 flex-shrink-0 cursor-pointer rounded border border-muted-foreground/30 p-0"
                               title="Marker colour"
                             />
                             <Input
@@ -1174,7 +1174,7 @@ const VenueConfiguration = ({
                               type="button"
                               size="icon"
                               variant="ghost"
-                              className="h-9 w-9 flex-shrink-0 text-red-500 hover:text-red-600"
+                              className="h-9 w-9 flex-shrink-0 text-destructive hover:text-destructive"
                               onClick={() =>
                                 updateSelectedConfig({
                                   customDoorTypes: (
@@ -1192,7 +1192,7 @@ const VenueConfiguration = ({
                             <span className="text-xs text-muted-foreground">
                               Shape
                             </span>
-                            <div className="inline-flex h-9 flex-1 overflow-hidden rounded-md border bg-white">
+                            <div className="inline-flex h-9 flex-1 overflow-hidden rounded-md border bg-card">
                               {(["circle", "square"] as const).map((s) => {
                                 const active = (d.shape || "circle") === s;
                                 return (
@@ -1294,7 +1294,7 @@ const VenueTemplatePicker: React.FC<{
   const isEmpty = !loading && templates.length === 0;
 
   return (
-    <div className="rounded-lg border border-purple-200 bg-purple-50/40 p-3 mb-5">
+    <div className="rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/40 dark:bg-purple-900/20 p-3 mb-5">
       <Label className="text-sm font-medium text-purple-900 flex items-center gap-2">
         <Grid3x3 size={14} /> Import a saved venue layout
       </Label>
@@ -1312,7 +1312,7 @@ const VenueTemplatePicker: React.FC<{
           {/* Uncontrolled value — always resets so the SAME layout can be
               imported again (e.g. two copies of one hall). */}
           <Select value="" onValueChange={apply}>
-            <SelectTrigger className="bg-white mt-2">
+            <SelectTrigger className="bg-card mt-2">
               <SelectValue
                 placeholder={
                   loading
@@ -1430,13 +1430,13 @@ const SavedSpaceTemplatePicker: React.FC<{
     : templates;
 
   return (
-    <div className="rounded-lg border border-purple-200 bg-purple-50/40 p-3">
+    <div className="rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/40 dark:bg-purple-900/20 p-3">
       <Label className="text-sm font-medium text-purple-900 flex items-center gap-2">
         <Grid3x3 size={14} /> Reuse a saved Space template
       </Label>
       <div className="flex gap-2 mt-2">
         <Select value={selectedId} onValueChange={apply}>
-          <SelectTrigger className="bg-white">
+          <SelectTrigger className="bg-card">
             <SelectValue
               placeholder={
                 loading
@@ -2081,25 +2081,25 @@ const TableManagement = ({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               Select which row this Space belongs to. Different rows can have
               different prices.
             </p>
           </div> */}
 
           {/* Pricing Section */}
-          <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <div className="space-y-4 p-4 bg-primary/10 rounded-lg border border-primary/30">
             <div className="flex items-center gap-2">
               {country === "IN" ? (
-                <IndianRupee size={18} className="text-blue-600" />
+                <IndianRupee size={18} className="text-primary" />
               ) : (
-                <DollarSign size={18} className="text-blue-600" />
+                <DollarSign size={18} className="text-primary" />
               )}
-              <h4 className="font-semibold text-blue-900">Pricing</h4>
+              <h4 className="font-semibold text-primary">Pricing</h4>
             </div>
 
             {!currentTable.forSale && (
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-700">
+              <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 text-sm text-warning">
                 This space is <strong>not for sale</strong> — it will appear on
                 the venue layout as a reference point (e.g., Food Court,
                 Registration Desk) but cannot be booked by exhibitors.
@@ -2121,7 +2121,7 @@ const TableManagement = ({
                     onChange={(e) => handleTablePriceChange(e.target.value)}
                     placeholder="10000"
                   />
-                  <p className="text-xs text-gray-600 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Full rental price for this table
                   </p>
                 </div>
@@ -2144,11 +2144,11 @@ const TableManagement = ({
                     }
                     placeholder="4000"
                   />
-                  <p className="text-xs text-gray-600 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Partial payment (≤ Space Price)
                   </p>
                   {currentTable.tablePrice && (
-                    <p className="text-xs text-blue-600 mt-1">
+                    <p className="text-xs text-primary mt-1">
                       Suggested:
                       {formatPrice(
                         calculateSuggestedBookingPrice(
@@ -2176,11 +2176,11 @@ const TableManagement = ({
                     }
                     placeholder="5000"
                   />
-                  <p className="text-xs text-gray-600 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Security deposit (refundable)
                   </p>
                   {currentTable.tablePrice && (
-                    <p className="text-xs text-blue-600 mt-1">
+                    <p className="text-xs text-primary mt-1">
                       Suggested:
                       {formatPrice(
                         calculateSuggestedDepositPrice(
@@ -2211,7 +2211,7 @@ const TableManagement = ({
                   placeholder="Unlimited"
                   className="max-w-xs"
                 />
-                <p className="text-xs text-gray-600 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   Most spaces of <strong>this type</strong> one exhibitor can
                   select in a single booking (e.g. 1 large, 2 small). Leave
                   blank for unlimited.
@@ -2306,7 +2306,7 @@ const TableManagement = ({
                 exhibitors must pay in full and the deposit-in-Option-1 toggle
                 below is hidden (it only matters when Option 1 exists). */}
             {currentTable.forSale && (
-              <div className="flex items-center justify-between gap-3 rounded-lg border bg-slate-50 p-3">
+              <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted p-3">
                 <div>
                   <Label className="text-sm">
                     Offer minimum payment option
@@ -2336,7 +2336,7 @@ const TableManagement = ({
                 Booking only (off, deposit collected with the balance). Only
                 shown when the minimum-payment plan is enabled above. */}
             {currentTable.forSale && currentTable.minimumPaymentEnabled && (
-              <div className="flex items-center justify-between gap-3 rounded-lg border bg-slate-50 p-3">
+              <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted p-3">
                 <div>
                   <Label className="text-sm">
                     Include deposit in Option 1 (minimum payment)
@@ -2365,7 +2365,7 @@ const TableManagement = ({
               <div className="flex gap-2">
                 <button
                   type="button"
-                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${currentTable.forSale ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${currentTable.forSale ? "border-green-500 bg-success/10 text-success" : "border-border text-muted-foreground hover:bg-muted"}`}
                   onClick={() =>
                     setCurrentTable((prev) => ({ ...prev, forSale: true }))
                   }
@@ -2374,7 +2374,7 @@ const TableManagement = ({
                 </button>
                 <button
                   type="button"
-                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${!currentTable.forSale ? "border-orange-500 bg-orange-50 text-orange-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${!currentTable.forSale ? "border-warning bg-warning/10 text-warning" : "border-border text-muted-foreground hover:bg-muted"}`}
                   onClick={() =>
                     setCurrentTable((prev) => ({
                       ...prev,
@@ -2388,7 +2388,7 @@ const TableManagement = ({
                   Not for Sale
                 </button>
               </div>
-              <p className="text-[10px] text-gray-400 mt-1">
+              <p className="text-[10px] text-muted-foreground mt-1">
                 {currentTable.forSale
                   ? "Exhibitors can book this space"
                   : "Reference only (Food Court, Registration Desk, etc.)"}
@@ -2416,7 +2416,7 @@ const TableManagement = ({
                   <button
                     key={c}
                     type="button"
-                    className={`w-8 h-8 rounded-full border-2 transition-all ${currentTable.color === c ? "border-gray-800 scale-110 shadow-md" : "border-gray-200 hover:scale-105"}`}
+                    className={`w-8 h-8 rounded-full border-2 transition-all ${currentTable.color === c ? "border-gray-800 scale-110 shadow-md" : "border-border hover:scale-105"}`}
                     style={{ backgroundColor: c }}
                     onClick={() =>
                       setCurrentTable((prev) => ({ ...prev, color: c }))
@@ -2432,7 +2432,7 @@ const TableManagement = ({
                       color: e.target.value,
                     }))
                   }
-                  className="w-8 h-8 rounded-full cursor-pointer border-2 border-gray-200"
+                  className="w-8 h-8 rounded-full cursor-pointer border-2 border-border"
                   title="Custom color"
                 />
               </div>
@@ -2443,7 +2443,7 @@ const TableManagement = ({
               currentTable.tablePrice &&
               currentTable.bookingPrice &&
               currentTable.depositPrice && (
-                <div className="bg-white p-3 rounded border border-blue-200">
+                <div className="bg-card p-3 rounded border border-primary/30">
                   <p className="text-sm font-semibold mb-2">
                     Payment Options for Exhibitors:
                   </p>
@@ -2455,11 +2455,11 @@ const TableManagement = ({
                     {/* Option 1 only exists when the minimum-payment plan is
                         enabled for this space. */}
                     {currentTable.minimumPaymentEnabled && (
-                      <div className="bg-green-50 p-2 rounded">
-                        <p className="font-medium text-green-800">
+                      <div className="bg-success/10 p-2 rounded">
+                        <p className="font-medium text-success">
                           Option 1: Minimum Payment
                         </p>
-                        <p className="text-green-700">
+                        <p className="text-success">
                           {currentTable.depositInOption1
                             ? "Booking + Deposit = "
                             : "Booking only = "}
@@ -2470,7 +2470,7 @@ const TableManagement = ({
                                 : 0),
                           )}
                         </p>
-                        <p className="text-xs text-green-600">
+                        <p className="text-xs text-success">
                           Remaining:
                           {formatPrice(
                             parseFloat(currentTable.tablePrice) -
@@ -2482,7 +2482,7 @@ const TableManagement = ({
                         </p>
                       </div>
                     )}
-                    <div className="bg-purple-50 p-2 rounded">
+                    <div className="bg-purple-50 dark:bg-purple-900/20 p-2 rounded">
                       <p className="font-medium text-purple-800">
                         {currentTable.minimumPaymentEnabled
                           ? "Option 2: Full Payment"
@@ -2518,7 +2518,7 @@ const TableManagement = ({
               (currentTable.memberPrice ||
                 currentTable.memberBookingPrice ||
                 currentTable.memberDepositPrice) && (
-                <div className="bg-white p-3 rounded border border-emerald-200">
+                <div className="bg-card p-3 rounded border border-success/30">
                   <p className="text-sm font-semibold mb-2 flex items-center gap-2 text-emerald-800">
                     <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
                     Member Payment Options
@@ -2622,7 +2622,7 @@ const TableManagement = ({
                 {tableTemplates.map((table) => (
                   <div
                     key={table.id}
-                    className={`flex items-center justify-between p-3 bg-gray-50 rounded border-l-4 ${
+                    className={`flex items-center justify-between p-3 bg-muted rounded border-l-4 ${
                       editingTableId === table.id ? "ring-2 ring-primary" : ""
                     }`}
                     style={{ borderLeftColor: table.color || "#6b7280" }}
@@ -2637,7 +2637,7 @@ const TableManagement = ({
                         {table.forSale === false && (
                           <Badge
                             variant="outline"
-                            className="text-[9px] px-1.5 py-0 border-orange-300 text-orange-600 bg-orange-50"
+                            className="text-[9px] px-1.5 py-0 border-warning/40 text-warning bg-warning/10"
                           >
                             Not for Sale
                           </Badge>
@@ -2649,16 +2649,16 @@ const TableManagement = ({
                           <Badge variant="destructive">Booked</Badge>
                         )}
                       </div>
-                      <div className="text-sm text-gray-600">
+                      <div className="text-sm text-muted-foreground">
                         {table.type} • {table.width}x{table.height}cm
                       </div>
-                      <div className="text-sm text-gray-700 font-medium">
+                      <div className="text-sm text-foreground font-medium">
                         Space: {formatPrice(table.tablePrice)} • Booking:
                         {formatPrice(table.bookingPrice)} • Deposit:
                         {formatPrice(table.depositPrice)}
                       </div>
                       {table.isBooked && table.bookedBy && (
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-muted-foreground">
                           Booked by: {table.bookedBy}
                         </div>
                       )}
@@ -2763,7 +2763,7 @@ const TableManagement = ({
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Image Uploader */}
-            <div className="col-span-1 border-2 border-dashed border-gray-300 rounded-lg p-2 flex flex-col items-center justify-center relative min-h-[100px]">
+            <div className="col-span-1 border-2 border-dashed border-muted-foreground/30 rounded-lg p-2 flex flex-col items-center justify-center relative min-h-[100px]">
               <input
                 type="file"
                 accept="image/*"
@@ -2804,8 +2804,8 @@ const TableManagement = ({
                   htmlFor="upload-addon"
                   className="flex flex-col items-center cursor-pointer w-full h-full justify-center"
                 >
-                  <Upload className="h-6 w-6 text-gray-400 mb-1" />
-                  <span className="text-xs text-gray-500 text-center">
+                  <Upload className="h-6 w-6 text-muted-foreground mb-1" />
+                  <span className="text-xs text-muted-foreground text-center">
                     Add Image
                   </span>
                 </label>
@@ -2856,7 +2856,7 @@ const TableManagement = ({
                         color: e.target.value,
                       }))
                     }
-                    className="h-8 w-10 cursor-pointer rounded border border-gray-300 bg-white p-0.5"
+                    className="h-8 w-10 cursor-pointer rounded border border-muted-foreground/30 bg-card p-0.5"
                   />
                   <Input
                     type="text"
@@ -2887,7 +2887,7 @@ const TableManagement = ({
                           (currentAddOn.color || "").toLowerCase() ===
                           c.toLowerCase()
                             ? "border-gray-800 scale-110"
-                            : "border-gray-200 hover:border-gray-400"
+                            : "border-border hover:border-muted-foreground/50"
                         }`}
                         style={{ backgroundColor: c }}
                       />
@@ -3063,7 +3063,7 @@ const TableManagement = ({
                 {addOnItems.map((addOn) => (
                   <div
                     key={addOn.id}
-                    className={`flex items-center justify-between p-3 bg-gray-50 rounded border ${
+                    className={`flex items-center justify-between p-3 bg-muted rounded border ${
                       editingAddOnId === addOn.id ? "ring-2 ring-primary" : ""
                     }`}
                   >
@@ -3074,7 +3074,7 @@ const TableManagement = ({
                         <PopoverTrigger asChild>
                           <button
                             type="button"
-                            className="w-4 h-4 rounded-full border border-gray-300 shrink-0 hover:scale-110 transition-transform"
+                            className="w-4 h-4 rounded-full border border-muted-foreground/30 shrink-0 hover:scale-110 transition-transform"
                             style={{
                               backgroundColor: addOn.color || "#6b7280",
                             }}
@@ -3099,7 +3099,7 @@ const TableManagement = ({
                                   ),
                                 )
                               }
-                              className="h-8 w-10 cursor-pointer rounded border border-gray-300 bg-white p-0.5"
+                              className="h-8 w-10 cursor-pointer rounded border border-muted-foreground/30 bg-card p-0.5"
                             />
                             <Input
                               type="text"
@@ -3138,7 +3138,7 @@ const TableManagement = ({
                                   (addOn.color || "#6b7280").toLowerCase() ===
                                   c.toLowerCase()
                                     ? "border-gray-800 scale-110"
-                                    : "border-gray-200 hover:border-gray-400"
+                                    : "border-border hover:border-muted-foreground/50"
                                 }`}
                                 style={{ backgroundColor: c }}
                               />
@@ -3153,13 +3153,13 @@ const TableManagement = ({
                           className="w-10 h-10 rounded object-cover border"
                         />
                       ) : (
-                        <div className="w-10 h-10 bg-gray-200 rounded border flex items-center justify-center">
-                          <Image className="w-4 h-4 text-gray-400" />
+                        <div className="w-10 h-10 bg-muted rounded border flex items-center justify-center">
+                          <Image className="w-4 h-4 text-muted-foreground" />
                         </div>
                       )}
                       <div>
                         <div className="font-medium">{addOn.name}</div>
-                        <div className="text-sm text-gray-600">
+                        <div className="text-sm text-muted-foreground">
                           {formatPrice(addOn.price)} - {addOn.description}
                         </div>
                       </div>
@@ -3269,7 +3269,7 @@ const MaximizableSurface = ({
       // pointer-events-auto: a modal Radix dialog sets `pointer-events: none`
       // on <body>; without this the portaled overlay would inherit it and be
       // unclickable.
-      <div className="fixed inset-0 z-[100] bg-white overflow-auto p-4 space-y-4 pointer-events-auto">
+      <div className="fixed inset-0 z-[100] bg-background overflow-auto p-4 space-y-4 pointer-events-auto">
         {children}
       </div>,
       document.body,
@@ -3387,7 +3387,7 @@ const TemplatesHost = ({
       onClick={onClose}
     >
       <div
-        className="mt-10 w-full max-w-3xl rounded-xl bg-white p-4 shadow-2xl"
+        className="mt-10 w-full max-w-3xl rounded-xl bg-card p-4 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
@@ -3396,7 +3396,7 @@ const TemplatesHost = ({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded p-1 text-slate-500 hover:bg-slate-100"
+            className="rounded p-1 text-muted-foreground hover:bg-muted"
           >
             <X className="h-4 w-4" />
           </button>
@@ -4847,7 +4847,7 @@ const VenueDesigner = ({
               size="sm"
               variant="outline"
               onClick={() => setAiOpen(true)}
-              className="border-amber-300 text-amber-700 hover:bg-amber-50"
+              className="border-warning/40 text-warning hover:bg-warning/10"
               title="Auto-arrange a layout from a brief"
             >
               <Sparkles size={14} className="mr-2" /> AI Layout
@@ -4860,7 +4860,7 @@ const VenueDesigner = ({
             className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 ${
               venueConfig?.published !== false
                 ? "border-emerald-300 bg-emerald-50"
-                : "border-gray-300 bg-gray-50"
+                : "border-muted-foreground/30 bg-muted"
             }`}
             title="When on, this venue is visible on the eventfront and vendor selection"
           >
@@ -4874,7 +4874,7 @@ const VenueDesigner = ({
               className={`text-xs font-semibold cursor-pointer ${
                 venueConfig?.published !== false
                   ? "text-emerald-700"
-                  : "text-gray-500"
+                  : "text-muted-foreground"
               }`}
             >
               {venueConfig?.published !== false ? "Published" : "Hidden"}
@@ -4887,7 +4887,7 @@ const VenueDesigner = ({
             className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 ${
               showSpacePricesOnEventfront
                 ? "border-emerald-300 bg-emerald-50"
-                : "border-gray-300 bg-gray-50"
+                : "border-muted-foreground/30 bg-muted"
             }`}
             title="When on, spaces show their price in the eventfront hover tooltip and a color legend appears below the venue map"
           >
@@ -4901,7 +4901,7 @@ const VenueDesigner = ({
               className={`text-xs font-semibold cursor-pointer ${
                 showSpacePricesOnEventfront
                   ? "text-emerald-700"
-                  : "text-gray-500"
+                  : "text-muted-foreground"
               }`}
             >
               Display price on eventfront
@@ -4964,7 +4964,7 @@ const VenueDesigner = ({
               type="button"
               onClick={() => setIsCanvasMaximized(false)}
               style={{ position: "fixed", top: 16, right: 16, zIndex: 112 }}
-              className="flex items-center gap-1 rounded-full border bg-white px-4 py-2 text-sm font-medium shadow-lg hover:bg-slate-50"
+              className="flex items-center gap-1 rounded-full border bg-card px-4 py-2 text-sm font-medium shadow-lg hover:bg-muted"
               title="Exit full screen (Esc)"
             >
               <Minimize2 className="h-4 w-4" /> Exit
@@ -4983,7 +4983,7 @@ const VenueDesigner = ({
           open={templatesDialogOpen}
           onClose={() => setTemplatesDialogOpen(false)}
         >
-          <div className="border rounded-xl bg-slate-50 p-4">
+          <div className="border rounded-xl bg-muted p-4">
             <button
               type="button"
               onClick={() => setSpacesListOpen((v) => !v)}
@@ -4991,7 +4991,7 @@ const VenueDesigner = ({
               className="flex w-full items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 hover:text-foreground transition-colors"
             >
               <span>Click to add to venue</span>
-              <span className="ml-auto flex items-center gap-1 normal-case font-medium text-[10px] text-slate-400">
+              <span className="ml-auto flex items-center gap-1 normal-case font-medium text-[10px] text-muted-foreground">
                 {spacesListOpen ? "Hide" : "Show"}
                 {spacesListOpen ? (
                   <ChevronUp className="h-4 w-4" />
@@ -5006,7 +5006,7 @@ const VenueDesigner = ({
                 {tableTemplates.map((template) => (
                   <div
                     key={template.id}
-                    className="flex-shrink-0 w-36 p-3 border-2 rounded-xl cursor-pointer hover:shadow-md transition-all bg-white"
+                    className="flex-shrink-0 w-36 p-3 border-2 rounded-xl cursor-pointer hover:shadow-md transition-all bg-card"
                     style={{
                       borderColor: (template.color || "#6b7280") + "44",
                     }}
@@ -5036,14 +5036,14 @@ const VenueDesigner = ({
                 {/* Divider */}
                 {tableTemplates.length > 0 &&
                   speakerSlotTemplates.length > 0 && (
-                    <div className="flex-shrink-0 w-px bg-gray-300 mx-1" />
+                    <div className="flex-shrink-0 w-px bg-border mx-1" />
                   )}
 
                 {/* Speaker Zone Templates */}
                 {speakerSlotTemplates.map((template) => (
                   <div
                     key={template.id}
-                    className="flex-shrink-0 w-40 p-3 border-2 border-purple-200 rounded-xl cursor-pointer hover:border-purple-500 hover:shadow-md transition-all bg-purple-50/50"
+                    className="flex-shrink-0 w-40 p-3 border-2 border-purple-200 dark:border-purple-800 rounded-xl cursor-pointer hover:border-purple-500 hover:shadow-md transition-all bg-purple-50/50 dark:bg-purple-900/20"
                     onClick={() => addSpeakerZoneToVenue(template)}
                   >
                     <div className="flex items-center gap-1 mb-1">
@@ -5074,14 +5074,14 @@ const VenueDesigner = ({
                 {(tableTemplates.length > 0 ||
                   speakerSlotTemplates.length > 0) &&
                   roundTableTemplates.length > 0 && (
-                    <div className="flex-shrink-0 w-px bg-gray-300 mx-1" />
+                    <div className="flex-shrink-0 w-px bg-border mx-1" />
                   )}
 
                 {/* Round Table Templates */}
                 {roundTableTemplates.map((template) => (
                   <div
                     key={template.id}
-                    className="flex-shrink-0 w-40 p-3 border-2 rounded-xl cursor-pointer hover:shadow-md transition-all bg-white"
+                    className="flex-shrink-0 w-40 p-3 border-2 rounded-xl cursor-pointer hover:shadow-md transition-all bg-card"
                     style={{ borderColor: template.color + "66" }}
                     onClick={() => addRoundTableToVenue(template)}
                   >
@@ -5113,7 +5113,7 @@ const VenueDesigner = ({
                   speakerSlotTemplates.length > 0 ||
                   roundTableTemplates.length > 0) &&
                   (venueConfig?.customDoorTypes || []).length > 0 && (
-                    <div className="flex-shrink-0 w-px bg-gray-300 mx-1" />
+                    <div className="flex-shrink-0 w-px bg-border mx-1" />
                   )}
 
                 {/* Door templates (Entrance, Exit, Fire Exit, …) — one per type
@@ -5181,18 +5181,18 @@ const VenueDesigner = ({
                   1 m = 10 px convention; we show the same scale here so
                   values match what the organizer typed. */}
                   {venueConfig.showGrid && (
-                    <div className="flex items-center gap-2 border rounded-md bg-slate-50 px-2 py-1 text-[10px] leading-tight">
+                    <div className="flex items-center gap-2 border rounded-md bg-muted px-2 py-1 text-[10px] leading-tight">
                       <div>
-                        <div className="font-semibold text-slate-700">
+                        <div className="font-semibold text-foreground">
                           Grid: {(venueConfig.gridSize / 10).toFixed(1)} m
                         </div>
-                        <div className="text-slate-500">
+                        <div className="text-muted-foreground">
                           Venue: {(venueConfig.width / 10).toFixed(0)} ×{" "}
                           {(venueConfig.height / 10).toFixed(0)} m
                         </div>
                       </div>
                       <div
-                        className="border-2 border-slate-400 bg-slate-200/50 flex items-center justify-center text-[8px] font-bold text-slate-600"
+                        className="border-2 border-muted-foreground/40 bg-muted/50 flex items-center justify-center text-[8px] font-bold text-muted-foreground"
                         style={{
                           width: venueConfig.gridSize * venueConfig.scale,
                           height: venueConfig.gridSize * venueConfig.scale,
@@ -5205,12 +5205,12 @@ const VenueDesigner = ({
                       </div>
                       {/* Keyboard shortcut hint — discoverability for the
                       Ctrl/Cmd+D duplicate and Ctrl/Cmd+Z undo. */}
-                      <div className="hidden sm:flex items-center gap-1 text-[10px] text-slate-500 border-l pl-2 ml-1">
-                        <kbd className="px-1 py-0.5 bg-white border rounded text-slate-700 font-mono">
+                      <div className="hidden sm:flex items-center gap-1 text-[10px] text-muted-foreground border-l pl-2 ml-1">
+                        <kbd className="px-1 py-0.5 bg-card border rounded text-foreground font-mono">
                           Ctrl+D
                         </kbd>
                         <span>duplicate</span>
-                        <kbd className="px-1 py-0.5 bg-white border rounded text-slate-700 font-mono ml-1">
+                        <kbd className="px-1 py-0.5 bg-card border rounded text-foreground font-mono ml-1">
                           Ctrl+Z
                         </kbd>
                         <span>undo</span>
@@ -5275,8 +5275,8 @@ const VenueDesigner = ({
               );
               if (forSaleTemplates.length === 0 && !hasNotForSale) return null;
               return (
-                <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border bg-white px-3 py-2 text-xs">
-                  <span className="font-semibold uppercase tracking-wide text-slate-400">
+                <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border bg-card px-3 py-2 text-xs">
+                  <span className="font-semibold uppercase tracking-wide text-muted-foreground">
                     Legend
                   </span>
                   {forSaleTemplates.map((entry) => (
@@ -5291,7 +5291,7 @@ const VenueDesigner = ({
                           borderColor: entry.color,
                         }}
                       />
-                      <span className="text-slate-700">{entry.name}</span>
+                      <span className="text-foreground">{entry.name}</span>
                     </div>
                   ))}
                   {hasNotForSale && (
@@ -5304,12 +5304,12 @@ const VenueDesigner = ({
                             "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.08) 3px, rgba(0,0,0,0.08) 6px)",
                         }}
                       />
-                      <span className="text-slate-700">Not for sale</span>
+                      <span className="text-foreground">Not for sale</span>
                     </div>
                   )}
                   <div className="flex items-center gap-1.5">
-                    <span className="h-4 w-4 rounded border-2 border-gray-500 bg-gray-300" />
-                    <span className="text-slate-700">Booked</span>
+                    <span className="h-4 w-4 rounded border-2 border-gray-500 bg-border" />
+                    <span className="text-foreground">Booked</span>
                   </div>
                 </div>
               );
@@ -5322,8 +5322,8 @@ const VenueDesigner = ({
               <div
                 className={
                   isCanvasMaximized
-                    ? "fixed top-3 left-1/2 -translate-x-1/2 z-[113] flex flex-wrap items-center gap-1 rounded-lg border bg-white p-1.5 shadow-xl max-w-[95vw]"
-                    : "mb-2 flex flex-wrap items-center gap-1 rounded-lg border bg-white p-1.5 shadow-sm"
+                    ? "fixed top-3 left-1/2 -translate-x-1/2 z-[113] flex flex-wrap items-center gap-1 rounded-lg border bg-card p-1.5 shadow-xl max-w-[95vw]"
+                    : "mb-2 flex flex-wrap items-center gap-1 rounded-lg border bg-card p-1.5 shadow-sm"
                 }
               >
                 {(
@@ -5346,7 +5346,7 @@ const VenueDesigner = ({
                     className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors ${
                       annotationTool === t
                         ? "bg-primary text-primary-foreground"
-                        : "text-gray-600 hover:bg-gray-100"
+                        : "text-muted-foreground hover:bg-muted"
                     }`}
                     title={
                       t === "none"
@@ -5358,27 +5358,27 @@ const VenueDesigner = ({
                     {label}
                   </button>
                 ))}
-                <div className="mx-1 h-5 w-px bg-gray-200" />
+                <div className="mx-1 h-5 w-px bg-muted" />
                 {/* Stroke / text colour for new shapes. */}
                 <label
-                  className="flex items-center gap-1.5 text-xs text-gray-500"
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground"
                   title="Drawing colour"
                 >
                   <input
                     type="color"
                     value={annotationColor}
                     onChange={(e) => setAnnotationColor(e.target.value)}
-                    className="h-6 w-7 cursor-pointer rounded border border-gray-300 bg-white p-0"
+                    className="h-6 w-7 cursor-pointer rounded border border-muted-foreground/30 bg-card p-0"
                   />
                 </label>
-                <div className="mx-1 h-5 w-px bg-gray-200" />
+                <div className="mx-1 h-5 w-px bg-muted" />
                 {/* Single undo for everything on the canvas — spaces, round
                   tables, doors AND the drawn annotations. Mirrors Ctrl/Cmd+Z. */}
                 <button
                   type="button"
                   onClick={undoLastChange}
                   disabled={undoDepth <= 1}
-                  className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
                   title="Undo last change (Ctrl/Cmd+Z) — spaces & drawings"
                 >
                   <Undo2 className="h-3.5 w-3.5" />
@@ -5428,11 +5428,11 @@ const VenueDesigner = ({
                       onDelete = () => removeTableFromVenue(id);
                     }
                     const actBtn =
-                      "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-100";
+                      "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted";
                     return (
                       <>
-                        <div className="mx-1 h-5 w-px bg-gray-200" />
-                        <span className="px-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                        <div className="mx-1 h-5 w-px bg-muted" />
+                        <span className="px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                           {kind}
                         </span>
                         {onRotate && (
@@ -5460,7 +5460,7 @@ const VenueDesigner = ({
                         <button
                           type="button"
                           onClick={onDelete ?? undefined}
-                          className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-red-500 transition-colors hover:bg-red-50 hover:text-red-600"
+                          className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/10 hover:text-destructive"
                           title="Delete selected"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -5474,7 +5474,7 @@ const VenueDesigner = ({
                     type="button"
                     size="sm"
                     variant="ghost"
-                    className="h-7 px-2 text-red-500 hover:bg-red-50 hover:text-red-600"
+                    className="h-7 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => {
                       updateAnnotations(
                         currentAnnotations.filter(
@@ -5488,7 +5488,7 @@ const VenueDesigner = ({
                   </Button>
                 )}
                 {annotationTool !== "none" && (
-                  <span className="ml-auto pr-1 text-[11px] text-gray-400">
+                  <span className="ml-auto pr-1 text-[11px] text-muted-foreground">
                     {annotationTool === "select"
                       ? "Click a drawing to select · Del to remove"
                       : "Click-drag on the canvas to draw"}
@@ -5509,7 +5509,7 @@ const VenueDesigner = ({
               //    bubbled up to the outer), forcing the user to grab
               //    the scrollbar by hand. With one scroll container
               //    the wheel just works anywhere on the canvas.
-              className={`relative border border-gray-200 rounded-xl flex justify-start items-start p-6 ${
+              className={`relative border border-border rounded-xl flex justify-start items-start p-6 ${
                 isCanvasMaximized ? "overflow-visible" : "overflow-auto"
               }`}
               style={{
@@ -5570,9 +5570,9 @@ const VenueDesigner = ({
                           className="absolute top-0"
                           style={{ left: i * major * s }}
                         >
-                          <div className="h-2 w-px bg-blue-500/50" />
+                          <div className="h-2 w-px bg-primary/50" />
                           {i > 0 && (
-                            <span className="absolute left-0.5 top-1.5 rounded bg-white/80 px-0.5 text-[9px] font-medium leading-none text-slate-500">
+                            <span className="absolute left-0.5 top-1.5 rounded bg-white/80 px-0.5 text-[9px] font-medium leading-none text-muted-foreground">
                               {fmt(i * major)}
                             </span>
                           )}
@@ -5585,16 +5585,16 @@ const VenueDesigner = ({
                           className="absolute left-0"
                           style={{ top: i * major * s }}
                         >
-                          <div className="h-px w-2 bg-blue-500/50" />
+                          <div className="h-px w-2 bg-primary/50" />
                           {i > 0 && (
-                            <span className="absolute left-0.5 top-0.5 rounded bg-white/80 px-0.5 text-[9px] font-medium leading-none text-slate-500">
+                            <span className="absolute left-0.5 top-0.5 rounded bg-white/80 px-0.5 text-[9px] font-medium leading-none text-muted-foreground">
                               {fmt(i * major)}
                             </span>
                           )}
                         </div>
                       ))}
                       {/* Origin label */}
-                      <span className="absolute left-0.5 top-0.5 rounded bg-white/80 px-0.5 text-[9px] font-semibold leading-none text-slate-600">
+                      <span className="absolute left-0.5 top-0.5 rounded bg-white/80 px-0.5 text-[9px] font-semibold leading-none text-muted-foreground">
                         0
                       </span>
                     </div>
@@ -5602,7 +5602,7 @@ const VenueDesigner = ({
                 })()}
                 {/* Stage Indicator */}
                 {venueConfig.hasMainStage && (
-                  <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-purple-100 border border-purple-300 px-6 py-2 rounded-lg text-[10px] font-bold text-purple-700 shadow-sm">
+                  <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-purple-100 dark:bg-purple-900/40 border border-purple-300 dark:border-purple-700 px-6 py-2 rounded-lg text-[10px] font-bold text-purple-700 dark:text-purple-300 shadow-sm">
                     MAIN STAGE
                   </div>
                 )}
@@ -5729,7 +5729,7 @@ const VenueDesigner = ({
                                 beginDoorResize(e, door, handle)
                               }
                               onClick={(e) => e.stopPropagation()}
-                              className="absolute rounded-sm bg-white border-2 border-blue-600 shadow z-40"
+                              className="absolute rounded-sm bg-white border-2 border-primary shadow z-40"
                               style={{
                                 ...(posStyle as React.CSSProperties),
                                 width: 10,
@@ -5851,7 +5851,7 @@ const VenueDesigner = ({
                                 key={h}
                                 onMouseDown={(e) => beginResize(e, table, h)}
                                 onClick={(e) => e.stopPropagation()}
-                                className="absolute rounded-sm bg-white border-2 border-blue-600 shadow z-40"
+                                className="absolute rounded-sm bg-white border-2 border-primary shadow z-40"
                                 style={{
                                   ...(posStyle as React.CSSProperties),
                                   width: 10,
@@ -5907,7 +5907,7 @@ const VenueDesigner = ({
                                       className="flex items-center gap-2 text-xs"
                                     >
                                       <span
-                                        className="w-3 h-3 rounded-full border border-gray-300 shrink-0"
+                                        className="w-3 h-3 rounded-full border border-muted-foreground/30 shrink-0"
                                         style={{ backgroundColor: d.color }}
                                       />
                                       <span className="flex-1 truncate">
@@ -6291,10 +6291,10 @@ const VenueDesigner = ({
                   </div>
                 </div>
                 <div
-                  className="mx-auto w-full max-w-5xl flex-1 min-h-0 overflow-auto rounded-xl bg-white p-4"
+                  className="mx-auto w-full max-w-5xl flex-1 min-h-0 overflow-auto rounded-xl bg-card p-4"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <p className="mb-3 text-xs text-gray-500">
+                  <p className="mb-3 text-xs text-muted-foreground">
                     This is how the venue layout will appear on the event page
                     {venueConfig.cropped ? " (cropped area)" : ""}.
                   </p>
@@ -6333,13 +6333,13 @@ const VenueDesigner = ({
               {currentTables.map((table) => (
                 <div
                   key={table.positionId}
-                  className={`p-3 border rounded-lg transition-all cursor-pointer ${selectedTable === table.positionId ? "ring-2 ring-blue-500 bg-blue-50" : "bg-slate-50 hover:bg-slate-100"}`}
+                  className={`p-3 border rounded-lg transition-all cursor-pointer ${selectedTable === table.positionId ? "ring-2 ring-primary bg-primary/10" : "bg-muted hover:bg-muted/70"}`}
                   onClick={() => setSelectedTable(table.positionId)}
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <div className="w-2 h-2 rounded-sm bg-blue-500" />
+                    <div className="w-2 h-2 rounded-sm bg-primary" />
                     <Input
-                      className="h-6 text-xs bg-white border-0 p-0 font-semibold"
+                      className="h-6 text-xs bg-transparent border-0 p-0 font-semibold"
                       value={table.name}
                       placeholder="Name"
                       onChange={(e) =>
@@ -6350,11 +6350,11 @@ const VenueDesigner = ({
                       onClick={(e) => e.stopPropagation()}
                     />
                   </div>
-                  <div className="flex justify-between text-[9px] text-slate-500 uppercase font-bold">
+                  <div className="flex justify-between text-[9px] text-muted-foreground uppercase font-bold">
                     <span>{table.type}</span>
                     <span
                       className={
-                        table.isBooked ? "text-red-500" : "text-green-600"
+                        table.isBooked ? "text-destructive" : "text-success"
                       }
                     >
                       {table.isBooked ? "Booked" : "Open"}
@@ -6478,7 +6478,7 @@ const VenueDesigner = ({
                                 </span>
                                 <button
                                   type="button"
-                                  className="text-blue-600 hover:underline"
+                                  className="text-primary hover:underline"
                                   onClick={() => writeSelection([])}
                                 >
                                   Clear (open to all)
@@ -6495,7 +6495,7 @@ const VenueDesigner = ({
               {currentSpeakerZones.map((zone) => (
                 <div
                   key={`inv-${zone.positionId}`}
-                  className={`p-3 border-2 border-purple-200 rounded-lg transition-all cursor-pointer ${selectedTable === `sz-${zone.positionId}` ? "ring-2 ring-purple-500 bg-purple-50" : "bg-purple-50/30 hover:bg-purple-50"}`}
+                  className={`p-3 border-2 border-purple-200 dark:border-purple-800 rounded-lg transition-all cursor-pointer ${selectedTable === `sz-${zone.positionId}` ? "ring-2 ring-purple-500 bg-purple-50 dark:bg-purple-900/30" : "bg-purple-50/30 dark:bg-purple-900/10 hover:bg-purple-50 dark:hover:bg-purple-900/20"}`}
                   onClick={() => setSelectedTable(`sz-${zone.positionId}`)}
                 >
                   <div className="flex items-center gap-2 mb-1">
@@ -6529,7 +6529,7 @@ const VenueDesigner = ({
                     {/* Inline rename — same as Spaces: edit the placed
                         round table's name directly after allocation. */}
                     <Input
-                      className="h-6 text-xs bg-white/70 border-0 p-0 font-semibold flex-1 min-w-0"
+                      className="h-6 text-xs bg-transparent border-0 p-0 font-semibold flex-1 min-w-0"
                       value={rt.name}
                       placeholder="Name"
                       onChange={(e) =>
@@ -9228,9 +9228,9 @@ export function CreateEventForm({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 ">
+    <div className="min-h-screen bg-muted ">
       {/* Sticky Header */}
-      <div className="sticky top-0 z-50 bg-white border-b shadow-sm">
+      <div className="sticky top-0 z-50 bg-card border-b shadow-sm">
         <div className="flex items-center justify-between gap-2 p-3 sm:p-4">
           <h1 className="text-base sm:text-xl font-bold ml-1 sm:ml-2 truncate min-w-0">
             {editMode
@@ -9301,7 +9301,7 @@ export function CreateEventForm({
             } as Record<number, string>
           )[visibleCount] || "grid-cols-10";
         return (
-          <div className="sticky top-[73px] z-40 bg-white border-b">
+          <div className="sticky top-[73px] z-40 bg-card border-b">
             <Tabs value={currentTab} onValueChange={setCurrentTab}>
               {/* Mobile: a horizontally-scrollable tab row (each tab keeps its
                   natural width — swipe to reach them) so labels aren't squashed
@@ -9604,9 +9604,9 @@ export function CreateEventForm({
                       />
                       {venueDropdownOpen &&
                         (venueLoading || venueSuggestions.length > 0) && (
-                          <div className="absolute z-30 left-0 right-0 mt-1 max-h-64 overflow-auto rounded-md border bg-white shadow-lg">
+                          <div className="absolute z-30 left-0 right-0 mt-1 max-h-64 overflow-auto rounded-md border bg-card shadow-lg">
                             {venueLoading && venueSuggestions.length === 0 && (
-                              <div className="px-3 py-2 text-xs text-slate-500">
+                              <div className="px-3 py-2 text-xs text-muted-foreground">
                                 Searching…
                               </div>
                             )}
@@ -9615,19 +9615,19 @@ export function CreateEventForm({
                                 type="button"
                                 key={s.placeId}
                                 onClick={() => pickVenueSuggestion(s)}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 border-b last:border-b-0"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-muted border-b last:border-b-0"
                               >
-                                <div className="font-medium text-slate-900 truncate">
+                                <div className="font-medium text-foreground truncate">
                                   {s.name}
                                 </div>
                                 {s.formattedAddress && (
-                                  <div className="text-xs text-slate-500 truncate">
+                                  <div className="text-xs text-muted-foreground truncate">
                                     {s.formattedAddress}
                                   </div>
                                 )}
                               </button>
                             ))}
-                            <div className="px-3 py-1.5 text-[10px] text-slate-400 text-right bg-slate-50/60">
+                            <div className="px-3 py-1.5 text-[10px] text-muted-foreground text-right bg-muted/60">
                               Suggestions by Geoapify · address auto-fills below
                             </div>
                           </div>
@@ -9668,7 +9668,7 @@ export function CreateEventForm({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label className="flex items-center gap-1.5">
-                        <Facebook className="h-4 w-4 text-blue-600" />
+                        <Facebook className="h-4 w-4 text-primary" />
                         Facebook Link
                       </Label>
                       <Input
@@ -9892,7 +9892,7 @@ export function CreateEventForm({
                                     ),
                                   )
                                 }
-                                className="shrink-0 text-stone-400 hover:text-red-600"
+                                className="shrink-0 text-stone-400 hover:text-destructive"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </button>
@@ -9923,7 +9923,7 @@ export function CreateEventForm({
                           />
                         </label>
                       </div>
-                      <div className="bg-white dark:bg-slate-950 rounded-md">
+                      <div className="bg-card rounded-md">
                         <Suspense
                           fallback={
                             <div className="h-[150px] border rounded-md animate-pulse bg-muted" />
@@ -9937,7 +9937,7 @@ export function CreateEventForm({
                               handleInputChange("specialInstructions", content)
                             }
                             placeholder="e.g. 1. Goods once sold are not returnable."
-                            className="[&_.ql-editor]:min-h-[150px] [&_.ql-container]:rounded-b-md [&_.ql-toolbar]:rounded-t-md text-black dark:text-white"
+                            className="[&_.ql-editor]:min-h-[150px] [&_.ql-container]:rounded-b-md [&_.ql-toolbar]:rounded-t-md text-foreground"
                           />
                         </Suspense>
                       </div>
@@ -9959,7 +9959,7 @@ export function CreateEventForm({
                           />
                         </label>
                       </div>
-                      <div className="bg-white dark:bg-slate-950 rounded-md">
+                      <div className="bg-card rounded-md">
                         <Suspense
                           fallback={
                             <div className="h-[150px] border rounded-md animate-pulse bg-muted" />
@@ -9973,7 +9973,7 @@ export function CreateEventForm({
                               handleInputChange("refundPolicy", content)
                             }
                             placeholder="Define your refund policies"
-                            className="[&_.ql-editor]:min-h-[150px] [&_.ql-container]:rounded-b-md [&_.ql-toolbar]:rounded-t-md text-black dark:text-white"
+                            className="[&_.ql-editor]:min-h-[150px] [&_.ql-container]:rounded-b-md [&_.ql-toolbar]:rounded-t-md text-foreground"
                           />
                         </Suspense>
                       </div>
@@ -9995,7 +9995,7 @@ export function CreateEventForm({
                           />
                         </label>
                       </div>
-                      <div className="bg-white dark:bg-slate-950 rounded-md">
+                      <div className="bg-card rounded-md">
                         <Suspense
                           fallback={
                             <div className="h-[150px] border rounded-md animate-pulse bg-muted" />
@@ -10009,7 +10009,7 @@ export function CreateEventForm({
                               handleInputChange("termsAndConditions", content)
                             }
                             placeholder="Event terms and conditions"
-                            className="[&_.ql-editor]:min-h-[150px] [&_.ql-container]:rounded-b-md [&_.ql-toolbar]:rounded-t-md text-black dark:text-white"
+                            className="[&_.ql-editor]:min-h-[150px] [&_.ql-container]:rounded-b-md [&_.ql-toolbar]:rounded-t-md text-foreground"
                           />
                         </Suspense>
                       </div>
@@ -10093,7 +10093,7 @@ export function CreateEventForm({
                                   type="button"
                                   variant="ghost"
                                   size="icon"
-                                  className="text-red-500 hover:bg-red-50 shrink-0"
+                                  className="text-destructive hover:bg-destructive/10 shrink-0"
                                   onClick={() =>
                                     setCustomSections((prev) =>
                                       prev.filter((s) => s.id !== sec.id),
@@ -10104,7 +10104,7 @@ export function CreateEventForm({
                                   <Trash2 size={14} />
                                 </Button>
                               </div>
-                              <div className="bg-white dark:bg-slate-950 rounded-md">
+                              <div className="bg-card rounded-md">
                                 <Suspense
                                   fallback={
                                     <div className="h-[150px] border rounded-md animate-pulse bg-muted" />
@@ -10124,7 +10124,7 @@ export function CreateEventForm({
                                       );
                                     }}
                                     placeholder="Write the section content here…"
-                                    className="[&_.ql-editor]:min-h-[150px] [&_.ql-container]:rounded-b-md [&_.ql-toolbar]:rounded-t-md text-black dark:text-white"
+                                    className="[&_.ql-editor]:min-h-[150px] [&_.ql-container]:rounded-b-md [&_.ql-toolbar]:rounded-t-md text-foreground"
                                   />
                                 </Suspense>
                               </div>
@@ -10144,13 +10144,13 @@ export function CreateEventForm({
                           <Plus size={14} className="mr-1" /> Add Condition
                         </Button>
                       </div>
-                      <p className="text-sm text-gray-500 mb-3">
+                      <p className="text-sm text-muted-foreground mb-3">
                         Each condition will appear as a checkbox that exhibitors
                         must agree to when booking a stall.
                       </p>
 
                       {stallTerms.length === 0 && (
-                        <div className="text-sm text-gray-400 border border-dashed rounded-lg p-4 text-center">
+                        <div className="text-sm text-muted-foreground border border-dashed rounded-lg p-4 text-center">
                           No stall conditions added yet. Click "+ Add Condition"
                           to add one.
                         </div>
@@ -10160,17 +10160,17 @@ export function CreateEventForm({
                         {stallTerms.map((term, index) => (
                           <div
                             key={term.id}
-                            className="border rounded-lg p-4 bg-slate-50 space-y-3"
+                            className="border rounded-lg p-4 bg-muted space-y-3"
                           >
                             <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-slate-600">
+                              <span className="text-sm font-medium text-muted-foreground">
                                 Condition #{index + 1}
                               </span>
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                className="text-red-500 hover:text-red-600 h-7 px-2"
+                                className="text-destructive hover:text-destructive h-7 px-2"
                                 onClick={() => removeStallTerm(term.id)}
                               >
                                 <Trash2 size={14} />
@@ -10187,7 +10187,7 @@ export function CreateEventForm({
                                   e.target.value,
                                 )
                               }
-                              className="min-h-[80px] bg-white"
+                              className="min-h-[80px] bg-background"
                             />
 
                             <div className="flex items-center space-x-2">
@@ -10220,7 +10220,7 @@ export function CreateEventForm({
             </ModuleGate>
 
             {/* ── Eventfront AI assistant ── */}
-            <div className="rounded-lg border bg-slate-50 p-4 space-y-4">
+            <div className="rounded-lg border bg-muted p-4 space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <Label className="text-sm font-medium">
@@ -10254,7 +10254,7 @@ export function CreateEventForm({
                     onChange={(e) =>
                       setChatbot((p) => ({ ...p, name: e.target.value }))
                     }
-                    className="bg-white"
+                    className="bg-background"
                   />
                   <p className="text-[11px] text-muted-foreground">
                     Shown as the chat's title and in its greeting (e.g. "Ravi's
@@ -10276,7 +10276,7 @@ export function CreateEventForm({
                             accentColor: e.target.value,
                           }))
                         }
-                        className="h-9 w-14 cursor-pointer rounded border bg-white p-0.5"
+                        className="h-9 w-14 cursor-pointer rounded border bg-card p-0.5"
                       />
                       <Input
                         value={chatbot.accentColor}
@@ -10287,7 +10287,7 @@ export function CreateEventForm({
                           }))
                         }
                         placeholder="#2563eb"
-                        className="w-32 bg-white font-mono text-sm"
+                        className="w-32 bg-background font-mono text-sm"
                       />
                       {/* Live preview chip */}
                       <span
@@ -10317,7 +10317,7 @@ export function CreateEventForm({
                   <CardTitle className="flex items-center gap-2">
                     <Users className="w-5 h-5" /> Volunteers
                   </CardTitle>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-muted-foreground">
                     Add team members who should be able to scan tickets. They
                     sign in on the scanner page with Google using the email you
                     enter here.
@@ -10325,14 +10325,14 @@ export function CreateEventForm({
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {volunteers.length === 0 && (
-                    <p className="text-sm text-gray-500 italic">
+                    <p className="text-sm text-muted-foreground italic">
                       No volunteers added yet. Click "Add Volunteer" below.
                     </p>
                   )}
                   {volunteers.map((v, idx) => (
                     <div
                       key={idx}
-                      className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end p-3 border rounded-lg bg-gray-50"
+                      className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end p-3 border rounded-lg bg-muted"
                     >
                       <div className="md:col-span-3">
                         <Label className="text-xs">Name</Label>
@@ -10374,7 +10374,7 @@ export function CreateEventForm({
                           size="icon"
                           onClick={() => removeVolunteer(idx)}
                           title="Remove volunteer"
-                          className="text-red-600 hover:text-red-700"
+                          className="text-destructive hover:text-destructive"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -10407,13 +10407,13 @@ export function CreateEventForm({
                     look-and-feel matches. Sits first in the Media tab
                     so the form mirrors the rendered order on the
                     eventfront: bar → banner → gallery → reels. */}
-                  <div className="space-y-3 rounded-lg border border-gray-200 p-4 bg-gray-50/40">
+                  <div className="space-y-3 rounded-lg border border-border p-4 bg-muted/40">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <Label className="text-base font-semibold">
                           Ad Bar
                         </Label>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-muted-foreground">
                           A continuously-scrolling announcement strip that sits
                           at the very top of the event page. Use it for promo
                           codes, early-bird notices, or last- minute updates.
@@ -10468,7 +10468,7 @@ export function CreateEventForm({
                                     bgColor: e.target.value,
                                   }))
                                 }
-                                className="h-9 w-12 rounded border border-gray-300 cursor-pointer"
+                                className="h-9 w-12 rounded border border-muted-foreground/30 cursor-pointer"
                               />
                               <Input
                                 value={adBar.bgColor}
@@ -10497,7 +10497,7 @@ export function CreateEventForm({
                                     textColor: e.target.value,
                                   }))
                                 }
-                                className="h-9 w-12 rounded border border-gray-300 cursor-pointer"
+                                className="h-9 w-12 rounded border border-muted-foreground/30 cursor-pointer"
                               />
                               <Input
                                 value={adBar.textColor}
@@ -10523,7 +10523,7 @@ export function CreateEventForm({
                             <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                               Preview
                             </Label>
-                            <div className="rounded-md overflow-hidden border border-gray-200">
+                            <div className="rounded-md overflow-hidden border border-border">
                               <AnnouncementBar
                                 message={adBar.message.trim()}
                                 backgroundColor={adBar.bgColor || "#000000"}
@@ -10575,7 +10575,7 @@ export function CreateEventForm({
                         <Label className="text-base font-semibold">
                           Sponsorships ({sponsorLogos.length})
                         </Label>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-muted-foreground">
                           Upload sponsor logos — they appear below the event
                           banner as a moving carousel on the eventfront. Add as
                           many as you like.
@@ -10602,7 +10602,7 @@ export function CreateEventForm({
                         {sponsorLogos.map((s) => (
                           <div
                             key={s.id}
-                            className="group relative flex h-20 items-center justify-center rounded-lg border bg-white p-2"
+                            className="group relative flex h-20 items-center justify-center rounded-lg border bg-card p-2"
                           >
                             <img
                               src={
@@ -10636,7 +10636,7 @@ export function CreateEventForm({
                             <button
                               type="button"
                               onClick={() => removeSponsor(s.id)}
-                              className="absolute -right-2 -top-2 rounded-full bg-red-500 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                              className="absolute -right-2 -top-2 rounded-full bg-destructive p-1 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100"
                               aria-label="Remove sponsor"
                             >
                               <X size={12} />
@@ -10691,7 +10691,7 @@ export function CreateEventForm({
                         <Label className="text-base font-semibold">
                           Instagram Reels ({reelLinks.length}/10)
                         </Label>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-muted-foreground">
                           Paste up to 10 Instagram reel URLs (e.g.
                           <span className="font-mono text-[11px] mx-1">
                             https://www.instagram.com/reel/&lt;id&gt;/
@@ -10713,9 +10713,9 @@ export function CreateEventForm({
                       </Button>
                     </div>
                     {reelLinks.length === 0 && (
-                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                      <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-6 text-center">
                         <Instagram className="h-10 w-10 text-pink-500 mx-auto mb-2" />
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-muted-foreground">
                           No reels yet — click "Add reel" to drop in a link.
                         </p>
                       </div>
@@ -10737,10 +10737,10 @@ export function CreateEventForm({
                                   setReelLinks(next);
                                 }}
                                 placeholder="https://www.instagram.com/reel/Cxyz123/"
-                                className={isInstagram ? "" : "border-red-400"}
+                                className={isInstagram ? "" : "border-destructive/50"}
                               />
                               {!isInstagram && (
-                                <p className="text-xs text-red-500 mt-1">
+                                <p className="text-xs text-destructive mt-1">
                                   Doesn't look like an Instagram reel URL.
                                 </p>
                               )}
@@ -10749,7 +10749,7 @@ export function CreateEventForm({
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="text-red-500 hover:bg-red-50"
+                              className="text-destructive hover:bg-destructive/10"
                               onClick={() =>
                                 setReelLinks(
                                   reelLinks.filter((_, i) => i !== idx),
@@ -10779,13 +10779,13 @@ export function CreateEventForm({
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-muted-foreground">
                     Define different visitor categories (e.g. Normal, Delegate,
                     VIP). Leave <strong>Max Count</strong> empty for unlimited
                     entries.
                   </p>
-                  <div className="border rounded-lg p-4 bg-slate-50 space-y-4">
-                    <Label className="text-sm font-semibold text-slate-700">
+                  <div className="border rounded-lg p-4 bg-muted space-y-4">
+                    <Label className="text-sm font-semibold text-foreground">
                       Add New Visitor Type
                     </Label>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -10821,7 +10821,7 @@ export function CreateEventForm({
                           placeholder="0 = Free"
                         />
                         {isIndividualAccount && (
-                          <p className="text-[11px] text-amber-600 mt-1">
+                          <p className="text-[11px] text-warning mt-1">
                             Individual accounts can only publish free events (no
                             payment processor configured). Upgrade to an
                             Organizer account to charge for tickets.
@@ -10831,7 +10831,7 @@ export function CreateEventForm({
                       <div>
                         <Label>
                           Max Count{" "}
-                          <span className="text-gray-400 text-xs">
+                          <span className="text-muted-foreground text-xs">
                             (blank = unlimited)
                           </span>
                         </Label>
@@ -10897,7 +10897,7 @@ export function CreateEventForm({
                                   type="button"
                                   variant="ghost"
                                   size="sm"
-                                  className="h-5 w-5 p-0 text-red-400 hover:text-red-600"
+                                  className="h-5 w-5 p-0 text-destructive/70 hover:text-destructive"
                                   onClick={() => {
                                     setCurrentVisitor((p) => {
                                       const fa = { ...p.featureAccess };
@@ -11004,7 +11004,7 @@ export function CreateEventForm({
                     </div>
                   </div>
                   {visitorTypes.length === 0 && (
-                    <div className="text-sm text-gray-400 border border-dashed rounded-lg p-6 text-center">
+                    <div className="text-sm text-muted-foreground border border-dashed rounded-lg p-6 text-center">
                       No visitor types added yet. Add at least one above.
                     </div>
                   )}
@@ -11012,7 +11012,7 @@ export function CreateEventForm({
                     {visitorTypes.map((visitor, index) => (
                       <div
                         key={visitor.id}
-                        className={`border rounded-lg p-4 bg-white space-y-3 ${
+                        className={`border rounded-lg p-4 bg-card space-y-3 ${
                           editingVisitorId === visitor.id
                             ? "ring-2 ring-primary border-primary"
                             : ""
@@ -11027,7 +11027,7 @@ export function CreateEventForm({
                               <div className="font-semibold">
                                 {visitor.name}
                               </div>
-                              <div className="text-sm text-gray-500">
+                              <div className="text-sm text-muted-foreground">
                                 {visitor.price === 0
                                   ? "Free"
                                   : formatPrice(visitor.price)}{" "}
@@ -11052,7 +11052,7 @@ export function CreateEventForm({
                               type="button"
                               variant="ghost"
                               size="sm"
-                              className="text-red-500 hover:text-red-600"
+                              className="text-destructive hover:text-destructive"
                               onClick={() => removeVisitorType(visitor.id)}
                             >
                               <Trash2 size={14} />
@@ -11060,7 +11060,7 @@ export function CreateEventForm({
                           </div>
                         </div>
                         {visitor.description && (
-                          <p className="text-sm text-gray-600 bg-gray-50 rounded px-3 py-2">
+                          <p className="text-sm text-muted-foreground bg-muted rounded px-3 py-2">
                             {visitor.description}
                           </p>
                         )}
@@ -11084,7 +11084,7 @@ export function CreateEventForm({
                           {Object.values(visitor.featureAccess).every(
                             (v) => !v,
                           ) && (
-                            <span className="text-xs text-gray-400">
+                            <span className="text-xs text-muted-foreground">
                               No special feature access
                             </span>
                           )}
@@ -11112,8 +11112,8 @@ export function CreateEventForm({
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="border rounded-xl p-5 bg-slate-50 space-y-4">
-                    <Label className="text-sm font-semibold text-slate-700">
+                  <div className="border rounded-xl p-5 bg-muted space-y-4">
+                    <Label className="text-sm font-semibold text-foreground">
                       Add Speaker Space
                     </Label>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -11146,7 +11146,7 @@ export function CreateEventForm({
                     </div>
 
                     {/* Main Stage Toggle */}
-                    <div className="flex items-center justify-between bg-white rounded-lg p-3 border">
+                    <div className="flex items-center justify-between bg-card rounded-lg p-3 border">
                       <div>
                         <Label className="text-sm font-medium">
                           Is Main Stage
@@ -11250,7 +11250,7 @@ export function CreateEventForm({
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between bg-white rounded-lg p-3 border">
+                    <div className="flex items-center justify-between bg-card rounded-lg p-3 border">
                       <div>
                         <Label className="text-sm font-medium">
                           Open for External Applications
@@ -11325,7 +11325,7 @@ export function CreateEventForm({
                     editingSpeakerId === space.id ? "ring-2 ring-primary" : ""
                   }`}
                 >
-                  <CardHeader className="bg-purple-50/50">
+                  <CardHeader className="bg-purple-50/50 dark:bg-purple-900/20">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="bg-purple-100 text-purple-700 rounded-lg w-10 h-10 flex items-center justify-center text-sm font-bold">
@@ -11342,13 +11342,13 @@ export function CreateEventForm({
                             {space.openForApplications && (
                               <Badge
                                 variant="outline"
-                                className="text-[10px] text-green-600 border-green-300"
+                                className="text-[10px] text-success border-success/40"
                               >
                                 Open
                               </Badge>
                             )}
                           </CardTitle>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-muted-foreground">
                             {space.isMainStage
                               ? "Main Stage"
                               : `${space.width}×${space.height}px`}
@@ -11379,7 +11379,7 @@ export function CreateEventForm({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="text-red-500 hover:text-red-600"
+                          className="text-destructive hover:text-destructive"
                           onClick={() => removeSpeakerSlot(space.id)}
                         >
                           <Trash2 size={14} className="mr-1" /> Remove Space
@@ -11389,7 +11389,7 @@ export function CreateEventForm({
                   </CardHeader>
                   <CardContent className="pt-4 space-y-4">
                     {space.description && (
-                      <p className="text-sm text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                      <p className="text-sm text-muted-foreground bg-muted rounded-lg px-3 py-2">
                         {space.description}
                       </p>
                     )}
@@ -11482,7 +11482,7 @@ export function CreateEventForm({
                         return (
                           <div
                             key={session.id}
-                            className="border rounded-xl p-4 bg-white space-y-4"
+                            className="border rounded-xl p-4 bg-card space-y-4"
                           >
                             <div className="flex items-center justify-between">
                               <Badge variant="secondary" className="text-xs">
@@ -11492,7 +11492,7 @@ export function CreateEventForm({
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                className="text-red-500 hover:text-red-600 h-7"
+                                className="text-destructive hover:text-destructive h-7"
                                 onClick={removeSession}
                               >
                                 <Trash2 size={12} className="mr-1" /> Remove
@@ -11504,7 +11504,7 @@ export function CreateEventForm({
                               {/* Photo Upload */}
                               <div className="flex flex-col items-center gap-1">
                                 <div
-                                  className="w-16 h-16 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-gray-50"
+                                  className="w-16 h-16 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-muted"
                                   onClick={() =>
                                     document
                                       .getElementById(
@@ -11841,13 +11841,13 @@ export function CreateEventForm({
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-muted-foreground">
                     Add the workshops visitors can book for this event. Each
                     one has its own price — you can also bundle several into a
                     Workshop Package below.
                   </p>
-                  <div className="border rounded-lg p-4 bg-slate-50 space-y-4">
-                    <Label className="text-sm font-semibold text-slate-700">
+                  <div className="border rounded-lg p-4 bg-muted space-y-4">
+                    <Label className="text-sm font-semibold text-foreground">
                       {editingWorkshopSessionId
                         ? "Edit Workshop"
                         : "Add New Workshop"}
@@ -11856,7 +11856,7 @@ export function CreateEventForm({
                       {/* Photo Upload */}
                       <div className="flex flex-col items-center gap-1">
                         <div
-                          className="w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-gray-50"
+                          className="w-24 h-24 rounded-lg border-2 border-dashed border-muted-foreground/30 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-muted"
                           onClick={() =>
                             document
                               .getElementById("workshop-session-img")
@@ -11943,7 +11943,7 @@ export function CreateEventForm({
                         <div>
                           <Label>
                             Max Seats{" "}
-                            <span className="text-gray-400 text-xs">
+                            <span className="text-muted-foreground text-xs">
                               (blank = unlimited)
                             </span>
                           </Label>
@@ -12032,7 +12032,7 @@ export function CreateEventForm({
                     </div>
                   </div>
                   {workshopSessions.length === 0 && (
-                    <div className="text-sm text-gray-400 border border-dashed rounded-lg p-6 text-center">
+                    <div className="text-sm text-muted-foreground border border-dashed rounded-lg p-6 text-center">
                       No workshops added yet. Add at least one above.
                     </div>
                   )}
@@ -12040,13 +12040,13 @@ export function CreateEventForm({
                     {workshopSessions.map((session) => (
                       <div
                         key={session.id}
-                        className={`border rounded-lg p-4 bg-white flex gap-3 ${
+                        className={`border rounded-lg p-4 bg-card flex gap-3 ${
                           editingWorkshopSessionId === session.id
                             ? "ring-2 ring-primary border-primary"
                             : ""
                         }`}
                       >
-                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-50 border flex items-center justify-center shrink-0">
+                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted border flex items-center justify-center shrink-0">
                           {session.photoPreview || session.image ? (
                             <img
                               src={
@@ -12068,7 +12068,7 @@ export function CreateEventForm({
                               <div className="font-semibold truncate">
                                 {session.name}
                               </div>
-                              <div className="text-sm text-gray-500">
+                              <div className="text-sm text-muted-foreground">
                                 {session.price === 0
                                   ? "Free"
                                   : formatPrice(session.price)}
@@ -12091,7 +12091,7 @@ export function CreateEventForm({
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                className="text-red-500 hover:text-red-600"
+                                className="text-destructive hover:text-destructive"
                                 onClick={() =>
                                   removeWorkshopSession(session.id)
                                 }
@@ -12101,7 +12101,7 @@ export function CreateEventForm({
                             </div>
                           </div>
                           {session.description && (
-                            <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                               {session.description}
                             </p>
                           )}
@@ -12121,7 +12121,7 @@ export function CreateEventForm({
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-muted-foreground">
                     Bundle two or more workshops into a package sold at its
                     own price — a discount incentive over booking each
                     workshop separately. Only workshops you added yourself are
@@ -12131,14 +12131,14 @@ export function CreateEventForm({
                   </p>
                   {workshopSessions.filter((s: any) => !s.requestId).length <
                   2 ? (
-                    <div className="text-sm text-gray-400 border border-dashed rounded-lg p-6 text-center">
+                    <div className="text-sm text-muted-foreground border border-dashed rounded-lg p-6 text-center">
                       Add at least 2 workshop sessions above before creating a
                       package. (Workshops from outside host applications
                       can't be bundled into a package.)
                     </div>
                   ) : (
-                    <div className="border rounded-lg p-4 bg-slate-50 space-y-4">
-                      <Label className="text-sm font-semibold text-slate-700">
+                    <div className="border rounded-lg p-4 bg-muted space-y-4">
+                      <Label className="text-sm font-semibold text-foreground">
                         {editingWorkshopPackageId
                           ? "Edit Package"
                           : "Add New Package"}
@@ -12197,7 +12197,7 @@ export function CreateEventForm({
                             .map((session) => (
                               <label
                                 key={session.id}
-                                className="flex items-center gap-2 border rounded-lg p-2 cursor-pointer hover:bg-white"
+                                className="flex items-center gap-2 border rounded-lg p-2 cursor-pointer hover:bg-muted"
                               >
                                 <Checkbox
                                   checked={currentWorkshopPackage.sessionIds.includes(
@@ -12209,7 +12209,7 @@ export function CreateEventForm({
                                 />
                                 <span className="text-sm truncate">
                                   {session.name}{" "}
-                                  <span className="text-gray-400">
+                                  <span className="text-muted-foreground">
                                     (
                                     {session.price === 0
                                       ? "Free"
@@ -12269,7 +12269,7 @@ export function CreateEventForm({
                     </div>
                   )}
                   {workshopPackages.length === 0 && workshopSessions.length >= 2 && (
-                    <div className="text-sm text-gray-400 border border-dashed rounded-lg p-6 text-center">
+                    <div className="text-sm text-muted-foreground border border-dashed rounded-lg p-6 text-center">
                       No packages added yet.
                     </div>
                   )}
@@ -12285,7 +12285,7 @@ export function CreateEventForm({
                       return (
                         <div
                           key={pkg.id}
-                          className={`border rounded-lg p-4 bg-white space-y-2 ${
+                          className={`border rounded-lg p-4 bg-card space-y-2 ${
                             editingWorkshopPackageId === pkg.id
                               ? "ring-2 ring-primary border-primary"
                               : ""
@@ -12294,12 +12294,12 @@ export function CreateEventForm({
                           <div className="flex items-center justify-between">
                             <div>
                               <div className="font-semibold">{pkg.name}</div>
-                              <div className="text-sm text-gray-500">
+                              <div className="text-sm text-muted-foreground">
                                 {pkg.price === 0
                                   ? "Free"
                                   : formatPrice(pkg.price)}
                                 {individualTotal > pkg.price && (
-                                  <span className="text-green-600">
+                                  <span className="text-success">
                                     {" "}
                                     · saves{" "}
                                     {formatPrice(individualTotal - pkg.price)}
@@ -12321,7 +12321,7 @@ export function CreateEventForm({
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                className="text-red-500 hover:text-red-600"
+                                className="text-destructive hover:text-destructive"
                                 onClick={() => removeWorkshopPackage(pkg.id)}
                               >
                                 <Trash2 size={14} />
@@ -12329,7 +12329,7 @@ export function CreateEventForm({
                             </div>
                           </div>
                           {pkg.description && (
-                            <p className="text-sm text-gray-600 bg-gray-50 rounded px-3 py-2">
+                            <p className="text-sm text-muted-foreground bg-muted rounded px-3 py-2">
                               {pkg.description}
                             </p>
                           )}
@@ -12499,7 +12499,7 @@ export function CreateEventForm({
                   </CardHeader>
                   <CardContent className="space-y-6">
                     {/* Add Round Table Form */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 border rounded-lg bg-slate-50">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 border rounded-lg bg-muted">
                       <div>
                         <Label>Table Name *</Label>
                         <Input
@@ -12568,8 +12568,8 @@ export function CreateEventForm({
                             type="button"
                             className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${
                               currentRoundTable.forSale
-                                ? "border-green-500 bg-green-50 text-green-700"
-                                : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                                ? "border-green-500 bg-success/10 text-success"
+                                : "border-border text-muted-foreground hover:bg-muted"
                             }`}
                             onClick={() =>
                               setCurrentRoundTable({
@@ -12584,8 +12584,8 @@ export function CreateEventForm({
                             type="button"
                             className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${
                               !currentRoundTable.forSale
-                                ? "border-orange-500 bg-orange-50 text-orange-700"
-                                : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                                ? "border-warning bg-warning/10 text-warning"
+                                : "border-border text-muted-foreground hover:bg-muted"
                             }`}
                             onClick={() =>
                               setCurrentRoundTable({
@@ -12600,7 +12600,7 @@ export function CreateEventForm({
                       </div>
 
                       {!currentRoundTable.forSale && (
-                        <div className="md:col-span-2 lg:col-span-3 bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-700">
+                        <div className="md:col-span-2 lg:col-span-3 bg-warning/10 border border-warning/30 rounded-lg p-3 text-sm text-warning">
                           This table is <strong>not for sale</strong> — it
                           appears on the venue layout as a reference (e.g. a
                           standing cocktail table or decoration) but cannot be
@@ -12865,7 +12865,7 @@ export function CreateEventForm({
                         {roundTableTemplates.map((template) => (
                           <div
                             key={template.id}
-                            className={`p-4 border-2 rounded-xl bg-white ${
+                            className={`p-4 border-2 rounded-xl bg-card ${
                               editingRoundTableId === template.id
                                 ? "ring-2 ring-primary"
                                 : ""
@@ -12945,7 +12945,7 @@ export function CreateEventForm({
                                   type="button"
                                   size="icon"
                                   variant="ghost"
-                                  className="h-7 w-7 text-red-500"
+                                  className="h-7 w-7 text-destructive"
                                   onClick={() => {
                                     setRoundTableTemplates(
                                       roundTableTemplates.filter(
@@ -12972,7 +12972,7 @@ export function CreateEventForm({
                               {template.forSale === false ? (
                                 <div className="flex justify-between">
                                   <span>Type:</span>
-                                  <span className="font-semibold text-orange-600">
+                                  <span className="font-semibold text-warning">
                                     Not for sale
                                   </span>
                                 </div>
@@ -13030,8 +13030,8 @@ export function CreateEventForm({
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="border rounded-xl p-5 bg-slate-50 space-y-4">
-                  <Label className="text-sm font-semibold text-slate-700">
+                <div className="border rounded-xl p-5 bg-muted space-y-4">
+                  <Label className="text-sm font-semibold text-foreground">
                     {editingSponsorId
                       ? "Edit Sponsor Type"
                       : "Add Sponsor Type"}
@@ -13052,7 +13052,7 @@ export function CreateEventForm({
                     </div>
                     <div>
                       {!isIndividualAccount && (
-                        <div className="flex items-center justify-between gap-3 rounded-lg border bg-white px-3 py-2">
+                        <div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2">
                           <div>
                             <Label className="text-xs">Collect Payment</Label>
                             <p className="text-[10px] text-muted-foreground">
@@ -13156,13 +13156,13 @@ export function CreateEventForm({
                               {currentSponsor.customOptions.map((opt) => (
                                 <span
                                   key={opt}
-                                  className="inline-flex items-center gap-1 rounded-full border bg-white px-3 py-1 text-xs"
+                                  className="inline-flex items-center gap-1 rounded-full border bg-card px-3 py-1 text-xs"
                                 >
                                   {opt}
                                   <button
                                     type="button"
                                     onClick={() => removeSponsorOption(opt)}
-                                    className="text-muted-foreground hover:text-red-600"
+                                    className="text-muted-foreground hover:text-destructive"
                                   >
                                     <X size={12} />
                                   </button>
@@ -13218,7 +13218,7 @@ export function CreateEventForm({
                 </div>
 
                 {sponsorTypes.length === 0 && (
-                  <div className="text-sm text-gray-400 border border-dashed rounded-lg p-6 text-center">
+                  <div className="text-sm text-muted-foreground border border-dashed rounded-lg p-6 text-center">
                     No sponsor types added yet. Add at least one above.
                   </div>
                 )}
@@ -13226,7 +13226,7 @@ export function CreateEventForm({
                   {sponsorTypes.map((sponsor, index) => (
                     <div
                       key={sponsor.id}
-                      className={`border rounded-lg p-4 bg-white space-y-3 ${
+                      className={`border rounded-lg p-4 bg-card space-y-3 ${
                         editingSponsorId === sponsor.id
                           ? "ring-2 ring-primary border-primary"
                           : ""
@@ -13239,7 +13239,7 @@ export function CreateEventForm({
                           </div>
                           <div>
                             <div className="font-semibold">{sponsor.name}</div>
-                            <div className="text-sm text-gray-500">
+                            <div className="text-sm text-muted-foreground">
                               {sponsor.price === 0
                                 ? "Free"
                                 : formatPrice(sponsor.price)}
@@ -13262,7 +13262,7 @@ export function CreateEventForm({
                             type="button"
                             variant="ghost"
                             size="sm"
-                            className="text-red-500 hover:text-red-600"
+                            className="text-destructive hover:text-destructive"
                             onClick={() => removeSponsorType(sponsor.id)}
                           >
                             <Trash2 size={14} />
@@ -13275,7 +13275,7 @@ export function CreateEventForm({
                             {sponsor.customOptions!.map((opt) => (
                               <span
                                 key={opt}
-                                className="rounded-full border bg-gray-50 px-2.5 py-0.5 text-xs text-gray-600"
+                                className="rounded-full border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"
                               >
                                 {opt}
                               </span>
@@ -13283,7 +13283,7 @@ export function CreateEventForm({
                           </div>
                         )}
                       {sponsor.description && (
-                        <p className="text-sm text-gray-600 bg-gray-50 rounded px-3 py-2">
+                        <p className="text-sm text-muted-foreground bg-muted rounded px-3 py-2">
                           {sponsor.description}
                         </p>
                       )}
