@@ -127,12 +127,15 @@ const SpaceLayout = forwardRef<HTMLDivElement, SpaceLayoutProps>(
           position: "relative",
           width: W * s,
           height: H * s,
-          backgroundColor: "#ffffff",
+          // Sheet/grid colors come from CSS vars (index.css --venue-*) so
+          // this renders correctly both on the public eventfront (always
+          // light) and inside the organizer dashboard's dark mode.
+          backgroundColor: "var(--venue-sheet, #ffffff)",
           backgroundImage: gridOn
-            ? "linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)"
+            ? "linear-gradient(to right, var(--venue-grid-minor, rgba(0,0,0,0.06)) 1px, transparent 1px), linear-gradient(to bottom, var(--venue-grid-minor, rgba(0,0,0,0.06)) 1px, transparent 1px)"
             : "none",
           backgroundSize: `${grid * s}px ${grid * s}px`,
-          border: "1px solid #d1d5db",
+          border: "1px solid var(--venue-sheet-border, #d1d5db)",
           borderRadius: 6,
           overflow: "hidden",
           ...style,
@@ -280,7 +283,11 @@ const SpaceLayout = forwardRef<HTMLDivElement, SpaceLayoutProps>(
                   ) : (
                     <span
                       style={{
-                        color: grey ? "#1f2937" : "#111827",
+                        // Was a fixed near-black — illegible once the sheet
+                        // (and the alpha-blended template-color fill sitting
+                        // on it) goes dark. --foreground already flips to a
+                        // near-white in dark mode.
+                        color: "hsl(var(--foreground))",
                         fontWeight: 800,
                         fontSize: Math.max(6, 8 * s),
                         lineHeight: 1,

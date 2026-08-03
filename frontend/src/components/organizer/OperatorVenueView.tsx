@@ -609,7 +609,11 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
           spacing/proportions match the eventfront exactly. */}
       <div
         ref={venueScrollRef}
-        className="relative border-2 border-dashed border-gray-300 rounded-xl bg-slate-50 overflow-auto p-4"
+        className="relative border-2 border-dashed rounded-xl overflow-auto p-4"
+        style={{
+          borderColor: "var(--venue-sheet-border)",
+          backgroundColor: "var(--venue-backdrop)",
+        }}
       >
         <div
           className="mx-auto"
