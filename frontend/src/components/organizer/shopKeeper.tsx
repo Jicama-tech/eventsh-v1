@@ -744,9 +744,9 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
 
   const getPaymentBadge = (paymentStatus: string) => {
     const variants: Record<string, { variant: any; color: string }> = {
-      Unpaid: { variant: "destructive", color: "text-red-600" },
-      Partial: { variant: "secondary", color: "text-yellow-600" },
-      Paid: { variant: "default", color: "text-green-600" },
+      Unpaid: { variant: "destructive", color: "text-destructive" },
+      Partial: { variant: "secondary", color: "text-warning" },
+      Paid: { variant: "default", color: "text-success" },
     };
 
     const config = variants[paymentStatus] || variants.Unpaid;
@@ -820,7 +820,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-green-600">
+              <div className="text-3xl font-bold text-success">
                 {stallStats.confirmed +
                   stallStats.processing +
                   stallStats.completed}
@@ -838,7 +838,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-blue-600">
+              <div className="text-3xl font-bold text-primary">
                 {formatCurrency(stallStats.totalRevenue)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -857,19 +857,19 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               <div className="space-y-1">
                 <div className="flex justify-between text-sm">
                   <span>Paid:</span>
-                  <span className="font-semibold text-green-600">
+                  <span className="font-semibold text-success">
                     {stallStats.paid}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Partial:</span>
-                  <span className="font-semibold text-yellow-600">
+                  <span className="font-semibold text-warning">
                     {stallStats.partial}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Unpaid:</span>
-                  <span className="font-semibold text-red-600">
+                  <span className="font-semibold text-destructive">
                     {stallStats.unpaid}
                   </span>
                 </div>
@@ -1035,7 +1035,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="font-semibold text-green-600">
+                            <div className="font-semibold text-success">
                               {formatCurrency(request.grandTotal)}
                             </div>
                             {request.selectedAddOns.length > 0 && (
@@ -1331,7 +1331,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                     <p className="font-medium">
                       <a
                         href={`mailto:${selectedRequest.shopkeeperId?.businessEmail}`}
-                        className="text-blue-600 underline"
+                        className="text-primary underline"
                         target="_blank"
                         rel="noopener noreferrer"
                       >
@@ -1364,7 +1364,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                         )}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-green-600 underline"
+                        className="text-success underline"
                       >
                         {selectedRequest.shopkeeperId?.whatsappNumber}
                       </a>
@@ -1417,7 +1417,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                       {selectedRequest.selectedTables.map((table, index) => (
                         <div
                           key={index}
-                          className="flex justify-between items-center p-3 bg-gray-50 rounded"
+                          className="flex justify-between items-center p-3 bg-muted rounded"
                         >
                           <div>
                             <p className="font-medium">{table.tableName}</p>
@@ -1451,7 +1451,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                       {selectedRequest.selectedAddOns.map((addon, index) => (
                         <div
                           key={index}
-                          className="flex justify-between items-center p-3 bg-gray-50 rounded"
+                          className="flex justify-between items-center p-3 bg-muted rounded"
                         >
                           <div>
                             <p className="font-medium">{addon.name}</p>
@@ -1503,7 +1503,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   <Separator className="my-2" />
                   <div className="flex justify-between text-lg font-bold">
                     <span>Grand Total</span>
-                    <span className="text-green-600">
+                    <span className="text-success">
                       {formatCurrency(selectedRequest.grandTotal)}
                     </span>
                   </div>
@@ -1517,8 +1517,8 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex items-start gap-3">
-                    <div className="bg-blue-100 rounded-full p-2">
-                      <FileText className="h-4 w-4 text-blue-600" />
+                    <div className="bg-primary/15 rounded-full p-2">
+                      <FileText className="h-4 w-4 text-primary" />
                     </div>
                     <div>
                       <p className="font-medium">Request Submitted</p>
@@ -1529,8 +1529,8 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   </div>
                   {selectedRequest.confirmationDate && (
                     <div className="flex items-start gap-3">
-                      <div className="bg-green-100 rounded-full p-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <div className="bg-success/15 rounded-full p-2">
+                        <CheckCircle2 className="h-4 w-4 text-success" />
                       </div>
                       <div>
                         <p className="font-medium">Request Confirmed</p>
@@ -1555,8 +1555,8 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   )}
                   {selectedRequest.paymentDate && (
                     <div className="flex items-start gap-3">
-                      <div className="bg-yellow-100 rounded-full p-2">
-                        <CreditCard className="h-4 w-4 text-yellow-600" />
+                      <div className="bg-warning/15 rounded-full p-2">
+                        <CreditCard className="h-4 w-4 text-warning" />
                       </div>
                       <div>
                         <p className="font-medium">Payment Received</p>
@@ -1568,8 +1568,8 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   )}
                   {selectedRequest.completionDate && (
                     <div className="flex items-start gap-3">
-                      <div className="bg-green-100 rounded-full p-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <div className="bg-success/15 rounded-full p-2">
+                        <CheckCircle2 className="h-4 w-4 text-success" />
                       </div>
                       <div>
                         <p className="font-medium">Booking Completed</p>
@@ -1582,8 +1582,8 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   {selectedRequest.hasCheckedIn &&
                     selectedRequest.checkInTime && (
                       <div className="flex items-start gap-3">
-                        <div className="bg-green-100 rounded-full p-2">
-                          <Clock1 className="h-4 w-4 text-green-600" />
+                        <div className="bg-success/15 rounded-full p-2">
+                          <Clock1 className="h-4 w-4 text-success" />
                         </div>
                         <div>
                           <p className="font-medium">Checked In Time</p>
@@ -1597,8 +1597,8 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                     selectedRequest.checkOutTime && (
                       <div className="flex items-start gap-3 justify-between">
                         <div className="flex items-start gap-3">
-                          <div className="bg-green-100 rounded-full p-2">
-                            <Clock12 className="h-4 w-4 text-green-600" />
+                          <div className="bg-success/15 rounded-full p-2">
+                            <Clock12 className="h-4 w-4 text-success" />
                           </div>
                           <div>
                             <p className="font-medium">Checked Out Time</p>
@@ -1640,7 +1640,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               {selectedRequest.cancellationReason && (
                 <Card className="border-red-200">
                   <CardHeader>
-                    <CardTitle className="text-lg text-red-600">
+                    <CardTitle className="text-lg text-destructive">
                       Cancellation Reason
                     </CardTitle>
                   </CardHeader>
@@ -1730,7 +1730,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
           <div className="space-y-4">
             <div>
               <Label htmlFor="cancel-reason">
-                Cancellation Reason <span className="text-red-500">*</span>
+                Cancellation Reason <span className="text-destructive">*</span>
               </Label>
               <Textarea
                 id="cancel-reason"
@@ -1918,7 +1918,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   {shopkeeperList.map((shopkeeper) => (
                     <div
                       key={shopkeeper._id}
-                      className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                      className="p-4 hover:bg-muted/50 cursor-pointer transition-colors"
                       onClick={() => handleShopkeeperToggle(shopkeeper._id)}
                     >
                       <div className="flex items-start gap-3">
@@ -1929,7 +1929,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                           onChange={() =>
                             handleShopkeeperToggle(shopkeeper._id)
                           }
-                          className="mt-1 w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                          className="mt-1 w-4 h-4 rounded border-input text-primary cursor-pointer"
                         />
 
                         {/* Shopkeeper Info */}
@@ -1969,7 +1969,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                               <Mail className="h-3 w-3" />
                               <a
                                 href={`mailto:${shopkeeper.email}`}
-                                className="text-blue-600 hover:underline"
+                                className="text-primary hover:underline"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 {shopkeeper.email}
@@ -1986,7 +1986,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                                   )}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-green-600"
+                                  className="text-success"
                                 >
                                   {shopkeeper.whatsappNumber}
                                 </a>
@@ -2037,7 +2037,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
 
             {/* Summary */}
             {selectedShopkeepers.length > 0 && (
-              <Card className="bg-blue-50 border-blue-200">
+              <Card className="bg-primary/10 border-primary/30">
                 <CardContent className="pt-4">
                   <p className="text-sm">
                     <span className="font-semibold">
@@ -2061,7 +2061,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                               key={shopkeeperId}
                               className="flex items-center gap-2"
                             >
-                              <CheckCircle2 className="h-3 w-3 text-green-600" />
+                              <CheckCircle2 className="h-3 w-3 text-success" />
                               {shop?.name} - {shop?.shopName}
                             </li>
                           );
