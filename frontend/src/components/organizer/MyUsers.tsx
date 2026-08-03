@@ -743,27 +743,27 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
         Pending: {
           variant: "secondary",
           icon: Clock,
-          color: "text-yellow-600",
+          color: "text-warning",
         },
         Confirmed: {
           variant: "default",
           icon: CheckCircle2,
-          color: "text-green-600",
+          color: "text-success",
         },
         Cancelled: {
           variant: "destructive",
           icon: XCircle,
-          color: "text-red-600",
+          color: "text-destructive",
         },
         Processing: {
           variant: "default",
           icon: AlertCircle,
-          color: "text-blue-600",
+          color: "text-primary",
         },
         Completed: {
           variant: "default",
           icon: CheckCircle2,
-          color: "text-green-700",
+          color: "text-success",
         },
       };
 
@@ -810,9 +810,9 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
 
   const getPaymentBadge = (paymentStatus: string) => {
     const variants: Record<string, { variant: any; color: string }> = {
-      Unpaid: { variant: "destructive", color: "text-red-600" },
-      Partial: { variant: "secondary", color: "text-yellow-600" },
-      Paid: { variant: "default", color: "text-green-600" },
+      Unpaid: { variant: "destructive", color: "text-destructive" },
+      Partial: { variant: "secondary", color: "text-warning" },
+      Paid: { variant: "default", color: "text-success" },
     };
 
     const config = variants[paymentStatus] || variants.Unpaid;
@@ -1229,7 +1229,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                               )}
                               {visitor.whatsapp && (
                                 <div className="flex items-center gap-1">
-                                  <FaWhatsapp className="h-3 w-3 text-green-600" />{" "}
+                                  <FaWhatsapp className="h-3 w-3 text-success" />{" "}
                                   {visitor.whatsapp}
                                 </div>
                               )}
@@ -1595,13 +1595,13 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                 <div className="text-xs text-muted-foreground">Created</div>
               </div>
               <div className="rounded-md border p-3 text-center">
-                <div className="text-2xl font-semibold text-blue-600">
+                <div className="text-2xl font-semibold text-primary">
                   {bulkResult.updated || 0}
                 </div>
                 <div className="text-xs text-muted-foreground">Updated</div>
               </div>
               <div className="rounded-md border p-3 text-center">
-                <div className="text-2xl font-semibold text-amber-600">
+                <div className="text-2xl font-semibold text-warning">
                   {bulkResult.skipped}
                 </div>
                 <div className="text-xs text-muted-foreground">Skipped</div>
@@ -1620,7 +1620,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               <div className="max-h-48 overflow-y-auto text-sm space-y-1 border rounded-md p-2">
                 {bulkResult.skippedRows?.slice(0, 25).map((s, i) => (
                   <div key={`s-${i}`} className="flex justify-between gap-2">
-                    <span className="text-amber-700">Row {s.row}</span>
+                    <span className="text-warning">Row {s.row}</span>
                     <span className="text-muted-foreground truncate">
                       {s.reason}
                     </span>
@@ -1705,7 +1705,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                       {selectedVisitor.email || "N/A"}
                     </div>
                     <div className="flex items-center gap-2">
-                      <FaWhatsapp className="h-4 w-4 text-green-600" />{" "}
+                      <FaWhatsapp className="h-4 w-4 text-success" />{" "}
                       {selectedVisitor.whatsapp || "N/A"}
                     </div>
                   </CardContent>
@@ -1833,25 +1833,25 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
 
               {/* Transaction Details */}
               {(stallRequest.transactionId || stallRequest.transactionScreenshot) && (
-                <Card className="border-amber-200 bg-amber-50/50">
+                <Card className="border-warning/30 bg-warning/10">
                   <CardContent className="p-4 space-y-3">
-                    <p className="font-semibold text-sm text-amber-900">Transaction Details from Vendor</p>
+                    <p className="font-semibold text-sm text-warning">Transaction Details from Vendor</p>
                     {stallRequest.transactionId && (
                       <div>
-                        <Label className="text-xs text-amber-700">Transaction ID</Label>
-                        <p className="font-mono font-bold text-sm bg-white rounded px-3 py-1.5 border border-amber-200 mt-1">{stallRequest.transactionId}</p>
+                        <Label className="text-xs text-warning">Transaction ID</Label>
+                        <p className="font-mono font-bold text-sm bg-background rounded px-3 py-1.5 border border-warning/30 mt-1">{stallRequest.transactionId}</p>
                       </div>
                     )}
                     {stallRequest.transactionScreenshot && (
                       <div>
-                        <Label className="text-xs text-amber-700">Payment Screenshot</Label>
+                        <Label className="text-xs text-warning">Payment Screenshot</Label>
                         <a href={`${__API_URL__}${stallRequest.transactionScreenshot}`} target="_blank" rel="noopener noreferrer">
-                          <img src={`${__API_URL__}${stallRequest.transactionScreenshot}`} alt="Transaction" className="max-w-xs max-h-60 rounded-lg border border-amber-200 mt-1 hover:shadow-md transition-shadow" />
+                          <img src={`${__API_URL__}${stallRequest.transactionScreenshot}`} alt="Transaction" className="max-w-xs max-h-60 rounded-lg border border-warning/30 mt-1 hover:shadow-md transition-shadow" />
                         </a>
                       </div>
                     )}
                     {stallRequest.paymentMethod && (
-                      <p className="text-xs text-amber-700">Method: <span className="font-semibold">{stallRequest.paymentMethod === "bank" ? "Bank Transfer" : "QR / UPI"}</span></p>
+                      <p className="text-xs text-warning">Method: <span className="font-semibold">{stallRequest.paymentMethod === "bank" ? "Bank Transfer" : "QR / UPI"}</span></p>
                     )}
                   </CardContent>
                 </Card>
@@ -1875,7 +1875,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                       {stallRequest.shopkeeperId?.hasDocVerification && (
                         <Badge
                           variant="outline"
-                          className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] h-5"
+                          className="bg-primary/10 text-primary border-primary/30 text-[10px] h-5"
                         >
                           Verified
                         </Badge>
@@ -1900,7 +1900,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                     <p className="font-medium">
                       <a
                         href={`mailto:${stallRequest.shopkeeperId?.businessEmail}`}
-                        className="text-blue-600 hover:underline block truncate"
+                        className="text-primary hover:underline block truncate"
                         target="_blank"
                         rel="noopener noreferrer"
                       >
@@ -1917,7 +1917,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                           href={`https://wa.me/${stallRequest.shopkeeperId.whatsappNumber.replace(/\+/g, "")}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-green-600 hover:underline"
+                          className="text-success hover:underline"
                         >
                           {stallRequest.shopkeeperId.whatsappNumber}
                         </a>
@@ -2104,7 +2104,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                       {stallRequest.eventId?.features?.parking && (
                         <Badge
                           variant="outline"
-                          className="flex gap-1 items-center bg-green-50"
+                          className="flex gap-1 items-center bg-success/10"
                         >
                           <ParkingCircle className="w-3 h-3" /> Parking
                         </Badge>
@@ -2112,7 +2112,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                       {stallRequest.eventId?.features?.photography && (
                         <Badge
                           variant="outline"
-                          className="flex gap-1 items-center bg-blue-50"
+                          className="flex gap-1 items-center bg-primary/10"
                         >
                           <Camera className="w-3 h-3" /> Photography
                         </Badge>
@@ -2120,7 +2120,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                       {stallRequest.eventId?.features?.security && (
                         <Badge
                           variant="outline"
-                          className="flex gap-1 items-center bg-red-50"
+                          className="flex gap-1 items-center bg-destructive/10"
                         >
                           <ShieldCheck className="w-3 h-3" /> Security
                         </Badge>
@@ -2214,7 +2214,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                       {stallRequest.selectedTables.map((table, index) => (
                         <div
                           key={index}
-                          className="flex justify-between items-center p-3 bg-gray-50 rounded"
+                          className="flex justify-between items-center p-3 bg-muted rounded"
                         >
                           <div>
                             <p className="font-medium">{table.tableName}</p>
@@ -2248,7 +2248,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                       {stallRequest.selectedAddOns.map((addon, index) => (
                         <div
                           key={index}
-                          className="flex justify-between items-center p-3 bg-gray-50 rounded"
+                          className="flex justify-between items-center p-3 bg-muted rounded"
                         >
                           <div>
                             <p className="font-medium">{addon.name}</p>
@@ -2300,7 +2300,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   <Separator className="my-2" />
                   <div className="flex justify-between text-lg font-bold">
                     <span>Grand Total</span>
-                    <span className="text-green-600">
+                    <span className="text-success">
                       {formatPrice(stallRequest.grandTotal)}
                     </span>
                   </div>
@@ -2314,8 +2314,8 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex items-start gap-3">
-                    <div className="bg-blue-100 rounded-full p-2">
-                      <FileText className="h-4 w-4 text-blue-600" />
+                    <div className="bg-primary/15 rounded-full p-2">
+                      <FileText className="h-4 w-4 text-primary" />
                     </div>
                     <div>
                       <p className="font-medium">Request Submitted</p>
@@ -2326,8 +2326,8 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   </div>
                   {stallRequest.confirmationDate && (
                     <div className="flex items-start gap-3">
-                      <div className="bg-green-100 rounded-full p-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <div className="bg-success/15 rounded-full p-2">
+                        <CheckCircle2 className="h-4 w-4 text-success" />
                       </div>
                       <div>
                         <p className="font-medium">Request Confirmed</p>
@@ -2352,8 +2352,8 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   )}
                   {stallRequest.paymentDate && (
                     <div className="flex items-start gap-3">
-                      <div className="bg-yellow-100 rounded-full p-2">
-                        <CreditCard className="h-4 w-4 text-yellow-600" />
+                      <div className="bg-warning/15 rounded-full p-2">
+                        <CreditCard className="h-4 w-4 text-warning" />
                       </div>
                       <div>
                         <p className="font-medium">Payment Received</p>
@@ -2365,8 +2365,8 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   )}
                   {stallRequest.completionDate && (
                     <div className="flex items-start gap-3">
-                      <div className="bg-green-100 rounded-full p-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <div className="bg-success/15 rounded-full p-2">
+                        <CheckCircle2 className="h-4 w-4 text-success" />
                       </div>
                       <div>
                         <p className="font-medium">Booking Completed</p>
@@ -2378,8 +2378,8 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   )}
                   {stallRequest.hasCheckedIn && stallRequest.checkInTime && (
                     <div className="flex items-start gap-3">
-                      <div className="bg-green-100 rounded-full p-2">
-                        <Clock1 className="h-4 w-4 text-green-600" />
+                      <div className="bg-success/15 rounded-full p-2">
+                        <Clock1 className="h-4 w-4 text-success" />
                       </div>
                       <div>
                         <p className="font-medium">Checked In Time</p>
@@ -2392,8 +2392,8 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   {stallRequest.hasCheckedOut && stallRequest.checkOutTime && (
                     <div className="flex items-start gap-3 justify-between">
                       <div className="flex items-start gap-3">
-                        <div className="bg-green-100 rounded-full p-2">
-                          <Clock12 className="h-4 w-4 text-green-600" />
+                        <div className="bg-success/15 rounded-full p-2">
+                          <Clock12 className="h-4 w-4 text-success" />
                         </div>
                         <div>
                           <p className="font-medium">Checked Out Time</p>
@@ -2435,7 +2435,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               {stallRequest.cancellationReason && (
                 <Card className="border-red-200">
                   <CardHeader>
-                    <CardTitle className="text-lg text-red-600">
+                    <CardTitle className="text-lg text-destructive">
                       Cancellation Reason
                     </CardTitle>
                   </CardHeader>
@@ -2549,8 +2549,8 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                                 <Badge
                                   className={
                                     req.status === "Confirmed"
-                                      ? "bg-green-600"
-                                      : "bg-gray-500"
+                                      ? "bg-success"
+                                      : "bg-muted-foreground"
                                   }
                                 >
                                   {req.status}
@@ -2603,7 +2603,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                 {events.map((event) => (
                   <div
                     key={event._id}
-                    className="flex items-center space-x-2 mb-2 p-2 hover:bg-slate-50 rounded"
+                    className="flex items-center space-x-2 mb-2 p-2 hover:bg-muted/50 rounded"
                   >
                     <Checkbox
                       id={`evt-${event._id}`}
@@ -2678,7 +2678,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                     return (
                       <div
                         key={id}
-                        className="flex items-center space-x-2 mb-2 p-2 hover:bg-slate-50 rounded"
+                        className="flex items-center space-x-2 mb-2 p-2 hover:bg-muted/50 rounded"
                       >
                         <Checkbox
                           id={`rec-${id}`}
@@ -3037,7 +3037,7 @@ export function AddCustomerDialog({
           {/* First Name */}
           <div>
             <Label htmlFor="firstName" className="font-medium mb-2 block">
-              First Name <span className="text-red-500">*</span>
+              First Name <span className="text-destructive">*</span>
             </Label>
             <Input
               id="firstName"
@@ -3049,14 +3049,14 @@ export function AddCustomerDialog({
               disabled={submitting}
             />
             {errors.firstName && (
-              <p className="text-red-500 text-sm mt-1">{errors.firstName}</p>
+              <p className="text-destructive text-sm mt-1">{errors.firstName}</p>
             )}
           </div>
 
           {/* Last Name */}
           <div>
             <Label htmlFor="lastName" className="font-medium mb-2 block">
-              Last Name <span className="text-red-500">*</span>
+              Last Name <span className="text-destructive">*</span>
             </Label>
             <Input
               id="lastName"
@@ -3068,14 +3068,14 @@ export function AddCustomerDialog({
               disabled={submitting}
             />
             {errors.lastName && (
-              <p className="text-red-500 text-sm mt-1">{errors.lastName}</p>
+              <p className="text-destructive text-sm mt-1">{errors.lastName}</p>
             )}
           </div>
 
           {/* WhatsApp Number with Country Code - UNCHANGED */}
           <div>
             <Label htmlFor="whatsAppNumber" className="font-medium mb-2 block">
-              WhatsApp Number <span className="text-red-500">*</span>
+              WhatsApp Number <span className="text-destructive">*</span>
             </Label>
             <div className="flex gap-2">
               <Select
@@ -3139,7 +3139,7 @@ export function AddCustomerDialog({
                           <span className="font-medium">
                             {country.dialCode}
                           </span>
-                          <span className="text-gray-500 text-sm">
+                          <span className="text-muted-foreground text-sm">
                             {country.name}
                           </span>
                         </div>
@@ -3166,12 +3166,12 @@ export function AddCustomerDialog({
               />
             </div>
             {(errors.whatsAppNumber || errors.countryCode) && (
-              <p className="text-red-500 text-sm mt-1">
+              <p className="text-destructive text-sm mt-1">
                 {errors.whatsAppNumber || errors.countryCode}
               </p>
             )}
             {selectedCountry && formData.whatsAppNumber && (
-              <p className="text-gray-500 text-xs mt-1">
+              <p className="text-muted-foreground text-xs mt-1">
                 Full number: {selectedCountry.dialCode}
                 {formData.whatsAppNumber}
               </p>
@@ -3182,7 +3182,7 @@ export function AddCustomerDialog({
           <div>
             <Label htmlFor="email" className="font-medium mb-2 block">
               Email{" "}
-              <span className="text-gray-400 text-xs font-normal">
+              <span className="text-muted-foreground text-xs font-normal">
                 (Optional)
               </span>
             </Label>
@@ -3196,7 +3196,7 @@ export function AddCustomerDialog({
               disabled={submitting}
             />
             {errors.email && (
-              <p className="text-red-500 text-sm mt-1">{errors.email}</p>
+              <p className="text-destructive text-sm mt-1">{errors.email}</p>
             )}
           </div>
 
@@ -3486,7 +3486,7 @@ export function AddExhibitorDialog({
                 }
               />
               {errors.firstName && (
-                <p className="text-red-500 text-xs">{errors.firstName}</p>
+                <p className="text-destructive text-xs">{errors.firstName}</p>
               )}
             </div>
             <div className="space-y-2">
@@ -3619,7 +3619,7 @@ export function AddExhibitorDialog({
                 />
               </div>
               {errors.whatsappNumber ? (
-                <p className="text-red-500 text-xs">{errors.whatsappNumber}</p>
+                <p className="text-destructive text-xs">{errors.whatsappNumber}</p>
               ) : (
                 <p className="text-[11px] text-muted-foreground">
                   {(() => {
@@ -3650,7 +3650,7 @@ export function AddExhibitorDialog({
                 />
               </div>
               {errors.phone && (
-                <p className="text-red-500 text-xs">{errors.phone}</p>
+                <p className="text-destructive text-xs">{errors.phone}</p>
               )}
             </div>
           </div>
@@ -3658,7 +3658,7 @@ export function AddExhibitorDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>
-                Personal Email <span className="text-red-500">*</span>
+                Personal Email <span className="text-destructive">*</span>
               </Label>
               <Input
                 type="email"
@@ -3669,12 +3669,12 @@ export function AddExhibitorDialog({
                 className={errors.email ? "border-red-500" : ""}
               />
               {errors.email && (
-                <p className="text-red-500 text-xs">{errors.email}</p>
+                <p className="text-destructive text-xs">{errors.email}</p>
               )}
             </div>
             <div className="space-y-2">
               <Label>
-                Business Email <span className="text-red-500">*</span>
+                Business Email <span className="text-destructive">*</span>
               </Label>
               <Input
                 type="email"
@@ -3685,7 +3685,7 @@ export function AddExhibitorDialog({
                 className={errors.businessEmail ? "border-red-500" : ""}
               />
               {errors.businessEmail && (
-                <p className="text-red-500 text-xs">{errors.businessEmail}</p>
+                <p className="text-destructive text-xs">{errors.businessEmail}</p>
               )}
             </div>
           </div>
@@ -3699,7 +3699,7 @@ export function AddExhibitorDialog({
               }
             />
             {errors.address && (
-              <p className="text-red-500 text-xs">{errors.address}</p>
+              <p className="text-destructive text-xs">{errors.address}</p>
             )}
           </div>
 

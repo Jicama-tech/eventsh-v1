@@ -714,27 +714,27 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         Pending: {
           variant: "secondary",
           icon: Clock,
-          color: "text-yellow-600",
+          color: "text-warning",
         },
         Confirmed: {
           variant: "default",
           icon: CheckCircle2,
-          color: "text-green-600",
+          color: "text-success",
         },
         Cancelled: {
           variant: "destructive",
           icon: XCircle,
-          color: "text-red-600",
+          color: "text-destructive",
         },
         Processing: {
           variant: "default",
           icon: AlertCircle,
-          color: "text-blue-600",
+          color: "text-primary",
         },
         Completed: {
           variant: "default",
           icon: CheckCircle2,
-          color: "text-green-700",
+          color: "text-success",
         },
       };
 
@@ -1319,9 +1319,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
   const getPaymentBadge = (paymentStatus: string) => {
     const variants: Record<string, { variant: any; color: string }> = {
-      Unpaid: { variant: "destructive", color: "text-red-600" },
-      Partial: { variant: "secondary", color: "text-yellow-600" },
-      Paid: { variant: "default", color: "text-green-600" },
+      Unpaid: { variant: "destructive", color: "text-destructive" },
+      Partial: { variant: "secondary", color: "text-warning" },
+      Paid: { variant: "default", color: "text-success" },
     };
 
     const config = variants[paymentStatus] || variants.Unpaid;
@@ -2368,24 +2368,24 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   // `emphasized` adds a pulsing ring for the stall a pill deep-linked to.
   const stallRowClass = (s: any, emphasized = false): string => {
     let base = "";
-    let ring = "ring-slate-400";
+    let ring = "ring-muted-foreground/30";
     if (s?.pendingCancellation?.status === "requested") {
-      base = "bg-rose-50 border-l-4 border-rose-400";
-      ring = "ring-rose-400";
+      base = "bg-destructive/10 border-l-4 border-destructive";
+      ring = "ring-destructive";
     } else if (s?.pendingAmendment?.status === "paid_pending_confirm") {
-      base = "bg-blue-50 border-l-4 border-blue-400";
-      ring = "ring-blue-400";
+      base = "bg-primary/10 border-l-4 border-primary";
+      ring = "ring-primary";
     } else if (s?.status === "Processing") {
-      base = "bg-emerald-50 border-l-4 border-emerald-400";
-      ring = "ring-emerald-400";
+      base = "bg-success/10 border-l-4 border-success";
+      ring = "ring-success";
     } else if (s?.status === "Pending") {
-      base = "bg-amber-50 border-l-4 border-amber-400";
-      ring = "ring-amber-400";
+      base = "bg-warning/10 border-l-4 border-warning";
+      ring = "ring-warning";
     } else if (s?.status === "Cancelled" || s?.status === "Returned") {
       // Soft-deleted / settled — kept in the list for refund/records but shown
       // muted so it reads as inactive.
-      base = "bg-slate-50 text-slate-400 border-l-4 border-slate-300";
-      ring = "ring-slate-400";
+      base = "bg-muted text-muted-foreground border-l-4 border-muted-foreground/30";
+      ring = "ring-muted-foreground/30";
     }
     const emph = emphasized ? `ring-2 ring-offset-1 ${ring} animate-pulse` : "";
     return `${base} ${emph}`.trim();
@@ -2459,7 +2459,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     return (
       <div className="flex items-center justify-center min-h-64">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
           Loading events data...
         </div>
       </div>
@@ -2674,7 +2674,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       </TableCell>
                       <TableCell>
                         {event.isLive ? (
-                          <Badge className="bg-green-100 text-green-800">
+                          <Badge className="bg-success/15 text-success">
                             Live
                           </Badge>
                         ) : (
@@ -2792,7 +2792,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Tickets Sold
                       </div>
-                      <div className="text-2xl font-bold text-blue-600">
+                      <div className="text-2xl font-bold text-primary">
                         {totalTicketsSold}
                       </div>
                     </div>
@@ -2800,7 +2800,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Attended
                       </div>
-                      <div className="text-2xl font-bold text-green-600">
+                      <div className="text-2xl font-bold text-success">
                         {totalAttended}
                       </div>
                     </div>
@@ -2909,7 +2909,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   <TicketFilters />
                   {loadingTickets ? (
                     <div className="text-center py-8">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 mx-auto mb-2"></div>
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-2"></div>
                       Loading attendance data...
                     </div>
                   ) : (
@@ -3043,7 +3043,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     <CardContent>
                       {loading ? (
                         <div className="text-center py-8">
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 mx-auto mb-2"></div>
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-2"></div>
                           Loading exhibitor bookings...
                         </div>
                       ) : stalls.length === 0 ? (
@@ -3197,7 +3197,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                     return (
                                       <>
                                         <div className="text-sm flex items-center gap-1">
-                                          <FaWhatsapp className="h-3 w-3 text-green-600" />
+                                          <FaWhatsapp className="h-3 w-3 text-success" />
                                           {phone || "—"}
                                         </div>
                                         {email && (
@@ -3225,8 +3225,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                   <Badge
                                     className={
                                       s.paymentStatus === "Paid"
-                                        ? "bg-green-100 text-green-800"
-                                        : "bg-yellow-100 text-yellow-800"
+                                        ? "bg-success/15 text-success"
+                                        : "bg-warning/15 text-warning"
                                     }
                                   >
                                     {s.paymentStatus || "Unpaid"}
@@ -3265,7 +3265,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         <Button
                                           variant="outline"
                                           size="icon"
-                                          className="h-7 w-7 text-green-700 border-green-300 hover:bg-green-50"
+                                          className="h-7 w-7 text-success border-success/40 hover:bg-success/10"
                                           onClick={() => {
                                             setSelectedRequest(s);
                                             setActionNotes("");
@@ -3278,7 +3278,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         <Button
                                           variant="outline"
                                           size="icon"
-                                          className="h-7 w-7 text-red-700 border-red-300 hover:bg-red-50"
+                                          className="h-7 w-7 text-destructive border-destructive/40 hover:bg-destructive/10"
                                           onClick={() => {
                                             setSelectedRequest(s);
                                             setCancellationReason("");
@@ -3307,7 +3307,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         <Button
                                           variant="outline"
                                           size="icon"
-                                          className="h-7 w-7 text-blue-700 border-blue-300 hover:bg-blue-50"
+                                          className="h-7 w-7 text-primary border-primary/40 hover:bg-primary/10"
                                           onClick={() => {
                                             setEditStall(s);
                                             setShowEditDialog(true);
@@ -3326,7 +3326,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                       <Button
                                         variant="outline"
                                         size="icon"
-                                        className="h-7 w-7 text-red-700 border-red-300 hover:bg-red-50"
+                                        className="h-7 w-7 text-destructive border-destructive/40 hover:bg-destructive/10"
                                         onClick={() => {
                                           setSelectedRequest(s);
                                           setShowDeleteStallDialog(true);
@@ -3340,7 +3340,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                       <Button
                                         variant="outline"
                                         size="icon"
-                                        className="h-7 w-7 text-green-700 border-green-300 hover:bg-green-50"
+                                        className="h-7 w-7 text-success border-success/40 hover:bg-success/10"
                                         onClick={() => {
                                           setRestoreTargetStall(s);
                                           setShowRestoreStallDialog(true);
@@ -3374,7 +3374,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     <CardContent>
                       {loadingSpeakers ? (
                         <div className="text-center py-8">
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 mx-auto mb-2"></div>
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-2"></div>
                           Loading speakers...
                         </div>
                       ) : eventSpeakers.length === 0 ? (
@@ -3435,7 +3435,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                   <div className="font-medium flex items-center gap-2">
                                     {req.name}
                                     {req.isKeynote && (
-                                      <Badge className="bg-purple-100 text-purple-700 text-[10px]">
+                                      <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 text-[10px]">
                                         Keynote
                                       </Badge>
                                     )}
@@ -3465,7 +3465,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         </div>
                                         {phone && (
                                           <div className="text-xs text-muted-foreground flex items-center gap-1">
-                                            <FaWhatsapp className="h-3 w-3 text-green-600" />
+                                            <FaWhatsapp className="h-3 w-3 text-success" />
                                             {phone}
                                           </div>
                                         )}
@@ -3490,7 +3490,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                   <Badge
                                     className={
                                       req.paymentStatus === "Paid"
-                                        ? "bg-green-100 text-green-800"
+                                        ? "bg-success/15 text-success"
                                         : ""
                                     }
                                     variant={
@@ -3510,7 +3510,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         <Button
                                           variant="outline"
                                           size="icon"
-                                          className="h-7 w-7 text-green-700 border-green-300 hover:bg-green-50"
+                                          className="h-7 w-7 text-success border-success/40 hover:bg-success/10"
                                           onClick={() =>
                                             updateSpeakerStatus(
                                               req._id,
@@ -3524,7 +3524,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         <Button
                                           variant="outline"
                                           size="icon"
-                                          className="h-7 w-7 text-red-700 border-red-300 hover:bg-red-50"
+                                          className="h-7 w-7 text-destructive border-destructive/40 hover:bg-destructive/10"
                                           onClick={() =>
                                             updateSpeakerStatus(
                                               req._id,
@@ -3613,8 +3613,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   </CardHeader>
                   <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-50 rounded-lg">
-                        <Calendar className="h-5 w-5 text-blue-600" />
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <Calendar className="h-5 w-5 text-primary" />
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">
@@ -3628,8 +3628,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-purple-50 rounded-lg">
-                        <MapPin className="h-5 w-5 text-purple-600" />
+                      <div className="p-2 bg-purple-50 dark:bg-purple-900/30 rounded-lg">
+                        <MapPin className="h-5 w-5 text-purple-600 dark:text-purple-300" />
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">
@@ -3641,8 +3641,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-orange-50 rounded-lg">
-                        <LayoutGrid className="h-5 w-5 text-orange-600" />
+                      <div className="p-2 bg-orange-50 dark:bg-orange-900/30 rounded-lg">
+                        <LayoutGrid className="h-5 w-5 text-orange-600 dark:text-orange-300" />
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">
@@ -3679,19 +3679,19 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   title="Total Registrations"
                   value={exhibitorsCount}
                   icon={<Users />}
-                  color="text-blue-600"
+                  color="text-primary"
                 />
                 <StatCard
                   title="Confirmed Exhibitors"
                   value={confirmedExhibitors}
                   icon={<CheckCircle />}
-                  color="text-green-600"
+                  color="text-success"
                 />
                 <StatCard
                   title="Pending Approvals"
                   value={exhibitorsCount - confirmedExhibitors}
                   icon={<Clock />}
-                  color="text-yellow-600"
+                  color="text-warning"
                 />
                 <StatCard
                   title="Total Add-ons Sold"
@@ -3712,7 +3712,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 </CardHeader>
                 <CardContent>
                   <Table>
-                    <TableHeader className="bg-slate-50">
+                    <TableHeader className="bg-muted">
                       <TableRow>
                         <TableHead>Exhibitor/Shop</TableHead>
                         <TableHead>Stalls / Tables</TableHead>
@@ -3769,8 +3769,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                             <Badge
                               className={
                                 stall.paymentStatus === "Paid"
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-red-100 text-red-700"
+                                  ? "bg-success/15 text-success"
+                                  : "bg-destructive/15 text-destructive"
                               }
                             >
                               {stall.paymentStatus}
@@ -3779,9 +3779,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               {stall.status === "Completed" ? (
-                                <CheckCircle className="h-4 w-4 text-green-500" />
+                                <CheckCircle className="h-4 w-4 text-success" />
                               ) : (
-                                <Clock className="h-4 w-4 text-yellow-500" />
+                                <Clock className="h-4 w-4 text-warning" />
                               )}
                               <span className="text-sm font-medium">
                                 {stall.status}
@@ -3789,13 +3789,13 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                             </div>
                             {(stall as any).pendingAmendment?.status ===
                               "paid_pending_confirm" && (
-                              <Badge className="mt-1 bg-amber-100 text-amber-700">
+                              <Badge className="mt-1 bg-warning/15 text-warning">
                                 Edit pending
                               </Badge>
                             )}
                             {(stall as any).pendingCancellation?.status ===
                               "requested" && (
-                              <Badge className="mt-1 bg-red-100 text-red-700">
+                              <Badge className="mt-1 bg-destructive/15 text-destructive">
                                 Cancel requested
                               </Badge>
                             )}
@@ -3819,7 +3819,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                 "paid_pending_confirm" && (
                                 <Button
                                   size="sm"
-                                  className="bg-amber-600 hover:bg-amber-700"
+                                  className="bg-warning hover:bg-warning/90"
                                   title="Confirm edit request & re-issue QR"
                                   onClick={() => {
                                     setSelectedRequest(stall);
@@ -3847,7 +3847,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                 <Button
                                   size="sm"
                                   variant="buttonOutline"
-                                  className="text-green-700 border-green-300 hover:bg-green-50"
+                                  className="text-success border-success/40 hover:bg-success/10"
                                   title="Restore stall (reassign to the vendor & re-book its space)"
                                   onClick={() => {
                                     setRestoreTargetStall(stall);
@@ -3863,7 +3863,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                   <Button
                                     size="sm"
                                     variant="default"
-                                    className="bg-green-600 hover:bg-green-700"
+                                    className="bg-success hover:bg-success/90"
                                     onClick={() => {
                                       setSelectedRequest(stall);
                                       setShowConfirmDialog(true);
@@ -3891,7 +3891,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                   <Button
                                     size="sm"
                                     variant="default"
-                                    className="bg-blue-600 hover:bg-blue-700"
+                                    className="bg-primary hover:bg-primary/90"
                                     onClick={() => {
                                       setSelectedRequest(stall);
                                       setShowPaymentDialog(true);
@@ -3904,7 +3904,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                 )}
 
                               {(stall.transactionId || stall.transactionScreenshot) && stall.paymentStatus !== "Paid" && (
-                                <Badge className="bg-amber-100 text-amber-700 text-[10px]">
+                                <Badge className="bg-warning/15 text-warning text-[10px]">
                                   TX Proof
                                 </Badge>
                               )}
@@ -3912,7 +3912,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                               {stall.paymentStatus === "Paid" &&
                                 stall.status === "Completed" &&
                                 !stall.hasCheckedIn && (
-                                  <Badge className="bg-green-100 text-green-700 text-[10px]">
+                                  <Badge className="bg-success/15 text-success text-[10px]">
                                     QR Sent
                                   </Badge>
                                 )}
@@ -3947,7 +3947,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
             <DialogTitle className="flex items-center gap-2">
               {selectedVisitor?.customerName || "Visitor"}
               {selectedVisitor?.attendance ? (
-                <Badge className="bg-green-100 text-green-800">
+                <Badge className="bg-success/15 text-success">
                   <CheckCircle className="h-3 w-3 mr-1" />
                   Attended
                 </Badge>
@@ -4215,7 +4215,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     {selectedSpeaker?.name || "Speaker"}
                   </span>
                   {selectedSpeaker?.isKeynote && (
-                    <Badge className="bg-purple-100 text-purple-700">
+                    <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
                       Keynote
                     </Badge>
                   )}
@@ -4348,7 +4348,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                 href={String(v)}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-xs text-blue-600 hover:underline capitalize"
+                                className="text-xs text-primary hover:underline capitalize"
                               >
                                 {k}
                               </a>
@@ -4408,7 +4408,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     <Badge
                       className={
                         selectedSpeaker.paymentStatus === "Paid"
-                          ? "bg-green-100 text-green-800"
+                          ? "bg-success/15 text-success"
                           : ""
                       }
                       variant={
@@ -4470,14 +4470,14 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     }
                     const dotFor = (status: string) =>
                       status === "Completed"
-                        ? "bg-green-500"
+                        ? "bg-success/100"
                         : status === "Confirmed"
-                          ? "bg-blue-500"
+                          ? "bg-primary/100"
                           : status === "Rejected" || status === "Cancelled"
-                            ? "bg-red-500"
+                            ? "bg-destructive/100"
                             : status === "Processing"
-                              ? "bg-amber-500"
-                              : "bg-gray-400";
+                              ? "bg-warning/100"
+                              : "bg-muted-foreground";
                     return (
                       <ol className="relative border-l pl-4 space-y-4">
                         {history
@@ -4640,7 +4640,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           <div className="space-y-4">
             <div>
               <Label htmlFor="cancel-reason">
-                Cancellation Reason <span className="text-red-500">*</span>
+                Cancellation Reason <span className="text-destructive">*</span>
               </Label>
               <Textarea
                 id="cancel-reason"
@@ -4709,7 +4709,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Trash2 className="h-5 w-5 text-red-600" />
+              <Trash2 className="h-5 w-5 text-destructive" />
               Are you sure you want to delete?
             </DialogTitle>
             <DialogDescription>
@@ -4725,7 +4725,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           </DialogHeader>
 
           {selectedRequest?.selectedTables?.length > 0 && (
-            <div className="rounded-md border bg-amber-50 border-amber-200 p-3 text-sm text-amber-800">
+            <div className="rounded-md border bg-warning/10 border-warning/30 p-3 text-sm text-warning">
               This stall has{" "}
               <strong>{selectedRequest.selectedTables.length}</strong> space
               {selectedRequest.selectedTables.length === 1 ? "" : "s"} selected —
@@ -4742,7 +4742,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           <div className="space-y-2">
             <Label htmlFor="delete-confirm" className="text-sm">
               To confirm, type{" "}
-              <code className="font-mono font-semibold text-red-600">
+              <code className="font-mono font-semibold text-destructive">
                 {DELETE_CONFIRM_PHRASE}
               </code>{" "}
               below:
@@ -4801,7 +4801,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <RotateCcw className="h-5 w-5 text-green-600" />
+              <RotateCcw className="h-5 w-5 text-success" />
               Restore this stall?
             </DialogTitle>
             <DialogDescription>
@@ -4829,7 +4829,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
               Go Back
             </Button>
             <Button
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-success hover:bg-success/90"
               onClick={handleRestoreStall}
               disabled={isSubmitting}
             >
@@ -4911,7 +4911,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
             {/* Either field is enough — the organizer might only have the
                 transaction ID, or only a screenshot, or both. */}
-            <div className="rounded-lg border bg-gray-50/60 p-3 space-y-3">
+            <div className="rounded-lg border bg-muted/60 p-3 space-y-3">
               <p className="text-xs text-muted-foreground">
                 Payment proof{selectedRequest?.paymentStatus !== "Paid" && " (optional)"} — attach if the vendor sent a
                 transaction ID or screenshot on WhatsApp.
@@ -4936,7 +4936,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   }
                 />
                 {payScreenshot && (
-                  <p className="text-xs text-green-700 mt-1">
+                  <p className="text-xs text-success mt-1">
                     {payScreenshot.name} attached
                   </p>
                 )}
@@ -4985,7 +4985,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Pencil className="h-5 w-5 text-amber-600" />
+              <Pencil className="h-5 w-5 text-warning" />
               Confirm edit request
             </DialogTitle>
             <DialogDescription>
@@ -4997,15 +4997,15 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
             const pa: any = (selectedRequest as any)?.pendingAmendment;
             if (!pa) return null;
             return (
-              <div className="space-y-2 rounded-lg border bg-slate-50 p-3 text-sm">
+              <div className="space-y-2 rounded-lg border bg-muted p-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Operators</span>
+                  <span className="text-muted-foreground">Operators</span>
                   <span className="font-medium">
                     {(selectedRequest as any)?.noOfOperators} → {pa.noOfOperators}
                   </span>
                 </div>
                 <div>
-                  <span className="text-gray-500">Updated add-ons</span>
+                  <span className="text-muted-foreground">Updated add-ons</span>
                   <ul className="mt-1 space-y-0.5">
                     {(pa.selectedAddOns || []).map((a: any, i: number) => (
                       <li key={i} className="flex justify-between">
@@ -5020,8 +5020,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   </ul>
                 </div>
                 <div className="flex justify-between border-t pt-2">
-                  <span className="text-gray-500">Difference paid</span>
-                  <span className="font-bold text-green-700">
+                  <span className="text-muted-foreground">Difference paid</span>
+                  <span className="font-bold text-success">
                     {formatPrice(pa.amountDue || 0)}
                   </span>
                 </div>
@@ -5037,7 +5037,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
               Close
             </Button>
             <Button
-              className="bg-amber-600 hover:bg-amber-700"
+              className="bg-warning hover:bg-warning/90"
               onClick={async () => {
                 await handleConfirmAmendment();
                 setShowAmendConfirmDialog(false);
