@@ -461,7 +461,7 @@ export default function GuestRoomDialog({
                   {guest.attendees.map((a, i) => (
                     <div
                       key={i}
-                      className="flex items-center justify-between gap-2 rounded bg-white px-2 py-1 text-xs text-stone-700"
+                      className="flex items-center justify-between gap-2 rounded bg-card px-2 py-1 text-xs text-foreground"
                     >
                       <span className="font-medium">{a.name}</span>
                       <span className="text-stone-500">
@@ -484,7 +484,7 @@ export default function GuestRoomDialog({
                   <span className="flex items-center gap-2 text-sm font-semibold text-rose-700">
                     Room {i + 1}
                     {r.checkedIn && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-green-700">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-success">
                         <Check className="h-3 w-3" /> Checked in
                       </span>
                     )}
@@ -492,7 +492,7 @@ export default function GuestRoomDialog({
                   <button
                     type="button"
                     onClick={() => removeRoom(i)}
-                    className="text-stone-400 hover:text-red-600"
+                    className="text-muted-foreground hover:text-destructive"
                     title="Remove this room"
                   >
                     <X className="h-4 w-4" />
@@ -596,7 +596,7 @@ export default function GuestRoomDialog({
                                   className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition ${
                                     on
                                       ? "border-rose-400 bg-rose-500 text-white"
-                                      : "border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
+                                      : "border-input bg-card text-muted-foreground hover:bg-muted"
                                   }`}
                                 >
                                   {on && <Check className="h-3 w-3" />}
@@ -615,19 +615,19 @@ export default function GuestRoomDialog({
                   )}
                 </div>
                 {/* Shared room — split this physical room across another party */}
-                <div className="rounded-lg border border-amber-100 bg-amber-50/60 p-2.5">
+                <div className="rounded-lg border border-warning/30 bg-warning/10 p-2.5">
                   {r.roomKey &&
                     r.sharedRsvpIds &&
                     r.sharedRsvpIds.length > 0 && (
                       <div className="mb-2">
-                        <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-warning">
                           Shared with
                         </div>
                         <div className="mt-1 flex flex-wrap gap-1.5">
                           {r.sharedRsvpIds.map((rid) => (
                             <span
                               key={rid}
-                              className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-white px-2 py-0.5 text-xs text-stone-700"
+                              className="inline-flex items-center gap-1 rounded-full border border-warning/30 bg-card px-2 py-0.5 text-xs text-foreground"
                             >
                               {guestById.get(rid)?.name || "Another party"}
                               <button
@@ -635,7 +635,7 @@ export default function GuestRoomDialog({
                                 onClick={() =>
                                   r.roomKey && doUnshare(r.roomKey, rid)
                                 }
-                                className="text-stone-400 hover:text-red-600"
+                                className="text-muted-foreground hover:text-destructive"
                                 title="Remove from this room"
                               >
                                 <X className="h-3 w-3" />
@@ -723,8 +723,8 @@ export default function GuestRoomDialog({
                                         }
                                         className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition ${
                                           on
-                                            ? "border-amber-400 bg-amber-500 text-white"
-                                            : "border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
+                                            ? "border-warning bg-warning text-warning-foreground"
+                                            : "border-input bg-card text-muted-foreground hover:bg-muted"
                                         }`}
                                       >
                                         {on && <Check className="h-3 w-3" />}
@@ -760,7 +760,7 @@ export default function GuestRoomDialog({
                           size="sm"
                           onClick={() => doShare(i)}
                           disabled={sharing}
-                          className="bg-amber-600 hover:bg-amber-700"
+                          className="bg-warning hover:bg-warning/90"
                         >
                           {sharing ? (
                             <Loader2 className="mr-1 h-4 w-4 animate-spin" />
@@ -780,7 +780,7 @@ export default function GuestRoomDialog({
                           setShareTarget("");
                           setShareNames([]);
                         }}
-                        className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 hover:text-amber-900"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-warning hover:text-warning"
                       >
                         <Users className="h-3.5 w-3.5" /> Share this room with
                         another RSVP
@@ -804,7 +804,7 @@ export default function GuestRoomDialog({
               <span
                 className={`text-xs ${
                   totalOcc > maxOcc
-                    ? "font-semibold text-red-600"
+                    ? "font-semibold text-destructive"
                     : "text-muted-foreground"
                 }`}
               >
