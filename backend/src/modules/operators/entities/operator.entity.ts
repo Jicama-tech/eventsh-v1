@@ -52,6 +52,11 @@ export class Operator {
   // it ON per operator; only those operators get emailed. Defaults false.
   @Prop({ default: false })
   allowEmails: boolean;
+
+  // Whether this operator may approve or reject event expenses logged by the
+  // team. Off by default — approving spend is a deliberate grant.
+  @Prop({ default: false })
+  canApproveExpenses: boolean;
 }
 
 export const OperatorSchema = SchemaFactory.createForClass(Operator);

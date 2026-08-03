@@ -2,6 +2,8 @@ import React, { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import EventPnlDialog from "@/components/organizer/EventPnlDialog";
+import { EventFeedbackDialog } from "@/components/organizer/EventFeedbackDialog";
 import {
   CalendarDays,
   MapPin,
@@ -19,6 +21,8 @@ import {
   ChevronDown,
   Share,
   Map,
+  Wallet,
+  MessageSquare,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -98,6 +102,12 @@ export default function DashboardOverview({
   const [spaceAnalyticsEvent, setSpaceAnalyticsEvent] = useState<any>(null);
   // Live venue-layout view (which spaces are booked + add-ons purchased).
   const [showVenueLayout, setShowVenueLayout] = useState(false);
+  // P&L report dialog (money in / money out / net profit for one event).
+  const [pnlEvent, setPnlEvent] = useState<any>(null);
+  const [showPnl, setShowPnl] = useState(false);
+  // Feedback (ratings/comments + payment feedback) for one event.
+  const [feedbackEvent, setFeedbackEvent] = useState<any>(null);
+  const [showFeedback, setShowFeedback] = useState(false);
   const [venueLayoutEvent, setVenueLayoutEvent] = useState<any>(null);
   const { country } = useCountry();
   const { formatPrice, getSymbol } = useCurrency(country);
@@ -679,6 +689,32 @@ export default function DashboardOverview({
                       Venue Layout
                     </Button>
                   )}
+                  {/* Profit & loss for this event — money in from visitors,
+                      exhibitors, round tables, speakers and sponsors, less
+                      supplier payouts and the platform fee. */}
+                  <Button
+                    variant="buttonOutline"
+                    size="sm"
+                    onClick={() => {
+                      setPnlEvent(event);
+                      setShowPnl(true);
+                    }}
+                  >
+                    <Wallet className="h-4 w-4 mr-1" />
+                    P&L Report
+                  </Button>
+                  {/* Ratings, comments and payment feedback for this event. */}
+                  <Button
+                    variant="buttonOutline"
+                    size="sm"
+                    onClick={() => {
+                      setFeedbackEvent(event);
+                      setShowFeedback(true);
+                    }}
+                  >
+                    <MessageSquare className="h-4 w-4 mr-1" />
+                    Feedback
+                  </Button>
                   {/* <Button
                     variant="buttonOutline"
                     size="sm"
@@ -697,6 +733,32 @@ export default function DashboardOverview({
                     onClick={() => handleShowAnalytics(event)}
                   >
                     Analytics
+                  </Button>
+                  {/* Profit & loss for this event — money in from visitors,
+                      exhibitors, round tables, speakers and sponsors, less
+                      supplier payouts and the platform fee. */}
+                  <Button
+                    variant="buttonOutline"
+                    size="sm"
+                    onClick={() => {
+                      setPnlEvent(event);
+                      setShowPnl(true);
+                    }}
+                  >
+                    <Wallet className="h-4 w-4 mr-1" />
+                    P&L Report
+                  </Button>
+                  {/* Ratings, comments and payment feedback for this event. */}
+                  <Button
+                    variant="buttonOutline"
+                    size="sm"
+                    onClick={() => {
+                      setFeedbackEvent(event);
+                      setShowFeedback(true);
+                    }}
+                  >
+                    <MessageSquare className="h-4 w-4 mr-1" />
+                    Feedback
                   </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -1421,6 +1483,24 @@ export default function DashboardOverview({
           if (!o) setSpaceAnalyticsEvent(null);
         }}
         event={spaceAnalyticsEvent}
+      />
+
+      {/* Ratings + comments, with the payment-feedback panel inside. */}
+      <EventFeedbackDialog
+        eventId={feedbackEvent?._id ?? feedbackEvent?.id ?? null}
+        eventTitle={feedbackEvent?.title || feedbackEvent?.name}
+        open={showFeedback}
+        onOpenChange={(o) => {
+          setShowFeedback(o);
+          if (!o) setFeedbackEvent(null);
+        }}
+      />
+
+      {/* Per-event profit & loss, downloadable as a PDF. */}
+      <EventPnlDialog
+        open={showPnl}
+        onClose={() => setShowPnl(false)}
+        eventId={pnlEvent?._id || pnlEvent?.id}
       />
 
       {/* Live venue layout — which spaces are booked and which add-ons were

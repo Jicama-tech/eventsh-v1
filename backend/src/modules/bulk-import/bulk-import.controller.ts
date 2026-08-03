@@ -67,6 +67,26 @@ export class BulkImportController {
     return this.service.importExhibitors(organizerId, file.buffer);
   }
 
+  @Post("suppliers/:organizerId")
+  @UseInterceptors(uploadInterceptor)
+  async importSuppliers(
+    @Param("organizerId") organizerId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException("No file uploaded");
+    return this.service.importSuppliers(organizerId, file.buffer);
+  }
+
+  @Post("sponsors/:organizerId")
+  @UseInterceptors(uploadInterceptor)
+  async importSponsors(
+    @Param("organizerId") organizerId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException("No file uploaded");
+    return this.service.importSponsors(organizerId, file.buffer);
+  }
+
   // ---------------- EXPORT ----------------
 
   @Get("visitors/export/:organizerId")
@@ -87,6 +107,24 @@ export class BulkImportController {
     this.sendXlsx(res, buf, `exhibitors-${Date.now()}.xlsx`);
   }
 
+  @Get("suppliers/export/:organizerId")
+  async exportSuppliers(
+    @Param("organizerId") organizerId: string,
+    @Res() res: Response,
+  ) {
+    const buf = await this.service.exportSuppliers(organizerId);
+    this.sendXlsx(res, buf, `suppliers-${Date.now()}.xlsx`);
+  }
+
+  @Get("sponsors/export/:organizerId")
+  async exportSponsors(
+    @Param("organizerId") organizerId: string,
+    @Res() res: Response,
+  ) {
+    const buf = await this.service.exportSponsors(organizerId);
+    this.sendXlsx(res, buf, `sponsors-${Date.now()}.xlsx`);
+  }
+
   // ---------------- TEMPLATES ----------------
 
   @Get("visitors/template")
@@ -99,6 +137,18 @@ export class BulkImportController {
   async exhibitorTemplate(@Res() res: Response) {
     const buf = await this.service.exhibitorTemplate();
     this.sendXlsx(res, buf, "exhibitors-template.xlsx");
+  }
+
+  @Get("suppliers/template")
+  async supplierTemplate(@Res() res: Response) {
+    const buf = await this.service.supplierTemplate();
+    this.sendXlsx(res, buf, "suppliers-template.xlsx");
+  }
+
+  @Get("sponsors/template")
+  async sponsorTemplate(@Res() res: Response) {
+    const buf = await this.service.sponsorTemplate();
+    this.sendXlsx(res, buf, "sponsors-template.xlsx");
   }
 
   private sendXlsx(res: Response, buf: Buffer, filename: string) {

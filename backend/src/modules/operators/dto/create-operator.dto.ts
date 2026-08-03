@@ -43,4 +43,8 @@ export class CreateOperatorDto {
   @IsBoolean()
   @IsOptional()
   allowEmails?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  canApproveExpenses?: boolean;
 }

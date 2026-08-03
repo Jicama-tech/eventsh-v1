@@ -5,6 +5,8 @@ import { BulkImportService } from "./bulk-import.service";
 import { UserSchema } from "../users/schemas/user.schema";
 import { Vendor, VendorSchema } from "../stalls/schemas/vendor.schema";
 import { Stall, StallSchema } from "../stalls/entities/stall.entity";
+import { Supplier, SupplierSchema } from "../suppliers/schemas/supplier.schema";
+import { Sponsor, SponsorSchema } from "../sponsors/schemas/sponsor.schema";
 
 @Module({
   imports: [
@@ -14,6 +16,8 @@ import { Stall, StallSchema } from "../stalls/entities/stall.entity";
       // Read-only: lets the exhibitor export include vendors who joined via
       // the stall form (matched through their stall records).
       { name: Stall.name, schema: StallSchema },
+      { name: Supplier.name, schema: SupplierSchema },
+      { name: Sponsor.name, schema: SponsorSchema },
     ]),
   ],
   controllers: [BulkImportController],

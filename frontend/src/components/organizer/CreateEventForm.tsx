@@ -45,6 +45,8 @@ import {
   Undo2,
   Image,
   Mic,
+  Handshake,
+  Crop,
   Circle,
   Sparkles,
   Maximize2,
@@ -103,6 +105,24 @@ interface VisitorType {
   description?: string;
   featureAccess: VisitorFeatureAccess;
   isActive: boolean;
+}
+
+/**
+ * A sponsorship tier on offer for this event. Deliberately just three fields —
+ * what it's called, what it costs, and what the sponsor gets. Not to be
+ * confused with `sponsors`, the logo URLs shown in the eventfront marquee.
+ */
+interface SponsorType {
+  id: string;
+  name: string;
+  price: number;
+  description?: string;
+  isActive: boolean;
+  // When false, this tier isn't paid — the sponsor picks from
+  // `customOptions` (vouchers, coupons, etc.) instead of being charged, up
+  // to the value of `price` (shown to sponsors the same way a price is).
+  collectPayment: boolean;
+  customOptions?: string[];
 }
 
 const DEFAULT_VISITOR_FEATURES: VisitorFeatureAccess = {
@@ -2719,9 +2739,8 @@ const TableManagement = ({
             <Label className="flex flex-col gap-1">
               <span>Auto-generate vendor coupon</span>
               <span className="font-normal text-xs text-muted-foreground">
-                When a stall payment is confirmed, create a 100% off coupon
-                for the vendor's operators. Turn OFF if you manage entry
-                separately.
+                When a stall payment is confirmed, create a 100% off coupon for
+                the vendor's operators. Turn OFF if you manage entry separately.
               </span>
             </Label>
             <Switch
@@ -2945,48 +2964,50 @@ const TableManagement = ({
                           {tableTemplates
                             .filter((tpl) => (tpl as any).forSale !== false)
                             .map((tpl) => (
-                            <div
-                              key={tpl.id}
-                              className="flex items-center gap-2"
-                            >
-                              <span
-                                className="inline-block h-3 w-3 shrink-0 rounded-sm border"
-                                style={{
-                                  backgroundColor: tpl.color || "#e5e7eb",
-                                }}
-                              />
-                              <span className="flex-1 truncate text-sm">
-                                {tpl.name || "Unnamed"}
-                              </span>
-                              <Input
-                                type="number"
-                                min={1}
-                                step={1}
-                                value={
-                                  currentAddOn.maxPerTemplate?.[tpl.id] ?? ""
-                                }
-                                onChange={(e) => {
-                                  const raw = e.target.value;
-                                  const n = parseInt(raw, 10);
-                                  const val =
-                                    raw === ""
-                                      ? ""
-                                      : String(
-                                          !Number.isFinite(n) || n < 1 ? 1 : n,
-                                        );
-                                  setCurrentAddOn((prev) => ({
-                                    ...prev,
-                                    maxPerTemplate: {
-                                      ...(prev.maxPerTemplate || {}),
-                                      [tpl.id]: val,
-                                    },
-                                  }));
-                                }}
-                                placeholder="—"
-                                className="h-8 w-20"
-                              />
-                            </div>
-                          ))}
+                              <div
+                                key={tpl.id}
+                                className="flex items-center gap-2"
+                              >
+                                <span
+                                  className="inline-block h-3 w-3 shrink-0 rounded-sm border"
+                                  style={{
+                                    backgroundColor: tpl.color || "#e5e7eb",
+                                  }}
+                                />
+                                <span className="flex-1 truncate text-sm">
+                                  {tpl.name || "Unnamed"}
+                                </span>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  step={1}
+                                  value={
+                                    currentAddOn.maxPerTemplate?.[tpl.id] ?? ""
+                                  }
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    const n = parseInt(raw, 10);
+                                    const val =
+                                      raw === ""
+                                        ? ""
+                                        : String(
+                                            !Number.isFinite(n) || n < 1
+                                              ? 1
+                                              : n,
+                                          );
+                                    setCurrentAddOn((prev) => ({
+                                      ...prev,
+                                      maxPerTemplate: {
+                                        ...(prev.maxPerTemplate || {}),
+                                        [tpl.id]: val,
+                                      },
+                                    }));
+                                  }}
+                                  placeholder="—"
+                                  className="h-8 w-20"
+                                />
+                              </div>
+                            ))}
                         </div>
                       </div>
                     </div>
@@ -6628,6 +6649,16 @@ export function CreateEventForm({
   const [bannerPreview, setBannerPreview] = useState("");
   const [galleryImages, setGalleryImages] = useState<GalleryImage[]>([]);
   const [sponsorLogos, setSponsorLogos] = useState<SponsorLogo[]>([]);
+  // Whether the sponsor bar renders on the eventfront at all. Legacy events
+  // have no stored value — treat that as visible so nothing disappears.
+  const [showSponsorBar, setShowSponsorBar] = useState<boolean>(
+    initialData?.showSponsorBar !== false,
+  );
+  // Logo currently open in the cropper, if any.
+  const [sponsorCrop, setSponsorCrop] = useState<{
+    id: string;
+    src: string;
+  } | null>(null);
   // Max total spaces a single vendor may book (drives the quantity-based
   // preferred-space picker on the stall form). Stored as a string while editing.
   const [maxSpacesPerVendor, setMaxSpacesPerVendor] = useState<string>("1");
@@ -6649,6 +6680,19 @@ export function CreateEventForm({
     setSponsorLogos((prev) => [...prev, ...additions]);
     e.target.value = "";
   };
+  // Replace a logo with its cropped version, keeping its position in the list.
+  const applySponsorCrop = (file: File) => {
+    if (!sponsorCrop) return;
+    setSponsorLogos((prev) =>
+      prev.map((s) => {
+        if (s.id !== sponsorCrop.id) return s;
+        if (s.preview.startsWith("blob:")) URL.revokeObjectURL(s.preview);
+        return { ...s, file, preview: URL.createObjectURL(file) };
+      }),
+    );
+    setSponsorCrop(null);
+  };
+
   const removeSponsor = (id: string) => {
     setSponsorLogos((prev) => {
       const target = prev.find((s) => s.id === id);
@@ -7152,6 +7196,10 @@ export function CreateEventForm({
         initialData?.features?.hasWorkshops ??
         (Array.isArray(initialData?.workshopSessions) &&
           initialData.workshopSessions.length > 0),
+      hasSponsors:
+        initialData?.features?.hasSponsors ??
+        (Array.isArray(initialData?.sponsorTypes) &&
+          initialData.sponsorTypes.length > 0),
     },
     ageRestriction: initialData?.ageRestriction ?? "All Ages",
     ageRestrictions: Array.isArray(initialData?.ageRestrictions)
@@ -7305,6 +7353,23 @@ export function CreateEventForm({
   // When set, the visitor-type form is editing this existing type in place
   // (Update) instead of creating a new one (Add).
   const [editingVisitorId, setEditingVisitorId] = useState<string | null>(null);
+
+  // Sponsorship tiers — same add/edit/remove shape as visitor types, but with
+  // only three fields (name, price, description).
+  const [sponsorTypes, setSponsorTypes] = useState<SponsorType[]>(
+    initialData?.sponsorTypes?.map((s: any) => ({ ...s })) ?? [],
+  );
+  const [currentSponsor, setCurrentSponsor] = useState({
+    name: "",
+    price: "0",
+    description: "",
+    collectPayment: true,
+    customOptions: [] as string[],
+  });
+  const [editingSponsorId, setEditingSponsorId] = useState<string | null>(null);
+  // Text box for adding one custom option at a time to the tier being
+  // added/edited (Voucher, Coupon, etc.) — not part of the tier itself.
+  const [newSponsorOption, setNewSponsorOption] = useState("");
 
   // Speaker Slot Templates (like table templates but for speaker zones)
   const [speakerSlotTemplates, setSpeakerSlotTemplates] = useState<any[]>(
@@ -7620,6 +7685,10 @@ export function CreateEventForm({
       if (initialData.visitorTypes) {
         setVisitorTypes(initialData.visitorTypes);
       }
+      if (initialData.sponsorTypes) {
+        setSponsorTypes(initialData.sponsorTypes);
+      }
+      setShowSponsorBar(initialData.showSponsorBar !== false);
       if (initialData.speakerSlotTemplates) {
         // Carry the saved speaker photos back onto their sessions, or the next
         // save sends image:"" for every speaker and erases them.
@@ -8127,6 +8196,7 @@ export function CreateEventForm({
       (currentTab === "speakers" && !f.hasSpeakers) ||
       (currentTab === "roundtables" && !f.hasRoundTables) ||
       (currentTab === "workshops" && !f.hasWorkshops) ||
+      (currentTab === "sponsors" && !f.hasSponsors) ||
       (currentTab === "layout" &&
         !f.hasStalls &&
         !f.hasSpeakers &&
@@ -8139,6 +8209,7 @@ export function CreateEventForm({
     formData.features.hasSpeakers,
     formData.features.hasRoundTables,
     formData.features.hasWorkshops,
+    formData.features.hasSponsors,
     venueConfigurations,
   ]);
 
@@ -8604,6 +8675,123 @@ export function CreateEventForm({
     if (editingWorkshopPackageId === id) resetWorkshopPackageForm();
   };
 
+  // ── Sponsorship tiers ──────────────────────────────────────────────
+  const resetSponsorForm = () => {
+    setCurrentSponsor({
+      name: "",
+      price: "0",
+      description: "",
+      collectPayment: true,
+      customOptions: [],
+    });
+    setNewSponsorOption("");
+    setEditingSponsorId(null);
+  };
+
+  // Add one custom option (Voucher, Coupon, …) to the tier being built.
+  const addSponsorOption = () => {
+    const v = newSponsorOption.trim();
+    if (!v) return;
+    if (currentSponsor.customOptions.includes(v)) {
+      setNewSponsorOption("");
+      return;
+    }
+    setCurrentSponsor((p) => ({
+      ...p,
+      customOptions: [...p.customOptions, v],
+    }));
+    setNewSponsorOption("");
+  };
+
+  const removeSponsorOption = (option: string) => {
+    setCurrentSponsor((p) => ({
+      ...p,
+      customOptions: p.customOptions.filter((o) => o !== option),
+    }));
+  };
+
+  // Add a new sponsorship tier, or update the one being edited in place.
+  const addSponsorType = () => {
+    if (!currentSponsor.name.trim()) {
+      toast({ title: "Sponsor type name is required", variant: "destructive" });
+      return;
+    }
+    // Individuals can't take payment, so tiers are always free for them —
+    // mirrors the visitor-type rule and the server-side guard. The
+    // collect-payment/custom-options toggle doesn't apply to them.
+    const collectPayment = isIndividualAccount
+      ? true
+      : currentSponsor.collectPayment;
+    // Non-cash tiers still carry a real price — it's shown to sponsors the
+    // same way a paid tier's price is, just fulfilled with items instead of
+    // money. Only individual accounts (which can't collect payment at all)
+    // are forced to zero.
+    const price = isIndividualAccount
+      ? 0
+      : parseFloat(currentSponsor.price) || 0;
+    if (!collectPayment && currentSponsor.customOptions.length === 0) {
+      toast({
+        title: "Add at least one option",
+        description:
+          "Since this tier doesn't collect payment, add what sponsors can choose instead (voucher, coupon, etc.).",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (editingSponsorId) {
+      setSponsorTypes((prev) =>
+        prev.map((s) =>
+          s.id === editingSponsorId
+            ? {
+                ...s,
+                name: currentSponsor.name.trim(),
+                price,
+                description: currentSponsor.description,
+                collectPayment,
+                customOptions: collectPayment
+                  ? []
+                  : currentSponsor.customOptions,
+              }
+            : s,
+        ),
+      );
+    } else {
+      setSponsorTypes((prev) => [
+        ...prev,
+        {
+          id: Math.random().toString(36).slice(2, 10),
+          name: currentSponsor.name.trim(),
+          price,
+          description: currentSponsor.description,
+          isActive: true,
+          collectPayment,
+          customOptions: collectPayment ? [] : currentSponsor.customOptions,
+        },
+      ]);
+    }
+    resetSponsorForm();
+  };
+
+  const editSponsorType = (id: string) => {
+    const s = sponsorTypes.find((st) => st.id === id);
+    if (!s) return;
+    setCurrentSponsor({
+      name: s.name,
+      price: String(s.price ?? 0),
+      description: s.description ?? "",
+      collectPayment: s.collectPayment !== false,
+      customOptions: s.customOptions ?? [],
+    });
+    setNewSponsorOption("");
+    setEditingSponsorId(id);
+  };
+
+  const removeSponsorType = (id: string) => {
+    setSponsorTypes((prev) => prev.filter((s) => s.id !== id));
+    if (editingSponsorId === id) resetSponsorForm();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -8739,6 +8927,7 @@ export function CreateEventForm({
         s.file ? { type: "new" } : { type: "existing", url: s.preview },
       );
       data.append("sponsorManifest", JSON.stringify(sponsorManifest));
+      data.append("showSponsorBar", String(showSponsorBar));
       data.append(
         "maxSpacesPerVendor",
         String(Math.max(1, parseInt(maxSpacesPerVendor, 10) || 1)),
@@ -8998,6 +9187,9 @@ export function CreateEventForm({
       // Add visitor types
       data.append("visitorTypes", JSON.stringify(visitorTypes));
 
+      // Sponsorship tiers
+      data.append("sponsorTypes", JSON.stringify(sponsorTypes));
+
       // Volunteers — emails trimmed; rows with no email are dropped so they
       // don't pollute the allow-list with empty strings.
       const cleanedVolunteers = volunteers
@@ -9079,6 +9271,7 @@ export function CreateEventForm({
         const showRoundTables = !!formData.features.hasRoundTables;
         const showSpeakers = !!formData.features.hasSpeakers;
         const showWorkshops = !!formData.features.hasWorkshops;
+        const showSponsors = !!formData.features.hasSponsors;
         // Layout tab is also useful when any door type is defined (per venue),
         // since the user needs the canvas to place those door markers.
         const anyDoorsEnabled = venueConfigurations.some(
@@ -9094,6 +9287,7 @@ export function CreateEventForm({
           (showSpeakers ? 1 : 0) +
           (showRoundTables ? 1 : 0) +
           (showWorkshops ? 1 : 0) +
+          (showSponsors ? 1 : 0) +
           (showLayout ? 1 : 0);
         const colsClass =
           (
@@ -9128,11 +9322,11 @@ export function CreateEventForm({
                   Volunteers
                 </TabsTrigger>
                 <TabsTrigger value="venue" className="text-sm">
-                  Venue Setup
+                  Venue
                 </TabsTrigger>
                 {showStalls && (
                   <TabsTrigger value="tables" className="text-sm">
-                    Space / AddOns
+                    Spaces
                   </TabsTrigger>
                 )}
 
@@ -9149,6 +9343,11 @@ export function CreateEventForm({
                 {showRoundTables && (
                   <TabsTrigger value="roundtables" className="text-sm">
                     Round Tables
+                  </TabsTrigger>
+                )}
+                {showSponsors && (
+                  <TabsTrigger value="sponsors" className="text-sm">
+                    Sponsors
                   </TabsTrigger>
                 )}
                 {showLayout && (
@@ -9291,35 +9490,35 @@ export function CreateEventForm({
                             when an event type is set: those sub-types are a
                             fixed list, not the free-form shared pool. */}
                           {!formData.eventType && (
-                          <div className="border-t p-2 flex gap-2 bg-muted/30">
-                            <Input
-                              value={newCategoryInput}
-                              onChange={(e) =>
-                                setNewCategoryInput(e.target.value)
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  handleAddCustomCategory();
+                            <div className="border-t p-2 flex gap-2 bg-muted/30">
+                              <Input
+                                value={newCategoryInput}
+                                onChange={(e) =>
+                                  setNewCategoryInput(e.target.value)
                                 }
-                              }}
-                              placeholder="Add new category"
-                              className="h-8 text-sm"
-                              disabled={addingCategory}
-                            />
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={handleAddCustomCategory}
-                              disabled={
-                                addingCategory || !newCategoryInput.trim()
-                              }
-                              className="h-8 px-3 shrink-0"
-                            >
-                              <Plus className="h-3 w-3 mr-1" />
-                              Add
-                            </Button>
-                          </div>
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    handleAddCustomCategory();
+                                  }
+                                }}
+                                placeholder="Add new category"
+                                className="h-8 text-sm"
+                                disabled={addingCategory}
+                              />
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={handleAddCustomCategory}
+                                disabled={
+                                  addingCategory || !newCategoryInput.trim()
+                                }
+                                className="h-8 px-3 shrink-0"
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                Add
+                              </Button>
+                            </div>
                           )}
                         </PopoverContent>
                       </Popover>
@@ -9686,8 +9885,9 @@ export function CreateEventForm({
                                 onClick={() =>
                                   handleInputChange(
                                     "ageRestrictions",
-                                    ((formData.ageRestrictions as any[]) ||
-                                      []).filter(
+                                    (
+                                      (formData.ageRestrictions as any[]) || []
+                                    ).filter(
                                       (_: any, idx: number) => idx !== i,
                                     ),
                                   )
@@ -10350,6 +10550,26 @@ export function CreateEventForm({
                   {/* Sponsorships — logos shown below the event banner on the
                     eventfront as a left-to-right moving carousel. No limit. */}
                   <div className="space-y-3">
+                    {/* The bar only renders publicly when this is on. Confirmed
+                        sponsors' logos flow into it automatically, alongside
+                        anything uploaded here. */}
+                    <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border p-3 hover:bg-muted/30">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">
+                          Show the sponsor bar on the event page
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Off hides the strip entirely — including the logos of
+                          sponsors whose payment you've confirmed.
+                        </p>
+                      </div>
+                      <Switch
+                        className="shrink-0"
+                        checked={showSponsorBar}
+                        onCheckedChange={setShowSponsorBar}
+                      />
+                    </label>
+
                     <div className="flex items-end justify-between gap-3">
                       <div>
                         <Label className="text-base font-semibold">
@@ -10397,6 +10617,24 @@ export function CreateEventForm({
                             />
                             <button
                               type="button"
+                              onClick={() =>
+                                setSponsorCrop({
+                                  id: s.id,
+                                  src:
+                                    s.preview.startsWith("blob:") ||
+                                    /^https?:\/\//.test(s.preview)
+                                      ? s.preview
+                                      : `${__API_URL__}${s.preview}`,
+                                })
+                              }
+                              className="absolute -left-2 -top-2 rounded-full bg-slate-700 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                              aria-label="Crop sponsor logo"
+                              title="Crop"
+                            >
+                              <Crop size={12} />
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => removeSponsor(s.id)}
                               className="absolute -right-2 -top-2 rounded-full bg-red-500 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
                               aria-label="Remove sponsor"
@@ -10412,10 +10650,21 @@ export function CreateEventForm({
                       </div>
                     )}
 
+                    {sponsorCrop && (
+                      <ImageCropModal
+                        open={!!sponsorCrop}
+                        image={sponsorCrop.src}
+                        onClose={() => setSponsorCrop(null)}
+                        onCropComplete={applySponsorCrop}
+                      />
+                    )}
+
                     {sponsorLogos.length > 0 && (
                       <div>
                         <p className="mb-1 text-xs font-medium text-muted-foreground">
                           Preview — moves left-to-right on the eventfront
+                          {!showSponsorBar &&
+                            " (hidden while the toggle is off)"}
                         </p>
                         <div className="overflow-hidden rounded-lg border">
                           <SponsorMarquee
@@ -12188,6 +12437,20 @@ export function CreateEventForm({
                           </p>
                         </div>
                       </label>
+                      <label className="flex items-start gap-3 border rounded-lg p-3 cursor-pointer hover:bg-muted/30">
+                        <Switch
+                          checked={!!formData.features.hasSponsors}
+                          onCheckedChange={(checked) =>
+                            handleFeatureChange("hasSponsors", checked)
+                          }
+                        />
+                        <div>
+                          <p className="font-medium text-sm">Sponsors</p>
+                          <p className="text-xs text-muted-foreground">
+                            Sponsorship tiers businesses can buy
+                          </p>
+                        </div>
+                      </label>
                     </div>
                   </CardContent>
                 </Card>
@@ -12750,6 +13013,285 @@ export function CreateEventForm({
                 </Card>
               </BlurOverlay>
             </ModuleGate>
+          </TabsContent>
+
+          {/* SPONSORS TAB — sponsorship tiers businesses can apply for */}
+          <TabsContent value="sponsors" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Handshake size={20} />
+                  Sponsorship Tiers
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Define the sponsorship packages businesses can buy. Each tier
+                  appears on your public event page with a "Become a sponsor"
+                  form.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="border rounded-xl p-5 bg-slate-50 space-y-4">
+                  <Label className="text-sm font-semibold text-slate-700">
+                    {editingSponsorId
+                      ? "Edit Sponsor Type"
+                      : "Add Sponsor Type"}
+                  </Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-xs">Type Name *</Label>
+                      <Input
+                        value={currentSponsor.name}
+                        onChange={(e) =>
+                          setCurrentSponsor((p) => ({
+                            ...p,
+                            name: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g. Gold, Silver, Community Partner"
+                      />
+                    </div>
+                    <div>
+                      {!isIndividualAccount && (
+                        <div className="flex items-center justify-between gap-3 rounded-lg border bg-white px-3 py-2">
+                          <div>
+                            <Label className="text-xs">Collect Payment</Label>
+                            <p className="text-[10px] text-muted-foreground">
+                              Off — sponsors pick from options you offer
+                              instead of paying.
+                            </p>
+                          </div>
+                          <Switch
+                            checked={currentSponsor.collectPayment}
+                            onCheckedChange={(checked) =>
+                              setCurrentSponsor((p) => ({
+                                ...p,
+                                collectPayment: checked,
+                              }))
+                            }
+                          />
+                        </div>
+                      )}
+                      <div className="mt-2">
+                        <Label className="text-xs">
+                          {isIndividualAccount || currentSponsor.collectPayment
+                            ? "Price"
+                            : "Value (what the sponsor provides instead)"}
+                        </Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={
+                            isIndividualAccount ? "0" : currentSponsor.price
+                          }
+                          disabled={isIndividualAccount}
+                          onChange={(e) =>
+                            setCurrentSponsor((p) => ({
+                              ...p,
+                              price: e.target.value,
+                            }))
+                          }
+                          placeholder="0"
+                        />
+                        {isIndividualAccount ? (
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            Personal events can't collect payment — tiers are
+                            free.
+                          </p>
+                        ) : (
+                          !currentSponsor.collectPayment && (
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                              Shown to sponsors the same way a price is — but
+                              instead of paying it, they provide items of this
+                              value (pick from the options below).
+                            </p>
+                          )
+                        )}
+                      </div>
+                      {!isIndividualAccount &&
+                        !currentSponsor.collectPayment && (
+                          <div className="mt-2">
+                            <Label className="text-xs">Add Option</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                value={newSponsorOption}
+                                onChange={(e) =>
+                                  setNewSponsorOption(e.target.value)
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    addSponsorOption();
+                                  }
+                                }}
+                                placeholder="e.g. Voucher, Coupon"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={addSponsorOption}
+                              >
+                                <Plus size={16} />
+                              </Button>
+                            </div>
+                            <p className="mt-1 text-[10px] text-muted-foreground">
+                              Examples of what a sponsor could provide to
+                              cover the value above (voucher, product hamper,
+                              service, …).
+                            </p>
+                          </div>
+                        )}
+                    </div>
+                    {!isIndividualAccount &&
+                      !currentSponsor.collectPayment && (
+                        <div>
+                          <Label className="text-xs">
+                            Options sponsors can choose
+                          </Label>
+                          {currentSponsor.customOptions.length === 0 ? (
+                            <p className="mt-2 text-xs text-muted-foreground">
+                              No options added yet.
+                            </p>
+                          ) : (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {currentSponsor.customOptions.map((opt) => (
+                                <span
+                                  key={opt}
+                                  className="inline-flex items-center gap-1 rounded-full border bg-white px-3 py-1 text-xs"
+                                >
+                                  {opt}
+                                  <button
+                                    type="button"
+                                    onClick={() => removeSponsorOption(opt)}
+                                    className="text-muted-foreground hover:text-red-600"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    <div className="md:col-span-2">
+                      <Label className="text-xs">Description</Label>
+                      <Textarea
+                        value={currentSponsor.description}
+                        onChange={(e) =>
+                          setCurrentSponsor((p) => ({
+                            ...p,
+                            description: e.target.value,
+                          }))
+                        }
+                        placeholder="What the sponsor gets — logo placement, stall, speaking slot, passes…"
+                        rows={3}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      onClick={addSponsorType}
+                      className="w-full md:w-auto"
+                    >
+                      {editingSponsorId ? (
+                        <>
+                          <Pencil size={16} className="mr-2" /> Update Sponsor
+                          Type
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={16} className="mr-2" /> Add Sponsor Type
+                        </>
+                      )}
+                    </Button>
+                    {editingSponsorId && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={resetSponsorForm}
+                        className="w-full md:w-auto"
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {sponsorTypes.length === 0 && (
+                  <div className="text-sm text-gray-400 border border-dashed rounded-lg p-6 text-center">
+                    No sponsor types added yet. Add at least one above.
+                  </div>
+                )}
+                <div className="space-y-3">
+                  {sponsorTypes.map((sponsor, index) => (
+                    <div
+                      key={sponsor.id}
+                      className={`border rounded-lg p-4 bg-white space-y-3 ${
+                        editingSponsorId === sponsor.id
+                          ? "ring-2 ring-primary border-primary"
+                          : ""
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-primary/10 text-primary rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <div className="font-semibold">{sponsor.name}</div>
+                            <div className="text-sm text-gray-500">
+                              {sponsor.price === 0
+                                ? "Free"
+                                : formatPrice(sponsor.price)}
+                              {sponsor.collectPayment === false &&
+                                " (Non-cash)"}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-primary hover:text-primary/80"
+                            onClick={() => editSponsorType(sponsor.id)}
+                          >
+                            <Pencil size={14} />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-500 hover:text-red-600"
+                            onClick={() => removeSponsorType(sponsor.id)}
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        </div>
+                      </div>
+                      {sponsor.collectPayment === false &&
+                        (sponsor.customOptions?.length ?? 0) > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {sponsor.customOptions!.map((opt) => (
+                              <span
+                                key={opt}
+                                className="rounded-full border bg-gray-50 px-2.5 py-0.5 text-xs text-gray-600"
+                              >
+                                {opt}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      {sponsor.description && (
+                        <p className="text-sm text-gray-600 bg-gray-50 rounded px-3 py-2">
+                          {sponsor.description}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* LAYOUT DESIGN TAB */}

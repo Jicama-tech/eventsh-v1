@@ -37,9 +37,11 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   MessageSquare,
-  Receipt,
   LifeBuoy,
   Award,
+  ChevronRight,
+  ChevronLeft,
+  Receipt,
 } from "lucide-react";
 import {
   Tooltip,
@@ -159,9 +161,7 @@ const OrganizerStorefrontCustomizer = lazy(() =>
 const RoundTableBookings = lazy(
   () => import("@/components/organizer/RoundTableBookings"),
 );
-const SupportPanel = lazy(
-  () => import("@/components/organizer/SupportPanel"),
-);
+const SupportPanel = lazy(() => import("@/components/organizer/SupportPanel"));
 const MembershipPanel = lazy(() =>
   import("@/components/organizer/MembershipPanel").then((m) => ({
     default: m.MembershipPanel,
@@ -982,7 +982,12 @@ export function OrganizerDashboard({
 
   const navigationItems = [
     { id: "chatbot", label: "Chatbot", icon: Bot, moduleKey: null },
-    { id: "dashboard", label: "Analytics", icon: Store, moduleKey: "analytics" },
+    {
+      id: "dashboard",
+      label: "Analytics",
+      icon: Store,
+      moduleKey: "analytics",
+    },
     {
       id: "kiosk",
       label: "In-Person Booking",
@@ -1003,7 +1008,7 @@ export function OrganizerDashboard({
     },
     {
       id: "users",
-      label: "Exhibitors/Visitors",
+      label: "CRM",
       icon: Users,
       moduleKey: "stalls",
     },
@@ -1192,8 +1197,8 @@ export function OrganizerDashboard({
 
         {/* Sidebar — fully hidden for Individuals (chatbot-only onboarding) */}
         {!isIndividual && (
-        <aside
-          className={`
+          <aside
+            className={`
             fixed lg:static lg:translate-x-0
             w-64 ${sidebarCollapsed ? "lg:w-16" : "lg:w-64"}
             border-r bg-card/95 backdrop-blur-sm lg:bg-muted/30
@@ -1205,106 +1210,109 @@ export function OrganizerDashboard({
                 : "-translate-x-full lg:translate-x-0"
             }
           `}
-        >
-          <div className="h-full flex flex-col">
-            <nav className="p-3 sm:p-4 space-y-1 sm:space-y-2 flex-1 overflow-y-auto">
-              <TooltipProvider delayDuration={0}>
-                {navigationItems
-                  .filter(
-                    (item) =>
-                      isTabAllowedForOperator(item.id) && isTabVisible(item.id),
-                  )
-                  .map((item) => {
-                    // Items without a moduleKey (Dashboard, Settings) are always available.
-                    const locked =
-                      !!item.moduleKey && !isModuleEnabled(item.moduleKey);
-                    const button = (
-                      <Button
-                        key={item.id}
-                        variant={
-                          activeTab === item.id ? "default" : "buttonOutline"
-                        }
-                        className={`w-full text-sm ${
-                          sidebarCollapsed
-                            ? "lg:justify-center lg:px-2 justify-start"
-                            : "justify-start"
-                        } ${locked ? "opacity-60" : ""}`}
-                        onClick={() => {
-                          // Demo: only the allowed tabs open; the rest (incl.
-                          // the storefront action) prompt to register/contact.
-                          if (demoMode && !DEMO_VIEW_TABS.includes(item.id)) {
-                            setShowDemoPrompt(true);
-                            return;
+          >
+            <div className="h-full flex flex-col">
+              <nav className="p-3 sm:p-4 space-y-1 sm:space-y-2 flex-1 overflow-y-auto">
+                <TooltipProvider delayDuration={0}>
+                  {navigationItems
+                    .filter(
+                      (item) =>
+                        isTabAllowedForOperator(item.id) &&
+                        isTabVisible(item.id),
+                    )
+                    .map((item) => {
+                      // Items without a moduleKey (Dashboard, Settings) are always available.
+                      const locked =
+                        !!item.moduleKey && !isModuleEnabled(item.moduleKey);
+                      const button = (
+                        <Button
+                          key={item.id}
+                          variant={
+                            activeTab === item.id ? "default" : "buttonOutline"
                           }
-                          if (item.id === "storefront") {
-                            handleViewStorefront();
-                          } else {
-                            handleTabChange(item.id);
+                          className={`w-full text-sm ${
+                            sidebarCollapsed
+                              ? "lg:justify-center lg:px-2 justify-start"
+                              : "justify-start"
+                          } ${locked ? "opacity-60" : ""}`}
+                          onClick={() => {
+                            // Demo: only the allowed tabs open; the rest (incl.
+                            // the storefront action) prompt to register/contact.
+                            if (demoMode && !DEMO_VIEW_TABS.includes(item.id)) {
+                              setShowDemoPrompt(true);
+                              return;
+                            }
+                            if (item.id === "storefront") {
+                              handleViewStorefront();
+                            } else {
+                              handleTabChange(item.id);
+                            }
+                          }}
+                          disabled={item.id === "storefront" && loading}
+                          title={
+                            locked ? "Upgrade your plan to unlock" : undefined
                           }
-                        }}
-                        disabled={item.id === "storefront" && loading}
-                        title={
-                          locked ? "Upgrade your plan to unlock" : undefined
-                        }
-                      >
-                        <item.icon
-                          className={`h-4 w-4 flex-shrink-0 ${
-                            sidebarCollapsed ? "lg:mr-0 mr-2" : "mr-2"
-                          }`}
-                        />
-                        <span
-                          className={`truncate flex-1 text-left ${
-                            sidebarCollapsed ? "lg:hidden" : ""
-                          }`}
                         >
-                          {item.id === "storefront" && loading
-                            ? "Loading..."
-                            : item.label}
-                        </span>
-                        {locked && (
-                          <Lock
-                            className={`h-3 w-3 ml-1 text-muted-foreground ${
-                              sidebarCollapsed ? "lg:hidden" : ""
+                          <item.icon
+                            className={`h-4 w-4 flex-shrink-0 ${
+                              sidebarCollapsed ? "lg:mr-0 mr-2" : "mr-2"
                             }`}
                           />
-                        )}
-                      </Button>
-                    );
-                    return sidebarCollapsed ? (
-                      <Tooltip key={item.id}>
-                        <TooltipTrigger asChild>{button}</TooltipTrigger>
-                        <TooltipContent
-                          side="right"
-                          className="hidden lg:block"
-                        >
-                          {item.label}
-                          {locked && " (locked)"}
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      button
-                    );
-                  })}
-              </TooltipProvider>
-            </nav>
-            {/* Desktop collapse toggle — pinned to bottom of sidebar */}
-            <div className="hidden lg:flex border-t p-2 justify-end">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSidebarCollapsed((v) => !v)}
-                title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                className="h-8 w-8 p-0"
-              >
-                {sidebarCollapsed ? (
-                  <PanelLeftOpen className="h-4 w-4" />
-                ) : (
-                  <PanelLeftClose className="h-4 w-4" />
-                )}
-              </Button>
+                          <span
+                            className={`truncate flex-1 text-left ${
+                              sidebarCollapsed ? "lg:hidden" : ""
+                            }`}
+                          >
+                            {item.id === "storefront" && loading
+                              ? "Loading..."
+                              : item.label}
+                          </span>
+                          {locked && (
+                            <Lock
+                              className={`h-3 w-3 ml-1 text-muted-foreground ${
+                                sidebarCollapsed ? "lg:hidden" : ""
+                              }`}
+                            />
+                          )}
+                        </Button>
+                      );
+                      return sidebarCollapsed ? (
+                        <Tooltip key={item.id}>
+                          <TooltipTrigger asChild>{button}</TooltipTrigger>
+                          <TooltipContent
+                            side="right"
+                            className="hidden lg:block"
+                          >
+                            {item.label}
+                            {locked && " (locked)"}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        button
+                      );
+                    })}
+                </TooltipProvider>
+              </nav>
+              {/* Desktop collapse toggle — pinned to bottom of sidebar */}
+              <div className="hidden lg:flex border-t p-2 justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSidebarCollapsed((v) => !v)}
+                  title={
+                    sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+                  }
+                  className="h-8 w-8 p-0"
+                >
+                  {sidebarCollapsed ? (
+                    <PanelLeftOpen className="h-4 w-4" />
+                  ) : (
+                    <PanelLeftClose className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
             </div>
-          </div>
-        </aside>
+          </aside>
         )}
 
         {/* Individual sidebar — desktop/tablet only (md+). Phones use the
@@ -1385,7 +1393,11 @@ export function OrganizerDashboard({
                       ? []
                       : navigationItems
                           .filter((n) => n.id !== "chatbot")
-                          .filter((n) => isTabAllowedForOperator(n.id) && isTabVisible(n.id))
+                          .filter(
+                            (n) =>
+                              isTabAllowedForOperator(n.id) &&
+                              isTabVisible(n.id),
+                          )
                           .map((n) => ({
                             id: n.id,
                             label: n.label,
@@ -1405,9 +1417,10 @@ export function OrganizerDashboard({
 
               <TabsContent value="dashboard" className="mt-0">
                 <ModuleGate moduleKey="analytics" hideWhenLocked>
-                <div className="space-y-4 sm:space-y-6">
-                  {/* Quick Actions */}
-                  {/* <Card>
+                  <div className="space-y-4 sm:space-y-6">
+
+                    {/* Quick Actions */}
+                    {/* <Card>
                     <CardHeader className="pb-3">
                       <CardTitle className="text-lg sm:text-xl">
                         Quick Actions
@@ -1473,17 +1486,17 @@ export function OrganizerDashboard({
                     </CardContent>
                   </Card> */}
 
-                  {/* Dashboard Overview Component */}
-                  <DashboardOverview
-                    setShowCreateEvent={setShowCreateEvent}
-                    setShowShopkeeperForm={setShowShopkeeperForm}
-                    onViewEvent={onViewEvent}
-                    handleEditEvent={handleEditEvent}
-                  />
+                    {/* Dashboard Overview Component */}
+                    <DashboardOverview
+                      setShowCreateEvent={setShowCreateEvent}
+                      setShowShopkeeperForm={setShowShopkeeperForm}
+                      onViewEvent={onViewEvent}
+                      handleEditEvent={handleEditEvent}
+                    />
 
-                  {/* Analytics charts (Recharts) */}
-                  {/* <OrganizerAnalyticsCharts /> */}
-                </div>
+                    {/* Analytics charts (Recharts) */}
+                    {/* <OrganizerAnalyticsCharts /> */}
+                  </div>
                 </ModuleGate>
               </TabsContent>
 
@@ -1877,4 +1890,3 @@ export function OrganizerDashboard({
     </div>
   );
 }
-

@@ -1,4 +1,11 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import {
+  useEffect,
+  useState,
+  useMemo,
+  useCallback,
+  lazy,
+  Suspense,
+} from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -10,6 +17,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -35,7 +43,12 @@ import { CreateEventForm } from "./CreateEventForm";
 import { MarriageEventForm } from "./MarriageEventForm";
 import { EventTypeChooser } from "./EventTypeChooser";
 import { CouponsManager } from "./CouponsManager";
-import { EventFeedbackDialog } from "./EventFeedbackDialog";
+const SupplierRequests = lazy(
+  () => import("@/components/organizer/SupplierRequests"),
+);
+const EventExpensesDialog = lazy(
+  () => import("@/components/organizer/EventExpensesDialog"),
+);
 import { RegistrationFormsDialog } from "./RegistrationFormsDialog";
 import type { EventTypeKey } from "@/lib/eventTypes";
 import {
@@ -57,7 +70,8 @@ import {
   Copy,
   Share2,
   QrCode,
-  MessageSquare,
+  Truck,
+  Receipt,
   Loader2,
   ClipboardList,
 } from "lucide-react";
@@ -65,7 +79,6 @@ import { format } from "date-fns";
 import { jwtDecode } from "jwt-decode";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";
-import { useSubscription as useEventshSubscription } from "@/hooks/useSubscription";
 
 export interface Event {
   _id: string;
@@ -172,11 +185,12 @@ export interface Event {
 }
 
 const MyEvents: React.FC = () => {
-  const { isModuleEnabled: isPlanModuleEnabled } = useEventshSubscription();
-  const canCollectFeedback = isPlanModuleEnabled("feedback");
   const apiURL = __API_URL__;
   const { toast } = useToast();
-  const [feedbackForEvent, setFeedbackForEvent] = useState<Event | null>(null);
+  // Supplier requirements + quotations for one event, shown in a dialog.
+  const [suppliesForEvent, setSuppliesForEvent] = useState<Event | null>(null);
+  // Expenses + approvals for one event.
+  const [expensesForEvent, setExpensesForEvent] = useState<Event | null>(null);
   const [regFormsForEvent, setRegFormsForEvent] = useState<Event | null>(null);
 
   const [events, setEvents] = useState<Event[]>([]);
@@ -1303,6 +1317,25 @@ const MyEvents: React.FC = () => {
                         >
                           <QrCode size={16} />
                         </Button>
+                        {/* Requirements + quotations for this event, in place
+                            — no need to leave for a separate Suppliers tab. */}
+                        <Button
+                          variant="buttonOutline"
+                          size="icon"
+                          onClick={() => setSuppliesForEvent(event)}
+                          title="Supplies — set requirements, share the supplier link, and review quotations"
+                        >
+                          <Truck size={16} />
+                        </Button>
+                        {/* Out-of-pocket spend, with its approval cycle. */}
+                        <Button
+                          variant="buttonOutline"
+                          size="icon"
+                          onClick={() => setExpensesForEvent(event)}
+                          title="Expenses — log expenses and approve what the team has submitted"
+                        >
+                          <Receipt size={16} />
+                        </Button>
                         {(event.features?.hasStalls ||
                           event.features?.hasSpeakers ||
                           event.features?.hasRoundTables ||
@@ -1314,16 +1347,6 @@ const MyEvents: React.FC = () => {
                             title="Registration Forms — choose which fields appear on this event's public application forms"
                           >
                             <ClipboardList size={16} />
-                          </Button>
-                        )}
-                        {canCollectFeedback && (
-                          <Button
-                            variant="buttonOutline"
-                            size="icon"
-                            onClick={() => setFeedbackForEvent(event)}
-                            title="Feedback — view ratings + comments and toggle deposit refund status"
-                          >
-                            <MessageSquare size={16} />
                           </Button>
                         )}
                         {canDeleteEvents && (
@@ -1407,12 +1430,47 @@ const MyEvents: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      <EventFeedbackDialog
-        eventId={feedbackForEvent?._id ?? null}
-        eventTitle={feedbackForEvent?.title}
-        open={!!feedbackForEvent}
-        onOpenChange={(o) => !o && setFeedbackForEvent(null)}
-      />
+      {/* Team expenses for the chosen event, with approvals */}
+      <Suspense fallback={null}>
+        <EventExpensesDialog
+          open={!!expensesForEvent}
+          onClose={() => setExpensesForEvent(null)}
+          eventId={expensesForEvent?._id}
+          eventTitle={expensesForEvent?.title}
+        />
+      </Suspense>
+
+      {/* Supplier requirements + quotations for the chosen event */}
+      <Dialog
+        open={!!suppliesForEvent}
+        onOpenChange={(o) => !o && setSuppliesForEvent(null)}
+      >
+        <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-4xl">
+          <DialogHeader className="shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              <Truck size={18} />
+              Supplies — {suppliesForEvent?.title}
+            </DialogTitle>
+            <DialogDescription>
+              Set what you need, share the private supplier link, and review
+              every quotation for this event.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="-mr-2 flex-1 overflow-y-auto pr-2">
+            {suppliesForEvent && (
+              <Suspense
+                fallback={
+                  <div className="flex justify-center py-10">
+                    <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-primary" />
+                  </div>
+                }
+              >
+                <SupplierRequests eventId={suppliesForEvent._id} />
+              </Suspense>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <RegistrationFormsDialog
         event={regFormsForEvent}
