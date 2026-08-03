@@ -226,24 +226,24 @@ const WorkshopHostRequests = ({
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Completed":
-        return "bg-green-100 text-green-700";
+        return "bg-success/15 text-success";
       case "Pending":
-        return "bg-yellow-100 text-yellow-700";
+        return "bg-warning/15 text-warning";
       case "Confirmed":
-        return "bg-blue-100 text-blue-700";
+        return "bg-primary/15 text-primary";
       case "Rejected":
-        return "bg-red-100 text-red-700";
+        return "bg-destructive/15 text-destructive";
       case "Cancelled":
-        return "bg-gray-100 text-gray-700";
+        return "bg-muted text-muted-foreground";
       default:
-        return "bg-gray-100 text-gray-600";
+        return "bg-muted text-muted-foreground";
     }
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="animate-spin text-gray-400" size={24} />
+        <Loader2 className="animate-spin text-muted-foreground" size={24} />
       </div>
     );
   }
@@ -252,9 +252,9 @@ const WorkshopHostRequests = ({
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <GraduationCap size={48} className="mx-auto mb-3 text-gray-300" />
-          <p className="text-gray-500">No workshop host applications yet</p>
-          <p className="text-xs text-gray-400 mt-1">
+          <GraduationCap size={48} className="mx-auto mb-3 text-muted-foreground/50" />
+          <p className="text-muted-foreground">No workshop host applications yet</p>
+          <p className="text-xs text-muted-foreground mt-1">
             Turn on "Accept Workshop Host Applications" in the event's
             Workshops tab to let outside hosts apply.
           </p>
@@ -306,14 +306,14 @@ const WorkshopHostRequests = ({
               <option value="Rejected">Rejected</option>
               <option value="Cancelled">Cancelled</option>
             </select>
-            <span className="ml-auto text-sm text-gray-500">
+            <span className="ml-auto text-sm text-muted-foreground">
               Showing {filtered.length} of {requests.length}
             </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-gray-500">
+                <tr className="border-b text-left text-muted-foreground">
                   <th className="pb-3 pr-4 font-medium">Host</th>
                   <th className="pb-3 pr-4 font-medium">Workshop</th>
                   <th className="pb-3 pr-4 font-medium">Visitor Price</th>
@@ -326,7 +326,7 @@ const WorkshopHostRequests = ({
               <tbody>
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-gray-500">
+                    <td colSpan={7} className="py-8 text-center text-muted-foreground">
                       No applications match your filters.
                     </td>
                   </tr>
@@ -334,13 +334,13 @@ const WorkshopHostRequests = ({
                 {filtered.map((req) => (
                   <tr
                     key={req._id}
-                    className="border-b last:border-0 hover:bg-gray-50"
+                    className="border-b last:border-0 hover:bg-muted/50"
                   >
                     <td className="py-3 pr-4">
-                      <p className="font-medium text-gray-800">
+                      <p className="font-medium text-foreground">
                         {req.hostName}
                       </p>
-                      <p className="text-xs text-gray-400">{req.hostEmail}</p>
+                      <p className="text-xs text-muted-foreground">{req.hostEmail}</p>
                     </td>
                     <td className="py-3 pr-4">
                       <p className="font-medium">{req.workshopName}</p>
@@ -359,16 +359,16 @@ const WorkshopHostRequests = ({
                       {req.finalPrice > 0 ? (
                         req.amountOwed > 0 ? (
                           <div>
-                            <p className="font-semibold text-amber-700">
+                            <p className="font-semibold text-warning">
                               {formatPrice(req.amountOwed)}
                             </p>
-                            <p className="text-[10px] text-gray-400">
+                            <p className="text-[10px] text-muted-foreground">
                               {req.ticketsSold} ticket
                               {req.ticketsSold === 1 ? "" : "s"} sold
                             </p>
                           </div>
                         ) : (
-                          <span className="text-xs text-gray-400">
+                          <span className="text-xs text-muted-foreground">
                             No sales yet
                           </span>
                         )
@@ -385,7 +385,7 @@ const WorkshopHostRequests = ({
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-7 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                        className="h-7 text-xs text-primary hover:text-primary hover:bg-primary/10"
                         onClick={() => openReview(req)}
                       >
                         <Eye size={12} className="mr-1" /> Review
@@ -419,18 +419,18 @@ const WorkshopHostRequests = ({
 
             <div className="space-y-4">
               <div className="rounded-lg border p-3 space-y-1">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Host
                 </p>
-                <p className="font-semibold text-gray-800">
+                <p className="font-semibold text-foreground">
                   {selected.hostName}
                 </p>
-                <p className="text-xs text-gray-500">{selected.hostEmail}</p>
+                <p className="text-xs text-muted-foreground">{selected.hostEmail}</p>
                 {workshopFieldOn("hostPhone") && selected.hostPhone && (
-                  <p className="text-xs text-gray-500">{selected.hostPhone}</p>
+                  <p className="text-xs text-muted-foreground">{selected.hostPhone}</p>
                 )}
                 {workshopFieldOn("hostBio") && selected.hostBio && (
-                  <p className="text-sm text-gray-600 mt-1">
+                  <p className="text-sm text-muted-foreground mt-1">
                     {selected.hostBio}
                   </p>
                 )}
@@ -439,19 +439,19 @@ const WorkshopHostRequests = ({
               {((workshopFieldOn("hostAccountName") && selected.hostAccountName) ||
                 (workshopFieldOn("hostAccountDetails") &&
                   selected.hostAccountDetails)) && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-1">
-                  <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">
+                <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 space-y-1">
+                  <p className="text-xs font-semibold text-warning uppercase tracking-wider">
                     Payout Account
                   </p>
                   {workshopFieldOn("hostAccountName") &&
                     selected.hostAccountName && (
-                    <p className="text-sm text-gray-800">
+                    <p className="text-sm text-foreground">
                       {selected.hostAccountName}
                     </p>
                   )}
                   {workshopFieldOn("hostAccountDetails") &&
                     selected.hostAccountDetails && (
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-muted-foreground">
                       {selected.hostAccountDetails}
                     </p>
                   )}
@@ -459,17 +459,17 @@ const WorkshopHostRequests = ({
               )}
 
               {selected.finalPrice > 0 && selected.status === "Completed" && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex items-center justify-between">
+                <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">
+                    <p className="text-xs font-semibold text-warning uppercase tracking-wider">
                       Owed to Host
                     </p>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       {selected.ticketsSold || 0} ticket
                       {selected.ticketsSold === 1 ? "" : "s"} sold
                     </p>
                   </div>
-                  <p className="text-lg font-bold text-amber-700">
+                  <p className="text-lg font-bold text-warning">
                     {formatPrice(selected.amountOwed || 0)}
                   </p>
                 </div>
@@ -478,22 +478,22 @@ const WorkshopHostRequests = ({
               {workshopFieldOn("workshopDescription") &&
                 selected.workshopDescription && (
                 <div className="rounded-lg border p-3">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
                     Description
                   </p>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-muted-foreground">
                     {selected.workshopDescription}
                   </p>
                 </div>
               )}
 
               {selected.status === "Completed" ? (
-                <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+                <div className="rounded-lg border border-success/30 bg-success/10 p-3 text-sm text-success">
                   This workshop is live and bookable on the event page.
                 </div>
               ) : (
                 <div className="rounded-lg border p-3 space-y-3">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Adjust before approving
                   </p>
                   <div className="grid grid-cols-2 gap-3">
@@ -592,7 +592,7 @@ const WorkshopHostRequests = ({
                 selected.isCharged &&
                 selected.hostingFee > 0 &&
                 selected.paymentStatus !== "Paid" && (
-                  <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                  <div className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm text-primary">
                     Awaiting the host's hosting-fee payment.
                   </div>
                 )}
@@ -602,7 +602,7 @@ const WorkshopHostRequests = ({
                 selected.hostingFee > 0 &&
                 selected.paymentStatus === "Paid" && (
                   <Button
-                    className="w-full bg-green-600 hover:bg-green-700"
+                    className="w-full bg-success hover:bg-success/90"
                     disabled={busy}
                     onClick={confirmPayment}
                   >
@@ -617,7 +617,7 @@ const WorkshopHostRequests = ({
               {selected.status === "Pending" && (
                 <div className="flex gap-2">
                   <Button
-                    className="flex-1 bg-green-600 hover:bg-green-700"
+                    className="flex-1 bg-success hover:bg-success/90"
                     disabled={busy}
                     onClick={approve}
                   >
@@ -625,7 +625,7 @@ const WorkshopHostRequests = ({
                   </Button>
                   <Button
                     variant="outline"
-                    className="flex-1 text-red-600 hover:text-red-700"
+                    className="flex-1 text-destructive hover:text-destructive"
                     disabled={busy}
                     onClick={() => reject()}
                   >
