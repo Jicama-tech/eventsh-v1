@@ -8111,7 +8111,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   {/* Current Layout Display — the header row doubles as
                     a toggle so the heavy canvas only renders when the
                     user expands it. Chevron sits on the right of the
-                    "Table Arrangement" title so the whole strip reads
+                    "Space Arrangement" title so the whole strip reads
                     as one clickable disclosure. */}
                   {venueConfig && venueConfig[currentLayoutIndex] && (
                     <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
@@ -8126,7 +8126,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           className="text-sm sm:text-lg font-bold tracking-widest uppercase text-left"
                           style={{ color: design?.primaryColor }}
                         >
-                          {venueConfig[currentLayoutIndex].name} — Table
+                          {venueConfig[currentLayoutIndex].name} — Space
                           Arrangement
                         </p>
                         <span className="ml-auto">
@@ -8286,6 +8286,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                                     {table.height * 10}cm
                                                   </div>
                                                   {(() => {
+                                                    // Organizer opt-out — hide prices
+                                                    // entirely from the public tooltip.
+                                                    if (
+                                                      (eventData as any)
+                                                        ?.showSpacePricesOnEventfront ===
+                                                      false
+                                                    )
+                                                      return null;
                                                     // Show BOTH the member price and the
                                                     // regular price whenever the space
                                                     // has a member price (resolved from
@@ -8598,6 +8606,141 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
                           {/* Available-tables list intentionally removed — space
                           availability is hidden on the public venue preview. */}
+
+                          {/* Space-template color legend — organizer opt-in via
+                              showSpacePricesOnEventfront. Dedupes by template
+                              name so many spaces of the same type collapse to
+                              one swatch, and only lists templates actually
+                              placed (and for sale) on the CURRENTLY selected
+                              layout — not-for-sale reference spaces/tables
+                              have no price, so they're excluded entirely.
+                              Each entry also shows the price (member tier
+                              too, if it differs) so the price is visible
+                              without hovering every individual space. */}
+                          {(eventData as any)?.showSpacePricesOnEventfront !==
+                            false &&
+                            (() => {
+                              const tpls = Array.isArray(
+                                (eventData as any)?.tableTemplates,
+                              )
+                                ? (eventData as any).tableTemplates
+                                : [];
+                              const entries = new Map<
+                                string,
+                                {
+                                  name: string;
+                                  color: string;
+                                  regular: number;
+                                  member: number | null;
+                                  suffix?: string;
+                                }
+                              >();
+                              (venueTables[currentLayoutId] || [])
+                                .filter(
+                                  (t) =>
+                                    inCrop(t.x, t.y) &&
+                                    (t as any).forSale !== false,
+                                )
+                                .forEach((t) => {
+                                  const tpl = tpls.find(
+                                    (x: any) => x?.id === (t as any).id,
+                                  );
+                                  const name =
+                                    tpl?.name || t.type || "Space";
+                                  const color =
+                                    (t as any).color ||
+                                    tpl?.color ||
+                                    "#22c55e";
+                                  const regular = t.tablePrice ?? 0;
+                                  const member =
+                                    (t as any).memberPrice != null
+                                      ? (t as any).memberPrice
+                                      : (tpl?.memberPrice ?? null);
+                                  if (!entries.has(name))
+                                    entries.set(name, {
+                                      name,
+                                      color,
+                                      regular,
+                                      member,
+                                    });
+                                });
+                              roundTableData
+                                .filter(
+                                  (rt: any) =>
+                                    belongsToLayout(rt?.venueConfigId) &&
+                                    rt?.forSale !== false,
+                                )
+                                .forEach((rt: any) => {
+                                  const name = rt.category || "Round Table";
+                                  const color = rt.color || "#8B5CF6";
+                                  const isChairMode =
+                                    rt.sellingMode === "chair";
+                                  const regular = isChairMode
+                                    ? rtChairPrice(rt)
+                                    : rtTablePrice(rt);
+                                  const member = isChairMode
+                                    ? (rt?.memberChairPrice ?? null)
+                                    : (rt?.memberTablePrice ?? null);
+                                  if (!entries.has(name))
+                                    entries.set(name, {
+                                      name,
+                                      color,
+                                      regular,
+                                      member,
+                                      suffix: isChairMode
+                                        ? " / seat"
+                                        : undefined,
+                                    });
+                                });
+                              const list = Array.from(entries.values());
+                              if (list.length === 0) return null;
+                              return (
+                                <div className="flex flex-wrap gap-2 px-1 pt-1">
+                                  {list.map((e) => {
+                                    const hasMember =
+                                      e.member != null &&
+                                      Number(e.member) !== Number(e.regular);
+                                    return (
+                                      <div
+                                        key={e.name}
+                                        className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5"
+                                      >
+                                        <span
+                                          className="inline-block h-3 w-3 flex-shrink-0 rounded-sm border"
+                                          style={{
+                                            backgroundColor: e.color + "80",
+                                            borderColor: e.color,
+                                          }}
+                                        />
+                                        <div className="leading-tight">
+                                          <div className="text-xs font-semibold text-gray-700">
+                                            {e.name}
+                                          </div>
+                                          {hasMember ? (
+                                            <div className="text-[10px] whitespace-nowrap">
+                                              <span className="font-medium text-emerald-600">
+                                                Member{" "}
+                                                {formatPrice(e.member!)}
+                                              </span>
+                                              <span className="text-gray-400">
+                                                {" "}
+                                                · {formatPrice(e.regular)}
+                                                {e.suffix}
+                                              </span>
+                                            </div>
+                                          ) : (
+                                            <div className="text-[10px] text-gray-500 whitespace-nowrap">
+                                              {formatPrice(e.regular)}
+                                              {e.suffix}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()}
                         </div>
                       )}
                     </div>
