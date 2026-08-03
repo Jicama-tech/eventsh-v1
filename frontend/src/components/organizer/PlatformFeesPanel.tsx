@@ -208,7 +208,7 @@ export function PlatformFeesPanel() {
             <div className="text-xs uppercase tracking-wide text-muted-foreground">
               Awaiting confirmation
             </div>
-            <div className="text-2xl font-bold text-amber-600">
+            <div className="text-2xl font-bold text-warning">
               {pendingCount}
             </div>
           </CardContent>
@@ -246,11 +246,11 @@ export function PlatformFeesPanel() {
         </CardHeader>
         <CardContent>
           {loading && events.length === 0 ? (
-            <div className="flex items-center justify-center py-10 text-slate-500 gap-2">
+            <div className="flex items-center justify-center py-10 text-muted-foreground gap-2">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading…
             </div>
           ) : events.length === 0 ? (
-            <div className="py-10 text-center text-slate-500">
+            <div className="py-10 text-center text-muted-foreground">
               No events yet — once attendees, exhibitors, or speakers
               register, fees will appear here.
             </div>
@@ -279,7 +279,7 @@ export function PlatformFeesPanel() {
                       <TableRow key={e.eventId}>
                         <TableCell>
                           <div className="font-medium">{e.title}</div>
-                          <div className="text-xs text-slate-500">
+                          <div className="text-xs text-muted-foreground">
                             {e.startDate
                               ? new Date(e.startDate).toLocaleDateString()
                               : ""}
@@ -310,12 +310,12 @@ export function PlatformFeesPanel() {
                               <CheckCircle2 className="h-3 w-3 mr-1" /> Paid
                             </Badge>
                           ) : isSubmitted ? (
-                            <Badge className="bg-amber-500">
+                            <Badge className="bg-warning">
                               <Hourglass className="h-3 w-3 mr-1" /> Awaiting
                               admin
                             </Badge>
                           ) : isAwaiting ? (
-                            <Badge variant="outline" className="text-slate-500">
+                            <Badge variant="outline" className="text-muted-foreground">
                               <Hourglass className="h-3 w-3 mr-1" /> In
                               progress
                             </Badge>
@@ -324,12 +324,12 @@ export function PlatformFeesPanel() {
                               Owed
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="text-slate-400">
+                            <Badge variant="outline" className="text-muted-foreground">
                               —
                             </Badge>
                           )}
                           {claim?.ref && (
-                            <div className="text-[10px] font-mono text-slate-400 mt-1">
+                            <div className="text-[10px] font-mono text-muted-foreground mt-1">
                               {claim.ref}
                             </div>
                           )}
@@ -367,7 +367,7 @@ export function PlatformFeesPanel() {
             </div>
           )}
           {!region && data && (
-            <p className="text-xs text-amber-600 mt-2">
+            <p className="text-xs text-warning mt-2">
               Your country doesn't have a QR scheme configured. Contact
               support to settle event fees off-band.
             </p>
@@ -414,11 +414,11 @@ export function PlatformFeesPanel() {
             </CardHeader>
             <CardContent>
               {loading && (!data?.memberships?.rows?.length) ? (
-                <div className="flex items-center justify-center py-10 text-slate-500 gap-2">
+                <div className="flex items-center justify-center py-10 text-muted-foreground gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" /> Loading…
                 </div>
               ) : !data?.memberships?.rows?.length ? (
-                <div className="py-10 text-center text-slate-500">
+                <div className="py-10 text-center text-muted-foreground">
                   No active exhibitor memberships yet — once one is
                   confirmed, the platform fee row appears here.
                 </div>
@@ -445,7 +445,7 @@ export function PlatformFeesPanel() {
                             <div className="font-medium">
                               {m.exhibitorName || m.exhibitorEmail || "—"}
                             </div>
-                            <div className="text-xs text-slate-500">
+                            <div className="text-xs text-muted-foreground">
                               {m.exhibitorEmail}
                               {m.exhibitorWhatsapp
                                 ? ` · ${m.exhibitorWhatsapp}`
@@ -486,7 +486,7 @@ export function PlatformFeesPanel() {
               )}
 
               {data?.memberships?.claim && (
-                <div className="mt-3 rounded-md border border-amber-200 bg-amber-50/50 px-3 py-2 text-xs text-amber-800 flex items-center gap-2">
+                <div className="mt-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning flex items-center gap-2">
                   {data.memberships.claim.status === "confirmed" ? (
                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                   ) : (
@@ -500,7 +500,7 @@ export function PlatformFeesPanel() {
               )}
 
               {!region && data && (
-                <p className="text-xs text-amber-600 mt-2">
+                <p className="text-xs text-warning mt-2">
                   Your country doesn't have a QR scheme configured.
                   Contact support to settle memberships fees off-band.
                 </p>

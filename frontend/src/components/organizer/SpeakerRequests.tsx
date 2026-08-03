@@ -348,10 +348,10 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
 
   const getPaymentBadge = (paymentStatus: string) => {
     const map: Record<string, { variant: any; color: string }> = {
-      Unpaid: { variant: "destructive", color: "text-red-600" },
-      Partial: { variant: "secondary", color: "text-yellow-600" },
-      Paid: { variant: "default", color: "text-green-600" },
-      Waived: { variant: "outline", color: "text-gray-500" },
+      Unpaid: { variant: "destructive", color: "text-destructive" },
+      Partial: { variant: "secondary", color: "text-warning" },
+      Paid: { variant: "default", color: "text-success" },
+      Waived: { variant: "outline", color: "text-muted-foreground" },
     };
     const config = map[paymentStatus] || map.Waived;
     return <Badge variant={config.variant}>{paymentStatus}</Badge>;
@@ -393,7 +393,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
             <CardTitle className="text-sm font-medium text-muted-foreground">Confirmed Speakers</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-green-600">{stats.confirmed}</div>
+            <div className="text-3xl font-bold text-success">{stats.confirmed}</div>
           </CardContent>
         </Card>
         <Card>
@@ -401,7 +401,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
             <CardTitle className="text-sm font-medium text-muted-foreground">Pending Review</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-yellow-600">{stats.pending}</div>
+            <div className="text-3xl font-bold text-warning">{stats.pending}</div>
           </CardContent>
         </Card>
       </div>
@@ -492,7 +492,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                     </TableCell>
                     <TableCell>
                       {event.status === "published" ? (
-                        <Badge className="bg-green-100 text-green-800">Live</Badge>
+                        <Badge className="bg-success/15 text-success">Live</Badge>
                       ) : (
                         <Badge variant="outline">{event.status || "Draft"}</Badge>
                       )}
@@ -564,7 +564,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                           <div className="font-medium flex items-center gap-1.5">
                             {req.name}
                             {req.isKeynote && (
-                              <Badge className="bg-amber-100 text-amber-800 text-[9px] px-1">KEYNOTE</Badge>
+                              <Badge className="bg-warning/15 text-warning text-[9px] px-1">KEYNOTE</Badge>
                             )}
                           </div>
                           <div className="text-sm text-muted-foreground">
@@ -622,10 +622,10 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                           {/* Pending: Approve / Reject / Set Fee */}
                           {!req.isFromEvent && req.status === "Pending" && (
                             <>
-                              <Button size="sm" variant="ghost" className="text-green-600" onClick={() => handleUpdateStatus(req._id, "Confirmed")}>
+                              <Button size="sm" variant="ghost" className="text-success" onClick={() => handleUpdateStatus(req._id, "Confirmed")}>
                                 <CheckCircle2 className="h-4 w-4" />
                               </Button>
-                              <Button size="sm" variant="ghost" className="text-red-600" onClick={() => handleUpdateStatus(req._id, "Rejected")}>
+                              <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleUpdateStatus(req._id, "Rejected")}>
                                 <XCircle className="h-4 w-4" />
                               </Button>
                               <Button size="sm" variant="ghost" onClick={() => { setSelectedSpeaker(req); setFeeCharged(req.isCharged || false); setFeeAmount(req.fee || 0); setShowFeeDialog(true); }}>
@@ -647,7 +647,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                               <Button size="sm" variant="ghost" onClick={() => { setSelectedSpeaker(req); setFeeCharged(req.isCharged || false); setFeeAmount(req.fee || 0); setShowFeeDialog(true); }}>
                                 <DollarSign className="h-4 w-4" />
                               </Button>
-                              <Button size="sm" variant="ghost" className="text-red-600" onClick={() => handleUpdateStatus(req._id, "Cancelled")}>
+                              <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleUpdateStatus(req._id, "Cancelled")}>
                                 <XCircle className="h-4 w-4" />
                               </Button>
                             </>
@@ -714,10 +714,10 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
 
               {selectedSpeaker.socialLinks && (
                 <div className="flex gap-4 flex-wrap">
-                  {selectedSpeaker.socialLinks.linkedin && <a href={selectedSpeaker.socialLinks.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />LinkedIn</a>}
-                  {selectedSpeaker.socialLinks.twitter && <a href={selectedSpeaker.socialLinks.twitter} target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Twitter</a>}
+                  {selectedSpeaker.socialLinks.linkedin && <a href={selectedSpeaker.socialLinks.linkedin} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />LinkedIn</a>}
+                  {selectedSpeaker.socialLinks.twitter && <a href={selectedSpeaker.socialLinks.twitter} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Twitter</a>}
                   {selectedSpeaker.socialLinks.instagram && <a href={selectedSpeaker.socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="text-pink-600 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Instagram</a>}
-                  {selectedSpeaker.socialLinks.youtube && <a href={selectedSpeaker.socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="text-red-600 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />YouTube</a>}
+                  {selectedSpeaker.socialLinks.youtube && <a href={selectedSpeaker.socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="text-destructive hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />YouTube</a>}
                   {selectedSpeaker.socialLinks.facebook && <a href={selectedSpeaker.socialLinks.facebook} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Facebook</a>}
                   {selectedSpeaker.socialLinks.website && <a href={selectedSpeaker.socialLinks.website} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Website</a>}
                 </div>
@@ -729,7 +729,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                   <Label className="text-xs font-medium">Sessions</Label>
                   <div className="space-y-2 mt-2">
                     {(selectedSpeaker.sessions || selectedSpeaker.slots || []).map((s: any, i: number) => (
-                      <div key={i} className="bg-slate-50 rounded-lg p-3 border text-sm">
+                      <div key={i} className="bg-muted rounded-lg p-3 border text-sm">
                         <p className="font-medium">{s.topic || s.agenda}</p>
                         {s.description && <p className="text-muted-foreground text-xs mt-1">{s.description}</p>}
                         <div className="flex gap-4 mt-1 text-xs text-muted-foreground">

@@ -389,7 +389,7 @@ export function HelpFAQ({ isIndividual = false }: { isIndividual?: boolean }) {
           return (
             <Card key={section.title}>
               <CardHeader
-                className="cursor-pointer hover:bg-gray-50 transition-colors"
+                className="cursor-pointer hover:bg-muted/50 transition-colors"
                 onClick={() => setExpandedSection(isExpanded ? null : section.title)}
               >
                 <div className="flex items-center justify-between">
@@ -420,7 +420,7 @@ export function HelpFAQ({ isIndividual = false }: { isIndividual?: boolean }) {
                         className="border rounded-lg overflow-hidden"
                       >
                         <button
-                          className="w-full text-left p-4 hover:bg-gray-50 transition-colors flex items-start justify-between gap-3"
+                          className="w-full text-left p-4 hover:bg-muted/50 transition-colors flex items-start justify-between gap-3"
                           onClick={() => setExpandedItem(isItemExpanded ? null : itemKey)}
                         >
                           <span className="font-medium text-sm">{item.q}</span>
@@ -431,7 +431,7 @@ export function HelpFAQ({ isIndividual = false }: { isIndividual?: boolean }) {
                           )}
                         </button>
                         {isItemExpanded && (
-                          <div className="px-4 pb-4 text-sm text-muted-foreground leading-relaxed bg-gray-50/50">
+                          <div className="px-4 pb-4 text-sm text-muted-foreground leading-relaxed bg-muted/50">
                             {item.a}
                           </div>
                         )}
