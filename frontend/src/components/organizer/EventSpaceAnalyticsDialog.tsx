@@ -712,7 +712,7 @@ export function EventSpaceAnalyticsDialog({
               Loading analytics…
             </div>
           ) : error ? (
-            <div className="py-12 text-center text-red-500">{error}</div>
+            <div className="py-12 text-center text-destructive">{error}</div>
           ) : !selected ? (
             // ----- LEVEL 1: template list -----
             templates.length === 0 ? (
@@ -739,7 +739,7 @@ export function EventSpaceAnalyticsDialog({
                       <span className="flex items-center gap-1">
                         <LayoutGrid className="h-4 w-4" /> {t.total} spaces
                       </span>
-                      <span className="flex items-center gap-1 text-green-600">
+                      <span className="flex items-center gap-1 text-success">
                         <CheckCircle2 className="h-4 w-4" /> {t.booked} booked
                       </span>
                     </div>
@@ -838,9 +838,9 @@ function StatTile({
   tone?: "default" | "green" | "amber";
 }) {
   const tones: Record<string, string> = {
-    default: "bg-muted/50 text-stone-700",
-    green: "bg-green-50 text-green-700",
-    amber: "bg-amber-50 text-amber-700",
+    default: "bg-muted/50 text-foreground",
+    green: "bg-success/10 text-success",
+    amber: "bg-warning/10 text-warning",
   };
   return (
     <div className={`rounded-xl p-4 ${tones[tone]}`}>

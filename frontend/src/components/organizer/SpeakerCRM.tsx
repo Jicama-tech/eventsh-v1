@@ -380,7 +380,7 @@ export default function SpeakerCRM() {
                     <TableRow key={s._id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">
+                          <div className="w-9 h-9 rounded-full overflow-hidden bg-muted flex items-center justify-center flex-shrink-0">
                             {s.image ? (
                               <img
                                 src={imageUrl(s.image)}
@@ -388,7 +388,7 @@ export default function SpeakerCRM() {
                                 className="w-full h-full object-cover"
                               />
                             ) : (
-                              <span className="text-xs font-bold text-gray-500">
+                              <span className="text-xs font-bold text-muted-foreground">
                                 {s.name?.charAt(0)?.toUpperCase()}
                               </span>
                             )}
@@ -444,7 +444,7 @@ export default function SpeakerCRM() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="text-red-600 hover:text-red-700"
+                            className="text-destructive hover:text-destructive"
                             disabled={deletingId === s._id}
                             onClick={() => remove(s)}
                           >
@@ -470,7 +470,7 @@ export default function SpeakerCRM() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">
+              <div className="w-10 h-10 rounded-full overflow-hidden bg-muted flex items-center justify-center flex-shrink-0">
                 {detail?.speaker?.image ? (
                   <img
                     src={imageUrl(detail.speaker.image)}
@@ -478,7 +478,7 @@ export default function SpeakerCRM() {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <span className="text-sm font-bold text-gray-500">
+                  <span className="text-sm font-bold text-muted-foreground">
                     {detail?.speaker?.name?.charAt(0)?.toUpperCase()}
                   </span>
                 )}
@@ -674,7 +674,7 @@ export default function SpeakerCRM() {
             {/* Headshot */}
             <div className="flex items-center gap-4">
               <div
-                className="w-20 h-20 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-gray-50 flex-shrink-0"
+                className="w-20 h-20 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-muted flex-shrink-0"
                 onClick={() =>
                   document.getElementById("speaker-crm-photo")?.click()
                 }
