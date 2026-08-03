@@ -207,6 +207,7 @@ export interface StallRequest {
   checkOutTime: Date;
   notes?: string;
   cancellationReason?: string;
+  cancelledVia?: string;
   brandName?: string;
   nameOfApplicant: string;
   businessOwnerNationality: string;

@@ -329,6 +329,19 @@ export class StallsController {
   }
 
   /**
+   * Restore a stall that was cancelled by timer-expiry or manual delete —
+   * reassigns it back to the vendor and re-books its space.
+   * PATCH /stalls/:id/restore
+   */
+  @Patch(":id/restore")
+  async restoreStall(
+    @Param("id") id: string,
+    @Body() body: { changedBy?: string },
+  ) {
+    return await this.stallsService.restoreStall(id, body?.changedBy);
+  }
+
+  /**
    * Scan QR code for check-in/check-out
    * POST /stalls/scan-qr
    */

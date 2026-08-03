@@ -60,6 +60,7 @@ import {
   Wifi,
   Trash2,
   Pencil,
+  RotateCcw,
 } from "lucide-react";
 import {
   FaFacebook,
@@ -365,6 +366,10 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   // Type-to-confirm guard for the destructive stall delete.
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const DELETE_CONFIRM_PHRASE = "I_WANT_TO_DELETE";
+  // Restore-stall confirmation (undoes a timer-expiry/manual-delete cancel;
+  // reassigns the stall back to the vendor and re-books its space).
+  const [showRestoreStallDialog, setShowRestoreStallDialog] = useState(false);
+  const [restoreTargetStall, setRestoreTargetStall] = useState<any>(null);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   // Optional proof the organizer/operator can attach when confirming a payment
   // (e.g. a screenshot the vendor sent over WhatsApp). Both are optional.
@@ -1591,6 +1596,66 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     const eventPassed = end ? new Date(end).getTime() < Date.now() : false;
     const fullyPaid = stall?.paymentStatus === "Paid";
     return !(fullyPaid && eventPassed);
+  };
+
+  // Only stalls cancelled by timer-expiry or manual delete are restorable —
+  // organizer-approved vendor cancellations and plain status-updates carry
+  // side effects (zeroed coupon, promised refund) a blind restore shouldn't
+  // silently undo. Stalls cancelled before this feature shipped have no
+  // cancelledVia tag and so won't show the button (fails safe).
+  const canRestoreStall = (stall: any) =>
+    stall?.status === "Cancelled" &&
+    ["auto-timeout", "manual-delete"].includes(stall?.cancelledVia);
+
+  // Mirrors the backend's getPreCancelStatus — best-effort preview of which
+  // status a restore will land on, shown in the confirm dialog.
+  const getPreCancelStatusLabel = (stall: any): string => {
+    const history: any[] = stall?.statusHistory || [];
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].status === "Cancelled") {
+        for (let j = i - 1; j >= 0; j--) {
+          if (history[j].status !== "Cancelled") return history[j].status;
+        }
+        break;
+      }
+    }
+    return "Pending";
+  };
+
+  const handleRestoreStall = async () => {
+    if (!restoreTargetStall || !selectedEvent) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(
+        `${apiURL}/stalls/${restoreTargetStall._id}/restore`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ changedBy: getActorLabel() }),
+        },
+      );
+      const result = await response.json();
+      if (result.success) {
+        toast({
+          duration: 5000,
+          title: "Stall restored",
+          description:
+            "The stall was reassigned to the vendor and its space re-booked.",
+        });
+        setShowRestoreStallDialog(false);
+        setRestoreTargetStall(null);
+        await fetchStallTickets(selectedEvent._id);
+      } else throw new Error(result.message);
+    } catch (error: any) {
+      toast({
+        duration: 5000,
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Who is performing an action, for the stall timeline. Resolved from the JWT:
@@ -3253,6 +3318,20 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         <Trash2 className="h-4 w-4" />
                                       </Button>
                                     )}
+                                    {canManageStallDeletion && canRestoreStall(s) && (
+                                      <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-7 w-7 text-green-700 border-green-300 hover:bg-green-50"
+                                        onClick={() => {
+                                          setRestoreTargetStall(s);
+                                          setShowRestoreStallDialog(true);
+                                        }}
+                                        title="Restore stall (reassign to the vendor & re-book its space)"
+                                      >
+                                        <RotateCcw className="h-4 w-4" />
+                                      </Button>
+                                    )}
                                   </div>
                                 </TableCell>
                               </TableRow>
@@ -3744,6 +3823,20 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                   }}
                                 >
                                   <Trash2 className="h-3 w-3" />
+                                </Button>
+                              )}
+                              {canManageStallDeletion && canRestoreStall(stall) && (
+                                <Button
+                                  size="sm"
+                                  variant="buttonOutline"
+                                  className="text-green-700 border-green-300 hover:bg-green-50"
+                                  title="Restore stall (reassign to the vendor & re-book its space)"
+                                  onClick={() => {
+                                    setRestoreTargetStall(stall);
+                                    setShowRestoreStallDialog(true);
+                                  }}
+                                >
+                                  <RotateCcw className="h-3 w-3" />
                                 </Button>
                               )}
 
@@ -4439,6 +4532,10 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           setReturnDepositStallId(stall._id);
           setShowReturnDepositDialog(true);
         }}
+        onRestoreStall={(stall) => {
+          setRestoreTargetStall(stall);
+          setShowRestoreStallDialog(true);
+        }}
         onNoteAdded={async () => {
           if (stallRequest?._id) await fetchStall(stallRequest._id);
         }}
@@ -4668,6 +4765,65 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 <>
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete Stall
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Restore Stall Dialog — undoes a timer-expiry / manual-delete cancel. */}
+      <Dialog
+        open={showRestoreStallDialog}
+        onOpenChange={(o) => {
+          setShowRestoreStallDialog(o);
+          if (!o) setRestoreTargetStall(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-green-600" />
+              Restore this stall?
+            </DialogTitle>
+            <DialogDescription>
+              This reassigns the stall back to{" "}
+              <strong>
+                {restoreTargetStall?.shopkeeperId?.name ||
+                  restoreTargetStall?.nameOfApplicant ||
+                  "the vendor"}
+              </strong>{" "}
+              and re-books the space it previously held. It will go back to{" "}
+              <strong>{getPreCancelStatusLabel(restoreTargetStall)}</strong>{" "}
+              status. If another stall has since booked the same space, this
+              will fail with an error instead of overwriting it.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button
+              variant="buttonOutline"
+              onClick={() => {
+                setShowRestoreStallDialog(false);
+                setRestoreTargetStall(null);
+              }}
+            >
+              Go Back
+            </Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700"
+              onClick={handleRestoreStall}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Restoring...
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Restore Stall
                 </>
               )}
             </Button>
