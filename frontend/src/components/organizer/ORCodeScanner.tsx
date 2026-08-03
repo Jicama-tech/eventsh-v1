@@ -753,18 +753,18 @@ export default function QRTicketScanner() {
   const renderOTPVerification = () => (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
-        <Shield className="mx-auto h-12 w-12 text-blue-600 mb-4" />
+        <Shield className="mx-auto h-12 w-12 text-primary mb-4" />
         <CardTitle>Volunteer Sign-In</CardTitle>
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-muted-foreground">
           Sign in with the Google account (Gmail) the organizer added to this
           event's volunteer list.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
         {eventData && (
-          <div className="bg-gray-50 p-4 rounded-lg">
+          <div className="bg-muted p-4 rounded-lg">
             <p className="font-medium">{eventData.title}</p>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               {eventData.organizer.organizationName}
             </p>
           </div>
@@ -799,7 +799,7 @@ export default function QRTicketScanner() {
             </svg>
             Continue with Google
           </Button>
-          <p className="text-xs text-gray-500 text-center">
+          <p className="text-xs text-muted-foreground text-center">
             Only Gmail IDs on this event's volunteer list can sign in.
           </p>
         </div>
@@ -812,15 +812,15 @@ export default function QRTicketScanner() {
   const renderModeSelection = () => (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
-        <Camera className="mx-auto h-12 w-12 text-blue-600 mb-4" />
+        <Camera className="mx-auto h-12 w-12 text-primary mb-4" />
         <CardTitle>Select Scan Type</CardTitle>
-        <p className="text-sm text-gray-600">Choose what you want to scan</p>
+        <p className="text-sm text-muted-foreground">Choose what you want to scan</p>
       </CardHeader>
       <CardContent className="space-y-4">
         {eventData && (
-          <div className="bg-gray-50 p-4 rounded-lg">
+          <div className="bg-muted p-4 rounded-lg">
             <p className="font-medium">{eventData.title}</p>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               {eventData.organizer.organizationName}
             </p>
           </div>
@@ -828,9 +828,9 @@ export default function QRTicketScanner() {
 
         {/* Signed-in volunteer banner + sign out. */}
         {volunteer && (
-          <div className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
+          <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
             <div className="min-w-0">
-              <p className="text-xs text-gray-500">Signed in as</p>
+              <p className="text-xs text-muted-foreground">Signed in as</p>
               <p className="truncate text-sm font-medium">
                 {volunteer.name || volunteer.email}
               </p>
@@ -848,14 +848,14 @@ export default function QRTicketScanner() {
         <div className="space-y-3">
           <Button
             onClick={() => handleModeSelection("event-ticket")}
-            className="w-full bg-blue-600 hover:bg-blue-700"
+            className="w-full bg-primary hover:bg-primary/90"
           >
             <Camera className="mr-2 h-4 w-4" />
             Visitor Ticket
           </Button>
           <Button
             onClick={() => handleModeSelection("stall-ticket")}
-            className="w-full bg-green-600 hover:bg-green-700"
+            className="w-full bg-success hover:bg-success/90"
           >
             <Camera className="mr-2 h-4 w-4" />
             Exhibitor Ticket
@@ -869,7 +869,7 @@ export default function QRTicketScanner() {
           </Button>
           <Button
             onClick={() => handleModeSelection("round-table")}
-            className="w-full bg-amber-600 hover:bg-amber-700"
+            className="w-full bg-warning hover:bg-warning/90"
           >
             <Camera className="mr-2 h-4 w-4" />
             Round Table Ticket
@@ -883,7 +883,7 @@ export default function QRTicketScanner() {
   const renderScanner = () => (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
-        <Camera className="mx-auto h-12 w-12 text-green-600 mb-4" />
+        <Camera className="mx-auto h-12 w-12 text-success mb-4" />
         <CardTitle>
           {scanMode === "event-ticket"
             ? "Scan Event Ticket"
@@ -893,7 +893,7 @@ export default function QRTicketScanner() {
                 ? "Scan Round Table Ticket"
                 : "Scan Stall Ticket"}
         </CardTitle>
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-muted-foreground">
           {scanMode === "event-ticket"
             ? "Point your camera at the attendee's ticket QR code"
             : scanMode === "round-table"
@@ -905,26 +905,26 @@ export default function QRTicketScanner() {
         <div className="relative">
           <div
             id="qr-reader"
-            className="w-full rounded-lg overflow-hidden border-2 border-dashed border-gray-300"
+            className="w-full rounded-lg overflow-hidden border-2 border-dashed border-muted-foreground/30"
             style={{ minHeight: "300px" }}
           />
 
           {isProcessing && (
-            <div className="absolute inset-0 bg-white bg-opacity-80 flex items-center justify-center rounded-lg">
+            <div className="absolute inset-0 bg-card bg-opacity-80 flex items-center justify-center rounded-lg">
               <div className="text-center">
-                <RefreshCw className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
+                <RefreshCw className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
                 <p className="text-sm font-medium">Processing...</p>
               </div>
             </div>
           )}
 
           {scanResult === "error" && (
-            <div className="absolute inset-0 bg-red-50 bg-opacity-95 flex items-center justify-center rounded-lg">
+            <div className="absolute inset-0 bg-destructive/10 bg-opacity-95 flex items-center justify-center rounded-lg">
               <div className="text-center p-4">
-                <XCircle className="h-12 w-12 text-red-600 mx-auto mb-2" />
-                <p className="font-medium text-red-800">Scan Failed</p>
-                <p className="text-sm text-red-600 mb-3">{errorMessage}</p>
-                <p className="text-xs text-gray-600">Restarting scanner...</p>
+                <XCircle className="h-12 w-12 text-destructive mx-auto mb-2" />
+                <p className="font-medium text-destructive">Scan Failed</p>
+                <p className="text-sm text-destructive mb-3">{errorMessage}</p>
+                <p className="text-xs text-muted-foreground">Restarting scanner...</p>
               </div>
             </div>
           )}
@@ -945,27 +945,27 @@ export default function QRTicketScanner() {
   const renderCheckInOutSelection = () => (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
-        <Camera className="mx-auto h-12 w-12 text-green-600 mb-4" />
+        <Camera className="mx-auto h-12 w-12 text-success mb-4" />
         <CardTitle>Select Action</CardTitle>
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-muted-foreground">
           QR code scanned successfully. What would you like to do?
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-          <p className="text-sm text-green-700 font-medium">
+        <div className="bg-success/10 border border-success/30 rounded-lg p-3 text-center">
+          <p className="text-sm text-success font-medium">
             ✅ QR Code Verified
           </p>
-          <p className="text-xs text-green-600 mt-1">
+          <p className="text-xs text-success mt-1">
             Please select the action below
           </p>
         </div>
 
         {/* Error message if check-out validation fails */}
         {scanResult === "error" && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
-            <XCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
-            <p className="text-sm text-red-700">{errorMessage}</p>
+          <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 flex items-start gap-2">
+            <XCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+            <p className="text-sm text-destructive">{errorMessage}</p>
           </div>
         )}
 
@@ -973,7 +973,7 @@ export default function QRTicketScanner() {
           <Button
             onClick={() => scanMode === "speaker-ticket" ? handleSpeakerActionConfirm("CHECK_IN") : scanMode === "round-table" ? handleRoundTableActionConfirm("CHECK_IN") : handleStallActionConfirm("CHECK_IN")}
             disabled={isProcessing}
-            className="w-full bg-green-600 hover:bg-green-700 h-14 text-base"
+            className="w-full bg-success hover:bg-success/90 h-14 text-base"
           >
             {isProcessing && (stallAction === "CHECK_IN" || speakerAction === "CHECK_IN" || roundTableAction === "CHECK_IN") ? (
               <RefreshCw className="mr-2 h-5 w-5 animate-spin" />
@@ -1018,13 +1018,13 @@ export default function QRTicketScanner() {
   const renderSuccessEventTicket = () => (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
-        <CheckCircle className="mx-auto h-16 w-16 text-green-600 mb-4" />
-        <CardTitle className="text-green-800">Attendance Marked!</CardTitle>
+        <CheckCircle className="mx-auto h-16 w-16 text-success mb-4" />
+        <CardTitle className="text-success">Attendance Marked!</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {ticketData && (
-          <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-            <h3 className="font-semibold text-green-800 mb-2">
+          <div className="bg-success/10 p-4 rounded-lg border border-success/30">
+            <h3 className="font-semibold text-success mb-2">
               Event Ticket Details
             </h3>
             <div className="space-y-1 text-sm">
@@ -1045,7 +1045,7 @@ export default function QRTicketScanner() {
               </p>
               <p>
                 <strong>Status:</strong>
-                <span className="ml-1 px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
+                <span className="ml-1 px-2 py-1 bg-success/15 text-success rounded-full text-xs">
                   Checked In
                 </span>
               </p>
@@ -1064,8 +1064,8 @@ export default function QRTicketScanner() {
   const renderSuccessStallTicket = () => (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
-        <CheckCircle className="mx-auto h-16 w-16 text-green-600 mb-4" />
-        <CardTitle className="text-green-800">
+        <CheckCircle className="mx-auto h-16 w-16 text-success mb-4" />
+        <CardTitle className="text-success">
           {stallAction === "CHECK_OUT"
             ? "Stall Checked Out!"
             : "Stall Checked In!"}
@@ -1073,7 +1073,7 @@ export default function QRTicketScanner() {
       </CardHeader>
       <CardContent className="space-y-4">
         {stallData && (
-          <div className="bg-green-50 p-4 rounded-lg border border-green-200 space-y-2 text-sm">
+          <div className="bg-success/10 p-4 rounded-lg border border-success/30 space-y-2 text-sm">
             <p>
               <strong>Shopkeeper:</strong> {stallData.shopkeeper.name}
             </p>
@@ -1091,8 +1091,8 @@ export default function QRTicketScanner() {
               <span
                 className={`ml-1 px-2 py-1 rounded-full text-xs font-medium ${
                   stallAction === "CHECK_OUT"
-                    ? "bg-orange-100 text-orange-800"
-                    : "bg-green-100 text-green-800"
+                    ? "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300"
+                    : "bg-success/15 text-success"
                 }`}
               >
                 {stallAction === "CHECK_OUT" ? "Checked Out" : "Checked In"}
@@ -1100,10 +1100,10 @@ export default function QRTicketScanner() {
             </p>
 
             {stallData.Tables?.length > 0 && (
-              <div className="pt-2 border-t border-green-200">
+              <div className="pt-2 border-t border-success/30">
                 <p className="font-semibold mb-1">Tables:</p>
                 {stallData.Tables.map((table) => (
-                  <p key={table.tableId} className="text-xs text-gray-600">
+                  <p key={table.tableId} className="text-xs text-muted-foreground">
                     {table.tableName} ({table.tableType}) — ${table.price}
                   </p>
                 ))}
@@ -1111,10 +1111,10 @@ export default function QRTicketScanner() {
             )}
 
             {stallData.AddOns?.length > 0 && (
-              <div className="pt-2 border-t border-green-200">
+              <div className="pt-2 border-t border-success/30">
                 <p className="font-semibold mb-1">Add-Ons:</p>
                 {stallData.AddOns.map((addOn) => (
-                  <p key={addOn.addOnId} className="text-xs text-gray-600">
+                  <p key={addOn.addOnId} className="text-xs text-muted-foreground">
                     {addOn.name} x{addOn.quantity} — ${addOn.price}
                   </p>
                 ))}
@@ -1146,22 +1146,22 @@ export default function QRTicketScanner() {
             Back
           </Button>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">QR Scanner</h1>
-            <p className="text-sm text-gray-600">
+            <h1 className="text-xl font-bold text-foreground">QR Scanner</h1>
+            <p className="text-sm text-muted-foreground">
               {eventData?.title || "Loading event..."}
             </p>
           </div>
         </div>
 
         {/* Security Notice */}
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+        <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 mb-6">
           <div className="flex items-start">
-            <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" />
+            <AlertCircle className="h-5 w-5 text-warning mt-0.5 mr-3 flex-shrink-0" />
             <div className="text-sm">
-              <p className="font-medium text-yellow-800 mb-1">
+              <p className="font-medium text-warning mb-1">
                 Security Notice
               </p>
-              <p className="text-yellow-700">
+              <p className="text-warning">
                 Only official EventSH QR codes can be scanned. Regular QR
                 scanners will not work with our secure tickets.
               </p>
@@ -1195,25 +1195,25 @@ export default function QRTicketScanner() {
           speakerData && (
             <Card className="w-full max-w-md mx-auto">
               <CardHeader className="text-center">
-                <CheckCircle className="mx-auto h-16 w-16 text-green-500 mb-2" />
-                <CardTitle className="text-green-700">
+                <CheckCircle className="mx-auto h-16 w-16 text-success mb-2" />
+                <CardTitle className="text-success">
                   {speakerData.action === "CHECK_IN" ? "Speaker Checked In!" : "Speaker Checked Out!"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-2">
-                  <p className="font-semibold text-purple-800">{speakerData.speakerName}</p>
+                <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4 space-y-2">
+                  <p className="font-semibold text-purple-800 dark:text-purple-200">{speakerData.speakerName}</p>
                   {speakerData.sessions?.length > 0 && (
-                    <p className="text-sm text-purple-600">Session: {speakerData.sessions[0].topic}</p>
+                    <p className="text-sm text-purple-600 dark:text-purple-300">Session: {speakerData.sessions[0].topic}</p>
                   )}
                   {speakerData.checkInTime && (
-                    <p className="text-xs text-gray-600">Check-in: {new Date(speakerData.checkInTime).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Check-in: {new Date(speakerData.checkInTime).toLocaleString()}</p>
                   )}
                   {speakerData.checkOutTime && (
-                    <p className="text-xs text-gray-600">Check-out: {new Date(speakerData.checkOutTime).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Check-out: {new Date(speakerData.checkOutTime).toLocaleString()}</p>
                   )}
                   {speakerData.duration && (
-                    <p className="text-xs text-gray-600">Duration: {speakerData.duration} minutes</p>
+                    <p className="text-xs text-muted-foreground">Duration: {speakerData.duration} minutes</p>
                   )}
                 </div>
                 <Button onClick={resetScanner} className="w-full">
@@ -1228,24 +1228,24 @@ export default function QRTicketScanner() {
           roundTableData && (
             <Card className="w-full max-w-md mx-auto">
               <CardHeader className="text-center">
-                <CheckCircle className="mx-auto h-16 w-16 text-green-500 mb-2" />
-                <CardTitle className="text-green-700">
+                <CheckCircle className="mx-auto h-16 w-16 text-success mb-2" />
+                <CardTitle className="text-success">
                   {roundTableData.action === "CHECK_IN" ? "Visitor Checked In!" : "Visitor Checked Out!"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-2">
-                  <p className="font-semibold text-amber-800">{roundTableData.visitorName}</p>
-                  <p className="text-sm text-amber-600">Table: {roundTableData.tableName} ({roundTableData.tableCategory})</p>
-                  <p className="text-sm text-amber-600">Seats: {roundTableData.seats}</p>
+                <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 space-y-2">
+                  <p className="font-semibold text-warning">{roundTableData.visitorName}</p>
+                  <p className="text-sm text-warning">Table: {roundTableData.tableName} ({roundTableData.tableCategory})</p>
+                  <p className="text-sm text-warning">Seats: {roundTableData.seats}</p>
                   {roundTableData.checkInTime && (
-                    <p className="text-xs text-gray-600">Check-in: {new Date(roundTableData.checkInTime).toLocaleTimeString()}</p>
+                    <p className="text-xs text-muted-foreground">Check-in: {new Date(roundTableData.checkInTime).toLocaleTimeString()}</p>
                   )}
                   {roundTableData.checkOutTime && (
-                    <p className="text-xs text-gray-600">Check-out: {new Date(roundTableData.checkOutTime).toLocaleTimeString()}</p>
+                    <p className="text-xs text-muted-foreground">Check-out: {new Date(roundTableData.checkOutTime).toLocaleTimeString()}</p>
                   )}
                   {roundTableData.durationMinutes && (
-                    <p className="text-xs text-gray-600">Duration: {roundTableData.durationMinutes} minutes</p>
+                    <p className="text-xs text-muted-foreground">Duration: {roundTableData.durationMinutes} minutes</p>
                   )}
                 </div>
                 <Button onClick={resetScanner} className="w-full">
@@ -1261,17 +1261,17 @@ export default function QRTicketScanner() {
             <Card className="w-full max-w-sm">
               <CardHeader>
                 <div className="flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-orange-500" />
+                  <AlertCircle className="h-5 w-5 text-warning" />
                   <CardTitle className="text-base">Confirm Check Out</CardTitle>
                 </div>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-sm text-muted-foreground mt-1">
                   Are you sure you want to <strong>Check Out</strong> this
                   {scanMode === "speaker-ticket" ? " speaker" : scanMode === "round-table" ? " visitor" : " exhibitor"}? This action cannot be undone.
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                  <p className="text-xs text-orange-700 font-medium">
+                <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-3">
+                  <p className="text-xs text-orange-700 dark:text-orange-300 font-medium">
                     To confirm, type{" "}
                     <span className="font-bold tracking-widest">CHECK_OUT</span>{" "}
                     in the box below:
@@ -1290,7 +1290,7 @@ export default function QRTicketScanner() {
                 />
 
                 {checkOutConfirmError && (
-                  <p className="text-xs text-red-600 flex items-center gap-1">
+                  <p className="text-xs text-destructive flex items-center gap-1">
                     <XCircle className="h-3 w-3" />
                     {checkOutConfirmError}
                   </p>
@@ -1332,7 +1332,7 @@ export default function QRTicketScanner() {
               {eventId ? (
                 <OperatorVenueView eventId={eventId} />
               ) : (
-                <div className="text-sm text-slate-500 italic text-center py-8">
+                <div className="text-sm text-muted-foreground italic text-center py-8">
                   No event id in URL.
                 </div>
               )}
