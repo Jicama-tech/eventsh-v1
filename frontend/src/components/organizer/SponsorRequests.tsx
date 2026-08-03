@@ -110,12 +110,12 @@ function money(amount: number, country?: string): string {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  Applied: "bg-amber-100 text-amber-700",
-  Approved: "bg-blue-100 text-blue-700",
-  "Payment Submitted": "bg-purple-100 text-purple-700",
-  Confirmed: "bg-green-100 text-green-700",
-  Rejected: "bg-red-100 text-red-700",
-  Cancelled: "bg-stone-200 text-stone-600",
+  Applied: "bg-warning/15 text-warning",
+  Approved: "bg-primary/15 text-primary",
+  "Payment Submitted": "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+  Confirmed: "bg-success/15 text-success",
+  Rejected: "bg-destructive/15 text-destructive",
+  Cancelled: "bg-muted text-muted-foreground",
 };
 
 function eventTitle(app: SponsorApplication): string {
@@ -650,7 +650,7 @@ export default function SponsorRequests({ eventId }: { eventId?: string } = {}) 
                         </a>
                       )}
                       {selected.paymentVerified && (
-                        <p className="flex items-center gap-1 pt-1 text-green-700">
+                        <p className="flex items-center gap-1 pt-1 text-success">
                           <CheckCircle2 className="h-3.5 w-3.5" /> Payment
                           verified
                         </p>
@@ -702,7 +702,7 @@ export default function SponsorRequests({ eventId }: { eventId?: string } = {}) 
                 <DialogFooter className="flex-col gap-2 sm:flex-row">
                   <Button
                     variant="outline"
-                    className="flex-1 border-green-200 text-green-700 hover:bg-green-50"
+                    className="flex-1 border-success/30 text-success hover:bg-success/10"
                     onClick={() => {
                       setActionNote("");
                       setAction("Approved");
@@ -712,7 +712,7 @@ export default function SponsorRequests({ eventId }: { eventId?: string } = {}) 
                   </Button>
                   <Button
                     variant="outline"
-                    className="flex-1 border-red-200 text-red-700 hover:bg-red-50"
+                    className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10"
                     onClick={() => {
                       setActionNote("");
                       setAction("Rejected");

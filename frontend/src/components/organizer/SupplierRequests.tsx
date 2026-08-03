@@ -143,14 +143,14 @@ function money(amount: number, country?: string): string {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  Quoted: "bg-amber-100 text-amber-700",
-  Approved: "bg-blue-100 text-blue-700",
-  Negotiating: "bg-purple-100 text-purple-700",
-  "Partially Paid": "bg-teal-100 text-teal-700",
-  Paid: "bg-green-100 text-green-700",
-  Completed: "bg-green-100 text-green-700",
-  Rejected: "bg-red-100 text-red-700",
-  Cancelled: "bg-stone-200 text-stone-600",
+  Quoted: "bg-warning/15 text-warning",
+  Approved: "bg-primary/15 text-primary",
+  Negotiating: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+  "Partially Paid": "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300",
+  Paid: "bg-success/15 text-success",
+  Completed: "bg-success/15 text-success",
+  Rejected: "bg-destructive/15 text-destructive",
+  Cancelled: "bg-muted text-muted-foreground",
 };
 
 // Paid-so-far / outstanding for a quotation. Prefers the balance the backend
@@ -556,7 +556,7 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
           {/* Auto-filled from what's sold, so the organizer reviews rather
               than retypes. */}
           {prefilled && (
-            <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
+            <div className="flex items-start gap-2 rounded-xl border border-primary/30 bg-primary/10 p-3 text-xs text-primary">
               <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
                 Prefilled from the add-ons sold for this event —{" "}
@@ -609,7 +609,7 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="shrink-0 text-stone-400 hover:text-red-600"
+                    className="shrink-0 text-stone-400 hover:text-destructive"
                     onClick={() => removeReq(i)}
                     title="Remove"
                   >
@@ -633,22 +633,22 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
                     <div
                       className={`rounded-lg border p-2 text-xs ${
                         f.fullyServed
-                          ? "border-green-200 bg-green-50"
-                          : "border-amber-200 bg-amber-50"
+                          ? "border-success/30 bg-success/10"
+                          : "border-warning/30 bg-warning/10"
                       }`}
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2 font-semibold">
                         <span className="flex items-center gap-1.5">
                           {f.fullyServed ? (
-                            <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                            <CheckCircle2 className="h-3.5 w-3.5 text-success" />
                           ) : (
-                            <PackageOpen className="h-3.5 w-3.5 text-amber-600" />
+                            <PackageOpen className="h-3.5 w-3.5 text-warning" />
                           )}
                           Served {f.served} of {f.required}
                         </span>
                         <span
                           className={
-                            f.fullyServed ? "text-green-700" : "text-amber-700"
+                            f.fullyServed ? "text-success" : "text-warning"
                           }
                         >
                           {f.fullyServed
@@ -736,7 +736,7 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
               disabled={!linkUrl}
             >
               {copied ? (
-                <Check className="mr-1 h-4 w-4 text-green-600" />
+                <Check className="mr-1 h-4 w-4 text-success" />
               ) : (
                 <Copy className="mr-1 h-4 w-4" />
               )}
@@ -813,7 +813,7 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
                         {/* Show what's still owed once part of it is paid */}
                         {paymentSummary(q).paid > 0 &&
                           paymentSummary(q).balance > 0 && (
-                            <div className="text-xs font-normal text-amber-700">
+                            <div className="text-xs font-normal text-warning">
                               {money(paymentSummary(q).balance, currency)} due
                             </div>
                           )}
@@ -1087,7 +1087,7 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="flex-1 border-green-200 text-green-700 hover:bg-green-50"
+                          className="flex-1 border-success/30 text-success hover:bg-success/10"
                           onClick={() => submitCheck("in")}
                           disabled={checkBusy !== null || allReceived}
                         >
@@ -1179,7 +1179,7 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
                           <span className="text-muted-foreground">
                             Paid so far
                           </span>
-                          <span className="font-medium text-green-700">
+                          <span className="font-medium text-success">
                             {money(selectedPay.paid, currency)}
                           </span>
                         </div>
@@ -1188,8 +1188,8 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
                           <span
                             className={
                               selectedPay.balance > 0
-                                ? "text-amber-700"
-                                : "text-green-700"
+                                ? "text-warning"
+                                : "text-success"
                             }
                           >
                             {money(selectedPay.balance, currency)}
@@ -1254,7 +1254,7 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
                           )}
                         </div>
                         {selected.payment.confirmedBySupplier && (
-                          <p className="flex items-center gap-1 pt-1 text-green-700">
+                          <p className="flex items-center gap-1 pt-1 text-success">
                             <CheckCircle2 className="h-3.5 w-3.5" /> Payment
                             confirmed by supplier
                           </p>
@@ -1281,9 +1281,9 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
                           <span
                             className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
                               isIn
-                                ? "bg-green-600"
+                                ? "bg-success"
                                 : isOut
-                                  ? "bg-amber-500"
+                                  ? "bg-warning"
                                   : "bg-primary"
                             }`}
                           />
@@ -1328,7 +1328,7 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
                 <DialogFooter className="flex-col gap-2 sm:flex-row">
                   <Button
                     variant="outline"
-                    className="flex-1 border-green-200 text-green-700 hover:bg-green-50"
+                    className="flex-1 border-success/30 text-success hover:bg-success/10"
                     onClick={() => {
                       setActionNote("");
                             setActionAmount("");
@@ -1339,7 +1339,7 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
                   </Button>
                   <Button
                     variant="outline"
-                    className="flex-1 border-purple-200 text-purple-700 hover:bg-purple-50"
+                    className="flex-1 border-purple-200 text-purple-700 hover:bg-purple-50 dark:border-purple-800 dark:text-purple-300 dark:hover:bg-purple-900/30"
                     onClick={() => {
                       setActionNote("");
                             setActionAmount("");
@@ -1350,7 +1350,7 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
                   </Button>
                   <Button
                     variant="outline"
-                    className="flex-1 border-red-200 text-red-700 hover:bg-red-50"
+                    className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10"
                     onClick={() => {
                       setActionNote("");
                             setActionAmount("");
@@ -1427,7 +1427,7 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Paid so far</span>
-                  <span className="text-green-700">
+                  <span className="text-success">
                     {money(selectedPay.paid, currency)}
                   </span>
                 </div>
@@ -1436,8 +1436,8 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
                   <span
                     className={
                       selectedPay.balance > 0
-                        ? "text-amber-700"
-                        : "text-green-700"
+                        ? "text-warning"
+                        : "text-success"
                     }
                   >
                     {money(selectedPay.balance, currency)}

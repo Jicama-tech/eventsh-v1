@@ -310,7 +310,7 @@ export function TicketSalesManagement({
             <div className="text-2xl font-bold">
               {totalStats.totalTicketsSold}
             </div>
-            <div className="flex items-center text-xs text-green-600">
+            <div className="flex items-center text-xs text-success">
               <TrendingUp className="h-3 w-3 mr-1" />
               +12% from last week
             </div>
@@ -326,7 +326,7 @@ export function TicketSalesManagement({
             <div className="text-2xl font-bold">
               ${totalStats.totalRevenue.toLocaleString()}
             </div>
-            <div className="flex items-center text-xs text-green-600">
+            <div className="flex items-center text-xs text-success">
               <TrendingUp className="h-3 w-3 mr-1" />
               +18% from last week
             </div>
@@ -340,7 +340,7 @@ export function TicketSalesManagement({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalStats.totalEvents}</div>
-            <div className="flex items-center text-xs text-blue-600">
+            <div className="flex items-center text-xs text-primary">
               <BarChart3 className="h-3 w-3 mr-1" />2 new this month
             </div>
           </CardContent>
@@ -357,7 +357,7 @@ export function TicketSalesManagement({
             <div className="text-2xl font-bold">
               ${Math.round(totalStats.averageTicketPrice)}
             </div>
-            <div className="flex items-center text-xs text-green-600">
+            <div className="flex items-center text-xs text-success">
               <TrendingUp className="h-3 w-3 mr-1" />
               +5% from last month
             </div>
@@ -467,11 +467,11 @@ export function TicketSalesManagement({
                       <TableCell>
                         {ticket.totalAvailable - ticket.totalSold}
                       </TableCell>
-                      <TableCell className="font-medium text-green-600">
+                      <TableCell className="font-medium text-success">
                         ${ticket.revenue.toLocaleString()}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center text-sm text-green-600">
+                        <div className="flex items-center text-sm text-success">
                           <TrendingUp className="h-3 w-3 mr-1" />
                           {ticket.salesTrend}
                         </div>
@@ -541,7 +541,7 @@ export function TicketSalesManagement({
                         </div>
                       </div>
                       <div className="text-center">
-                        <div className="text-2xl font-bold text-green-600">
+                        <div className="text-2xl font-bold text-success">
                           ${eventRevenue.toLocaleString()}
                         </div>
                         <div className="text-sm text-muted-foreground">
