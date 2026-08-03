@@ -45,9 +45,9 @@ const EXPENSE_CATEGORIES = [
 ];
 
 const STATUS_STYLES: Record<string, string> = {
-  Pending: "bg-amber-100 text-amber-700",
-  Approved: "bg-green-100 text-green-700",
-  Rejected: "bg-red-100 text-red-700",
+  Pending: "bg-warning/15 text-warning",
+  Approved: "bg-success/15 text-success",
+  Rejected: "bg-destructive/15 text-destructive",
 };
 
 interface Expense {
@@ -249,7 +249,7 @@ export default function EventExpensesDialog({
         <div className="-mr-2 flex-1 space-y-3 overflow-y-auto pr-2">
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-xl border p-3 text-center">
-              <div className="text-lg font-bold text-green-700">
+              <div className="text-lg font-bold text-success">
                 {money(total, currency)}
               </div>
               <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -257,7 +257,7 @@ export default function EventExpensesDialog({
               </div>
             </div>
             <div className="rounded-xl border p-3 text-center">
-              <div className="text-lg font-bold text-amber-700">
+              <div className="text-lg font-bold text-warning">
                 {money(pendingTotal, currency)}
               </div>
               <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -377,7 +377,7 @@ export default function EventExpensesDialog({
                           : ""}
                       </div>
                       {r.status === "Approved" && r.approvedBy && (
-                        <div className="mt-0.5 flex items-center gap-1 text-[11px] text-green-700">
+                        <div className="mt-0.5 flex items-center gap-1 text-[11px] text-success">
                           <CheckCircle2 className="h-3 w-3" />
                           Approved by {r.approvedBy}
                           {r.approvedByRole ? ` (${r.approvedByRole})` : ""}
@@ -387,7 +387,7 @@ export default function EventExpensesDialog({
                         </div>
                       )}
                       {r.status === "Rejected" && (
-                        <div className="mt-0.5 flex items-center gap-1 text-[11px] text-red-700">
+                        <div className="mt-0.5 flex items-center gap-1 text-[11px] text-destructive">
                           <XCircle className="h-3 w-3" />
                           Rejected
                           {r.approvedBy ? ` by ${r.approvedBy}` : ""}
@@ -415,14 +415,14 @@ export default function EventExpensesDialog({
 
                   {r.status === "Pending" && (
                     <div className="mt-2 flex flex-wrap items-center gap-2 border-t pt-2">
-                      <span className="flex items-center gap-1 text-[11px] text-amber-700">
+                      <span className="flex items-center gap-1 text-[11px] text-warning">
                         <Clock className="h-3 w-3" /> Awaiting approval
                       </span>
                       <div className="ml-auto flex gap-2">
                         <Button
                           size="sm"
                           variant="outline"
-                          className="border-green-200 text-green-700 hover:bg-green-50"
+                          className="border-success/30 text-success hover:bg-success/10"
                           onClick={() => decide(r, true)}
                           disabled={decidingId === r._id}
                         >
@@ -436,7 +436,7 @@ export default function EventExpensesDialog({
                         <Button
                           size="sm"
                           variant="outline"
-                          className="border-red-200 text-red-700 hover:bg-red-50"
+                          className="border-destructive/30 text-destructive hover:bg-destructive/10"
                           onClick={() => decide(r, false)}
                           disabled={decidingId === r._id}
                         >
@@ -445,7 +445,7 @@ export default function EventExpensesDialog({
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-8 w-8 text-muted-foreground hover:text-red-600"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
                           onClick={() => remove(r)}
                           title="Delete"
                         >
