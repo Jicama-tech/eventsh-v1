@@ -2302,6 +2302,7 @@ export class StallsService {
 
       const actor = (dto.changedBy || "").trim() || "Organizer";
       stall.status = "Cancelled" as any;
+      (stall as any).cancelledVia = "organizer-decision";
       pc.status = "approved";
       pc.organizerNote = note;
       pc.resolvedAt = new Date();
@@ -3627,6 +3628,7 @@ export class StallsService {
     await this.releaseStallTables(stall);
     stall.status = "Cancelled";
     stall.confirmationDeadline = null;
+    (stall as any).cancelledVia = "auto-timeout";
     stall.statusHistory.push({
       status: "Cancelled" as any,
       note: "Auto-released — the organizer did not confirm the payment within 24 hours. Space freed for re-booking.",
@@ -4212,6 +4214,7 @@ export class StallsService {
 
       if (updateDto.status === "Cancelled") {
         updateData.cancellationReason = updateDto.cancellationReason;
+        updateData.cancelledVia = "status-update";
       }
 
       const updatedStall = await this.stallModel
@@ -4516,6 +4519,7 @@ export class StallsService {
       // Cancelled-status guard in scanStallQR). We do NOT drop it from the DB.
       const actor = (changedBy || "").trim() || "Organizer";
       stall.status = "Cancelled" as any;
+      (stall as any).cancelledVia = "manual-delete";
       stall.statusHistory.push({
         status: "Cancelled" as any,
         note: `Stall deleted by ${actor} — space freed. Kept in the list for refund/records.`,
@@ -4576,6 +4580,127 @@ export class StallsService {
       this.logger.warn(
         `Failed to release tables for stall ${stall?._id}: ${e?.message}`,
       );
+    }
+  }
+
+  // Re-book the space(s) a cancelled stall previously held, refusing if any
+  // position has since been booked by a *different* stall. Mirrors
+  // releaseStallTables() but inverted, plus the conflict guard restore needs.
+  private async reclaimStallTables(stall: any) {
+    const positionIds = (stall?.selectedTables || [])
+      .map((t: any) => t.positionId)
+      .filter(Boolean);
+    if (positionIds.length === 0 || !stall.eventId) return;
+
+    const eventDoc: any = await this.eventModel.findById(stall.eventId);
+    if (!eventDoc?.venueTables) return;
+
+    const stallIdStr = String(stall._id);
+    const allTables: any[] = Array.isArray(eventDoc.venueTables)
+      ? eventDoc.venueTables
+      : Object.values(eventDoc.venueTables).flat();
+
+    const conflicts = allTables
+      .filter((t: any) => positionIds.includes(t.positionId))
+      .filter((t: any) => t.isBooked && String(t.bookedBy) !== stallIdStr)
+      .map((t: any) => t.name || t.positionId);
+
+    if (conflicts.length > 0) {
+      throw new BadRequestException(
+        `Can't restore — ${conflicts.join(", ")} ${
+          conflicts.length === 1 ? "is" : "are"
+        } now booked by another stall. Reassign that stall first.`,
+      );
+    }
+
+    const reclaim = (t: any) => {
+      if (!positionIds.includes(t.positionId)) return t;
+      const obj = t.toObject ? t.toObject() : t;
+      return { ...obj, isBooked: true, bookedBy: stallIdStr };
+    };
+
+    if (Array.isArray(eventDoc.venueTables)) {
+      eventDoc.venueTables = eventDoc.venueTables.map(reclaim);
+    } else {
+      for (const layoutId of Object.keys(eventDoc.venueTables)) {
+        eventDoc.venueTables[layoutId] = (
+          eventDoc.venueTables[layoutId] || []
+        ).map(reclaim);
+      }
+    }
+
+    eventDoc.markModified("venueTables");
+    await eventDoc.save();
+    this.logger.log(
+      `Reclaimed ${positionIds.length} table(s) for restored stall ${stall._id}`,
+    );
+  }
+
+  // Walks statusHistory backwards from the most recent "Cancelled" entry to
+  // find what the stall's status was immediately before cancellation.
+  private getPreCancelStatus(stall: any): string {
+    const history = stall.statusHistory || [];
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].status === "Cancelled") {
+        for (let j = i - 1; j >= 0; j--) {
+          if (history[j].status !== "Cancelled") return history[j].status;
+        }
+        break;
+      }
+    }
+    return "Pending";
+  }
+
+  // Restore a stall that was cancelled by timer-expiry or manual delete —
+  // reassigns it back to the vendor (shopkeeperId was never cleared on
+  // cancel) and re-books its space(s). Excludes organizer-approved vendor
+  // cancellations and plain status-updates, which carry side effects (zeroed
+  // coupon, promised refund) a blind restore shouldn't silently undo.
+  async restoreStall(id: string, changedBy?: string) {
+    try {
+      if (!Types.ObjectId.isValid(id)) {
+        throw new BadRequestException("Invalid stall ID format");
+      }
+      const stall = await this.stallModel.findById(id);
+      if (!stall) {
+        throw new NotFoundException("Stall not found");
+      }
+      if (stall.status !== "Cancelled") {
+        throw new BadRequestException("Only cancelled stalls can be restored.");
+      }
+      const allowed = ["auto-timeout", "manual-delete"];
+      if (!allowed.includes((stall as any).cancelledVia)) {
+        throw new BadRequestException(
+          "This stall wasn't cancelled by a timer expiry or manual delete, so it can't be restored from here.",
+        );
+      }
+
+      // Throws BadRequestException if a position was re-booked since cancel.
+      await this.reclaimStallTables(stall);
+
+      const restoreStatus = this.getPreCancelStatus(stall);
+      const actor = (changedBy || "").trim() || "Organizer";
+      stall.status = restoreStatus as any;
+      (stall as any).cancelledVia = undefined;
+      stall.statusHistory.push({
+        status: restoreStatus as any,
+        note: `Stall restored by ${actor} — reassigned to the vendor and space re-booked.`,
+        changedAt: new Date(),
+        changedBy: actor,
+      });
+      await stall.save();
+
+      return {
+        success: true,
+        message: "Stall restored.",
+        data: stall,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+        data: null,
+      };
     }
   }
 
