@@ -1817,16 +1817,16 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 /* ✅ VERIFIED - BLURRED BUT VISIBLE CONTENT */
                 <div className="md:col-span-2 space-y-4">
                   {/* ✅ HEADER */}
-                  <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center justify-between p-4 bg-success/10 border border-success/30 rounded-lg">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                        <CreditCard className="w-5 h-5 text-green-600" />
+                      <div className="w-10 h-10 bg-success/15 rounded-lg flex items-center justify-center">
+                        <CreditCard className="w-5 h-5 text-success" />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-lg text-green-800">
+                        <h3 className="font-semibold text-lg text-success">
                           Document Verified ✓
                         </h3>
-                        <p className="text-sm text-green-600">
+                        <p className="text-sm text-success">
                           Secure & protected
                         </p>
                       </div>
@@ -1835,7 +1835,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="border border-green-300 hover:bg-green-100 text-green-700"
+                      className="border border-success/40 hover:bg-success/15 text-success"
                       onClick={() => {
                         setOrganizerProfile({
                           ...shopProfile,
@@ -1852,14 +1852,14 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   </div>
 
                   {/* ✅ BLURRED COUNTRY - SHOW SELECTED VALUE */}
-                  <div className="grid gap-2 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                    <Label className="flex items-center gap-2 text-sm font-medium text-gray-600">
+                  <div className="grid gap-2 p-4 bg-muted border border-border rounded-lg">
+                    <Label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                       <Globe className="w-4 h-4" />
                       Country
                     </Label>
-                    <div className="flex items-center gap-3 p-3 bg-white border rounded-md opacity-60">
-                      <Globe className="w-4 h-4 text-gray-400" />
-                      <span className="font-medium text-gray-700">
+                    <div className="flex items-center gap-3 p-3 bg-background border rounded-md opacity-60">
+                      <Globe className="w-4 h-4 text-muted-foreground" />
+                      <span className="font-medium text-foreground">
                         {countries.find((c) => c.code === selectedCountry)
                           ?.name || "India"}
                         (
@@ -1871,21 +1871,21 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   </div>
 
                   {/* ✅ BLURRED NUMBER - SHOW ACTUAL VALUE */}
-                  <div className="grid gap-2 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                    <Label className="flex items-center gap-2 text-sm font-medium text-gray-600">
+                  <div className="grid gap-2 p-4 bg-muted border border-border rounded-lg">
+                    <Label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                       <CreditCard className="w-4 h-4" />
                       {selectedCountry === "IN" ? "GST Number" : "UEN Number"}
                     </Label>
-                    <div className="flex items-center justify-between p-3 bg-white border rounded-md opacity-60">
+                    <div className="flex items-center justify-between p-3 bg-background border rounded-md opacity-60">
                       <div className="flex items-center gap-3">
-                        <CreditCard className="w-4 h-4 text-gray-400" />
-                        <span className="font-mono text-lg font-semibold text-gray-700 tracking-wider">
+                        <CreditCard className="w-4 h-4 text-muted-foreground" />
+                        <span className="font-mono text-lg font-semibold text-foreground tracking-wider">
                           {selectedCountry === "IN"
                             ? shopProfile.GSTNumber
                             : shopProfile.UENNumber}
                         </span>
                       </div>
-                      <Badge className="bg-green-100 text-green-800 border-green-200">
+                      <Badge className="bg-success/15 text-success border-success/30">
                         Verified
                       </Badge>
                     </div>
@@ -1930,7 +1930,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
                   {/* GST NUMBER */}
                   {selectedCountry === "IN" && (
-                    <div className="grid gap-2 p-4 bg-blue-50 border border-blue-200 rounded-lg md:col-span-2">
+                    <div className="grid gap-2 p-4 bg-primary/10 border border-primary/30 rounded-lg md:col-span-2">
                       <Label
                         htmlFor="gstNumber"
                         className="flex items-center gap-2 font-semibold"
@@ -1967,15 +1967,15 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                         )}
                       </div>
                       {gstError && (
-                        <p className="text-xs text-red-600">{gstError}</p>
+                        <p className="text-xs text-destructive">{gstError}</p>
                       )}
                       {gstVerified && (
-                        <p className="text-xs text-green-600">
+                        <p className="text-xs text-success">
                           ✓ GST verified successfully. Save profile to secure
                           it.
                         </p>
                       )}
-                      <p className="text-xs text-gray-600">
+                      <p className="text-xs text-muted-foreground">
                         Your GST Identification Number (GSTIN)
                       </p>
                     </div>
@@ -1983,7 +1983,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
                   {/* UEN NUMBER */}
                   {selectedCountry === "SG" && (
-                    <div className="grid gap-2 p-4 bg-blue-50 border border-blue-200 rounded-lg md:col-span-2">
+                    <div className="grid gap-2 p-4 bg-primary/10 border border-primary/30 rounded-lg md:col-span-2">
                       <Label
                         htmlFor="uenNumber"
                         className="flex items-center gap-2 font-semibold"
@@ -2016,15 +2016,15 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                         </Button>
                       </div>
                       {uenError && (
-                        <p className="text-xs text-red-600">{uenError}</p>
+                        <p className="text-xs text-destructive">{uenError}</p>
                       )}
                       {uenVerified && (
-                        <p className="text-xs text-green-600">
+                        <p className="text-xs text-success">
                           ✓ UEN verified successfully. Save profile to secure
                           it.
                         </p>
                       )}
-                      <p className="text-xs text-gray-600">
+                      <p className="text-xs text-muted-foreground">
                         Your Unique Entity Number (UEN)
                       </p>
 
@@ -2066,14 +2066,14 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                                     Paying to {payee}
                                   </p>
                                 )}
-                                <p className="text-xs text-gray-500 text-center">
+                                <p className="text-xs text-muted-foreground text-center">
                                   Amount: SGD 1.00 — if your bank app shows your
                                   own business name as the payee, your UEN is set
                                   up correctly.
                                 </p>
                               </div>
                             ) : (
-                              <p className="text-sm text-red-600 py-2">
+                              <p className="text-sm text-destructive py-2">
                                 Enter a valid UEN number first.
                               </p>
                             );
@@ -2114,16 +2114,16 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               {shopProfile.hasDocVerification && gstDetails && (
                 <div className="md:col-span-2 space-y-4">
                   {/* ✅ HEADER */}
-                  <div className="flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center justify-between p-4 bg-primary/10 border border-primary/30 rounded-lg">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <FileText className="w-5 h-5 text-blue-600" />
+                      <div className="w-10 h-10 bg-primary/15 rounded-lg flex items-center justify-center">
+                        <FileText className="w-5 h-5 text-primary" />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-lg text-blue-800">
+                        <h3 className="font-semibold text-lg text-primary">
                           Verification Details
                         </h3>
-                        <p className="text-sm text-blue-600">
+                        <p className="text-sm text-primary">
                           Official business information
                         </p>
                       </div>
@@ -2131,7 +2131,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   </div>
 
                   {/* ✅ BUSINESS INFO CARD */}
-                  <Card className="border-blue-200">
+                  <Card className="border-primary/30">
                     <CardHeader className="pb-3">
                       <CardTitle className="text-lg flex items-center gap-2">
                         <Building className="w-5 h-5" />
@@ -2160,7 +2160,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                           <span className="text-xs text-muted-foreground font-medium">
                             Status
                           </span>
-                          <Badge className="bg-green-100 text-green-800">
+                          <Badge className="bg-success/15 text-success">
                             {gstDetails.taxpayerInfo?.sts || "N/A"}
                           </Badge>
                         </div>
@@ -2189,7 +2189,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   </Card>
 
                   {/* ✅ ADDRESS CARD */}
-                  <Card className="border-blue-200">
+                  <Card className="border-primary/30">
                     <CardHeader className="pb-3">
                       <CardTitle className="text-lg flex items-center gap-2">
                         <MapPin className="w-5 h-5" />
@@ -2198,13 +2198,13 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg">
-                        <p className="font-mono text-sm tracking-wide text-gray-800">
+                        <p className="font-mono text-sm tracking-wide text-foreground">
                           {gstDetails.taxpayerInfo?.pradr?.addr?.bno || ""}{" "}
                           {gstDetails.taxpayerInfo?.pradr?.addr?.st || ""},{" "}
                           {gstDetails.taxpayerInfo?.pradr?.addr?.loc || ""},{" "}
                           {gstDetails.taxpayerInfo?.pradr?.addr?.dst || ""}
                         </p>
-                        <p className="text-xs text-gray-600 mt-1">
+                        <p className="text-xs text-muted-foreground mt-1">
                           {gstDetails.taxpayerInfo?.pradr?.addr?.stcd || ""} -{" "}
                           {gstDetails.taxpayerInfo?.pradr?.addr?.pncd || ""}
                         </p>
@@ -2396,7 +2396,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     return (
                       <div
                         key={idx}
-                        className="rounded-lg border bg-white p-2.5 space-y-2"
+                        className="rounded-lg border bg-card p-2.5 space-y-2"
                       >
                         {/* Label for this number — e.g. "Reception", a name */}
                         <Input
@@ -2451,7 +2451,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                             type="button"
                             variant="outline"
                             size="icon"
-                            className="text-red-600 hover:text-red-700 shrink-0"
+                            className="text-destructive hover:text-destructive shrink-0"
                             onClick={() => {
                               const next = shopProfile.contactPhones.filter(
                                 (_, i) => i !== idx,
@@ -2561,7 +2561,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     </SelectTrigger>
                     <SelectContent>
                       {categories.length === 0 ? (
-                        <div className="px-2 py-1.5 text-sm text-gray-500">
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
                           Loading...
                         </div>
                       ) : (
@@ -2631,7 +2631,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
               <div className="md:col-span-2">
                 <Label className="mb-2 block">Terms & Conditions</Label>
-                <div className="bg-white dark:bg-slate-950 rounded-md">
+                <div className="bg-card rounded-md">
                   <Suspense
                     fallback={
                       <div className="h-[150px] border rounded-md animate-pulse bg-muted" />
@@ -2648,7 +2648,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                         }))
                       }
                       placeholder="e.g. 1. Goods once sold are not returnable."
-                      className="[&_.ql-editor]:min-h-[150px] [&_.ql-container]:rounded-b-md [&_.ql-toolbar]:rounded-t-md text-black dark:text-white"
+                      className="[&_.ql-editor]:min-h-[150px] [&_.ql-container]:rounded-b-md [&_.ql-toolbar]:rounded-t-md text-foreground"
                     />
                   </Suspense>
                 </div>
@@ -2692,7 +2692,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 />
               </div>
 
-              <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+              <div className="rounded-md bg-warning/10 border border-warning/30 p-3 text-xs text-warning">
                 For your emails to arrive (and not land in spam), you must enter
                 your mailbox's SMTP details below — these come from your email
                 provider (e.g. a Gmail App Password, or your Hostinger / Outlook
@@ -2858,7 +2858,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 </div>
               ) : !subscription?.subscribed ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  <ShieldCheck className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <ShieldCheck className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
                   <p className="text-lg font-medium">No Active Plan</p>
                   <p className="text-sm mt-1 mb-4">
                     Choose a plan to get started.
@@ -2923,7 +2923,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   </div>
 
                   {subscription.inGracePeriod && (
-                    <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900">
+                    <div className="p-3 rounded-lg bg-warning/10 border border-warning/30 text-sm text-warning">
                       Your plan expired but you're in a{" "}
                       {subscription.gracePeriodDays}-day grace window —{" "}
                       <strong>
@@ -2935,7 +2935,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     </div>
                   )}
                   {subscription.fullyLapsed && (
-                    <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-800">
+                    <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-sm text-destructive">
                       Your plan has expired and the grace window is over. Renew
                       or switch to a new plan to restore premium features.
                     </div>
@@ -3052,8 +3052,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                                 key={m.key}
                                 className={`px-3 py-2 rounded-lg border ${
                                   on
-                                    ? "bg-green-50 border-green-200"
-                                    : "bg-gray-50 border-gray-200 opacity-60"
+                                    ? "bg-success/10 border-success/30"
+                                    : "bg-muted border-border opacity-60"
                                 }`}
                               >
                                 <div className="flex items-center justify-between">
@@ -3186,7 +3186,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                                 .slice(0, 6)
                                 .map((f: string, i: number) => (
                                   <li key={i} className="flex items-start">
-                                    <CheckCircle2 className="h-3 w-3 text-green-600 mr-1 mt-1 shrink-0" />
+                                    <CheckCircle2 className="h-3 w-3 text-success mr-1 mt-1 shrink-0" />
                                     <span className="text-xs">{f}</span>
                                   </li>
                                 ))}
@@ -3569,7 +3569,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   {/* Nested permissions under Participants — only shown when
                       the Participants tab itself is granted. */}
                   {(operatorForm.accessTabs ?? []).includes("eventAttendees") && (
-                    <div className="mt-3 ml-1 pl-3 border-l-2 border-blue-200 space-y-2">
+                    <div className="mt-3 ml-1 pl-3 border-l-2 border-primary/30 space-y-2">
                       <p className="text-xs font-medium text-muted-foreground">
                         Participants — extra permissions
                       </p>
@@ -3617,7 +3617,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   {/* Nested permissions under Events/Coupons — only shown when
                       the Events tab itself is granted. */}
                   {(operatorForm.accessTabs ?? []).includes("events") && (
-                    <div className="mt-3 ml-1 pl-3 border-l-2 border-blue-200 space-y-2">
+                    <div className="mt-3 ml-1 pl-3 border-l-2 border-primary/30 space-y-2">
                       <p className="text-xs font-medium text-muted-foreground">
                         Events — extra permissions
                       </p>
@@ -3771,11 +3771,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
         <TabsContent value="payments" className="space-y-4">
           {/* STATIC QR TOGGLE */}
-          <div className="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition bg-white">
+          <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted transition bg-card">
             <div className="flex items-center gap-3">
-              <QrCode className="w-5 h-5 text-blue-600" />
+              <QrCode className="w-5 h-5 text-primary" />
               <div>
-                <Label className="font-semibold text-slate-900">
+                <Label className="font-semibold text-foreground">
                   Static QR Code
                 </Label>
                 <p className="text-xs text-muted-foreground">
@@ -3797,9 +3797,9 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
           {/* STATIC QR SECTION - APPEARS RIGHT BELOW TOGGLE */}
           {paymentMethods.staticQR && (
-            <Card className="border-blue-200 bg-blue-50 animate-in slide-in-from-top">
+            <Card className="border-primary/30 bg-primary/10 animate-in slide-in-from-top">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-blue-900">
+                <CardTitle className="flex items-center gap-2 text-primary">
                   <QrCode className="w-5 h-5" />
                   Upload Static QR
                 </CardTitle>
@@ -3810,7 +3810,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               <CardContent className="space-y-4">
                 <div className="flex flex-col md:flex-row gap-6 items-start">
                   {/* QR PREVIEW */}
-                  <div className="w-48 h-48 rounded-lg border-2 border-blue-300 flex items-center justify-center overflow-hidden bg-white flex-shrink-0">
+                  <div className="w-48 h-48 rounded-lg border-2 border-primary/40 flex items-center justify-center overflow-hidden bg-white flex-shrink-0">
                     {paymentQrPreview ? (
                       <img
                         src={paymentQrPreview}
@@ -3852,8 +3852,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     </div>
 
                     {shopProfile?.paymentURL && (
-                      <div className="space-y-2 p-3 bg-white rounded-lg border border-blue-200">
-                        <p className="text-xs font-semibold text-slate-900">
+                      <div className="space-y-2 p-3 bg-card rounded-lg border border-primary/30">
+                        <p className="text-xs font-semibold text-foreground">
                           Public URL (Read-only)
                         </p>
                         <Input
@@ -3882,11 +3882,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           )}
 
           {/* DYNAMIC QR TOGGLE */}
-          <div className="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition bg-white">
+          <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted transition bg-card">
             <div className="flex items-center gap-3">
-              <Zap className="w-5 h-5 text-amber-600" />
+              <Zap className="w-5 h-5 text-warning" />
               <div>
-                <Label className="font-semibold text-slate-900">
+                <Label className="font-semibold text-foreground">
                   Dynamic QR Code
                 </Label>
                 <p className="text-xs text-muted-foreground">
@@ -3908,9 +3908,9 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
           {/* DYNAMIC QR SECTION - APPEARS RIGHT BELOW TOGGLE */}
           {shopProfile.dynamicQR && (
-            <Card className="border-amber-200 bg-amber-50 animate-in slide-in-from-top">
+            <Card className="border-warning/30 bg-warning/10 animate-in slide-in-from-top">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-amber-900">
+                <CardTitle className="flex items-center gap-2 text-warning">
                   <Zap className="w-5 h-5" />
                   Dynamic QR Configuration
                 </CardTitle>
@@ -3920,7 +3920,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   Code Section
                 </CardDescription>
                 <CardDescription>
-                  <p className="text-amber-900 font-semibold">
+                  <p className="text-warning font-semibold">
                     Please Check Your Store Order a Small Product and Verify the
                     Dynamic QR code *.
                   </p>
@@ -3928,10 +3928,10 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* HOW IT WORKS */}
-                <div className="bg-white border border-amber-200 rounded-lg p-4">
+                <div className="bg-card border border-warning/30 rounded-lg p-4">
                   <div className="flex gap-3">
-                    <Info className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <div className="text-sm text-amber-900 space-y-2">
+                    <Info className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-warning space-y-2">
                       <p className="font-semibold">How Dynamic QR works:</p>
                       <ul className="list-disc list-inside text-xs space-y-1">
                         <li>
@@ -3952,11 +3952,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           )}
 
           {/* CARD PAYMENTS TOGGLE */}
-          {/* <div className="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition bg-white">
+          {/* <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted transition bg-card">
             <div className="flex items-center gap-3">
               <CreditCard className="w-5 h-5 text-emerald-600" />
               <div>
-                <Label className="font-semibold text-slate-900">
+                <Label className="font-semibold text-foreground">
                   Card Payments
                 </Label>
                 <p className="text-xs text-muted-foreground">
@@ -3977,11 +3977,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
           {/* CARD PAYMENTS SECTION - APPEARS RIGHT BELOW TOGGLE */}
           {/* 🔘 RAZORPAY CARD PAYMENTS TOGGLE */}
-          <div className="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition bg-white">
+          <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted transition bg-card">
             <div className="flex items-center gap-3">
-              <CreditCard className="w-5 h-5 text-indigo-600" />
+              <CreditCard className="w-5 h-5 text-indigo-600 dark:text-indigo-300" />
               <div>
-                <Label className="font-semibold text-slate-900">
+                <Label className="font-semibold text-foreground">
                   Credit Cards Payments
                 </Label>
                 <p className="text-xs text-muted-foreground">
@@ -4002,9 +4002,9 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
           {/* 🔧 RAZORPAY SETUP SECTION - INLINE BELOW TOGGLE */}
           {paymentMethods.razorpayCards && (
-            <Card className="border-indigo-200 bg-indigo-50 animate-in slide-in-from-top">
+            <Card className="border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 animate-in slide-in-from-top">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-indigo-900">
+                <CardTitle className="flex items-center gap-2 text-indigo-900 dark:text-indigo-200">
                   <CreditCard className="w-5 h-5" />
                   Razorpay Payment Setup
                 </CardTitle>
@@ -4017,17 +4017,17 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               <CardContent className="space-y-6">
                 {/* CONNECTION STATUS */}
                 {razorpaySettings?.isConnected ? (
-                  <div className="bg-white border border-indigo-200 rounded-lg p-4">
+                  <div className="bg-card border border-indigo-200 dark:border-indigo-800 rounded-lg p-4">
                     <div className="flex items-start gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-indigo-600 mt-0.5 flex-shrink-0" />
+                      <CheckCircle2 className="w-5 h-5 text-indigo-600 dark:text-indigo-300 mt-0.5 flex-shrink-0" />
                       <div>
-                        <p className="font-semibold text-indigo-900">
+                        <p className="font-semibold text-indigo-900 dark:text-indigo-200">
                           ✅ Razorpay Account Connected
                         </p>
-                        <p className="text-xs text-indigo-700 mt-1">
+                        <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-1">
                           Account ID: {razorpaySettings.razorpayAccountId}
                         </p>
-                        <p className="text-xs text-indigo-600 mt-2">
+                        <p className="text-xs text-indigo-600 dark:text-indigo-300 mt-2">
                           Your shop can now accept card, UPI and netbanking
                           payments.
                         </p>
@@ -4035,21 +4035,21 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-white border border-indigo-200 rounded-lg p-4">
+                  <div className="bg-card border border-indigo-200 dark:border-indigo-800 rounded-lg p-4">
                     <div className="flex items-start gap-3">
-                      <AlertCircle className="w-5 h-5 text-indigo-600 mt-0.5 flex-shrink-0" />
+                      <AlertCircle className="w-5 h-5 text-indigo-600 dark:text-indigo-300 mt-0.5 flex-shrink-0" />
                       <div className="flex-1">
-                        <p className="font-semibold text-indigo-900">
+                        <p className="font-semibold text-indigo-900 dark:text-indigo-200">
                           Setup Card Payments for this shop
                         </p>
-                        <p className="text-xs text-indigo-700 mt-1 mb-4">
+                        <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-1 mb-4">
                           Enter your business and bank details below. Your
                           Razorpay account will be created and submitted for KYC
                           review.
                         </p>
 
                         {/* RAZORPAY SETUP FORM */}
-                        <div className="space-y-3 p-3 bg-indigo-50 border border-indigo-200 rounded">
+                        <div className="space-y-3 p-3 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 rounded">
                           {/* BUSINESS INFO */}
                           <div className="space-y-1">
                             <Label
@@ -4439,8 +4439,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
                 {/* OPTIONAL SETTINGS AFTER CONNECT (similar to Stripe card settings) */}
                 {razorpaySettings?.isConnected && (
-                  <div className="space-y-4 p-4 bg-white border border-indigo-200 rounded-lg">
-                    <h4 className="font-semibold text-slate-900">
+                  <div className="space-y-4 p-4 bg-card border border-indigo-200 dark:border-indigo-800 rounded-lg">
+                    <h4 className="font-semibold text-foreground">
                       Payment Options
                     </h4>
 
@@ -4522,7 +4522,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 !paymentMethods.dynamicQR &&
                 !paymentMethods.cardPayments)
             }
-            className="w-full bg-blue-600 hover:bg-blue-700 font-semibold text-base"
+            className="w-full bg-primary hover:bg-primary/90 font-semibold text-base"
             size="lg"
           >
             {isLoading ? (
@@ -4796,7 +4796,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     className={`flex items-center justify-between rounded-lg border p-3 cursor-pointer transition
       ${
         shopProfile.receiptType === "58MM"
-          ? "border-blue-600 bg-blue-50"
+          ? "border-primary bg-primary/10"
           : "border-border hover:bg-muted"
       }`}
                   >
@@ -4826,7 +4826,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     className={`flex items-center justify-between rounded-lg border p-3 cursor-pointer transition
       ${
         shopProfile.receiptType === "A4"
-          ? "border-blue-600 bg-blue-50"
+          ? "border-primary bg-primary/10"
           : "border-border hover:bg-muted"
       }`}
                   >
@@ -4897,7 +4897,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                             className={`flex items-center justify-between rounded-lg border p-3 cursor-pointer transition
             ${
               shopProfile.whatsAppQRNumber === shopProfile.whatsAppNumber
-                ? "border-blue-600 bg-blue-50"
+                ? "border-primary bg-primary/10"
                 : "border-border hover:bg-muted"
             }`}
                           >
@@ -4934,7 +4934,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                             className={`flex items-center justify-between rounded-lg border p-3 cursor-pointer transition
             ${
               shopProfile.whatsAppQRNumber === shopProfile.phone
-                ? "border-blue-600 bg-blue-50"
+                ? "border-primary bg-primary/10"
                 : "border-border hover:bg-muted"
             }`}
                           >
