@@ -401,9 +401,16 @@ export function OrganizerDashboard({
   useEffect(() => {
     localStorage.setItem("organizerSidebarCollapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed]);
-  // Dark mode — scoped to this dashboard (the "dark" class lands on the
-  // shell's own root div, not <html>), so toggling it here never bleeds
-  // into the public eventfront, admin, or user portals.
+  // Dark mode. The "dark" class has to land on <html> — not a div scoped to
+  // this component's own subtree — because Radix portals (Dialog, Select,
+  // DropdownMenu, Popover, the Chatbot's own dialogs, etc.) render into
+  // document.body, *outside* any inner div's DOM subtree. A class on a
+  // wrapper div never reaches them, so their CSS variables silently resolve
+  // to the light-mode :root values no matter what this component renders.
+  // Scoping to the dashboard is instead done by lifecycle: OrganizerDashboard
+  // only mounts for the organizer route, and the cleanup below strips the
+  // class the moment it unmounts (e.g. on logout), so the public eventfront,
+  // admin, and user portals never see it.
   const [dashboardTheme, setDashboardTheme] = useState<"light" | "dark">(
     () => {
       if (typeof window === "undefined") return "light";
@@ -414,6 +421,13 @@ export function OrganizerDashboard({
   );
   useEffect(() => {
     localStorage.setItem("organizerDashboardTheme", dashboardTheme);
+    document.documentElement.classList.toggle(
+      "dark",
+      dashboardTheme === "dark",
+    );
+    return () => {
+      document.documentElement.classList.remove("dark");
+    };
   }, [dashboardTheme]);
   const [loading, setLoading] = useState(false);
   const [OrganizationName, setOrganizationName] = useState(() => {
@@ -1074,9 +1088,7 @@ export function OrganizerDashboard({
   }
 
   return (
-    <div
-      className={`app-shell flex flex-col overflow-hidden ${dashboardTheme === "dark" ? "dark bg-background text-foreground" : ""}`}
-    >
+    <div className="app-shell flex flex-col overflow-hidden bg-background text-foreground">
       <DemoPrompt
         open={showDemoPrompt}
         onClose={() => setShowDemoPrompt(false)}
