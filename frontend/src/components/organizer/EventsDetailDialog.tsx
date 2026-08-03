@@ -110,7 +110,7 @@ const FeatureIcon = ({
 }) => {
   if (!feature) return null;
   return (
-    <div className="flex items-center gap-2 p-2 rounded-md bg-gray-100 text-gray-700">
+    <div className="flex items-center gap-2 p-2 rounded-md bg-muted text-foreground">
       {icon}
       <span className="text-sm">{label}</span>
     </div>
@@ -148,10 +148,10 @@ export function EnhancedEventsDetailDialog({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[95%] md:max-w-[900px] lg:max-w-[1200px] max-h-[95vh] overflow-y-auto p-6">
         <DialogHeader className="border-b pb-4 mb-4">
-          <DialogTitle className="text-3xl font-extrabold tracking-tight text-gray-900">
+          <DialogTitle className="text-3xl font-extrabold tracking-tight text-foreground">
             {event.title}
           </DialogTitle>
-          <DialogDescription className="text-gray-600 mt-1">
+          <DialogDescription className="text-muted-foreground mt-1">
             {event.description}
           </DialogDescription>
         </DialogHeader>
@@ -173,17 +173,17 @@ export function EnhancedEventsDetailDialog({
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-blue-600 font-medium">
+                  <p className="text-sm text-primary font-medium">
                     Tickets Sold
                   </p>
-                  <p className="text-2xl font-bold text-blue-900">
+                  <p className="text-2xl font-bold text-primary">
                     {ticketsSold}
                   </p>
-                  <p className="text-xs text-blue-600">
+                  <p className="text-xs text-primary">
                     of {event.totalTickets || "∞"}
                   </p>
                 </div>
-                <Ticket className="h-8 w-8 text-blue-600" />
+                <Ticket className="h-8 w-8 text-primary" />
               </div>
             </CardContent>
           </Card>
@@ -192,17 +192,17 @@ export function EnhancedEventsDetailDialog({
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-purple-600 font-medium">
+                  <p className="text-sm text-purple-600 dark:text-purple-300 font-medium">
                     Stalls Booked
                   </p>
-                  <p className="text-2xl font-bold text-purple-900">
+                  <p className="text-2xl font-bold text-purple-900 dark:text-purple-200">
                     {stallsBooked}
                   </p>
-                  <p className="text-xs text-purple-600">
+                  <p className="text-xs text-purple-600 dark:text-purple-300">
                     {stallsPending} pending
                   </p>
                 </div>
-                <Building className="h-8 w-8 text-purple-600" />
+                <Building className="h-8 w-8 text-purple-600 dark:text-purple-300" />
               </div>
             </CardContent>
           </Card>
@@ -211,15 +211,15 @@ export function EnhancedEventsDetailDialog({
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-green-600 font-medium">
+                  <p className="text-sm text-success font-medium">
                     Total Revenue
                   </p>
-                  <p className="text-2xl font-bold text-green-900">
+                  <p className="text-2xl font-bold text-success">
                     {event.revenue || formatPrice(totalRevenue)}
                   </p>
-                  <p className="text-xs text-green-600">Combined</p>
+                  <p className="text-xs text-success">Combined</p>
                 </div>
-                <TrendingUp className="h-8 w-8 text-green-600" />
+                <TrendingUp className="h-8 w-8 text-success" />
               </div>
             </CardContent>
           </Card>
@@ -228,15 +228,15 @@ export function EnhancedEventsDetailDialog({
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-orange-600 font-medium">
+                  <p className="text-sm text-orange-600 dark:text-orange-300 font-medium">
                     Sales Progress
                   </p>
-                  <p className="text-2xl font-bold text-orange-900">
+                  <p className="text-2xl font-bold text-orange-900 dark:text-orange-200">
                     {salesPercentage.toFixed(0)}%
                   </p>
-                  <p className="text-xs text-orange-600">Ticket capacity</p>
+                  <p className="text-xs text-orange-600 dark:text-orange-300">Ticket capacity</p>
                 </div>
-                <Users className="h-8 w-8 text-orange-600" />
+                <Users className="h-8 w-8 text-orange-600 dark:text-orange-300" />
               </div>
             </CardContent>
           </Card>
@@ -248,60 +248,60 @@ export function EnhancedEventsDetailDialog({
             {/* Event Details */}
             <Card className="shadow-sm">
               <CardHeader>
-                <CardTitle className="text-xl flex items-center gap-2 text-gray-800">
-                  <Info className="h-5 w-5 text-blue-600" />
+                <CardTitle className="text-xl flex items-center gap-2 text-foreground">
+                  <Info className="h-5 w-5 text-primary" />
                   Event Details
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-gray-500" />
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
                     <div className="text-sm">
                       <p className="font-semibold">Dates</p>
-                      <p className="text-gray-600">
+                      <p className="text-muted-foreground">
                         {format(new Date(event.startDate), "PPP")} -{" "}
                         {format(new Date(event.endDate), "PPP")}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-gray-500" />
+                    <Clock className="h-4 w-4 text-muted-foreground" />
                     <div className="text-sm">
                       <p className="font-semibold">Time</p>
-                      <p className="text-gray-600">
+                      <p className="text-muted-foreground">
                         {event.time} - {event.endTime}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-gray-500" />
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
                     <div className="text-sm">
                       <p className="font-semibold">Location</p>
-                      <p className="text-gray-600">{event.location}</p>
+                      <p className="text-muted-foreground">{event.location}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Ticket className="h-4 w-4 text-gray-500" />
+                    <Ticket className="h-4 w-4 text-muted-foreground" />
                     <div className="text-sm">
                       <p className="font-semibold">Tickets</p>
-                      <p className="text-gray-600">
+                      <p className="text-muted-foreground">
                         Total: {event.totalTickets || "Unlimited"}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-gray-500" />
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
                     <div className="text-sm">
                       <p className="font-semibold">Price</p>
-                      <p className="text-gray-600">${event.ticketPrice}</p>
+                      <p className="text-muted-foreground">${event.ticketPrice}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-gray-500" />
+                    <Users className="h-4 w-4 text-muted-foreground" />
                     <div className="text-sm">
                       <p className="font-semibold">Age Restriction</p>
-                      <p className="text-gray-600">{event.ageRestriction}</p>
+                      <p className="text-muted-foreground">{event.ageRestriction}</p>
                     </div>
                   </div>
                 </div>
@@ -325,35 +325,35 @@ export function EnhancedEventsDetailDialog({
             {(ticketsRevenue > 0 || stallsRevenue > 0) && (
               <Card className="shadow-sm">
                 <CardHeader>
-                  <CardTitle className="text-xl flex items-center gap-2 text-gray-800">
-                    <DollarSign className="h-5 w-5 text-green-600" />
+                  <CardTitle className="text-xl flex items-center gap-2 text-foreground">
+                    <DollarSign className="h-5 w-5 text-success" />
                     Revenue Breakdown
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="p-4 bg-blue-50 rounded-lg">
-                      <p className="text-sm text-blue-600 font-medium mb-1">
+                    <div className="p-4 bg-primary/10 rounded-lg">
+                      <p className="text-sm text-primary font-medium mb-1">
                         Tickets Revenue
                       </p>
-                      <p className="text-2xl font-bold text-blue-900">
+                      <p className="text-2xl font-bold text-primary">
                         ${ticketsRevenue.toLocaleString()}
                       </p>
-                      <p className="text-xs text-blue-600 mt-1">
+                      <p className="text-xs text-primary mt-1">
                         {totalRevenue > 0
                           ? ((ticketsRevenue / totalRevenue) * 100).toFixed(1)
                           : 0}
                         % of total
                       </p>
                     </div>
-                    <div className="p-4 bg-purple-50 rounded-lg">
-                      <p className="text-sm text-purple-600 font-medium mb-1">
+                    <div className="p-4 bg-purple-50 dark:bg-purple-900/30 rounded-lg">
+                      <p className="text-sm text-purple-600 dark:text-purple-300 font-medium mb-1">
                         Stalls Revenue
                       </p>
-                      <p className="text-2xl font-bold text-purple-900">
+                      <p className="text-2xl font-bold text-purple-900 dark:text-purple-200">
                         ${stallsRevenue.toLocaleString()}
                       </p>
-                      <p className="text-xs text-purple-600 mt-1">
+                      <p className="text-xs text-purple-600 dark:text-purple-300 mt-1">
                         {totalRevenue > 0
                           ? ((stallsRevenue / totalRevenue) * 100).toFixed(1)
                           : 0}
@@ -364,7 +364,7 @@ export function EnhancedEventsDetailDialog({
                   <div className="border-t pt-4">
                     <div className="flex justify-between items-center">
                       <span className="font-bold text-lg">Total Revenue</span>
-                      <span className="font-bold text-2xl text-green-600">
+                      <span className="font-bold text-2xl text-success">
                         {formatPrice(totalRevenue)}
                       </span>
                     </div>
@@ -376,8 +376,8 @@ export function EnhancedEventsDetailDialog({
             {/* Features & Tags */}
             <Card className="shadow-sm">
               <CardHeader>
-                <CardTitle className="text-xl flex items-center gap-2 text-gray-800">
-                  <Tag className="h-5 w-5 text-orange-600" />
+                <CardTitle className="text-xl flex items-center gap-2 text-foreground">
+                  <Tag className="h-5 w-5 text-orange-600 dark:text-orange-300" />
                   Features & Tags
                 </CardTitle>
               </CardHeader>
@@ -431,7 +431,7 @@ export function EnhancedEventsDetailDialog({
             {event.gallery && event.gallery.length > 0 && (
               <Card className="shadow-sm">
                 <CardHeader>
-                  <CardTitle className="text-xl flex items-center gap-2 text-gray-800">
+                  <CardTitle className="text-xl flex items-center gap-2 text-foreground">
                     <Camera className="h-5 w-5 text-pink-600" />
                     Event Gallery
                   </CardTitle>
@@ -462,7 +462,7 @@ export function EnhancedEventsDetailDialog({
               event.specialInstructions) && (
               <Card className="shadow-sm">
                 <CardHeader>
-                  <CardTitle className="text-xl flex items-center gap-2 text-gray-800">
+                  <CardTitle className="text-xl flex items-center gap-2 text-foreground">
                     <FileText className="h-5 w-5 text-indigo-600" />
                     Policies & Instructions
                   </CardTitle>
@@ -471,7 +471,7 @@ export function EnhancedEventsDetailDialog({
                   {event.dresscode && (
                     <div>
                       <p className="font-semibold text-sm mb-1">Dress Code</p>
-                      <p className="text-sm text-gray-600">{event.dresscode}</p>
+                      <p className="text-sm text-muted-foreground">{event.dresscode}</p>
                     </div>
                   )}
                   {event.refundPolicy && (
@@ -479,7 +479,7 @@ export function EnhancedEventsDetailDialog({
                       <p className="font-semibold text-sm mb-1">
                         Refund Policy
                       </p>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-muted-foreground">
                         {event.refundPolicy}
                       </p>
                     </div>
@@ -489,7 +489,7 @@ export function EnhancedEventsDetailDialog({
                       <p className="font-semibold text-sm mb-1">
                         Terms & Conditions
                       </p>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-muted-foreground">
                         {event.termsAndConditions}
                       </p>
                     </div>
@@ -499,7 +499,7 @@ export function EnhancedEventsDetailDialog({
                       <p className="font-semibold text-sm mb-1">
                         Special Instructions
                       </p>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-muted-foreground">
                         {event.specialInstructions}
                       </p>
                     </div>
@@ -514,7 +514,7 @@ export function EnhancedEventsDetailDialog({
             {/* Organizer Details */}
             <Card className="shadow-sm">
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2 text-gray-800">
+                <CardTitle className="text-lg flex items-center gap-2 text-foreground">
                   <Users className="h-5 w-5 text-teal-600" />
                   Organizer
                 </CardTitle>
@@ -526,28 +526,28 @@ export function EnhancedEventsDetailDialog({
                   </p>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  <Mail className="h-4 w-4 text-gray-500" />
+                  <Mail className="h-4 w-4 text-muted-foreground" />
                   <a
                     href={`mailto:${event.organizerDetails.email}`}
-                    className="text-blue-600 hover:underline"
+                    className="text-primary hover:underline"
                   >
                     {event.organizerDetails.email}
                   </a>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  <Phone className="h-4 w-4 text-gray-500" />
-                  <span className="text-gray-600">
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">
                     {event.organizerDetails.phone}
                   </span>
                 </div>
                 {event.organizerDetails.website && (
                   <div className="flex items-center gap-2 text-sm">
-                    <Globe className="h-4 w-4 text-gray-500" />
+                    <Globe className="h-4 w-4 text-muted-foreground" />
                     <a
                       href={event.organizerDetails.website}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline"
+                      className="text-primary hover:underline"
                     >
                       Website
                     </a>
@@ -562,8 +562,8 @@ export function EnhancedEventsDetailDialog({
               event.socialMedia.twitter) && (
               <Card className="shadow-sm">
                 <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2 text-gray-800">
-                    <Globe className="h-5 w-5 text-blue-600" />
+                  <CardTitle className="text-lg flex items-center gap-2 text-foreground">
+                    <Globe className="h-5 w-5 text-primary" />
                     Social Media
                   </CardTitle>
                 </CardHeader>
@@ -573,7 +573,7 @@ export function EnhancedEventsDetailDialog({
                       href={event.socialMedia.facebook}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm text-blue-600 hover:underline"
+                      className="flex items-center gap-2 text-sm text-primary hover:underline"
                     >
                       <Facebook className="h-4 w-4" />
                       Facebook
@@ -607,31 +607,31 @@ export function EnhancedEventsDetailDialog({
 
             {/* Stall Information */}
             {(stallsBooked > 0 || stallsPending > 0) && (
-              <Card className="shadow-sm bg-purple-50">
+              <Card className="shadow-sm bg-purple-50 dark:bg-purple-900/20">
                 <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2 text-purple-900">
-                    <Building className="h-5 w-5 text-purple-600" />
+                  <CardTitle className="text-lg flex items-center gap-2 text-purple-900 dark:text-purple-200">
+                    <Building className="h-5 w-5 text-purple-600 dark:text-purple-300" />
                     Stall Bookings
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">Confirmed</span>
-                    <span className="text-lg font-bold text-purple-600">
+                    <span className="text-lg font-bold text-purple-600 dark:text-purple-300">
                       {stallsBooked}
                     </span>
                   </div>
                   {stallsPending > 0 && (
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-medium">Pending</span>
-                      <span className="text-lg font-bold text-orange-600">
+                      <span className="text-lg font-bold text-orange-600 dark:text-orange-300">
                         {stallsPending}
                       </span>
                     </div>
                   )}
                   <div className="flex justify-between items-center border-t pt-2">
                     <span className="text-sm font-medium">Revenue</span>
-                    <span className="text-lg font-bold text-green-600">
+                    <span className="text-lg font-bold text-success">
                       ${stallsRevenue.toLocaleString()}
                     </span>
                   </div>
@@ -641,15 +641,15 @@ export function EnhancedEventsDetailDialog({
 
             {/* Action Needed */}
             {stallsPending > 0 && (
-              <Card className="shadow-sm bg-orange-50 border-orange-200">
+              <Card className="shadow-sm bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800">
                 <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2 text-orange-900">
-                    <AlertCircle className="h-5 w-5 text-orange-600" />
+                  <CardTitle className="text-lg flex items-center gap-2 text-orange-900 dark:text-orange-200">
+                    <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-300" />
                     Action Needed
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-orange-800">
+                  <p className="text-sm text-orange-800 dark:text-orange-200">
                     You have <strong>{stallsPending}</strong> pending stall
                     request{stallsPending > 1 ? "s" : ""} awaiting your
                     approval.
