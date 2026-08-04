@@ -176,12 +176,10 @@ export default function TicketPaymentPage() {
     }
   }
 
-  useEffect(() => {
-  });
+  useEffect(() => {});
 
   async function extractUpiFromImage() {
     if (!state?.paymentURL || upiId) return;
-
 
     try {
       setLoading(true);
@@ -261,7 +259,6 @@ export default function TicketPaymentPage() {
 
         const value = qrData.slice(pos + 4, pos + 4 + len);
 
-
         // Look for proxy type field (ID=01, value="01" for UEN proxy)
         if (id === "01" && value === "01") {
           foundProxyType = true;
@@ -272,7 +269,6 @@ export default function TicketPaymentPage() {
             const uenLenHex = qrData.slice(nextPos + 2, nextPos + 4);
             const uenLen = parseInt(uenLenHex, 16);
             const uen = qrData.slice(nextPos + 4, nextPos + 4 + uenLen);
-
 
             // Validate UEN format
             if (
@@ -927,6 +923,23 @@ Please confirm my ticket booking. Thank you!`,
                           Google Pay, PhonePe, Paytm, etc.
                         </p> */}
                                 </div>
+                                {/* Backup static QR — the dynamic UPI QR is
+                                    generated client-side so there's no load
+                                    event to detect a scan failure on; show
+                                    the organizer's uploaded static QR as an
+                                    always-available fallback instead. */}
+                                {state?.paymentURL && (
+                                  <div className="text-center space-y-2 pt-4 border-t w-full">
+                                    <p className="font-semibold text-sm text-gray-700">
+                                      If the QR code fails, use this backup QR:
+                                    </p>
+                                    <img
+                                      src={state.paymentURL}
+                                      alt="Backup Payment QR Code"
+                                      className="mx-auto w-40 h-40 object-contain"
+                                    />
+                                  </div>
+                                )}
                               </div>
                             ) : (
                               <div className="flex justify-center animate-pulse">
@@ -974,36 +987,34 @@ Please confirm my ticket booking. Thank you!`,
                                   <p className="font-bold text-lg text-green-700">
                                     📱 Scan with any Payment App
                                   </p>
-                                  {mobileId && !uenId && (
+                                  {/* UEN wins when the organizer has it set on
+                                      their profile (same rule the dynamic QR
+                                      itself is generated with) — mobile
+                                      number is the fallback. Previously this
+                                      checked the separate `uenId` state,
+                                      which only ever got populated by
+                                      decoding the uploaded static QR image
+                                      client-side, and `mobileId === null`,
+                                      which mobileId (sourced from the
+                                      organizer's phone field) is never
+                                      actually set to — so the UEN branch
+                                      could never really fire. */}
+                                  {(organizerInfo as any)?.UENNumber ? (
                                     <div>
                                       <p className="font-semibold text-lg text-green-700">
                                         If the QR code fails, Pay Directly to
-                                        Mobile Number:
-                                        {mobileId}.
-                                      </p>
-
-                                      <p className="text-sm text-gray-600">
-                                        WhatsAppNumber:{" "}
-                                        <span className="font-medium">
-                                          {state?.whatsAppNumber}
-                                        </span>
+                                        UEN: {(organizerInfo as any).UENNumber}.
                                       </p>
                                     </div>
-                                  )}
-                                  {uenId && mobileId === null && (
-                                    <div>
-                                      <p className="font-semibold text-lg text-green-700">
-                                        If the QR code fails, Pay Directly to
-                                        UEN: {uenId}.
-                                      </p>
-
-                                      <p className="text-sm text-gray-600">
-                                        WhatsAppNumber:{" "}
-                                        <span className="font-medium">
-                                          {state?.whatsAppNumber}
-                                        </span>
-                                      </p>
-                                    </div>
+                                  ) : (
+                                    mobileId && (
+                                      <div>
+                                        <p className="font-semibold text-lg text-green-700">
+                                          If the QR code fails, Pay Directly to
+                                          Mobile Number: {mobileId}.
+                                        </p>
+                                      </div>
+                                    )
                                   )}
                                 </div>
                               </div>
