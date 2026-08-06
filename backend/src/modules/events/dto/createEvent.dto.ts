@@ -10,6 +10,7 @@ import {
   IsNumber,
   IsObject,
   Min,
+  Matches,
 } from "class-validator";
 import { Type } from "class-transformer";
 
@@ -223,6 +224,13 @@ export class VenueConfigDto {
   @IsBoolean()
   hasMainStage: boolean;
 
+  @IsString() @IsOptional() mainStageLabel?: string;
+  @IsString() @IsOptional() mainStageShape?: string;
+  @IsNumber() @IsOptional() mainStageWidth?: number;
+  @IsNumber() @IsOptional() mainStageHeight?: number;
+  @IsNumber() @IsOptional() mainStageX?: number;
+  @IsNumber() @IsOptional() mainStageY?: number;
+
   @IsNumber()
   @Min(1)
   @IsOptional()
@@ -304,6 +312,30 @@ export class VisitorTypeDto {
   featureAccess?: VisitorFeatureAccessDto;
 
   @IsBoolean() @IsOptional() isActive?: boolean;
+}
+
+/** A declared seat row (e.g. "VIP Row"): label, its own price, and a color.
+ * Self-contained — no VisitorType/tier and no seat cap. */
+export class SeatRowTemplateDto {
+  @IsString() id: string;
+  @IsString() name: string;
+  @IsNumber() @Min(0) price: number;
+  @IsString() @IsOptional() color?: string;
+}
+
+/** One individual seat placed on the venue canvas. */
+export class PositionedSeatDto {
+  @IsString() id: string;
+  @IsString() rowId: string;
+  @IsNumber() seatNumber: number;
+  @IsString() @IsOptional() color?: string;
+  @IsString() @IsOptional() name?: string;
+  @IsNumber() x: number;
+  @IsNumber() y: number;
+  // Degrees — set for seats placed via the drag-to-draw-a-row tool along a
+  // tilted line.
+  @IsNumber() @IsOptional() rotation?: number;
+  @IsString() venueConfigId: string;
 }
 
 /** One sponsorship tier: name, price, description — nothing more. */
@@ -647,6 +679,19 @@ export class CreateEventDto {
   @IsOptional()
   description?: string;
 
+  // Optional organizer-chosen URL identifier. Unique per organizer (not
+  // globally) — see the schema comment. Normalized (lowercased, trimmed,
+  // invalid characters stripped) again server-side in the service before
+  // saving, so this pattern is just fast client-facing feedback, not the
+  // only line of defense.
+  @IsString()
+  @IsOptional()
+  @Matches(/^[a-z0-9]+(-[a-z0-9]+)*$/, {
+    message:
+      "Slug can only contain lowercase letters, numbers, and hyphens (e.g. my-event-2026)",
+  })
+  slug?: string;
+
   // "commercial" | "personal" — top-level grouping from the create pre-step.
   @IsString()
   @IsOptional()
@@ -900,6 +945,20 @@ export class CreateEventDto {
   @IsOptional()
   @Type(() => VisitorTypeDto)
   visitorTypes?: VisitorTypeDto[];
+
+  @ValidateNested({ each: true })
+  @IsOptional()
+  @Type(() => SeatRowTemplateDto)
+  seatRowTemplates?: SeatRowTemplateDto[];
+
+  @ValidateNested({ each: true })
+  @IsOptional()
+  @Type(() => PositionedSeatDto)
+  venueSeats?: PositionedSeatDto[];
+
+  @IsString({ each: true })
+  @IsOptional()
+  seatMapBookedSeats?: string[];
 
   @ValidateNested({ each: true })
   @IsOptional()

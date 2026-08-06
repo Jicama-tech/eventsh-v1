@@ -260,6 +260,12 @@ interface VenueConfig {
   gridSize: number;
   showGrid: boolean;
   hasMainStage: boolean;
+  mainStageLabel?: string;
+  mainStageShape?: "rectangle" | "circle" | "semicircle";
+  mainStageWidth?: number;
+  mainStageHeight?: number;
+  mainStageX?: number;
+  mainStageY?: number;
   totalRows: number;
 }
 
@@ -279,6 +285,9 @@ interface FetchedEvent {
   totalTickets?: number;
   originalTotalTickets?: number;
   visitorTypes?: any[];
+  seatRowTemplates?: any[];
+  venueSeats?: any[];
+  seatMapBookedSeats?: string[];
   visibility: string;
   inviteLink: string;
   tags: string[];
@@ -520,10 +529,33 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     isRegFieldEnabled(eventData?.registrationFormFields, "workshop", key);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { id } = useParams();
+  // organizationName is only present on routes shaped
+  // "/:organizationName/events/:id" — undefined on the embed-only
+  // "/events/:id" variants. Passed through to the event-fetch call below so
+  // the backend can disambiguate a custom slug that collides across two
+  // different organizers (slugs are unique per organizer, not globally).
+  const { id, organizationName } = useParams();
   const [isFavorited, setIsFavorited] = useState(false);
   const [ticketQuantity, setTicketQuantity] = useState(1);
   const [selectedVisitorType, setSelectedVisitorType] = useState<number>(0);
+  // Cinema/concert seat map — selected seats as PositionedSeat.id values.
+  const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
+  // Measures the full-width seat-map section's actual rendered width so
+  // seats scale to fill whatever room the main content column has, instead
+  // of a guessed/fixed pixel budget. The callback ref re-fires (and this
+  // effect re-attaches its observer) whenever the section mounts/unmounts —
+  // notably the first time `showSeatPicker` flips true, well after this
+  // hook itself is declared.
+  const [seatMapEl, setSeatMapEl] = useState<HTMLDivElement | null>(null);
+  const [seatMapWidth, setSeatMapWidth] = useState(600);
+  useEffect(() => {
+    if (!seatMapEl) return;
+    const update = () => setSeatMapWidth(seatMapEl.clientWidth || 600);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(seatMapEl);
+    return () => ro.disconnect();
+  }, [seatMapEl]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   // Collapsible "Additional Information" inside the Organizer tab.
   const [showAdditionalInfo, setShowAdditionalInfo] = useState(false);
@@ -893,6 +925,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventData, currentLayoutIndex]);
+
+  // A seat selection is scoped to whichever venue is currently being
+  // viewed — switching layouts (multi-venue events) must drop any prior
+  // picks, since they belong to a different layout's seat list. Left
+  // uncleared, a stale seat id renders as a blank chip in the sidebar
+  // summary (looked up against the wrong layout's seats and finding none).
+  useEffect(() => {
+    setSelectedSeats([]);
+  }, [currentLayoutIndex]);
 
   const venueContainerRef = useRef<HTMLDivElement>(null);
   const [dynamicScale, setDynamicScale] = useState(1);
@@ -1365,7 +1406,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     const fetchEvent = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`${apiURL}/events/${eventId || id}`);
+        // organizationName disambiguates a custom event slug when two
+        // different organizers happen to have picked the same one — the
+        // backend ignores it entirely when the id segment is a real
+        // Mongo ObjectId (the common case), so this is always safe to send.
+        const orgQuery = organizationName
+          ? `?organizer=${encodeURIComponent(organizationName)}`
+          : "";
+        const response = await fetch(
+          `${apiURL}/events/${eventId || id}${orgQuery}`,
+        );
         if (!response.ok) {
           throw new Error("Failed to fetch event");
         }
@@ -1418,7 +1468,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     if (eventId || id) {
       fetchEvent();
     }
-  }, [eventId, id]);
+  }, [eventId, id, organizationName]);
 
   // Fetch round table availability — only when event has round tables
   const hasRoundTables = (eventData?.venueRoundTables?.length || 0) > 0;
@@ -4933,6 +4983,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           eventId: eventData._id,
           eventTitle: eventData.title,
           ticketType: vt.name,
+          tierId: vt.id,
           price: Number(vt.price) || 0,
           quantity: 1,
           maxQuantity: Number(vt.maxCount) || 100,
@@ -5016,6 +5067,131 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     localStorage.setItem("ticketCart", JSON.stringify(newCartData));
     if (replacedEventTitle) {
       // Say it plainly — a silently emptied cart is worse than a refusal.
+      toast({
+        duration: 6000,
+        title: "Cart updated",
+        description: `Your tickets for "${replacedEventTitle}" were removed — a cart can only hold one event at a time.`,
+      });
+    }
+    navigate(`/ticket-cart/${newCartData.eventInfo.organizerId}`);
+  };
+
+  // Cinema/concert seat map: build one cart line item per tier touched by
+  // the current seat selection (a buyer can mix VIP + standard seats in one
+  // purchase), each carrying its own seatIds — mirrors handleGetTickets but
+  // quantity is derived from the seats picked, not typed in.
+  const handleGetSeatTickets = () => {
+    if (!eventData || !eventData.organizer) return;
+    if ((eventData as any)?.isDemo) {
+      setShowDemoPrompt(true);
+      return;
+    }
+    if (isEventOver(eventData)) {
+      toast({
+        title: "This event has ended",
+        description: "Ticket sales are closed for this event.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (selectedSeats.length === 0) return;
+
+    // Individual seats placed on the currently-viewed venue layout — same
+    // venueConfigId matching the eventfront's spatial venue map uses
+    // (untagged/legacy seats belong only to the first layout).
+    const currentCfgId =
+      (eventData as any)?.venueConfig?.map((c: any) => c.id)?.[
+        currentLayoutIndex
+      ] || "default";
+    const layoutSeats: any[] = (
+      (eventData as any)?.venueSeats || []
+    ).filter((s: any) =>
+      s?.venueConfigId && s.venueConfigId !== "default"
+        ? s.venueConfigId === currentCfgId
+        : currentLayoutIndex === 0,
+    );
+    const rowDefs: any[] = (eventData as any)?.seatRowTemplates || [];
+    // Seats are self-priced via their own row template — no VisitorType
+    // lookup involved.
+    const seatsByRow = new Map<string, { seatIds: string[] }>();
+    for (const seatId of selectedSeats) {
+      const seat = layoutSeats.find((s) => s.id === seatId);
+      if (!seat) continue;
+      const entry = seatsByRow.get(seat.rowId) || { seatIds: [] };
+      entry.seatIds.push(seatId);
+      seatsByRow.set(seat.rowId, entry);
+    }
+
+    const cartItems: any[] = [];
+    for (const [rowId, { seatIds }] of seatsByRow) {
+      const row = rowDefs.find((r) => r.id === rowId);
+      if (!row) continue;
+      const seatLabels = seatIds
+        .map((id) => {
+          const seat = layoutSeats.find((s) => s.id === id);
+          if (seat?.name) return seat.name;
+          return `${row.name}${seat?.seatNumber ?? ""}`;
+        })
+        .sort();
+      cartItems.push({
+        eventId: eventData._id,
+        eventTitle: eventData.title,
+        ticketType: `${row.name} (Seats ${seatLabels.join(", ")})`,
+        tierId: row.id,
+        price: Number(row.price) || 0,
+        quantity: seatIds.length,
+        maxQuantity: seatIds.length,
+        seatIds,
+        organizerId: eventData?.organizer?._id,
+        organizerName: eventData.organizer.name,
+        organizationName: eventData.organizer.organizationName,
+        eventDate: eventData.startDate,
+        eventTime: eventData.time,
+        venue: eventData.location || eventData.address,
+        category: eventData.category,
+        ageRestriction: eventData.ageRestriction,
+        dressCode: eventData.dresscode,
+        validUntil: eventData.endDate,
+        image: eventData.image,
+        description: eventData.description,
+      });
+    }
+    if (cartItems.length === 0) return;
+
+    const existingCart = JSON.parse(localStorage.getItem("ticketCart") || "{}");
+    const existingItems = existingCart.items || [];
+    const existingEventId =
+      existingItems.length > 0 ? existingItems[0].eventId : null;
+    const replacedEventTitle =
+      existingEventId && existingEventId !== eventData._id
+        ? existingCart?.eventInfo?.title || "another event"
+        : null;
+
+    const newCartData = {
+      items: cartItems,
+      eventInfo: {
+        id: eventData._id,
+        title: eventData.title,
+        organizerId: eventData?.organizer?._id,
+        organizerName: eventData.organizer.name,
+        organizationName: eventData.organizer.organizationName,
+        date: eventData.startDate,
+        time: eventData.time,
+        venue: eventData.location || eventData.address,
+        description: eventData.description,
+        category: eventData.category,
+        ageRestriction: eventData.ageRestriction,
+        dressCode: eventData.dresscode,
+        image: eventData.image,
+        tags: eventData.tags,
+        refundPolicy: eventData.refundPolicy,
+        features: eventData.features,
+      },
+      timestamp: Date.now(),
+    };
+
+    localStorage.setItem("ticketCart", JSON.stringify(newCartData));
+    if (replacedEventTitle) {
       toast({
         duration: 6000,
         title: "Cart updated",
@@ -5237,6 +5413,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     totalTickets: rawTotalTickets,
     originalTotalTickets: rawOriginalTotal,
     visitorTypes,
+    seatRowTemplates,
+    venueSeats: rawVenueSeats,
+    seatMapBookedSeats: rawSeatMapBookedSeats,
     tags,
     features,
     ageRestriction,
@@ -5263,10 +5442,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const cleanedReelLinks: string[] = Array.isArray(reelLinks)
     ? reelLinks.map((u) => String(u || "").trim()).filter(Boolean)
     : [];
+  const allVenueSeats: any[] = Array.isArray(rawVenueSeats)
+    ? rawVenueSeats
+    : [];
+  const seatMapBookedSeats: string[] = Array.isArray(rawSeatMapBookedSeats)
+    ? rawSeatMapBookedSeats
+    : [];
   const hasReels = cleanedReelLinks.length > 0;
-  const hasVenueLayout =
-    (venueTables && Object.keys(venueTables).length > 0) ||
-    roundTableData.length > 0;
 
   // Sponsorship entry points only appear once the organizer publishes tiers.
   const sponsorTiersAvailable =
@@ -5453,6 +5635,26 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const inCrop = (x?: number, y?: number) =>
     !cropActive || ((Number(x) || 0) < cropW && (Number(y) || 0) < cropH);
 
+  // Individual seats placed on the currently-viewed venue layout — the same
+  // dots the organizer clicks onto the Space Layout canvas one at a time.
+  // Cropped-out seats are hidden here exactly like tables/round tables/doors.
+  const seats = allVenueSeats
+    .filter((s: any) => belongsToLayout(s?.venueConfigId))
+    .filter((s: any) => inCrop(s?.x, s?.y));
+  // Whether this event uses seating AT ALL (any screen/venue, not just the
+  // one currently being viewed). Deliberately NOT `seats.length > 0` — that
+  // would make the whole seat-buying UI (this section, the sidebar card,
+  // the screen switcher itself) disappear the moment someone switches to a
+  // screen that happens to have zero seats placed on it, with no way back.
+  const showSeatPicker = allVenueSeats.length > 0;
+  // Front-of-house label for the seat picker's header bar — reuses the same
+  // free-text "Main Stage" label the organizer sets on the venue canvas
+  // (which can read "Screen", "Stage", or anything else), independent of
+  // whether they've also switched the Main Stage banner itself on.
+  const seatPickerStageLabel =
+    (eventData as any)?.venueConfig?.[currentLayoutIndex]?.mainStageLabel ||
+    "Screen";
+
   const layoutAnnotations: any[] = (
     Array.isArray((eventData as any)?.venueAnnotations)
       ? ((eventData as any).venueAnnotations as any[])
@@ -5484,6 +5686,24 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     if (raw.length === 0) return [];
     return raw.filter((d) => belongsToLayout(d?.venueConfigId));
   })();
+
+  // The Venue Layout tab is for sellable/bookable venue items — gated by
+  // whichever of those sections the organizer actually turned on for this
+  // event (Spaces/AddOns, Round Tables, Speakers — which covers both
+  // Speaker Slots and the physical Speaker Space zone, and Workshops),
+  // plus doors (entrances/exits/a custom "Pathway" type, etc.) since those
+  // aren't behind their own feature toggle. Cinema/concert seats are
+  // deliberately EXCLUDED: they already get their own dedicated "Select
+  // Your Seats" section (gated by showSeatPicker), so an event with nothing
+  // but seats doesn't also need the general Venue Layout tab — it would
+  // just be a redundant, seat-only copy of that section.
+  const eventFeatures = (eventData as any)?.features || {};
+  const hasVenueLayout =
+    !!eventFeatures.hasStalls ||
+    !!eventFeatures.hasRoundTables ||
+    !!eventFeatures.hasSpeakers ||
+    !!eventFeatures.hasWorkshops ||
+    currentLayoutDoors.length > 0;
 
   // Reusable door renderer — mirrors the designer so the storefront,
   // exhibitor stall picker, and maximised dialog all show doors at the
@@ -5530,6 +5750,45 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           </div>
         );
       });
+
+  // Reusable seat renderer — same square-badge design language as
+  // renderDoors above (colored fill, dark border, white bold label), shown
+  // alongside doors/tables/round-tables/stage in the general Venue Layout
+  // map (not just the dedicated ticket-buying seat picker section).
+  const renderSeats = () =>
+    seats.map((seat: any) => {
+      const row = (seatRowTemplates || []).find(
+        (r: any) => r.id === seat.rowId,
+      );
+      const isBooked = seatMapBookedSeats.includes(seat.id);
+      return (
+        <div
+          key={`vseat-${seat.id}`}
+          className="absolute flex items-center justify-center text-[7px] font-bold text-white shadow-md select-none pointer-events-none border-2 overflow-hidden px-0.5"
+          style={{
+            left: `${seat.x}px`,
+            top: `${seat.y}px`,
+            width: "30px",
+            height: "30px",
+            borderRadius: 5,
+            backgroundColor: isBooked ? "#94a3b8" : seat.color || "#8B5CF6",
+            borderColor: "rgba(0,0,0,0.25)",
+            opacity: isBooked ? 0.6 : 1,
+            zIndex: 5,
+            transform: seat.rotation
+              ? `rotate(${seat.rotation}deg)`
+              : undefined,
+          }}
+          title={
+            seat.name || `${row?.name || "Seat"}${seat.seatNumber}`
+          }
+        >
+          <span className="px-0.5 truncate">
+            {seat.name || seat.seatNumber}
+          </span>
+        </div>
+      );
+    });
 
   const handleAddOnSelect = (addon: any) => {
     // In Edit-Request (amend) mode add-ons are add-only: an originally-booked
@@ -6250,36 +6509,1124 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               ballooning the whole column (Gallery included, since it's
               w-full *relative to this column*) past the right edge. */}
           <div className="w-full flex-1 min-w-0 space-y-8 anim-fade-up order-2 lg:order-1">
-            {/* About Section */}
-            <section>
-              <h2 className="text-lg sm:text-2xl font-bold text-gray-900 mb-3">
-                About This Event
-              </h2>
-              <p className="text-gray-600 leading-relaxed text-sm sm:text-base">
-                {description}
-              </p>
-            </section>
-
-            {/* Tags — hidden on mobile (shown sm+ only) at user request */}
-            {tags && tags.length > 0 && (
-              <div className="hidden sm:flex flex-wrap gap-2">
-                {tags.map((tag, index) => (
-                  <span
-                    key={index}
-                    className="px-3 py-1.5 rounded-full text-xs font-semibold border"
+            {/* Cinema/concert seat map — a dedicated, full-width section
+                (not squeezed into the sidebar) since seat selection is the
+                primary action for these events. Uses the SAME coordinate
+                space as the Space Layout canvas (venue width/height, cropped
+                if the organizer cropped it) rather than a box fit just to
+                the seats' own bounding area — so a seat placed near the
+                stage or off to one side shows up in that same relative spot
+                here, not re-centered into a generic grid. */}
+            {showSeatPicker && (
+              <section
+                id="seat-picker-map"
+                className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden"
+              >
+                {/* Premium top accent — a thin brand-gradient strip, the same
+                    small touch that separates a "functional" panel from a
+                    designed one. */}
+                <div
+                  className="h-1.5 w-full"
+                  style={{
+                    background: `linear-gradient(90deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                  }}
+                />
+                <div className="p-4 sm:p-8">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5 sm:mb-6">
+                    <div className="min-w-0">
+                      <h2 className="flex items-center gap-2 sm:gap-2.5 text-base sm:text-2xl font-bold text-gray-900 mb-1">
+                        <span
+                          className="flex h-7 w-7 sm:h-9 sm:w-9 flex-shrink-0 items-center justify-center rounded-xl text-white shadow-sm"
+                          style={{
+                            background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                          }}
+                        >
+                          <Ticket className="h-3.5 w-3.5 sm:h-5 sm:w-5" />
+                        </span>
+                        Select Your Seats
+                      </h2>
+                      <p className="text-xs sm:text-sm text-gray-500">
+                        Tap a seat to select it. Tap again to remove it.
+                      </p>
+                    </div>
+                    {selectedSeats.length > 0 && (
+                      <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-gray-900 text-white text-xs font-bold px-3 py-1.5 shadow-sm">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {selectedSeats.length} seat
+                        {selectedSeats.length === 1 ? "" : "s"} selected
+                      </span>
+                    )}
+                  </div>
+                  {/* Screen/venue switcher — lets a multi-venue event (e.g.
+                      two cinema screens) jump straight to picking seats on
+                      the other one, right here in the seat card itself.
+                      Previously the only way to switch venues was the
+                      separate "Venue Layout" tab, which doesn't even exist
+                      for a seating-only event (no stalls/round-tables) — so
+                      there was no way at all to reach the second screen's
+                      seats. Switching clears any in-progress selection
+                      (existing effect keyed on currentLayoutIndex), since a
+                      picked seat belongs to whichever screen was active when
+                      it was tapped. */}
+                  {venueConfig && publishedVenueCount > 1 && (
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 mb-5 -mt-1">
+                      <span className="flex-shrink-0 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                        Screen
+                      </span>
+                      {venueConfig.map((layout: any, index: number) =>
+                        layout?.published === false ? null : (
+                          <button
+                            key={layout.id}
+                            type="button"
+                            onClick={() => setCurrentLayoutIndex(index)}
+                            className={`flex-shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs sm:text-sm font-semibold transition-all ${
+                              currentLayoutIndex === index
+                                ? "text-white shadow-sm"
+                                : "border border-gray-200 text-gray-500 bg-gray-50 hover:bg-gray-100"
+                            }`}
+                            style={
+                              currentLayoutIndex === index
+                                ? {
+                                    backgroundColor:
+                                      design?.primaryColor || "#f97316",
+                                  }
+                                : undefined
+                            }
+                          >
+                            {layout.name}
+                          </button>
+                        ),
+                      )}
+                    </div>
+                  )}
+                  <div
+                    className="rounded-2xl border border-gray-200 p-3 sm:p-5 shadow-inner"
                     style={{
-                      color: design?.primaryColor || "#f97316",
-                      borderColor: `${design?.primaryColor}40` || "#fca96840",
-                      backgroundColor: `${design?.primaryColor}10` || "#fff7ed",
+                      background:
+                        "radial-gradient(ellipse at top, #eef1f6 0%, #f8fafc 55%, #ffffff 100%)",
                     }}
                   >
-                    {tag}
-                  </span>
-                ))}
-              </div>
+                    {seats.length === 0 ? (
+                      // This screen/venue has no seats placed on it — the
+                      // switcher above stays visible so there's always a
+                      // way back to whichever one does, instead of the
+                      // whole seat-buying UI just going blank.
+                      <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+                        <Ticket className="h-8 w-8 text-gray-300" />
+                        <p className="text-sm font-semibold text-gray-500">
+                          No seats on this screen
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          Try picking a different screen above.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                    {!cropCfg?.hasMainStage && (
+                      <div className="relative mx-auto max-w-md mb-1">
+                        <div
+                          className="absolute inset-x-6 -bottom-5 h-10 blur-xl opacity-60 pointer-events-none"
+                          style={{
+                            background: `radial-gradient(ellipse at center, ${design?.primaryColor || "#f97316"}55, transparent 75%)`,
+                          }}
+                        />
+                        <div className="relative rounded-t-[100px] bg-gradient-to-b from-gray-700 via-gray-800 to-gray-900 text-white text-center text-xs sm:text-sm font-semibold tracking-[0.3em] py-2.5 sm:py-3 uppercase shadow-[0_10px_24px_-8px_rgba(0,0,0,0.45)] border-b-2 border-white/10">
+                          {seatPickerStageLabel}
+                        </div>
+                      </div>
+                    )}
+                    {(() => {
+                      // As big as this layout's own seat spacing safely
+                      // allows (up to 32, bumped up from a flat 28) —
+                      // computed per-layout rather than a fixed constant,
+                      // because a curved/tightly-packed row (e.g. one drawn
+                      // with the curve tool) can have much closer
+                      // seat-to-seat spacing than a straight row, and a
+                      // flat "bigger" constant made those seats visibly
+                      // overlap. Falls back to 28 with no seats placed yet.
+                      let nearestSeatGap = Infinity;
+                      for (let i = 0; i < seats.length; i++) {
+                        for (let j = i + 1; j < seats.length; j++) {
+                          const d = Math.hypot(
+                            (seats[i].x ?? 0) - (seats[j].x ?? 0),
+                            (seats[i].y ?? 0) - (seats[j].y ?? 0),
+                          );
+                          if (d > 0 && d < nearestSeatGap) nearestSeatGap = d;
+                        }
+                      }
+                      const SEAT_NATURAL =
+                        nearestSeatGap === Infinity
+                          ? 28
+                          : Math.min(32, Math.max(18, nearestSeatGap - 6));
+                      // Zoom into just the area that actually has content
+                      // instead of rendering the organizer's FULL declared
+                      // venue canvas (often much bigger than the seating
+                      // block itself, which used to leave a sea of white
+                      // space around a small cluster of seats). Bounding
+                      // box across every item this map actually draws
+                      // (seats, doors, main stage, non-sellable spaces for
+                      // this layout), padded a bit, becomes the reference
+                      // frame instead of the raw venue width/height — same
+                      // fit-to-width scale technique, just a tighter canvas
+                      // to fit, which reads as "zoomed in".
+                      const CONTENT_PADDING = 26;
+                      const boundsDoors = currentLayoutDoors.filter(
+                        (door: any) => inCrop(door?.x, door?.y),
+                      );
+                      const boundsSpaces = (
+                        venueTables?.[currentLayoutId] || []
+                      ).filter(
+                        (table: any) =>
+                          table.forSale === false &&
+                          inCrop(table.x, table.y),
+                      );
+                      let minX = Infinity;
+                      let minY = Infinity;
+                      let maxX = -Infinity;
+                      let maxY = -Infinity;
+                      const extend = (
+                        x: number,
+                        y: number,
+                        w: number,
+                        h: number,
+                      ) => {
+                        minX = Math.min(minX, x);
+                        minY = Math.min(minY, y);
+                        maxX = Math.max(maxX, x + w);
+                        maxY = Math.max(maxY, y + h);
+                      };
+                      seats.forEach((s: any) =>
+                        extend(s.x || 0, s.y || 0, SEAT_NATURAL, SEAT_NATURAL),
+                      );
+                      boundsDoors.forEach((d: any) =>
+                        extend(
+                          d.x || 0,
+                          d.y || 0,
+                          Number(d.width) > 0 ? Number(d.width) : 50,
+                          Number(d.height) > 0 ? Number(d.height) : 50,
+                        ),
+                      );
+                      boundsSpaces.forEach((t: any) =>
+                        extend(
+                          t.x || 0,
+                          t.y || 0,
+                          t.displayWidth ?? t.width ?? 50,
+                          t.displayHeight ?? t.height ?? 50,
+                        ),
+                      );
+                      // Computed once here (not re-derived inside the render
+                      // block below with a different width reference) so the
+                      // stage's bounding-box contribution and its actual
+                      // rendered position never disagree.
+                      const stageGeom = cropCfg?.hasMainStage
+                        ? {
+                            w: cropCfg?.mainStageWidth ?? 200,
+                            h: cropCfg?.mainStageHeight ?? 60,
+                            x:
+                              cropCfg?.mainStageX ??
+                              ((cropW || 800) -
+                                (cropCfg?.mainStageWidth ?? 200)) /
+                                2,
+                            y: cropCfg?.mainStageY ?? 10,
+                          }
+                        : null;
+                      if (stageGeom) {
+                        extend(
+                          stageGeom.x,
+                          stageGeom.y,
+                          stageGeom.w,
+                          stageGeom.h,
+                        );
+                      }
+                      const hasBounds = minX !== Infinity;
+                      // Offsets shift every item's raw venue-absolute
+                      // coordinate so the tight content box starts right at
+                      // CONTENT_PADDING from the canvas's top-left — same
+                      // small margin on every side now that the row-label
+                      // gutter (a separate reserved strip on the left) has
+                      // been removed entirely, which was the real source of
+                      // the leftover white space on the left.
+                      const offsetX = hasBounds
+                        ? CONTENT_PADDING - minX
+                        : 0;
+                      const offsetY = hasBounds
+                        ? CONTENT_PADDING - minY
+                        : 0;
+                      const venueW = hasBounds
+                        ? maxX - minX + CONTENT_PADDING * 2
+                        : cropW || 800;
+                      const venueH = hasBounds
+                        ? maxY - minY + CONTENT_PADDING * 2
+                        : cropH || 500;
+                      const naturalW = venueW;
+                      const naturalH = venueH;
+                      // Fit-to-width, capped at 1 — the EXACT same technique
+                      // the general Venue Layout map uses (venueDisplayScale
+                      // above): the whole canvas (stage, doors, spaces,
+                      // every seat) renders at its natural size and is
+                      // scaled down as a single CSS transform, so nothing
+                      // can ever overlap — everything shrinks together, in
+                      // lockstep — and the box never needs a horizontal
+                      // scrollbar to show the rest of the seats, matching
+                      // how the Venue Layout tab behaves.
+                      const trueScale =
+                        naturalW > 0
+                          ? Math.min((seatMapWidth / naturalW) * 0.98, 1)
+                          : 1;
+                      const seatSize = SEAT_NATURAL;
+                      return (
+                        <div
+                          ref={setSeatMapEl}
+                          className="overflow-auto rounded-xl mt-3"
+                          style={{ width: "100%" }}
+                        >
+                          <div
+                            className="mx-auto"
+                            style={{
+                              width: naturalW * trueScale,
+                              height: naturalH * trueScale,
+                            }}
+                          >
+                            <div
+                              className="relative"
+                              style={{
+                                width: naturalW,
+                                height: naturalH,
+                                transform: `scale(${trueScale})`,
+                                transformOrigin: "top left",
+                              }}
+                            >
+                          {/* Main Stage — rendered at its true position/size
+                              only when the organizer actually turned it on,
+                              exactly matching the Space Layout canvas
+                              (dragged position included, not just centered). */}
+                          {stageGeom &&
+                            (() => {
+                              return (
+                                <div
+                                  className="absolute flex items-center justify-center font-bold uppercase text-purple-800 bg-purple-200/90 border-2 border-purple-400"
+                                  style={{
+                                    left: offsetX + stageGeom.x,
+                                    top: offsetY + stageGeom.y,
+                                    width: stageGeom.w,
+                                    height: stageGeom.h,
+                                    borderRadius:
+                                      cropCfg?.mainStageShape === "semicircle"
+                                        ? "0 0 50% 50% / 0 0 100% 100%"
+                                        : cropCfg?.mainStageShape === "circle"
+                                          ? "50%"
+                                          : 8,
+                                    fontSize: 14,
+                                    zIndex: 8,
+                                  }}
+                                >
+                                  {cropCfg?.mainStageLabel || "Main Stage"}
+                                </div>
+                              );
+                            })()}
+                          {/* Entrance / Exit / custom doors — shown for
+                              context (e.g. "which entrance is closest to my
+                              seat"), same square/circle badge design and
+                              true position as the general Venue Layout map. */}
+                          {boundsDoors
+                            .map((door: any) => {
+                              const type = (door?.type || "").toLowerCase();
+                              const isEntrance = type === "entrance";
+                              const isExit = type === "exit";
+                              const isSquare = door?.shape === "square";
+                              const dw =
+                                Number(door?.width) > 0
+                                  ? Number(door.width)
+                                  : 50;
+                              const dh =
+                                Number(door?.height) > 0
+                                  ? Number(door.height)
+                                  : 50;
+                              const doorColor = isEntrance
+                                ? "#16a34a"
+                                : isExit
+                                  ? "#dc2626"
+                                  : door?.color || "#f97316";
+                              const fallback = isEntrance
+                                ? "IN"
+                                : isExit
+                                  ? "OUT"
+                                  : "DOOR";
+                              return (
+                                <div
+                                  key={`seatmap-door-${door.id || `${door.x}-${door.y}`}`}
+                                  className="absolute flex items-center justify-center text-[12px] font-bold text-white shadow-md select-none pointer-events-none border-2 overflow-hidden"
+                                  style={{
+                                    left: offsetX + (door.x || 0),
+                                    top: offsetY + (door.y || 0),
+                                    width: dw,
+                                    height: dh,
+                                    borderRadius: isSquare
+                                      ? Math.max(2, dw * 0.16)
+                                      : "50%",
+                                    backgroundColor: doorColor,
+                                    borderColor: "rgba(0,0,0,0.25)",
+                                    transform: `rotate(${door.rotation || 0}deg)`,
+                                    transformOrigin: "center center",
+                                    zIndex: 7,
+                                  }}
+                                  title={(door.label as string) || fallback}
+                                >
+                                  <span className="px-0.5 truncate">
+                                    {door.label || fallback}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          {/* Non-sellable Spaces (decoration / standing
+                              tables marked forSale: false) — layout-only
+                              landmarks shown for context, same as the Venue
+                              Layout tab: hatched fill, no click handler, no
+                              "Book a stall" prompt, since there's nothing to
+                              sell here. Sellable stalls are deliberately
+                              left out of this section — booking those still
+                              happens from the Venue Layout tab. */}
+                          {boundsSpaces
+                            .map((table: any) => (
+                              <div
+                                key={`seatmap-space-${table.positionId}`}
+                                className={`absolute border flex items-center justify-center pointer-events-none ${
+                                  table.type === "Round"
+                                    ? "rounded-full"
+                                    : table.type === "Corner"
+                                      ? "rounded-lg"
+                                      : "rounded-sm"
+                                }`}
+                                style={{
+                                  left: offsetX + (table.x || 0),
+                                  top: offsetY + (table.y || 0),
+                                  width:
+                                    table.displayWidth ?? table.width ?? 50,
+                                  height:
+                                    table.displayHeight ?? table.height ?? 50,
+                                  transform: `rotate(${table.rotation || 0}deg)`,
+                                  transformOrigin: "center center",
+                                  backgroundColor:
+                                    (table.color || "#f59e0b") + "59",
+                                  borderColor: table.color || "#f59e0b",
+                                  backgroundImage:
+                                    "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.05) 3px, rgba(0,0,0,0.05) 6px)",
+                                  zIndex: 6,
+                                }}
+                                title={table.name}
+                              >
+                                <span className="font-extrabold text-[11px] leading-none truncate w-full text-center text-gray-900 px-0.5">
+                                  {table.name}
+                                </span>
+                              </div>
+                            ))}
+                          {seats.map((seat: any) => {
+                            const row = (seatRowTemplates || []).find(
+                              (r: any) => r.id === seat.rowId,
+                            );
+                            const isBooked = seatMapBookedSeats.includes(
+                              seat.id,
+                            );
+                            const isSelected = selectedSeats.includes(
+                              seat.id,
+                            );
+                            const color = seat.color || "#8B5CF6";
+                            return (
+                              <button
+                                key={seat.id}
+                                type="button"
+                                disabled={isBooked}
+                                title={
+                                  seat.name ||
+                                  `${row?.name || "Seat"}${seat.seatNumber}`
+                                }
+                                onClick={() =>
+                                  setSelectedSeats((prev) =>
+                                    prev.includes(seat.id)
+                                      ? prev.filter((s) => s !== seat.id)
+                                      : [...prev, seat.id],
+                                  )
+                                }
+                                className="absolute transition-all duration-150 hover:scale-110 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center leading-none overflow-hidden px-0.5"
+                                style={{
+                                  left: offsetX + seat.x,
+                                  top: offsetY + seat.y,
+                                  width: seatSize,
+                                  height: seatSize,
+                                  // Proportional to the seat's own size, not
+                                  // a fixed px value — a fixed radius (e.g.
+                                  // Tailwind's rounded-md, 6px) swallows a
+                                  // small seat whole and reads as a circle.
+                                  borderRadius: Math.max(1, seatSize * 0.16),
+                                  // Bumped up from the original 0.26/6 floor
+                                  // — legible at a glance was the goal, and
+                                  // the button already truncates long custom
+                                  // names rather than overflowing.
+                                  fontSize: Math.max(11, seatSize * 0.45),
+                                  fontWeight: 700,
+                                  color: isBooked ? "#94a3b8" : "#ffffff",
+                                  backgroundColor: isBooked
+                                    ? "#e2e8f0"
+                                    : color,
+                                  backgroundImage: isBooked
+                                    ? "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 6px)"
+                                    : "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 45%)",
+                                  opacity: isBooked ? 0.7 : 1,
+                                  // A subtle chair-like bevel on every seat
+                                  // (soft top highlight, darker underside) so
+                                  // they read as seats rather than flat
+                                  // color swatches; selected ones add a
+                                  // bright ring + a glow in the seat's own
+                                  // color for a premium "picked" feel.
+                                  boxShadow: isBooked
+                                    ? "inset 0 -2px 2px rgba(0,0,0,0.12)"
+                                    : isSelected
+                                      ? `0 0 0 2px #ffffff, 0 0 0 4px ${design?.primaryColor || "#111827"}, 0 6px 14px -2px ${color}88, inset 0 -2px 2px rgba(0,0,0,0.25), inset 0 1px 1px rgba(255,255,255,0.4)`
+                                      : "inset 0 -2px 2px rgba(0,0,0,0.25), inset 0 1px 1px rgba(255,255,255,0.4)",
+                                  transform: seat.rotation
+                                    ? `rotate(${seat.rotation}deg)`
+                                    : undefined,
+                                }}
+                              >
+                                <span className="truncate drop-shadow-sm">
+                                  {seat.name || seat.seatNumber}
+                                </span>
+                              </button>
+                            );
+                          })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Legend of seating rows — deliberately its own block
+                      below the grid, not layered on top of it, so it's
+                      always readable regardless of how packed the map is.
+                      Pill-chip styling matches the seat buttons themselves
+                      (rounded swatch + border in the row's own color) so the
+                      legend reads as part of the same designed system.
+                      Skipped entirely when this screen has no seats — see
+                      the empty state above. */}
+                  {seats.length > 0 && (
+                  <div className="mt-5 pt-5 border-t border-gray-100">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2.5">
+                      Seat Types
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {Array.from(
+                        new Map(
+                          seats.map((s: any) => [s.rowId, true]),
+                        ).keys(),
+                      )
+                        .map((rowId) =>
+                          (seatRowTemplates || []).find(
+                            (r: any) => r.id === rowId,
+                          ),
+                        )
+                        .filter(Boolean)
+                        .map((row: any) => (
+                          <div
+                            key={row.id}
+                            className="flex items-center gap-1.5 rounded-full border bg-white px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 shadow-sm"
+                            style={{ borderColor: row.color + "55" }}
+                          >
+                            <span
+                              className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: row.color }}
+                            />
+                            {row.name}
+                            <span className="text-gray-300">·</span>
+                            <span
+                              className="font-semibold"
+                              style={{ color: row.color }}
+                            >
+                              {row.price === 0
+                                ? "Free"
+                                : formatPrice(row.price)}
+                            </span>
+                          </div>
+                        ))}
+                      <div className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 shadow-sm">
+                        <span className="h-2.5 w-2.5 rounded-full flex-shrink-0 bg-gray-900 ring-2 ring-white ring-offset-1 ring-offset-gray-300" />
+                        Selected
+                      </div>
+                      <div className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-400 shadow-sm">
+                        <span className="h-2.5 w-2.5 rounded-full flex-shrink-0 bg-gray-300" />
+                        Booked
+                      </div>
+                      {/* Doors are NOT sellable — they don't get a legend
+                          entry (their IN/OUT/label text is already shown
+                          directly on the badge on the map). Only the seating
+                          rows above (which have a price) belong in this
+                          legend. */}
+                    </div>
+                  </div>
+                  )}
+                </div>
+              </section>
             )}
 
-            {/* Gallery */}
+            {/* Mobile-only: "Your Seats" purchase card + "Contact
+                Organizer" duplicated here (hidden on desktop, where the
+                sidebar already shows them) so the mobile stacking order
+                matches what was asked for: info cards -> seat map ->
+                your seats -> contact organizer -> gallery -> rest. The
+                originals stay in the sidebar for desktop, wrapped in
+                "hidden lg:block" below so they do not also render here. */}
+            <div className="lg:hidden space-y-4 mb-6">
+              {/* ── Ticket Purchase Card — only if tickets or seats exist ── */}
+              {(visitorTypes && visitorTypes.length > 0) || showSeatPicker ? (
+                <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <div className="p-5 sm:p-6">
+                    {/* Cinema/concert seating: the actual seat map now lives
+                        in its own full-width section above (near the top of
+                        the main content column) where there's real room for
+                        it. This card just shows a compact running summary —
+                        which seats are picked and the total — plus the Buy
+                        CTA below. */}
+                    {showSeatPicker ? (
+                      <>
+                        <p className="text-gray-900 font-bold text-lg mb-1">
+                          Your Seats
+                        </p>
+                        {selectedSeats.length === 0 ? (
+                          // On mobile this card sits ABOVE the actual seat
+                          // map in page order (the sidebar comes first in
+                          // the stacked layout), so "the map above" would be
+                          // backwards — a real jump link instead of static
+                          // text works regardless of layout.
+                          <button
+                            type="button"
+                            onClick={() =>
+                              document
+                                .getElementById("seat-picker-map")
+                                ?.scrollIntoView({
+                                  behavior: "smooth",
+                                  block: "start",
+                                })
+                            }
+                            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4"
+                          >
+                            Pick your seats from the seat map
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          </button>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5 mb-4">
+                            {selectedSeats.map((seatId) => {
+                              const seat = seats.find(
+                                (s: any) => s.id === seatId,
+                              );
+                              const row = (seatRowTemplates || []).find(
+                                (r: any) => r.id === seat?.rowId,
+                              );
+                              const label =
+                                seat?.name ||
+                                `${row?.name || ""}${seat?.seatNumber ?? ""}`;
+                              return (
+                                <span
+                                  key={seatId}
+                                  className="inline-flex items-center gap-1 rounded-md bg-gray-900 text-white text-xs font-semibold px-2 py-1"
+                                >
+                                  {label}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setSelectedSeats((prev) =>
+                                        prev.filter((s) => s !== seatId),
+                                      )
+                                    }
+                                    className="text-gray-400 hover:text-white"
+                                    title="Remove"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        <div className="border-t border-gray-100 pt-4 mb-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-gray-600 text-sm font-medium">
+                                Total
+                              </span>
+                              <p className="text-xs text-gray-400">
+                                {selectedSeats.length} seat
+                                {selectedSeats.length === 1 ? "" : "s"}{" "}
+                                selected
+                              </p>
+                            </div>
+                            <span className="text-2xl font-black text-gray-900">
+                              {formatPrice(
+                                selectedSeats.reduce((sum, seatId) => {
+                                  const seat = seats.find(
+                                    (s: any) => s.id === seatId,
+                                  );
+                                  const row = (seatRowTemplates || []).find(
+                                    (r: any) => r.id === seat?.rowId,
+                                  );
+                                  return sum + (Number(row?.price) || 0);
+                                }, 0),
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      </>
+                    ) : visitorTypes && visitorTypes.length > 0 ? (
+                      <>
+                        <p className="text-gray-900 font-bold text-lg mb-3">
+                          Select Ticket Type
+                        </p>
+                        <div className="space-y-2 mb-4">
+                          {visitorTypes.map((vt: any, idx: number) => {
+                            const isSelected = selectedVisitorType === idx;
+                            return (
+                              <button
+                                key={vt.id || idx}
+                                type="button"
+                                onClick={() => setSelectedVisitorType(idx)}
+                                className={`w-full text-left rounded-xl border p-4 transition-all cursor-pointer ${isSelected ? "border-2 bg-gray-50/80 shadow-sm" : "border-gray-200 bg-white hover:bg-gray-50"}`}
+                                style={
+                                  isSelected
+                                    ? {
+                                        borderColor:
+                                          design?.primaryColor || "#6366f1",
+                                      }
+                                    : {}
+                                }
+                              >
+                                <div className="flex items-center gap-3">
+                                  {/* Radio indicator */}
+                                  <div
+                                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${isSelected ? "border-transparent" : "border-gray-300"}`}
+                                    style={
+                                      isSelected
+                                        ? {
+                                            backgroundColor:
+                                              design?.primaryColor || "#6366f1",
+                                          }
+                                        : {}
+                                    }
+                                  >
+                                    {isSelected && (
+                                      <div className="w-2 h-2 rounded-full bg-white" />
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between mb-0.5">
+                                      <h4 className="font-semibold text-gray-900 text-sm">
+                                        {vt.name}
+                                      </h4>
+                                      <span
+                                        className="font-bold text-base flex-shrink-0 ml-2"
+                                        style={{
+                                          color:
+                                            design?.secondaryColor || "#ef4444",
+                                        }}
+                                      >
+                                        {vt.price === 0
+                                          ? "Free"
+                                          : formatPrice(vt.price)}
+                                      </span>
+                                    </div>
+                                    {vt.description && (
+                                      <p className="text-xs text-gray-500 mb-1">
+                                        {vt.description}
+                                      </p>
+                                    )}
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs text-gray-400">
+                                        {vt.maxCount > 0
+                                          ? `${vt.maxCount} spots`
+                                          : "Unlimited"}
+                                      </span>
+                                      {vt.featureAccess && (
+                                        <div className="flex gap-1 flex-wrap justify-end">
+                                          {Object.entries(vt.featureAccess)
+                                            .filter(([, v]) => v)
+                                            .map(([k]) => (
+                                              <span
+                                                key={k}
+                                                className="px-1.5 py-0.5 bg-gray-100 rounded text-[9px] capitalize text-gray-500"
+                                              >
+                                                {k}
+                                              </span>
+                                            ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Total for selected type */}
+                        <div className="border-t border-gray-100 pt-4 mb-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-gray-600 text-sm font-medium">
+                                Total
+                              </span>
+                              <p className="text-xs text-gray-400">
+                                {visitorTypes[selectedVisitorType]?.name} x1
+                              </p>
+                            </div>
+                            <span className="text-2xl font-black text-gray-900">
+                              {visitorTypes[selectedVisitorType]?.price === 0
+                                ? "Free"
+                                : formatPrice(
+                                    visitorTypes[selectedVisitorType]?.price ||
+                                      0,
+                                  )}
+                            </span>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* Single ticket type (legacy) */}
+                        <p className="text-gray-500 text-sm mb-1">
+                          Price per ticket
+                        </p>
+                        <p
+                          className="text-4xl sm:text-5xl font-black mb-4 leading-none"
+                          style={{ color: design?.secondaryColor || "#ef4444" }}
+                        >
+                          {ticketPrice === 0
+                            ? "Free"
+                            : formatPrice(ticketPrice)}
+                        </p>
+
+                        {/* Availability bar */}
+                        <div className="mb-5">
+                          {totalTickets > 0 ? (
+                            <>
+                              <div className="flex items-center justify-between text-sm mb-1.5">
+                                <span className="text-gray-600 font-medium">
+                                  {availableTickets} tickets left
+                                </span>
+                                <span
+                                  className="font-semibold"
+                                  style={{
+                                    color: design?.secondaryColor || "#ef4444",
+                                  }}
+                                >
+                                  {Math.round(
+                                    ((totalTickets - availableTickets) /
+                                      totalTickets) *
+                                      100,
+                                  )}
+                                  % sold
+                                </span>
+                              </div>
+                              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-500"
+                                  style={{
+                                    width: `${Math.min(((totalTickets - availableTickets) / totalTickets) * 100, 100)}%`,
+                                    background: `linear-gradient(to right, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                                  }}
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <p className="text-sm text-gray-500 font-medium">
+                              Unlimited tickets available
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Divider + Total */}
+                        <div className="border-t border-gray-100 pt-4 mb-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-600 text-sm font-medium">
+                              Total
+                            </span>
+                            <span className="text-2xl font-black text-gray-900">
+                              {ticketPrice === 0
+                                ? "Free"
+                                : formatPrice(ticketPrice * ticketQuantity)}
+                            </span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Buy Tickets CTA — only if visitorTypes exist. Once the
+                        event is over, sales close: the button is replaced with
+                        an "ended" notice (the handler + backend also refuse). */}
+                    {showSeatPicker ? (
+                      isEventOver(eventData) ? (
+                        <div className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 mb-3 text-center text-sm font-medium text-gray-500">
+                          This event has ended — ticket sales are closed.
+                        </div>
+                      ) : (
+                        <button
+                          onClick={handleGetSeatTickets}
+                          disabled={selectedSeats.length === 0}
+                          className="w-full h-12 sm:h-14 rounded-xl font-bold text-base text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 shadow-md hover:shadow-lg mb-3 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:opacity-40"
+                          style={{
+                            background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                          }}
+                        >
+                          <Ticket className="h-5 w-5" />
+                          {selectedSeats.length === 0
+                            ? "Select Seats"
+                            : `Buy ${selectedSeats.length} Seat${selectedSeats.length === 1 ? "" : "s"}`}
+                        </button>
+                      )
+                    ) : (
+                      visitorTypes &&
+                      visitorTypes.length > 0 &&
+                      (isEventOver(eventData) ? (
+                        <div className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 mb-3 text-center text-sm font-medium text-gray-500">
+                          This event has ended — ticket sales are closed.
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleGetTickets()}
+                          className="w-full h-12 sm:h-14 rounded-xl font-bold text-base text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 shadow-md hover:shadow-lg mb-3"
+                          style={{
+                            background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                          }}
+                        >
+                          <Ticket className="h-5 w-5" />
+                          Buy Tickets
+                        </button>
+                      ))
+                    )}
+
+                    {/* Share */}
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleShare}
+                        className="flex-1 h-10 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center gap-2 text-sm font-medium text-gray-600 transition-all"
+                      >
+                        <Share2 className="h-4 w-4" />
+                        Share
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Organized by footer — tap to jump to the Organizer tab */}
+                  <button
+                    type="button"
+                    onClick={() => goToTab("organizer")}
+                    className="w-full text-left border-t border-gray-100 px-5 sm:px-6 py-4 hover:bg-gray-50 transition-colors"
+                  >
+                    <p className="text-gray-400 text-xs font-medium mb-3">
+                      Organized by
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                        style={{
+                          background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                        }}
+                      >
+                        {organizer.organizationName.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900 text-sm truncate">
+                          {organizer.organizationName}
+                        </p>
+                        <p className="text-gray-400 text-xs">Event Organizer</p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <div className="p-5 sm:p-6">
+                    <p className="text-gray-900 font-bold text-lg mb-2">
+                      {title}
+                    </p>
+                    <p className="text-gray-500 text-sm mb-4">
+                      {new Date(startDate).toLocaleDateString("en-US", {
+                        weekday: "long",
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                      {time ? ` · ${time}` : ""}
+                    </p>
+                    {location && (
+                      <p className="text-gray-600 text-sm mb-1">{location}</p>
+                    )}
+                    {address && (
+                      <p className="text-gray-400 text-xs mb-4">{address}</p>
+                    )}
+
+                    {/* Share */}
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleShare}
+                        className="flex-1 h-10 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center gap-2 text-sm font-medium text-gray-600 transition-all"
+                      >
+                        <Share2 className="h-4 w-4" />
+                        Share
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Organized by footer — tap to jump to the Organizer tab */}
+                  <button
+                    type="button"
+                    onClick={() => goToTab("organizer")}
+                    className="w-full text-left border-t border-gray-100 px-5 sm:px-6 py-4 hover:bg-gray-50 transition-colors"
+                  >
+                    <p className="text-gray-400 text-xs font-medium mb-3">
+                      Organized by
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                        style={{
+                          background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                        }}
+                      >
+                        {organizer.organizationName.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900 text-sm truncate">
+                          {organizer.organizationName}
+                        </p>
+                        <p className="text-gray-400 text-xs">Event Organizer</p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              )}
+              {/* ── Contact Organizer ── */}
+              {(() => {
+                // Resolve the list of phones to render. Prefer the new
+                // contactPhones array; fall back to the legacy single
+                // phoneNumber/phone fields so older organizer records
+                // keep showing something. Dedupe so a legacy primary
+                // copied into the array doesn't render twice.
+                const rawPhones: string[] = Array.isArray(
+                  (organizer as any).contactPhones,
+                )
+                  ? (organizer as any).contactPhones
+                  : [];
+                const rawNames: string[] = Array.isArray(
+                  (organizer as any).contactPhoneNames,
+                )
+                  ? (organizer as any).contactPhoneNames
+                  : [];
+                const legacy =
+                  (organizer as any).phoneNumber ||
+                  (organizer as any).phone ||
+                  "";
+                const seen = new Set<string>();
+                // Pair each number with its label (aligned by index); append
+                // the legacy single number (no label); dedupe by number.
+                const phoneEntries = [
+                  ...rawPhones.map((p, i) => ({
+                    phone: String(p || "").trim(),
+                    name: String(rawNames[i] || "").trim(),
+                  })),
+                  { phone: String(legacy || "").trim(), name: "" },
+                ].filter((e) => {
+                  if (!e.phone) return false;
+                  const k = e.phone.replace(/\s+/g, "");
+                  if (seen.has(k)) return false;
+                  seen.add(k);
+                  return true;
+                });
+                const showCard =
+                  phoneEntries.length > 0 ||
+                  organizer.email ||
+                  organizer.whatsAppNumber;
+                if (!showCard) return null;
+                return (
+                  <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+                    <div className="px-5 pt-5 pb-4">
+                      <p
+                        className="text-sm sm:text-lg font-bold tracking-widest uppercase mb-4"
+                        style={{ color: design?.primaryColor }}
+                      >
+                        Contact Organizer
+                      </p>
+                      <div className="space-y-3">
+                        {phoneEntries.length > 0 && (
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                              <Phone className="h-3.5 w-3.5 text-gray-400" />
+                            </div>
+                            <div className="text-sm font-medium flex flex-col gap-1">
+                              {phoneEntries.map((e, idx) => (
+                                <a
+                                  key={`p-${idx}`}
+                                  href={`tel:${e.phone.replace(/\s+/g, "")}`}
+                                  className="hover:underline"
+                                  style={{
+                                    color: design?.secondaryColor || "#ef4444",
+                                  }}
+                                >
+                                  {e.name && (
+                                    <span className="text-gray-700 font-semibold mr-1.5">
+                                      {e.name}:
+                                    </span>
+                                  )}
+                                  {e.phone}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {organizer.email && (
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                              <Mail className="h-3.5 w-3.5 text-gray-400" />
+                            </div>
+                            <a
+                              href={`mailto:${organizer.email}`}
+                              className="text-sm font-medium hover:underline break-all"
+                              style={{
+                                color: design?.secondaryColor || "#ef4444",
+                              }}
+                            >
+                              {organizer.email}
+                            </a>
+                          </div>
+                        )}
+                        {organizer.whatsAppNumber && (
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                              <FaWhatsapp className="h-3.5 w-3.5 text-green-500" />
+                            </div>
+                            <a
+                              href={`https://wa.me/${organizer.whatsAppNumber.replace(/\D/g, "")}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm font-medium text-gray-700 hover:text-green-600 transition-colors"
+                            >
+                              {organizer.whatsAppNumber}
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Gallery — moved up to right after the seat map/venue info
+                (was previously below About/Tags) so mobile sees visuals
+                before a wall of text, per the requested mobile order:
+                cards → selection/seat map → your seats + contact organizer
+                (sidebar, injected below via the lg:hidden block) →
+                gallery → everything else. */}
             {gallery && gallery.length > 0 && (
               <section>
                 <h2 className="text-lg sm:text-2xl font-bold text-gray-900 mb-4">
@@ -6338,6 +7685,35 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
                 )}
               </section>
+            )}
+
+            {/* About Section */}
+            <section>
+              <h2 className="text-lg sm:text-2xl font-bold text-gray-900 mb-3">
+                About This Event
+              </h2>
+              <p className="text-gray-600 leading-relaxed text-sm sm:text-base">
+                {description}
+              </p>
+            </section>
+
+            {/* Tags — hidden on mobile (shown sm+ only) at user request */}
+            {tags && tags.length > 0 && (
+              <div className="hidden sm:flex flex-wrap gap-2">
+                {tags.map((tag, index) => (
+                  <span
+                    key={index}
+                    className="px-3 py-1.5 rounded-full text-xs font-semibold border"
+                    style={{
+                      color: design?.primaryColor || "#f97316",
+                      borderColor: `${design?.primaryColor}40` || "#fca96840",
+                      backgroundColor: `${design?.primaryColor}10` || "#fff7ed",
+                    }}
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
             )}
 
             {/* History (Instagram reels) moved out of this column — it now
@@ -6765,12 +8141,108 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           {/* ── RIGHT: Sticky Sidebar ── */}
           <div className="w-full lg:w-80 xl:w-96 flex-shrink-0 order-1 lg:order-2">
             <div className="sticky-sidebar space-y-4">
-              {/* ── Ticket Purchase Card — only if tickets exist ── */}
-              {visitorTypes && visitorTypes.length > 0 ? (
+              <div className="hidden lg:block">
+              {/* ── Ticket Purchase Card — only if tickets or seats exist ── */}
+              {(visitorTypes && visitorTypes.length > 0) || showSeatPicker ? (
                 <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                   <div className="p-5 sm:p-6">
-                    {/* Multiple Visitor Types — select one */}
-                    {visitorTypes && visitorTypes.length > 0 ? (
+                    {/* Cinema/concert seating: the actual seat map now lives
+                        in its own full-width section above (near the top of
+                        the main content column) where there's real room for
+                        it. This card just shows a compact running summary —
+                        which seats are picked and the total — plus the Buy
+                        CTA below. */}
+                    {showSeatPicker ? (
+                      <>
+                        <p className="text-gray-900 font-bold text-lg mb-1">
+                          Your Seats
+                        </p>
+                        {selectedSeats.length === 0 ? (
+                          // On mobile this card sits ABOVE the actual seat
+                          // map in page order (the sidebar comes first in
+                          // the stacked layout), so "the map above" would be
+                          // backwards — a real jump link instead of static
+                          // text works regardless of layout.
+                          <button
+                            type="button"
+                            onClick={() =>
+                              document
+                                .getElementById("seat-picker-map")
+                                ?.scrollIntoView({
+                                  behavior: "smooth",
+                                  block: "start",
+                                })
+                            }
+                            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4"
+                          >
+                            Pick your seats from the seat map
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          </button>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5 mb-4">
+                            {selectedSeats.map((seatId) => {
+                              const seat = seats.find(
+                                (s: any) => s.id === seatId,
+                              );
+                              const row = (seatRowTemplates || []).find(
+                                (r: any) => r.id === seat?.rowId,
+                              );
+                              const label =
+                                seat?.name ||
+                                `${row?.name || ""}${seat?.seatNumber ?? ""}`;
+                              return (
+                                <span
+                                  key={seatId}
+                                  className="inline-flex items-center gap-1 rounded-md bg-gray-900 text-white text-xs font-semibold px-2 py-1"
+                                >
+                                  {label}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setSelectedSeats((prev) =>
+                                        prev.filter((s) => s !== seatId),
+                                      )
+                                    }
+                                    className="text-gray-400 hover:text-white"
+                                    title="Remove"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        <div className="border-t border-gray-100 pt-4 mb-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-gray-600 text-sm font-medium">
+                                Total
+                              </span>
+                              <p className="text-xs text-gray-400">
+                                {selectedSeats.length} seat
+                                {selectedSeats.length === 1 ? "" : "s"}{" "}
+                                selected
+                              </p>
+                            </div>
+                            <span className="text-2xl font-black text-gray-900">
+                              {formatPrice(
+                                selectedSeats.reduce((sum, seatId) => {
+                                  const seat = seats.find(
+                                    (s: any) => s.id === seatId,
+                                  );
+                                  const row = (seatRowTemplates || []).find(
+                                    (r: any) => r.id === seat?.rowId,
+                                  );
+                                  return sum + (Number(row?.price) || 0);
+                                }, 0),
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      </>
+                    ) : visitorTypes && visitorTypes.length > 0 ? (
                       <>
                         <p className="text-gray-900 font-bold text-lg mb-3">
                           Select Ticket Type
@@ -6955,7 +8427,28 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     {/* Buy Tickets CTA — only if visitorTypes exist. Once the
                         event is over, sales close: the button is replaced with
                         an "ended" notice (the handler + backend also refuse). */}
-                    {visitorTypes &&
+                    {showSeatPicker ? (
+                      isEventOver(eventData) ? (
+                        <div className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 mb-3 text-center text-sm font-medium text-gray-500">
+                          This event has ended — ticket sales are closed.
+                        </div>
+                      ) : (
+                        <button
+                          onClick={handleGetSeatTickets}
+                          disabled={selectedSeats.length === 0}
+                          className="w-full h-12 sm:h-14 rounded-xl font-bold text-base text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 shadow-md hover:shadow-lg mb-3 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:opacity-40"
+                          style={{
+                            background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                          }}
+                        >
+                          <Ticket className="h-5 w-5" />
+                          {selectedSeats.length === 0
+                            ? "Select Seats"
+                            : `Buy ${selectedSeats.length} Seat${selectedSeats.length === 1 ? "" : "s"}`}
+                        </button>
+                      )
+                    ) : (
+                      visitorTypes &&
                       visitorTypes.length > 0 &&
                       (isEventOver(eventData) ? (
                         <div className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 mb-3 text-center text-sm font-medium text-gray-500">
@@ -6972,7 +8465,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           <Ticket className="h-5 w-5" />
                           Buy Tickets
                         </button>
-                      ))}
+                      ))
+                    )}
 
                     {/* Share */}
                     <div className="flex gap-3">
@@ -7075,6 +8569,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </button>
                 </div>
               )}
+              </div>
 
               {/* ── Exhibitor Card — only if event has stall spaces ── */}
               {venueTables && Object.keys(venueTables).length > 0 && (
@@ -7213,6 +8708,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
                 )}
 
+              <div className="hidden lg:block">
               {/* ── Contact Organizer ── */}
               {(() => {
                 // Resolve the list of phones to render. Prefer the new
@@ -7327,6 +8823,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
                 );
               })()}
+              </div>
 
               {/* Follow Us — separate card below Contact Organizer so
                   the social links read as their own block. Renders the
@@ -7566,8 +9063,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               >
                 Organizer
               </TabsTrigger>
-              {((venueTables && Object.keys(venueTables).length > 0) ||
-                roundTableData.length > 0) && (
+              {hasVenueLayout && (
                 <TabsTrigger
                   value="venue"
                   className="flex-1 rounded-xl text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm font-medium text-sm py-2.5"
@@ -8227,21 +9723,37 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 }}
                               >
                                 {venueConfig[currentLayoutIndex]
-                                  ?.hasMainStage && (
-                                  <div
-                                    className="absolute bg-purple-200 border-2 border-purple-500 flex items-center justify-center font-bold text-purple-700 shadow-md"
-                                    style={{
-                                      top: "0px",
-                                      left: "50%",
-                                      transform: "translateX(-50%)",
-                                      width: "200px",
-                                      height: "60px",
-                                      zIndex: 10,
-                                    }}
-                                  >
-                                    MAIN STAGE
-                                  </div>
-                                )}
+                                  ?.hasMainStage &&
+                                  (() => {
+                                    const vc = venueConfig[currentLayoutIndex];
+                                    const stageW = vc?.mainStageWidth ?? 200;
+                                    const stageH = vc?.mainStageHeight ?? 60;
+                                    const stageX =
+                                      vc?.mainStageX ??
+                                      (venueDisplayCanvas.width - stageW) / 2;
+                                    const stageY = vc?.mainStageY ?? 0;
+                                    return (
+                                      <div
+                                        className="absolute bg-purple-200 border-2 border-purple-500 flex items-center justify-center font-bold text-purple-700 shadow-md uppercase"
+                                        style={{
+                                          left: stageX,
+                                          top: stageY,
+                                          width: stageW,
+                                          height: stageH,
+                                          borderRadius:
+                                            vc?.mainStageShape ===
+                                            "semicircle"
+                                              ? "0 0 50% 50% / 0 0 100% 100%"
+                                              : vc?.mainStageShape === "circle"
+                                                ? "50%"
+                                                : undefined,
+                                          zIndex: 10,
+                                        }}
+                                      >
+                                        {vc?.mainStageLabel || "Main Stage"}
+                                      </div>
+                                    );
+                                  })()}
                                 {venueTables[currentLayoutId]
                                   ?.filter((table) => inCrop(table.x, table.y))
                                   .map((table) => {
@@ -8648,6 +10160,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                   })}
                                 {/* Entrance / exit door markers */}
                                 {renderDoors()}
+                                {/* Cinema/concert seats */}
+                                {renderSeats()}
                                 {layoutAnnotations.length > 0 && (
                                   <VenueAnnotationLayer
                                     readOnly
@@ -9081,13 +10595,21 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                   {/* Main Stage */}
                                   {vc.hasMainStage && (
                                     <div
-                                      className="absolute flex items-center justify-center font-bold rounded-b-lg"
+                                      className="absolute flex items-center justify-center font-bold rounded-b-lg uppercase"
                                       style={{
-                                        top: 0,
-                                        left: "50%",
-                                        transform: "translateX(-50%)",
-                                        width: 200,
-                                        height: 50,
+                                        top: vc.mainStageY ?? 0,
+                                        left:
+                                          vc.mainStageX ??
+                                          (canvasW - (vc.mainStageWidth ?? 200)) /
+                                            2,
+                                        width: vc.mainStageWidth ?? 200,
+                                        height: vc.mainStageHeight ?? 50,
+                                        borderRadius:
+                                          vc.mainStageShape === "semicircle"
+                                            ? "0 0 50% 50% / 0 0 100% 100%"
+                                            : vc.mainStageShape === "circle"
+                                              ? "50%"
+                                              : undefined,
                                         zIndex: 10,
                                         fontSize: 11,
                                         letterSpacing: 3,
@@ -9097,7 +10619,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                         borderBottom: "2px solid #8b5cf6",
                                       }}
                                     >
-                                      MAIN STAGE
+                                      {vc.mainStageLabel || "Main Stage"}
                                     </div>
                                   )}
                                 </div>
@@ -12482,21 +14004,37 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         >
                           {/* Main Stage */}
                           {eventData?.venueConfig?.[currentLayoutIndex]
-                            ?.hasMainStage && (
-                            <div
-                              className="absolute bg-purple-200 border-2 border-purple-500 flex items-center justify-center font-bold text-purple-700 shadow-md"
-                              style={{
-                                top: 0,
-                                left: "50%",
-                                transform: "translateX(-50%)",
-                                width: 200,
-                                height: 60,
-                                zIndex: 10,
-                              }}
-                            >
-                              MAIN STAGE
-                            </div>
-                          )}
+                            ?.hasMainStage &&
+                            (() => {
+                              const vc: any =
+                                eventData?.venueConfig?.[currentLayoutIndex];
+                              const stageW = vc?.mainStageWidth ?? 200;
+                              const stageH = vc?.mainStageHeight ?? 60;
+                              const stageX =
+                                vc?.mainStageX ??
+                                (venueDisplayCanvas.width - stageW) / 2;
+                              const stageY = vc?.mainStageY ?? 0;
+                              return (
+                                <div
+                                  className="absolute bg-purple-200 border-2 border-purple-500 flex items-center justify-center font-bold text-purple-700 shadow-md uppercase"
+                                  style={{
+                                    left: stageX,
+                                    top: stageY,
+                                    width: stageW,
+                                    height: stageH,
+                                    borderRadius:
+                                      vc?.mainStageShape === "semicircle"
+                                        ? "0 0 50% 50% / 0 0 100% 100%"
+                                        : vc?.mainStageShape === "circle"
+                                          ? "50%"
+                                          : undefined,
+                                    zIndex: 10,
+                                  }}
+                                >
+                                  {vc?.mainStageLabel || "Main Stage"}
+                                </div>
+                              );
+                            })()}
 
                           {/* Tables */}
                           {(availableTables[currentLayoutId] || [])
@@ -12711,6 +14249,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             })}
                           {/* Entrance / exit door markers */}
                           {renderDoors()}
+                          {/* Cinema/concert seats */}
+                          {renderSeats()}
                           {layoutAnnotations.length > 0 && (
                             <VenueAnnotationLayer
                               readOnly
@@ -13262,21 +14802,37 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 }}
               >
                 {/* Main Stage */}
-                {eventData?.venueConfig?.[currentLayoutIndex]?.hasMainStage && (
-                  <div
-                    className="absolute bg-purple-200 border-2 border-purple-500 flex items-center justify-center font-bold text-purple-700"
-                    style={{
-                      top: 0,
-                      left: "50%",
-                      transform: "translateX(-50%)",
-                      width: 200,
-                      height: 60,
-                      zIndex: 10,
-                    }}
-                  >
-                    MAIN STAGE
-                  </div>
-                )}
+                {eventData?.venueConfig?.[currentLayoutIndex]?.hasMainStage &&
+                  (() => {
+                    const vc: any =
+                      eventData?.venueConfig?.[currentLayoutIndex];
+                    const stageW = vc?.mainStageWidth ?? 200;
+                    const stageH = vc?.mainStageHeight ?? 60;
+                    const stageX =
+                      vc?.mainStageX ??
+                      (venueDisplayCanvas.width - stageW) / 2;
+                    const stageY = vc?.mainStageY ?? 0;
+                    return (
+                      <div
+                        className="absolute bg-purple-200 border-2 border-purple-500 flex items-center justify-center font-bold text-purple-700 uppercase"
+                        style={{
+                          left: stageX,
+                          top: stageY,
+                          width: stageW,
+                          height: stageH,
+                          borderRadius:
+                            vc?.mainStageShape === "semicircle"
+                              ? "0 0 50% 50% / 0 0 100% 100%"
+                              : vc?.mainStageShape === "circle"
+                                ? "50%"
+                                : undefined,
+                          zIndex: 10,
+                        }}
+                      >
+                        {vc?.mainStageLabel || "Main Stage"}
+                      </div>
+                    );
+                  })()}
 
                 {/* Tables */}
                 {(availableTables[currentLayoutId] || [])
@@ -13432,6 +14988,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   })}
                 {/* Entrance / exit door markers */}
                 {renderDoors()}
+                {/* Cinema/concert seats */}
+                {renderSeats()}
                 {layoutAnnotations.length > 0 && (
                   <VenueAnnotationLayer
                     readOnly

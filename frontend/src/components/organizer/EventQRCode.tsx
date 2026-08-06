@@ -28,6 +28,9 @@ import { useCountry } from "@/hooks/useCountry";
 interface EventQRCodeProps {
   event: {
     id: string | number;
+    // Optional organizer-chosen URL identifier — when set, the QR code
+    // links here instead of the raw event id.
+    slug?: string;
     name: string;
     date: string;
     time?: string;
@@ -107,7 +110,7 @@ export function EventQRCode({ event, apiURL, onClose }: EventQRCodeProps) {
   // is the organizer's slug — NOT an `/organizers/` API prefix, which is what
   // made the old link 404 and the QR open nothing useful.
   const linkReady = !!slug;
-  const eventURL = `https://eventsh.com/${slug}/events/${event.id}`;
+  const eventURL = `https://eventsh.com/${slug}/events/${event.slug || event.id}`;
 
   // Encode the plain URL so any phone camera or QR app opens the event page
   // directly. Previously this encoded a JSON blob, which scanners surfaced as
