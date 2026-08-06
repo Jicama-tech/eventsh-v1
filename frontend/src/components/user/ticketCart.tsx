@@ -51,6 +51,14 @@ interface TicketItem {
   venue: string;
   description?: string;
   validUntil: string;
+  // Cinema/concert seat map only: the reserved seat cells this line item
+  // covers (`${rowId}:${seatNumber}`). Already baked into `ticketType`'s
+  // display label by eventFront's seat picker.
+  seatIds?: string[];
+  // VisitorType.id — lets the backend reliably decrement that tier's
+  // capacity even though `ticketType` may be a decorated display string
+  // (seat purchases embed seat labels into it).
+  tierId?: string;
 }
 
 interface EventInfo {
@@ -984,6 +992,8 @@ export default function TicketCart() {
           price: item.price,
           eventTitle: item.eventTitle,
           validUntil: item.validUntil,
+          ...(item.seatIds?.length ? { seatIds: item.seatIds } : {}),
+          ...(item.tierId ? { tierId: item.tierId } : {}),
         })),
         customerDetails: {
           email: email,
@@ -1550,6 +1560,15 @@ export default function TicketCart() {
                   <div className="flex justify-between items-start gap-4">
                     <div className="flex-1 space-y-2">
                       <h4 className="font-semibold">{item.eventTitle}</h4>
+                      {/* Ticket type/tier — already includes the chosen
+                          seats for seat-map purchases (e.g. "VIP (Seats A1,
+                          A2)"), so this is the one line that actually tells
+                          the buyer which seats they're paying for. */}
+                      {item.ticketType && (
+                        <p className="text-sm font-medium text-gray-700">
+                          {item.ticketType}
+                        </p>
+                      )}
                       {item.description && (
                         <p className="text-sm text-muted-foreground line-clamp-2">
                           {item.description}
@@ -1574,10 +1593,10 @@ export default function TicketCart() {
 
                     <div className="flex items-center gap-3">
                       <span className="px-3 py-1 min-w-[3rem] text-center">
-                        × 1
+                        × {item.quantity}
                       </span>
                       <div className="min-w-[4rem] font-semibold text-right">
-                        = {formatPrice(item.price)}
+                        = {formatPrice(item.price * item.quantity)}
                       </div>
                       <Button
                         variant="ghost"

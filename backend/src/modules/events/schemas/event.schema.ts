@@ -25,6 +25,29 @@ class VenueConfig {
   @Prop()
   hasMainStage: boolean;
 
+  // Free-text front-of-house label shown on the canvas banner when
+  // hasMainStage is on — "Main Stage" for a gala, "Screen" for a movie,
+  // "Stage" for a concert, or anything else the organizer wants.
+  @Prop({ default: "Main Stage" })
+  mainStageLabel?: string;
+
+  @Prop({ default: "rectangle" })
+  mainStageShape?: string;
+
+  @Prop({ default: 200 })
+  mainStageWidth?: number;
+
+  @Prop({ default: 60 })
+  mainStageHeight?: number;
+
+  // Undefined = default centered-at-top position (computed on the fly from
+  // width/mainStageWidth) — set once the organizer drags it anywhere else.
+  @Prop()
+  mainStageX?: number;
+
+  @Prop()
+  mainStageY?: number;
+
   @Prop()
   totalRows?: number;
 
@@ -87,6 +110,40 @@ class VisitorType {
   @Prop() description?: string;
   @Prop({ type: Object }) featureAccess: VisitorFeatureAccess;
   @Prop({ default: true }) isActive: boolean;
+}
+
+// A declared seat row (e.g. "VIP Row") defined on the Seating tab — self-
+// contained pricing (no VisitorType dependency): a label, its own price, and
+// a color. Declaring a row does NOT place any seats and has no seat cap —
+// however many PositionedSeat entries end up tagged with this row's id
+// (placed one at a time or in bulk via the drag-to-draw tool) IS the row's
+// seat count, counted live rather than pre-declared.
+class SeatRowTemplate {
+  @Prop({ required: true }) id: string;
+  @Prop({ required: true }) name: string;
+  @Prop({ required: true, min: 0 }) price: number;
+  @Prop({ default: "#8B5CF6" }) color: string;
+}
+
+// One individual seat placed on the venue canvas, freely positioned (not
+// confined to a straight box) — booked ones are tracked by `id` directly in
+// Event.seatMapBookedSeats. Pricing/name resolve live via `rowId` against
+// SeatRowTemplate — never snapshotted onto the seat itself.
+class PositionedSeat {
+  @Prop({ required: true }) id: string;
+  @Prop({ required: true }) rowId: string;
+  @Prop({ required: true }) seatNumber: number;
+  @Prop({ default: "#8B5CF6" }) color: string;
+  // Optional organizer-given name (e.g. "VIP-1", a sponsor's reserved
+  // seat) — falls back to `${row.name}${seatNumber}` everywhere when unset.
+  @Prop() name?: string;
+  @Prop() x: number;
+  @Prop() y: number;
+  // Degrees, set when this seat was placed by the drag-to-draw-a-row tool
+  // along a tilted line (real curved/theater-style rows) — undefined/0 for
+  // seats placed one at a time, which stay upright.
+  @Prop() rotation?: number;
+  @Prop() venueConfigId: string;
 }
 
 /**
@@ -367,6 +424,17 @@ export class Event {
 
   @Prop()
   description?: string;
+
+  // Organizer-chosen URL identifier — when set, the public eventfront link
+  // uses this instead of the raw Mongo _id (e.g. /org-slug/events/my-event
+  // instead of /org-slug/events/671f...). Unique per organizer, not
+  // globally — two different organizers may pick the same slug (the
+  // eventfront route already carries the organizer's own slug, so there's
+  // no real ambiguity there). Left unset, everything works exactly as
+  // before (falls back to the _id). Enforced via a sparse compound index
+  // below so events without a slug never collide with each other.
+  @Prop({ trim: true, lowercase: true })
+  slug?: string;
 
   // Top-level event grouping picked in the "Create Event" pre-step. The
   // chosen sub-type is stored in `category`; this records which family it
@@ -773,6 +841,20 @@ export class Event {
   @Prop({ type: [Object], default: [] })
   visitorTypes: VisitorType[];
 
+  // Cinema/concert-style assigned seating (Event Sections toggle:
+  // features.hasSeating). Templates are defined on the Seating tab and
+  // placed onto the venue canvas like round tables/stalls; when none are
+  // placed, ticketing falls back to the plain visitorTypes picker above
+  // with no other code change.
+  @Prop({ type: [Object], default: [] })
+  seatRowTemplates?: SeatRowTemplate[];
+
+  @Prop({ type: Array, default: [] })
+  venueSeats?: PositionedSeat[];
+
+  @Prop({ type: [String], default: [] })
+  seatMapBookedSeats?: string[];
+
   // Sponsorship tiers on offer. Businesses apply against one of these from
   // the eventfront; see the `sponsors` module for the applications themselves.
   @Prop({ type: [Object], default: [] })
@@ -859,3 +941,17 @@ export class Event {
 }
 
 export const EventSchema = SchemaFactory.createForClass(Event);
+
+// Partial (not sparse) so events with no slug never collide with each
+// other under the unique constraint. `sparse` alone doesn't do this for a
+// COMPOUND key: MongoDB only skips a sparse index entry when EVERY field
+// in the key is missing, and `organizer` is always present here — so a
+// merely-sparse version of this index would try to index every slugless
+// event too, with `slug` read as null, and any two of an organizer's
+// events without a slug would collide as "duplicates." A partial filter
+// restricts the index to documents that actually have a slug, which is
+// what was actually intended.
+EventSchema.index(
+  { organizer: 1, slug: 1 },
+  { unique: true, partialFilterExpression: { slug: { $exists: true } } },
+);

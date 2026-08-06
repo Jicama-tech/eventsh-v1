@@ -19,12 +19,25 @@ interface Props {
   roundTables: any[];
   doors: any[];
   annotations: VenueAnnotation[];
+  /** Individual cinema/concert seats — optional, older callers omit these. */
+  seats?: any[];
+  /** Row declarations (label/tier/color) the seats above reference. */
+  seatRowTemplates?: any[];
   /** Display px per logical unit. */
   scale?: number;
 }
 
 const VenuePreview = forwardRef<HTMLDivElement, Props>(function VenuePreview(
-  { config, tables, roundTables, doors, annotations, scale = 1 },
+  {
+    config,
+    tables,
+    roundTables,
+    doors,
+    annotations,
+    seats = [],
+    seatRowTemplates = [],
+    scale = 1,
+  },
   ref,
 ) {
   const cropped = !!config?.cropped;
@@ -62,16 +75,25 @@ const VenuePreview = forwardRef<HTMLDivElement, Props>(function VenuePreview(
         overflow: "hidden",
       }}
     >
-      {/* Main stage */}
+      {/* Main stage — true position/size, including a drag if the
+          organizer moved it off its default centered-at-top spot. */}
       {config?.hasMainStage && (
         <div
           style={{
             position: "absolute",
-            top: 0,
-            left: "50%",
-            transform: "translateX(-50%)",
-            width: 200 * s,
-            height: 60 * s,
+            left:
+              config?.mainStageX != null
+                ? config.mainStageX * s
+                : (W - (config?.mainStageWidth ?? 200)) / 2 * s,
+            top: (config?.mainStageY ?? 0) * s,
+            width: (config?.mainStageWidth ?? 200) * s,
+            height: (config?.mainStageHeight ?? 60) * s,
+            borderRadius:
+              config?.mainStageShape === "semicircle"
+                ? "0 0 50% 50% / 0 0 100% 100%"
+                : config?.mainStageShape === "circle"
+                  ? "50%"
+                  : 6,
             backgroundColor: "#e9d5ff",
             border: "2px solid #a855f7",
             color: "#7c3aed",
@@ -80,10 +102,11 @@ const VenuePreview = forwardRef<HTMLDivElement, Props>(function VenuePreview(
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            textTransform: "uppercase",
             zIndex: 10,
           }}
         >
-          MAIN STAGE
+          {config?.mainStageLabel || "Main Stage"}
         </div>
       )}
 
@@ -245,6 +268,48 @@ const VenuePreview = forwardRef<HTMLDivElement, Props>(function VenuePreview(
               }}
             >
               {label}
+            </div>
+          );
+        })}
+
+      {/* Cinema/concert seats — small square per seat, colored by its row. */}
+      {seats
+        .filter((seat) => inCrop(seat.x, seat.y))
+        .map((seat) => {
+          const row = seatRowTemplates.find((r) => r.id === seat.rowId);
+          const size = Math.max(6, 26 * s);
+          return (
+            <div
+              key={seat.id}
+              title={
+                seat.name || `${row?.name || "Seat"}${seat.seatNumber}`
+              }
+              style={{
+                position: "absolute",
+                left: (seat.x || 0) * s,
+                top: (seat.y || 0) * s,
+                width: size,
+                height: size,
+                // Proportional to the seat's own rendered size, not a fixed
+                // px value that would swallow a small seat and look round.
+                borderRadius: Math.max(1, size * 0.16),
+                backgroundColor: seat.color || "#8B5CF6",
+                border: "1px solid rgba(255,255,255,0.6)",
+                color: "#fff",
+                fontWeight: 700,
+                fontSize: Math.max(5, size * 0.4),
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                lineHeight: 1,
+                overflow: "hidden",
+                zIndex: 6,
+                transform: seat.rotation
+                  ? `rotate(${seat.rotation}deg)`
+                  : undefined,
+              }}
+            >
+              {size >= 10 ? seat.name || seat.seatNumber : ""}
             </div>
           );
         })}

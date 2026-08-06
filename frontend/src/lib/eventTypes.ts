@@ -31,6 +31,7 @@ export const EVENT_TYPE_GROUPS: Record<EventTypeKey, EventTypeGroup> = {
       "Product Launch",
       "Networking Event",
       "Job Fair",
+      "Movie / Concert",
     ],
   },
   personal: {

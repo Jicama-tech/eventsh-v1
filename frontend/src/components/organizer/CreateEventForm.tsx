@@ -65,6 +65,7 @@ import {
   Eye,
   GraduationCap,
   Package,
+  LayoutGrid,
 } from "lucide-react";
 import {
   HoverCard,
@@ -106,6 +107,58 @@ interface VisitorType {
   featureAccess: VisitorFeatureAccess;
   isActive: boolean;
 }
+
+// A declared seat row (e.g. "VIP Row"), defined on the Seating tab —
+// self-contained pricing (its own `price`, no VisitorType/Visitors-tab
+// dependency). Declaring a row places nothing and has no seat cap: the
+// organizer adds PositionedSeat entries on the Space Layout canvas (one at a
+// time, or in bulk via the drag-to-draw-a-row tool), and however many end up
+// tagged with this row's id IS its seat count — counted live, never
+// pre-declared.
+interface SeatRowTemplate {
+  id: string;
+  name: string;
+  price: number;
+  color: string;
+}
+
+// One individual seat placed on the venue canvas — freely positioned (not
+// confined to a straight box), tagged to the row it counts against. Price/
+// name resolve live via `rowId` against SeatRowTemplate, never snapshotted.
+interface PositionedSeat {
+  id: string;
+  rowId: string;
+  seatNumber: number;
+  color: string;
+  // Optional organizer-given name — falls back to `${row.name}${seatNumber}`
+  // everywhere when unset.
+  name?: string;
+  x: number;
+  y: number;
+  // Degrees — set when placed by the drag-to-draw-a-row tool along a tilted
+  // line (curved/theater-style rows); undefined/0 for seats placed one at a
+  // time, which stay upright.
+  rotation?: number;
+  venueConfigId: string;
+}
+
+// Fixed palette a new seat-row template's color cycles through by default —
+// mirrors RoundTableTemplate's single default ("#8B5CF6") but varied so
+// multiple tiers are visually distinct out of the box.
+const SEAT_TIER_COLORS = [
+  "#8B5CF6",
+  "#2563EB",
+  "#DB2777",
+  "#F59E0B",
+  "#10B981",
+  "#EF4444",
+];
+
+// On-canvas footprint of one individual seat — fixed size, not derived from
+// any count. Module-scope so both the canvas-growth calc and the placement/
+// render code (which run at different points in the component body) share
+// one value.
+const SEAT_SIZE = 26;
 
 /**
  * A sponsorship tier on offer for this event. Deliberately just three fields —
@@ -351,6 +404,16 @@ interface VenueConfig {
   gridSize: number;
   showGrid: boolean;
   hasMainStage: boolean;
+  // Front-of-house banner label shown on the canvas when hasMainStage is on
+  // — free text so it can read "Screen" or "Stage" instead of "Main Stage".
+  mainStageLabel?: string;
+  mainStageShape?: "rectangle" | "circle" | "semicircle";
+  mainStageWidth?: number;
+  mainStageHeight?: number;
+  // Undefined = default centered-at-top position — set once the organizer
+  // drags it anywhere else.
+  mainStageX?: number;
+  mainStageY?: number;
   hasEntrance?: boolean;
   hasExit?: boolean;
   // Default shape new entrance / exit markers spawn with. Each placed
@@ -1097,6 +1160,47 @@ const VenueConfiguration = ({
                   }
                 />
                 <Label className="text-sm">Main Stage</Label>
+                {selectedConfig.hasMainStage && (
+                  <>
+                    <Input
+                      value={selectedConfig.mainStageLabel ?? "Main Stage"}
+                      onChange={(e) =>
+                        updateSelectedConfig({
+                          mainStageLabel: e.target.value,
+                        })
+                      }
+                      placeholder="Main Stage"
+                      className="h-7 w-32 text-xs"
+                      title="Front-of-house label shown on the canvas — e.g. Screen, Stage"
+                    />
+                    <div className="flex gap-1">
+                      {(["rectangle", "circle", "semicircle"] as const).map(
+                        (shape) => (
+                          <Button
+                            key={shape}
+                            type="button"
+                            size="sm"
+                            variant={
+                              (selectedConfig.mainStageShape ||
+                                "rectangle") === shape
+                                ? "default"
+                                : "outline"
+                            }
+                            className="h-7 px-2 text-xs capitalize"
+                            onClick={() =>
+                              updateSelectedConfig({ mainStageShape: shape })
+                            }
+                          >
+                            {shape === "semicircle" ? "Semi-circle" : shape}
+                          </Button>
+                        ),
+                      )}
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">
+                      Drag its corner on the canvas to resize.
+                    </span>
+                  </>
+                )}
               </div>
               {/* Custom door types — Entrance, Exit, Fire Exit, Loading Bay,
                   etc. Each gets its own draggable marker (with chosen shape +
@@ -3232,6 +3336,12 @@ interface VenueDesignerProps {
   roundTableTemplates: RoundTableTemplate[];
   venueRoundTables: Record<string, PositionedRoundTable[]>;
   setVenueRoundTables: (tables: Record<string, PositionedRoundTable[]>) => void;
+  /** Row declarations (label/price/color) — self-contained, no VisitorType
+   *  dependency and no seat cap; placing seats under one just grows its live
+   *  count. */
+  seatRowTemplates: SeatRowTemplate[];
+  venueSeats: Record<string, PositionedSeat[]>;
+  setVenueSeats: (seats: Record<string, PositionedSeat[]>) => void;
   venueDoors: Record<string, PositionedDoor[]>;
   setVenueDoors: (doors: Record<string, PositionedDoor[]>) => void;
   /** Booked-stall lookup (positionId → vendor + add-ons). Used to render
@@ -3426,6 +3536,9 @@ const VenueDesigner = ({
   roundTableTemplates,
   venueRoundTables,
   setVenueRoundTables,
+  seatRowTemplates,
+  venueSeats,
+  setVenueSeats,
   venueDoors,
   setVenueDoors,
   stallBookings,
@@ -3453,6 +3566,7 @@ const VenueDesigner = ({
     Array<{
       venueTables: Record<string, PositionedTable[]>;
       venueRoundTables: Record<string, PositionedRoundTable[]>;
+      venueSeats: Record<string, PositionedSeat[]>;
       venueSpeakerZones: Record<string, any[]>;
       venueDoors: Record<string, PositionedDoor[]>;
       venueAnnotations: Record<string, VenueAnnotation[]>;
@@ -3472,6 +3586,7 @@ const VenueDesigner = ({
     undoStackRef.current.push({
       venueTables,
       venueRoundTables,
+      venueSeats,
       venueSpeakerZones,
       venueDoors,
       venueAnnotations,
@@ -3482,6 +3597,7 @@ const VenueDesigner = ({
   }, [
     venueTables,
     venueRoundTables,
+    venueSeats,
     venueSpeakerZones,
     venueDoors,
     venueAnnotations,
@@ -3498,6 +3614,7 @@ const VenueDesigner = ({
     isRestoringRef.current = true;
     setVenueTables(prev.venueTables);
     setVenueRoundTables(prev.venueRoundTables);
+    setVenueSeats(prev.venueSeats);
     setVenueSpeakerZones(prev.venueSpeakerZones);
     setVenueDoors(prev.venueDoors);
     setVenueAnnotations(prev.venueAnnotations);
@@ -3683,6 +3800,7 @@ const VenueDesigner = ({
   const currentTables = venueTables[selectedVenueConfigId] || [];
   const currentSpeakerZones = venueSpeakerZones[selectedVenueConfigId] || [];
   const currentRoundTables = venueRoundTables[selectedVenueConfigId] || [];
+  const currentSeats = venueSeats[selectedVenueConfigId] || [];
   const currentDoors = venueDoors[selectedVenueConfigId] || [];
   const currentAnnotations = venueAnnotations[selectedVenueConfigId] || [];
 
@@ -3741,6 +3859,94 @@ const VenueDesigner = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isResizingCanvas]);
 
+  // Drag + resize the Main Stage banner — same pattern as the venue crop
+  // handle above, since the stage is a property of venueConfig itself, not
+  // a positionId-keyed placed item. Explicit top-left x/y (not a centered
+  // CSS transform), defaulting to centered-at-top only when unset, so a
+  // plain resize only grows the right/bottom edge like every other item.
+  const [mainStageDrag, setMainStageDrag] = useState<{
+    startClientX: number;
+    startClientY: number;
+    origX: number;
+    origY: number;
+    x: number;
+    y: number;
+  } | null>(null);
+  const mainStageDragRef = useRef<typeof mainStageDrag>(null);
+  mainStageDragRef.current = mainStageDrag;
+  const isDraggingMainStage = mainStageDrag !== null;
+  useEffect(() => {
+    if (!isDraggingMainStage) return;
+    const onMove = (e: MouseEvent) => {
+      const r = mainStageDragRef.current;
+      const sc = venueConfig?.scale || 1;
+      if (!r) return;
+      const dx = (e.clientX - r.startClientX) / sc;
+      const dy = (e.clientY - r.startClientY) / sc;
+      const w = venueConfig?.mainStageWidth ?? 200;
+      const h = venueConfig?.mainStageHeight ?? 60;
+      setMainStageDrag({
+        ...r,
+        x: Math.max(0, Math.min(r.origX + dx, canvasW - w)),
+        y: Math.max(0, Math.min(r.origY + dy, canvasH - h)),
+      });
+    };
+    const onUp = () => {
+      const r = mainStageDragRef.current;
+      if (r) patchVenueConfig({ mainStageX: r.x, mainStageY: r.y });
+      setMainStageDrag(null);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDraggingMainStage]);
+
+  const [mainStageResize, setMainStageResize] = useState<{
+    startX: number;
+    startY: number;
+    origW: number;
+    origH: number;
+    w: number;
+    h: number;
+  } | null>(null);
+  const mainStageResizeRef = useRef<typeof mainStageResize>(null);
+  mainStageResizeRef.current = mainStageResize;
+  const isResizingMainStage = mainStageResize !== null;
+  useEffect(() => {
+    if (!isResizingMainStage) return;
+    const onMove = (e: MouseEvent) => {
+      const r = mainStageResizeRef.current;
+      const sc = venueConfig?.scale || 1;
+      if (!r) return;
+      // No centering transform anymore — the box's x/y (top-left) is fixed,
+      // so a plain resize only grows the right/bottom edge.
+      const dw = (e.clientX - r.startX) / sc;
+      const dh = (e.clientY - r.startY) / sc;
+      setMainStageResize({
+        ...r,
+        w: Math.max(60, Math.round(r.origW + dw)),
+        h: Math.max(30, Math.round(r.origH + dh)),
+      });
+    };
+    const onUp = () => {
+      const r = mainStageResizeRef.current;
+      if (r)
+        patchVenueConfig({ mainStageWidth: r.w, mainStageHeight: r.h });
+      setMainStageResize(null);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isResizingMainStage]);
+
   // Designer canvas size — the canvas IS the venue. It starts at the
   // configured venue dimensions and grows ONLY to contain the spaces /
   // round tables / zones / doors actually placed (plus a small working
@@ -3764,6 +3970,8 @@ const VenueDesigner = ({
     (selectedVenueConfigId && venueSpeakerZones[selectedVenueConfigId]) || [];
   const currentDoorsForCanvas =
     (selectedVenueConfigId && venueDoors[selectedVenueConfigId]) || [];
+  const currentSeatsForCanvas =
+    (selectedVenueConfigId && venueSeats[selectedVenueConfigId]) || [];
   // Ignore stray items dragged absurdly far out (a known data glitch) so a
   // single bad coordinate can't inflate the canvas into endless empty grid.
   const OUTLIER_X = Math.max((venueConfig?.width || 1000) * 5, 6000);
@@ -3796,6 +4004,10 @@ const VenueDesigner = ({
     const dh = Number(d.height) > 0 ? Number(d.height) : 50;
     growX((d.x || 0) + dw);
     growY((d.y || 0) + dh);
+  }
+  for (const s of currentSeatsForCanvas as any[]) {
+    growX((s.x || 0) + SEAT_SIZE);
+    growY((s.y || 0) + SEAT_SIZE);
   }
   // Small working margin past the furthest-placed item so there's room to
   // drop / nudge the next space. The canvas grows by this much beyond the
@@ -4064,6 +4276,11 @@ const VenueDesigner = ({
           duplicateRoundTable();
           return;
         }
+        if (selectedTable.startsWith("iseat-")) {
+          e.preventDefault();
+          duplicateSeat();
+          return;
+        }
         // Speaker zones / doors aren't wired for duplication yet — skip
         // silently when the selected item isn't a Space.
         if (
@@ -4182,6 +4399,360 @@ const VenueDesigner = ({
     setIsDragging(true);
   };
 
+  // Which row is currently "armed" for placement — set by clicking a row's
+  // palette card, cleared by clicking it again or pressing Escape. While
+  // set, clicking empty canvas drops one seat (no cap — every placed seat
+  // just adds to that row's live count).
+  const [placingSeatRowId, setPlacingSeatRowId] = useState<string | null>(
+    null,
+  );
+  // Escape exits placement mode; switching layouts also exits it (canvas
+  // clicks are relative to whichever layout is on screen).
+  useEffect(() => {
+    if (!placingSeatRowId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPlacingSeatRowId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [placingSeatRowId]);
+  useEffect(() => {
+    setPlacingSeatRowId(null);
+  }, [selectedVenueConfigId]);
+
+  const seatsForRow = (rowId: string) =>
+    currentSeats.filter((s) => s.rowId === rowId);
+
+  // Drop exactly one seat for the armed row at a canvas-logical (x, y). No
+  // cap — every placed seat just adds to that row's live count.
+  const placeSeatAt = (rowId: string, x: number, y: number) => {
+    const template = seatRowTemplates.find((t) => t.id === rowId);
+    if (!template) return;
+    const existing = seatsForRow(rowId);
+    const newSeat: PositionedSeat = {
+      id: Math.random().toString(36).slice(2, 15),
+      rowId,
+      seatNumber: existing.length + 1,
+      color: template.color,
+      x,
+      y,
+      venueConfigId: selectedVenueConfigId,
+    };
+    setVenueSeats({
+      ...venueSeats,
+      [selectedVenueConfigId]: [...currentSeats, newSeat],
+    });
+  };
+
+  const removeSeat = (id: string) => {
+    setVenueSeats({
+      ...venueSeats,
+      [selectedVenueConfigId]: currentSeats.filter((s) => s.id !== id),
+    });
+    setSelectedTable(null);
+  };
+
+  // Bulk-remove every seat placed under a row — the inventory panel's
+  // "Clear" action.
+  const clearRowSeats = (rowId: string) => {
+    setVenueSeats({
+      ...venueSeats,
+      [selectedVenueConfigId]: currentSeats.filter((s) => s.rowId !== rowId),
+    });
+  };
+
+  const handleSeatMouseDown = (e: React.MouseEvent, seat: PositionedSeat) => {
+    const containerRect = venueRef.current?.getBoundingClientRect();
+    if (!containerRect || !venueConfig) return;
+    setDragOffset({
+      x: e.clientX - containerRect.left - seat.x * venueConfig.scale,
+      y: e.clientY - containerRect.top - seat.y * venueConfig.scale,
+    });
+    setSelectedTable(`iseat-${seat.id}`);
+    setIsDragging(true);
+  };
+
+  // Convert a canvas click into logical (x, y) and drop a seat there —
+  // called from the venue sheet's onClick while a row is armed.
+  const handleCanvasClickForSeat = (e: React.MouseEvent) => {
+    if (!placingSeatRowId || !venueConfig) return;
+    const rect = venueRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = (e.clientX - rect.left) / venueConfig.scale - SEAT_SIZE / 2;
+    const y = (e.clientY - rect.top) / venueConfig.scale - SEAT_SIZE / 2;
+    placeSeatAt(
+      placingSeatRowId,
+      Math.max(0, Math.min(x, canvasW - SEAT_SIZE)),
+      Math.max(0, Math.min(y, canvasH - SEAT_SIZE)),
+    );
+  };
+
+  // Copy the selected seat — same "Copy" toolbar button / Ctrl+D shortcut
+  // every other placed item has. Offsets the clone so it doesn't sit exactly
+  // on top of the original, and never clones a custom name onto the copy.
+  const duplicateSeat = (id?: string) => {
+    const targetId = (id || selectedTable || "").replace(/^iseat-/, "");
+    if (!targetId || !venueConfig) return;
+    const original = currentSeats.find((s) => s.id === targetId);
+    if (!original) return;
+    const template = seatRowTemplates.find((t) => t.id === original.rowId);
+    const existingCount = seatsForRow(original.rowId).length;
+    const OFFSET = 20;
+    let nx = original.x + OFFSET;
+    let ny = original.y + OFFSET;
+    if (nx + SEAT_SIZE > canvasW) nx = Math.max(0, canvasW - SEAT_SIZE);
+    if (ny + SEAT_SIZE > canvasH) ny = Math.max(0, canvasH - SEAT_SIZE);
+    const newSeat: PositionedSeat = {
+      ...original,
+      id: Math.random().toString(36).slice(2, 15),
+      seatNumber: existingCount + 1,
+      name: undefined,
+      x: nx,
+      y: ny,
+    };
+    setVenueSeats({
+      ...venueSeats,
+      [selectedVenueConfigId]: [...currentSeats, newSeat],
+    });
+    setSelectedTable(`iseat-${newSeat.id}`);
+    toast({
+      title: "Seat duplicated",
+      description: `Added another seat to ${template?.name || "the row"} — drag to reposition.`,
+    });
+  };
+
+  // --- Drag-to-draw a CURVED seat row -------------------------------------
+  // Faster alternative to one-by-one click placement: arm this tool, drag
+  // out a row on the canvas to drop it, then bend it into an arc with the
+  // curve handle before adding seats — real curved/theater-style rows, not
+  // just a straight tilted line. Flow: drop → curve (optional) → Add Seats
+  // → popup asks template + series label (e.g. "A") + count → seats are
+  // laid out evenly along the curve, each rotated to match its tangent.
+  const [seatRowDrawArmed, setSeatRowDrawArmed] = useState(false);
+  const [seatRowDraw, setSeatRowDraw] = useState<{
+    startX: number;
+    startY: number;
+    curX: number;
+    curY: number;
+  } | null>(null);
+  const seatRowDrawRef = useRef<typeof seatRowDraw>(null);
+  seatRowDrawRef.current = seatRowDraw;
+  const isDrawingSeatRow = seatRowDraw !== null;
+
+  // The dropped row, now on-canvas and editable: a quadratic Bezier curve
+  // (startX,startY) → (curveX,curveY) control point → (endX,endY). A fresh
+  // drop starts with the control point at the midpoint, i.e. a straight
+  // line, until the curve handle is dragged. Null when no row is being
+  // authored (nothing dropped yet, or it was just confirmed/canceled).
+  const [seatRowCurveDraft, setSeatRowCurveDraft] = useState<{
+    startX: number;
+    startY: number;
+    curveX: number;
+    curveY: number;
+    endX: number;
+    endY: number;
+  } | null>(null);
+  // Which handle of the curve draft is currently being dragged.
+  const [curveHandleDrag, setCurveHandleDrag] = useState<
+    "start" | "end" | "curve" | null
+  >(null);
+  const curveHandleDragRef = useRef(curveHandleDrag);
+  curveHandleDragRef.current = curveHandleDrag;
+  // Whether the count/series/template popup is open — its target geometry
+  // is always the current seatRowCurveDraft.
+  const [seatRowPopupOpen, setSeatRowPopupOpen] = useState(false);
+  const [seatRowPopupForm, setSeatRowPopupForm] = useState({
+    templateId: "",
+    label: "A",
+    count: "10",
+  });
+
+  useEffect(() => {
+    if (!isDrawingSeatRow) return;
+    const onMove = (e: MouseEvent) => {
+      const r = seatRowDrawRef.current;
+      const rect = venueRef.current?.getBoundingClientRect();
+      if (!r || !rect || !venueConfig) return;
+      setSeatRowDraw({
+        ...r,
+        curX: (e.clientX - rect.left) / venueConfig.scale,
+        curY: (e.clientY - rect.top) / venueConfig.scale,
+      });
+    };
+    const onUp = () => {
+      const r = seatRowDrawRef.current;
+      setSeatRowDraw(null);
+      setSeatRowDrawArmed(false);
+      if (!r) return;
+      const dx = r.curX - r.startX;
+      const dy = r.curY - r.startY;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      // Too small to be an intentional drag — treat as a stray click rather
+      // than dropping a sliver of a row.
+      if (length < SEAT_SIZE) return;
+      // Drop the row as a straight line to start — the curve handle sits at
+      // the midpoint until dragged.
+      setSeatRowCurveDraft({
+        startX: r.startX,
+        startY: r.startY,
+        curveX: (r.startX + r.curX) / 2,
+        curveY: (r.startY + r.curY) / 2,
+        endX: r.curX,
+        endY: r.curY,
+      });
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDrawingSeatRow]);
+
+  // Starts the drag when the "Draw Row" tool is armed and the mousedown
+  // lands on empty canvas — children stopPropagation their own mousedowns,
+  // same as every other placed-item gesture on this canvas.
+  const handleCanvasMouseDownForSeatRow = (e: React.MouseEvent) => {
+    if (!seatRowDrawArmed || annotationTool !== "none" || !venueConfig) return;
+    const rect = venueRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setSeatRowDraw({
+      startX: (e.clientX - rect.left) / venueConfig.scale,
+      startY: (e.clientY - rect.top) / venueConfig.scale,
+      curX: (e.clientX - rect.left) / venueConfig.scale,
+      curY: (e.clientY - rect.top) / venueConfig.scale,
+    });
+  };
+
+  // Dragging the curve draft's start/end/bend handles — same window
+  // mousemove/mouseup-while-active pattern as mainStageDrag.
+  useEffect(() => {
+    if (!curveHandleDrag) return;
+    const onMove = (e: MouseEvent) => {
+      const which = curveHandleDragRef.current;
+      const rect = venueRef.current?.getBoundingClientRect();
+      if (!which || !rect || !venueConfig) return;
+      const x = (e.clientX - rect.left) / venueConfig.scale;
+      const y = (e.clientY - rect.top) / venueConfig.scale;
+      setSeatRowCurveDraft((prev) => {
+        if (!prev) return prev;
+        if (which === "start") return { ...prev, startX: x, startY: y };
+        if (which === "end") return { ...prev, endX: x, endY: y };
+        return { ...prev, curveX: x, curveY: y };
+      });
+    };
+    const onUp = () => setCurveHandleDrag(null);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [curveHandleDrag]);
+
+  // Escape cancels an in-progress curve draft (and closes the popup with
+  // it) — same convention as Escape exiting one-by-one placement mode.
+  useEffect(() => {
+    if (!seatRowCurveDraft) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSeatRowCurveDraft(null);
+        setSeatRowPopupOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [seatRowCurveDraft]);
+
+  // "Add Seats" on the dropped row's floating toolbar — opens the popup,
+  // pre-filling a seat-count estimate from the curve's straight-line span.
+  const openSeatRowPopup = () => {
+    if (!seatRowCurveDraft) return;
+    const { startX, startY, endX, endY } = seatRowCurveDraft;
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const estCount = Math.max(2, Math.round((length + 6) / (SEAT_SIZE + 6)));
+    setSeatRowPopupForm({
+      templateId: seatRowTemplates[0]?.id || "",
+      label: "A",
+      count: String(estCount),
+    });
+    setSeatRowPopupOpen(true);
+  };
+
+  const cancelSeatRowDraft = () => {
+    setSeatRowCurveDraft(null);
+    setSeatRowPopupOpen(false);
+  };
+
+  // Confirm the popup: lay out `count` seats evenly along the curve (a
+  // quadratic Bezier through start → curve handle → end — a straight line
+  // when the handle hasn't been moved off the midpoint), each rotated to
+  // match the curve's tangent at that point, labeled `${label}1`…`${label}N`.
+  const confirmSeatRowDraw = () => {
+    if (!seatRowCurveDraft) return;
+    const template = seatRowTemplates.find(
+      (t) => t.id === seatRowPopupForm.templateId,
+    );
+    if (!template) {
+      toast({ title: "Choose a seat template", variant: "destructive" });
+      return;
+    }
+    const label = seatRowPopupForm.label.trim();
+    if (!label) {
+      toast({ title: "Series label is required", variant: "destructive" });
+      return;
+    }
+    const count = Math.max(1, parseInt(seatRowPopupForm.count) || 0);
+    const startNumber = seatsForRow(template.id).length + 1;
+    const p0 = { x: seatRowCurveDraft.startX, y: seatRowCurveDraft.startY };
+    const p1 = { x: seatRowCurveDraft.curveX, y: seatRowCurveDraft.curveY };
+    const p2 = { x: seatRowCurveDraft.endX, y: seatRowCurveDraft.endY };
+    // Quadratic Bezier point + tangent at parameter t ∈ [0,1].
+    const pointAt = (t: number) => {
+      const mt = 1 - t;
+      return {
+        x: mt * mt * p0.x + 2 * mt * t * p1.x + t * t * p2.x,
+        y: mt * mt * p0.y + 2 * mt * t * p1.y + t * t * p2.y,
+      };
+    };
+    const tangentAngleAt = (t: number) => {
+      const dx = 2 * (1 - t) * (p1.x - p0.x) + 2 * t * (p2.x - p1.x);
+      const dy = 2 * (1 - t) * (p1.y - p0.y) + 2 * t * (p2.y - p1.y);
+      return (Math.atan2(dy, dx) * 180) / Math.PI;
+    };
+    const newSeats: PositionedSeat[] = Array.from(
+      { length: count },
+      (_, i) => {
+        const t = count > 1 ? i / (count - 1) : 0.5;
+        const p = pointAt(t);
+        return {
+          id: Math.random().toString(36).slice(2, 15),
+          rowId: template.id,
+          seatNumber: startNumber + i,
+          color: template.color,
+          name: `${label}${i + 1}`,
+          x: Math.max(0, Math.min(p.x - SEAT_SIZE / 2, canvasW - SEAT_SIZE)),
+          y: Math.max(0, Math.min(p.y - SEAT_SIZE / 2, canvasH - SEAT_SIZE)),
+          rotation: tangentAngleAt(t),
+          venueConfigId: selectedVenueConfigId,
+        };
+      },
+    );
+    setVenueSeats({
+      ...venueSeats,
+      [selectedVenueConfigId]: [...currentSeats, ...newSeats],
+    });
+    toast({
+      title: "Seats added",
+      description: `${count} seats added to ${template.name} (${label}1–${label}${count}).`,
+    });
+    setSeatRowCurveDraft(null);
+    setSeatRowPopupOpen(false);
+  };
+
   // --- Drag & Drop Logic ---
 
   const handleMouseDown = (e: React.MouseEvent, table: PositionedTable) => {
@@ -4230,6 +4801,12 @@ const VenueDesigner = ({
       if (!zone) return;
       w = zone.width;
       h = zone.height;
+    } else if (selectedTable.startsWith("iseat-")) {
+      const seat = currentSeats.find(
+        (s) => s.id === selectedTable.replace("iseat-", ""),
+      );
+      if (!seat) return;
+      w = h = SEAT_SIZE;
     } else {
       const table = currentTables.find((t) => t.positionId === selectedTable);
       if (!table) return;
@@ -4286,6 +4863,14 @@ const VenueDesigner = ({
         ...venueSpeakerZones,
         [selectedVenueConfigId]: currentSpeakerZones.map((z) =>
           z.positionId === zoneId ? { ...z, x, y } : z,
+        ),
+      });
+    } else if (key.startsWith("iseat-")) {
+      const seatId = key.replace("iseat-", "");
+      setVenueSeats({
+        ...venueSeats,
+        [selectedVenueConfigId]: currentSeats.map((s) =>
+          s.id === seatId ? { ...s, x, y } : s,
         ),
       });
     } else {
@@ -5063,9 +5648,7 @@ const VenueDesigner = ({
                         : "Time TBD"}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
-                      {template.isMainStage
-                        ? "Main Stage"
-                        : `${template.width}×${template.height}`}
+                      {template.width}×{template.height}
                     </p>
                   </div>
                 ))}
@@ -5108,10 +5691,75 @@ const VenueDesigner = ({
                   </div>
                 ))}
 
-                {/* Divider before doors */}
+                {/* Divider before seat rows */}
                 {(tableTemplates.length > 0 ||
                   speakerSlotTemplates.length > 0 ||
                   roundTableTemplates.length > 0) &&
+                  seatRowTemplates.length > 0 && (
+                    <div className="flex-shrink-0 w-px bg-gray-300 mx-1" />
+                  )}
+
+                {/* Seat Row Templates — click arms placement mode (click
+                  again to disarm); while armed, click empty canvas to drop
+                  seats for this row one at a time. No cap — use the "Draw
+                  Row" tool above for bulk placement instead. */}
+                {seatRowTemplates.map((template) => {
+                  const placed = seatsForRow(template.id).length;
+                  const isArmed = placingSeatRowId === template.id;
+                  return (
+                    <div
+                      key={template.id}
+                      className={`flex-shrink-0 w-40 p-3 border-2 rounded-xl cursor-pointer hover:shadow-md transition-all ${isArmed ? "ring-2" : ""}`}
+                      style={{
+                        borderColor: template.color + "66",
+                        backgroundColor: isArmed
+                          ? template.color + "1a"
+                          : "#fff",
+                      }}
+                      onClick={() => {
+                        setSeatRowDrawArmed(false);
+                        setPlacingSeatRowId(isArmed ? null : template.id);
+                      }}
+                      title={
+                        isArmed
+                          ? "Click empty canvas to add seats · click here again to stop"
+                          : "Click to start adding seats one by one"
+                      }
+                    >
+                      <div className="flex items-center gap-1 mb-1">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: template.color }}
+                        />
+                        <span className="font-bold text-xs truncate">
+                          {template.name}
+                        </span>
+                        {isArmed && (
+                          <span className="ml-auto text-[8px] font-bold uppercase tracking-wide text-emerald-600">
+                            Adding…
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        {placed} seat{placed === 1 ? "" : "s"} placed
+                      </p>
+                      <p
+                        className="text-[10px] font-semibold truncate"
+                        style={{ color: template.color }}
+                      >
+                        {template.price === 0
+                          ? "Free"
+                          : formatPrice(template.price)}
+                      </p>
+                    </div>
+                  );
+                })}
+
+                {/* Divider before doors */}
+                {(tableTemplates.length > 0 ||
+                  speakerSlotTemplates.length > 0 ||
+                  roundTableTemplates.length > 0 ||
+                  seatRowTemplates.length > 0) &&
                   (venueConfig?.customDoorTypes || []).length > 0 && (
                     <div className="flex-shrink-0 w-px bg-gray-300 mx-1" />
                   )}
@@ -5342,6 +5990,7 @@ const VenueDesigner = ({
                     onClick={() => {
                       setAnnotationTool(t as AnnotationTool);
                       setSelectedAnnId(null);
+                      setSeatRowDrawArmed(false);
                     }}
                     className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors ${
                       annotationTool === t
@@ -5358,6 +6007,26 @@ const VenueDesigner = ({
                     {label}
                   </button>
                 ))}
+                {seatRowTemplates.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAnnotationTool("none");
+                      setPlacingSeatRowId(null);
+                      cancelSeatRowDraft();
+                      setSeatRowDrawArmed((v) => !v);
+                    }}
+                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                      seatRowDrawArmed
+                        ? "bg-indigo-600 text-white"
+                        : "text-gray-600 hover:bg-gray-100"
+                    }`}
+                    title="Drag a row onto the canvas, bend it into a curve if you like, then add seats along it (e.g. A1…A20)"
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    Draw Row
+                  </button>
+                )}
                 <div className="mx-1 h-5 w-px bg-gray-200" />
                 {/* Stroke / text colour for new shapes. */}
                 <label
@@ -5396,6 +6065,7 @@ const VenueDesigner = ({
                     let onRotate: (() => void) | null = null;
                     let onCopy: (() => void) | null = null;
                     let onDelete: (() => void) | null = null;
+                    let nameField: React.ReactNode = null;
                     if (id.startsWith("sz-")) {
                       const realId = id.slice(3);
                       kind = "Speaker zone";
@@ -5416,6 +6086,37 @@ const VenueDesigner = ({
                       kind = "Round table";
                       onCopy = () => duplicateRoundTable(realId);
                       onDelete = () => removeRoundTable(realId);
+                    } else if (id.startsWith("iseat-")) {
+                      const realId = id.slice(6);
+                      kind = "Seat";
+                      onCopy = () => duplicateSeat(realId);
+                      onDelete = () => removeSeat(realId);
+                      const seat = currentSeats.find(
+                        (s) => s.id === realId,
+                      );
+                      const row = seatRowTemplates.find(
+                        (t) => t.id === seat?.rowId,
+                      );
+                      nameField = (
+                        <Input
+                          className="h-7 w-28 text-xs"
+                          value={seat?.name ?? ""}
+                          placeholder={
+                            row ? `${row.name}${seat?.seatNumber}` : "Name"
+                          }
+                          onChange={(e) =>
+                            setVenueSeats({
+                              ...venueSeats,
+                              [selectedVenueConfigId]: currentSeats.map((s) =>
+                                s.id === realId
+                                  ? { ...s, name: e.target.value }
+                                  : s,
+                              ),
+                            })
+                          }
+                          title="Custom name for this seat"
+                        />
+                      );
                     } else if (id.startsWith("door-")) {
                       const realId = id.slice(5);
                       kind = "Door";
@@ -5435,6 +6136,7 @@ const VenueDesigner = ({
                         <span className="px-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
                           {kind}
                         </span>
+                        {nameField}
                         {onRotate && (
                           <button
                             type="button"
@@ -5526,10 +6228,16 @@ const VenueDesigner = ({
                 // (which tracks the placed items), drawn as a white "sheet"
                 // with a subtle border + shadow so its bounds are obvious.
                 className="relative"
+                onClick={handleCanvasClickForSeat}
+                onMouseDown={handleCanvasMouseDownForSeatRow}
                 style={{
                   width: canvasW * venueConfig.scale,
                   height: canvasH * venueConfig.scale,
                   flex: "none",
+                  cursor:
+                    placingSeatRowId || seatRowDrawArmed
+                      ? "crosshair"
+                      : undefined,
                   border: "1px solid #cbd5e1",
                   borderRadius: 6,
                   boxShadow: "0 4px 16px rgba(15,23,42,0.08)",
@@ -5600,12 +6308,94 @@ const VenueDesigner = ({
                     </div>
                   );
                 })()}
-                {/* Stage Indicator */}
-                {venueConfig.hasMainStage && (
-                  <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-purple-100 border border-purple-300 px-6 py-2 rounded-lg text-[10px] font-bold text-purple-700 shadow-sm">
-                    MAIN STAGE
-                  </div>
-                )}
+                {/* Stage Indicator — draggable anywhere on the canvas
+                  (defaults to centered-at-top until moved), sized from
+                  mainStageWidth/Height (live resize value takes precedence
+                  while dragging the corner handle), shaped per
+                  mainStageShape. */}
+                {venueConfig.hasMainStage &&
+                  (() => {
+                    const baseW = venueConfig.mainStageWidth ?? 200;
+                    const baseH = venueConfig.mainStageHeight ?? 60;
+                    const liveW = mainStageResize ? mainStageResize.w : baseW;
+                    const liveH = mainStageResize ? mainStageResize.h : baseH;
+                    const isCircle = venueConfig.mainStageShape === "circle";
+                    const isSemicircle =
+                      venueConfig.mainStageShape === "semicircle";
+                    const defaultX = (venueConfig.width - baseW) / 2;
+                    const pos = mainStageDrag
+                      ? { x: mainStageDrag.x, y: mainStageDrag.y }
+                      : {
+                          x: venueConfig.mainStageX ?? defaultX,
+                          y: venueConfig.mainStageY ?? 10,
+                        };
+                    return (
+                      <div
+                        className="absolute bg-purple-100 border border-purple-300 flex items-center justify-center text-[10px] font-bold text-purple-700 shadow-sm uppercase tracking-wide cursor-grab"
+                        onMouseDown={(e) => {
+                          if (annotationTool !== "none") return;
+                          e.stopPropagation();
+                          setMainStageDrag({
+                            startClientX: e.clientX,
+                            startClientY: e.clientY,
+                            origX: pos.x,
+                            origY: pos.y,
+                            x: pos.x,
+                            y: pos.y,
+                          });
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        title="Drag to move the Main Stage"
+                        style={{
+                          left: pos.x * venueConfig.scale,
+                          top: pos.y * venueConfig.scale,
+                          width: liveW * venueConfig.scale,
+                          height: liveH * venueConfig.scale,
+                          // Semicircle: flat top edge (back wall), rounded
+                          // bottom edge bulging toward the audience — the
+                          // standard CSS half-ellipse trick.
+                          borderRadius: isSemicircle
+                            ? "0 0 50% 50% / 0 0 100% 100%"
+                            : isCircle
+                              ? "50%"
+                              : 8,
+                          cursor: isDraggingMainStage ? "grabbing" : "grab",
+                          zIndex: isDraggingMainStage ? 15 : 3,
+                        }}
+                      >
+                        {venueConfig.mainStageLabel || "Main Stage"}
+                        {annotationTool === "none" && (
+                          <div
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setMainStageResize({
+                                startX: e.clientX,
+                                startY: e.clientY,
+                                origW: baseW,
+                                origH: baseH,
+                                w: baseW,
+                                h: baseH,
+                              });
+                            }}
+                            title="Drag to resize the Main Stage"
+                            style={{
+                              position: "absolute",
+                              right: -6,
+                              bottom: -6,
+                              width: 14,
+                              height: 14,
+                              borderRadius: 3,
+                              background: "white",
+                              border: "2px solid #7c3aed",
+                              boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                              cursor: "nwse-resize",
+                            }}
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
                 {/* Placed Entrance / Exit doors — draggable, rotatable, and
                   (for square doors) resizable via 8 corner/edge handles
                   exactly like a Space. Circles render at their stored
@@ -6147,6 +6937,197 @@ const VenueDesigner = ({
                   );
                 })}
 
+                {/* Live preview of the line being dragged for the "Draw Row"
+                  seat tool — any angle, so the eventual seats can tilt for
+                  curved/theater-style rows. A popup opens on mouseup to turn
+                  it into N seats. Anchored at the start point and rotated
+                  around its left edge so it always points at the cursor. */}
+                {seatRowDraw &&
+                  (() => {
+                    const dx = seatRowDraw.curX - seatRowDraw.startX;
+                    const dy = seatRowDraw.curY - seatRowDraw.startY;
+                    const length = Math.sqrt(dx * dx + dy * dy);
+                    const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+                    return (
+                      <div
+                        className="absolute border-2 border-dashed border-indigo-500 bg-indigo-500/10 pointer-events-none"
+                        style={{
+                          left: seatRowDraw.startX * venueConfig.scale,
+                          top:
+                            seatRowDraw.startY * venueConfig.scale -
+                            (SEAT_SIZE * venueConfig.scale) / 2,
+                          width: length * venueConfig.scale,
+                          height: SEAT_SIZE * venueConfig.scale,
+                          transformOrigin: "left center",
+                          transform: `rotate(${angleDeg}deg)`,
+                          zIndex: 40,
+                        }}
+                      />
+                    );
+                  })()}
+
+                {/* The dropped, editable curve draft — a quadratic Bezier
+                  (dashed path) with 3 draggable handles (start/end circles,
+                  a diamond bend handle) plus a floating "Add Seats" / "Cancel"
+                  toolbar. Bend the diamond to curve the row before adding
+                  seats; the count/series/template popup reads this geometry
+                  when confirmed. */}
+                {seatRowCurveDraft &&
+                  (() => {
+                    const { startX, startY, curveX, curveY, endX, endY } =
+                      seatRowCurveDraft;
+                    const sc = venueConfig.scale;
+                    const handle = (
+                      x: number,
+                      y: number,
+                      which: "start" | "end" | "curve",
+                    ) => (
+                      <div
+                        key={which}
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          setCurveHandleDrag(which);
+                        }}
+                        title={
+                          which === "curve"
+                            ? "Drag to curve this row"
+                            : "Drag to move this end"
+                        }
+                        className={`absolute bg-white border-2 border-indigo-600 cursor-move ${
+                          which === "curve" ? "rounded-sm rotate-45" : "rounded-full"
+                        }`}
+                        style={{
+                          left: x * sc - (which === "curve" ? 5 : 6),
+                          top: y * sc - (which === "curve" ? 5 : 6),
+                          width: which === "curve" ? 10 : 12,
+                          height: which === "curve" ? 10 : 12,
+                          zIndex: 41,
+                        }}
+                      />
+                    );
+                    return (
+                      <>
+                        <svg
+                          className="absolute pointer-events-none"
+                          style={{
+                            left: 0,
+                            top: 0,
+                            width: canvasW * sc,
+                            height: canvasH * sc,
+                            zIndex: 40,
+                            overflow: "visible",
+                          }}
+                        >
+                          <path
+                            d={`M ${startX * sc} ${startY * sc} Q ${curveX * sc} ${curveY * sc} ${endX * sc} ${endY * sc}`}
+                            fill="none"
+                            stroke="#4f46e5"
+                            strokeWidth={2}
+                            strokeDasharray="6 4"
+                          />
+                        </svg>
+                        {handle(startX, startY, "start")}
+                        {handle(endX, endY, "end")}
+                        {handle(curveX, curveY, "curve")}
+                        <div
+                          className="absolute flex items-center gap-1 rounded-lg border bg-white p-1 shadow-xl"
+                          style={{
+                            left: curveX * sc,
+                            top: curveY * sc - 44,
+                            transform: "translateX(-50%)",
+                            zIndex: 42,
+                          }}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={openSeatRowPopup}
+                            className="flex items-center gap-1 rounded-md bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            Add Seats
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelSeatRowDraft}
+                            title="Discard this row"
+                            className="flex items-center rounded-md px-2 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-100"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </>
+                    );
+                  })()}
+
+                {/* Placed Seats — each one individually positioned (not
+                  confined to a straight row), colored by its row's tier.
+                  Click to select, drag to move; delete lives in the fixed
+                  toolbar like every other placed item. */}
+                {currentSeats.map((seat) => {
+                  const key = `iseat-${seat.id}`;
+                  const isSelected = selectedTable === key;
+                  const size = SEAT_SIZE * venueConfig.scale;
+                  const pos = livePos(key, seat.x, seat.y);
+                  const row = seatRowTemplates.find(
+                    (t) => t.id === seat.rowId,
+                  );
+                  return (
+                    <div
+                      key={key}
+                      style={{
+                        position: "absolute",
+                        left: pos.x * venueConfig.scale,
+                        top: pos.y * venueConfig.scale,
+                        width: size,
+                        height: size,
+                        // Proportional to the seat's own size — a fixed
+                        // radius swallows a small (low-zoom) seat whole and
+                        // reads as a circle instead of a square.
+                        borderRadius: Math.max(1, size * 0.16),
+                        cursor: isDragging ? "grabbing" : "grab",
+                        userSelect: "none" as const,
+                        zIndex: isSelected ? 10 : 2,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: seat.color + "33",
+                        border: isSelected
+                          ? `2px solid ${seat.color}`
+                          : `1.5px solid ${seat.color}aa`,
+                        boxShadow: isSelected
+                          ? `0 4px 10px ${seat.color}44`
+                          : "none",
+                        transform: seat.rotation
+                          ? `rotate(${seat.rotation}deg)`
+                          : undefined,
+                      }}
+                      onMouseDown={(e) => handleSeatMouseDown(e, seat)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedTable(key);
+                      }}
+                      title={
+                        seat.name ||
+                        `${row?.name || "Seat"} #${seat.seatNumber}`
+                      }
+                    >
+                      <span
+                        className="truncate px-0.5"
+                        style={{
+                          fontSize: Math.max(6, 8 * venueConfig.scale) + "px",
+                          fontWeight: "bold",
+                          color: seat.color,
+                          lineHeight: 1,
+                        }}
+                      >
+                        {seat.name || seat.seatNumber}
+                      </span>
+                    </div>
+                  );
+                })}
+
                 {/* Venue boundary + crop handle. The dashed rectangle is the
                   venue's actual size; the grey area beyond it is just working
                   room. Drag the bottom-right handle to crop / resize the
@@ -6305,6 +7286,8 @@ const VenueDesigner = ({
                     roundTables={currentRoundTables}
                     doors={currentDoors}
                     annotations={currentAnnotations}
+                    seats={currentSeats}
+                    seatRowTemplates={seatRowTemplates}
                     scale={previewScale}
                   />
                 </div>
@@ -6317,14 +7300,16 @@ const VenueDesigner = ({
       {/* Inventory Summary - Full Width */}
       {(currentTables.length > 0 ||
         currentSpeakerZones.length > 0 ||
-        currentRoundTables.length > 0) && (
+        currentRoundTables.length > 0 ||
+        currentSeats.length > 0) && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">
               Placed Items (
               {currentTables.length +
                 currentSpeakerZones.length +
-                currentRoundTables.length}
+                currentRoundTables.length +
+                currentSeats.length}
               )
             </CardTitle>
           </CardHeader>
@@ -6554,9 +7539,147 @@ const VenueDesigner = ({
                   </p>
                 </div>
               ))}
+              {/* Seats, grouped by declared row — a live placed count plus a
+                  bulk "Clear" action. Individual seats are selected and
+                  deleted directly on the canvas (click a dot). */}
+              {seatRowTemplates
+                .filter((t) => seatsForRow(t.id).length > 0)
+                .map((t) => {
+                  const placed = seatsForRow(t.id).length;
+                  return (
+                    <div
+                      key={`inv-row-${t.id}`}
+                      className="p-3 border-2 rounded-lg"
+                      style={{
+                        borderColor: t.color + "66",
+                        backgroundColor: t.color + "11",
+                      }}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <div
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: t.color }}
+                        />
+                        <span className="text-xs font-semibold flex-1 min-w-0 truncate">
+                          {t.name}
+                        </span>
+                        <button
+                          type="button"
+                          className="text-[10px] font-semibold text-red-500 hover:underline shrink-0"
+                          onClick={() => clearRowSeats(t.id)}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      <p className="text-[9px] text-muted-foreground">
+                        {placed} seat{placed === 1 ? "" : "s"} placed &middot;{" "}
+                        {t.price === 0 ? "Free" : formatPrice(t.price)}
+                      </p>
+                    </div>
+                  );
+                })}
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Drag-to-draw seat row popup — opened via "Add Seats" on the dropped
+          row's floating toolbar. Closing it (X / backdrop / its own Cancel)
+          just closes the popup — the curve draft on canvas stays put so the
+          organizer can keep bending it and reopen this later. Only the
+          floating toolbar's Cancel discards the row itself. */}
+      {seatRowPopupOpen && seatRowCurveDraft && (
+        <div
+          className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setSeatRowPopupOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl bg-white p-4 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold">Add a Row of Seats</h3>
+              <button
+                type="button"
+                onClick={() => setSeatRowPopupOpen(false)}
+                aria-label="Close"
+                className="rounded p-1 text-slate-500 hover:bg-slate-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div>
+              <Label>Seat Template *</Label>
+              <Select
+                value={seatRowPopupForm.templateId}
+                onValueChange={(v) =>
+                  setSeatRowPopupForm((p) => ({ ...p, templateId: v }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a template" />
+                </SelectTrigger>
+                <SelectContent>
+                  {seatRowTemplates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name} —{" "}
+                      {t.price === 0 ? "Free" : formatPrice(t.price)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Series Label *</Label>
+                <Input
+                  value={seatRowPopupForm.label}
+                  onChange={(e) =>
+                    setSeatRowPopupForm((p) => ({
+                      ...p,
+                      label: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g. A"
+                  maxLength={4}
+                />
+              </div>
+              <div>
+                <Label>Number of Seats *</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={seatRowPopupForm.count}
+                  onChange={(e) =>
+                    setSeatRowPopupForm((p) => ({
+                      ...p,
+                      count: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Adds seats {seatRowPopupForm.label || "A"}1 through{" "}
+              {seatRowPopupForm.label || "A"}
+              {Math.max(1, parseInt(seatRowPopupForm.count) || 1)} evenly
+              along the row you drew (curve it first if you want a curved
+              line of seats).
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSeatRowPopupOpen(false)}
+              >
+                Back
+              </Button>
+              <Button type="button" onClick={confirmSeatRowDraw}>
+                Add Seats
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -7141,6 +8264,10 @@ export function CreateEventForm({
 
   const [formData, setFormData] = useState({
     title: initialData?.title ?? "",
+    // Optional custom URL identifier — when set, the public eventfront link
+    // uses this instead of the event's raw database id. Left blank, nothing
+    // changes: the link keeps working exactly as it does today.
+    slug: initialData?.slug ?? "",
     // Top-level event grouping ("commercial" | "personal") chosen in the
     // pre-step before the form opens. Empty for legacy events created before
     // this field existed — those fall back to the free-form category picker.
@@ -7200,6 +8327,10 @@ export function CreateEventForm({
         initialData?.features?.hasSponsors ??
         (Array.isArray(initialData?.sponsorTypes) &&
           initialData.sponsorTypes.length > 0),
+      hasSeating:
+        initialData?.features?.hasSeating ??
+        (Array.isArray(initialData?.venueSeats) &&
+          initialData.venueSeats.length > 0),
     },
     ageRestriction: initialData?.ageRestriction ?? "All Ages",
     ageRestrictions: Array.isArray(initialData?.ageRestrictions)
@@ -7353,6 +8484,37 @@ export function CreateEventForm({
   // When set, the visitor-type form is editing this existing type in place
   // (Update) instead of creating a new one (Add).
   const [editingVisitorId, setEditingVisitorId] = useState<string | null>(null);
+
+  // Cinema/concert-style assigned seating (Event Sections: hasSeating).
+  // Row declarations (label/price/color) are defined here, self-contained —
+  // no VisitorType dependency. Individual seats are placed on the Space
+  // Layout canvas (one at a time, or in bulk via the drag-to-draw tool);
+  // there's no cap, the placed count IS the row's seat count.
+  const [seatRowTemplates, setSeatRowTemplates] = useState<
+    SeatRowTemplate[]
+  >(initialData?.seatRowTemplates || []);
+  const [venueSeats, setVenueSeats] = useState<
+    Record<string, PositionedSeat[]>
+  >(
+    initialData?.venueSeats
+      ? Array.isArray(initialData.venueSeats)
+        ? initialData.venueSeats.reduce((acc: any, r: any) => {
+            const key = r.venueConfigId || "default";
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(r);
+            return acc;
+          }, {})
+        : initialData.venueSeats
+      : {},
+  );
+  const [currentSeatTemplate, setCurrentSeatTemplate] = useState({
+    name: "",
+    price: "0",
+    color: SEAT_TIER_COLORS[0],
+  });
+  const [editingSeatTemplateId, setEditingSeatTemplateId] = useState<
+    string | null
+  >(null);
 
   // Sponsorship tiers — same add/edit/remove shape as visitor types, but with
   // only three fields (name, price, description).
@@ -7684,6 +8846,25 @@ export function CreateEventForm({
       }
       if (initialData.visitorTypes) {
         setVisitorTypes(initialData.visitorTypes);
+      }
+      if (initialData.seatRowTemplates) {
+        setSeatRowTemplates(initialData.seatRowTemplates);
+      }
+      if (initialData.venueSeats) {
+        if (Array.isArray(initialData.venueSeats)) {
+          const grouped = initialData.venueSeats.reduce(
+            (acc: any, r: any) => {
+              const key = r.venueConfigId || "default";
+              if (!acc[key]) acc[key] = [];
+              acc[key].push(r);
+              return acc;
+            },
+            {},
+          );
+          setVenueSeats(grouped);
+        } else {
+          setVenueSeats(initialData.venueSeats);
+        }
       }
       if (initialData.sponsorTypes) {
         setSponsorTypes(initialData.sponsorTypes);
@@ -8197,10 +9378,12 @@ export function CreateEventForm({
       (currentTab === "roundtables" && !f.hasRoundTables) ||
       (currentTab === "workshops" && !f.hasWorkshops) ||
       (currentTab === "sponsors" && !f.hasSponsors) ||
+      (currentTab === "seating" && !f.hasSeating) ||
       (currentTab === "layout" &&
         !f.hasStalls &&
         !f.hasSpeakers &&
         !f.hasRoundTables &&
+        !f.hasSeating &&
         !anyDoors);
     if (hidden) setCurrentTab("basic");
   }, [
@@ -8210,6 +9393,7 @@ export function CreateEventForm({
     formData.features.hasRoundTables,
     formData.features.hasWorkshops,
     formData.features.hasSponsors,
+    formData.features.hasSeating,
     venueConfigurations,
   ]);
 
@@ -8515,6 +9699,72 @@ export function CreateEventForm({
     setVisitorTypes((prev) => prev.filter((v) => v.id !== id));
     // If the type being edited was deleted, exit edit mode cleanly.
     if (editingVisitorId === id) resetVisitorForm();
+  };
+
+  // Clear the seat-row template form and drop out of edit mode.
+  const resetSeatTemplateForm = () => {
+    setCurrentSeatTemplate({
+      name: "",
+      price: "0",
+      color:
+        SEAT_TIER_COLORS[seatRowTemplates.length % SEAT_TIER_COLORS.length],
+    });
+    setEditingSeatTemplateId(null);
+  };
+
+  // Add a brand-new seat-row template, or — when editingSeatTemplateId is
+  // set — update that existing template in place (keeping its id). Editing
+  // a template does NOT touch seats already placed on the canvas — same
+  // behavior as editing a round-table template. Price changes apply
+  // instantly to every seat already placed under it (price is resolved live
+  // via rowId, never snapshotted onto the seat).
+  const addSeatTemplate = () => {
+    if (!currentSeatTemplate.name.trim()) {
+      toast({ title: "Template name is required", variant: "destructive" });
+      return;
+    }
+    const price = Math.max(0, parseFloat(currentSeatTemplate.price) || 0);
+
+    if (editingSeatTemplateId) {
+      setSeatRowTemplates((prev) =>
+        prev.map((t) =>
+          t.id === editingSeatTemplateId
+            ? {
+                ...t,
+                name: currentSeatTemplate.name.trim(),
+                price,
+                color: currentSeatTemplate.color,
+              }
+            : t,
+        ),
+      );
+    } else {
+      const newTemplate: SeatRowTemplate = {
+        id: Math.random().toString(36).slice(2, 15),
+        name: currentSeatTemplate.name.trim(),
+        price,
+        color: currentSeatTemplate.color,
+      };
+      setSeatRowTemplates((prev) => [...prev, newTemplate]);
+    }
+    resetSeatTemplateForm();
+  };
+
+  // Load an existing seat-row template back into the form for editing.
+  const editSeatTemplate = (id: string) => {
+    const t = seatRowTemplates.find((x) => x.id === id);
+    if (!t) return;
+    setCurrentSeatTemplate({
+      name: t.name,
+      price: String(t.price),
+      color: t.color || SEAT_TIER_COLORS[0],
+    });
+    setEditingSeatTemplateId(id);
+  };
+
+  const removeSeatTemplate = (id: string) => {
+    setSeatRowTemplates((prev) => prev.filter((t) => t.id !== id));
+    if (editingSeatTemplateId === id) resetSeatTemplateForm();
   };
 
   const resetWorkshopSessionForm = () => {
@@ -9167,6 +10417,13 @@ export function CreateEventForm({
       );
       data.append("venueRoundTables", JSON.stringify(allRoundTables));
 
+      // Cinema/concert seating — row declarations + flattened individual seats.
+      data.append("seatRowTemplates", JSON.stringify(seatRowTemplates));
+      const allSeats = Object.entries(venueSeats).flatMap(([configId, seats]) =>
+        seats.map((s) => ({ ...s, venueConfigId: configId })),
+      );
+      data.append("venueSeats", JSON.stringify(allSeats));
+
       // Placed entrance / exit doors — flattened to one list with each
       // door tagged by its venueConfigId so the backend can group them
       // back per venue on read (same shape we use for speaker zones and
@@ -9272,6 +10529,10 @@ export function CreateEventForm({
         const showSpeakers = !!formData.features.hasSpeakers;
         const showWorkshops = !!formData.features.hasWorkshops;
         const showSponsors = !!formData.features.hasSponsors;
+        // Cinema/concert-style assigned seating — a normal Event Sections
+        // toggle now, available for any commercial event, not tied to a
+        // specific category.
+        const showSeating = !!formData.features.hasSeating;
         // Layout tab is also useful when any door type is defined (per venue),
         // since the user needs the canvas to place those door markers.
         const anyDoorsEnabled = venueConfigurations.some(
@@ -9279,7 +10540,11 @@ export function CreateEventForm({
             v.hasEntrance || v.hasExit || (v.customDoorTypes || []).length > 0,
         );
         const showLayout =
-          showStalls || showRoundTables || showSpeakers || anyDoorsEnabled;
+          showStalls ||
+          showRoundTables ||
+          showSpeakers ||
+          showSeating ||
+          anyDoorsEnabled;
         // Always-on tabs: basic, media, venue, visitors, volunteers (5)
         const visibleCount =
           5 +
@@ -9288,6 +10553,7 @@ export function CreateEventForm({
           (showRoundTables ? 1 : 0) +
           (showWorkshops ? 1 : 0) +
           (showSponsors ? 1 : 0) +
+          (showSeating ? 1 : 0) +
           (showLayout ? 1 : 0);
         const colsClass =
           (
@@ -9298,6 +10564,7 @@ export function CreateEventForm({
               8: "grid-cols-8",
               9: "grid-cols-9",
               10: "grid-cols-10",
+              11: "grid-cols-11",
             } as Record<number, string>
           )[visibleCount] || "grid-cols-10";
         return (
@@ -9324,6 +10591,11 @@ export function CreateEventForm({
                 <TabsTrigger value="venue" className="text-sm">
                   Venue
                 </TabsTrigger>
+                {showSeating && (
+                  <TabsTrigger value="seating" className="text-sm">
+                    Seating
+                  </TabsTrigger>
+                )}
                 {showStalls && (
                   <TabsTrigger value="tables" className="text-sm">
                     Spaces
@@ -9523,6 +10795,33 @@ export function CreateEventForm({
                         </PopoverContent>
                       </Popover>
                     </div>
+                  </div>
+
+                  <div>
+                    <Label>Event URL Slug (optional)</Label>
+                    <Input
+                      value={formData.slug}
+                      onChange={(e) =>
+                        handleInputChange(
+                          "slug",
+                          // Sanitize as they type — lowercase, spaces/
+                          // anything else become hyphens — rather than
+                          // rejecting keystrokes, so it always stays a
+                          // valid URL segment without fighting the input.
+                          e.target.value
+                            .toLowerCase()
+                            .replace(/[^a-z0-9]+/g, "-")
+                            .replace(/^-+/, ""),
+                        )
+                      }
+                      placeholder="e.g. summer-music-fest"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Leave blank to keep using the default event link. Set
+                      this to use a readable link instead (e.g. .../events/
+                      {formData.slug || "summer-music-fest"}) — must be
+                      unique among your own events.
+                    </p>
                   </div>
 
                   <div>
@@ -11097,6 +12396,176 @@ export function CreateEventForm({
             </ModuleGate>
           </TabsContent>
 
+          <TabsContent value="seating" className="space-y-6">
+            <ModuleGate moduleKey="events" sectionKey="seating">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <LayoutGrid size={20} />
+                    Seat Row Templates
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Define the kinds of seat rows this event can have — name,
+                    price and color, priced directly here (no Visitors tab
+                    needed). Once defined, switch to the{" "}
+                    <strong>Space Layout</strong> tab to place them on your
+                    venue canvas, one seat at a time or in bulk with the "Draw
+                    Row" tool. A template with no instances placed doesn't
+                    show up anywhere on the eventfront.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="border rounded-lg p-4 bg-slate-50 space-y-4">
+                    <Label className="text-sm font-semibold text-slate-700">
+                      {editingSeatTemplateId
+                        ? "Edit Seat Row Template"
+                        : "Add Seat Row Template"}
+                    </Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label>Template Name *</Label>
+                        <Input
+                          value={currentSeatTemplate.name}
+                          onChange={(e) =>
+                            setCurrentSeatTemplate((p) => ({
+                              ...p,
+                              name: e.target.value,
+                            }))
+                          }
+                          placeholder="e.g. VIP Row, Standard Row"
+                        />
+                      </div>
+                      <div>
+                        <Label>Price per Seat *</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={currentSeatTemplate.price}
+                          onChange={(e) =>
+                            setCurrentSeatTemplate((p) => ({
+                              ...p,
+                              price: e.target.value,
+                            }))
+                          }
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Color</Label>
+                      <div className="flex gap-2 mt-1">
+                        {SEAT_TIER_COLORS.map((c) => (
+                          <button
+                            key={c}
+                            type="button"
+                            className={`w-8 h-8 rounded-full border-2 transition-all ${currentSeatTemplate.color === c ? "border-gray-800 scale-110" : "border-transparent"}`}
+                            style={{ backgroundColor: c }}
+                            onClick={() =>
+                              setCurrentSeatTemplate((p) => ({
+                                ...p,
+                                color: c,
+                              }))
+                            }
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" onClick={addSeatTemplate}>
+                        {editingSeatTemplateId ? (
+                          <>
+                            <Pencil size={16} className="mr-2" /> Update
+                            Template
+                          </>
+                        ) : (
+                          <>
+                            <Plus size={16} className="mr-2" /> Add Template
+                          </>
+                        )}
+                      </Button>
+                      {editingSeatTemplateId && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={resetSeatTemplateForm}
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {seatRowTemplates.length === 0 ? (
+                    <div className="text-sm text-gray-400 border border-dashed rounded-lg p-6 text-center">
+                      No seat row templates yet. Add at least one above.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {seatRowTemplates.map((t) => {
+                        const placedCount = Object.values(venueSeats)
+                          .flat()
+                          .filter((s) => s.rowId === t.id).length;
+                        return (
+                          <div
+                            key={t.id}
+                            className={`flex items-center justify-between border rounded-lg p-3 bg-white ${
+                              editingSeatTemplateId === t.id
+                                ? "ring-2 ring-primary border-primary"
+                                : ""
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span
+                                className="h-4 w-4 rounded-sm border shrink-0"
+                                style={{
+                                  backgroundColor: t.color + "80",
+                                  borderColor: t.color,
+                                }}
+                              />
+                              <div>
+                                <div className="font-medium text-sm">
+                                  {t.name} —{" "}
+                                  {t.price === 0
+                                    ? "Free"
+                                    : formatPrice(t.price)}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {placedCount} seat
+                                  {placedCount === 1 ? "" : "s"} placed on the
+                                  venue
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-primary hover:text-primary/80"
+                                onClick={() => editSeatTemplate(t.id)}
+                              >
+                                <Pencil size={14} />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-500 hover:text-red-600"
+                                onClick={() => removeSeatTemplate(t.id)}
+                              >
+                                <Trash2 size={14} />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </ModuleGate>
+          </TabsContent>
+
           <TabsContent value="speakers" className="space-y-6">
             <ModuleGate moduleKey="events" sectionKey="speakers">
               {/* SECTION 1: Speaker Space (Physical Zone) */}
@@ -11349,9 +12818,7 @@ export function CreateEventForm({
                             )}
                           </CardTitle>
                           <p className="text-xs text-gray-500">
-                            {space.isMainStage
-                              ? "Main Stage"
-                              : `${space.width}×${space.height}px`}
+                            {space.width}×{space.height}px
                             {" · "}
                             {space.slotPrice > 0
                               ? formatPrice(space.slotPrice)
@@ -12410,6 +13877,20 @@ export function CreateEventForm({
                       </label>
                       <label className="flex items-start gap-3 border rounded-lg p-3 cursor-pointer hover:bg-muted/30">
                         <Switch
+                          checked={!!formData.features.hasSeating}
+                          onCheckedChange={(checked) =>
+                            handleFeatureChange("hasSeating", checked)
+                          }
+                        />
+                        <div>
+                          <p className="font-medium text-sm">Seating</p>
+                          <p className="text-xs text-muted-foreground">
+                            Cinema/concert rows placed on the Space Layout
+                          </p>
+                        </div>
+                      </label>
+                      <label className="flex items-start gap-3 border rounded-lg p-3 cursor-pointer hover:bg-muted/30">
+                        <Switch
                           checked={!!formData.features.hasSpeakers}
                           onCheckedChange={(checked) =>
                             handleFeatureChange("hasSpeakers", checked)
@@ -13317,6 +14798,9 @@ export function CreateEventForm({
                   roundTableTemplates={roundTableTemplates}
                   venueRoundTables={venueRoundTables}
                   setVenueRoundTables={setVenueRoundTables}
+                  seatRowTemplates={seatRowTemplates}
+                  venueSeats={venueSeats}
+                  setVenueSeats={setVenueSeats}
                   venueDoors={venueDoors}
                   setVenueDoors={setVenueDoors}
                   stallBookings={stallBookings}

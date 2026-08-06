@@ -62,6 +62,28 @@ export class TicketsService {
         }
       }
 
+      // 0.5 Assigned-seating events: atomically reserve any selected seats
+      // before doing anything else. A single conditional updateOne means two
+      // buyers racing for the same seat can't both succeed — whoever's
+      // update actually matches wins, the other gets a clear conflict error.
+      const allSeatIds = (createTicketDto.tickets || []).flatMap(
+        (t) => t.seatIds || []
+      );
+      if (allSeatIds.length > 0) {
+        const reserveResult = await this.eventModel.updateOne(
+          {
+            _id: createTicketDto.eventId,
+            seatMapBookedSeats: { $nin: allSeatIds },
+          },
+          { $push: { seatMapBookedSeats: { $each: allSeatIds } } }
+        );
+        if (reserveResult.modifiedCount === 0) {
+          throw new BadRequestException(
+            "One or more selected seats were just booked by someone else. Please go back and reselect your seats."
+          );
+        }
+      }
+
       // 1. Find or create user by WhatsApp number
       let user = await this.userModel
         .findOne({
@@ -97,6 +119,8 @@ export class TicketsService {
         ticketType: t.type,
         quantity: t.quantity,
         price: t.price,
+        ...(t.seatIds?.length ? { seatIds: t.seatIds } : {}),
+        ...(t.tierId ? { tierId: t.tierId } : {}),
       }));
       const totalQuantity = createTicketDto.tickets.reduce(
         (acc, t) => acc + t.quantity,
@@ -210,6 +234,21 @@ export class TicketsService {
     }
   }
 
+  // Ticket type strings (organizer tier names, seat row/seat names) flow
+  // straight into the PDF's HTML — escape them so an odd name can't break
+  // the markup or inject anything into a document handed to a third party.
+  private escapeHtml(value: unknown): string {
+    return String(value ?? "").replace(/[&<>"']/g, (c) => {
+      switch (c) {
+        case "&": return "&amp;";
+        case "<": return "&lt;";
+        case ">": return "&gt;";
+        case '"': return "&quot;";
+        default: return "&#39;";
+      }
+    });
+  }
+
   // --- Puppeteer PDF Generation ---
   private generateTicketHTML(ticket: Ticket, qrBase64: string, country?: string, orgName?: string): string {
     const eventDate = new Date(ticket.eventDate).toLocaleDateString();
@@ -255,6 +294,17 @@ export class TicketsService {
             <p><span class="emoji"></span><span class="bold">Time:</span> ${ticket.eventTime || "N/A"}</p>
             <p><span class="emoji"></span><span class="bold">Venue:</span> ${ticket.eventVenue || "N/A"}</p>
             <p><span class="emoji"></span><span class="bold">Total:</span> ${formatCurrency(ticket.totalAmount || 0, country)}</p>
+          </div>
+          <div class="ticket-breakdown">
+            ${(ticket.ticketDetails || [])
+              .map(
+                (d: any) => `<p style="margin:0 0 6px 0;">
+                  <span class="bold">${this.escapeHtml(d.ticketType)}</span>
+                  &nbsp;×&nbsp;${d.quantity}
+                  &nbsp;—&nbsp;${formatCurrency((d.price || 0) * (d.quantity || 0), country)}
+                </p>`,
+              )
+              .join("")}
           </div>
           <div class="qr-section">
             <div style="font-size:16px; margin-bottom:5px;">Scan at Event Entrance</div>
@@ -466,12 +516,21 @@ Thank you for choosing Eventsh! 🎊`;
       }
     }
 
-    // Deduct from specific visitorType maxCount if visitorTypes exist
+    // Deduct from specific visitorType maxCount if visitorTypes exist.
+    // Prefer matching by tierId (VisitorType.id, stable) — falls back to
+    // the old exact-name match for tickets/clients that never sent one.
+    // Name matching alone silently fails for seat purchases, whose
+    // ticketType is a decorated display string ("VIP (Seats A1, A2)"),
+    // never `event.visitorTypes[].name` verbatim.
     if (event.visitorTypes && event.visitorTypes.length > 0 && ticketDetails) {
       for (const detail of ticketDetails) {
-        const vt = event.visitorTypes.find(
-          (v: any) => v.name === detail.ticketType,
-        );
+        const vt = (detail as any).tierId
+          ? event.visitorTypes.find(
+              (v: any) => v.id === (detail as any).tierId,
+            )
+          : event.visitorTypes.find(
+              (v: any) => v.name === detail.ticketType,
+            );
         if (vt) {
           if (vt.maxCount !== undefined && vt.maxCount !== null) {
             if (vt.maxCount < detail.quantity) {
@@ -576,24 +635,27 @@ Thank you for choosing Eventsh! 🎊`;
       .filter((t) => t.paymentConfirmed)
       .reduce((sum, t) => sum + (t.totalAmount || 0), 0);
 
+    // Group by tierId when present so every seat purchase of the same tier
+    // aggregates into one bucket — grouping by the raw ticketType string
+    // would fragment seat sales, since each one embeds its own seat labels
+    // ("VIP (Seats A1, A2)" vs "VIP (Seats B4)" are the same tier but
+    // different strings). The displayed label still comes from whichever
+    // detail is seen first for that group.
     const ticketTypeMap = new Map();
     tickets.forEach((ticket) => {
-      ticket.ticketDetails.forEach((detail) => {
-        const existing = ticketTypeMap.get(detail.ticketType) || {
+      ticket.ticketDetails.forEach((detail: any) => {
+        const key = detail.tierId || detail.ticketType;
+        const existing = ticketTypeMap.get(key) || {
+          ticketType: detail.ticketType,
           quantity: 0,
           revenue: 0,
         };
         existing.quantity += detail.quantity;
         existing.revenue += detail.price * detail.quantity;
-        ticketTypeMap.set(detail.ticketType, existing);
+        ticketTypeMap.set(key, existing);
       });
     });
-    const ticketTypeBreakdown = Array.from(ticketTypeMap.entries()).map(
-      ([type, data]) => ({
-        ticketType: type,
-        ...data,
-      })
-    );
+    const ticketTypeBreakdown = Array.from(ticketTypeMap.values());
 
     const statusMap = new Map();
     tickets.forEach((ticket) => {
