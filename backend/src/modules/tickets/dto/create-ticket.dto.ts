@@ -19,6 +19,20 @@ export class TicketDetailDto {
 
   @IsNumber()
   price: number;
+
+  // Assigned-seating events only: the seat map cells this line item reserves
+  // (`${rowId}:${seatNumber}`), checked/locked atomically in TicketsService.create.
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  seatIds?: string[];
+
+  // VisitorType.id — lets the backend reliably decrement that tier's
+  // maxCount even when `type` is a decorated display string (seat
+  // purchases embed seat labels, e.g. "VIP (Seats A1, A2)").
+  @IsOptional()
+  @IsString()
+  tierId?: string;
 }
 
 export class CustomerDetailsDto {

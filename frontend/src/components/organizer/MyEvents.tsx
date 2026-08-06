@@ -83,6 +83,9 @@ import { useCountry } from "@/hooks/useCountry";
 export interface Event {
   _id: string;
   title: string;
+  // Optional organizer-chosen URL identifier — when set, share links use
+  // this instead of _id.
+  slug?: string;
   description?: string;
   category?: string;
   startDate: string;
@@ -668,11 +671,12 @@ const MyEvents: React.FC = () => {
 
   /**
    * Build the public-facing URL for an event matching the App.tsx route
-   * `/:organizationName/events/:id`. The organization slug is vanity (the
-   * page reads only :id from params), so we slugify whatever name we can
-   * find on the JWT and fall back to a placeholder when nothing's there.
+   * `/:organizationName/events/:id`. The organization slug segment is used
+   * server-side to disambiguate a custom event slug that collides across
+   * two different organizers — pass whatever name we can find on the JWT
+   * and fall back to a placeholder when nothing's there.
    */
-  const buildEventShareUrl = (eventId: string) => {
+  const buildEventShareUrl = (eventId: string, eventSlug?: string) => {
     // Prefer the organizer's real, current slug so the link always matches the
     // latest storefront slug. Fall back to a token-derived slug only until the
     // profile (and its slug) has loaded.
@@ -698,7 +702,7 @@ const MyEvents: React.FC = () => {
         // Non-fatal — placeholder slug still produces a working URL.
       }
     }
-    return `${window.location.origin}/${encodeURIComponent(org || "event")}/events/${eventId}`;
+    return `${window.location.origin}/${encodeURIComponent(org || "event")}/events/${encodeURIComponent(eventSlug || eventId)}`;
   };
 
   // Publish toggle — ON makes the public eventfront link live; OFF blocks the
@@ -750,7 +754,7 @@ const MyEvents: React.FC = () => {
    * Toast either way so the user gets confirmation.
    */
   const handleShareEvent = async (event: Event) => {
-    const url = buildEventShareUrl(event._id);
+    const url = buildEventShareUrl(event._id, event.slug);
     const shareData = {
       title: event.title,
       text: `Check out "${event.title}"`,

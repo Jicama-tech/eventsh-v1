@@ -399,6 +399,8 @@ export default function TicketPaymentPage() {
         type: t.ticketType,
         quantity: t.quantity,
         price: t.price,
+        ...(t.seatIds?.length ? { seatIds: t.seatIds } : {}),
+        ...(t.tierId ? { tierId: t.tierId } : {}),
       }));
 
       const eventInfo = {
