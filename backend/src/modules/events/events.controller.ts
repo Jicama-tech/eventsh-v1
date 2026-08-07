@@ -17,6 +17,7 @@ import {
   ParseIntPipe,
   ValidationPipe,
   ForbiddenException,
+  NotFoundException,
 } from "@nestjs/common";
 import { Response } from "express";
 import {
@@ -37,7 +38,7 @@ import { WebpValidationPipe } from "../../seed/parse-webp.pipe";
 import { compressEventUploadFiles } from "../../seed/compress-event-images.util";
 import { computePlanExpiry } from "../plans/plan-validity.util";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
+import { Model, Types } from "mongoose";
 import { buildDefaultStorefrontSettings } from "../organizer-stores/default-settings";
 
 function generateFileName(req: any, file: any, cb: any) {
@@ -435,6 +436,12 @@ export class EventsController {
         );
       if (typeof body.visitorTypes === "string")
         body.visitorTypes = JSON.parse(body.visitorTypes);
+      if (typeof body.seatRowTemplates === "string")
+        body.seatRowTemplates = JSON.parse(body.seatRowTemplates);
+      if (typeof body.venueSeats === "string")
+        body.venueSeats = JSON.parse(body.venueSeats);
+      if (typeof body.seatMapBookedSeats === "string")
+        body.seatMapBookedSeats = JSON.parse(body.seatMapBookedSeats);
 
       // Individuals can't accept payment (no Razorpay / Stripe account,
       // no bank details). Force every visitor-type price to 0 so tickets
@@ -842,9 +849,74 @@ export class EventsController {
   }
 
   @Get(":id")
-  async getEventById(@Param("id") id: string) {
+  async getEventById(
+    @Param("id") id: string,
+    @Query("organizer") organizerRef?: string,
+  ) {
     try {
-      const event: any = await this.eventsService.findById(id);
+      let event: any;
+      if (Types.ObjectId.isValid(id)) {
+        event = await this.eventsService.findById(id);
+      } else {
+        // Not a valid ObjectId — treat it as an organizer-chosen slug.
+        // Slugs are unique per organizer, not globally, so resolve the
+        // organizer context (the eventfront passes ?organizer=<the URL's
+        // own :organizationName segment>) to disambiguate two different
+        // organizers who happened to pick the same slug.
+        const query: any = { slug: id.toLowerCase() };
+        if (organizerRef) {
+          const normalize = (s: string) =>
+            (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+          let orgId: any = Types.ObjectId.isValid(organizerRef)
+            ? organizerRef
+            : undefined;
+          if (!orgId) {
+            // Try an exact slug match first — but many organizer accounts
+            // predate that field and don't have it set, and even when they
+            // do, someone typing the URL by hand naturally guesses
+            // variations (spaces removed, hyphens omitted, etc. — "Jicama
+            // Tech" → "jicamatech" is a completely reasonable guess that
+            // doesn't match the stored slug "jicama-tech"). Fall back to
+            // comparing a normalized (letters+digits only) form against
+            // organizationName too, so those guesses still resolve.
+            const bySlug = (await this.organizerModel
+              .findOne({ slug: organizerRef })
+              .select("_id")
+              .lean()) as any;
+            orgId = bySlug?._id;
+            if (!orgId) {
+              const normalizedRef = normalize(organizerRef);
+              const candidates = (await this.organizerModel
+                .find({})
+                .select("_id organizationName")
+                .lean()) as any[];
+              orgId = candidates.find(
+                (o) => normalize(o.organizationName) === normalizedRef,
+              )?._id;
+            }
+          }
+          if (orgId) {
+            // Some event rows have `organizer` stored as a plain string
+            // instead of an ObjectId (same legacy quirk the populate
+            // fallback below already works around) — match either form so
+            // this doesn't silently 404 against real data.
+            query.organizer = { $in: [orgId, String(orgId)] };
+          }
+          // If the organizer segment never resolved to anyone at all, DON'T
+          // force a guaranteed no-match — fall back to an unscoped slug
+          // search instead (same as if no organizer param had been sent).
+          // A wrong/guessed organizer segment in a hand-typed URL is far
+          // more likely in practice than two different organizers genuinely
+          // colliding on the same custom event slug.
+        }
+        event = await this.eventModelDirect()
+          .findOne(query)
+          .populate("organizer")
+          .exec();
+        if (!event) {
+          throw new NotFoundException(`Event not found for slug: ${id}`);
+        }
+      }
       // Many event rows in this DB have `organizer` stored as a plain
       // string instead of an ObjectId (schema says ObjectId but writes
       // landed as String). Mongoose's `populate("organizer")` returns
@@ -855,7 +927,7 @@ export class EventsController {
         event && typeof event.toObject === "function" ? event.toObject() : event;
       if (dataObj && !dataObj.organizer) {
         const raw: any = await this.eventModelDirect()
-          .findById(id)
+          .findById(dataObj._id)
           .lean();
         const orgIdStr = raw?.organizer ? String(raw.organizer) : null;
         if (orgIdStr) {
@@ -1000,6 +1072,12 @@ export class EventsController {
         );
       if (typeof body.visitorTypes === "string")
         body.visitorTypes = JSON.parse(body.visitorTypes);
+      if (typeof body.seatRowTemplates === "string")
+        body.seatRowTemplates = JSON.parse(body.seatRowTemplates);
+      if (typeof body.venueSeats === "string")
+        body.venueSeats = JSON.parse(body.venueSeats);
+      if (typeof body.seatMapBookedSeats === "string")
+        body.seatMapBookedSeats = JSON.parse(body.seatMapBookedSeats);
 
       // Mirror the create-event policy: Individuals can't accept payment
       // (no Razorpay / Stripe / bank). Force every visitor-type price to

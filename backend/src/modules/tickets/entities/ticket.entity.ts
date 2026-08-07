@@ -51,6 +51,14 @@ export class Ticket {
         ticketType: { type: String, required: true },
         quantity: { type: Number, required: true },
         price: { type: Number, required: true },
+        // Assigned-seating events only: the reserved seat map cells
+        // (`${rowId}:${seatNumber}`) this line item covers.
+        seatIds: { type: [String], default: undefined },
+        // VisitorType.id at time of purchase — used to reliably decrement
+        // that tier's maxCount even when `ticketType` is a decorated
+        // display string (e.g. seat purchases: "VIP (Seats A1, A2)" is
+        // never an exact match for the tier's stored name "VIP").
+        tierId: { type: String },
       },
     ],
     required: true,
@@ -59,6 +67,8 @@ export class Ticket {
     ticketType: string;
     quantity: number;
     price: number;
+    seatIds?: string[];
+    tierId?: string;
   }>;
 
   @Prop({ required: true })

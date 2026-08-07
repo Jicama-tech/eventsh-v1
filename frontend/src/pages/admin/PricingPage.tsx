@@ -85,6 +85,7 @@ const EVENT_TAB_SECTIONS: { key: string; label: string }[] = [
   { key: "visitors", label: "Visitors" },
   { key: "volunteers", label: "Volunteers" },
   { key: "venue", label: "Venue Setup" },
+  { key: "seating", label: "Seat Map (Movie/Concert)" },
   { key: "tables", label: "Space / AddOns" },
   { key: "speakers", label: "Speakers" },
   { key: "workshops", label: "Workshops" },

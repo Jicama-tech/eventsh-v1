@@ -77,6 +77,9 @@ interface Organizer {
 
 interface Event {
   id: string;
+  // Optional organizer-chosen URL identifier — when set, the storefront
+  // card links here instead of the raw event id.
+  slug?: string;
   name: string;
   description: string;
   date: string;
@@ -180,6 +183,7 @@ export interface OrganizerStore {
 
 interface FetchedEvent {
   _id: string;
+  slug?: string;
   title: string;
   description: string;
   category: string;
@@ -463,6 +467,7 @@ export function OrganizerStorefront({
         if (eventsdata.data && eventsdata.data.length > 0) {
           const mappedEvents = eventsdata.data.map((event: FetchedEvent) => ({
             id: event._id,
+            slug: event.slug,
             name: event.title,
             description: event.description,
             date: new Date(event.startDate).toLocaleDateString(),
@@ -1626,7 +1631,7 @@ export function OrganizerStorefront({
                               minHeight: "220px",
                               animationDelay: `${0.1 + idx * 0.08}s`,
                             }}
-                            onClick={() => handleEventClick(event.id)}
+                            onClick={() => handleEventClick(event.slug || event.id)}
                           >
                             <img
                               src={getImageUrl(event.image)}
@@ -1739,7 +1744,7 @@ export function OrganizerStorefront({
                                   key={event.id}
                                   className={`relative rounded-2xl sm:rounded-3xl overflow-hidden cursor-pointer group shadow-sm hover:shadow-xl transition-shadow duration-300 ${index === 1 ? "hidden sm:block" : "block"}`}
                                   style={{ height: "360px" }}
-                                  onClick={() => handleEventClick(event.id)}
+                                  onClick={() => handleEventClick(event.slug || event.id)}
                                 >
                                   {/* BG image */}
                                   <img
@@ -1810,7 +1815,7 @@ export function OrganizerStorefront({
                                         }}
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          handleEventClick(event.id);
+                                          handleEventClick(event.slug || event.id);
                                         }}
                                       >
                                         View Event
@@ -2034,7 +2039,7 @@ export function OrganizerStorefront({
                                 key={event.id}
                                 className="relative rounded-2xl overflow-hidden cursor-pointer group shadow-sm hover:shadow-lg transition-shadow duration-300"
                                 style={{ minHeight: "148px" }}
-                                onClick={() => handleEventClick(event.id)}
+                                onClick={() => handleEventClick(event.slug || event.id)}
                               >
                                 <img
                                   src={getImageUrl(event.image)}
@@ -2160,7 +2165,7 @@ export function OrganizerStorefront({
                         key={event.id}
                         className="relative rounded-2xl sm:rounded-3xl overflow-hidden cursor-pointer group shadow-sm hover:shadow-xl transition-shadow duration-300"
                         style={{ height: cardH }}
-                        onClick={() => handleEventClick(event.id)}
+                        onClick={() => handleEventClick(event.slug || event.id)}
                       >
                         <img
                           src={getImageUrl(event.image)}
@@ -2226,7 +2231,7 @@ export function OrganizerStorefront({
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleEventClick(event.id);
+                                handleEventClick(event.slug || event.id);
                               }}
                             >
                               View Event
@@ -2305,7 +2310,7 @@ export function OrganizerStorefront({
                     <div
                       key={event.id}
                       className="group cursor-pointer rounded-2xl sm:rounded-3xl overflow-hidden border border-gray-200 bg-white flex flex-col transition-all duration-300 hover:-translate-y-1 shadow-sm hover:shadow-lg"
-                      onClick={() => handleEventClick(event.id)}
+                      onClick={() => handleEventClick(event.slug || event.id)}
                     >
                       {/* Image */}
                       <div className="relative h-52 sm:h-56 overflow-hidden">
@@ -2375,7 +2380,7 @@ export function OrganizerStorefront({
                             }}
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleEventClick(event.id);
+                              handleEventClick(event.slug || event.id);
                             }}
                           >
                             View Event

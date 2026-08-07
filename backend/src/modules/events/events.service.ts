@@ -15,6 +15,18 @@ import { UpdateEventDto } from "./dto/updateEvent.dto";
 import { TemplatesService } from "../templates/templates.service";
 import { OtpService } from "../otp/otp.service";
 
+// Lowercases, trims, and collapses anything that isn't a-z/0-9 into single
+// hyphens (no leading/trailing ones) — the DTO's @Matches already rejects
+// bad input client-side, but this is the actual stored-value guarantee.
+// Empty in, empty out (no slug provided/left over after stripping).
+function normalizeSlug(input: string): string {
+  return (input || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 @Injectable()
 export class EventsService {
   constructor(
@@ -342,6 +354,26 @@ export class EventsService {
         startDate,
       );
 
+      // Slugs are unique per organizer, not globally — check against this
+      // organizer's OTHER events before saving so a collision surfaces as a
+      // clear 400 instead of a raw Mongo duplicate-key error from the index.
+      const normalizedSlug = createEventDto.slug
+        ? normalizeSlug(createEventDto.slug)
+        : "";
+      if (normalizedSlug) {
+        const clash = await this.eventModel
+          .findOne({
+            organizer: createEventDto.organizerId,
+            slug: normalizedSlug,
+          })
+          .lean();
+        if (clash) {
+          throw new BadRequestException(
+            `You already have an event using the slug "${normalizedSlug}" — choose a different one.`,
+          );
+        }
+      }
+
       // Initial ticket capacity = sum of visitor-type caps when present,
       // otherwise the flat totalTickets. Stored in originalTotalTickets so the
       // front end can always show "available / original" — purchases later
@@ -358,6 +390,7 @@ export class EventsService {
       const event = new this.eventModel({
         title: createEventDto.title,
         description: createEventDto.description,
+        slug: normalizedSlug || undefined,
         eventType: createEventDto.eventType,
         // Landing-page showcase / demo flags (admin-created demo events).
         isShowcase: createEventDto.isShowcase === true,
@@ -418,6 +451,9 @@ export class EventsService {
         venueTables: createEventDto.venueTables || [],
         addOnItems: createEventDto.addOnItems || [],
         visitorTypes: createEventDto.visitorTypes || [],
+        seatRowTemplates: createEventDto.seatRowTemplates || [],
+        venueSeats: createEventDto.venueSeats || [],
+        seatMapBookedSeats: createEventDto.seatMapBookedSeats || [],
         sponsorTypes: createEventDto.sponsorTypes || [],
         showSponsorBar: createEventDto.showSponsorBar ?? true,
         speakers: createEventDto.speakers || [],
@@ -617,6 +653,39 @@ export class EventsService {
         }));
       }
 
+      // Slugs are unique per organizer, not globally — checked against this
+      // organizer's OTHER events (excluding this one, which may legitimately
+      // already own the slug being re-saved unchanged).
+      let clearSlug = false;
+      if (updateEventDto.slug !== undefined) {
+        const normalizedSlug = normalizeSlug(updateEventDto.slug);
+        if (normalizedSlug) {
+          const current = await this.eventModel
+            .findById(id)
+            .select("organizer")
+            .lean();
+          const clash = await this.eventModel
+            .findOne({
+              _id: { $ne: id },
+              organizer: (current as any)?.organizer,
+              slug: normalizedSlug,
+            })
+            .lean();
+          if (clash) {
+            throw new BadRequestException(
+              `You already have another event using the slug "${normalizedSlug}" — choose a different one.`,
+            );
+          }
+          updateEventDto.slug = normalizedSlug;
+        } else {
+          // Organizer cleared the field — an empty string would still count
+          // as a real (colliding) value under the sparse unique index, so
+          // this needs an explicit $unset rather than $set-to-"" below.
+          delete (updateEventDto as any).slug;
+          clearSlug = true;
+        }
+      }
+
       const updatedEvent = await this.eventModel
         .findByIdAndUpdate(id, updateEventDto, {
           new: true,
@@ -627,6 +696,11 @@ export class EventsService {
 
       if (!updatedEvent) {
         throw new NotFoundException(`Event with ID ${id} not found`);
+      }
+
+      if (clearSlug) {
+        await this.eventModel.updateOne({ _id: id }, { $unset: { slug: 1 } });
+        (updatedEvent as any).slug = undefined;
       }
 
       // Capture any space templates touched by this update — covers both
