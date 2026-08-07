@@ -43,6 +43,11 @@ interface TicketDetails {
   customerName: string;
   totalAmount: number;
   qrCode: string; // Base64 dataURL
+  ticketDetails?: {
+    ticketType: string;
+    quantity: number;
+    price: number;
+  }[];
 }
 
 const apiURL = __API_URL__;
@@ -579,6 +584,7 @@ Please confirm my ticket booking. Thank you!`,
         customerName: data.customerName,
         totalAmount: data.totalAmount,
         qrCode: data.qrCode, // Assumed base64 data URL string stored in DB or generated
+        ticketDetails: data.ticketDetails,
       };
 
       setTicket(ticketData);
@@ -1269,6 +1275,34 @@ Please confirm my ticket booking. Thank you!`,
                             {formatPrice(ticket.totalAmount)}
                           </p>
                         </div>
+
+                        {ticket.ticketDetails &&
+                          ticket.ticketDetails.length > 0 && (
+                            <div
+                              style={{
+                                background: "#f8fafc",
+                                padding: 15,
+                                borderRadius: 8,
+                                marginBottom: 20,
+                              }}
+                            >
+                              {ticket.ticketDetails.map((d, idx) => (
+                                <p
+                                  key={idx}
+                                  style={{
+                                    margin:
+                                      idx === ticket.ticketDetails!.length - 1
+                                        ? 0
+                                        : "0 0 6px 0",
+                                  }}
+                                >
+                                  <strong>{d.ticketType}</strong> ×{" "}
+                                  {d.quantity} —{" "}
+                                  {formatPrice((d.price || 0) * (d.quantity || 0))}
+                                </p>
+                              ))}
+                            </div>
+                          )}
 
                         <div>
                           <p

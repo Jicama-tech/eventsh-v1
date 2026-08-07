@@ -1133,15 +1133,15 @@ export default function TicketCart() {
               <Card className="space-y-4">
                 {ticketItems.map((item) => (
                   <div key={item.id} className="p-4 space-y-4">
-                    <div className="flex justify-between items-start gap-4">
-                      <div className="flex-1 space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
+                      <div className="flex-1 space-y-2 min-w-0">
                         <h4 className="font-semibold">{item.eventTitle}</h4>
                         {item.description && (
                           <p className="text-sm text-muted-foreground">
                             {item.description}
                           </p>
                         )}
-                        <div className="flex gap-4 text-sm text-muted-foreground">
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                           <span>{formatPrice(item.price)} each</span>
                           <span>
                             Valid until:{" "}
@@ -1158,7 +1158,7 @@ export default function TicketCart() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-between sm:justify-end gap-3">
                         <span className="px-3 py-1 min-w-[3rem] text-center">
                           × 1
                         </span>
@@ -1168,7 +1168,7 @@ export default function TicketCart() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
                           onClick={() => clearCart()}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -1179,23 +1179,23 @@ export default function TicketCart() {
                     <Separator />
                   </div>
                 ))}
-                <div className="flex justify-between">
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-3 p-4">
                   <Button
                     variant="buttonOutline"
-                    className="mb-4 ml-4 mt-4 mb-4"
+                    className="w-full sm:w-auto"
                     onClick={handleBackToStore}
                   >
                     Back to Store
                   </Button>
                   <Button
                     variant="buttonOutline"
-                    className="mr-4 mt-4 mb-4 text-green-600"
+                    className="w-full sm:w-auto text-green-600"
                   >
                     <a
                       href={`https://wa.me/${whatsAppNumber.replace(/\D/g, "")}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-green-600 transition"
+                      className="inline-flex items-center justify-center gap-1 w-full text-green-600 transition"
                     >
                       <FaWhatsapp size={24} />
                       <span className="font-medium">WhatsApp Contact</span>
@@ -1557,8 +1557,8 @@ export default function TicketCart() {
             <Card className="space-y-4">
               {ticketItems.map((item) => (
                 <div key={item.id} className="p-4 space-y-4">
-                  <div className="flex justify-between items-start gap-4">
-                    <div className="flex-1 space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
+                    <div className="flex-1 space-y-2 min-w-0">
                       <h4 className="font-semibold">{item.eventTitle}</h4>
                       {/* Ticket type/tier — already includes the chosen
                           seats for seat-map purchases (e.g. "VIP (Seats A1,
@@ -1574,7 +1574,7 @@ export default function TicketCart() {
                           {item.description}
                         </p>
                       )}
-                      <div className="flex gap-4 text-sm text-muted-foreground">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                         <span>{formatPrice(item.price)} each</span>
                         <span>
                           Valid until:{" "}
@@ -1591,7 +1591,7 @@ export default function TicketCart() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-between sm:justify-end gap-3">
                       <span className="px-3 py-1 min-w-[3rem] text-center">
                         × {item.quantity}
                       </span>
@@ -1601,7 +1601,7 @@ export default function TicketCart() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
                         onClick={() => clearCart()}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -1612,20 +1612,20 @@ export default function TicketCart() {
                   <Separator />
                 </div>
               ))}
-              <div className="flex justify-between">
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-3 p-4">
                 <Button
                   variant="buttonOutline"
-                  className="mb-4 ml-4"
+                  className="w-full sm:w-auto"
                   onClick={handleBackToStore}
                 >
                   Back to Store
                 </Button>
-                <Button variant="buttonOutline" className="mr-4 text-green-600">
+                <Button variant="buttonOutline" className="w-full sm:w-auto text-green-600">
                   <a
                     href={`https://wa.me/${whatsAppNumber.replace(/\D/g, "")}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-green-600 transition"
+                    className="inline-flex items-center justify-center gap-1 w-full text-green-600 transition"
                   >
                     <FaWhatsapp size={24} />
                     <span className="font-medium">WhatsApp Contact</span>

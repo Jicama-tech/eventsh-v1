@@ -479,6 +479,20 @@ Thank you for choosing Eventsh! 🎊`;
     const hasCap = Number.isFinite(currentTotal);
     const hasVisitorTypes =
       Array.isArray(event.visitorTypes) && event.visitorTypes.length > 0;
+    // Assigned-seating events have no visitorTypes at all (seating is
+    // self-priced, decoupled from the Visitors tab) and their capacity is
+    // already enforced atomically against seatMapBookedSeats before this
+    // function ever runs — so a purchase that includes seats must never
+    // ALSO be checked/decremented against the generic totalTickets cap
+    // below. Left ungated, a leftover/stale totalTickets value on the event
+    // (e.g. carried over from before Seating was enabled, or just never
+    // cleared) throws "Not enough tickets available" for a seat purchase
+    // that was already validated and reserved correctly.
+    const hasSeatTickets =
+      Array.isArray(ticketDetails) &&
+      ticketDetails.some(
+        (d: any) => Array.isArray(d.seatIds) && d.seatIds.length > 0,
+      );
 
     // Backfill originalTotalTickets (the baseline capacity) when it's missing
     // — e.g. legacy events created before this field was tracked.
@@ -511,7 +525,7 @@ Thank you for choosing Eventsh! 🎊`;
         }
         event.originalTotalTickets =
           vtSumNow + Math.max(0, soldSoFar - quantity);
-      } else if (hasCap) {
+      } else if (hasCap && !hasSeatTickets) {
         event.originalTotalTickets = currentTotal + quantity;
       }
     }
@@ -549,8 +563,9 @@ Thank you for choosing Eventsh! 🎊`;
         (sum: number, v: any) => sum + (Number(v.maxCount) || 0),
         0,
       );
-    } else if (hasCap) {
+    } else if (hasCap && !hasSeatTickets) {
       // No visitor types AND a real cap exists — deduct from totalTickets.
+      // (Seat purchases are excluded — see hasSeatTickets above.)
       if (currentTotal < quantity) {
         throw new BadRequestException("Not enough tickets available");
       }
