@@ -84,6 +84,10 @@ export class FeaturesDto {
   @IsBoolean()
   @IsOptional()
   hasWorkshops?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  hasScheduledSpaces?: boolean;
 }
 
 // One custom age restriction: a heading (e.g. "Vendors") + an age (e.g. "18+").
@@ -549,6 +553,61 @@ export class PositionedRoundTableDto {
   @IsBoolean() @IsOptional() isFullyBooked?: boolean;
 }
 
+// A single bookable date+time occurrence of a Scheduled Space.
+export class ScheduleSlotDto {
+  @IsString() id: string;
+  @IsString() @IsOptional() label?: string;
+  @IsString() date: string;
+  @IsString() startTime: string;
+  @IsString() endTime: string;
+}
+
+// A bookable facility (tennis court, cricket ground, chess court, ...),
+// unified across both shapes — no separate rect/round template types.
+export class ScheduledSpaceTemplateDto {
+  @IsString() id: string;
+  @IsString() facilityType: string;
+  @IsString() name: string;
+  @IsString() @IsOptional() shape?: string; // "Rectangle" | "Circle"
+  @IsNumber() @IsOptional() width?: number;
+  @IsNumber() @IsOptional() height?: number;
+  @IsNumber() @IsOptional() diameter?: number;
+  @IsNumber() @Min(0) @IsOptional() price?: number;
+  @IsNumber() @Min(0) @IsOptional() memberPrice?: number;
+  @IsString() @IsOptional() color?: string;
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => ScheduleSlotDto)
+  slots?: ScheduleSlotDto[];
+}
+
+export class PositionedScheduledSpaceDto {
+  @IsString() positionId: string;
+  @IsString() templateId: string;
+  @IsString() facilityType: string;
+  @IsString() name: string;
+  @IsString() @IsOptional() shape?: string;
+  @IsNumber() @IsOptional() width?: number;
+  @IsNumber() @IsOptional() height?: number;
+  @IsNumber() @IsOptional() diameter?: number;
+  @IsNumber() @IsOptional() displayWidth?: number;
+  @IsNumber() @IsOptional() displayHeight?: number;
+  @IsNumber() @Min(0) @IsOptional() price?: number;
+  @IsNumber() @Min(0) @IsOptional() memberPrice?: number;
+  @IsString() @IsOptional() color?: string;
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => ScheduleSlotDto)
+  slots?: ScheduleSlotDto[];
+  @IsNumber() x: number;
+  @IsNumber() y: number;
+  @IsNumber() @IsOptional() rotation?: number;
+  @IsBoolean() @IsOptional() isPlaced?: boolean;
+  @IsString() venueConfigId: string;
+}
+
 export class VolunteerDto {
   @IsString()
   name: string;
@@ -838,6 +897,7 @@ export class CreateEventDto {
     speaker?: Record<string, boolean>;
     roundTable?: Record<string, boolean>;
     workshop?: Record<string, boolean>;
+    scheduledSpace?: Record<string, boolean>;
   };
 
   @IsString()
@@ -997,6 +1057,20 @@ export class CreateEventDto {
   @IsOptional()
   @Type(() => PositionedRoundTableDto)
   venueRoundTables?: PositionedRoundTableDto[];
+
+  @ValidateNested({ each: true })
+  @IsOptional()
+  @Type(() => ScheduledSpaceTemplateDto)
+  scheduledSpaceTemplates?: ScheduledSpaceTemplateDto[];
+
+  @ValidateNested({ each: true })
+  @IsOptional()
+  @Type(() => PositionedScheduledSpaceDto)
+  venueScheduledSpaces?: PositionedScheduledSpaceDto[];
+
+  @IsString({ each: true })
+  @IsOptional()
+  scheduledSpaceBookedSlots?: string[];
 
   // Placed entrance / exit doors. Kept as a loose array — the door
   // shape is small and stable enough that we can skip a typed

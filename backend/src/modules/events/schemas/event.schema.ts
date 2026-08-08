@@ -333,6 +333,66 @@ class PositionedRoundTable {
   @Prop({ default: false }) isFullyBooked: boolean;
 }
 
+// A single bookable occurrence of a Scheduled Space — a specific calendar
+// date + time window. Capacity is always exclusive (one booking takes the
+// whole space for that slot), so there's no seat/chair count here.
+class ScheduleSlot {
+  @Prop({ required: true }) id: string;
+  @Prop() label?: string;
+  @Prop({ required: true }) date: string; // "2026-08-20"
+  @Prop({ required: true }) startTime: string; // "10:00"
+  @Prop({ required: true }) endTime: string; // "11:00"
+}
+
+// A Scheduled Space is a bookable facility (tennis court, cricket ground,
+// chess court, ...) — NOT a sellable/rentable "space" in the Stalls sense.
+// Unified across both shapes (no separate rect/round template types) so the
+// organizer picks a facility type + shape from one form, not two parallel
+// sections. Pricing is a single per-slot price (no booking/deposit tiers —
+// those belong to the Stalls vendor-deposit workflow, not a court booking).
+class ScheduledSpaceTemplate {
+  @Prop({ required: true }) id: string;
+  // e.g. "Tennis Court", "Cricket Ground" — from a curated list on the
+  // frontend, or a custom value when the organizer picks "Other".
+  @Prop({ required: true }) facilityType: string;
+  // Instance label, e.g. "Court 1" — distinguishes multiple facilities of
+  // the same type.
+  @Prop({ required: true }) name: string;
+  @Prop({ enum: ["Rectangle", "Circle"], default: "Rectangle" })
+  shape: string;
+  @Prop() width?: number;
+  @Prop() height?: number;
+  @Prop() diameter?: number;
+  @Prop({ default: 0 }) price: number;
+  @Prop() memberPrice?: number;
+  @Prop() color?: string;
+  @Prop({ type: [Object], default: [] }) slots: ScheduleSlot[];
+}
+
+// Placed Scheduled Space instance on the venue canvas.
+class PositionedScheduledSpace {
+  @Prop({ required: true }) positionId: string;
+  @Prop({ required: true }) templateId: string;
+  @Prop({ required: true }) facilityType: string;
+  @Prop({ required: true }) name: string;
+  @Prop({ enum: ["Rectangle", "Circle"], default: "Rectangle" })
+  shape: string;
+  @Prop() width?: number;
+  @Prop() height?: number;
+  @Prop() diameter?: number;
+  @Prop() displayWidth?: number;
+  @Prop() displayHeight?: number;
+  @Prop({ default: 0 }) price: number;
+  @Prop() memberPrice?: number;
+  @Prop() color?: string;
+  @Prop({ type: [Object], default: [] }) slots: ScheduleSlot[];
+  @Prop() x: number;
+  @Prop() y: number;
+  @Prop({ default: 0 }) rotation: number;
+  @Prop({ default: true }) isPlaced: boolean;
+  @Prop() venueConfigId: string;
+}
+
 class termsAndConditionsforStalls {
   @Prop()
   termsAndConditionsforStalls: string;
@@ -552,6 +612,7 @@ export class Event {
     hasSpeakers?: boolean;
     hasRoundTables?: boolean;
     hasWorkshops?: boolean;
+    hasScheduledSpaces?: boolean;
   };
 
   @Prop()
@@ -613,6 +674,7 @@ export class Event {
     speaker?: Record<string, boolean>;
     roundTable?: Record<string, boolean>;
     workshop?: Record<string, boolean>;
+    scheduledSpace?: Record<string, boolean>;
   };
 
   @Prop()
@@ -884,6 +946,21 @@ export class Event {
 
   @Prop({ type: Array, default: [] })
   venueRoundTables: PositionedRoundTable[];
+
+  // Scheduled Spaces (Event Sections toggle: features.hasScheduledSpaces) —
+  // bookable facilities (tennis court, cricket ground, ...) sold per time
+  // slot rather than once for the whole event. Templates are defined on the
+  // Schedule tab and placed onto the venue canvas like Spaces/Round Tables.
+  @Prop({ type: Array, default: [] })
+  scheduledSpaceTemplates: ScheduledSpaceTemplate[];
+
+  @Prop({ type: Array, default: [] })
+  venueScheduledSpaces: PositionedScheduledSpace[];
+
+  // Atomic per-(instance,slot) reservation ledger — same proven technique as
+  // seatMapBookedSeats above. Tokens: `${positionId}:${slotId}`.
+  @Prop({ type: [String], default: [] })
+  scheduledSpaceBookedSlots?: string[];
 
   // Placed entrance / exit doors. Each entry carries its own
   // venueConfigId so multi-config layouts can group them per venue at

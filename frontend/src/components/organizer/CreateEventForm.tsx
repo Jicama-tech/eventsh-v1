@@ -9,6 +9,7 @@ import SponsorMarquee from "@/components/ui/SponsorMarquee";
 import { useCountry } from "@/hooks/useCountry";
 import { useSubscription } from "@/hooks/useSubscription";
 import { subtypesFor, eventTypeLabel } from "@/lib/eventTypes";
+import { FacilityCourtMarkings } from "@/lib/facilityCourtLines";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -318,6 +319,60 @@ interface PositionedTable extends TableTemplate {
   // off them.
   displayWidth?: number;
   displayHeight?: number;
+}
+
+// A single bookable date+time occurrence of a Scheduled Space. Capacity is
+// always exclusive — one booking takes the whole space for that slot.
+interface ScheduleSlot {
+  id: string;
+  label?: string;
+  date: string; // "2026-08-20"
+  startTime: string; // "10:00"
+  endTime: string; // "11:00"
+}
+
+// A Scheduled Space is a bookable FACILITY (tennis court, cricket ground,
+// chess court, ...) sold per time slot — not a sellable/rentable "space" in
+// the Stalls sense, so there's no forSale toggle and no booking/deposit
+// pricing tiers, just one per-slot price. Unified across both shapes: the
+// organizer picks a facilityType + shape from ONE form, not two parallel
+// rect/round sections.
+const SCHEDULED_SPACE_FACILITY_TYPES = [
+  "Tennis Court",
+  "Cricket Ground",
+  "Badminton Court",
+  "Basketball Court",
+  "Football Ground",
+  "Volleyball Court",
+  "Swimming Pool",
+  "Chess Court",
+  "Table Tennis Court",
+  "Squash Court",
+  "Other",
+];
+
+interface ScheduledSpaceTemplate {
+  id: string;
+  facilityType: string;
+  name: string;
+  shape: "Rectangle" | "Circle";
+  width?: number;
+  height?: number;
+  diameter?: number;
+  price: number;
+  memberPrice?: number;
+  color?: string;
+  slots: ScheduleSlot[];
+}
+
+interface PositionedScheduledSpace extends ScheduledSpaceTemplate {
+  positionId: string;
+  templateId: string;
+  x: number;
+  y: number;
+  rotation: number;
+  isPlaced: boolean;
+  venueConfigId: string;
 }
 
 // Exhibitor business categories a space can be allotted to — kept in sync with
@@ -3315,6 +3370,497 @@ const TableManagement = ({
   );
 };
 
+// Scheduled Space templates — bookable FACILITIES (tennis courts, cricket
+// grounds, chess tables, ...), unified across both shapes in one form (a
+// Shape field, not two parallel rect/round sections). No forSale toggle and
+// no booking/deposit price tiers — those are Stalls vendor-space concepts
+// that don't apply here; a facility is always bookable, one price per slot.
+const ScheduledSpaceManagement = ({
+  templates,
+  setTemplates,
+  current,
+  setCurrent,
+}: {
+  templates: ScheduledSpaceTemplate[];
+  setTemplates: (templates: ScheduledSpaceTemplate[]) => void;
+  current: {
+    facilityType: string;
+    customFacilityType: string;
+    name: string;
+    shape: "Rectangle" | "Circle";
+    width: string;
+    height: string;
+    diameter: string;
+    price: string;
+    memberPrice?: string;
+    color: string;
+    slots: ScheduleSlot[];
+  };
+  setCurrent: React.Dispatch<React.SetStateAction<typeof current>>;
+}) => {
+  const { country } = useCountry();
+  const { formatPrice } = useCurrency(country);
+  const { isModuleEnabled } = useSubscription();
+  const isMembershipEnabled = isModuleEnabled("membership");
+  const { toast } = useToast();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [slotDraft, setSlotDraft] = useState({
+    label: "",
+    date: "",
+    startTime: "",
+    endTime: "",
+  });
+
+  const resetForm = () => {
+    setCurrent({
+      facilityType: SCHEDULED_SPACE_FACILITY_TYPES[0],
+      customFacilityType: "",
+      name: "",
+      shape: "Rectangle",
+      width: "100",
+      height: "100",
+      diameter: "100",
+      price: "",
+      memberPrice: "",
+      color: "#3b82f6",
+      slots: [],
+    });
+    setEditingId(null);
+  };
+
+  const addSlot = () => {
+    if (!slotDraft.date || !slotDraft.startTime || !slotDraft.endTime) {
+      toast({
+        duration: 5000,
+        title: "Date, start time and end time are required",
+        variant: "destructive",
+      });
+      return;
+    }
+    setCurrent((prev) => ({
+      ...prev,
+      slots: [
+        ...prev.slots,
+        {
+          id: Math.random().toString(36).slice(2, 15),
+          label: slotDraft.label || undefined,
+          date: slotDraft.date,
+          startTime: slotDraft.startTime,
+          endTime: slotDraft.endTime,
+        },
+      ],
+    }));
+    setSlotDraft({ label: "", date: "", startTime: "", endTime: "" });
+  };
+
+  const removeSlot = (id: string) =>
+    setCurrent((prev) => ({
+      ...prev,
+      slots: prev.slots.filter((s) => s.id !== id),
+    }));
+
+  const parseOptionalNum = (v?: string) => {
+    if (v == null) return undefined;
+    const s = String(v).trim();
+    if (!s) return undefined;
+    const n = parseFloat(s);
+    return Number.isFinite(n) && n >= 0 ? n : undefined;
+  };
+
+  const saveTemplate = () => {
+    if (!current.name) {
+      toast({ duration: 5000, title: "Name is required", variant: "destructive" });
+      return;
+    }
+    const facilityType =
+      current.facilityType === "Other"
+        ? current.customFacilityType.trim()
+        : current.facilityType;
+    if (!facilityType) {
+      toast({
+        duration: 5000,
+        title: "Facility type is required",
+        variant: "destructive",
+      });
+      return;
+    }
+    const data: ScheduledSpaceTemplate = {
+      id: editingId || Math.random().toString(36).slice(2, 15),
+      facilityType,
+      name: current.name,
+      shape: current.shape,
+      width:
+        current.shape === "Rectangle"
+          ? parseInt(current.width, 10) || 0
+          : undefined,
+      height:
+        current.shape === "Rectangle"
+          ? parseInt(current.height, 10) || 0
+          : undefined,
+      diameter:
+        current.shape === "Circle"
+          ? parseInt(current.diameter, 10) || 0
+          : undefined,
+      price: parseFloat(current.price) || 0,
+      memberPrice: parseOptionalNum(current.memberPrice),
+      color: current.color || "#3b82f6",
+      slots: current.slots,
+    };
+    if (editingId) {
+      setTemplates(templates.map((t) => (t.id === editingId ? data : t)));
+      toast({ duration: 5000, title: "Scheduled Space updated" });
+    } else {
+      setTemplates([...templates, data]);
+      toast({ duration: 5000, title: "Scheduled Space created" });
+    }
+    resetForm();
+  };
+
+  const editTemplate = (id: string) => {
+    const t = templates.find((x) => x.id === id);
+    if (!t) return;
+    const isCustomType = !SCHEDULED_SPACE_FACILITY_TYPES.includes(
+      t.facilityType,
+    );
+    setCurrent({
+      facilityType: isCustomType ? "Other" : t.facilityType,
+      customFacilityType: isCustomType ? t.facilityType : "",
+      name: t.name,
+      shape: t.shape || "Rectangle",
+      width: t.width != null ? String(t.width) : "100",
+      height: t.height != null ? String(t.height) : "100",
+      diameter: t.diameter != null ? String(t.diameter) : "100",
+      price: t.price != null ? String(t.price) : "",
+      memberPrice: t.memberPrice != null ? String(t.memberPrice) : "",
+      color: t.color || "#3b82f6",
+      slots: t.slots || [],
+    });
+    setEditingId(id);
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Scheduled Spaces</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Facilities bookable by time slot — tennis courts, cricket grounds,
+          chess tables and the like. Booking a slot reserves the whole
+          facility exclusively for that window.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="border rounded-lg p-4 bg-slate-50 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>Facility Type *</Label>
+              <Select
+                value={current.facilityType}
+                onValueChange={(v) =>
+                  setCurrent((p) => ({ ...p, facilityType: v }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SCHEDULED_SPACE_FACILITY_TYPES.map((ft) => (
+                    <SelectItem key={ft} value={ft}>
+                      {ft}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {current.facilityType === "Other" && (
+              <div>
+                <Label>Custom Facility Type *</Label>
+                <Input
+                  value={current.customFacilityType}
+                  onChange={(e) =>
+                    setCurrent((p) => ({
+                      ...p,
+                      customFacilityType: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g. Skating Rink"
+                />
+              </div>
+            )}
+          </div>
+          <div>
+            <Label>Name *</Label>
+            <Input
+              value={current.name}
+              onChange={(e) =>
+                setCurrent((p) => ({ ...p, name: e.target.value }))
+              }
+              placeholder="e.g. Court 1"
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label className="mb-2 block">Shape</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={current.shape === "Rectangle" ? "default" : "outline"}
+                  className="flex-1"
+                  onClick={() =>
+                    setCurrent((p) => ({ ...p, shape: "Rectangle" }))
+                  }
+                >
+                  Rectangle
+                </Button>
+                <Button
+                  type="button"
+                  variant={current.shape === "Circle" ? "default" : "outline"}
+                  className="flex-1"
+                  onClick={() => setCurrent((p) => ({ ...p, shape: "Circle" }))}
+                >
+                  Circle
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label>Price per Slot *</Label>
+              <Input
+                type="number"
+                min={0}
+                value={current.price}
+                onChange={(e) =>
+                  setCurrent((p) => ({ ...p, price: e.target.value }))
+                }
+              />
+            </div>
+          </div>
+          {current.shape === "Rectangle" ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Width</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={current.width}
+                  onChange={(e) =>
+                    setCurrent((p) => ({ ...p, width: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <Label>Height</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={current.height}
+                  onChange={(e) =>
+                    setCurrent((p) => ({ ...p, height: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+          ) : (
+            <div>
+              <Label>Diameter</Label>
+              <Input
+                type="number"
+                min={0}
+                value={current.diameter}
+                onChange={(e) =>
+                  setCurrent((p) => ({ ...p, diameter: e.target.value }))
+                }
+              />
+            </div>
+          )}
+          {isMembershipEnabled && (
+            <div>
+              <Label>Member Price</Label>
+              <Input
+                type="number"
+                min={0}
+                value={current.memberPrice}
+                onChange={(e) =>
+                  setCurrent((p) => ({ ...p, memberPrice: e.target.value }))
+                }
+              />
+            </div>
+          )}
+          <div>
+            <Label className="mb-2 block">Color</Label>
+            <div className="flex items-center gap-2 flex-wrap">
+              {[
+                "#3b82f6",
+                "#6b7280",
+                "#ef4444",
+                "#f59e0b",
+                "#10b981",
+                "#8B5CF6",
+                "#ec4899",
+                "#14b8a6",
+                "#f97316",
+                "#6366f1",
+              ].map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  className={`w-8 h-8 rounded-full border-2 transition-all ${current.color === c ? "border-gray-800 scale-110" : "border-gray-200"}`}
+                  style={{ backgroundColor: c }}
+                  onClick={() => setCurrent((p) => ({ ...p, color: c }))}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Time Slots */}
+          <div className="border rounded-lg p-3 bg-white space-y-3">
+            <Label className="text-sm font-medium">Time Slots</Label>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <Input
+                type="date"
+                value={slotDraft.date}
+                onChange={(e) =>
+                  setSlotDraft((p) => ({ ...p, date: e.target.value }))
+                }
+              />
+              <Input
+                type="time"
+                value={slotDraft.startTime}
+                onChange={(e) =>
+                  setSlotDraft((p) => ({ ...p, startTime: e.target.value }))
+                }
+              />
+              <Input
+                type="time"
+                value={slotDraft.endTime}
+                onChange={(e) =>
+                  setSlotDraft((p) => ({ ...p, endTime: e.target.value }))
+                }
+              />
+              <Input
+                placeholder="Label (optional)"
+                value={slotDraft.label}
+                onChange={(e) =>
+                  setSlotDraft((p) => ({ ...p, label: e.target.value }))
+                }
+              />
+            </div>
+            <Button type="button" variant="buttonOutline" size="sm" onClick={addSlot}>
+              <Plus size={14} className="mr-1" /> Add Slot
+            </Button>
+            {current.slots.length > 0 && (
+              <div className="space-y-1">
+                {current.slots.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between text-sm bg-gray-50 rounded px-2 py-1.5"
+                  >
+                    <span>
+                      {s.date} • {s.startTime}–{s.endTime}
+                      {s.label ? ` • ${s.label}` : ""}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => removeSlot(s.id)}
+                    >
+                      <Trash2 size={12} />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" onClick={saveTemplate} className="flex-1">
+              {editingId ? (
+                <>
+                  <Pencil size={16} className="mr-2" /> Update Scheduled Space
+                </>
+              ) : (
+                <>
+                  <Plus size={16} className="mr-2" /> Create Scheduled Space
+                </>
+              )}
+            </Button>
+            {editingId && (
+              <Button type="button" variant="outline" onClick={resetForm}>
+                Cancel
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {templates.length > 0 && (
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">
+              Scheduled Spaces ({templates.length})
+            </Label>
+            <div className="grid gap-2 max-h-60 overflow-y-auto">
+              {templates.map((t) => (
+                <div
+                  key={t.id}
+                  className={`flex items-center justify-between p-3 bg-gray-50 rounded border-l-4 ${
+                    editingId === t.id ? "ring-2 ring-primary" : ""
+                  }`}
+                  style={{ borderLeftColor: t.color || "#3b82f6" }}
+                >
+                  <div className="space-y-1">
+                    <div className="font-medium flex items-center gap-2">
+                      <span
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: t.color || "#3b82f6" }}
+                      />
+                      {t.name}
+                      <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                        {t.facilityType}
+                      </Badge>
+                      <Badge variant="secondary" className="text-[9px] px-1.5 py-0">
+                        {t.shape}
+                      </Badge>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {t.shape === "Rectangle"
+                        ? `${t.width}×${t.height}`
+                        : `⌀${t.diameter}`}{" "}
+                      • {t.slots.length} slot(s)
+                    </div>
+                    <div className="text-sm text-gray-700 font-medium">
+                      {formatPrice(t.price)} / slot
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="buttonOutline"
+                      size="sm"
+                      onClick={() => editTemplate(t.id)}
+                    >
+                      <Pencil size={14} />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="buttonOutline"
+                      size="sm"
+                      onClick={() => {
+                        setTemplates(templates.filter((x) => x.id !== t.id));
+                        if (editingId === t.id) resetForm();
+                      }}
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
 // Enhanced Venue Designer with Improved Drag & Drop
 interface VenueDesignerProps {
   tableTemplates: TableTemplate[];
@@ -3336,6 +3882,11 @@ interface VenueDesignerProps {
   roundTableTemplates: RoundTableTemplate[];
   venueRoundTables: Record<string, PositionedRoundTable[]>;
   setVenueRoundTables: (tables: Record<string, PositionedRoundTable[]>) => void;
+  scheduledSpaceTemplates: ScheduledSpaceTemplate[];
+  venueScheduledSpaces: Record<string, PositionedScheduledSpace[]>;
+  setVenueScheduledSpaces: (
+    spaces: Record<string, PositionedScheduledSpace[]>,
+  ) => void;
   /** Row declarations (label/price/color) — self-contained, no VisitorType
    *  dependency and no seat cap; placing seats under one just grows its live
    *  count. */
@@ -3536,6 +4087,9 @@ const VenueDesigner = ({
   roundTableTemplates,
   venueRoundTables,
   setVenueRoundTables,
+  scheduledSpaceTemplates,
+  venueScheduledSpaces,
+  setVenueScheduledSpaces,
   seatRowTemplates,
   venueSeats,
   setVenueSeats,
@@ -3566,6 +4120,7 @@ const VenueDesigner = ({
     Array<{
       venueTables: Record<string, PositionedTable[]>;
       venueRoundTables: Record<string, PositionedRoundTable[]>;
+      venueScheduledSpaces: Record<string, PositionedScheduledSpace[]>;
       venueSeats: Record<string, PositionedSeat[]>;
       venueSpeakerZones: Record<string, any[]>;
       venueDoors: Record<string, PositionedDoor[]>;
@@ -3586,6 +4141,7 @@ const VenueDesigner = ({
     undoStackRef.current.push({
       venueTables,
       venueRoundTables,
+      venueScheduledSpaces,
       venueSeats,
       venueSpeakerZones,
       venueDoors,
@@ -3597,6 +4153,7 @@ const VenueDesigner = ({
   }, [
     venueTables,
     venueRoundTables,
+    venueScheduledSpaces,
     venueSeats,
     venueSpeakerZones,
     venueDoors,
@@ -3614,6 +4171,7 @@ const VenueDesigner = ({
     isRestoringRef.current = true;
     setVenueTables(prev.venueTables);
     setVenueRoundTables(prev.venueRoundTables);
+    setVenueScheduledSpaces(prev.venueScheduledSpaces);
     setVenueSeats(prev.venueSeats);
     setVenueSpeakerZones(prev.venueSpeakerZones);
     setVenueDoors(prev.venueDoors);
@@ -3800,6 +4358,8 @@ const VenueDesigner = ({
   const currentTables = venueTables[selectedVenueConfigId] || [];
   const currentSpeakerZones = venueSpeakerZones[selectedVenueConfigId] || [];
   const currentRoundTables = venueRoundTables[selectedVenueConfigId] || [];
+  const currentScheduledSpaces =
+    venueScheduledSpaces[selectedVenueConfigId] || [];
   const currentSeats = venueSeats[selectedVenueConfigId] || [];
   const currentDoors = venueDoors[selectedVenueConfigId] || [];
   const currentAnnotations = venueAnnotations[selectedVenueConfigId] || [];
@@ -4008,6 +4568,12 @@ const VenueDesigner = ({
   for (const s of currentSeatsForCanvas as any[]) {
     growX((s.x || 0) + SEAT_SIZE);
     growY((s.y || 0) + SEAT_SIZE);
+  }
+  for (const s of currentScheduledSpaces) {
+    const size =
+      s.shape === "Circle" ? s.diameter || 100 : undefined;
+    growX((s.x || 0) + (size ?? s.width ?? 0));
+    growY((s.y || 0) + (size ?? s.height ?? 0));
   }
   // Small working margin past the furthest-placed item so there's room to
   // drop / nudge the next space. The canvas grows by this much beyond the
@@ -4281,6 +4847,11 @@ const VenueDesigner = ({
           duplicateSeat();
           return;
         }
+        if (selectedTable.startsWith("ss-")) {
+          e.preventDefault();
+          duplicateScheduledSpace();
+          return;
+        }
         // Speaker zones / doors aren't wired for duplication yet — skip
         // silently when the selected item isn't a Space.
         if (
@@ -4383,6 +4954,113 @@ const VenueDesigner = ({
       ),
     });
     setSelectedTable(null);
+  };
+
+  // --- Scheduled Space Actions --- unified across both shapes (own prefix
+  // "ss-" in selectedTable/dragPreview so it never collides with Stalls
+  // spaces or Round Tables). Footprint is width×height for Rectangle,
+  // diameter×diameter for Circle.
+  const scheduledSpaceFootprint = (s: {
+    shape: string;
+    width?: number;
+    height?: number;
+    diameter?: number;
+  }) =>
+    s.shape === "Circle"
+      ? { w: s.diameter || 100, h: s.diameter || 100 }
+      : { w: s.width || 100, h: s.height || 100 };
+
+  const addScheduledSpaceToVenue = (template: ScheduledSpaceTemplate) => {
+    if (!venueConfig) return;
+    const { w, h } = scheduledSpaceFootprint(template);
+    const newSpace: PositionedScheduledSpace = {
+      ...template,
+      positionId: Math.random().toString(36).slice(2, 15),
+      templateId: template.id,
+      x: (venueConfig.width - w) / 2,
+      y: (venueConfig.height - h) / 2,
+      rotation: 0,
+      isPlaced: true,
+      venueConfigId: selectedVenueConfigId,
+    };
+    setVenueScheduledSpaces({
+      ...venueScheduledSpaces,
+      [selectedVenueConfigId]: [...currentScheduledSpaces, newSpace],
+    });
+    setSelectedTable(`ss-${newSpace.positionId}`);
+    toast({
+      title: "Scheduled Space Added",
+      description: `${template.name} added to ${venueConfig.name}`,
+    });
+  };
+
+  const removeScheduledSpace = (positionId: string) => {
+    setVenueScheduledSpaces({
+      ...venueScheduledSpaces,
+      [selectedVenueConfigId]: currentScheduledSpaces.filter(
+        (s) => s.positionId !== positionId,
+      ),
+    });
+    setSelectedTable(null);
+  };
+
+  const duplicateScheduledSpace = (positionId?: string) => {
+    const targetId = (positionId || selectedTable || "").replace(/^ss-/, "");
+    if (!targetId || !venueConfig) return;
+    const original = currentScheduledSpaces.find(
+      (s) => s.positionId === targetId,
+    );
+    if (!original) return;
+    const { w, h } = scheduledSpaceFootprint(original);
+    const OFFSET = 24;
+    let nx = original.x + OFFSET;
+    let ny = original.y + OFFSET;
+    if (nx + w > canvasW) nx = Math.max(0, canvasW - w);
+    if (ny + h > canvasH) ny = Math.max(0, canvasH - h);
+    const newSpace: PositionedScheduledSpace = {
+      ...original,
+      positionId: Math.random().toString(36).slice(2, 15),
+      x: nx,
+      y: ny,
+    };
+    setVenueScheduledSpaces({
+      ...venueScheduledSpaces,
+      [selectedVenueConfigId]: [...currentScheduledSpaces, newSpace],
+    });
+    setSelectedTable(`ss-${newSpace.positionId}`);
+    toast({
+      title: "Scheduled Space duplicated",
+      description: `Cloned "${original.name}" — drag to reposition.`,
+    });
+  };
+
+  const rotateScheduledSpace = (positionId: string) => {
+    const space = currentScheduledSpaces.find(
+      (s) => s.positionId === positionId,
+    );
+    if (!space) return;
+    setVenueScheduledSpaces({
+      ...venueScheduledSpaces,
+      [selectedVenueConfigId]: currentScheduledSpaces.map((s) =>
+        s.positionId === positionId
+          ? { ...s, rotation: (s.rotation + 90) % 360 }
+          : s,
+      ),
+    });
+  };
+
+  const handleScheduledSpaceMouseDown = (
+    e: React.MouseEvent,
+    space: PositionedScheduledSpace,
+  ) => {
+    const containerRect = venueRef.current?.getBoundingClientRect();
+    if (!containerRect || !venueConfig) return;
+    setDragOffset({
+      x: e.clientX - containerRect.left - space.x * venueConfig.scale,
+      y: e.clientY - containerRect.top - space.y * venueConfig.scale,
+    });
+    setSelectedTable(`ss-${space.positionId}`);
+    setIsDragging(true);
   };
 
   const handleRoundTableMouseDown = (
@@ -4807,6 +5485,14 @@ const VenueDesigner = ({
       );
       if (!seat) return;
       w = h = SEAT_SIZE;
+    } else if (selectedTable.startsWith("ss-")) {
+      const space = currentScheduledSpaces.find(
+        (s) => s.positionId === selectedTable.replace("ss-", ""),
+      );
+      if (!space) return;
+      const footprint = scheduledSpaceFootprint(space);
+      w = footprint.w;
+      h = footprint.h;
     } else {
       const table = currentTables.find((t) => t.positionId === selectedTable);
       if (!table) return;
@@ -4871,6 +5557,14 @@ const VenueDesigner = ({
         ...venueSeats,
         [selectedVenueConfigId]: currentSeats.map((s) =>
           s.id === seatId ? { ...s, x, y } : s,
+        ),
+      });
+    } else if (key.startsWith("ss-")) {
+      const spaceId = key.replace("ss-", "");
+      setVenueScheduledSpaces({
+        ...venueScheduledSpaces,
+        [selectedVenueConfigId]: currentScheduledSpaces.map((s) =>
+          s.positionId === spaceId ? { ...s, x, y } : s,
         ),
       });
     } else {
@@ -4942,6 +5636,22 @@ const VenueDesigner = ({
       size = Math.min(size, canvasW - r.origX, canvasH - r.origY);
       setResize({ ...r, x: r.origX, y: r.origY, w: size, h: size });
       return;
+    }
+    // Circle Scheduled Spaces stay circular — same single-handle diameter
+    // drag as round tables. Rectangle Scheduled Spaces fall through to the
+    // generic 8-handle logic below, same as Stalls.
+    if (r.positionId.startsWith("ss-")) {
+      const spaceId = r.positionId.replace("ss-", "");
+      const space = currentScheduledSpaces.find(
+        (s) => s.positionId === spaceId,
+      );
+      if (space?.shape === "Circle") {
+        const delta = Math.max(dx, dy);
+        let size = Math.max(MIN, r.origW + delta);
+        size = Math.min(size, canvasW - r.origX, canvasH - r.origY);
+        setResize({ ...r, x: r.origX, y: r.origY, w: size, h: size });
+        return;
+      }
     }
     const handle = r.handle;
     // The space is rendered with `transform: rotate(θ)` around its center, so
@@ -5064,6 +5774,39 @@ const VenueDesigner = ({
     });
   };
 
+  // Begin a resize on a placed Scheduled Space. Circle facilities behave
+  // like round tables — a single SE handle grows/shrinks the diameter,
+  // kept square. Rectangle facilities get the full 8-handle treatment,
+  // same math as beginResize/processResizeMove's default branch.
+  const beginScheduledSpaceResize = (
+    e: React.MouseEvent,
+    space: PositionedScheduledSpace,
+    handle: "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w",
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const positionId = `ss-${space.positionId}`;
+    setSelectedTable(positionId);
+    const isCircle = space.shape === "Circle";
+    const curW = isCircle ? space.diameter || 100 : space.width || 100;
+    const curH = isCircle ? space.diameter || 100 : space.height || 100;
+    setResize({
+      positionId,
+      handle: isCircle ? "se" : handle,
+      rotation: isCircle ? 0 : space.rotation || 0,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      origX: space.x,
+      origY: space.y,
+      origW: curW,
+      origH: curH,
+      x: space.x,
+      y: space.y,
+      w: curW,
+      h: curH,
+    });
+  };
+
   const commitResize = () => {
     const r = resizeRef.current;
     if (!r) return;
@@ -5076,6 +5819,34 @@ const VenueDesigner = ({
           rt.positionId === rtId
             ? { ...rt, tableDiameter: Math.round(r.w) }
             : rt,
+        ),
+      });
+      setResize(null);
+      return;
+    }
+    // Scheduled Space resize commits straight to width/height (Rectangle)
+    // or diameter (Circle) — these are copied onto the placed instance at
+    // add-time (no template/display split), so writing directly is correct.
+    if (r.positionId.startsWith("ss-")) {
+      const spaceId = r.positionId.replace("ss-", "");
+      const space = currentScheduledSpaces.find(
+        (s) => s.positionId === spaceId,
+      );
+      const isCircle = space?.shape === "Circle";
+      setVenueScheduledSpaces({
+        ...venueScheduledSpaces,
+        [selectedVenueConfigId]: currentScheduledSpaces.map((s) =>
+          s.positionId === spaceId
+            ? isCircle
+              ? { ...s, x: r.x, y: r.y, diameter: Math.round(r.w) }
+              : {
+                  ...s,
+                  x: r.x,
+                  y: r.y,
+                  width: Math.round(r.w),
+                  height: Math.round(r.h),
+                }
+            : s,
         ),
       });
       setResize(null);
@@ -5123,6 +5894,17 @@ const VenueDesigner = ({
       w: t.displayWidth ?? t.width,
       h: t.displayHeight ?? t.height,
     };
+  };
+
+  // Same live-geometry snapshot as liveTableGeom, for Scheduled Spaces —
+  // falls back to diameter (Circle) or width/height (Rectangle).
+  const liveScheduledSpaceGeom = (s: PositionedScheduledSpace) => {
+    const pos = livePos(`ss-${s.positionId}`, s.x, s.y);
+    if (resize && resize.positionId === `ss-${s.positionId}`) {
+      return { x: resize.x, y: resize.y, w: resize.w, h: resize.h };
+    }
+    const footprint = scheduledSpaceFootprint(s);
+    return { x: pos.x, y: pos.y, w: footprint.w, h: footprint.h };
   };
 
   // Keep refs fresh so the window-level resize listener (attached once) reads
@@ -5691,10 +6473,52 @@ const VenueDesigner = ({
                   </div>
                 ))}
 
-                {/* Divider before seat rows */}
+                {/* Divider before Scheduled Spaces */}
                 {(tableTemplates.length > 0 ||
                   speakerSlotTemplates.length > 0 ||
                   roundTableTemplates.length > 0) &&
+                  scheduledSpaceTemplates.length > 0 && (
+                    <div className="flex-shrink-0 w-px bg-gray-300 mx-1" />
+                  )}
+
+                {/* Scheduled Space Templates — bookable facilities, unified
+                    across both shapes. */}
+                {scheduledSpaceTemplates.map((template) => (
+                  <div
+                    key={template.id}
+                    className="flex-shrink-0 w-36 p-3 border-2 rounded-xl cursor-pointer hover:shadow-md transition-all bg-amber-50/50"
+                    style={{
+                      borderColor: (template.color || "#3b82f6") + "44",
+                    }}
+                    onClick={() => addScheduledSpaceToVenue(template)}
+                  >
+                    <div className="flex items-center gap-1 mb-1">
+                      <div
+                        className={
+                          template.shape === "Circle"
+                            ? "w-3 h-3 rounded-full"
+                            : "w-3 h-3 rounded-sm"
+                        }
+                        style={{ backgroundColor: template.color || "#3b82f6" }}
+                      />
+                      <span className="font-bold text-xs truncate">
+                        {template.name}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {template.facilityType}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {(template.slots || []).length} slot(s)
+                    </p>
+                  </div>
+                ))}
+
+                {/* Divider before seat rows */}
+                {(tableTemplates.length > 0 ||
+                  speakerSlotTemplates.length > 0 ||
+                  roundTableTemplates.length > 0 ||
+                  scheduledSpaceTemplates.length > 0) &&
                   seatRowTemplates.length > 0 && (
                     <div className="flex-shrink-0 w-px bg-gray-300 mx-1" />
                   )}
@@ -6086,6 +6910,12 @@ const VenueDesigner = ({
                       kind = "Round table";
                       onCopy = () => duplicateRoundTable(realId);
                       onDelete = () => removeRoundTable(realId);
+                    } else if (id.startsWith("ss-")) {
+                      const realId = id.slice(3);
+                      kind = "Scheduled Space";
+                      onRotate = () => rotateScheduledSpace(realId);
+                      onCopy = () => duplicateScheduledSpace(realId);
+                      onDelete = () => removeScheduledSpace(realId);
                     } else if (id.startsWith("iseat-")) {
                       const realId = id.slice(6);
                       kind = "Seat";
@@ -6933,6 +7763,150 @@ const VenueDesigner = ({
                       )}
 
                       {/* Round-table actions moved to the fixed toolbar. */}
+                    </div>
+                  );
+                })}
+
+                {/* Placed Scheduled Spaces — unified across both shapes. No
+                    resize handles (the template's dimensions define the
+                    size); drag, rotate, duplicate and delete are supported
+                    via the fixed toolbar. */}
+                {currentScheduledSpaces.map((space) => {
+                  const isSelected = selectedTable === `ss-${space.positionId}`;
+                  const isCircle = space.shape === "Circle";
+                  const geom = liveScheduledSpaceGeom(space);
+                  const w = geom.w;
+                  const h = geom.h;
+                  return (
+                    <div
+                      key={`ss-${space.positionId}`}
+                      style={{
+                        position: "absolute",
+                        left: geom.x * venueConfig.scale,
+                        top: geom.y * venueConfig.scale,
+                        width: w * venueConfig.scale,
+                        height: h * venueConfig.scale,
+                        borderRadius: isCircle ? "50%" : "4px",
+                        transform: `rotate(${space.rotation}deg)`,
+                        backgroundColor: isSelected
+                          ? "#3b82f6"
+                          : space.color || "#3b82f6",
+                        color: "white",
+                        border: isSelected
+                          ? "3px solid #1d4ed8"
+                          : `2px solid ${space.color ? space.color + "88" : "#374151"}`,
+                        cursor: isDragging ? "grabbing" : "grab",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: Math.max(7, 9 * venueConfig.scale) + "px",
+                        fontWeight: "bold",
+                        userSelect: "none",
+                        zIndex: isSelected ? 10 : 1,
+                        transition: isDragging ? "none" : "all 0.1s ease",
+                        boxShadow: isSelected
+                          ? "0 4px 12px rgba(0,0,0,0.2)"
+                          : "none",
+                      }}
+                      onMouseDown={(e) => handleScheduledSpaceMouseDown(e, space)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedTable(`ss-${space.positionId}`);
+                      }}
+                    >
+                      {/* Court/field markings so the box actually reads as
+                      the chosen facility (a Tennis Court looks like one).
+                      Stretches to the box's own aspect ratio so it stays
+                      correct through a resize; clipped to a circle for
+                      round facilities. Custom facility names render none. */}
+                      <FacilityCourtMarkings
+                        facilityType={space.facilityType}
+                        isCircle={isCircle}
+                        idSeed={space.positionId}
+                      />
+                      <div
+                        className="text-center p-1 overflow-hidden"
+                        style={{ position: "relative", zIndex: 1 }}
+                      >
+                        <div className="truncate">{space.name}</div>
+                        <div className="text-[7px] mt-0.5 opacity-90 truncate">
+                          {space.facilityType}
+                        </div>
+                        <div className="text-[7px] opacity-90">
+                          {(space.slots || []).length} slot(s)
+                        </div>
+                      </div>
+                      {/* Resize handle(s) — Circle facilities get a single SE
+                      handle that grows the diameter (kept round), Rectangle
+                      facilities get the full 8-handle treatment like Stalls. */}
+                      {isSelected && isCircle && (
+                        <div
+                          onMouseDown={(e) =>
+                            beginScheduledSpaceResize(e, space, "se")
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                          title="Drag to resize"
+                          style={{
+                            position: "absolute",
+                            bottom: -5,
+                            right: -5,
+                            width: 12,
+                            height: 12,
+                            borderRadius: 3,
+                            background: "white",
+                            border: `2px solid ${space.color || "#3b82f6"}`,
+                            boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                            cursor: "nwse-resize",
+                            zIndex: 50,
+                          }}
+                        />
+                      )}
+                      {isSelected &&
+                        !isCircle &&
+                        (
+                          [
+                            ["nw", "nwse-resize", { top: -5, left: -5 }],
+                            [
+                              "n",
+                              "ns-resize",
+                              { top: -5, left: "50%", marginLeft: -5 },
+                            ],
+                            ["ne", "nesw-resize", { top: -5, right: -5 }],
+                            [
+                              "e",
+                              "ew-resize",
+                              { top: "50%", right: -5, marginTop: -5 },
+                            ],
+                            ["se", "nwse-resize", { bottom: -5, right: -5 }],
+                            [
+                              "s",
+                              "ns-resize",
+                              { bottom: -5, left: "50%", marginLeft: -5 },
+                            ],
+                            ["sw", "nesw-resize", { bottom: -5, left: -5 }],
+                            [
+                              "w",
+                              "ew-resize",
+                              { top: "50%", left: -5, marginTop: -5 },
+                            ],
+                          ] as const
+                        ).map(([h2, , posStyle]) => (
+                          <div
+                            key={h2}
+                            onMouseDown={(e) =>
+                              beginScheduledSpaceResize(e, space, h2)
+                            }
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute rounded-sm bg-white border-2 border-blue-600 shadow z-40"
+                            style={{
+                              ...(posStyle as React.CSSProperties),
+                              width: 10,
+                              height: 10,
+                              cursor: rotatedCursor(h2, space.rotation),
+                            }}
+                            title="Drag to resize"
+                          />
+                        ))}
                     </div>
                   );
                 })}
@@ -7878,6 +8852,11 @@ export function CreateEventForm({
   const [tableTemplates, setTableTemplates] = useState<TableTemplate[]>([]);
   const [addOnItems, setAddOnItems] = useState<AddOnItem[]>([]);
 
+  // Scheduled Spaces — bookable facilities, unified across both shapes.
+  const [scheduledSpaceTemplates, setScheduledSpaceTemplates] = useState<
+    ScheduledSpaceTemplate[]
+  >(initialData?.scheduledSpaceTemplates || []);
+
   // Venue Configurations (multiple)
   const [venueConfigurations, setVenueConfigurations] = useState<VenueConfig[]>(
     [
@@ -8067,6 +9046,23 @@ export function CreateEventForm({
     color: "#6b7280",
     forSale: true,
     maxPerBooking: "",
+  });
+
+  // Draft state for the "Schedule" tab's unified facility form —
+  // independent from currentTable/tableTemplates so Scheduled Spaces and
+  // Spaces/AddOns never interfere.
+  const [currentScheduledSpace, setCurrentScheduledSpace] = useState({
+    facilityType: SCHEDULED_SPACE_FACILITY_TYPES[0],
+    customFacilityType: "",
+    name: "",
+    shape: "Rectangle" as "Rectangle" | "Circle",
+    width: "100",
+    height: "100",
+    diameter: "100",
+    price: "",
+    memberPrice: "",
+    color: "#3b82f6",
+    slots: [] as ScheduleSlot[],
   });
 
   // Replace your currentAddOn state with this:
@@ -8331,6 +9327,10 @@ export function CreateEventForm({
         initialData?.features?.hasSeating ??
         (Array.isArray(initialData?.venueSeats) &&
           initialData.venueSeats.length > 0),
+      hasScheduledSpaces:
+        initialData?.features?.hasScheduledSpaces ??
+        (Array.isArray(initialData?.scheduledSpaceTemplates) &&
+          initialData.scheduledSpaceTemplates.length > 0),
     },
     ageRestriction: initialData?.ageRestriction ?? "All Ages",
     ageRestrictions: Array.isArray(initialData?.ageRestrictions)
@@ -8736,6 +9736,24 @@ export function CreateEventForm({
         : initialData.venueRoundTables
       : {},
   );
+
+  // Scheduled Spaces — placed instances, keyed by venueConfigId, same
+  // grouping shape as venueTables/venueRoundTables above.
+  const [venueScheduledSpaces, setVenueScheduledSpaces] = useState<
+    Record<string, PositionedScheduledSpace[]>
+  >(
+    initialData?.venueScheduledSpaces
+      ? Array.isArray(initialData.venueScheduledSpaces)
+        ? initialData.venueScheduledSpaces.reduce((acc: any, s: any) => {
+            const key = s.venueConfigId || "default";
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(s);
+            return acc;
+          }, {})
+        : initialData.venueScheduledSpaces
+      : {},
+  );
+
   const [currentRoundTable, setCurrentRoundTable] = useState({
     name: "",
     numberOfChairs: "8",
@@ -9379,11 +10397,13 @@ export function CreateEventForm({
       (currentTab === "workshops" && !f.hasWorkshops) ||
       (currentTab === "sponsors" && !f.hasSponsors) ||
       (currentTab === "seating" && !f.hasSeating) ||
+      (currentTab === "schedule" && !f.hasScheduledSpaces) ||
       (currentTab === "layout" &&
         !f.hasStalls &&
         !f.hasSpeakers &&
         !f.hasRoundTables &&
         !f.hasSeating &&
+        !f.hasScheduledSpaces &&
         !anyDoors);
     if (hidden) setCurrentTab("basic");
   }, [
@@ -9394,6 +10414,7 @@ export function CreateEventForm({
     formData.features.hasWorkshops,
     formData.features.hasSponsors,
     formData.features.hasSeating,
+    formData.features.hasScheduledSpaces,
     venueConfigurations,
   ]);
 
@@ -10417,6 +11438,19 @@ export function CreateEventForm({
       );
       data.append("venueRoundTables", JSON.stringify(allRoundTables));
 
+      // Scheduled Spaces — facility templates, plus their placed instances
+      // (flattened + tagged with venueConfigId, same pattern as round
+      // tables above).
+      data.append(
+        "scheduledSpaceTemplates",
+        JSON.stringify(scheduledSpaceTemplates),
+      );
+      const allScheduledSpaces = Object.entries(venueScheduledSpaces).flatMap(
+        ([configId, spaces]) =>
+          spaces.map((s) => ({ ...s, venueConfigId: configId })),
+      );
+      data.append("venueScheduledSpaces", JSON.stringify(allScheduledSpaces));
+
       // Cinema/concert seating — row declarations + flattened individual seats.
       data.append("seatRowTemplates", JSON.stringify(seatRowTemplates));
       const allSeats = Object.entries(venueSeats).flatMap(([configId, seats]) =>
@@ -10533,6 +11567,10 @@ export function CreateEventForm({
         // toggle now, available for any commercial event, not tied to a
         // specific category.
         const showSeating = !!formData.features.hasSeating;
+        // Spaces bookable in specific time slots — own "Schedule" tab for
+        // defining templates; placement still happens on the shared Space
+        // Layout canvas, same as Stalls/Round Tables.
+        const showScheduledSpaces = !!formData.features.hasScheduledSpaces;
         // Layout tab is also useful when any door type is defined (per venue),
         // since the user needs the canvas to place those door markers.
         const anyDoorsEnabled = venueConfigurations.some(
@@ -10544,6 +11582,7 @@ export function CreateEventForm({
           showRoundTables ||
           showSpeakers ||
           showSeating ||
+          showScheduledSpaces ||
           anyDoorsEnabled;
         // Always-on tabs: basic, media, venue, visitors, volunteers (5)
         const visibleCount =
@@ -10554,6 +11593,7 @@ export function CreateEventForm({
           (showWorkshops ? 1 : 0) +
           (showSponsors ? 1 : 0) +
           (showSeating ? 1 : 0) +
+          (showScheduledSpaces ? 1 : 0) +
           (showLayout ? 1 : 0);
         const colsClass =
           (
@@ -10565,6 +11605,7 @@ export function CreateEventForm({
               9: "grid-cols-9",
               10: "grid-cols-10",
               11: "grid-cols-11",
+              12: "grid-cols-12",
             } as Record<number, string>
           )[visibleCount] || "grid-cols-10";
         return (
@@ -10620,6 +11661,11 @@ export function CreateEventForm({
                 {showSponsors && (
                   <TabsTrigger value="sponsors" className="text-sm">
                     Sponsors
+                  </TabsTrigger>
+                )}
+                {showScheduledSpaces && (
+                  <TabsTrigger value="schedule" className="text-sm">
+                    Schedule
                   </TabsTrigger>
                 )}
                 {showLayout && (
@@ -13932,6 +14978,21 @@ export function CreateEventForm({
                           </p>
                         </div>
                       </label>
+                      <label className="flex items-start gap-3 border rounded-lg p-3 cursor-pointer hover:bg-muted/30">
+                        <Switch
+                          checked={!!formData.features.hasScheduledSpaces}
+                          onCheckedChange={(checked) =>
+                            handleFeatureChange("hasScheduledSpaces", checked)
+                          }
+                        />
+                        <div>
+                          <p className="font-medium text-sm">Scheduled Spaces</p>
+                          <p className="text-xs text-muted-foreground">
+                            Spaces bookable in specific time slots, not sold
+                            once for the whole event
+                          </p>
+                        </div>
+                      </label>
                     </div>
                   </CardContent>
                 </Card>
@@ -14775,6 +15836,20 @@ export function CreateEventForm({
             </Card>
           </TabsContent>
 
+          {/* SCHEDULED SPACES TAB */}
+          <TabsContent value="schedule" className="space-y-6">
+            <ModuleGate moduleKey="events" sectionKey="schedule">
+              <BlurOverlay visible={!blurActive}>
+                <ScheduledSpaceManagement
+                  templates={scheduledSpaceTemplates}
+                  setTemplates={setScheduledSpaceTemplates}
+                  current={currentScheduledSpace}
+                  setCurrent={setCurrentScheduledSpace}
+                />
+              </BlurOverlay>
+            </ModuleGate>
+          </TabsContent>
+
           {/* LAYOUT DESIGN TAB */}
           <TabsContent value="layout">
             <ModuleGate moduleKey="events" sectionKey="layout">
@@ -14798,6 +15873,9 @@ export function CreateEventForm({
                   roundTableTemplates={roundTableTemplates}
                   venueRoundTables={venueRoundTables}
                   setVenueRoundTables={setVenueRoundTables}
+                  scheduledSpaceTemplates={scheduledSpaceTemplates}
+                  venueScheduledSpaces={venueScheduledSpaces}
+                  setVenueScheduledSpaces={setVenueScheduledSpaces}
                   seatRowTemplates={seatRowTemplates}
                   venueSeats={venueSeats}
                   setVenueSeats={setVenueSeats}

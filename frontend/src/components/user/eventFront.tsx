@@ -122,7 +122,9 @@ import AnnouncementBar from "@/components/ui/AnnouncementBar";
 import { Checkbox } from "@radix-ui/react-checkbox";
 import { OrganizerStore } from "./organizerStoreFront";
 import MarriageEventFront from "./MarriageEventFront";
-import { StallStepper } from "./StallStepper";
+import { StallStepper, ScheduledSpaceStepper } from "./StallStepper";
+import StatusTimeline from "@/components/StatusTimeline";
+import { FacilityCourtMarkings } from "@/lib/facilityCourtLines";
 import DemoPrompt from "./DemoPrompt";
 import { startDemoDashboard } from "@/lib/demoDashboard";
 import { isFieldEnabled as isRegFieldEnabled } from "@/lib/registrationFormFields";
@@ -304,6 +306,7 @@ interface FetchedEvent {
     speaker?: Record<string, boolean>;
     roundTable?: Record<string, boolean>;
     workshop?: Record<string, boolean>;
+    scheduledSpace?: Record<string, boolean>;
   };
   ageRestriction: string;
   dresscode: string;
@@ -527,6 +530,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     isRegFieldEnabled(eventData?.registrationFormFields, "roundTable", key);
   const workshopOn = (key: string) =>
     isRegFieldEnabled(eventData?.registrationFormFields, "workshop", key);
+  const scheduledSpaceOn = (key: string) =>
+    isRegFieldEnabled(eventData?.registrationFormFields, "scheduledSpace", key);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // organizationName is only present on routes shaped
@@ -805,6 +810,73 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     endDate?: string;
   } | null>(null);
   const isMember = !!activeMembership;
+
+  // Scheduled Spaces booking workflow state. Simpler than the Stalls flow
+  // above — no vendor-account system, no amend/multi-request chooser: a
+  // registrant is just identified by the (Google-verified) email, and at
+  // most one active request per event is expected. Every entry into the
+  // flow goes through Google sign-in first — no session-remembered
+  // shortcut — resolveScheduledSpaceAfterGoogle then looks up any existing
+  // request by that verified email and routes straight to its status.
+  const [existingScheduledSpaceRequest, setExistingScheduledSpaceRequest] =
+    useState<any>(null);
+  const [showScheduledSpaceForm, setShowScheduledSpaceForm] = useState(false);
+  const [showScheduledSpaceStatus, setShowScheduledSpaceStatus] =
+    useState(false);
+  const [showScheduledSpacePicker, setShowScheduledSpacePicker] =
+    useState(false);
+  // "auth" (Google sign-in gate) → "form" (details). Mirrors the Rent-a-
+  // Stall / Become-a-Sponsor flows' Google-first pattern.
+  const [scheduledSpaceStep, setScheduledSpaceStep] = useState<
+    "auth" | "form"
+  >("auth");
+  const [scheduledSpaceGoogleLoading, setScheduledSpaceGoogleLoading] =
+    useState(false);
+  const [downloadingScheduledSpaceTicket, setDownloadingScheduledSpaceTicket] =
+    useState(false);
+  const scheduledSpacePopupRef = useRef<Window | null>(null);
+  const [scheduledSpaceForm, setScheduledSpaceForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    whatsappNumber: "",
+    facilityType: "",
+    purpose: "",
+    organization: "",
+    companions: [] as string[],
+  });
+  // Selected-country objects for the WhatsApp/Phone PhoneInput fields — drive
+  // the "Enter N digits for Country" hint, same as the Stall form's fields.
+  const [scheduledSpaceWhatsappCountry, setScheduledSpaceWhatsappCountry] =
+    useState<any>(null);
+  const [scheduledSpacePhoneCountry, setScheduledSpacePhoneCountry] =
+    useState<any>(null);
+  const [scheduledSpaceLoading, setScheduledSpaceLoading] = useState(false);
+  const [scheduledSpacesAvailable, setScheduledSpacesAvailable] = useState<
+    any[]
+  >([]);
+  const [selectedScheduledSlots, setSelectedScheduledSlots] = useState<any[]>(
+    [],
+  );
+  // Distinct facility types actually placed with at least one slot — drives
+  // the "Type of Space Required" picker so a venue with e.g. both Tennis
+  // Courts and Chess Tables lets the registrant pick which one up-front.
+  const scheduledSpaceFacilityTypes = useMemo(() => {
+    const types = ((eventData as any)?.venueScheduledSpaces || [])
+      .filter((s: any) => (s.slots || []).length > 0)
+      .map((s: any) => s.facilityType)
+      .filter(Boolean);
+    return Array.from(new Set(types)) as string[];
+  }, [eventData]);
+  // Slot picker narrows to the facility type the registrant asked for (when
+  // that field was collected) — otherwise every placed space is shown.
+  const filteredScheduledSpaces = useMemo(() => {
+    const want = existingScheduledSpaceRequest?.facilityTypeRequested;
+    if (!want) return scheduledSpacesAvailable;
+    return scheduledSpacesAvailable.filter(
+      (s: any) => s.facilityType === want,
+    );
+  }, [scheduledSpacesAvailable, existingScheduledSpaceRequest]);
 
   // Effective round-table prices — honour the member tier when the viewer
   // holds an active membership (matches the backend booking calculation).
@@ -1677,6 +1749,353 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     setSelectedDialogShopId("");
     setStallGoogleLoading(false);
     setStallMembership(null);
+  };
+
+  // --- Scheduled Spaces booking workflow ---
+
+  const routeScheduledSpaceRequest = (request: any) => {
+    setExistingScheduledSpaceRequest(request);
+    if (request.status === "Confirmed") {
+      fetchAvailableScheduledSpaces();
+      setShowScheduledSpacePicker(true);
+    } else {
+      setShowScheduledSpaceStatus(true);
+    }
+  };
+
+  // Always opens on the Google sign-in step — no session-remembered
+  // shortcut. Even a visitor who registered minutes ago sees "Continue with
+  // Google" again; resolveScheduledSpaceAfterGoogle is what actually looks
+  // up their existing request (by their verified email) and routes them
+  // straight to their status/ticket once signed in.
+  const handleScheduledSpaceClick = () => {
+    if ((eventData as any)?.isDemo) {
+      setShowDemoPrompt(true);
+      return;
+    }
+    setScheduledSpaceForm({
+      name: "",
+      email: "",
+      phone: "",
+      whatsappNumber: "",
+      facilityType:
+        scheduledSpaceFacilityTypes.length === 1
+          ? scheduledSpaceFacilityTypes[0]
+          : "",
+      purpose: "",
+      organization: "",
+      companions: [],
+    });
+    setScheduledSpaceStep("auth");
+    setShowScheduledSpaceForm(true);
+  };
+
+  // Same fetch-blob-and-trigger-download shape as the Stall ticket's
+  // handleDownload, pointed at the Scheduled Space download endpoint.
+  const handleDownloadScheduledSpaceTicket = async () => {
+    const request = existingScheduledSpaceRequest;
+    if (!request?._id) return;
+    setDownloadingScheduledSpaceTicket(true);
+    try {
+      const response = await fetch(
+        `${apiURL}/scheduled-spaces/${request._id}/download-ticket`,
+      );
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.message || "Failed to download ticket");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute(
+        "download",
+        `scheduled_space_ticket_${(eventData as any)?.title || request._id}.pdf`,
+      );
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast({
+        duration: 5000,
+        title: "Couldn't download ticket",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingScheduledSpaceTicket(false);
+    }
+  };
+
+  // Google sign-in gate for the booking form — same popup + postMessage /
+  // localStorage handshake as Rent-a-Stall and Become-a-Sponsor use. On
+  // success we silently check for an existing request under that email
+  // (routing straight to status/slot-picker if found) before falling back
+  // to a blank form with the verified email pre-filled.
+  const handleScheduledSpaceGoogleLogin = () => {
+    const url = `${apiURL}/auth/google-member`;
+    const w = 480;
+    const h = 600;
+    const left =
+      typeof window !== "undefined"
+        ? window.screenX + (window.outerWidth - w) / 2
+        : 0;
+    const top =
+      typeof window !== "undefined"
+        ? window.screenY + (window.outerHeight - h) / 2
+        : 0;
+    const popup = window.open(
+      url,
+      "eventsh-google-member",
+      `width=${w},height=${h},left=${left},top=${top}`,
+    );
+    if (!popup) {
+      toast({
+        duration: 5000,
+        title: "Popup blocked",
+        description: "Allow pop-ups for this site and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    scheduledSpacePopupRef.current = popup;
+    setScheduledSpaceGoogleLoading(true);
+  };
+
+  const resolveScheduledSpaceAfterGoogle = async (
+    email: string,
+    name?: string,
+  ) => {
+    try {
+      const res = await fetch(
+        `${apiURL}/scheduled-spaces/check-request/${(eventData as any)?._id}/${encodeURIComponent(email)}`,
+      );
+      const result = await res.json().catch(() => null);
+      if (res.ok && result?.data) {
+        setShowScheduledSpaceForm(false);
+        routeScheduledSpaceRequest(result.data);
+        return;
+      }
+    } catch {
+      // No existing request (or a transient error) — fall through to the
+      // blank form. Not finding one is the normal, expected case here.
+    }
+    setScheduledSpaceForm((p) => ({ ...p, email, name: p.name || name || "" }));
+    setScheduledSpaceStep("form");
+  };
+
+  useEffect(() => {
+    if (!scheduledSpaceGoogleLoading) return;
+    const KEY = "eventsh:google-member";
+    const prev = (() => {
+      try {
+        return localStorage.getItem(KEY) || "";
+      } catch {
+        return "";
+      }
+    })();
+    let handled = false;
+    let sawPopupClosed = false;
+
+    const accept = (rawEmail: string, name?: string) => {
+      const clean = String(rawEmail || "").trim().toLowerCase();
+      setScheduledSpaceGoogleLoading(false);
+      if (!clean) {
+        toast({
+          duration: 5000,
+          title: "Sign-in failed",
+          description: "Couldn't read your Google email.",
+          variant: "destructive",
+        });
+        return;
+      }
+      resolveScheduledSpaceAfterGoogle(clean, name);
+    };
+
+    const onMessage = (ev: MessageEvent) => {
+      const d = ev?.data;
+      if (!d || d.kind !== "eventsh:google-member" || handled) return;
+      handled = true;
+      accept(d.email || "", d.name);
+    };
+    window.addEventListener("message", onMessage);
+
+    const t = window.setInterval(() => {
+      try {
+        const raw = localStorage.getItem(KEY);
+        if (raw && raw !== prev && !handled) {
+          handled = true;
+          window.clearInterval(t);
+          localStorage.removeItem(KEY);
+          const parsed = JSON.parse(raw);
+          accept(parsed?.email || "", parsed?.name);
+          return;
+        }
+      } catch {
+        // ignore
+      }
+      if (
+        scheduledSpacePopupRef.current &&
+        scheduledSpacePopupRef.current.closed &&
+        !handled
+      ) {
+        if (sawPopupClosed) {
+          window.clearInterval(t);
+          setScheduledSpaceGoogleLoading(false);
+        } else {
+          sawPopupClosed = true;
+        }
+      }
+    }, 500);
+
+    return () => {
+      window.removeEventListener("message", onMessage);
+      window.clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scheduledSpaceGoogleLoading]);
+
+  const handleScheduledSpaceFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const missing: string[] = [];
+    if (!scheduledSpaceForm.name.trim()) missing.push("Full Name");
+    if (!scheduledSpaceForm.email.trim()) missing.push("Email");
+    if (
+      scheduledSpaceOn("whatsappNumber") &&
+      !scheduledSpaceForm.whatsappNumber?.trim()
+    )
+      missing.push("WhatsApp Number");
+    if (scheduledSpaceOn("phone") && !scheduledSpaceForm.phone?.trim())
+      missing.push("Phone Number");
+    if (
+      scheduledSpaceOn("facilityType") &&
+      scheduledSpaceFacilityTypes.length > 0 &&
+      !scheduledSpaceForm.facilityType
+    )
+      missing.push("Type of Space Required");
+    if (missing.length > 0) {
+      toast({
+        duration: 5000,
+        title: "Please fill in all required fields",
+        description: missing.join(", "),
+        variant: "destructive",
+      });
+      return;
+    }
+    setScheduledSpaceLoading(true);
+    try {
+      const res = await fetch(`${apiURL}/scheduled-spaces/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId: (eventData as any)?._id,
+          organizerId: (eventData as any)?.organizer?._id,
+          name: scheduledSpaceForm.name,
+          email: scheduledSpaceForm.email,
+          phone: scheduledSpaceForm.phone || undefined,
+          whatsappNumber: scheduledSpaceForm.whatsappNumber || undefined,
+          facilityTypeRequested: scheduledSpaceForm.facilityType || undefined,
+          purpose: scheduledSpaceForm.purpose || undefined,
+          organization: scheduledSpaceForm.organization || undefined,
+          companions: scheduledSpaceForm.companions
+            .map((c) => c.trim())
+            .filter(Boolean),
+        }),
+      });
+      const result = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(result?.message || "Failed to submit registration");
+      }
+      setShowScheduledSpaceForm(false);
+      // No approval gate — registration is confirmed immediately, so this
+      // routes straight into the slot picker (routeScheduledSpaceRequest
+      // treats "Confirmed" as "go pick a space & time slot now").
+      routeScheduledSpaceRequest(result.data);
+      toast({
+        duration: 5000,
+        title: "Registration confirmed",
+        description: "Pick your space and time slot to continue.",
+      });
+    } catch (err: any) {
+      toast({
+        duration: 5000,
+        title: "Couldn't submit registration",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setScheduledSpaceLoading(false);
+    }
+  };
+
+  const fetchAvailableScheduledSpaces = async () => {
+    try {
+      const res = await fetch(
+        `${apiURL}/scheduled-spaces/available/${(eventData as any)?._id}`,
+      );
+      const result = await res.json();
+      setScheduledSpacesAvailable(result?.data?.spaces || []);
+    } catch {
+      setScheduledSpacesAvailable([]);
+    }
+  };
+
+  const toggleScheduledSlotSelection = (space: any, slot: any) => {
+    const key = `${space.positionId}:${slot.id}`;
+    setSelectedScheduledSlots((prev) => {
+      const exists = prev.some((s) => `${s.positionId}:${s.slotId}` === key);
+      if (exists) {
+        return prev.filter((s) => `${s.positionId}:${s.slotId}` !== key);
+      }
+      return [
+        ...prev,
+        {
+          positionId: space.positionId,
+          templateId: space.templateId,
+          slotId: slot.id,
+          spaceName: space.name,
+          facilityType: space.facilityType,
+          slotLabel: slot.label,
+          date: slot.date,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          price: space.price || 0,
+        },
+      ];
+    });
+  };
+
+  const handleScheduledSpaceSlotsSubmit = () => {
+    if (selectedScheduledSlots.length === 0) {
+      toast({
+        duration: 5000,
+        title: "Pick at least one slot",
+        variant: "destructive",
+      });
+      return;
+    }
+    const total = selectedScheduledSlots.reduce(
+      (sum, s) => sum + (s.price || 0),
+      0,
+    );
+    navigate("/scheduled-space-payment", {
+      state: {
+        requestId: existingScheduledSpaceRequest?._id,
+        eventId: (eventData as any)?._id,
+        eventInfo: {
+          title: (eventData as any)?.title,
+          date: (eventData as any)?.startDate,
+          venue: (eventData as any)?.location,
+        },
+        registrant: {
+          name: existingScheduledSpaceRequest?.name,
+          email: existingScheduledSpaceRequest?.email,
+        },
+        selectedSlots: selectedScheduledSlots,
+        total,
+      },
+    });
   };
 
   // Send WhatsApp OTP
@@ -5687,22 +6106,37 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     return raw.filter((d) => belongsToLayout(d?.venueConfigId));
   })();
 
+  // Placed Scheduled Space facilities (courts/grounds/tables bookable by
+  // time slot) for the currently-viewed layout — same belongsToLayout/
+  // inCrop filtering as every other venue item, so a Tennis Court placed on
+  // Screen-2 doesn't show up while viewing Screen-1.
+  const currentLayoutScheduledSpaces: any[] = (() => {
+    const raw: any[] = Array.isArray((eventData as any)?.venueScheduledSpaces)
+      ? ((eventData as any).venueScheduledSpaces as any[])
+      : [];
+    if (raw.length === 0) return [];
+    return raw
+      .filter((s) => belongsToLayout(s?.venueConfigId))
+      .filter((s) => inCrop(s?.x, s?.y));
+  })();
+
   // The Venue Layout tab is for sellable/bookable venue items — gated by
   // whichever of those sections the organizer actually turned on for this
   // event (Spaces/AddOns, Round Tables, Speakers — which covers both
-  // Speaker Slots and the physical Speaker Space zone, and Workshops),
-  // plus doors (entrances/exits/a custom "Pathway" type, etc.) since those
-  // aren't behind their own feature toggle. Cinema/concert seats are
-  // deliberately EXCLUDED: they already get their own dedicated "Select
-  // Your Seats" section (gated by showSeatPicker), so an event with nothing
-  // but seats doesn't also need the general Venue Layout tab — it would
-  // just be a redundant, seat-only copy of that section.
+  // Speaker Slots and the physical Speaker Space zone, Workshops, and
+  // Scheduled Spaces), plus doors (entrances/exits/a custom "Pathway" type,
+  // etc.) since those aren't behind their own feature toggle. Cinema/concert
+  // seats are deliberately EXCLUDED: they already get their own dedicated
+  // "Select Your Seats" section (gated by showSeatPicker), so an event with
+  // nothing but seats doesn't also need the general Venue Layout tab — it
+  // would just be a redundant, seat-only copy of that section.
   const eventFeatures = (eventData as any)?.features || {};
   const hasVenueLayout =
     !!eventFeatures.hasStalls ||
     !!eventFeatures.hasRoundTables ||
     !!eventFeatures.hasSpeakers ||
     !!eventFeatures.hasWorkshops ||
+    !!eventFeatures.hasScheduledSpaces ||
     currentLayoutDoors.length > 0;
 
   // Reusable door renderer — mirrors the designer so the storefront,
@@ -5786,6 +6220,49 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           <span className="px-0.5 truncate">
             {seat.name || seat.seatNumber}
           </span>
+        </div>
+      );
+    });
+
+  // Reusable Scheduled Space renderer — colored box/circle with the same
+  // court/field markings (FacilityCourtMarkings) the organizer sees on
+  // their own Space Layout canvas, so a Tennis Court reads as a tennis
+  // court right on the public Venue Layout map too, not just a plain box.
+  const renderScheduledSpaces = () =>
+    currentLayoutScheduledSpaces.map((space: any) => {
+      const isCircle = space.shape === "Circle";
+      const w = (isCircle ? space.diameter : space.width) || 100;
+      const h = (isCircle ? space.diameter : space.height) || 100;
+      return (
+        <div
+          key={`vss-${space.positionId}`}
+          className="absolute flex items-center justify-center text-white shadow-md select-none pointer-events-none overflow-hidden"
+          style={{
+            left: `${space.x}px`,
+            top: `${space.y}px`,
+            width: `${w}px`,
+            height: `${h}px`,
+            borderRadius: isCircle ? "50%" : "6px",
+            backgroundColor: space.color || "#3b82f6",
+            border: `2px solid ${space.color ? space.color + "88" : "#1d4ed8"}`,
+            transform: space.rotation
+              ? `rotate(${space.rotation}deg)`
+              : undefined,
+            zIndex: 5,
+          }}
+          title={`${space.name} — ${space.facilityType}`}
+        >
+          <FacilityCourtMarkings
+            facilityType={space.facilityType}
+            isCircle={isCircle}
+            idSeed={`vf-${space.positionId}`}
+          />
+          <div className="relative z-10 text-center px-1 overflow-hidden">
+            <div className="text-[9px] font-bold truncate">{space.name}</div>
+            <div className="text-[7px] opacity-90 truncate">
+              {space.facilityType}
+            </div>
+          </div>
         </div>
       );
     });
@@ -8634,6 +9111,31 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 </div>
               )}
 
+              {/* ── Scheduled Spaces — only if the organizer has placed at
+                  least one facility with a defined slot ── */}
+              {((eventData as any)?.venueScheduledSpaces || []).some(
+                (s: any) => (s.slots || []).length > 0,
+              ) && (
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <p className="text-gray-700 font-semibold text-sm mb-1">
+                    Book a Scheduled Space
+                  </p>
+                  <p className="text-gray-400 text-xs mb-4">
+                    Reserve a court, ground or table for a specific time slot.
+                  </p>
+                  <button
+                    onClick={handleScheduledSpaceClick}
+                    className="w-full h-14 rounded-xl border-2 font-bold text-lg text-white shadow-md transition-all hover:opacity-90"
+                    style={{
+                      backgroundColor: design?.primaryColor || "#f97316",
+                      borderColor: design?.primaryColor || "#f97316",
+                    }}
+                  >
+                    Book a slot
+                  </button>
+                </div>
+              )}
+
               {/* ── Apply as Speaker — only if event has speaker slots ── */}
               {eventData?.speakerSlotTemplates &&
                 eventData.speakerSlotTemplates.length > 0 && (
@@ -9621,7 +10123,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
             <TabsContent value="venue" className="mt-4 space-y-6">
               {(venueTables && Object.keys(venueTables).length > 0) ||
-              roundTableData.length > 0 ? (
+              roundTableData.length > 0 ||
+              currentLayoutScheduledSpaces.length > 0 ? (
                 <div className="space-y-5">
                   {/* Layout Selector — only published venues are offered */}
                   {venueConfig && publishedVenueCount > 1 && (
@@ -9754,7 +10257,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                       </div>
                                     );
                                   })()}
-                                {venueTables[currentLayoutId]
+                                {venueTables?.[currentLayoutId]
                                   ?.filter((table) => inCrop(table.x, table.y))
                                   .map((table) => {
                                     const isBooked = table.isBooked;
@@ -10162,6 +10665,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 {renderDoors()}
                                 {/* Cinema/concert seats */}
                                 {renderSeats()}
+                                {/* Scheduled Space facilities (courts/grounds/tables) */}
+                                {renderScheduledSpaces()}
                                 {layoutAnnotations.length > 0 && (
                                   <VenueAnnotationLayer
                                     readOnly
@@ -10207,7 +10712,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                   suffix?: string;
                                 }
                               >();
-                              (venueTables[currentLayoutId] || [])
+                              (venueTables?.[currentLayoutId] || [])
                                 .filter(
                                   (t) =>
                                     inCrop(t.x, t.y) &&
@@ -13124,6 +13629,534 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         primaryColor={design?.primaryColor || "#f97316"}
       />
 
+      {/* Scheduled Spaces — Google sign-in gate, then registration form. */}
+      <Dialog
+        open={showScheduledSpaceForm}
+        onOpenChange={setShowScheduledSpaceForm}
+      >
+        <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col overflow-hidden p-0">
+          <div className="shrink-0 px-6 pt-6">
+            <DialogHeader>
+              <DialogTitle>Book a Scheduled Space</DialogTitle>
+              {scheduledSpaceStep === "auth" && (
+                <DialogDescription>
+                  Sign in with Google to continue.
+                </DialogDescription>
+              )}
+            </DialogHeader>
+            <ScheduledSpaceStepper
+              current={scheduledSpaceStep === "auth" ? 1 : 2}
+            />
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
+          {scheduledSpaceStep === "auth" ? (
+            <div className="space-y-4 py-2">
+              {scheduledSpaceGoogleLoading ? (
+                <div className="py-6 text-center space-y-2">
+                  <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" />
+                  <p className="text-sm text-muted-foreground">
+                    Looking you up…
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={handleScheduledSpaceGoogleLogin}
+                    className="w-full"
+                  >
+                    <Mail className="h-4 w-4 mr-2" />
+                    Continue with Google
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    We use your email to verify your booking and find any
+                    existing request — already registered? Signing in again
+                    takes you straight to your status.
+                  </p>
+                </>
+              )}
+            </div>
+          ) : (
+            <form
+              onSubmit={handleScheduledSpaceFormSubmit}
+              className="space-y-4"
+            >
+              <div>
+                <Label>Full Name *</Label>
+                <Input
+                  value={scheduledSpaceForm.name}
+                  onChange={(e) =>
+                    setScheduledSpaceForm((p) => ({
+                      ...p,
+                      name: e.target.value,
+                    }))
+                  }
+                  required
+                />
+              </div>
+              <div>
+                <Label>Email (verified with Google)</Label>
+                <Input
+                  type="email"
+                  value={scheduledSpaceForm.email}
+                  disabled
+                  className="bg-muted/50"
+                  title="Verified via Google sign-in — can't be changed"
+                />
+              </div>
+              {scheduledSpaceOn("whatsappNumber") && (
+                <div className="space-y-2">
+                  <Label>WhatsApp Number *</Label>
+                  <PhoneInput
+                    value={scheduledSpaceForm.whatsappNumber}
+                    onChange={(whatsappNumber: string, country: any) => {
+                      setScheduledSpaceWhatsappCountry(country);
+                      setScheduledSpaceForm((p) => ({
+                        ...p,
+                        whatsappNumber,
+                      }));
+                    }}
+                    enableSearch
+                    countryCodeEditable={false}
+                    preferredCountries={["in", "sg", "us", "gb"]}
+                    inputStyle={{
+                      width: "100%",
+                      height: "36px",
+                      borderRadius: "6px",
+                    }}
+                  />
+                  {scheduledSpaceWhatsappCountry && (
+                    <p className="text-[11px] text-gray-400">
+                      Enter {phoneHint(scheduledSpaceWhatsappCountry)} for{" "}
+                      {scheduledSpaceWhatsappCountry.name}
+                    </p>
+                  )}
+                </div>
+              )}
+              {scheduledSpaceOn("phone") && (
+                <div className="space-y-2">
+                  <Label>Phone Number *</Label>
+                  <PhoneInput
+                    value={scheduledSpaceForm.phone}
+                    onChange={(phone: string, country: any) => {
+                      setScheduledSpacePhoneCountry(country);
+                      setScheduledSpaceForm((p) => ({ ...p, phone }));
+                    }}
+                    enableSearch
+                    countryCodeEditable={false}
+                    preferredCountries={["in", "sg", "us", "gb"]}
+                    inputStyle={{
+                      width: "100%",
+                      height: "36px",
+                      borderRadius: "6px",
+                    }}
+                  />
+                  {scheduledSpacePhoneCountry && (
+                    <p className="text-[11px] text-gray-400">
+                      Enter {phoneHint(scheduledSpacePhoneCountry)} for{" "}
+                      {scheduledSpacePhoneCountry.name}
+                    </p>
+                  )}
+                </div>
+              )}
+              {scheduledSpaceOn("facilityType") &&
+                scheduledSpaceFacilityTypes.length > 0 && (
+                  <div>
+                    <Label>Type of Space Required *</Label>
+                    <Select
+                      value={scheduledSpaceForm.facilityType}
+                      onValueChange={(v) =>
+                        setScheduledSpaceForm((p) => ({
+                          ...p,
+                          facilityType: v,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a space type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {scheduledSpaceFacilityTypes.map((ft) => (
+                          <SelectItem key={ft} value={ft}>
+                            {ft}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              {scheduledSpaceOn("purpose") && (
+                <div>
+                  <Label>Purpose of Booking</Label>
+                  <Input
+                    value={scheduledSpaceForm.purpose}
+                    onChange={(e) =>
+                      setScheduledSpaceForm((p) => ({
+                        ...p,
+                        purpose: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              )}
+              {scheduledSpaceOn("organization") && (
+                <div>
+                  <Label>Organization / Department</Label>
+                  <Input
+                    value={scheduledSpaceForm.organization}
+                    onChange={(e) =>
+                      setScheduledSpaceForm((p) => ({
+                        ...p,
+                        organization: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              )}
+              {scheduledSpaceOn("companions") && (
+                <div>
+                  <Label>Persons Coming With You</Label>
+                  <div className="space-y-2 mt-1">
+                    {scheduledSpaceForm.companions.map((c, i) => (
+                      <div key={i} className="flex gap-2">
+                        <Input
+                          value={c}
+                          placeholder={`Person ${i + 1} name`}
+                          onChange={(e) =>
+                            setScheduledSpaceForm((p) => {
+                              const next = [...p.companions];
+                              next[i] = e.target.value;
+                              return { ...p, companions: next };
+                            })
+                          }
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            setScheduledSpaceForm((p) => ({
+                              ...p,
+                              companions: p.companions.filter(
+                                (_, idx) => idx !== i,
+                              ),
+                            }))
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setScheduledSpaceForm((p) => ({
+                          ...p,
+                          companions: [...p.companions, ""],
+                        }))
+                      }
+                    >
+                      <Plus className="h-4 w-4 mr-1" /> Add Person
+                    </Button>
+                  </div>
+                </div>
+              )}
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={scheduledSpaceLoading}
+              >
+                {scheduledSpaceLoading ? "Submitting…" : "Submit Registration"}
+              </Button>
+            </form>
+          )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Scheduled Spaces — status view (Pending / Rejected / Processing /
+          Completed). Confirmed skips straight to the slot picker instead. */}
+      <Dialog
+        open={showScheduledSpaceStatus}
+        onOpenChange={setShowScheduledSpaceStatus}
+      >
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Your Scheduled Space Request</DialogTitle>
+          </DialogHeader>
+          <ScheduledSpaceStepper
+            current={
+              existingScheduledSpaceRequest?.status === "Completed"
+                ? 4
+                : existingScheduledSpaceRequest?.status === "Processing"
+                  ? 3
+                  : 2
+            }
+            pending={["Pending", "Rejected"].includes(
+              existingScheduledSpaceRequest?.status,
+            )}
+            note={
+              existingScheduledSpaceRequest?.status === "Rejected"
+                ? "This request was not approved"
+                : undefined
+            }
+          />
+          <div className="space-y-3 text-sm">
+            <p>
+              <strong>Status:</strong> {existingScheduledSpaceRequest?.status}
+            </p>
+            {existingScheduledSpaceRequest?.status === "Pending" && (
+              <p className="text-amber-600">
+                Waiting for the organizer to approve your registration.
+              </p>
+            )}
+            {existingScheduledSpaceRequest?.status === "Rejected" && (
+              <p className="text-red-600">
+                Your registration wasn't approved.
+                {existingScheduledSpaceRequest?.cancellationReason
+                  ? ` Reason: ${existingScheduledSpaceRequest.cancellationReason}`
+                  : ""}
+              </p>
+            )}
+            {existingScheduledSpaceRequest?.status === "Processing" && (
+              <>
+                <p className="text-amber-600">
+                  Payment submitted — waiting for the organizer to confirm.
+                </p>
+                <div className="rounded-lg border p-3 space-y-1">
+                  {(existingScheduledSpaceRequest?.selectedSlots || []).map(
+                    (s: any, i: number) => (
+                      <div
+                        key={i}
+                        className="flex justify-between text-xs"
+                      >
+                        <span>
+                          {s.spaceName} — {s.date} {s.startTime}-{s.endTime}
+                        </span>
+                        <span>{formatPrice(s.price)}</span>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </>
+            )}
+            {existingScheduledSpaceRequest?.status === "Completed" && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                  <CheckCircle2 className="h-9 w-9 text-emerald-600 shrink-0" />
+                  <div>
+                    <p className="font-bold text-emerald-800">
+                      Booking Confirmed
+                    </p>
+                    <p className="text-xs text-emerald-700">
+                      Your check-in QR ticket is ready — show this at the
+                      venue.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-center gap-2">
+                  <Badge className="bg-emerald-100 text-emerald-700 border border-emerald-300">
+                    {existingScheduledSpaceRequest.status}
+                  </Badge>
+                  <Badge className="bg-blue-100 text-blue-700 border border-blue-300">
+                    {existingScheduledSpaceRequest.paymentStatus}
+                  </Badge>
+                </div>
+
+                {existingScheduledSpaceRequest?.qrCodeImage && (
+                  <div className="flex justify-center">
+                    <div className="rounded-xl border-2 border-dashed border-gray-200 bg-white p-4">
+                      <img
+                        src={existingScheduledSpaceRequest.qrCodeImage}
+                        alt="Check-in QR code"
+                        className="w-40 h-40"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="rounded-lg border p-3 space-y-1">
+                  {(existingScheduledSpaceRequest?.selectedSlots || []).map(
+                    (s: any, i: number) => (
+                      <div
+                        key={i}
+                        className="flex justify-between text-xs"
+                      >
+                        <span>
+                          {s.spaceName} — {s.date} {s.startTime}-{s.endTime}
+                        </span>
+                        <span>{formatPrice(s.price)}</span>
+                      </div>
+                    ),
+                  )}
+                  <div className="flex justify-between text-sm font-semibold border-t pt-1 mt-1">
+                    <span>Total Paid</span>
+                    <span>
+                      {formatPrice(
+                        existingScheduledSpaceRequest?.paidAmount ||
+                          existingScheduledSpaceRequest?.slotsTotal ||
+                          0,
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  disabled={downloadingScheduledSpaceTicket}
+                  onClick={handleDownloadScheduledSpaceTicket}
+                >
+                  {downloadingScheduledSpaceTicket ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Downloading…
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4 mr-2" />
+                      Download Ticket
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+            <div className="rounded-lg border p-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                Status History
+              </p>
+              <StatusTimeline
+                history={existingScheduledSpaceRequest?.statusHistory}
+              />
+            </div>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setShowScheduledSpaceStatus(false)}
+            >
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Scheduled Spaces — pick a space + time slot (only reachable once
+          the registration is Confirmed). Card-list picker rather than a
+          pixel-positioned canvas — a deliberate simplification since every
+          space/slot is already listed with its name, price and availability;
+          spatial layout isn't essential to make a booking decision here. */}
+      <Dialog
+        open={showScheduledSpacePicker}
+        onOpenChange={setShowScheduledSpacePicker}
+      >
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Pick a Space & Time Slot</DialogTitle>
+          </DialogHeader>
+          <ScheduledSpaceStepper current={3} />
+          <div className="space-y-3">
+            {filteredScheduledSpaces.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No spaces are available yet — check back later.
+              </p>
+            )}
+            {filteredScheduledSpaces.map((space: any) => (
+                <div key={space.positionId} className="rounded-lg border p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span
+                      className="w-3 h-3 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: space.color || "#3b82f6" }}
+                    />
+                    <div>
+                      <span className="font-semibold text-sm block">
+                        {space.name}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {space.facilityType}
+                      </span>
+                    </div>
+                    <span className="ml-auto text-sm font-semibold">
+                      {formatPrice(space.price || 0)}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(space.slots || []).map((slot: any) => {
+                      const isSelected = selectedScheduledSlots.some(
+                        (s) =>
+                          s.positionId === space.positionId &&
+                          s.slotId === slot.id,
+                      );
+                      return (
+                        <button
+                          key={slot.id}
+                          type="button"
+                          disabled={slot.isBooked}
+                          onClick={() =>
+                            toggleScheduledSlotSelection(space, slot)
+                          }
+                          className={`px-3 py-1.5 rounded-md text-xs border transition-colors ${
+                            slot.isBooked
+                              ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                              : isSelected
+                                ? "bg-blue-600 text-white border-blue-600"
+                                : "bg-white hover:border-blue-400"
+                          }`}
+                        >
+                          {slot.date} · {slot.startTime}-{slot.endTime}
+                          {slot.label ? ` (${slot.label})` : ""}
+                          {slot.isBooked ? " — Booked" : ""}
+                        </button>
+                      );
+                    })}
+                    {(space.slots || []).length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        No slots defined for this space yet.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+          </div>
+          {selectedScheduledSlots.length > 0 && (
+            <div className="border-t pt-3 mt-3 space-y-2">
+              <p className="text-sm font-semibold">
+                Selected ({selectedScheduledSlots.length})
+              </p>
+              {selectedScheduledSlots.map((s, i) => (
+                <div key={i} className="flex justify-between text-xs">
+                  <span>
+                    {s.spaceName} — {s.date} {s.startTime}-{s.endTime}
+                  </span>
+                  <span>{formatPrice(s.price)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between font-semibold text-sm border-t pt-2">
+                <span>Total</span>
+                <span>
+                  {formatPrice(
+                    selectedScheduledSlots.reduce(
+                      (sum, s) => sum + (s.price || 0),
+                      0,
+                    ),
+                  )}
+                </span>
+              </div>
+            </div>
+          )}
+          <Button
+            className="w-full mt-3"
+            onClick={handleScheduledSpaceSlotsSubmit}
+            disabled={selectedScheduledSlots.length === 0}
+          >
+            Proceed to Payment
+          </Button>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showWhatsAppDialog} onOpenChange={setShowWhatsAppDialog}>
         <DialogContent
           className="sm:max-w-md"
@@ -14251,6 +15284,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           {renderDoors()}
                           {/* Cinema/concert seats */}
                           {renderSeats()}
+                          {/* Scheduled Space facilities (courts/grounds/tables) */}
+                          {renderScheduledSpaces()}
                           {layoutAnnotations.length > 0 && (
                             <VenueAnnotationLayer
                               readOnly
@@ -14990,6 +16025,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 {renderDoors()}
                 {/* Cinema/concert seats */}
                 {renderSeats()}
+                {/* Scheduled Space facilities (courts/grounds/tables) */}
+                {renderScheduledSpaces()}
                 {layoutAnnotations.length > 0 && (
                   <VenueAnnotationLayer
                     readOnly
