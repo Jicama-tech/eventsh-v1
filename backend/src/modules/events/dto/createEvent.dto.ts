@@ -573,7 +573,6 @@ export class ScheduledSpaceTemplateDto {
   @IsNumber() @IsOptional() height?: number;
   @IsNumber() @IsOptional() diameter?: number;
   @IsNumber() @Min(0) @IsOptional() price?: number;
-  @IsNumber() @Min(0) @IsOptional() memberPrice?: number;
   @IsString() @IsOptional() color?: string;
   @IsArray()
   @IsOptional()
@@ -594,7 +593,6 @@ export class PositionedScheduledSpaceDto {
   @IsNumber() @IsOptional() displayWidth?: number;
   @IsNumber() @IsOptional() displayHeight?: number;
   @IsNumber() @Min(0) @IsOptional() price?: number;
-  @IsNumber() @Min(0) @IsOptional() memberPrice?: number;
   @IsString() @IsOptional() color?: string;
   @IsArray()
   @IsOptional()

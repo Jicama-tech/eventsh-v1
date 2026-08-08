@@ -364,7 +364,6 @@ class ScheduledSpaceTemplate {
   @Prop() height?: number;
   @Prop() diameter?: number;
   @Prop({ default: 0 }) price: number;
-  @Prop() memberPrice?: number;
   @Prop() color?: string;
   @Prop({ type: [Object], default: [] }) slots: ScheduleSlot[];
 }
@@ -383,7 +382,6 @@ class PositionedScheduledSpace {
   @Prop() displayWidth?: number;
   @Prop() displayHeight?: number;
   @Prop({ default: 0 }) price: number;
-  @Prop() memberPrice?: number;
   @Prop() color?: string;
   @Prop({ type: [Object], default: [] }) slots: ScheduleSlot[];
   @Prop() x: number;
