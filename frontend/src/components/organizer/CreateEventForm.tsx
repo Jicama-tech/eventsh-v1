@@ -360,7 +360,6 @@ interface ScheduledSpaceTemplate {
   height?: number;
   diameter?: number;
   price: number;
-  memberPrice?: number;
   color?: string;
   slots: ScheduleSlot[];
 }
@@ -3392,7 +3391,6 @@ const ScheduledSpaceManagement = ({
     height: string;
     diameter: string;
     price: string;
-    memberPrice?: string;
     color: string;
     slots: ScheduleSlot[];
   };
@@ -3400,8 +3398,6 @@ const ScheduledSpaceManagement = ({
 }) => {
   const { country } = useCountry();
   const { formatPrice } = useCurrency(country);
-  const { isModuleEnabled } = useSubscription();
-  const isMembershipEnabled = isModuleEnabled("membership");
   const { toast } = useToast();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [slotDraft, setSlotDraft] = useState({
@@ -3421,7 +3417,6 @@ const ScheduledSpaceManagement = ({
       height: "100",
       diameter: "100",
       price: "",
-      memberPrice: "",
       color: "#3b82f6",
       slots: [],
     });
@@ -3459,14 +3454,6 @@ const ScheduledSpaceManagement = ({
       slots: prev.slots.filter((s) => s.id !== id),
     }));
 
-  const parseOptionalNum = (v?: string) => {
-    if (v == null) return undefined;
-    const s = String(v).trim();
-    if (!s) return undefined;
-    const n = parseFloat(s);
-    return Number.isFinite(n) && n >= 0 ? n : undefined;
-  };
-
   const saveTemplate = () => {
     if (!current.name) {
       toast({ duration: 5000, title: "Name is required", variant: "destructive" });
@@ -3502,7 +3489,6 @@ const ScheduledSpaceManagement = ({
           ? parseInt(current.diameter, 10) || 0
           : undefined,
       price: parseFloat(current.price) || 0,
-      memberPrice: parseOptionalNum(current.memberPrice),
       color: current.color || "#3b82f6",
       slots: current.slots,
     };
@@ -3531,7 +3517,6 @@ const ScheduledSpaceManagement = ({
       height: t.height != null ? String(t.height) : "100",
       diameter: t.diameter != null ? String(t.diameter) : "100",
       price: t.price != null ? String(t.price) : "",
-      memberPrice: t.memberPrice != null ? String(t.memberPrice) : "",
       color: t.color || "#3b82f6",
       slots: t.slots || [],
     });
@@ -3667,19 +3652,6 @@ const ScheduledSpaceManagement = ({
                 value={current.diameter}
                 onChange={(e) =>
                   setCurrent((p) => ({ ...p, diameter: e.target.value }))
-                }
-              />
-            </div>
-          )}
-          {isMembershipEnabled && (
-            <div>
-              <Label>Member Price</Label>
-              <Input
-                type="number"
-                min={0}
-                value={current.memberPrice}
-                onChange={(e) =>
-                  setCurrent((p) => ({ ...p, memberPrice: e.target.value }))
                 }
               />
             </div>
@@ -9060,7 +9032,6 @@ export function CreateEventForm({
     height: "100",
     diameter: "100",
     price: "",
-    memberPrice: "",
     color: "#3b82f6",
     slots: [] as ScheduleSlot[],
   });

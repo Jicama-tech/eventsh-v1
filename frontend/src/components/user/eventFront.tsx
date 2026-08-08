@@ -868,6 +868,23 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       .filter(Boolean);
     return Array.from(new Set(types)) as string[];
   }, [eventData]);
+  // Per-facility-type slot counts (from the same availability fetch the slot
+  // picker uses) so the "Type of Space Required" dropdown can tell the
+  // registrant up-front whether a type still has open slots, instead of them
+  // finding out only after registering and reaching the picker.
+  const scheduledSpaceFacilityAvailability = useMemo(() => {
+    const map: Record<string, { total: number; available: number }> = {};
+    for (const space of scheduledSpacesAvailable as any[]) {
+      const ft = space?.facilityType;
+      if (!ft) continue;
+      if (!map[ft]) map[ft] = { total: 0, available: 0 };
+      for (const slot of space.slots || []) {
+        map[ft].total += 1;
+        if (!slot.isBooked) map[ft].available += 1;
+      }
+    }
+    return map;
+  }, [scheduledSpacesAvailable]);
   // Slot picker narrows to the facility type the registrant asked for (when
   // that field was collected) — otherwise every placed space is shown.
   const filteredScheduledSpaces = useMemo(() => {
@@ -1788,6 +1805,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     });
     setScheduledSpaceStep("auth");
     setShowScheduledSpaceForm(true);
+    // Fetch slot availability now (not just after registration) so the
+    // "Type of Space Required" dropdown can show which facility types still
+    // have open slots while the registrant is filling in the form.
+    fetchAvailableScheduledSpaces();
   };
 
   // Same fetch-blob-and-trigger-download shape as the Stall ticket's
@@ -13777,11 +13798,29 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         <SelectValue placeholder="Select a space type" />
                       </SelectTrigger>
                       <SelectContent>
-                        {scheduledSpaceFacilityTypes.map((ft) => (
-                          <SelectItem key={ft} value={ft}>
-                            {ft}
-                          </SelectItem>
-                        ))}
+                        {scheduledSpaceFacilityTypes.map((ft) => {
+                          const avail = scheduledSpaceFacilityAvailability[ft];
+                          const hint =
+                            avail && avail.total > 0
+                              ? avail.available > 0
+                                ? `${avail.available} slot${avail.available === 1 ? "" : "s"} available`
+                                : "Fully booked"
+                              : null;
+                          return (
+                            <SelectItem key={ft} value={ft}>
+                              <span className="flex items-center gap-2">
+                                <span>{ft}</span>
+                                {hint && (
+                                  <span
+                                    className={`text-xs ${avail.available > 0 ? "text-green-600" : "text-red-500"}`}
+                                  >
+                                    ({hint})
+                                  </span>
+                                )}
+                              </span>
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>

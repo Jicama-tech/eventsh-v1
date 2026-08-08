@@ -113,10 +113,17 @@ export default function DashboardOverview({
   const { formatPrice, getSymbol } = useCurrency(country);
 
   const calculateEventMetrics = (event, tickets, stalls = [], revenueByEvent = {}) => {
-    const eventTickets = tickets.filter(
-      (ticket) =>
-        ticket.eventId._id === event._id && ticket.status === "confirmed",
-    );
+    // eventId can arrive populated (object), a plain id, or null (the ticket's
+    // event was since deleted — populate() resolves a dangling ref to null).
+    // Normalize + guard the same way the stall filter below already does, so
+    // one orphaned ticket doesn't crash the whole dashboard for this organizer.
+    const evIdForTickets = String(event._id);
+    const eventTickets = tickets.filter((ticket) => {
+      const raw = ticket.eventId;
+      if (!raw) return false;
+      const tid = typeof raw === "object" ? raw._id : raw;
+      return String(tid) === evIdForTickets && ticket.status === "confirmed";
+    });
 
     const ticketsSold = eventTickets.reduce(
       (total, ticket) =>
