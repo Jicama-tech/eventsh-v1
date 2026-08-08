@@ -30,6 +30,7 @@ const Blog = lazy(() => import("./pages/Blog"));
 const FAQ = lazy(() => import("./pages/faqs"));
 const ContactUsPage = lazy(() => import("./pages/contactUs"));
 const TablePaymentPage = lazy(() => import("./components/user/tablePaymentPage"));
+const ScheduledSpacePaymentPage = lazy(() => import("./components/user/scheduledSpacePaymentPage"));
 const SpeakerPaymentPage = lazy(() => import("./components/user/speakerPaymentPage"));
 const TicketPaymentPage = lazy(() => import("./components/user/ticketPaymentPage"));
 const TicketCart = lazy(() => import("./components/user/ticketCart"));
@@ -102,6 +103,7 @@ function CleanStorefrontUrl() {
       "/ticket-payment",
       "/ticket-cart",
       "/table-payment",
+      "/scheduled-space-payment",
       "/speaker-payment",
       "/round-table-payment",
       "/workshop-payment",
@@ -281,6 +283,7 @@ function AppContent() {
           <Route path="/wedding-room/:token" element={<WeddingRoomTicket />} />
           <Route path="/ticket-payment" element={<TicketPaymentPage />} />
           <Route path="/table-payment" element={<TablePaymentPage />} />
+          <Route path="/scheduled-space-payment" element={<ScheduledSpacePaymentPage />} />
           <Route path="/speaker-payment" element={<SpeakerPaymentPage />} />
           <Route path="/round-table-payment" element={<RoundTablePaymentPage />} />
           <Route path="/workshop-payment" element={<WorkshopPaymentPage />} />
@@ -429,6 +432,7 @@ function AppContent() {
                     element={<TicketPaymentPage />}
                   />
                   <Route path="/table-payment" element={<TablePaymentPage />} />
+          <Route path="/scheduled-space-payment" element={<ScheduledSpacePaymentPage />} />
           <Route path="/speaker-payment" element={<SpeakerPaymentPage />} />
           <Route path="/round-table-payment" element={<RoundTablePaymentPage />} />
           <Route path="/workshop-payment" element={<WorkshopPaymentPage />} />
@@ -513,6 +517,7 @@ function AppContent() {
                     element={<TicketPaymentPage />}
                   />
                   <Route path="/table-payment" element={<TablePaymentPage />} />
+          <Route path="/scheduled-space-payment" element={<ScheduledSpacePaymentPage />} />
           <Route path="/speaker-payment" element={<SpeakerPaymentPage />} />
           <Route path="/round-table-payment" element={<RoundTablePaymentPage />} />
           <Route path="/workshop-payment" element={<WorkshopPaymentPage />} />

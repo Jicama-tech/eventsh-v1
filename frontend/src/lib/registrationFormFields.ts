@@ -18,7 +18,8 @@ export type RegistrationFormCategory =
   | "stall"
   | "speaker"
   | "roundTable"
-  | "workshop";
+  | "workshop"
+  | "scheduledSpace";
 
 export interface RegistrationFormFieldDef {
   key: string;
@@ -99,6 +100,17 @@ export const REGISTRATION_FORM_FIELDS: Record<
     { key: "proposedStartTime", label: "Start Time", alwaysOn: false },
     { key: "proposedEndTime", label: "End Time", alwaysOn: false },
   ],
+  scheduledSpace: [
+    { key: "spaceSlotSelection", label: "Space & Time Slot Selection", alwaysOn: true },
+    { key: "name", label: "Full Name", alwaysOn: true },
+    { key: "email", label: "Email", alwaysOn: true },
+    { key: "whatsappNumber", label: "WhatsApp Number", alwaysOn: false },
+    { key: "phone", label: "Phone Number", alwaysOn: false },
+    { key: "facilityType", label: "Type of Space Required", alwaysOn: false },
+    { key: "purpose", label: "Purpose of Booking", alwaysOn: false },
+    { key: "organization", label: "Organization / Department", alwaysOn: false },
+    { key: "companions", label: "Persons Coming With You", alwaysOn: false },
+  ],
 };
 
 /** Missing key = enabled (matches Event.sectionVisibility's convention). */
@@ -117,6 +129,7 @@ export const CATEGORY_LABELS: Record<RegistrationFormCategory, string> = {
   speaker: "Speaker",
   roundTable: "Round Table",
   workshop: "Workshop",
+  scheduledSpace: "Scheduled Space",
 };
 
 /** Maps each category to the Event.features.hasX flag that gates it. */
@@ -125,4 +138,5 @@ export const CATEGORY_FEATURE_FLAG: Record<RegistrationFormCategory, string> = {
   speaker: "hasSpeakers",
   roundTable: "hasRoundTables",
   workshop: "hasWorkshops",
+  scheduledSpace: "hasScheduledSpaces",
 };

@@ -91,6 +91,7 @@ import { stallStage } from "@/lib/stallStatus";
 import { isFieldEnabled } from "@/lib/registrationFormFields";
 import RoundTableBookings from "@/components/organizer/RoundTableBookings";
 import WorkshopHostRequests from "@/components/organizer/WorkshopHostRequests";
+import ScheduledSpaceRequests from "@/components/organizer/ScheduledSpaceRequests";
 import { useCountry } from "@/hooks/useCountry";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { StallRequest } from "./shopKeeper";
@@ -2271,6 +2272,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         roundtables: false,
         workshopRequests: false,
         sponsors: false,
+        scheduledSpaces: false,
       };
     }
     const e: any = event;
@@ -2297,6 +2299,18 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     // event — applications arrive against those tiers.
     const sponsors =
       Array.isArray(e.sponsorTypes) && e.sponsorTypes.length > 0;
+    // Scheduled Spaces show as soon as the organizer has placed at least
+    // one rect or round space with a defined slot — same threshold the
+    // eventfront entry card uses to decide whether to show itself.
+    const scheduledSpaces =
+      (Array.isArray(e.venueScheduledSpaces) &&
+        e.venueScheduledSpaces.some(
+          (s: any) => Array.isArray(s.slots) && s.slots.length > 0,
+        )) ||
+      (Array.isArray(e.venueScheduledRoundSpaces) &&
+        e.venueScheduledRoundSpaces.some(
+          (s: any) => Array.isArray(s.slots) && s.slots.length > 0,
+        ));
     return {
       visitors,
       exhibitors,
@@ -2304,6 +2318,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       roundtables,
       workshopRequests,
       sponsors,
+      scheduledSpaces,
     };
   };
 
@@ -2842,15 +2857,16 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   (sections.speakers ? 1 : 0) +
                   (sections.roundtables ? 1 : 0) +
                   (sections.workshopRequests ? 1 : 0) +
-                  (sections.sponsors ? 1 : 0);
+                  (sections.sponsors ? 1 : 0) +
+                  (sections.scheduledSpaces ? 1 : 0);
                 if (visibleCount === 0) {
                   return (
                     <Card>
                       <CardContent className="py-12 text-center text-muted-foreground">
                         This event has no visitor, exhibitor, speaker, round
-                        table, workshop or sponsor sections enabled. Add at
-                        least one in the event editor to see attendance data
-                        here.
+                        table, workshop, sponsor or scheduled space sections
+                        enabled. Add at least one in the event editor to see
+                        attendance data here.
                       </CardContent>
                     </Card>
                   );
@@ -2863,7 +2879,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     4: "grid-cols-4",
                     5: "grid-cols-5",
                     6: "grid-cols-6",
-                  } as Record<number, string>)[visibleCount] || "grid-cols-6";
+                    7: "grid-cols-7",
+                  } as Record<number, string>)[visibleCount] || "grid-cols-7";
                 return (
               <Tabs
                 value={detailTab}
@@ -2889,6 +2906,11 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   )}
                   {sections.sponsors && (
                     <TabsTrigger value="sponsors">Sponsors</TabsTrigger>
+                  )}
+                  {sections.scheduledSpaces && (
+                    <TabsTrigger value="scheduledSpaces">
+                      Scheduled Spaces
+                    </TabsTrigger>
                   )}
                 </TabsList>
 
@@ -3573,6 +3595,16 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 {sections.workshopRequests && (
                 <TabsContent value="workshopRequests" className="pt-4">
                   <WorkshopHostRequests
+                    eventId={selectedEvent._id}
+                    registrationFormFields={(selectedEvent as any)?.registrationFormFields}
+                  />
+                </TabsContent>
+                )}
+
+                {/* SCHEDULED SPACES TAB — registration -> pick-slot -> pay requests */}
+                {sections.scheduledSpaces && (
+                <TabsContent value="scheduledSpaces" className="pt-4">
+                  <ScheduledSpaceRequests
                     eventId={selectedEvent._id}
                     registrationFormFields={(selectedEvent as any)?.registrationFormFields}
                   />

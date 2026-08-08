@@ -32,6 +32,7 @@ interface EventLike {
     hasSpeakers?: boolean;
     hasRoundTables?: boolean;
     hasWorkshops?: boolean;
+    hasScheduledSpaces?: boolean;
   };
   registrationFormFields?: RegistrationFormFieldsConfig;
 }
@@ -41,6 +42,7 @@ const ALL_CATEGORIES: RegistrationFormCategory[] = [
   "speaker",
   "roundTable",
   "workshop",
+  "scheduledSpace",
 ];
 
 export function RegistrationFormsDialog({
@@ -126,9 +128,9 @@ export function RegistrationFormsDialog({
 
         {activeCategories.length === 0 ? (
           <div className="py-10 text-center text-muted-foreground text-sm">
-            No Stall, Speaker, Round Table, or Workshop modules are enabled
-            for this event yet — turn one on in Venue Setup → Event
-            Sections first.
+            No Stall, Speaker, Round Table, Workshop, or Scheduled Space
+            modules are enabled for this event yet — turn one on in Venue
+            Setup → Event Sections first.
           </div>
         ) : (
           <Tabs

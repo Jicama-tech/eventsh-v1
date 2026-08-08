@@ -632,6 +632,13 @@ const MyEvents: React.FC = () => {
       bookedChairs: [],
       isFullyBooked: false,
     });
+    // Workshop sessions track their booking count directly on the session
+    // (bookedSeats), not via a placed-instance array — same "brand new, zero
+    // bookings" reset as stalls/round tables above.
+    const clearWorkshopBookings = (item: any) => ({
+      ...item,
+      bookedSeats: 0,
+    });
     const sanitizeLayoutCollection = <T,>(
       raw: any,
       transform: (item: T) => T,
@@ -654,6 +661,17 @@ const MyEvents: React.FC = () => {
         rest.venueRoundTables,
         clearRoundBookings,
       ),
+      workshopSessions: sanitizeLayoutCollection(
+        rest.workshopSessions,
+        clearWorkshopBookings,
+      ),
+      // Ledgers of booked (space:slot) / seat tokens — CreateEventForm never
+      // reads or resubmits these fields, so a duplicate's create-event POST
+      // naturally omits them and the backend defaults to []. Cleared here
+      // too so the object handed to the form is honestly "unbooked" even if
+      // something inspects it before submit.
+      scheduledSpaceBookedSlots: [],
+      seatMapBookedSeats: [],
     };
 
     setDuplicatingFrom(cloned as Event);

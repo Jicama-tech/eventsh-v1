@@ -16,6 +16,7 @@ import { OtpModule } from "./modules/otp/otp.module";
 import { PaymentsModule } from "./modules/payments/payments.module";
 import { TicketsModule } from "./modules/tickets/tickets.module";
 import { StallsModule } from "./modules/stalls/stalls.module";
+import { ScheduledSpacesModule } from "./modules/scheduled-spaces/scheduled-spaces.module";
 import { PlansModule } from "./modules/plans/plans.module";
 import { EnquiryModule } from "./modules/enquiry/enquiry.module";
 import { OrganizerStoresModule } from "./modules/organizer-stores/organizer-stores.module";
@@ -72,6 +73,7 @@ import { ExpensesModule } from "./modules/expenses/expenses.module";
     PaymentsModule,
     TicketsModule,
     StallsModule,
+    ScheduledSpacesModule,
     PlansModule,
     SubscriptionsModule,
     BillingPaymentsModule,
