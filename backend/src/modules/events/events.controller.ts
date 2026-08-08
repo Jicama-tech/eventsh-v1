@@ -498,6 +498,10 @@ export class EventsController {
         body.roundTableTemplates = JSON.parse(body.roundTableTemplates);
       if (typeof body.venueRoundTables === "string")
         body.venueRoundTables = JSON.parse(body.venueRoundTables);
+      if (typeof body.scheduledSpaceTemplates === "string")
+        body.scheduledSpaceTemplates = JSON.parse(body.scheduledSpaceTemplates);
+      if (typeof body.venueScheduledSpaces === "string")
+        body.venueScheduledSpaces = JSON.parse(body.venueScheduledSpaces);
       if (typeof body.venueAnnotations === "string")
         body.venueAnnotations = JSON.parse(body.venueAnnotations);
       // Placed entrance / exit doors — same multipart-JSON unwrap as
@@ -1132,6 +1136,10 @@ export class EventsController {
         body.roundTableTemplates = JSON.parse(body.roundTableTemplates);
       if (typeof body.venueRoundTables === "string")
         body.venueRoundTables = JSON.parse(body.venueRoundTables);
+      if (typeof body.scheduledSpaceTemplates === "string")
+        body.scheduledSpaceTemplates = JSON.parse(body.scheduledSpaceTemplates);
+      if (typeof body.venueScheduledSpaces === "string")
+        body.venueScheduledSpaces = JSON.parse(body.venueScheduledSpaces);
       if (typeof body.venueAnnotations === "string")
         body.venueAnnotations = JSON.parse(body.venueAnnotations);
       // Placed entrance / exit doors — same unwrap as the create path.
@@ -1396,6 +1404,7 @@ export class EventsController {
       speaker?: Record<string, boolean>;
       roundTable?: Record<string, boolean>;
       workshop?: Record<string, boolean>;
+      scheduledSpace?: Record<string, boolean>;
     },
   ) {
     try {

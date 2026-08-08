@@ -1,14 +1,8 @@
-// Progress indicator for the exhibitor stall-booking flow. Shown at the top of
-// every surface in the flow so the vendor always knows where they are:
-//   1. Sign in      → the Google / WhatsApp auth gate
-//   2. Terms        → the rules & regulations gate
-//   3. Your details → the stall registration form
-//   4. Spaces & pay → space selection + payment
-//   5. Confirmed    → payment approved, booking complete (transaction cycle done)
-//
-// Two stages wait on the organizer: after the form is submitted (request
-// approval) and after payment is submitted (payment approval). Pass
-// `pending` + a `note` to render the waiting banner at either point.
+// Generic progress-indicator stepper, shown at the top of every surface in a
+// multi-step public booking flow so the visitor always knows where they are.
+// Originally built for the exhibitor stall-booking flow (hence the file
+// name — kept for import-path stability) and now shared by any flow that
+// needs the same step-wise look, e.g. Scheduled Spaces.
 import { Check, Clock } from "lucide-react";
 
 const STALL_STEPS = [
@@ -19,13 +13,25 @@ const STALL_STEPS = [
   "Confirmed",
 ] as const;
 
-export function StallStepper({
+// Sign in (Google gate) → Your details (the registration form) →
+// Space & pay (pick a facility + time slot, then pay) → Confirmed (QR
+// issued). No "Terms" step — Scheduled Spaces has no rules/regulations gate.
+const SCHEDULED_SPACE_STEPS = [
+  "Sign in",
+  "Your details",
+  "Space & pay",
+  "Confirmed",
+] as const;
+
+function Stepper({
+  steps,
   current,
   pending = false,
   note,
 }: {
+  steps: readonly string[];
   /** 1-based active step. Steps below `current` render as done; pass a value
-   *  past the last step (e.g. 6) to mark every step complete. */
+   *  past the last step (e.g. steps.length + 1) to mark every step complete. */
   current: number;
   /** True while awaiting organizer approval — the `current` step renders as
    *  not-yet-started and the waiting banner is shown. */
@@ -36,11 +42,11 @@ export function StallStepper({
   return (
     <div className="mb-4">
       <ol className="flex items-start">
-        {STALL_STEPS.map((label, i) => {
+        {steps.map((label, i) => {
           const step = i + 1;
           const done = step < current;
           const active = !pending && step === current;
-          const isLast = step === STALL_STEPS.length;
+          const isLast = step === steps.length;
           return (
             <li
               key={label}
@@ -88,6 +94,22 @@ export function StallStepper({
       )}
     </div>
   );
+}
+
+export function StallStepper(props: {
+  current: number;
+  pending?: boolean;
+  note?: string;
+}) {
+  return <Stepper steps={STALL_STEPS} {...props} />;
+}
+
+export function ScheduledSpaceStepper(props: {
+  current: number;
+  pending?: boolean;
+  note?: string;
+}) {
+  return <Stepper steps={SCHEDULED_SPACE_STEPS} {...props} />;
 }
 
 export default StallStepper;

@@ -479,6 +479,11 @@ export class EventsService {
 
         roundTableTemplates: createEventDto.roundTableTemplates || [],
         venueRoundTables: createEventDto.venueRoundTables || [],
+        workshopSessions: createEventDto.workshopSessions || [],
+        workshopPackages: createEventDto.workshopPackages || [],
+        scheduledSpaceTemplates: createEventDto.scheduledSpaceTemplates || [],
+        venueScheduledSpaces: createEventDto.venueScheduledSpaces || [],
+        scheduledSpaceBookedSlots: createEventDto.scheduledSpaceBookedSlots || [],
         venueAnnotations: createEventDto.venueAnnotations || [],
         volunteers: (createEventDto.volunteers || []).map((v) => ({
           name: v.name,
@@ -781,6 +786,7 @@ export class EventsService {
       speaker?: Record<string, boolean>;
       roundTable?: Record<string, boolean>;
       workshop?: Record<string, boolean>;
+      scheduledSpace?: Record<string, boolean>;
     },
   ): Promise<Event> {
     if (!Types.ObjectId.isValid(id)) {
