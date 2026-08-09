@@ -759,48 +759,28 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
     );
   };
 
-  // Add-on dots only, no text — used for the hidden EXPORT copy that
-  // html2canvas rasterises for the PDF. html2canvas measures/positions text
+  // No label, no dots — used for the hidden EXPORT copy that html2canvas
+  // rasterises for the PDF. The PDF's map is meant to be the clean printable
+  // floor plan; add-on dots are a screen-only aid for volunteers matching
+  // vendor purchases at the door (still shown in the live Analytics Venue
+  // Layout view via renderSpaceLabelFn) and don't belong on the printout.
+  // Text is likewise left out here — html2canvas measures/positions text
   // incorrectly on tiles that are both rotated (rotate + SpaceLayout's own
   // counter-rotate to keep the label upright) AND carry a long vendor/brand
   // name — it clips or mis-centres the text even though the same DOM renders
   // perfectly on screen (confirmed: it's an html2canvas layout bug, not a
-  // real one — a plain screenshot of the live tile is clean). Rather than
-  // fight that, the export map carries no text at all; downloadVenuePdf
+  // real one — a plain screenshot of the live tile is clean). downloadVenuePdf
   // draws every label itself with jsPDF's native text after the map image is
-  // placed, which is exact regardless of rotation and prints crisper too.
-  const renderDotsOnlyFn = (t: any) => {
-    const booking = bookings[t.positionId];
-    const dots = (booking?.addOns || []).map((a: any) => ({
-      color: addOnColorMap.get(a.id)?.color || "#6b7280",
-    }));
-    if (dots.length === 0) return null;
-    return (
-      <div
-        className="absolute left-1/2 -translate-x-1/2 flex gap-0.5"
-        style={{ bottom: 2 }}
-      >
-        {dots.slice(0, 8).map((d: any, i: number) => (
-          <span
-            key={i}
-            className="rounded-full border border-white/80 shadow"
-            style={{ width: 6, height: 6, backgroundColor: d.color }}
-          />
-        ))}
-        {dots.length > 8 && (
-          <span className="text-[7px] font-bold text-slate-600 ml-0.5">
-            +{dots.length - 8}
-          </span>
-        )}
-      </div>
-    );
-  };
+  // placed instead, which is exact regardless of rotation and prints
+  // crisper too.
+  const renderNothingFn = () => null;
 
   // Rasterise the off-screen natural-resolution map, then compose it into a
   // print-ready PDF: a title band (event name/venue/date, best-effort logo),
-  // the legend, the map itself, and — for A4 — an exhibitor directory table
-  // on the page(s) that follow (A4 is too small to read stall labels once
-  // printed, so the directory backs the map up).
+  // the map itself with natively-drawn labels (no add-on dots — those are a
+  // screen-only aid), and — for A4 — an exhibitor directory table on the
+  // page(s) that follow (A4 prints stall labels too small to read on their
+  // own, so the directory backs the map up).
   const downloadVenuePdf = async (paperSize: "a1" | "a4") => {
     if (!exportRef.current) return;
     setPdfBusy(paperSize);
@@ -892,11 +872,12 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
       pdf.addImage(mapImg, "PNG", mapX, y, drawW, drawH);
 
       // --- Space labels, drawn natively (not part of the rasterised map) ---
-      // The export copy carries no text (see renderDotsOnlyFn) — html2canvas
-      // mis-measures/mis-centres text on tiles that are both rotated and
-      // long-labelled, clipping it, even though the exact same DOM is clean
-      // on screen. Drawing the labels here with jsPDF's own text is exact
-      // regardless of rotation, and prints crisper (real text, not pixels).
+      // The export copy carries no text or dots (see renderNothingFn) —
+      // html2canvas mis-measures/mis-centres text on tiles that are both
+      // rotated and long-labelled, clipping it, even though the exact same
+      // DOM is clean on screen. Drawing the labels here with jsPDF's own
+      // text is exact regardless of rotation, and prints crisper (real
+      // text, not pixels).
       const scaleToPdf = drawW / canvasW;
       pdf.setFont("helvetica", "bold");
       for (const t of tables) {
@@ -920,7 +901,12 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
         const rotated90 = Math.abs(((t as any).rotation || 0) % 180) === 90;
         const footW = (rotated90 ? bh : bw) * scaleToPdf;
         const footH = (rotated90 ? bw : bh) * scaleToPdf;
-        const fs = Math.max(3.5, Math.min(7, footH * 0.4));
+        // A4 stalls print much smaller than A1's — the same font-size range
+        // read as oversized/cramped on the handout, so it gets its own,
+        // smaller ceiling rather than just inheriting A1's.
+        const fs = big
+          ? Math.max(3.5, Math.min(7, footH * 0.4))
+          : Math.max(2.8, Math.min(4.5, footH * 0.3));
         pdf.setFontSize(fs);
         pdf.setTextColor(17, 24, 39);
         const fitted = fitText(pdf, label, Math.max(6, footW - 3));
@@ -1249,7 +1235,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
             doors={doors}
             speakerZones={zones}
             getState={getSpaceState}
-            renderSpaceLabel={renderDotsOnlyFn}
+            renderSpaceLabel={renderNothingFn}
           />
         </div>
       </div>
