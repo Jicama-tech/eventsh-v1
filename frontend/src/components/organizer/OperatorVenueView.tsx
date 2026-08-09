@@ -906,7 +906,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
         // smaller ceiling rather than just inheriting A1's.
         const fs = big
           ? Math.max(3.5, Math.min(7, footH * 0.4))
-          : Math.max(2.8, Math.min(4.5, footH * 0.3));
+          : Math.max(2.2, Math.min(3.5, footH * 0.22));
         pdf.setFontSize(fs);
         pdf.setTextColor(17, 24, 39);
         const fitted = fitText(pdf, label, Math.max(6, footW - 3));
@@ -926,12 +926,14 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
       };
       stamp();
 
-      // --- Exhibitor directory (A4 only) — the map alone prints too small
-      // to read stall labels at A4, so back it with page(s) listing every
-      // booked stall against its exhibitor as an actual bordered table
-      // (header row + gridlines), laid out in side-by-side column-blocks —
-      // the same shape as a printed participant directory.
-      if (paperSize === "a4") {
+      // --- Exhibitor directory (both sizes) — the map alone prints stall
+      // labels too small to read on their own, so every size gets page(s)
+      // after the map listing each booked stall against its exhibitor as
+      // an actual bordered table (header row + gridlines), laid out in
+      // side-by-side column-blocks — the same shape as a printed
+      // participant directory. A1's poster scale means bigger blocks, a
+      // bigger font, and room for more of them across the wider page.
+      {
         const directory = tables
           .filter((t) => bookings[t.positionId])
           .map((t) => {
@@ -952,38 +954,44 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
           );
 
         if (directory.length > 0) {
-          const rowH = 14;
-          const headerH = 16;
-          const blockGap = 14;
-          const maxBlocks = 3;
-          const titleH = 22;
+          const rowH = big ? 24 : 14;
+          const headerH = big ? 28 : 16;
+          const blockGap = big ? 24 : 14;
+          const maxBlocks = big ? 5 : 3;
+          const titleH = big ? 34 : 22;
+          const cellFontSize = big ? 11 : 7.5;
+          const cellPad = big ? 6 : 3;
+          const baselineOffset = big ? 8 : 4;
           const topY = margin + titleH;
           const availH = pageH - topY - margin;
           const rowsPerBlock = Math.max(1, Math.floor((availH - headerH) / rowH));
           // Only spread across multiple blocks once there's enough rows to
           // fill them — a handful of exhibitors gets one clean table, not
-          // three mostly-empty ones.
+          // several mostly-empty ones.
           const blocks = Math.max(
             1,
             Math.min(maxBlocks, Math.ceil(directory.length / rowsPerBlock)),
           );
           const totalW = pageW - margin * 2;
           const blockW = (totalW - blockGap * (blocks - 1)) / blocks;
-          const numW = Math.max(16, blockW * 0.07);
-          const stallW = Math.max(32, blockW * 0.15);
+          const numW = Math.max(big ? 26 : 16, blockW * 0.07);
+          const stallW = Math.max(big ? 50 : 32, blockW * 0.15);
           const contactW = blockW * 0.32;
           const exhibitorW = blockW - numW - stallW - contactW;
           const perPage = rowsPerBlock * blocks;
 
           for (let start = 0, pageIdx = 0; start < directory.length; start += perPage, pageIdx++) {
             pdf.addPage();
-            pdf.setFont("helvetica", "bold").setFontSize(12).setTextColor(0);
+            pdf
+              .setFont("helvetica", "bold")
+              .setFontSize(big ? 20 : 12)
+              .setTextColor(0);
             pdf.text(
               pageIdx === 0
                 ? "Exhibitor Directory"
                 : "Exhibitor Directory (cont'd)",
               margin,
-              margin + 12,
+              margin + (big ? 20 : 12),
             );
 
             const chunk = directory.slice(start, start + perPage);
@@ -1008,29 +1016,38 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
               pdf.setDrawColor(180);
               pdf.rect(bx, topY, blockW, totalBlockH); // outer border
 
-              pdf.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(51);
-              pdf.text("#", colXs[0] + 3, topY + headerH - 5);
-              pdf.text("Stall", colXs[1] + 3, topY + headerH - 5);
-              pdf.text("Exhibitor", colXs[2] + 3, topY + headerH - 5);
-              pdf.text("Contact", colXs[3] + 3, topY + headerH - 5);
+              pdf
+                .setFont("helvetica", "bold")
+                .setFontSize(cellFontSize)
+                .setTextColor(51);
+              const headerY = topY + headerH - baselineOffset;
+              pdf.text("#", colXs[0] + cellPad, headerY);
+              pdf.text("Stall", colXs[1] + cellPad, headerY);
+              pdf.text("Exhibitor", colXs[2] + cellPad, headerY);
+              pdf.text("Contact", colXs[3] + cellPad, headerY);
               pdf.setTextColor(0);
 
-              pdf.setFont("helvetica", "normal").setFontSize(7.5);
+              pdf.setFont("helvetica", "normal").setFontSize(cellFontSize);
               blockEntries.forEach((d, i) => {
                 const ry = topY + headerH + i * rowH;
                 const rowNum = start + b * rowsPerBlock + i + 1;
-                pdf.text(String(rowNum), colXs[0] + 3, ry + rowH - 4);
-                pdf.text(fitText(pdf, d.label, stallW - 6), colXs[1] + 3, ry + rowH - 4);
+                const rowY = ry + rowH - baselineOffset;
+                pdf.text(String(rowNum), colXs[0] + cellPad, rowY);
                 pdf.text(
-                  fitText(pdf, d.exhibitor, exhibitorW - 6),
-                  colXs[2] + 3,
-                  ry + rowH - 4,
+                  fitText(pdf, d.label, stallW - cellPad * 2),
+                  colXs[1] + cellPad,
+                  rowY,
+                );
+                pdf.text(
+                  fitText(pdf, d.exhibitor, exhibitorW - cellPad * 2),
+                  colXs[2] + cellPad,
+                  rowY,
                 );
                 if (d.contact) {
                   pdf.text(
-                    fitText(pdf, d.contact, contactW - 6),
-                    colXs[3] + 3,
-                    ry + rowH - 4,
+                    fitText(pdf, d.contact, contactW - cellPad * 2),
+                    colXs[3] + cellPad,
+                    rowY,
                   );
                 }
               });
@@ -1063,10 +1080,11 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
 
   return (
     <div className="space-y-4">
-      {/* Download — a print-ready PDF of this layout. A1 is a big single
-          poster for pinning up on-site; A4 is a compact handout that also
-          lists every booked stall against its exhibitor (stall labels are
-          too small to read at A4 size once printed). */}
+      {/* Download — a print-ready PDF of this layout. Both sizes carry an
+          Exhibitor Directory listing every booked stall against its
+          exhibitor after the map — stall labels print too small to read
+          on their own at either size, A1's poster scale just gets there
+          with fewer, larger stalls than A4's handout. */}
       <div className="flex justify-end">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -1087,7 +1105,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
             >
               A1 — large poster
               <span className="ml-auto pl-3 text-[10px] text-muted-foreground">
-                for on-site printing
+                + exhibitor directory
               </span>
             </DropdownMenuItem>
             <DropdownMenuItem
