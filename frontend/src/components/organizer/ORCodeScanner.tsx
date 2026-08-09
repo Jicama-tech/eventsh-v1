@@ -38,6 +38,17 @@ interface TicketData {
   isUsed: boolean;
   attendance?: boolean;
   status: string;
+  // Assigned-seating events (features.hasSeating) don't get their own scan
+  // mode — a seat is just an attribute of the regular ticket. Each line
+  // item's ticketType already embeds the seat labels for a seat purchase
+  // (e.g. "VIP (Seats A1, A2)"), so surfacing this list is how seating
+  // shows up in the scanner: on the same Visitor Ticket success screen.
+  ticketDetails?: {
+    ticketType: string;
+    quantity: number;
+    price: number;
+    seatIds?: string[];
+  }[];
 }
 
 interface Table {
@@ -102,9 +113,29 @@ interface EventData {
     whatsAppNumber: string;
     organizationName: string;
   };
+  // Which modules this event actually has turned on — gates which scan
+  // buttons show up below (no point offering to scan Speaker Passes on an
+  // event with no speaker track). Seating has no scan button of its own:
+  // assigned seats are just an attribute on the regular event ticket, so
+  // they already surface via the Visitor Ticket scan.
+  features?: {
+    hasStalls?: boolean;
+    hasSpeakers?: boolean;
+    hasRoundTables?: boolean;
+    hasWorkshops?: boolean;
+    hasSeating?: boolean;
+    hasScheduledSpaces?: boolean;
+  };
 }
 
-type ScanMode = "event-ticket" | "stall-ticket" | "speaker-ticket" | "round-table" | null;
+type ScanMode =
+  | "event-ticket"
+  | "stall-ticket"
+  | "speaker-ticket"
+  | "round-table"
+  | "workshop"
+  | "scheduled-space"
+  | null;
 type Step =
   | "otp-verification"
   | "mode-selection"
@@ -152,6 +183,12 @@ export default function QRTicketScanner() {
   const [pendingRoundTableQR, setPendingRoundTableQR] = useState<string | null>(null);
   const [roundTableData, setRoundTableData] = useState<any>(null);
   const [roundTableAction, setRoundTableAction] = useState<"CHECK_IN" | "CHECK_OUT" | null>(null);
+
+  // Workshops and Scheduled Spaces are single-stage — attended once, no
+  // check-in/check-out selection screen, so there's no "pending QR" +
+  // separate action-confirm step like stalls/speakers/round tables above.
+  const [workshopData, setWorkshopData] = useState<any>(null);
+  const [scheduledSpaceData, setScheduledSpaceData] = useState<any>(null);
 
   // Check-Out confirmation dialog states
   const [showCheckOutConfirmDialog, setShowCheckOutConfirmDialog] =
@@ -327,6 +364,10 @@ export default function QRTicketScanner() {
         await handleSpeakerTicketScan(decodedText);
       } else if (scanMode === "round-table") {
         await handleRoundTableScan(decodedText);
+      } else if (scanMode === "workshop") {
+        await handleWorkshopScan(decodedText);
+      } else if (scanMode === "scheduled-space") {
+        await handleScheduledSpaceScan(decodedText);
       }
     } catch (error) {
       console.error("Error processing QR code:", error);
@@ -720,6 +761,85 @@ export default function QRTicketScanner() {
     }
   };
 
+  // Handle Workshop QR Scan — single-stage (a workshop is attended once), so
+  // this scans straight to success like the visitor ticket flow, no
+  // check-in/check-out selection screen. The backend itself treats a repeat
+  // scan as a graceful "already checked in" success rather than an error.
+  const handleWorkshopScan = async (decodedText: string) => {
+    const qrData = JSON.parse(decodedText);
+
+    if (!qrData.type || qrData.type !== "eventsh-workshop-checkin") {
+      throw new Error("Invalid workshop QR code. This QR is not from EventSH.");
+    }
+    if (!qrData.bookingId) {
+      throw new Error("Invalid QR code format. Missing booking ID.");
+    }
+
+    const res = await fetch(`${apiURL}/workshop-bookings/scan-qr`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ qrCodeData: decodedText }),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.message || "Failed to process workshop QR");
+    }
+
+    const info = await res.json();
+    setWorkshopData(info.data);
+    setScanResult("success");
+    setStep("success");
+
+    toast({
+      duration: 5000,
+      title:
+        info.data.action === "ALREADY_CHECKED_IN"
+          ? "Already checked in"
+          : "Success!",
+      description: `${info.data.visitorName} — ${info.data.itemName}`,
+    });
+  };
+
+  // Handle Scheduled Space QR Scan — also single-stage. Unlike Workshops, a
+  // repeat scan here is a hard error from the backend ("Already checked
+  // in."), so it falls through to the generic error handling in
+  // onScanSuccess like the visitor-ticket / round-table flows do.
+  const handleScheduledSpaceScan = async (decodedText: string) => {
+    const qrData = JSON.parse(decodedText);
+
+    if (!qrData.type || qrData.type !== "eventsh-scheduled-space-checkin") {
+      throw new Error(
+        "Invalid scheduled space QR code. This QR is not from EventSH.",
+      );
+    }
+    if (!qrData.requestId) {
+      throw new Error("Invalid QR code format. Missing request ID.");
+    }
+
+    const res = await fetch(`${apiURL}/scheduled-spaces/scan-qr`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ qrCodeData: decodedText }),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.message || "Failed to process scheduled space QR");
+    }
+
+    const info = await res.json();
+    setScheduledSpaceData(info.data);
+    setScanResult("success");
+    setStep("success");
+
+    toast({
+      duration: 5000,
+      title: "Success!",
+      description: `Checked in: ${info.data.name}`,
+    });
+  };
+
   const onScanFailure = (error: any) => {
     // Ignore scan failures (normal when no QR code is detected)
   };
@@ -734,6 +854,8 @@ export default function QRTicketScanner() {
     setRoundTableData(null);
     setPendingRoundTableQR(null);
     setRoundTableAction(null);
+    setWorkshopData(null);
+    setScheduledSpaceData(null);
     setErrorMessage("");
     setIsProcessing(false);
     setPendingStallQR(null);
@@ -845,6 +967,13 @@ export default function QRTicketScanner() {
           </div>
         )}
 
+        {/* Only offer to scan what this event actually has turned on — a
+            module's checkbox in the organizer's event setup (Stalls,
+            Speakers, Round Tables, Workshops, Scheduled Spaces). Visitor
+            Ticket always shows: every event sells tickets, and assigned
+            seating (if enabled) is just an attribute on that same ticket,
+            not a separate scan type. While the event is still loading,
+            only Visitor Ticket shows — the rest populate once it's in. */}
         <div className="space-y-3">
           <Button
             onClick={() => handleModeSelection("event-ticket")}
@@ -853,52 +982,97 @@ export default function QRTicketScanner() {
             <Camera className="mr-2 h-4 w-4" />
             Visitor Ticket
           </Button>
-          <Button
-            onClick={() => handleModeSelection("stall-ticket")}
-            className="w-full bg-green-600 hover:bg-green-700"
-          >
-            <Camera className="mr-2 h-4 w-4" />
-            Exhibitor Ticket
-          </Button>
-          <Button
-            onClick={() => handleModeSelection("speaker-ticket")}
-            className="w-full bg-purple-600 hover:bg-purple-700"
-          >
-            <Camera className="mr-2 h-4 w-4" />
-            Speaker Pass
-          </Button>
-          <Button
-            onClick={() => handleModeSelection("round-table")}
-            className="w-full bg-amber-600 hover:bg-amber-700"
-          >
-            <Camera className="mr-2 h-4 w-4" />
-            Round Table Ticket
-          </Button>
+          {eventData?.features?.hasStalls && (
+            <Button
+              onClick={() => handleModeSelection("stall-ticket")}
+              className="w-full bg-green-600 hover:bg-green-700"
+            >
+              <Camera className="mr-2 h-4 w-4" />
+              Exhibitor Ticket
+            </Button>
+          )}
+          {eventData?.features?.hasSpeakers && (
+            <Button
+              onClick={() => handleModeSelection("speaker-ticket")}
+              className="w-full bg-purple-600 hover:bg-purple-700"
+            >
+              <Camera className="mr-2 h-4 w-4" />
+              Speaker Pass
+            </Button>
+          )}
+          {eventData?.features?.hasRoundTables && (
+            <Button
+              onClick={() => handleModeSelection("round-table")}
+              className="w-full bg-amber-600 hover:bg-amber-700"
+            >
+              <Camera className="mr-2 h-4 w-4" />
+              Round Table Ticket
+            </Button>
+          )}
+          {eventData?.features?.hasWorkshops && (
+            <Button
+              onClick={() => handleModeSelection("workshop")}
+              className="w-full bg-teal-600 hover:bg-teal-700"
+            >
+              <Camera className="mr-2 h-4 w-4" />
+              Workshop Pass
+            </Button>
+          )}
+          {eventData?.features?.hasScheduledSpaces && (
+            <Button
+              onClick={() => handleModeSelection("scheduled-space")}
+              className="w-full bg-rose-600 hover:bg-rose-700"
+            >
+              <Camera className="mr-2 h-4 w-4" />
+              Scheduled Space
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
   );
 
   // ─── RENDER: QR Scanner ──────────────────────────────────────────────────────
+  const SCAN_MODE_COPY: Record<
+    Exclude<ScanMode, null>,
+    { title: string; subtitle: string }
+  > = {
+    "event-ticket": {
+      title: "Scan Event Ticket",
+      subtitle: "Point your camera at the attendee's ticket QR code",
+    },
+    "stall-ticket": {
+      title: "Scan Stall Ticket",
+      subtitle: "Point your camera at the shopkeeper's stall QR code",
+    },
+    "speaker-ticket": {
+      title: "Scan Speaker Pass",
+      subtitle: "Point your camera at the speaker's pass QR code",
+    },
+    "round-table": {
+      title: "Scan Round Table Ticket",
+      subtitle: "Point your camera at the round table ticket QR code",
+    },
+    workshop: {
+      title: "Scan Workshop Pass",
+      subtitle: "Point your camera at the attendee's workshop QR code",
+    },
+    "scheduled-space": {
+      title: "Scan Scheduled Space Ticket",
+      subtitle: "Point your camera at the booking's QR code",
+    },
+  };
   const renderScanner = () => (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
         <Camera className="mx-auto h-12 w-12 text-green-600 mb-4" />
         <CardTitle>
-          {scanMode === "event-ticket"
-            ? "Scan Event Ticket"
-            : scanMode === "speaker-ticket"
-              ? "Scan Speaker Pass"
-              : scanMode === "round-table"
-                ? "Scan Round Table Ticket"
-                : "Scan Stall Ticket"}
+          {scanMode ? SCAN_MODE_COPY[scanMode].title : "Scan QR Code"}
         </CardTitle>
         <p className="text-sm text-gray-600">
-          {scanMode === "event-ticket"
-            ? "Point your camera at the attendee's ticket QR code"
-            : scanMode === "round-table"
-              ? "Point your camera at the round table ticket QR code"
-              : "Point your camera at the shopkeeper's stall QR code"}
+          {scanMode
+            ? SCAN_MODE_COPY[scanMode].subtitle
+            : "Point your camera at the QR code"}
         </p>
       </CardHeader>
       <CardContent>
@@ -1049,6 +1223,19 @@ export default function QRTicketScanner() {
                   Checked In
                 </span>
               </p>
+              {/* Assigned-seating events: each line item's type already
+                  reads e.g. "VIP (Seats A1, A2)" — this is how the volunteer
+                  sees which seat(s) to point the visitor to. */}
+              {ticketData.ticketDetails?.length ? (
+                <div className="pt-2 border-t border-green-200">
+                  <p className="font-semibold mb-1">Tickets:</p>
+                  {ticketData.ticketDetails.map((d, i) => (
+                    <p key={i} className="text-xs text-gray-600">
+                      {d.ticketType} × {d.quantity}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </div>
         )}
@@ -1172,13 +1359,21 @@ export default function QRTicketScanner() {
         {/* Main Content. OTP verification happens before the tabs — once the
             operator has authenticated, we expose Scanner | Venue so they can
             either scan tickets or look at the venue layout (with vendor +
-            add-on details on hover) while setting up the physical space. */}
+            add-on details on hover) while setting up the physical space.
+            Venue only shows for events that actually have something to lay
+            out on it — Workshops and Scheduled Spaces are their own booking
+            systems, not part of the venue designer, so they don't affect
+            this. */}
         {step === "otp-verification" && renderOTPVerification()}
         {step !== "otp-verification" && (
           <Tabs defaultValue="scanner" className="mt-2">
             <TabsList>
               <TabsTrigger value="scanner">Scanner</TabsTrigger>
-              <TabsTrigger value="venue">Venue</TabsTrigger>
+              {(eventData?.features?.hasStalls ||
+                eventData?.features?.hasRoundTables ||
+                eventData?.features?.hasSpeakers) && (
+                <TabsTrigger value="venue">Venue</TabsTrigger>
+              )}
             </TabsList>
             <TabsContent value="scanner" className="mt-4 space-y-4">
         {step === "mode-selection" && renderModeSelection()}
@@ -1246,6 +1441,85 @@ export default function QRTicketScanner() {
                   )}
                   {roundTableData.durationMinutes && (
                     <p className="text-xs text-gray-600">Duration: {roundTableData.durationMinutes} minutes</p>
+                  )}
+                </div>
+                <Button onClick={resetScanner} className="w-full">
+                  Scan Another QR
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+        {step === "success" && scanMode === "workshop" && workshopData && (
+          <Card className="w-full max-w-md mx-auto">
+            <CardHeader className="text-center">
+              <CheckCircle className="mx-auto h-16 w-16 text-green-500 mb-2" />
+              <CardTitle className="text-teal-700">
+                {workshopData.action === "ALREADY_CHECKED_IN"
+                  ? "Already Checked In"
+                  : "Workshop Checked In!"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 space-y-2">
+                <p className="font-semibold text-teal-800">
+                  {workshopData.visitorName}
+                </p>
+                <p className="text-sm text-teal-600">
+                  Workshop: {workshopData.itemName}
+                </p>
+                {workshopData.quantity != null && (
+                  <p className="text-sm text-teal-600">
+                    Quantity: {workshopData.quantity}
+                  </p>
+                )}
+                {workshopData.checkInTime && (
+                  <p className="text-xs text-gray-600">
+                    Check-in:{" "}
+                    {new Date(workshopData.checkInTime).toLocaleTimeString()}
+                  </p>
+                )}
+              </div>
+              <Button onClick={resetScanner} className="w-full">
+                Scan Another QR
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {step === "success" &&
+          scanMode === "scheduled-space" &&
+          scheduledSpaceData && (
+            <Card className="w-full max-w-md mx-auto">
+              <CardHeader className="text-center">
+                <CheckCircle className="mx-auto h-16 w-16 text-green-500 mb-2" />
+                <CardTitle className="text-rose-700">Checked In!</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="bg-rose-50 border border-rose-200 rounded-lg p-4 space-y-2">
+                  <p className="font-semibold text-rose-800">
+                    {scheduledSpaceData.name}
+                  </p>
+                  {scheduledSpaceData.selectedSlots?.length > 0 && (
+                    <div className="space-y-1">
+                      {scheduledSpaceData.selectedSlots.map(
+                        (s: any, i: number) => (
+                          <p key={i} className="text-sm text-rose-600">
+                            {s.spaceName} —{" "}
+                            {s.slotLabel || `${s.startTime}–${s.endTime}`}
+                            {s.date ? ` (${s.date})` : ""}
+                          </p>
+                        ),
+                      )}
+                    </div>
+                  )}
+                  {scheduledSpaceData.checkInTime && (
+                    <p className="text-xs text-gray-600">
+                      Check-in:{" "}
+                      {new Date(
+                        scheduledSpaceData.checkInTime,
+                      ).toLocaleTimeString()}
+                    </p>
                   )}
                 </div>
                 <Button onClick={resetScanner} className="w-full">
@@ -1328,6 +1602,9 @@ export default function QRTicketScanner() {
           </div>
         )}
             </TabsContent>
+            {(eventData?.features?.hasStalls ||
+              eventData?.features?.hasRoundTables ||
+              eventData?.features?.hasSpeakers) && (
             <TabsContent value="venue" className="mt-4">
               {eventId ? (
                 <OperatorVenueView eventId={eventId} />
@@ -1337,6 +1614,7 @@ export default function QRTicketScanner() {
                 </div>
               )}
             </TabsContent>
+            )}
           </Tabs>
         )}
       </div>
