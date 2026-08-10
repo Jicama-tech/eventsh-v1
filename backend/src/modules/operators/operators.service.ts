@@ -157,6 +157,9 @@ export class OperatorsService {
         ...(typeof createOperatorDto.allowEmails === "boolean"
           ? { allowEmails: createOperatorDto.allowEmails }
           : {}),
+        ...(typeof createOperatorDto.referralEnabled === "boolean"
+          ? { referralEnabled: createOperatorDto.referralEnabled }
+          : {}),
       });
 
       await this.saveWithUniqueReferralCode(newOperator);
@@ -219,13 +222,17 @@ export class OperatorsService {
   // Look up an operator by referral code, scoped to an organizer — used to
   // gate Scheduled Space visibility for visitors on the public event page.
   // Scoping to organizerId means codes only need to be globally unique, not
-  // separately re-validated per event.
+  // separately re-validated per event. Only matches operators with
+  // referralEnabled on — an organizer switching it off for an operator
+  // stops that code from working for visitors immediately, not just
+  // hiding it from the operator list.
   async findByReferralCode(organizerId: string, code: string) {
     const normalized = (code || "").trim().toUpperCase();
     if (!normalized) return null;
     return this.operatorModel.findOne({
       organizerId,
       referralCode: normalized,
+      referralEnabled: true,
     });
   }
 

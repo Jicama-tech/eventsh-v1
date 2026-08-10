@@ -62,9 +62,19 @@ export class Operator {
   // registration form to unlock the spaces assigned to this operator.
   // Auto-generated on create (and lazily backfilled for pre-existing
   // operators) — sparse+unique since it's assigned after the fact for old
-  // docs one at a time, not in a single migration.
+  // docs one at a time, not in a single migration. Generated regardless of
+  // referralEnabled below — it just isn't shown or matched against until
+  // switched on, so turning it on later doesn't change the code itself.
   @Prop({ unique: true, sparse: true })
   referralCode?: string;
+
+  // Opt-in gate for referralCode: most operators (chatbot/kiosk/dashboard
+  // staff) have nothing to do with Scheduled Spaces, so the code stays
+  // hidden in the organizer's operator list and non-functional for
+  // visitors until explicitly switched on for the operators actually
+  // handing one out. Off by default.
+  @Prop({ default: false })
+  referralEnabled: boolean;
 }
 
 export const OperatorSchema = SchemaFactory.createForClass(Operator);

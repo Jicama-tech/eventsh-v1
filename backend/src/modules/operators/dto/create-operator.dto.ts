@@ -47,4 +47,9 @@ export class CreateOperatorDto {
   @IsOptional()
   @IsBoolean()
   canApproveExpenses?: boolean;
+
+  // Opt-in gate for the Scheduled Space referral code — off by default.
+  @IsOptional()
+  @IsBoolean()
+  referralEnabled?: boolean;
 }
