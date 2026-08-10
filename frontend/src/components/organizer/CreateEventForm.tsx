@@ -54,6 +54,8 @@ import {
   Minimize2,
   GripVertical,
   Pencil,
+  Copy,
+  Check,
   ChevronDown,
   ChevronUp,
   Facebook,
@@ -3426,11 +3428,16 @@ const ScheduledSpaceManagement = ({
   const { formatPrice } = useCurrency(country);
   const { toast } = useToast();
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [slotDraft, setSlotDraft] = useState({
-    label: "",
+  // "Slot AI" — generates N equal-duration slots spanning a start/end
+  // window instead of adding each one by hand. Organizer can still remove
+  // or tweak individual generated slots afterward via the list below.
+  const [slotAI, setSlotAI] = useState({
     date: "",
     startTime: "",
     endTime: "",
+    count: "",
+    gapMinutes: "0",
+    labelPrefix: "",
   });
 
   const resetForm = () => {
@@ -3450,8 +3457,44 @@ const ScheduledSpaceManagement = ({
     setEditingId(null);
   };
 
-  const addSlot = () => {
-    if (!slotDraft.date || !slotDraft.startTime || !slotDraft.endTime) {
+  const removeSlot = (id: string) =>
+    setCurrent((prev) => ({
+      ...prev,
+      slots: prev.slots.filter((s) => s.id !== id),
+    }));
+
+  // Per-slot inline editing — separate from editingId above (that's the
+  // template being edited, not a slot). Lets the organizer nudge a single
+  // Slot-AI-generated slot's time/label without deleting and regenerating
+  // the whole batch.
+  const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
+  const [editingSlotDraft, setEditingSlotDraft] = useState({
+    date: "",
+    startTime: "",
+    endTime: "",
+    label: "",
+  });
+
+  const startEditSlot = (s: ScheduleSlot) => {
+    setEditingSlotId(s.id);
+    setEditingSlotDraft({
+      date: s.date,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      label: s.label || "",
+    });
+  };
+
+  const cancelEditSlot = () => {
+    setEditingSlotId(null);
+  };
+
+  const saveEditSlot = () => {
+    if (
+      !editingSlotDraft.date ||
+      !editingSlotDraft.startTime ||
+      !editingSlotDraft.endTime
+    ) {
       toast({
         duration: 5000,
         title: "Date, start time and end time are required",
@@ -3459,27 +3502,100 @@ const ScheduledSpaceManagement = ({
       });
       return;
     }
+    if (editingSlotDraft.endTime <= editingSlotDraft.startTime) {
+      toast({
+        duration: 5000,
+        title: "End time must be after start time",
+        variant: "destructive",
+      });
+      return;
+    }
     setCurrent((prev) => ({
       ...prev,
-      slots: [
-        ...prev.slots,
-        {
-          id: Math.random().toString(36).slice(2, 15),
-          label: slotDraft.label || undefined,
-          date: slotDraft.date,
-          startTime: slotDraft.startTime,
-          endTime: slotDraft.endTime,
-        },
-      ],
+      slots: prev.slots.map((s) =>
+        s.id === editingSlotId
+          ? {
+              ...s,
+              date: editingSlotDraft.date,
+              startTime: editingSlotDraft.startTime,
+              endTime: editingSlotDraft.endTime,
+              label: editingSlotDraft.label || undefined,
+            }
+          : s,
+      ),
     }));
-    setSlotDraft({ label: "", date: "", startTime: "", endTime: "" });
+    setEditingSlotId(null);
   };
 
-  const removeSlot = (id: string) =>
-    setCurrent((prev) => ({
-      ...prev,
-      slots: prev.slots.filter((s) => s.id !== id),
-    }));
+  // Slot AI — turns "10:00 to 18:00, 8 slots" into 8 equal-duration,
+  // back-to-back slots (optionally separated by a turnaround gap). This is
+  // the only way to add slots now (the old one-at-a-time manual form was
+  // removed) — adjusting afterward means deleting the unwanted slot(s)
+  // below and re-running the generator, or running it again to append more.
+  const generateSlotsWithAI = () => {
+    const { date, startTime, endTime, count, gapMinutes, labelPrefix } = slotAI;
+    const n = parseInt(count, 10);
+    const gap = parseInt(gapMinutes, 10) || 0;
+    if (!date || !startTime || !endTime || !n || n < 1) {
+      toast({
+        duration: 5000,
+        title: "Date, start time, end time and number of slots are required",
+        variant: "destructive",
+      });
+      return;
+    }
+    const toMinutes = (t: string) => {
+      const [h, m] = t.split(":").map(Number);
+      return h * 60 + m;
+    };
+    const toTimeStr = (mins: number) => {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    };
+    const startMin = toMinutes(startTime);
+    const endMin = toMinutes(endTime);
+    const span = endMin - startMin;
+    if (span <= 0) {
+      toast({
+        duration: 5000,
+        title: "End time must be after start time",
+        variant: "destructive",
+      });
+      return;
+    }
+    const slotDuration = (span - gap * (n - 1)) / n;
+    if (slotDuration <= 0) {
+      toast({
+        duration: 5000,
+        title: "Not enough time for that many slots with this gap",
+        description:
+          "Shorten the gap, widen the time window, or reduce the slot count.",
+        variant: "destructive",
+      });
+      return;
+    }
+    // Each slot's boundaries are computed from the fixed start time (not
+    // chained off the previous slot's rounded end), so per-minute rounding
+    // never compounds across slots.
+    const newSlots: ScheduleSlot[] = Array.from({ length: n }, (_, i) => {
+      const slotStart = startMin + i * (slotDuration + gap);
+      return {
+        id: Math.random().toString(36).slice(2, 15),
+        label: labelPrefix.trim() ? `${labelPrefix.trim()} ${i + 1}` : undefined,
+        date,
+        startTime: toTimeStr(Math.round(slotStart)),
+        endTime: toTimeStr(Math.round(slotStart + slotDuration)),
+      };
+    });
+    setCurrent((prev) => ({ ...prev, slots: [...prev.slots, ...newSlots] }));
+    setSlotAI((p) => ({ ...p, count: "" }));
+    toast({
+      duration: 4000,
+      title: `${n} slots generated`,
+      description: "Remove or tweak any below as needed.",
+    });
+  };
 
   const saveTemplate = () => {
     if (!current.name) {
@@ -3549,9 +3665,10 @@ const ScheduledSpaceManagement = ({
     resetForm();
   };
 
-  const editTemplate = (id: string) => {
-    const t = templates.find((x) => x.id === id);
-    if (!t) return;
+  // Populates the form from an existing template — shared by editTemplate
+  // (edits it in place) and duplicateTemplate (edits the new copy in place,
+  // so renaming it is the very next thing the organizer does).
+  const loadTemplateIntoForm = (t: ScheduledSpaceTemplate, id: string) => {
     const isCustomType = !SCHEDULED_SPACE_FACILITY_TYPES.includes(
       t.facilityType,
     );
@@ -3569,6 +3686,41 @@ const ScheduledSpaceManagement = ({
       operatorId: t.operatorId || "",
     });
     setEditingId(id);
+  };
+
+  const editTemplate = (id: string) => {
+    const t = templates.find((x) => x.id === id);
+    if (!t) return;
+    loadTemplateIntoForm(t, id);
+  };
+
+  // Clones an existing template — same facility type, shape, dimensions,
+  // price, color, slots and operator assignment, just a distinct name —
+  // so a venue with several identical courts/tables doesn't mean re-typing
+  // every field for each one. Immediately loads the copy into the form
+  // (not just adding it to the list) so renaming it is the only step left.
+  const duplicateTemplate = (id: string) => {
+    const t = templates.find((x) => x.id === id);
+    if (!t) return;
+    const baseName = t.name.replace(/\s*\(Copy(?:\s\d+)?\)$/, "");
+    const existingNames = new Set(templates.map((x) => x.name));
+    let newName = `${baseName} (Copy)`;
+    for (let n = 2; existingNames.has(newName); n++) {
+      newName = `${baseName} (Copy ${n})`;
+    }
+    const newId = Math.random().toString(36).slice(2, 15);
+    const duplicate: ScheduledSpaceTemplate = {
+      ...t,
+      id: newId,
+      name: newName,
+    };
+    setTemplates([...templates, duplicate]);
+    loadTemplateIntoForm(duplicate, newId);
+    toast({
+      duration: 4000,
+      title: "Scheduled Space duplicated",
+      description: `"${newName}" is ready — update the name and save.`,
+    });
   };
 
   return (
@@ -3797,61 +3949,189 @@ const ScheduledSpaceManagement = ({
           {/* Time Slots */}
           <div className="border rounded-lg p-3 bg-white space-y-3">
             <Label className="text-sm font-medium">Time Slots</Label>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+
+            {/* Slot AI — pick a start/end window and a count, get that many
+                equal-duration slots back-to-back (or spaced by an optional
+                gap) instead of adding each one by hand. Generated slots are
+                ordinary entries in the list below — remove or re-add
+                individual ones same as always. */}
+            <div className="border rounded-lg p-3 bg-indigo-50/60 border-indigo-200 space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-1.5 text-indigo-800">
+                <Sparkles size={14} />
+                Slot AI
+              </Label>
+              <p className="text-xs text-indigo-700/80">
+                Set a date, start/end time and how many slots you need —
+                equal-duration slots fill the window automatically. Adjust or
+                remove any of them afterward like usual.
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                <Input
+                  type="date"
+                  value={slotAI.date}
+                  onChange={(e) =>
+                    setSlotAI((p) => ({ ...p, date: e.target.value }))
+                  }
+                />
+                <Input
+                  type="time"
+                  value={slotAI.startTime}
+                  onChange={(e) =>
+                    setSlotAI((p) => ({ ...p, startTime: e.target.value }))
+                  }
+                />
+                <Input
+                  type="time"
+                  value={slotAI.endTime}
+                  onChange={(e) =>
+                    setSlotAI((p) => ({ ...p, endTime: e.target.value }))
+                  }
+                />
+                <Input
+                  type="number"
+                  min={1}
+                  placeholder="No. of slots"
+                  value={slotAI.count}
+                  onChange={(e) =>
+                    setSlotAI((p) => ({ ...p, count: e.target.value }))
+                  }
+                />
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="Gap (min)"
+                  value={slotAI.gapMinutes}
+                  onChange={(e) =>
+                    setSlotAI((p) => ({ ...p, gapMinutes: e.target.value }))
+                  }
+                />
+              </div>
               <Input
-                type="date"
-                value={slotDraft.date}
+                placeholder={
+                  'Label prefix (optional — e.g. "Session" → Session 1, Session 2…)'
+                }
+                value={slotAI.labelPrefix}
                 onChange={(e) =>
-                  setSlotDraft((p) => ({ ...p, date: e.target.value }))
+                  setSlotAI((p) => ({ ...p, labelPrefix: e.target.value }))
                 }
               />
-              <Input
-                type="time"
-                value={slotDraft.startTime}
-                onChange={(e) =>
-                  setSlotDraft((p) => ({ ...p, startTime: e.target.value }))
-                }
-              />
-              <Input
-                type="time"
-                value={slotDraft.endTime}
-                onChange={(e) =>
-                  setSlotDraft((p) => ({ ...p, endTime: e.target.value }))
-                }
-              />
-              <Input
-                placeholder="Label (optional)"
-                value={slotDraft.label}
-                onChange={(e) =>
-                  setSlotDraft((p) => ({ ...p, label: e.target.value }))
-                }
-              />
+              <Button
+                type="button"
+                size="sm"
+                className="bg-indigo-600 hover:bg-indigo-700"
+                onClick={generateSlotsWithAI}
+              >
+                <Sparkles size={14} className="mr-1" />
+                Generate Slots
+              </Button>
             </div>
-            <Button type="button" variant="buttonOutline" size="sm" onClick={addSlot}>
-              <Plus size={14} className="mr-1" /> Add Slot
-            </Button>
+
             {current.slots.length > 0 && (
               <div className="space-y-1">
-                {current.slots.map((s) => (
-                  <div
-                    key={s.id}
-                    className="flex items-center justify-between text-sm bg-gray-50 rounded px-2 py-1.5"
-                  >
-                    <span>
-                      {s.date} • {s.startTime}–{s.endTime}
-                      {s.label ? ` • ${s.label}` : ""}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={() => removeSlot(s.id)}
+                {current.slots.map((s) =>
+                  editingSlotId === s.id ? (
+                    <div
+                      key={s.id}
+                      className="bg-gray-50 rounded p-2 space-y-2 ring-1 ring-primary"
                     >
-                      <Trash2 size={12} />
-                    </Button>
-                  </div>
-                ))}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        <Input
+                          type="date"
+                          className="h-8 text-xs"
+                          value={editingSlotDraft.date}
+                          onChange={(e) =>
+                            setEditingSlotDraft((p) => ({
+                              ...p,
+                              date: e.target.value,
+                            }))
+                          }
+                        />
+                        <Input
+                          type="time"
+                          className="h-8 text-xs"
+                          value={editingSlotDraft.startTime}
+                          onChange={(e) =>
+                            setEditingSlotDraft((p) => ({
+                              ...p,
+                              startTime: e.target.value,
+                            }))
+                          }
+                        />
+                        <Input
+                          type="time"
+                          className="h-8 text-xs"
+                          value={editingSlotDraft.endTime}
+                          onChange={(e) =>
+                            setEditingSlotDraft((p) => ({
+                              ...p,
+                              endTime: e.target.value,
+                            }))
+                          }
+                        />
+                        <Input
+                          placeholder="Label (optional)"
+                          className="h-8 text-xs"
+                          value={editingSlotDraft.label}
+                          onChange={(e) =>
+                            setEditingSlotDraft((p) => ({
+                              ...p,
+                              label: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7"
+                          onClick={cancelEditSlot}
+                        >
+                          <X size={12} className="mr-1" /> Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-7"
+                          onClick={saveEditSlot}
+                        >
+                          <Check size={12} className="mr-1" /> Save
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      key={s.id}
+                      className="flex items-center justify-between text-sm bg-gray-50 rounded px-2 py-1.5"
+                    >
+                      <span>
+                        {s.date} • {s.startTime}–{s.endTime}
+                        {s.label ? ` • ${s.label}` : ""}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => startEditSlot(s)}
+                        >
+                          <Pencil size={12} />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => removeSlot(s.id)}
+                        >
+                          <Trash2 size={12} />
+                        </Button>
+                      </div>
+                    </div>
+                  ),
+                )}
               </div>
             )}
           </div>
@@ -3922,6 +4202,15 @@ const ScheduledSpaceManagement = ({
                       onClick={() => editTemplate(t.id)}
                     >
                       <Pencil size={14} />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="buttonOutline"
+                      size="sm"
+                      title="Duplicate — same facility type, shape, price, slots and operator, just rename it"
+                      onClick={() => duplicateTemplate(t.id)}
+                    >
+                      <Copy size={14} />
                     </Button>
                     <Button
                       type="button"
