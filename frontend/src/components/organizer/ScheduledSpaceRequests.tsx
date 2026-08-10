@@ -191,7 +191,8 @@ const ScheduledSpaceRequests = ({
         refreshOne(result.data);
         await fetchRequests();
         toast({
-          title: "Payment confirmed",
+          title:
+            selected.slotsTotal === 0 ? "Booking approved" : "Payment confirmed",
           description: "The check-in QR has been issued and emailed.",
         });
       } else {
@@ -481,6 +482,11 @@ const ScheduledSpaceRequests = ({
                       {selected.organization}
                     </p>
                   )}
+                {selected.referralCode && (
+                  <p className="text-xs text-gray-500">
+                    Referral code: <span className="font-mono">{selected.referralCode}</span>
+                  </p>
+                )}
                 {scheduledSpaceFieldOn("purpose") && selected.purpose && (
                   <p className="text-sm text-gray-600 mt-1">
                     {selected.purpose}
@@ -693,6 +699,8 @@ const ScheduledSpaceRequests = ({
                   >
                     {busy ? (
                       <Loader2 size={14} className="animate-spin" />
+                    ) : selected.slotsTotal === 0 ? (
+                      "Approve Booking & Issue QR"
                     ) : (
                       "Confirm Payment & Issue QR"
                     )}

@@ -98,6 +98,13 @@ export class ScheduledSpaceRequest {
   @Prop()
   organization?: string;
 
+  // Operator referral code the visitor entered at registration (uppercased),
+  // if any. Stored so the slot picker can re-apply it automatically on
+  // every later fetch without asking the visitor to retype it — see
+  // ScheduledSpacesService.getAvailableSpaces.
+  @Prop()
+  referralCode?: string;
+
   // Names of people attending alongside the registrant — free-text, no
   // separate identity/contact info (mirrors how Round Table's per-seat
   // guest names work: display-only, not booking records of their own).
