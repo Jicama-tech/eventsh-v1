@@ -579,8 +579,8 @@ export class ScheduledSpaceTemplateDto {
   @ValidateNested({ each: true })
   @Type(() => ScheduleSlotDto)
   slots?: ScheduleSlotDto[];
-  // Operator this space is assigned to — unset means public/visible to
-  // every visitor. See ScheduledSpacesService.getAvailableSpaces.
+  // Operator this space is assigned to. A referral code filters, it
+  // doesn't gate — see ScheduledSpacesService.getAvailableSpaces.
   @IsString() @IsOptional() operatorId?: string;
 }
 

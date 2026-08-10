@@ -191,7 +191,8 @@ const ScheduledSpaceRequests = ({
         refreshOne(result.data);
         await fetchRequests();
         toast({
-          title: "Payment confirmed",
+          title:
+            selected.slotsTotal === 0 ? "Booking approved" : "Payment confirmed",
           description: "The check-in QR has been issued and emailed.",
         });
       } else {
@@ -698,6 +699,8 @@ const ScheduledSpaceRequests = ({
                   >
                     {busy ? (
                       <Loader2 size={14} className="animate-spin" />
+                    ) : selected.slotsTotal === 0 ? (
+                      "Approve Booking & Issue QR"
                     ) : (
                       "Confirm Payment & Issue QR"
                     )}

@@ -1,4 +1,5 @@
 import {
+  ForbiddenException,
   Injectable,
   NotFoundException,
   BadRequestException,
@@ -12,6 +13,14 @@ import {
   Organizer,
   OrganizerDocument,
 } from "../organizers/schemas/organizer.schema";
+
+/** Shape the JWT strategy puts on `req.user` — mirrors expenses.service.ts's JwtActor. */
+export interface JwtActor {
+  userId?: string;
+  name?: string;
+  email?: string;
+  roles?: string[];
+}
 
 @Injectable()
 export class OperatorsService {
@@ -221,14 +230,26 @@ export class OperatorsService {
   }
 
   // Issue a fresh code for an operator (e.g. after a leak) — old code stops
-  // working immediately since it's simply overwritten, not archived.
-  async regenerateReferralCode(id: string) {
+  // working immediately since it's simply overwritten, not archived. Only
+  // the operator's own organizer (identified from the caller's token, never
+  // trusted from the request body — mirrors expenses.service.ts's
+  // assertCanApprove) or an admin may trigger this, since it silently
+  // invalidates whatever code that operator has printed/handed out.
+  async regenerateReferralCode(id: string, actor: JwtActor) {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException("Invalid operator ID");
     }
     const operator = await this.operatorModel.findById(id);
     if (!operator) {
       throw new NotFoundException("Operator not found");
+    }
+    const actorId = String(actor?.userId || "");
+    const isOwner = !!actorId && actorId === String(operator.organizerId);
+    const isAdmin = !!actor?.roles?.includes("admin");
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException(
+        "You don't have permission to manage this operator.",
+      );
     }
     await this.saveWithUniqueReferralCode(operator);
     return { message: "Referral code regenerated", data: operator };

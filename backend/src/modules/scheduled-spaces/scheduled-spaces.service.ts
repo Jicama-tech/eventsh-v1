@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -20,6 +21,17 @@ import {
 import { MailService } from "../roles/mail.service";
 import { OperatorsService } from "../operators/operators.service";
 
+// A visitor may have any number of Scheduled Space requests for the same
+// event over time (mirrors stalls.service.ts's vendor-request model), but
+// only one *live* one at once — these are the statuses that count as
+// "done with," so a new registration is allowed once the prior request
+// lands in one of them.
+const TERMINAL_STATUSES = [
+  ScheduledSpaceStatusEnum.Completed,
+  ScheduledSpaceStatusEnum.Cancelled,
+  ScheduledSpaceStatusEnum.Rejected,
+];
+
 @Injectable()
 export class ScheduledSpacesService {
   private readonly logger = new Logger(ScheduledSpacesService.name);
@@ -36,12 +48,29 @@ export class ScheduledSpacesService {
   // A visitor registers and is immediately confirmed — no organizer approval
   // gate to pass before picking a space & slot. The organizer's role starts
   // at payment confirmation instead (see confirmPayment below).
+  //
+  // A visitor may submit any number of requests for the same event over
+  // its lifetime — mirrors stalls.service.ts's createStallRequest — but
+  // only one *live* (non-terminal) one at a time, so this only blocks a
+  // second registration while a prior one is still Pending/Confirmed/
+  // Processing.
   async register(dto: RegisterScheduledSpaceDto) {
     if (!Types.ObjectId.isValid(String(dto.eventId))) {
       throw new BadRequestException("Invalid event id");
     }
     const event = await this.eventModel.findById(dto.eventId);
     if (!event) throw new NotFoundException("Event not found");
+
+    const existingActive = await this.requestModel.findOne({
+      eventId: new Types.ObjectId(String(dto.eventId)),
+      email: dto.email,
+      status: { $nin: TERMINAL_STATUSES },
+    });
+    if (existingActive) {
+      throw new ConflictException(
+        "You already have an active Scheduled Space request for this event.",
+      );
+    }
 
     const request = new this.requestModel({
       eventId: new Types.ObjectId(String(dto.eventId)),
@@ -64,23 +93,21 @@ export class ScheduledSpacesService {
     return { success: true, data: request };
   }
 
-  // Looks up the most recent, non-cancelled request for this email on this
-  // event — the visitor-side "have I already registered" check, keyed by
-  // email since this module has no vendor-account system. Returns null
-  // (not a 404) when nothing is found — a normal, expected outcome for a
-  // first-time visitor, not an error.
+  // The visitor-side "have I already registered" check, keyed by email
+  // since this module has no vendor-account system. Mirrors
+  // stalls.service.ts's checkExistingRequest: returns every request this
+  // email has ever made for this event (unfiltered by status, newest
+  // first) in `requests`, plus the most recent one in `data` for callers
+  // that only care about the single-request shape. An empty/null result is
+  // a normal, expected outcome for a first-time visitor, not an error.
   async checkExistingRequest(eventId: string, email: string) {
     if (!Types.ObjectId.isValid(eventId)) {
       throw new BadRequestException("Invalid event id");
     }
-    const request = await this.requestModel
-      .findOne({
-        eventId: new Types.ObjectId(eventId),
-        email,
-        status: { $ne: ScheduledSpaceStatusEnum.Cancelled },
-      })
+    const requests = await this.requestModel
+      .find({ eventId: new Types.ObjectId(eventId), email })
       .sort({ createdAt: -1 });
-    return { success: true, data: request || null };
+    return { success: true, data: requests[0] || null, requests };
   }
 
   // Placed instances with their template-defined slots, annotated with
@@ -213,24 +240,26 @@ export class ScheduledSpacesService {
     request.selectedSlots = resolved as any;
     request.slotsTotal = slotsTotal;
 
-    // Free/charity spaces (organizer never set a price) have nothing to
-    // pay — slot selection IS the final step. Skip the Processing/
-    // payment-proof phase and issue the check-in ticket immediately,
-    // same effect as an organizer confirming payment on a paid booking.
-    if (slotsTotal === 0) {
-      await this.completeBooking(request, {
-        notes: dto.notes,
-        historyNote:
-          "Free space — no payment required, booking confirmed automatically",
-      });
-      return { success: true, data: request };
-    }
-
-    const paidAmount = dto.paidAmount || 0;
+    // Free/charity spaces (organizer never set a price) skip straight past
+    // the payment-proof UI on the frontend — there's nothing to pay — but
+    // still land in Processing like a paid booking: the organizer approves
+    // every slot selection themselves (via confirmPayment/completeBooking),
+    // free or not. Only paidAmount/paymentStatus differ (0/"Paid" here vs.
+    // whatever was actually collected for a paid space).
+    const paidAmount = slotsTotal === 0 ? 0 : dto.paidAmount || 0;
     request.paidAmount = paidAmount;
     request.remainingAmount = Math.max(0, slotsTotal - paidAmount);
+    // paidAmount(0) >= slotsTotal(0) would otherwise read "Paid" for a free
+    // space that's still sitting in Processing awaiting the organizer's
+    // approval — misleading on the organizer's request list, which shows
+    // this column separately from Status. completeBooking() is what
+    // actually marks it "Paid", once the organizer approves.
     request.paymentStatus =
-      paidAmount >= slotsTotal ? "Paid" : paidAmount > 0 ? "Partial" : "Unpaid";
+      paidAmount >= slotsTotal && slotsTotal > 0
+        ? "Paid"
+        : paidAmount > 0
+          ? "Partial"
+          : "Unpaid";
     request.transactionId = dto.transactionId || null;
     request.transactionScreenshot = dto.transactionScreenshot || null;
     request.paymentMethod = dto.paymentMethod || null;
@@ -238,7 +267,10 @@ export class ScheduledSpacesService {
     request.status = ScheduledSpaceStatusEnum.Processing;
     request.statusHistory.push({
       status: ScheduledSpaceStatusEnum.Processing,
-      note: "Slots selected, awaiting organizer payment confirmation",
+      note:
+        slotsTotal === 0
+          ? "Slots selected — free space, awaiting organizer approval"
+          : "Slots selected, awaiting organizer payment confirmation",
       changedAt: new Date(),
     } as any);
     await request.save();
@@ -371,6 +403,16 @@ export class ScheduledSpacesService {
           been confirmed. Here is your check-in QR ticket — please show this
           at the venue. A PDF copy is attached.
         </p>
+        ${
+          request.whatsappNumber
+            ? `<p style="margin:4px 0"><span style="color:#64748b">WhatsApp:</span> <strong>${request.whatsappNumber}</strong></p>`
+            : ""
+        }
+        ${
+          request.referralCode
+            ? `<p style="margin:4px 0"><span style="color:#64748b">Referral Code:</span> <strong>${request.referralCode}</strong></p>`
+            : ""
+        }
         <table style="border-collapse:collapse;width:100%;margin:16px 0;border:1px solid #e2e8f0;border-radius:8px">
           <thead>
             <tr style="background:#f8fafc">
@@ -384,7 +426,8 @@ export class ScheduledSpacesService {
         <p style="text-align:center;margin:24px 0">
           <img src="cid:${qrCid}" alt="Check-in QR" style="width:180px;height:180px;border:1px solid #e2e8f0;border-radius:8px;padding:8px" />
         </p>
-        <p style="color:#64748b;font-size:12px">— ${organizer?.organizationName || "EventSH"}</p>
+        <p style="color:#64748b;font-size:12px;margin-bottom:2px">— ${organizer?.organizationName || "EventSH"}</p>
+        <p style="color:#94a3b8;font-size:11px;margin-top:0">Powered by EventSH</p>
       </div>`;
 
     let pdfBuffer: Buffer | null = null;
@@ -466,12 +509,22 @@ export class ScheduledSpacesService {
       <body>
         <div class="ticket">
           <div class="header">
-            <h1>Scheduled Space Ticket</h1>
-            <p>${event?.title || "Event"}</p>
+            <h1>${organizer?.organizationName || "EventSH"}</h1>
+            <p>${event?.title || "Event"} — Scheduled Space Ticket</p>
           </div>
           <div class="body">
             <div class="row"><span>Registrant</span><strong>${request.name}</strong></div>
             <div class="row"><span>Email</span><strong>${request.email}</strong></div>
+            ${
+              request.whatsappNumber
+                ? `<div class="row"><span>WhatsApp</span><strong>${request.whatsappNumber}</strong></div>`
+                : ""
+            }
+            ${
+              request.referralCode
+                ? `<div class="row"><span>Referral Code</span><strong>${request.referralCode}</strong></div>`
+                : ""
+            }
             <table>
               <thead><tr><th>Space</th><th>Time Slot</th><th style="text-align:right">Price</th></tr></thead>
               <tbody>${rows}</tbody>
@@ -480,7 +533,10 @@ export class ScheduledSpacesService {
             <div class="qr"><img src="${qrCodeImage}" alt="Check-in QR" /></div>
             <p style="text-align:center;font-size:12px;color:#64748b">Show this QR at check-in.</p>
           </div>
-          <div class="footer">— ${organizer?.organizationName || "EventSH"}</div>
+          <div class="footer">
+            <div>— ${organizer?.organizationName || "EventSH"}</div>
+            <div style="margin-top:4px;opacity:0.7">Powered by EventSH</div>
+          </div>
         </div>
       </body>
       </html>`;

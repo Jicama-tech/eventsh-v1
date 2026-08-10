@@ -825,6 +825,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     useState(false);
   const [showScheduledSpacePicker, setShowScheduledSpacePicker] =
     useState(false);
+  // A visitor can have more than one Scheduled Space request for the same
+  // event over time (mirrors the Rent-a-Stall multi-request chooser) — this
+  // holds every request found for their verified email so they can pick
+  // which one to view, or start a fresh one, instead of always being
+  // dropped straight into their single most-recent request.
+  const [scheduledSpaceRequestList, setScheduledSpaceRequestList] = useState<
+    any[]
+  >([]);
+  const [
+    showScheduledSpaceRequestListChoice,
+    setShowScheduledSpaceRequestListChoice,
+  ] = useState(false);
   // "auth" (Google sign-in gate) → "form" (details). Mirrors the Rent-a-
   // Stall / Become-a-Sponsor flows' Google-first pattern.
   const [scheduledSpaceStep, setScheduledSpaceStep] = useState<
@@ -1937,6 +1949,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         `${apiURL}/scheduled-spaces/check-request/${(eventData as any)?._id}/${encodeURIComponent(email)}`,
       );
       const result = await res.json().catch(() => null);
+      if (res.ok && Array.isArray(result?.requests) && result.requests.length > 1) {
+        // More than one request on record for this email — let them pick
+        // which to view, or start a new one, rather than guessing.
+        setScheduledSpaceRequestList(result.requests);
+        setShowScheduledSpaceForm(false);
+        setShowScheduledSpaceRequestListChoice(true);
+        return;
+      }
       if (res.ok && result?.data) {
         setShowScheduledSpaceForm(false);
         routeScheduledSpaceRequest(result.data);
@@ -1951,6 +1971,41 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     setScheduledSpaceMatchedOperator(null);
     setScheduledSpaceReferralInvalid(false);
     setScheduledSpaceStep("form");
+  };
+
+  // Resets to a blank registration form and, since the visitor is already
+  // Google-verified in this session, skips straight to the "form" step —
+  // used both from the multi-request list chooser and from a terminal
+  // (Completed/Cancelled/Rejected) request's status view, the two places a
+  // visitor can choose to start another request. Same POST /register
+  // endpoint as a first-time registration; the backend only blocks a
+  // second *active* request, not a second request outright.
+  const startNewScheduledSpaceRequest = () => {
+    const email =
+      existingScheduledSpaceRequest?.email || scheduledSpaceForm.email;
+    const name = existingScheduledSpaceRequest?.name || "";
+    setShowScheduledSpaceStatus(false);
+    setShowScheduledSpaceRequestListChoice(false);
+    setScheduledSpaceForm({
+      name,
+      email,
+      phone: "",
+      whatsappNumber: "",
+      facilityType:
+        allScheduledSpaceFacilityTypes.length === 1
+          ? allScheduledSpaceFacilityTypes[0]
+          : "",
+      purpose: "",
+      organization: "",
+      companions: [],
+      referralCode: "",
+    });
+    setScheduledSpaceReferralResolved(false);
+    setScheduledSpaceMatchedOperator(null);
+    setScheduledSpaceReferralInvalid(false);
+    setScheduledSpaceStep("form");
+    setShowScheduledSpaceForm(true);
+    fetchAvailableScheduledSpaces();
   };
 
   useEffect(() => {
@@ -2176,8 +2231,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     );
 
     // Free/charity space (organizer never set a price) — there's nothing to
-    // pay, so slot selection IS the final step. Submit directly and land on
-    // the ticket instead of routing through the payment page.
+    // pay, so the payment page (QR/transaction proof) doesn't apply. Submit
+    // the slot selection directly instead, same as the paid path minus the
+    // proof-of-payment fields — the organizer still approves it manually
+    // before the ticket is issued.
     if (total === 0) {
       setScheduledSpaceSlotsSubmitting(true);
       try {
@@ -2200,7 +2257,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         );
         const result = await res.json().catch(() => null);
         if (!res.ok) {
-          throw new Error(result?.message || "Failed to confirm your booking");
+          throw new Error(result?.message || "Failed to submit your booking");
         }
         setExistingScheduledSpaceRequest(result.data);
         setSelectedScheduledSlots([]);
@@ -2208,14 +2265,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         setShowScheduledSpaceStatus(true);
         toast({
           duration: 5000,
-          title: "Booking confirmed",
+          title: "Booking submitted",
           description:
-            "This space is free — no payment needed. Your ticket is ready.",
+            "This space is free — no payment needed. The organizer will confirm your slot shortly.",
         });
       } catch (err: any) {
         toast({
           duration: 5000,
-          title: "Couldn't confirm your booking",
+          title: "Couldn't submit your booking",
           description: err?.message || "Please try again.",
           variant: "destructive",
         });
@@ -14171,10 +14228,20 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   : ""}
               </p>
             )}
+            {existingScheduledSpaceRequest?.status === "Cancelled" && (
+              <p className="text-red-600">
+                This request was cancelled.
+                {existingScheduledSpaceRequest?.cancellationReason
+                  ? ` Reason: ${existingScheduledSpaceRequest.cancellationReason}`
+                  : ""}
+              </p>
+            )}
             {existingScheduledSpaceRequest?.status === "Processing" && (
               <>
                 <p className="text-amber-600">
-                  Payment submitted — waiting for the organizer to confirm.
+                  {existingScheduledSpaceRequest?.slotsTotal === 0
+                    ? "Slot selected — this space is free, waiting for the organizer to approve your booking."
+                    : "Payment submitted — waiting for the organizer to confirm."}
                 </p>
                 <div className="rounded-lg border p-3 space-y-1">
                   {(existingScheduledSpaceRequest?.selectedSlots || []).map(
@@ -14283,6 +14350,17 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 history={existingScheduledSpaceRequest?.statusHistory}
               />
             </div>
+            {["Completed", "Cancelled", "Rejected"].includes(
+              existingScheduledSpaceRequest?.status,
+            ) && (
+              <Button
+                className="w-full"
+                onClick={startNewScheduledSpaceRequest}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Register a New Request
+              </Button>
+            )}
             <Button
               variant="outline"
               className="w-full"
@@ -14291,6 +14369,71 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               Close
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Scheduled Spaces — more than one request on record for this email:
+          let the visitor pick which to view, or start a new one. Mirrors
+          the Rent-a-Stall multi-request chooser. */}
+      <Dialog
+        open={showScheduledSpaceRequestListChoice}
+        onOpenChange={setShowScheduledSpaceRequestListChoice}
+      >
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Your Scheduled Space Requests</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            {scheduledSpaceRequestList.map((req: any) => (
+              <button
+                key={req._id}
+                type="button"
+                className="w-full text-left rounded-lg border p-3 hover:border-blue-400 hover:bg-blue-50/50 transition-colors"
+                onClick={() => {
+                  setShowScheduledSpaceRequestListChoice(false);
+                  routeScheduledSpaceRequest(req);
+                }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold">
+                    {(req.selectedSlots || [])[0]?.spaceName ||
+                      req.facilityTypeRequested ||
+                      "Scheduled Space request"}
+                  </span>
+                  <Badge
+                    className={`text-xs ${
+                      {
+                        Completed: "bg-emerald-100 text-emerald-700 border border-emerald-300",
+                        Confirmed: "bg-blue-100 text-blue-700 border border-blue-300",
+                        Processing: "bg-amber-100 text-amber-700 border border-amber-300",
+                        Pending: "bg-amber-100 text-amber-700 border border-amber-300",
+                        Rejected: "bg-red-100 text-red-700 border border-red-300",
+                        Cancelled: "bg-red-100 text-red-700 border border-red-300",
+                      }[req.status as string] ||
+                      "bg-gray-100 text-gray-700 border border-gray-300"
+                    }`}
+                  >
+                    {req.status}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Submitted{" "}
+                  {req.createdAt
+                    ? new Date(req.createdAt).toLocaleDateString()
+                    : "—"}
+                  {req.slotsTotal > 0 ? ` · ${formatPrice(req.slotsTotal)}` : ""}
+                </p>
+              </button>
+            ))}
+          </div>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={startNewScheduledSpaceRequest}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Register a New Request
+          </Button>
         </DialogContent>
       </Dialog>
 
@@ -14426,7 +14569,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 (sum, s) => sum + (s.price || 0),
                 0,
               ) === 0 ? (
-              "Confirm Booking (Free)"
+              "Submit Booking (Free)"
             ) : (
               "Proceed to Payment"
             )}

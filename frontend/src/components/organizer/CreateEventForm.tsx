@@ -362,9 +362,10 @@ interface ScheduledSpaceTemplate {
   price: number;
   color?: string;
   slots: ScheduleSlot[];
-  // Operator this space is assigned to. Unset = public (visible to every
-  // visitor); set = only visible to visitors who enter that operator's
-  // referral code on the registration form.
+  // Operator this space is assigned to. A referral code filters, it
+  // doesn't gate: every space is visible by default (no code, or one that
+  // doesn't match anyone); entering a matching code narrows the list to
+  // that operator's spaces plus the unassigned ones.
   operatorId?: string;
 }
 
@@ -3651,9 +3652,10 @@ const ScheduledSpaceManagement = ({
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground mt-1">
-                Unassigned spaces stay visible to every visitor. Assigning an
-                operator hides this space unless the visitor enters that
-                operator's referral code.
+                Every space is visible to every visitor by default. A
+                visitor who enters this operator's referral code sees a
+                narrowed list — just this operator's spaces plus any
+                unassigned ones — instead of everything.
               </p>
             </div>
             {current.operatorId && (
