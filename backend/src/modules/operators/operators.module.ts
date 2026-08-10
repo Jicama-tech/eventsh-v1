@@ -14,5 +14,6 @@ import { OrganizersModule } from "../organizers/organizers.module";
   ],
   controllers: [OperatorsController],
   providers: [OperatorsService],
+  exports: [OperatorsService],
 })
 export class OperatorsModule {}

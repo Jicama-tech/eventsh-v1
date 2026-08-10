@@ -366,6 +366,11 @@ class ScheduledSpaceTemplate {
   @Prop({ default: 0 }) price: number;
   @Prop() color?: string;
   @Prop({ type: [Object], default: [] }) slots: ScheduleSlot[];
+  // Operator (organizer staff account) this space belongs to. Unset = the
+  // space is public — visible to every visitor with no referral code
+  // needed. Set = only visible to visitors who enter that operator's
+  // referral code (see ScheduledSpacesService.getAvailableSpaces).
+  @Prop() operatorId?: string;
 }
 
 // Placed Scheduled Space instance on the venue canvas.
@@ -389,6 +394,8 @@ class PositionedScheduledSpace {
   @Prop({ default: 0 }) rotation: number;
   @Prop({ default: true }) isPlaced: boolean;
   @Prop() venueConfigId: string;
+  // Copied from the template at placement time — see note above.
+  @Prop() operatorId?: string;
 }
 
 class termsAndConditionsforStalls {

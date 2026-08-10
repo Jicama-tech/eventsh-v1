@@ -9,6 +9,7 @@ import {
 import { EventSchema } from "../events/schemas/event.schema";
 import { OrganizerSchema } from "../organizers/schemas/organizer.schema";
 import { MailModule } from "../roles/mail.module";
+import { OperatorsModule } from "../operators/operators.module";
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { MailModule } from "../roles/mail.module";
       { name: "Organizer", schema: OrganizerSchema },
     ]),
     MailModule,
+    OperatorsModule,
   ],
   controllers: [ScheduledSpacesController],
   providers: [ScheduledSpacesService],

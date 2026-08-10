@@ -9,6 +9,7 @@ import {
   UseGuards,
   Request,
 } from "@nestjs/common";
+import { AuthGuard } from "@nestjs/passport";
 import { OperatorsService } from "./operators.service";
 import { CreateOperatorDto } from "./dto/create-operator.dto";
 import { UpdateOperatorDto } from "./dto/update-operator.dto";
@@ -45,6 +46,17 @@ export class OperatorsController {
   @Get("fetch/:id")
   findOne(@Param("id") id: string) {
     return this.operatorsService.findOne(id);
+  }
+
+  // Regenerate an operator's Scheduled Space referral code (invalidates the
+  // old one immediately). Guarded — unlike the rest of this controller —
+  // since it's a sensitive write with no other access check: an
+  // unauthenticated caller who merely knows/enumerates an operator ID could
+  // otherwise invalidate that operator's poster-printed code at will.
+  @Patch("regenerate-referral-code/:id")
+  @UseGuards(AuthGuard("jwt"))
+  regenerateReferralCode(@Param("id") id: string) {
+    return this.operatorsService.regenerateReferralCode(id);
   }
 
   // Update operator by ID

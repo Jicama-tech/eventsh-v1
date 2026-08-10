@@ -21,6 +21,67 @@ export class OperatorsService {
     private organizerModel: Model<OrganizerDocument>,
   ) {}
 
+  // 7-char uppercase alphanumeric, excluding visually-ambiguous characters
+  // (0/O, 1/I) so visitors can read/type it off a poster without confusion.
+  private generateReferralCode(): string {
+    const charset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    for (let i = 0; i < 7; i++) {
+      code += charset[Math.floor(Math.random() * charset.length)];
+    }
+    return code;
+  }
+
+  // Generates a referral code guaranteed unique across all operators.
+  private async generateUniqueReferralCode(): Promise<string> {
+    let code = this.generateReferralCode();
+    let attempts = 0;
+    while (await this.operatorModel.exists({ referralCode: code })) {
+      code = this.generateReferralCode();
+      attempts++;
+      if (attempts > 10) {
+        throw new BadRequestException(
+          "Failed to generate unique referral code",
+        );
+      }
+    }
+    return code;
+  }
+
+  // The exists() check inside generateUniqueReferralCode is an optimization,
+  // not a guarantee — two concurrent requests (e.g. two operators created
+  // back-to-back, or two lazy backfills) can both pass it before either
+  // save() actually commits. The sparse unique index on referralCode is the
+  // real backstop; this is what reacts when it rejects a collided write,
+  // regenerating and retrying rather than letting a raw duplicate-key error
+  // surface as an unhandled 500 on what's otherwise a routine save.
+  private async saveWithUniqueReferralCode(
+    doc: OperatorDocument,
+    attempts = 3,
+  ): Promise<void> {
+    for (let i = 0; i < attempts; i++) {
+      doc.referralCode = await this.generateUniqueReferralCode();
+      try {
+        await doc.save();
+        return;
+      } catch (err: any) {
+        if (err?.code === 11000 && i < attempts - 1) continue;
+        throw err;
+      }
+    }
+  }
+
+  // Pre-existing operators (created before referral codes existed) won't
+  // have one yet — backfill lazily on read instead of a one-off migration.
+  private async ensureReferralCode(
+    operator: OperatorDocument,
+  ): Promise<OperatorDocument> {
+    if (!operator.referralCode) {
+      await this.saveWithUniqueReferralCode(operator);
+    }
+    return operator;
+  }
+
   // Create operator by Organizer
   async createByOrganizer(
     createOperatorDto: CreateOperatorDto,
@@ -89,11 +150,11 @@ export class OperatorsService {
           : {}),
       });
 
-      const savedOperator = await newOperator.save();
+      await this.saveWithUniqueReferralCode(newOperator);
 
       return {
         message: "Operator created successfully for Organizer",
-        data: savedOperator,
+        data: newOperator,
       };
     } catch (error) {
       throw error;
@@ -121,6 +182,7 @@ export class OperatorsService {
       if (!operator) {
         throw new NotFoundException("Operator not found");
       }
+      await this.ensureReferralCode(operator);
 
       return { message: "Operator found", data: operator };
     } catch (error) {
@@ -136,10 +198,40 @@ export class OperatorsService {
       }
 
       const operators = await this.operatorModel.find({ organizerId });
-      return { message: "Operators fetched successfully", data: operators };
+      const withCodes = await Promise.all(
+        operators.map((op) => this.ensureReferralCode(op)),
+      );
+      return { message: "Operators fetched successfully", data: withCodes };
     } catch (error) {
       throw error;
     }
+  }
+
+  // Look up an operator by referral code, scoped to an organizer — used to
+  // gate Scheduled Space visibility for visitors on the public event page.
+  // Scoping to organizerId means codes only need to be globally unique, not
+  // separately re-validated per event.
+  async findByReferralCode(organizerId: string, code: string) {
+    const normalized = (code || "").trim().toUpperCase();
+    if (!normalized) return null;
+    return this.operatorModel.findOne({
+      organizerId,
+      referralCode: normalized,
+    });
+  }
+
+  // Issue a fresh code for an operator (e.g. after a leak) — old code stops
+  // working immediately since it's simply overwritten, not archived.
+  async regenerateReferralCode(id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException("Invalid operator ID");
+    }
+    const operator = await this.operatorModel.findById(id);
+    if (!operator) {
+      throw new NotFoundException("Operator not found");
+    }
+    await this.saveWithUniqueReferralCode(operator);
+    return { message: "Referral code regenerated", data: operator };
   }
 
   // Update operator by ID

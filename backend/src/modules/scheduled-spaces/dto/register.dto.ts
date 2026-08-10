@@ -50,4 +50,11 @@ export class RegisterScheduledSpaceDto {
   @IsArray()
   @IsString({ each: true })
   companions?: string[];
+
+  // Operator referral code — optional. Unlocks that operator's Scheduled
+  // Spaces in the slot picker; spaces with no operator assigned stay
+  // visible regardless.
+  @IsOptional()
+  @IsString()
+  referralCode?: string;
 }

@@ -481,6 +481,11 @@ const ScheduledSpaceRequests = ({
                       {selected.organization}
                     </p>
                   )}
+                {selected.referralCode && (
+                  <p className="text-xs text-gray-500">
+                    Referral code: <span className="font-mono">{selected.referralCode}</span>
+                  </p>
+                )}
                 {scheduledSpaceFieldOn("purpose") && selected.purpose && (
                   <p className="text-sm text-gray-600 mt-1">
                     {selected.purpose}

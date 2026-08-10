@@ -579,6 +579,9 @@ export class ScheduledSpaceTemplateDto {
   @ValidateNested({ each: true })
   @Type(() => ScheduleSlotDto)
   slots?: ScheduleSlotDto[];
+  // Operator this space is assigned to — unset means public/visible to
+  // every visitor. See ScheduledSpacesService.getAvailableSpaces.
+  @IsString() @IsOptional() operatorId?: string;
 }
 
 export class PositionedScheduledSpaceDto {
@@ -604,6 +607,8 @@ export class PositionedScheduledSpaceDto {
   @IsNumber() @IsOptional() rotation?: number;
   @IsBoolean() @IsOptional() isPlaced?: boolean;
   @IsString() venueConfigId: string;
+  // Copied from the template at placement time — see note above.
+  @IsString() @IsOptional() operatorId?: string;
 }
 
 export class VolunteerDto {

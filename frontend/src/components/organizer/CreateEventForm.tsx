@@ -362,6 +362,10 @@ interface ScheduledSpaceTemplate {
   price: number;
   color?: string;
   slots: ScheduleSlot[];
+  // Operator this space is assigned to. Unset = public (visible to every
+  // visitor); set = only visible to visitors who enter that operator's
+  // referral code on the registration form.
+  operatorId?: string;
 }
 
 interface PositionedScheduledSpace extends ScheduledSpaceTemplate {
@@ -3379,6 +3383,10 @@ const ScheduledSpaceManagement = ({
   setTemplates,
   current,
   setCurrent,
+  operators,
+  onRegenerateReferralCode,
+  venueScheduledSpaces,
+  setVenueScheduledSpaces,
 }: {
   templates: ScheduledSpaceTemplate[];
   setTemplates: (templates: ScheduledSpaceTemplate[]) => void;
@@ -3393,8 +3401,20 @@ const ScheduledSpaceManagement = ({
     price: string;
     color: string;
     slots: ScheduleSlot[];
+    operatorId: string;
   };
   setCurrent: React.Dispatch<React.SetStateAction<typeof current>>;
+  operators: { _id: string; name: string; referralCode?: string }[];
+  onRegenerateReferralCode: (operatorId: string) => Promise<void>;
+  // Placement takes a snapshot copy of the template, so re-assigning a
+  // template's operator after it's already been placed on the venue canvas
+  // wouldn't otherwise reach the already-placed instances — saveTemplate
+  // below explicitly re-syncs operatorId onto any of them that came from
+  // this template.
+  venueScheduledSpaces: Record<string, PositionedScheduledSpace[]>;
+  setVenueScheduledSpaces: React.Dispatch<
+    React.SetStateAction<Record<string, PositionedScheduledSpace[]>>
+  >;
 }) => {
   const { country } = useCountry();
   const { formatPrice } = useCurrency(country);
@@ -3419,6 +3439,7 @@ const ScheduledSpaceManagement = ({
       price: "",
       color: "#3b82f6",
       slots: [],
+      operatorId: "",
     });
     setEditingId(null);
   };
@@ -3491,9 +3512,29 @@ const ScheduledSpaceManagement = ({
       price: parseFloat(current.price) || 0,
       color: current.color || "#3b82f6",
       slots: current.slots,
+      operatorId: current.operatorId || undefined,
     };
     if (editingId) {
       setTemplates(templates.map((t) => (t.id === editingId ? data : t)));
+      // Re-sync the operator assignment onto any instances of this template
+      // already placed on the venue canvas — placement snapshots the
+      // template's fields at the time it's dropped, so an operator change
+      // made afterward here wouldn't otherwise reach them, leaving a
+      // "reassigned" space still gated to (or visible to) the wrong code.
+      setVenueScheduledSpaces((prev) => {
+        let changed = false;
+        const next: Record<string, PositionedScheduledSpace[]> = {};
+        for (const [configId, spaces] of Object.entries(prev)) {
+          next[configId] = spaces.map((s) => {
+            if (s.templateId !== editingId || s.operatorId === data.operatorId) {
+              return s;
+            }
+            changed = true;
+            return { ...s, operatorId: data.operatorId };
+          });
+        }
+        return changed ? next : prev;
+      });
       toast({ duration: 5000, title: "Scheduled Space updated" });
     } else {
       setTemplates([...templates, data]);
@@ -3519,6 +3560,7 @@ const ScheduledSpaceManagement = ({
       price: t.price != null ? String(t.price) : "",
       color: t.color || "#3b82f6",
       slots: t.slots || [],
+      operatorId: t.operatorId || "",
     });
     setEditingId(id);
   };
@@ -3581,6 +3623,61 @@ const ScheduledSpaceManagement = ({
               }
               placeholder="e.g. Court 1"
             />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+            <div>
+              <Label>Assign to Operator</Label>
+              <Select
+                value={current.operatorId || "__none__"}
+                onValueChange={(v) =>
+                  setCurrent((p) => ({
+                    ...p,
+                    operatorId: v === "__none__" ? "" : v,
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">
+                    — Unassigned (public) —
+                  </SelectItem>
+                  {operators.map((op) => (
+                    <SelectItem key={op._id} value={op._id}>
+                      {op.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Unassigned spaces stay visible to every visitor. Assigning an
+                operator hides this space unless the visitor enters that
+                operator's referral code.
+              </p>
+            </div>
+            {current.operatorId && (
+              <div>
+                <Label>Referral Code</Label>
+                <div className="flex gap-2">
+                  <Input
+                    readOnly
+                    value={
+                      operators.find((op) => op._id === current.operatorId)
+                        ?.referralCode || "—"
+                    }
+                    className="font-mono"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => onRegenerateReferralCode(current.operatorId)}
+                  >
+                    Regenerate
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -9034,6 +9131,7 @@ export function CreateEventForm({
     price: "",
     color: "#3b82f6",
     slots: [] as ScheduleSlot[],
+    operatorId: "",
   });
 
   // Replace your currentAddOn state with this:
@@ -9093,6 +9191,54 @@ export function CreateEventForm({
   useEffect(() => {
     fetchOrganizer();
   }, []);
+
+  // Operators list for the Scheduled Spaces "Assign to Operator" dropdown.
+  // Reuses the same endpoint OrganizerSettings.tsx uses to manage operators.
+  const [scheduledSpaceOperators, setScheduledSpaceOperators] = useState<
+    { _id: string; name: string; referralCode?: string }[]
+  >([]);
+
+  const fetchScheduledSpaceOperators = async () => {
+    try {
+      const organizerId = organizerIdOverride || getOrganizerIdFromToken();
+      if (!organizerId) return;
+      const token = sessionStorage.getItem("token") || "";
+      const res = await fetch(
+        `${__API_URL__}/operators/get-by-organizer/${organizerId}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (res.ok) {
+        const result = await res.json();
+        setScheduledSpaceOperators(result?.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching operators", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchScheduledSpaceOperators();
+  }, []);
+
+  const regenerateOperatorReferralCode = async (operatorId: string) => {
+    try {
+      const token = sessionStorage.getItem("token") || "";
+      const res = await fetch(
+        `${__API_URL__}/operators/regenerate-referral-code/${operatorId}`,
+        { method: "PATCH", headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) throw new Error("Failed to regenerate referral code");
+      await fetchScheduledSpaceOperators();
+      toast({ duration: 3000, title: "Referral code regenerated" });
+    } catch (error: any) {
+      toast({
+        duration: 5000,
+        title: "Couldn't regenerate referral code",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Enhanced Options. Held in state so URL-imported categories can be
   // appended on the fly. Seeded with a static baseline so the dropdown
@@ -15816,6 +15962,10 @@ export function CreateEventForm({
                   setTemplates={setScheduledSpaceTemplates}
                   current={currentScheduledSpace}
                   setCurrent={setCurrentScheduledSpace}
+                  operators={scheduledSpaceOperators}
+                  onRegenerateReferralCode={regenerateOperatorReferralCode}
+                  venueScheduledSpaces={venueScheduledSpaces}
+                  setVenueScheduledSpaces={setVenueScheduledSpaces}
                 />
               </BlurOverlay>
             </ModuleGate>

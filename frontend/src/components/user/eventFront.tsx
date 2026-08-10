@@ -844,7 +844,23 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     purpose: "",
     organization: "",
     companions: [] as string[],
+    referralCode: "",
   });
+  // Whether the referral code the visitor typed on the registration form
+  // matched an operator — surfaced in the slot picker so they know why
+  // certain spaces are (or aren't) showing.
+  const [scheduledSpaceMatchedOperator, setScheduledSpaceMatchedOperator] =
+    useState<{ id: string; name: string } | null>(null);
+  const [scheduledSpaceReferralInvalid, setScheduledSpaceReferralInvalid] =
+    useState(false);
+  // Gates the rest of the registration form: the registrant must either
+  // apply a referral code or explicitly say they don't have one before the
+  // remaining fields (and the space list they drive) unblur. Reset to
+  // false every time a fresh form is reached (see resolveScheduledSpaceAfterGoogle).
+  const [scheduledSpaceReferralResolved, setScheduledSpaceReferralResolved] =
+    useState(false);
+  const [scheduledSpaceCheckingReferral, setScheduledSpaceCheckingReferral] =
+    useState(false);
   // Selected-country objects for the WhatsApp/Phone PhoneInput fields — drive
   // the "Enter N digits for Country" hint, same as the Stall form's fields.
   const [scheduledSpaceWhatsappCountry, setScheduledSpaceWhatsappCountry] =
@@ -852,6 +868,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [scheduledSpacePhoneCountry, setScheduledSpacePhoneCountry] =
     useState<any>(null);
   const [scheduledSpaceLoading, setScheduledSpaceLoading] = useState(false);
+  // Free/charity spaces have no payment page to route to — slot selection
+  // submits and completes the booking directly, so this tracks that
+  // in-flight request instead of the instant navigate() the paid path uses.
+  const [
+    scheduledSpaceSlotsSubmitting,
+    setScheduledSpaceSlotsSubmitting,
+  ] = useState(false);
   const [scheduledSpacesAvailable, setScheduledSpacesAvailable] = useState<
     any[]
   >([]);
@@ -861,7 +884,24 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // Distinct facility types actually placed with at least one slot — drives
   // the "Type of Space Required" picker so a venue with e.g. both Tennis
   // Courts and Chess Tables lets the registrant pick which one up-front.
+  // Sourced from scheduledSpacesAvailable (the referral-code-filtered
+  // fetch), NOT the raw event doc — otherwise operator-gated facility
+  // types would leak into the dropdown before/without the right code.
   const scheduledSpaceFacilityTypes = useMemo(() => {
+    const types = (scheduledSpacesAvailable || [])
+      .filter((s: any) => (s.slots || []).length > 0)
+      .map((s: any) => s.facilityType)
+      .filter(Boolean);
+    return Array.from(new Set(types)) as string[];
+  }, [scheduledSpacesAvailable]);
+  // Same set, but sourced synchronously from the raw event doc rather than
+  // the availability fetch — scheduledSpacesAvailable starts out empty
+  // ([]) until fetchAvailableScheduledSpaces() resolves, so it can't be
+  // used for the single-facility-type auto-select below (handleScheduled-
+  // SpaceClick runs before that fetch has had a chance to land). Only used
+  // for that one-off convenience default, never for what's actually shown
+  // as bookable — the gated dropdown/picker still key off the fetch above.
+  const allScheduledSpaceFacilityTypes = useMemo(() => {
     const types = ((eventData as any)?.venueScheduledSpaces || [])
       .filter((s: any) => (s.slots || []).length > 0)
       .map((s: any) => s.facilityType)
@@ -1773,7 +1813,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const routeScheduledSpaceRequest = (request: any) => {
     setExistingScheduledSpaceRequest(request);
     if (request.status === "Confirmed") {
-      fetchAvailableScheduledSpaces();
+      // Re-apply the referral code the visitor registered with (if any) so
+      // any operator-assigned spaces they unlocked reappear automatically —
+      // they never have to retype the code at this step.
+      fetchAvailableScheduledSpaces(request.referralCode);
       setShowScheduledSpacePicker(true);
     } else {
       setShowScheduledSpaceStatus(true);
@@ -1796,12 +1839,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       phone: "",
       whatsappNumber: "",
       facilityType:
-        scheduledSpaceFacilityTypes.length === 1
-          ? scheduledSpaceFacilityTypes[0]
+        allScheduledSpaceFacilityTypes.length === 1
+          ? allScheduledSpaceFacilityTypes[0]
           : "",
       purpose: "",
       organization: "",
       companions: [],
+      referralCode: "",
     });
     setScheduledSpaceStep("auth");
     setShowScheduledSpaceForm(true);
@@ -1903,6 +1947,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       // blank form. Not finding one is the normal, expected case here.
     }
     setScheduledSpaceForm((p) => ({ ...p, email, name: p.name || name || "" }));
+    setScheduledSpaceReferralResolved(false);
+    setScheduledSpaceMatchedOperator(null);
+    setScheduledSpaceReferralInvalid(false);
     setScheduledSpaceStep("form");
   };
 
@@ -2019,6 +2066,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           facilityTypeRequested: scheduledSpaceForm.facilityType || undefined,
           purpose: scheduledSpaceForm.purpose || undefined,
           organization: scheduledSpaceForm.organization || undefined,
+          referralCode: scheduledSpaceForm.referralCode?.trim() || undefined,
           companions: scheduledSpaceForm.companions
             .map((c) => c.trim())
             .filter(Boolean),
@@ -2050,16 +2098,42 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }
   };
 
-  const fetchAvailableScheduledSpaces = async () => {
+  const fetchAvailableScheduledSpaces = async (referralCode?: string) => {
     try {
-      const res = await fetch(
-        `${apiURL}/scheduled-spaces/available/${(eventData as any)?._id}`,
-      );
+      const code = referralCode?.trim();
+      const url = `${apiURL}/scheduled-spaces/available/${(eventData as any)?._id}${
+        code ? `?referralCode=${encodeURIComponent(code)}` : ""
+      }`;
+      const res = await fetch(url);
       const result = await res.json();
       setScheduledSpacesAvailable(result?.data?.spaces || []);
+      setScheduledSpaceMatchedOperator(result?.data?.matchedOperator || null);
+      setScheduledSpaceReferralInvalid(!!result?.data?.referralCodeInvalid);
     } catch {
       setScheduledSpacesAvailable([]);
+      setScheduledSpaceMatchedOperator(null);
+      setScheduledSpaceReferralInvalid(false);
     }
+  };
+
+  // Validates whatever the registrant typed and unlocks the rest of the
+  // form — the space list underneath (facility-type dropdown, and later
+  // the slot picker) only ever reflects this resolved code.
+  const applyScheduledSpaceReferralCode = async () => {
+    setScheduledSpaceCheckingReferral(true);
+    await fetchAvailableScheduledSpaces(scheduledSpaceForm.referralCode);
+    setScheduledSpaceCheckingReferral(false);
+    setScheduledSpaceReferralResolved(true);
+  };
+
+  // "No Coupon" — proceeds with the public space list only, same as never
+  // having entered a code.
+  const skipScheduledSpaceReferralCode = async () => {
+    setScheduledSpaceForm((p) => ({ ...p, referralCode: "" }));
+    setScheduledSpaceCheckingReferral(true);
+    await fetchAvailableScheduledSpaces();
+    setScheduledSpaceCheckingReferral(false);
+    setScheduledSpaceReferralResolved(true);
   };
 
   const toggleScheduledSlotSelection = (space: any, slot: any) => {
@@ -2087,7 +2161,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     });
   };
 
-  const handleScheduledSpaceSlotsSubmit = () => {
+  const handleScheduledSpaceSlotsSubmit = async () => {
     if (selectedScheduledSlots.length === 0) {
       toast({
         duration: 5000,
@@ -2100,6 +2174,57 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       (sum, s) => sum + (s.price || 0),
       0,
     );
+
+    // Free/charity space (organizer never set a price) — there's nothing to
+    // pay, so slot selection IS the final step. Submit directly and land on
+    // the ticket instead of routing through the payment page.
+    if (total === 0) {
+      setScheduledSpaceSlotsSubmitting(true);
+      try {
+        const res = await fetch(
+          `${apiURL}/scheduled-spaces/${existingScheduledSpaceRequest?._id}/select-slots`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              // Only identity fields are accepted by the DTO — price/name/
+              // date/time are re-resolved server-side. Same shape the paid
+              // flow (scheduledSpacePaymentPage.tsx) sends.
+              selectedSlots: selectedScheduledSlots.map((s) => ({
+                positionId: s.positionId,
+                templateId: s.templateId,
+                slotId: s.slotId,
+              })),
+            }),
+          },
+        );
+        const result = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(result?.message || "Failed to confirm your booking");
+        }
+        setExistingScheduledSpaceRequest(result.data);
+        setSelectedScheduledSlots([]);
+        setShowScheduledSpacePicker(false);
+        setShowScheduledSpaceStatus(true);
+        toast({
+          duration: 5000,
+          title: "Booking confirmed",
+          description:
+            "This space is free — no payment needed. Your ticket is ready.",
+        });
+      } catch (err: any) {
+        toast({
+          duration: 5000,
+          title: "Couldn't confirm your booking",
+          description: err?.message || "Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setScheduledSpaceSlotsSubmitting(false);
+      }
+      return;
+    }
+
     navigate("/scheduled-space-payment", {
       state: {
         requestId: existingScheduledSpaceRequest?._id,
@@ -6130,13 +6255,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // Placed Scheduled Space facilities (courts/grounds/tables bookable by
   // time slot) for the currently-viewed layout — same belongsToLayout/
   // inCrop filtering as every other venue item, so a Tennis Court placed on
-  // Screen-2 doesn't show up while viewing Screen-1.
+  // Screen-2 doesn't show up while viewing Screen-1. This map is shown to
+  // every visitor unconditionally (no referral-code gate applies here, only
+  // in the booking dialog's fetch), so operator-assigned spaces are always
+  // excluded — showing one here would leak its name/facility type to
+  // visitors who never entered that operator's code.
   const currentLayoutScheduledSpaces: any[] = (() => {
     const raw: any[] = Array.isArray((eventData as any)?.venueScheduledSpaces)
       ? ((eventData as any).venueScheduledSpaces as any[])
       : [];
     if (raw.length === 0) return [];
     return raw
+      .filter((s) => !s?.operatorId)
       .filter((s) => belongsToLayout(s?.venueConfigId))
       .filter((s) => inCrop(s?.x, s?.y));
   })();
@@ -13703,6 +13833,86 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               onSubmit={handleScheduledSpaceFormSubmit}
               className="space-y-4"
             >
+              <div className="rounded-lg border p-3 bg-slate-50">
+                <Label>Referral Code</Label>
+                {scheduledSpaceReferralResolved ? (
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    {scheduledSpaceMatchedOperator ? (
+                      <p className="text-xs text-green-700">
+                        Code <span className="font-mono">{scheduledSpaceForm.referralCode}</span> accepted
+                        — narrowed to {scheduledSpaceMatchedOperator.name}'s spaces (plus public ones).
+                      </p>
+                    ) : scheduledSpaceReferralInvalid ? (
+                      <p className="text-xs text-amber-700">
+                        Code not recognized — showing all spaces.
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        No referral code — showing all spaces.
+                      </p>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs shrink-0"
+                      onClick={() => setScheduledSpaceReferralResolved(false)}
+                    >
+                      Change
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <Input
+                      value={scheduledSpaceForm.referralCode}
+                      placeholder="Have a code from an organizer/operator?"
+                      onChange={(e) =>
+                        setScheduledSpaceForm((p) => ({
+                          ...p,
+                          referralCode: e.target.value.toUpperCase(),
+                        }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground mt-1 mb-2">
+                      Have a code from a specific operator? Enter it to
+                      narrow the list below to just their spaces. Don't have
+                      one? No problem — continue to see every space.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={
+                          !scheduledSpaceForm.referralCode.trim() ||
+                          scheduledSpaceCheckingReferral
+                        }
+                        onClick={applyScheduledSpaceReferralCode}
+                      >
+                        {scheduledSpaceCheckingReferral
+                          ? "Checking…"
+                          : "Apply Code"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={scheduledSpaceCheckingReferral}
+                        onClick={skipScheduledSpaceReferralCode}
+                      >
+                        No Coupon — Continue
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+              <fieldset
+                disabled={!scheduledSpaceReferralResolved}
+                className={`space-y-4 transition-all ${
+                  scheduledSpaceReferralResolved
+                    ? ""
+                    : "opacity-40 blur-[1.5px] pointer-events-none select-none"
+                }`}
+              >
               <div>
                 <Label>Full Name *</Label>
                 <Input
@@ -13910,6 +14120,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               >
                 {scheduledSpaceLoading ? "Submitting…" : "Submit Registration"}
               </Button>
+              </fieldset>
             </form>
           )}
           </div>
@@ -14097,6 +14308,17 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             <DialogTitle>Pick a Space & Time Slot</DialogTitle>
           </DialogHeader>
           <ScheduledSpaceStepper current={3} />
+          {scheduledSpaceMatchedOperator && (
+            <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+              Referral code accepted — narrowed to{" "}
+              {scheduledSpaceMatchedOperator.name}'s spaces (plus public ones).
+            </p>
+          )}
+          {scheduledSpaceReferralInvalid && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              That referral code wasn't recognized — showing all spaces.
+            </p>
+          )}
           <div className="space-y-3">
             {filteredScheduledSpaces.length === 0 && (
               <p className="text-sm text-muted-foreground">
@@ -14189,9 +14411,25 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           <Button
             className="w-full mt-3"
             onClick={handleScheduledSpaceSlotsSubmit}
-            disabled={selectedScheduledSlots.length === 0}
+            disabled={
+              selectedScheduledSlots.length === 0 ||
+              scheduledSpaceSlotsSubmitting
+            }
           >
-            Proceed to Payment
+            {scheduledSpaceSlotsSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Confirming…
+              </>
+            ) : selectedScheduledSlots.length > 0 &&
+              selectedScheduledSlots.reduce(
+                (sum, s) => sum + (s.price || 0),
+                0,
+              ) === 0 ? (
+              "Confirm Booking (Free)"
+            ) : (
+              "Proceed to Payment"
+            )}
           </Button>
         </DialogContent>
       </Dialog>

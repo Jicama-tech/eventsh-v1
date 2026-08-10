@@ -57,6 +57,14 @@ export class Operator {
   // team. Off by default — approving spend is a deliberate grant.
   @Prop({ default: false })
   canApproveExpenses: boolean;
+
+  // Short alphanumeric code visitors can enter on a Scheduled Space
+  // registration form to unlock the spaces assigned to this operator.
+  // Auto-generated on create (and lazily backfilled for pre-existing
+  // operators) — sparse+unique since it's assigned after the fact for old
+  // docs one at a time, not in a single migration.
+  @Prop({ unique: true, sparse: true })
+  referralCode?: string;
 }
 
 export const OperatorSchema = SchemaFactory.createForClass(Operator);

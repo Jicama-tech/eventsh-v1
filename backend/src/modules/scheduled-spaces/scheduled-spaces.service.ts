@@ -18,6 +18,7 @@ import {
   ScheduledSpaceStatusEnum,
 } from "./entities/scheduled-space-request.entity";
 import { MailService } from "../roles/mail.service";
+import { OperatorsService } from "../operators/operators.service";
 
 @Injectable()
 export class ScheduledSpacesService {
@@ -29,6 +30,7 @@ export class ScheduledSpacesService {
     @InjectModel("Event") private eventModel: Model<any>,
     @InjectModel("Organizer") private organizerModel: Model<any>,
     private mailService: MailService,
+    private operatorsService: OperatorsService,
   ) {}
 
   // A visitor registers and is immediately confirmed — no organizer approval
@@ -51,6 +53,9 @@ export class ScheduledSpacesService {
       facilityTypeRequested: dto.facilityTypeRequested,
       purpose: dto.purpose,
       organization: dto.organization,
+      referralCode: dto.referralCode?.trim()
+        ? dto.referralCode.trim().toUpperCase()
+        : undefined,
       companions: (dto.companions || []).filter((c) => c && c.trim()),
       status: ScheduledSpaceStatusEnum.Confirmed,
       statusHistory: [{ status: ScheduledSpaceStatusEnum.Confirmed }],
@@ -82,29 +87,53 @@ export class ScheduledSpacesService {
   // which (positionId, slotId) tokens are already reserved. Mirrors
   // stalls.service.ts's getAvailableTables, but per-slot rather than
   // per-whole-space.
-  async getAvailableSpaces(eventId: string) {
+  async getAvailableSpaces(eventId: string, referralCode?: string) {
     if (!Types.ObjectId.isValid(eventId)) {
       throw new BadRequestException("Invalid event id");
     }
     const event = await this.eventModel.findById(eventId);
     if (!event) throw new NotFoundException("Event not found");
 
+    // Resolve the referral code (if any) to an operator scoped to this
+    // event's organizer. A referral code is a *filter*, not an access
+    // gate: with no code (or one that doesn't match anything), every
+    // space shows — public and every operator's alike. Only once a code
+    // resolves to a specific operator does the list narrow to that
+    // operator's spaces plus the unassigned/public ones.
+    let matchedOperator: { id: string; name: string } | null = null;
+    if (referralCode?.trim()) {
+      const operator = await this.operatorsService.findByReferralCode(
+        String(event.organizer),
+        referralCode,
+      );
+      if (operator) {
+        matchedOperator = { id: String(operator._id), name: operator.name };
+      }
+    }
+
     const bookedTokens = new Set<string>(event.scheduledSpaceBookedSlots || []);
 
-    const spaces = (event.venueScheduledSpaces || []).map((space: any) => {
-      const s = space?.toObject ? space.toObject() : space;
-      const slots = (s.slots || []).map((slot: any) => ({
-        ...slot,
-        isBooked: bookedTokens.has(`${s.positionId}:${slot.id}`),
-      }));
-      return { ...s, slots };
-    });
+    const spaces = (event.venueScheduledSpaces || [])
+      .map((space: any) => (space?.toObject ? space.toObject() : space))
+      .filter(
+        (s: any) =>
+          !matchedOperator || !s.operatorId || s.operatorId === matchedOperator.id,
+      )
+      .map((s: any) => {
+        const slots = (s.slots || []).map((slot: any) => ({
+          ...slot,
+          isBooked: bookedTokens.has(`${s.positionId}:${slot.id}`),
+        }));
+        return { ...s, slots };
+      });
 
     return {
       success: true,
       data: {
         spaces,
         venueConfig: event.venueConfig,
+        matchedOperator,
+        referralCodeInvalid: !!referralCode?.trim() && !matchedOperator,
       },
     };
   }
@@ -180,14 +209,28 @@ export class ScheduledSpacesService {
     }
 
     const slotsTotal = resolved.reduce((sum, r) => sum + (r.price || 0), 0);
-    const paidAmount = dto.paidAmount || 0;
 
     request.selectedSlots = resolved as any;
     request.slotsTotal = slotsTotal;
+
+    // Free/charity spaces (organizer never set a price) have nothing to
+    // pay — slot selection IS the final step. Skip the Processing/
+    // payment-proof phase and issue the check-in ticket immediately,
+    // same effect as an organizer confirming payment on a paid booking.
+    if (slotsTotal === 0) {
+      await this.completeBooking(request, {
+        notes: dto.notes,
+        historyNote:
+          "Free space — no payment required, booking confirmed automatically",
+      });
+      return { success: true, data: request };
+    }
+
+    const paidAmount = dto.paidAmount || 0;
     request.paidAmount = paidAmount;
     request.remainingAmount = Math.max(0, slotsTotal - paidAmount);
     request.paymentStatus =
-      paidAmount >= slotsTotal && slotsTotal > 0 ? "Paid" : paidAmount > 0 ? "Partial" : "Unpaid";
+      paidAmount >= slotsTotal ? "Paid" : paidAmount > 0 ? "Partial" : "Unpaid";
     request.transactionId = dto.transactionId || null;
     request.transactionScreenshot = dto.transactionScreenshot || null;
     request.paymentMethod = dto.paymentMethod || null;
@@ -216,6 +259,23 @@ export class ScheduledSpacesService {
       );
     }
 
+    await this.completeBooking(request, {
+      notes: dto.notes,
+      changedBy: dto.changedBy,
+    });
+
+    return { success: true, data: request };
+  }
+
+  // Shared terminal step for both a paid booking (organizer confirms
+  // payment) and a free one (slot selection completes it automatically):
+  // generates the check-in QR, marks the request Completed/Paid, and
+  // emails the ticket. `paidAmount` is taken from slotsTotal — for a free
+  // request that's 0, which is correct (nothing was owed).
+  private async completeBooking(
+    request: ScheduledSpaceRequestDocument,
+    opts?: { notes?: string; changedBy?: string; historyNote?: string },
+  ): Promise<void> {
     const qrPayload = {
       type: "eventsh-scheduled-space-checkin",
       requestId: String(request._id),
@@ -233,11 +293,11 @@ export class ScheduledSpacesService {
     request.remainingAmount = 0;
     request.qrCodeData = JSON.stringify(qrPayload);
     request.qrCodeImage = qrCodeImage;
-    request.notes = dto.notes ?? request.notes;
+    request.notes = opts?.notes ?? request.notes;
     request.statusHistory.push({
       status: ScheduledSpaceStatusEnum.Completed,
-      note: dto.notes,
-      changedBy: dto.changedBy,
+      note: opts?.historyNote ?? opts?.notes,
+      changedBy: opts?.changedBy,
       changedAt: new Date(),
     } as any);
     await request.save();
@@ -251,8 +311,6 @@ export class ScheduledSpacesService {
         }`,
       ),
     );
-
-    return { success: true, data: request };
   }
 
   // Emails the registrant their check-in QR ticket + booking summary once
