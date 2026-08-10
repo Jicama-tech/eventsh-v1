@@ -70,6 +70,8 @@ import {
   UserPlus2,
   Plus,
   Award,
+  Copy,
+  RefreshCw,
 } from "lucide-react";
 import { MembershipPanel } from "./MembershipPanel";
 import { jwtDecode } from "jwt-decode";
@@ -112,6 +114,13 @@ interface Operator {
   // When false, this operator does not receive notification emails.
   allowEmails?: boolean;
   canApproveExpenses?: boolean;
+  // Auto-generated, unique per operator — a visitor enters this on a
+  // Scheduled Space registration form to unlock/narrow to this operator's
+  // spaces. Send it to the operator to hand out to their visitors.
+  referralCode?: string;
+  // Opt-in gate: the code above is only shown here (and only matches for
+  // visitors) while this is true.
+  referralEnabled?: boolean;
 }
 
 interface ShopkeeperSettingsProps {
@@ -1091,6 +1100,9 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     // When off, this operator does not receive notification emails.
     allowEmails: boolean;
     canApproveExpenses: boolean;
+    // When off, this operator's Scheduled Space referral code stays hidden
+    // in the operator list and doesn't match for visitors either.
+    referralEnabled: boolean;
   }>({
     name: "",
     operatorCountryCode: "+91",
@@ -1100,8 +1112,14 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     accessTabs: [],
     allowEmails: false,
     canApproveExpenses: false,
+    referralEnabled: false,
   });
   const [isSavingOperators, setIsSavingOperators] = useState(false);
+  // Which operator's referral code is currently being regenerated, so only
+  // that card's button shows a spinner rather than the whole list.
+  const [regeneratingOperatorId, setRegeneratingOperatorId] = useState<
+    string | null
+  >(null);
 
   // const handleConnectRazorpay = async () => {
   //   setIsConnectingRazorpay(true);
@@ -1213,6 +1231,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           accessTabs: operatorForm.accessTabs,
           allowEmails: operatorForm.allowEmails,
           canApproveExpenses: operatorForm.canApproveExpenses,
+          referralEnabled: operatorForm.referralEnabled,
         }),
       });
 
@@ -1235,7 +1254,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
         operatorLocalNumber: "",
         accessTabs: [],
         allowEmails: false,
-    canApproveExpenses: false,
+        canApproveExpenses: false,
+        referralEnabled: false,
       });
       setEditingOperatorIndex(null);
     } catch (err: any) {
@@ -1284,6 +1304,61 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
         variant: "destructive",
       });
     }
+  };
+
+  // Issues a fresh Scheduled Space referral code for this operator — the
+  // old one stops working immediately. Kept here (not just inside
+  // CreateEventForm's per-space assignment picker) since this is the
+  // natural place an organizer would come to grab/reissue an operator's
+  // code to hand out.
+  const handleRegenerateReferralCode = async (operatorId: string) => {
+    setRegeneratingOperatorId(operatorId);
+    try {
+      const token = sessionStorage.getItem("token");
+      if (!token) throw new Error("Please login");
+      const decoded = jwtDecode<{ sub: string }>(token);
+      const organizerId = decoded.sub;
+
+      const res = await fetch(
+        `${apiURL}/operators/regenerate-referral-code/${operatorId}`,
+        {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Failed to regenerate referral code");
+      }
+
+      await fetchOperators(organizerId, token);
+      toast({ duration: 3000, title: "Referral code regenerated" });
+    } catch (err: any) {
+      toast({
+        duration: 5000,
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setRegeneratingOperatorId(null);
+    }
+  };
+
+  const handleCopyReferralCode = (code: string) => {
+    navigator.clipboard
+      .writeText(code)
+      .then(() =>
+        toast({ duration: 2000, title: "Referral code copied" }),
+      )
+      .catch(() =>
+        toast({
+          duration: 3000,
+          title: "Couldn't copy",
+          description: "Copy the code manually instead.",
+          variant: "destructive",
+        }),
+      );
   };
 
   // Notification Settings
@@ -3247,11 +3322,12 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       name: "",
                       operatorCountryCode: countryCode,
                       operatorEmail: "",
+                      operatorCompanyEmail: "",
                       operatorLocalNumber: "",
                       accessTabs: [],
-                    
                       allowEmails: false,
                       canApproveExpenses: false,
+                      referralEnabled: false,
                     });
                     setEditingOperatorIndex(null);
                     setOperatorDialogOpen(true);
@@ -3270,7 +3346,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 <div className="space-y-3">
                   {operators.map((op, index) => (
                     <Card key={op._id ?? index}>
-                      <CardContent className="flex items-center justify-between p-4">
+                      <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center justify-between">
                         <div>
                           <p className="font-semibold">{op.name}</p>
                           <p className="text-sm text-muted-foreground flex items-center gap-1">
@@ -3306,9 +3383,9 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                                 operatorLocalNumber: splitLocal,
                                 accessTabs: op.accessTabs ?? [],
                                 allowEmails: op.allowEmails === true,
-                              
                                 canApproveExpenses:
                                   !!(op as any).canApproveExpenses,
+                                referralEnabled: op.referralEnabled === true,
                               });
                               setEditingOperatorIndex(index);
                               setOperatorDialogOpen(true);
@@ -3326,6 +3403,58 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                             <Trash className="w-4 h-4" />
                           </Button>
                         </div>
+                      </div>
+
+                      {/* Scheduled Space referral code — only shown when the
+                          toggle above is on for this operator; send it to
+                          them to hand out to their visitors. Entering it on
+                          a booking narrows the space list to this
+                          operator's spaces (plus any unassigned ones). */}
+                      {op.referralEnabled && (
+                        <div className="flex items-center justify-between rounded-lg border bg-slate-50 px-3 py-2">
+                          <div>
+                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                              Referral Code
+                            </p>
+                            <p className="font-mono text-sm font-semibold">
+                              {op.referralCode || "—"}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={!op.referralCode}
+                              onClick={() =>
+                                op.referralCode &&
+                                handleCopyReferralCode(op.referralCode)
+                              }
+                              title="Copy code"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={
+                                !op._id || regeneratingOperatorId === op._id
+                              }
+                              onClick={() =>
+                                op._id && handleRegenerateReferralCode(op._id)
+                              }
+                              title="Regenerate code"
+                            >
+                              <RefreshCw
+                                className={`w-3.5 h-3.5 ${
+                                  regeneratingOperatorId === op._id
+                                    ? "animate-spin"
+                                    : ""
+                                }`}
+                              />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                       </CardContent>
                     </Card>
                   ))}
@@ -3497,6 +3626,26 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       setOperatorForm((prev) => ({
                         ...prev,
                         canApproveExpenses: checked,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                  <div>
+                    <Label>Scheduled Space Referral Code</Label>
+                    <p className="text-xs text-muted-foreground">
+                      When on, this operator gets a referral code visitors
+                      can enter to narrow a Scheduled Space booking to their
+                      spaces — visible here and usable by visitors only while
+                      on. Off by default.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={operatorForm.referralEnabled}
+                    onCheckedChange={(checked) =>
+                      setOperatorForm((prev) => ({
+                        ...prev,
+                        referralEnabled: checked,
                       }))
                     }
                   />

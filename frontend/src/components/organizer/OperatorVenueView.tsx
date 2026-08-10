@@ -4,7 +4,13 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,6 +18,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
 import { Loader2, Info, Download, ChevronDown } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { ExhibitorDetailDialog } from "./ExhibitorDetailDialog";
@@ -62,6 +78,34 @@ function fitText(pdf: any, text: string, maxW: number): string {
     s = s.slice(0, -1);
   }
   return s.length < text.length ? s + "…" : s;
+}
+
+/** Which field the organizer wants printed on each booked space, chosen in
+ * the export-config dialog. Unbooked spaces always show their own name
+ * regardless of this — there's no vendor/brand data for an empty stall. */
+export type ExportLabelField = "spaceName" | "vendorName" | "brandName";
+
+/** Resolves the label text for one space in the exported PDF (both the map
+ * tile and the directory's "Exhibitor" column go through this, so they stay
+ * consistent with whichever field the organizer picked) — each option still
+ * falls back through the others rather than printing blank when the
+ * specifically-chosen field is empty for that vendor. */
+function resolveExportLabel(
+  t: any,
+  booking: BookingInfo | undefined,
+  field: ExportLabelField,
+): string {
+  const spaceName = t.tableName || t.name || t.positionId || "";
+  if (!booking) return spaceName;
+  switch (field) {
+    case "spaceName":
+      return spaceName;
+    case "vendorName":
+      return booking.vendorName || booking.businessName || booking.brandName || spaceName;
+    case "brandName":
+    default:
+      return booking.brandName || booking.businessName || booking.vendorName || spaceName;
+  }
 }
 
 // Shared canvas 2D context for text-width measurement, built once. Real
@@ -223,6 +267,7 @@ interface AddOnItem {
 interface BookingInfo {
   vendorName: string;
   businessName?: string;
+  brandName?: string;
   businessType?: string;
   vendorEmail?: string;
   vendorPhone?: string;
@@ -280,6 +325,19 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
   // Which paper size is currently being generated, so the trigger button can
   // show a spinner + the two menu items can disable themselves mid-export.
   const [pdfBusy, setPdfBusy] = useState<"a1" | "a4" | null>(null);
+  // Picking A1/A4 from the dropdown no longer exports immediately — it opens
+  // this config dialog first (label field, directory toggle, label size),
+  // with the chosen size held here until "Generate PDF" is actually clicked.
+  const [exportConfigSize, setExportConfigSize] = useState<"a1" | "a4" | null>(
+    null,
+  );
+  const [exportLabelField, setExportLabelField] =
+    useState<ExportLabelField>("brandName");
+  const [exportIncludeDirectory, setExportIncludeDirectory] = useState(true);
+  // Multiplier applied to the auto-computed per-tile label font size (see
+  // downloadVenuePdf) — 1 = the existing default sizing, adjustable via the
+  // dialog's live preview.
+  const [exportLabelScale, setExportLabelScale] = useState(1);
   // Off-screen, natural-resolution copy of the map (see below) — the
   // html2canvas capture source for PDF export.
   const exportRef = useRef<HTMLDivElement>(null);
@@ -366,6 +424,11 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
               stall?.shopkeeper?.businessName ||
               stall?.businessName ||
               stall?.shopkeeper?.organizationName;
+            // Distinct from businessName/shopName — a vendor's registered
+            // shop name and their marketed brand name aren't always the
+            // same thing. Falls back through the same chain if unset.
+            const brandName =
+              sk?.brandName || stall?.shopkeeper?.brandName || stall?.brandName;
             const vendorEmail =
               sk?.email ||
               stall?.shopkeeper?.email ||
@@ -384,6 +447,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
               map[positionId] = {
                 vendorName,
                 businessName,
+                brandName,
                 businessType,
                 vendorEmail,
                 vendorPhone,
@@ -781,7 +845,14 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
   // screen-only aid), and — for A4 — an exhibitor directory table on the
   // page(s) that follow (A4 prints stall labels too small to read on their
   // own, so the directory backs the map up).
-  const downloadVenuePdf = async (paperSize: "a1" | "a4") => {
+  const downloadVenuePdf = async (
+    paperSize: "a1" | "a4",
+    options: {
+      labelField: ExportLabelField;
+      includeDirectory: boolean;
+      labelScale: number;
+    },
+  ) => {
     if (!exportRef.current) return;
     setPdfBusy(paperSize);
     try {
@@ -886,9 +957,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
         // Off-canvas items (outside a crop) aren't drawn on the map either.
         if (bx < 0 || by < 0 || bx > canvasW || by > canvasH) continue;
         const booking = bookings[t.positionId];
-        const label = booking
-          ? booking.businessName || booking.vendorName
-          : t.tableName || t.name || "";
+        const label = resolveExportLabel(t, booking, options.labelField);
         if (!label) continue;
         const bw = ((t as any).displayWidth ?? t.width ?? 50) as number;
         const bh = ((t as any).displayHeight ?? t.height ?? 50) as number;
@@ -904,9 +973,10 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
         // A4 stalls print much smaller than A1's — the same font-size range
         // read as oversized/cramped on the handout, so it gets its own,
         // smaller ceiling rather than just inheriting A1's.
-        const fs = big
-          ? Math.max(3.5, Math.min(7, footH * 0.4))
-          : Math.max(2.2, Math.min(3.5, footH * 0.22));
+        const fs =
+          (big
+            ? Math.max(3.5, Math.min(7, footH * 0.4))
+            : Math.max(2.2, Math.min(3.5, footH * 0.22))) * options.labelScale;
         pdf.setFontSize(fs);
         pdf.setTextColor(17, 24, 39);
         const fitted = fitText(pdf, label, Math.max(6, footW - 3));
@@ -926,27 +996,27 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
       };
       stamp();
 
-      // --- Exhibitor directory (both sizes) — the map alone prints stall
-      // labels too small to read on their own, so every size gets page(s)
-      // after the map listing each booked stall against its exhibitor as
-      // an actual bordered table (header row + gridlines), laid out in
-      // side-by-side column-blocks — the same shape as a printed
-      // participant directory. A1's poster scale means bigger blocks, a
-      // bigger font, and room for more of them across the wider page.
-      {
+      // --- Exhibitor directory (both sizes, toggleable) — the map alone
+      // prints stall labels too small to read on their own, so when
+      // enabled every size gets page(s) after the map listing each booked
+      // stall against its exhibitor as an actual bordered table (header
+      // row + gridlines), laid out in side-by-side column-blocks — the
+      // same shape as a printed participant directory. A1's poster scale
+      // means bigger blocks, a bigger font, and room for more of them
+      // across the wider page.
+      if (options.includeDirectory) {
         const directory = tables
           .filter((t) => bookings[t.positionId])
           .map((t) => {
             const b = bookings[t.positionId];
-            const exhibitor = b.businessName || b.vendorName || "—";
+            const exhibitor = resolveExportLabel(t, b, options.labelField) || "—";
             return {
               label: t.tableName || t.name || t.positionId,
               exhibitor,
               // Only show a separate contact line when it's not just a
               // repeat of the exhibitor name already shown.
-              contact: b.businessName && b.businessName !== b.vendorName
-                ? b.vendorName
-                : "",
+              contact:
+                b.vendorName && b.vendorName !== exhibitor ? b.vendorName : "",
             };
           })
           .sort((a, b) =>
@@ -1080,11 +1150,9 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
 
   return (
     <div className="space-y-4">
-      {/* Download — a print-ready PDF of this layout. Both sizes carry an
-          Exhibitor Directory listing every booked stall against its
-          exhibitor after the map — stall labels print too small to read
-          on their own at either size, A1's poster scale just gets there
-          with fewer, larger stalls than A4's handout. */}
+      {/* Download — a print-ready PDF of this layout. Picking a size opens a
+          config dialog (label field, exhibitor directory toggle, label
+          text size) before generating, rather than exporting immediately. */}
       <div className="flex justify-end">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -1101,25 +1169,150 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
           <DropdownMenuContent align="end">
             <DropdownMenuItem
               disabled={!!pdfBusy}
-              onClick={() => downloadVenuePdf("a1")}
+              onClick={() => setExportConfigSize("a1")}
             >
               A1 — large poster
               <span className="ml-auto pl-3 text-[10px] text-muted-foreground">
-                + exhibitor directory
+                configure…
               </span>
             </DropdownMenuItem>
             <DropdownMenuItem
               disabled={!!pdfBusy}
-              onClick={() => downloadVenuePdf("a4")}
+              onClick={() => setExportConfigSize("a4")}
             >
               A4 — handout
               <span className="ml-auto pl-3 text-[10px] text-muted-foreground">
-                + exhibitor directory
+                configure…
               </span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {/* Export config — label field, exhibitor directory toggle, and a
+          live-sized preview tile so the organizer can see roughly how the
+          label text will read before spending time on a full export. */}
+      <Dialog
+        open={!!exportConfigSize}
+        onOpenChange={(open) => !open && setExportConfigSize(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Export {exportConfigSize?.toUpperCase()} —{" "}
+              {exportConfigSize === "a1" ? "large poster" : "handout"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Label spaces with</Label>
+              <Select
+                value={exportLabelField}
+                onValueChange={(v) =>
+                  setExportLabelField(v as ExportLabelField)
+                }
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="brandName">Brand Name</SelectItem>
+                  <SelectItem value="vendorName">Vendor Name</SelectItem>
+                  <SelectItem value="spaceName">Space Name</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Unbooked spaces always show their own name — there's
+                nothing else to print for an empty stall.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <Label htmlFor="export-directory-toggle">
+                  Include Exhibitor Directory
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Adds page(s) listing every booked stall against its
+                  exhibitor after the map.
+                </p>
+              </div>
+              <Switch
+                id="export-directory-toggle"
+                checked={exportIncludeDirectory}
+                onCheckedChange={setExportIncludeDirectory}
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between">
+                <Label>Label Text Size</Label>
+                <span className="text-xs text-muted-foreground">
+                  {Math.round(exportLabelScale * 100)}%
+                </span>
+              </div>
+              <Slider
+                className="mt-2"
+                min={0.6}
+                max={1.6}
+                step={0.1}
+                value={[exportLabelScale]}
+                onValueChange={([v]) => setExportLabelScale(v)}
+              />
+              {/* Rough visual proxy only — the real PDF uses jsPDF's own font
+                  metrics and per-tile auto-fit, not this CSS box. It's here
+                  so "bigger/smaller" has an immediate, concrete reference
+                  instead of a bare percentage. */}
+              <div className="mt-3 rounded-lg border bg-slate-50 p-4 flex items-center justify-center">
+                <div
+                  className="rounded-md flex items-center justify-center text-center px-2 py-3 text-white font-bold shadow-sm"
+                  style={{
+                    backgroundColor: "#3b82f6",
+                    width: 160,
+                    minHeight: 60,
+                    fontSize: `${9 * exportLabelScale}px`,
+                  }}
+                >
+                  {exportLabelField === "spaceName"
+                    ? "Stall A1"
+                    : exportLabelField === "vendorName"
+                      ? "Demo Vendor Name"
+                      : "Demo Organization Name"}
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setExportConfigSize(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={!!pdfBusy}
+              onClick={() => {
+                const size = exportConfigSize;
+                setExportConfigSize(null);
+                if (size) {
+                  downloadVenuePdf(size, {
+                    labelField: exportLabelField,
+                    includeDirectory: exportIncludeDirectory,
+                    labelScale: exportLabelScale,
+                  });
+                }
+              }}
+            >
+              {pdfBusy ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-1" />
+              )}
+              Generate PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Venue selector — one tab per venue (only shown for multi-venue
           events). Selecting a venue shows ONLY that venue's layout. */}

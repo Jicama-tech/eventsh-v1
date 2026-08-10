@@ -3405,7 +3405,12 @@ const ScheduledSpaceManagement = ({
     operatorId: string;
   };
   setCurrent: React.Dispatch<React.SetStateAction<typeof current>>;
-  operators: { _id: string; name: string; referralCode?: string }[];
+  operators: {
+    _id: string;
+    name: string;
+    referralCode?: string;
+    referralEnabled?: boolean;
+  }[];
   onRegenerateReferralCode: (operatorId: string) => Promise<void>;
   // Placement takes a snapshot copy of the template, so re-assigning a
   // template's operator after it's already been placed on the venue canvas
@@ -3678,6 +3683,14 @@ const ScheduledSpaceManagement = ({
                     Regenerate
                   </Button>
                 </div>
+                {!operators.find((op) => op._id === current.operatorId)
+                  ?.referralEnabled && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    This operator's referral code is currently off — turn it
+                    on in Organizer Settings → Operators for visitors to be
+                    able to use it.
+                  </p>
+                )}
               </div>
             )}
           </div>

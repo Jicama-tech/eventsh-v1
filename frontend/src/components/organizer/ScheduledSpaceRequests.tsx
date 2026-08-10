@@ -367,6 +367,7 @@ const ScheduledSpaceRequests = ({
               <thead>
                 <tr className="border-b text-left text-gray-500">
                   <th className="pb-3 pr-4 font-medium">Registrant</th>
+                  <th className="pb-3 pr-4 font-medium">Referral Code</th>
                   <th className="pb-3 pr-4 font-medium">Selected Slots</th>
                   <th className="pb-3 pr-4 font-medium">Total</th>
                   <th className="pb-3 pr-4 font-medium">Payment</th>
@@ -377,7 +378,7 @@ const ScheduledSpaceRequests = ({
               <tbody>
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-gray-500">
+                    <td colSpan={7} className="py-8 text-center text-gray-500">
                       No requests match your filters.
                     </td>
                   </tr>
@@ -390,6 +391,15 @@ const ScheduledSpaceRequests = ({
                     <td className="py-3 pr-4">
                       <p className="font-medium text-gray-800">{req.name}</p>
                       <p className="text-xs text-gray-400">{req.email}</p>
+                    </td>
+                    <td className="py-3 pr-4">
+                      {req.referralCode ? (
+                        <span className="font-mono text-xs text-gray-700">
+                          {req.referralCode}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="py-3 pr-4">
                       {(req.selectedSlots || []).length === 0 ? (
