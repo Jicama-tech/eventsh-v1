@@ -97,12 +97,10 @@ export class Vendor {
   @Prop()
   brandName: string;
 
-  // Optional organizer/vendor-facing display name for the stall — distinct
-  // from brandName/businessName, purely a "what should print/show for this
-  // vendor" label. Persists on the vendor so it carries forward: a returning
-  // vendor's next application prefills whatever was last saved here.
-  @Prop()
-  displayName: string;
+  // NOTE: no displayName here on purpose — it's an organizer/operator-only
+  // reference label bound to an individual stall (see stall.entity.ts), not
+  // to the vendor. Vendors never set it, and it doesn't carry forward across
+  // a returning vendor's other stalls.
 
   @Prop()
   nameOfApplicant: string;

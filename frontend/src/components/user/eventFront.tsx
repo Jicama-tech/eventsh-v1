@@ -1123,7 +1123,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     businessCategory: "",
     noOfOperators: 1,
     brandName: "",
-    displayName: "",
     nameOfApplicant: "",
     businessOwnerNationality: "",
     registrationNumber: "",
@@ -2463,7 +2462,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         shopData.businessCategory || shopData.businessType || "",
       noOfOperators: shopData.noOfOperators || 0,
       brandName: shopData.brandName || "",
-      displayName: shopData.displayName || "",
       nameOfApplicant: shopData.nameOfApplicant || "",
       businessOwnerNationality: shopData.businessOwnerNationality || "",
       productDescription: shopData.productDescription || "",
@@ -5432,7 +5430,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
       // Append new schema fields
       formData.append("brandName", shopkeeperDetails.brandName);
-      formData.append("displayName", shopkeeperDetails.displayName);
       formData.append("nameOfApplicant", shopkeeperDetails.nameOfApplicant);
       formData.append(
         "businessOwnerNationality",
@@ -17702,17 +17699,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       required
                     />
                   </div>
-                  {stallOn("displayName") && (
-                    <div className="space-y-2">
-                      <Label>Display Name (optional)</Label>
-                      <Input
-                        name="displayName"
-                        value={shopkeeperDetails.displayName}
-                        onChange={handleRentFormChange}
-                        placeholder="How this exhibitor's name should be shown"
-                      />
-                    </div>
-                  )}
                 </div>
 
                 {/* Only show these if creating a NEW shopkeeper */}

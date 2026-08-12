@@ -320,7 +320,10 @@ export class Stall {
   @Prop()
   brandName: string;
 
-  // Optional display name for this stall's exhibitor — see Vendor schema.
+  // Organizer/operator-only reference label for this stall's exhibitor.
+  // Set only from the backend (StallEditDialog / OperatorVenueView edit
+  // flows) — vendors never see or set it, and it is NOT stored on the
+  // vendor record, so each stall a vendor holds can carry its own.
   @Prop()
   displayName: string;
 
