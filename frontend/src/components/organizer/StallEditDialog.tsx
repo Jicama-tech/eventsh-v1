@@ -200,6 +200,7 @@ export function StallEditDialog({
         faceBookLink: v.faceBookLink || "",
         instagramLink: v.instagramLink || v.instagramHandle || "",
         brandName: stall?.brandName || v.brandName || "",
+        displayName: stall?.displayName || v.displayName || "",
         nameOfApplicant: stall?.nameOfApplicant || v.nameOfApplicant || "",
         registrationNumber:
           stall?.registrationNumber || v.registrationNumber || "",
@@ -582,6 +583,7 @@ export function StallEditDialog({
                 {renderField("Owner Name", "name")}
                 {renderField("Applicant Name", "nameOfApplicant")}
                 {renderField("Brand Name", "brandName")}
+                {renderField("Display Name", "displayName")}
                 {renderField("Business Name", "businessName")}
                 {renderField("Primary Email", "email")}
                 {renderField("Business Email", "businessEmail")}

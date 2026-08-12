@@ -1012,6 +1012,19 @@ export function ExhibitorDetailDialog({
                       "—"}
                   </p>
                 </div>
+                {stallFieldOn("displayName") &&
+                  (stallRequest.displayName ||
+                    stallRequest.shopkeeperId?.displayName) && (
+                  <div>
+                    <Label className="text-muted-foreground">
+                      Display Name
+                    </Label>
+                    <p className="font-medium">
+                      {stallRequest.displayName ||
+                        stallRequest.shopkeeperId?.displayName}
+                    </p>
+                  </div>
+                )}
                 {stallRequest.shopkeeperId?.email && (
                   <div>
                     <Label className="text-muted-foreground">

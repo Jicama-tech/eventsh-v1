@@ -209,6 +209,7 @@ export interface StallRequest {
   cancellationReason?: string;
   cancelledVia?: string;
   brandName?: string;
+  displayName?: string;
   nameOfApplicant: string;
   businessOwnerNationality: string;
   productDescription?: string;
