@@ -41,6 +41,7 @@ export const REGISTRATION_FORM_FIELDS: Record<
     { key: "businessOwnerNationality", label: "Owner Nationality", alwaysOn: false },
     { key: "residency", label: "Residency", alwaysOn: false },
     { key: "brandName", label: "Brand Name", alwaysOn: false },
+    { key: "displayName", label: "Display Name", alwaysOn: false },
     { key: "shopName", label: "Registered Business Name", alwaysOn: true },
     { key: "email", label: "Primary Email", alwaysOn: true },
     { key: "businessEmail", label: "Business Email", alwaysOn: false },

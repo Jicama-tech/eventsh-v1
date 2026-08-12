@@ -305,6 +305,17 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     todaysAttendees: 0,
   });
   const [loading, setLoading] = useState(true);
+  // Exhibitors tab's own loading flag — deliberately separate from `loading`
+  // above. `loading` gates an early return that unmounts this component's
+  // ENTIRE tree (see the `if (loading)` return below), including whatever
+  // dialog is open. fetchStallTickets() re-runs after almost every exhibitor
+  // action (edit, confirm, reject, payment, ...) to refresh the table; if it
+  // toggled the shared `loading` flag, that refresh would unmount + remount
+  // StallEditDialog mid-edit, discarding whatever the organizer just typed
+  // and saved back to its stale pre-edit values (e.g. Display Name reverting
+  // to blank right after "Save details" — only a manual close/reopen fixed
+  // it, since that re-seeds from the freshly-fetched stall).
+  const [stallsLoading, setStallsLoading] = useState(false);
   // Organizer "Edit stall" dialog — re-allocate spaces/add-ons + collect extra.
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editStall, setEditStall] = useState<any>(null);
@@ -1432,7 +1443,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
   const fetchStallTickets = async (eventId: string) => {
     try {
-      setLoading(true);
+      setStallsLoading(true);
       const response = await fetch(`${apiURL}/stalls/event/${eventId}`, {
         method: "GET",
       });
@@ -1447,7 +1458,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       console.error("Error fetching stalls:", error);
       setStalls([]);
     } finally {
-      setLoading(false);
+      setStallsLoading(false);
     }
   };
 
@@ -3063,7 +3074,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      {loading ? (
+                      {stallsLoading ? (
                         <div className="text-center py-8">
                           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 mx-auto mb-2"></div>
                           Loading exhibitor bookings...

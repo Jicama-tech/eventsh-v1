@@ -268,6 +268,8 @@ export class StallsService {
         const updateFields: Record<string, any> = {};
         if (createStallDto.brandName)
           updateFields.brandName = createStallDto.brandName;
+        if (createStallDto.displayName)
+          updateFields.displayName = createStallDto.displayName;
         if (createStallDto.nameOfApplicant)
           updateFields.nameOfApplicant = createStallDto.nameOfApplicant;
         if (createStallDto.businessOwnerNationality)
@@ -409,6 +411,7 @@ export class StallsService {
             state: createStallDto.businessState,
             pincode: createStallDto.businessPincode,
             brandName: createStallDto.brandName,
+            displayName: createStallDto.displayName,
             nameOfApplicant: createStallDto.nameOfApplicant,
             businessOwnerNationality: createStallDto.businessOwnerNationality,
             registrationNumber: createStallDto.registrationNumber,
@@ -475,6 +478,7 @@ export class StallsService {
         noOfOperators: createStallDto.noOfOperators,
         notes: createStallDto.notes,
         brandName: createStallDto.brandName,
+        displayName: createStallDto.displayName,
         nameOfApplicant: createStallDto.nameOfApplicant,
         registrationImage:
           createStallDto.registrationImage || vendorImages?.registrationImage,
@@ -1148,6 +1152,7 @@ export class StallsService {
 
       // Fields that live on the stall doc (also mirrored to the vendor below).
       set(stall, "brandName", dto.brandName);
+      set(stall, "displayName", dto.displayName);
       set(stall, "nameOfApplicant", dto.nameOfApplicant);
       set(stall, "registrationNumber", dto.registrationNumber);
       set(stall, "residency", dto.residency);
@@ -1187,6 +1192,7 @@ export class StallsService {
         set(vUpdate, "faceBookLink", dto.faceBookLink);
         set(vUpdate, "instagramLink", dto.instagramLink);
         set(vUpdate, "brandName", dto.brandName);
+        set(vUpdate, "displayName", dto.displayName);
         set(vUpdate, "nameOfApplicant", dto.nameOfApplicant);
         set(vUpdate, "registrationNumber", dto.registrationNumber);
         set(vUpdate, "residency", dto.residency);
@@ -4392,7 +4398,7 @@ export class StallsService {
             // vendor filled in, so we ship both and let the frontend fall back.
             // Keep this in sync with the fields the export/stall dialog show.
             select:
-              "name email businessEmail phoneNumber phone whatsAppNumber whatsappNumber countryCode country shopName businessName businessType businessCategory businessDescription instagramLink instagramHandle faceBookLink businessOwnerNationality residency noOfOperators refundPaymentDescription productDescription nameOfApplicant registrationNumber brandName hasDocVerification isGSTVerified isUENVerified GSTNumber UENNumber isMember membershipEndDate",
+              "name email businessEmail phoneNumber phone whatsAppNumber whatsappNumber countryCode country shopName businessName businessType businessCategory businessDescription instagramLink instagramHandle faceBookLink businessOwnerNationality residency noOfOperators refundPaymentDescription productDescription nameOfApplicant registrationNumber brandName displayName hasDocVerification isGSTVerified isUENVerified GSTNumber UENNumber isMember membershipEndDate",
           },
           {
             path: "eventId",

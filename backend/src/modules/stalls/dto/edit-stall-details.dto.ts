@@ -27,6 +27,7 @@ export class EditStallDetailsDto {
 
   // ── Shared: applicant / registration (stall + vendor) ──
   @IsOptional() @IsString() brandName?: string;
+  @IsOptional() @IsString() displayName?: string;
   @IsOptional() @IsString() nameOfApplicant?: string;
   @IsOptional() @IsString() registrationNumber?: string;
   @IsOptional() @IsString() residency?: string;

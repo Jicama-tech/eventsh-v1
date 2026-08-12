@@ -126,6 +126,10 @@ export class CreateStallDto {
   @IsString()
   brandName?: string;
 
+  @IsOptional()
+  @IsString()
+  displayName?: string;
+
   @IsNotEmpty()
   @IsString()
   nameOfApplicant: string;

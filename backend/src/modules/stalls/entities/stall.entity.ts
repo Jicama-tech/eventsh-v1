@@ -320,6 +320,10 @@ export class Stall {
   @Prop()
   brandName: string;
 
+  // Optional display name for this stall's exhibitor — see Vendor schema.
+  @Prop()
+  displayName: string;
+
   @Prop()
   nameOfApplicant: string;
 

@@ -80,16 +80,35 @@ function fitText(pdf: any, text: string, maxW: number): string {
   return s.length < text.length ? s + "…" : s;
 }
 
-/** Which field the organizer wants printed on each booked space, chosen in
- * the export-config dialog. Unbooked spaces always show their own name
- * regardless of this — there's no vendor/brand data for an empty stall. */
-export type ExportLabelField = "spaceName" | "vendorName" | "brandName";
+/** Which field(s) the organizer wants printed on each booked space, chosen
+ * in the export-config dialog. Unbooked spaces always show their own name
+ * regardless of this — there's no vendor/brand data for an empty stall. The
+ * "+" options print two fields joined with an em dash (e.g. "A1 — Acme
+ * Traders") rather than picking just one. */
+export type ExportLabelField =
+  | "spaceName"
+  | "vendorName"
+  | "brandName"
+  | "businessName"
+  | "displayName"
+  | "spaceName+businessName"
+  | "spaceName+brandName"
+  | "spaceName+displayName"
+  | "vendorName+brandName"
+  | "vendorName+businessName"
+  | "vendorName+displayName";
+
+/** Joins two label parts with an em dash, dropping whichever side is empty
+ * instead of printing a bare "— " or " —". */
+function joinLabelParts(a: string, b: string): string {
+  return [a, b].filter(Boolean).join(" — ");
+}
 
 /** Resolves the label text for one space in the exported PDF (both the map
  * tile and the directory's "Exhibitor" column go through this, so they stay
- * consistent with whichever field the organizer picked) — each option still
- * falls back through the others rather than printing blank when the
- * specifically-chosen field is empty for that vendor. */
+ * consistent with whichever field the organizer picked) — each single-field
+ * option still falls back through the others rather than printing blank
+ * when the specifically-chosen field is empty for that vendor. */
 function resolveExportLabel(
   t: any,
   booking: BookingInfo | undefined,
@@ -102,6 +121,46 @@ function resolveExportLabel(
       return spaceName;
     case "vendorName":
       return booking.vendorName || booking.businessName || booking.brandName || spaceName;
+    case "businessName":
+      return booking.businessName || booking.brandName || booking.vendorName || spaceName;
+    case "displayName":
+      return (
+        booking.displayName ||
+        booking.brandName ||
+        booking.businessName ||
+        booking.vendorName ||
+        spaceName
+      );
+    case "spaceName+businessName":
+      return joinLabelParts(
+        spaceName,
+        booking.businessName || booking.brandName || booking.vendorName || "",
+      );
+    case "spaceName+brandName":
+      return joinLabelParts(
+        spaceName,
+        booking.brandName || booking.businessName || booking.vendorName || "",
+      );
+    case "spaceName+displayName":
+      return joinLabelParts(
+        spaceName,
+        booking.displayName || booking.brandName || booking.businessName || "",
+      );
+    case "vendorName+brandName":
+      return joinLabelParts(
+        booking.vendorName || spaceName,
+        booking.brandName || booking.businessName || "",
+      );
+    case "vendorName+businessName":
+      return joinLabelParts(
+        booking.vendorName || spaceName,
+        booking.businessName || booking.brandName || "",
+      );
+    case "vendorName+displayName":
+      return joinLabelParts(
+        booking.vendorName || spaceName,
+        booking.displayName || booking.brandName || booking.businessName || "",
+      );
     case "brandName":
     default:
       return booking.brandName || booking.businessName || booking.vendorName || spaceName;
@@ -268,6 +327,7 @@ interface BookingInfo {
   vendorName: string;
   businessName?: string;
   brandName?: string;
+  displayName?: string;
   businessType?: string;
   vendorEmail?: string;
   vendorPhone?: string;
@@ -429,6 +489,10 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
             // same thing. Falls back through the same chain if unset.
             const brandName =
               sk?.brandName || stall?.shopkeeper?.brandName || stall?.brandName;
+            const displayName =
+              sk?.displayName ||
+              stall?.shopkeeper?.displayName ||
+              stall?.displayName;
             const vendorEmail =
               sk?.email ||
               stall?.shopkeeper?.email ||
@@ -448,6 +512,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
                 vendorName,
                 businessName,
                 brandName,
+                displayName,
                 businessType,
                 vendorEmail,
                 vendorPhone,
@@ -1218,7 +1283,27 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
                 <SelectContent>
                   <SelectItem value="brandName">Brand Name</SelectItem>
                   <SelectItem value="vendorName">Vendor Name</SelectItem>
+                  <SelectItem value="businessName">Business Name</SelectItem>
+                  <SelectItem value="displayName">Display Name</SelectItem>
                   <SelectItem value="spaceName">Space Name</SelectItem>
+                  <SelectItem value="spaceName+businessName">
+                    Space Name + Business Name
+                  </SelectItem>
+                  <SelectItem value="spaceName+brandName">
+                    Space Name + Brand Name
+                  </SelectItem>
+                  <SelectItem value="spaceName+displayName">
+                    Space Name + Display Name
+                  </SelectItem>
+                  <SelectItem value="vendorName+brandName">
+                    Vendor Name + Brand Name
+                  </SelectItem>
+                  <SelectItem value="vendorName+businessName">
+                    Vendor Name + Business Name
+                  </SelectItem>
+                  <SelectItem value="vendorName+displayName">
+                    Vendor Name + Display Name
+                  </SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground mt-1">
@@ -1273,11 +1358,24 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
                     fontSize: `${9 * exportLabelScale}px`,
                   }}
                 >
-                  {exportLabelField === "spaceName"
-                    ? "Stall A1"
-                    : exportLabelField === "vendorName"
-                      ? "Demo Vendor Name"
-                      : "Demo Organization Name"}
+                  {
+                    {
+                      spaceName: "Stall A1",
+                      vendorName: "Demo Vendor Name",
+                      businessName: "Demo Business Name",
+                      brandName: "Demo Organization Name",
+                      displayName: "Demo Display Name",
+                      "spaceName+businessName": "Stall A1 — Demo Business Name",
+                      "spaceName+brandName": "Stall A1 — Demo Organization Name",
+                      "spaceName+displayName": "Stall A1 — Demo Display Name",
+                      "vendorName+brandName":
+                        "Demo Vendor Name — Demo Organization Name",
+                      "vendorName+businessName":
+                        "Demo Vendor Name — Demo Business Name",
+                      "vendorName+displayName":
+                        "Demo Vendor Name — Demo Display Name",
+                    }[exportLabelField]
+                  }
                 </div>
               </div>
             </div>
