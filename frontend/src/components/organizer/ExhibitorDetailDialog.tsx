@@ -1012,17 +1012,12 @@ export function ExhibitorDetailDialog({
                       "—"}
                   </p>
                 </div>
-                {stallFieldOn("displayName") &&
-                  (stallRequest.displayName ||
-                    stallRequest.shopkeeperId?.displayName) && (
+                {stallRequest.displayName && (
                   <div>
                     <Label className="text-muted-foreground">
                       Display Name
                     </Label>
-                    <p className="font-medium">
-                      {stallRequest.displayName ||
-                        stallRequest.shopkeeperId?.displayName}
-                    </p>
+                    <p className="font-medium">{stallRequest.displayName}</p>
                   </div>
                 )}
                 {stallRequest.shopkeeperId?.email && (

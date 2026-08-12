@@ -489,10 +489,10 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
             // same thing. Falls back through the same chain if unset.
             const brandName =
               sk?.brandName || stall?.shopkeeper?.brandName || stall?.brandName;
-            const displayName =
-              sk?.displayName ||
-              stall?.shopkeeper?.displayName ||
-              stall?.displayName;
+            // Organizer/operator-only reference label — bound to this stall,
+            // never the vendor, so two stalls held by the same exhibitor can
+            // carry different display names.
+            const displayName = stall?.displayName;
             const vendorEmail =
               sk?.email ||
               stall?.shopkeeper?.email ||
