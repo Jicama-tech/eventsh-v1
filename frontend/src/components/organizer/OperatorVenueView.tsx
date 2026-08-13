@@ -80,6 +80,49 @@ function fitText(pdf: any, text: string, maxW: number): string {
   return s.length < text.length ? s + "…" : s;
 }
 
+/** Line-height multiplier used to both wrap and vertically stack the space
+ * labels below — kept as one constant so wrapping math and draw-position
+ * math never drift apart. */
+const LABEL_LINE_HEIGHT = 1.15;
+
+/** Wraps a space's main label onto up to `maxLines` lines instead of
+ * ellipsis-truncating it — organizers want the full vendor/brand name
+ * readable on the map, not cut off, even if that means shrinking the font.
+ * Tries the auto-computed `baseFs` first (mutates the PDF's font size as it
+ * goes — caller must re-set it before drawing anything else); if that wraps
+ * to more lines than fit `maxHeight` or exceeds `maxLines`, it steps the
+ * size down (never below ~55% of baseFs, so it doesn't shrink into
+ * illegibility) and re-wraps. If it still doesn't fit at the floor size,
+ * the overflow lines are collapsed into the last line with an ellipsis
+ * rather than spilling past the box. */
+function fitLabelLines(
+  pdf: any,
+  text: string,
+  maxWidth: number,
+  maxHeight: number,
+  baseFs: number,
+  maxLines = 3,
+): { lines: string[]; fs: number } {
+  const minFs = baseFs * 0.55;
+  let fs = baseFs;
+  let lines: string[] = [text];
+  for (let i = 0; i < 8; i++) {
+    pdf.setFontSize(fs);
+    lines = pdf.splitTextToSize(text, maxWidth);
+    const blockH = lines.length * fs * LABEL_LINE_HEIGHT;
+    if (lines.length <= maxLines && blockH <= maxHeight) break;
+    if (fs <= minFs) break;
+    fs = Math.max(minFs, fs * 0.88);
+  }
+  if (lines.length > maxLines) {
+    const kept = lines.slice(0, maxLines);
+    const overflow = lines.slice(maxLines - 1).join(" ");
+    kept[maxLines - 1] = fitText(pdf, overflow, maxWidth);
+    lines = kept;
+  }
+  return { lines, fs };
+}
+
 /** Which field(s) the organizer wants printed on each booked space, chosen
  * in the export-config dialog. Unbooked spaces always show their own name
  * regardless of this — there's no vendor/brand data for an empty stall. The
@@ -1151,24 +1194,39 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
           (big
             ? Math.max(3.5, Math.min(7, footH * 0.4))
             : Math.max(2.2, Math.min(3.5, footH * 0.22))) * options.labelScale;
-        pdf.setFontSize(fs);
+        // Wraps onto up to 3 lines (shrinking the font a bit first if
+        // needed) instead of ellipsis-truncating — the full name should
+        // stay readable on the map rather than getting cut off.
+        const { lines: labelLines, fs: labelFs } = fitLabelLines(
+          pdf,
+          label,
+          Math.max(6, footW - 3),
+          footH - 2,
+          fs,
+        );
+        pdf.setFontSize(labelFs);
         pdf.setTextColor(17, 24, 39);
-        const fitted = fitText(pdf, label, Math.max(6, footW - 3));
-        pdf.text(fitted, cx, cy + fs * 0.32, { align: "center" });
+        const lineH = labelFs * LABEL_LINE_HEIGHT;
+        const blockH = labelLines.length * lineH;
+        // First line's baseline: centred as a block around cy, then offset
+        // down by the font's ascent (~0.78× size) so it lands the same way
+        // the old single-line "cy + fs * 0.32" placement did.
+        const firstBaselineY = cy - blockH / 2 + lineH * 0.78;
+        labelLines.forEach((ln, i) => {
+          pdf.text(ln, cx, firstBaselineY + i * lineH, { align: "center" });
+        });
 
         // "Show Space Names" — the space's own code (e.g. "C1"), printed
-        // just outside the box's bottom edge rather than inside it, so it
-        // reads as a grid reference alongside whichever vendor/brand label
-        // is shown inside (skipped when that label already IS the space
-        // name — e.g. an unbooked stall — to avoid printing it twice).
+        // just outside the box's RIGHT edge (not inside it, not below it),
+        // vertically centred on the box — so it reads as a grid reference
+        // alongside whichever vendor/brand label is shown inside (skipped
+        // when that label already IS the space name — e.g. an unbooked
+        // stall — to avoid printing it twice).
         // Own size formula (not just fs reused) — it's a secondary/reference
         // label so it gets its own ceiling, PLUS its own user-adjustable
         // scale (options.spaceNameScale, independent of the main label's
         // options.labelScale) since organizers want to size the two
-        // separately, not in lockstep. Hugging the box: jsPDF's y is the
-        // text BASELINE, so closing the visual gap means only clearing the
-        // glyphs' own ascent (~0.75× font size) above the baseline, plus a
-        // small fixed pad.
+        // separately, not in lockstep.
         if (options.showSpaceNames) {
           const spaceName = t.tableName || t.name || t.positionId || "";
           if (spaceName && spaceName !== label) {
@@ -1180,16 +1238,12 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
             pdf.setFontSize(spaceNameFs);
             pdf.setFont("helvetica", "bold");
             pdf.setTextColor(71, 85, 105); // slate-600 — distinct from the main label
-            const fittedSpaceName = fitText(
-              pdf,
-              spaceName,
-              Math.max(6, footW - 3),
-            );
+            const fittedSpaceName = fitText(pdf, spaceName, footW);
             pdf.text(
               fittedSpaceName,
-              cx,
-              cy + footH / 2 + spaceNameFs * 0.75 + 0.5,
-              { align: "center" },
+              cx + footW / 2 + 3,
+              cy + spaceNameFs * 0.32,
+              { align: "left" },
             );
             pdf.setTextColor(17, 24, 39);
           }
