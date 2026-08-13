@@ -394,10 +394,22 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
   const [exportLabelField, setExportLabelField] =
     useState<ExportLabelField>("brandName");
   const [exportIncludeDirectory, setExportIncludeDirectory] = useState(true);
+  // When on, each space's own code/name (e.g. "C1") is printed just outside
+  // its box on the map — in addition to whatever exportLabelField shows
+  // inside — so the floor plan still reads as a grid reference even when the
+  // inside label is a vendor/brand name instead of the space name.
+  const [exportShowSpaceNames, setExportShowSpaceNames] = useState(false);
   // Multiplier applied to the auto-computed per-tile label font size (see
   // downloadVenuePdf) — 1 = the existing default sizing, adjustable via the
   // dialog's live preview.
   const [exportLabelScale, setExportLabelScale] = useState(1);
+  // Separate multiplier for the outside-the-box space name (see
+  // "Show Space Names" above) — kept independent from exportLabelScale so
+  // sizing the inside vendor/brand label doesn't force the outside space
+  // code to the same size; it's printed smaller by nature (a secondary
+  // reference, not the primary label) and organizers asked to tune it on
+  // its own.
+  const [exportSpaceNameScale, setExportSpaceNameScale] = useState(1);
   // Off-screen, natural-resolution copy of the map (see below) — the
   // html2canvas capture source for PDF export.
   const exportRef = useRef<HTMLDivElement>(null);
@@ -916,6 +928,8 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
       labelField: ExportLabelField;
       includeDirectory: boolean;
       labelScale: number;
+      showSpaceNames: boolean;
+      spaceNameScale: number;
     },
   ) => {
     if (!exportRef.current) return;
@@ -924,12 +938,93 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
       const [{ default: html2canvas }, { default: jsPDF }] =
         await Promise.all([import("html2canvas"), import("jspdf")]);
 
+      // --- Content bounding box (export-only auto-crop) -------------------
+      // canvasW/canvasH cover the whole configured venue, which is very
+      // often much bigger than where stalls actually sit — printing that
+      // 1:1 wastes most of the sheet on blank grid down one side. An
+      // EXPLICIT manual crop (cropped === true AND real cropWidth/Height on
+      // file) is the organizer's deliberate choice — may intentionally
+      // include aisle/buffer space — so it's left alone. But `cropped` can
+      // be true with no crop size ever saved (canvasW/H above then just
+      // fall back to the base venue size same as "uncropped" would) — that's
+      // not a real crop, so it still gets auto-cropped to a padded box
+      // around the actual tables/round tables/zones/doors.
+      const hasExplicitCrop =
+        cropped &&
+        Number(cfgAny.cropWidth) > 0 &&
+        Number(cfgAny.cropHeight) > 0;
+      // Small on purpose: a generous pad silently reclaims nothing on any
+      // edge where the real slack is smaller than the pad itself (it just
+      // clamps back to the untrimmed edge) — this stays well under typical
+      // stall spacing so it actually trims the blank margin instead of
+      // re-donating it back.
+      const CROP_PAD = 20;
+      let cropMinX = 0;
+      let cropMinY = 0;
+      let cropMaxX = canvasW;
+      let cropMaxY = canvasH;
+      if (!hasExplicitCrop) {
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        const mark = (x: number, y: number, w: number, h: number) => {
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x + w);
+          maxY = Math.max(maxY, y + h);
+        };
+        for (const t of tables) {
+          const w = (t as any).displayWidth ?? t.width ?? 0;
+          const h = (t as any).displayHeight ?? t.height ?? 0;
+          mark(t.x || 0, t.y || 0, w, h);
+        }
+        for (const r of rounds) {
+          const d = r.tableDiameter || 120;
+          mark(r.x || 0, r.y || 0, d, d);
+        }
+        for (const z of zones) {
+          mark(z.x || 0, z.y || 0, z.width || 0, z.height || 0);
+        }
+        for (const d of doors) {
+          const dw = Number(d.width) > 0 ? Number(d.width) : 50;
+          const dh = Number(d.height) > 0 ? Number(d.height) : 50;
+          mark(d.x || 0, d.y || 0, dw, dh);
+        }
+        if (minX !== Infinity) {
+          cropMinX = Math.max(0, minX - CROP_PAD);
+          cropMinY = Math.max(0, minY - CROP_PAD);
+          cropMaxX = Math.min(canvasW, maxX + CROP_PAD);
+          cropMaxY = Math.min(canvasH, maxY + CROP_PAD);
+        }
+      }
+      const cropW = cropMaxX - cropMinX;
+      const cropH = cropMaxY - cropMinY;
+
       // Higher raster scale for A1 so it stays crisp blown up to poster size.
-      const mapCanvas = await html2canvas(exportRef.current, {
+      const fullCanvas = await html2canvas(exportRef.current, {
         backgroundColor: "#ffffff",
         scale: paperSize === "a1" ? 2.5 : 2,
         useCORS: true,
       });
+      // Crop the raster to the content box above — a no-op when the venue
+      // was manually cropped already or has nothing to bound.
+      let mapCanvas: HTMLCanvasElement = fullCanvas;
+      if (cropW < canvasW || cropH < canvasH) {
+        const rasterScale = fullCanvas.width / canvasW;
+        const sx = cropMinX * rasterScale;
+        const sy = cropMinY * rasterScale;
+        const sw = cropW * rasterScale;
+        const sh = cropH * rasterScale;
+        const off = document.createElement("canvas");
+        off.width = sw;
+        off.height = sh;
+        const ctx = off.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(fullCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+          mapCanvas = off;
+        }
+      }
       const mapImg = mapCanvas.toDataURL("image/png");
 
       const pdf = new jsPDF({
@@ -940,6 +1035,12 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
       const margin = paperSize === "a1" ? 40 : 24;
+      // The map itself gets a much tighter margin than the header text does
+      // — A1 is printed as a poster to be read from a distance, so every bit
+      // of sheet not spent on the title band should go to the map growing
+      // bigger (and its space labels with it), not to blank paper framing
+      // it. A4 keeps the roomier margin; it's a handout, not a poster.
+      const mapMargin = paperSize === "a1" ? 12 : 24;
       const big = paperSize === "a1";
 
       // --- Title band ------------------------------------------------
@@ -993,9 +1094,9 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
       pdf.setTextColor(0, 0, 0);
 
       // --- Map -----------------------------------------------------------
-      const y = headerH + margin;
-      const mapMaxW = pageW - margin * 2;
-      const mapMaxH = pageH - y - margin;
+      const y = headerH + mapMargin;
+      const mapMaxW = pageW - mapMargin * 2;
+      const mapMaxH = pageH - y - mapMargin;
       const ratio = Math.min(
         mapMaxW / mapCanvas.width,
         mapMaxH / mapCanvas.height,
@@ -1003,9 +1104,15 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
       const drawW = mapCanvas.width * ratio;
       const drawH = mapCanvas.height * ratio;
       const mapX = (pageW - drawW) / 2;
+      // The map's aspect ratio rarely matches the sheet's exactly, so one
+      // axis is always the binding constraint and the other has leftover
+      // room — centering on BOTH axes (not just horizontally) spreads that
+      // leftover evenly around the map instead of dumping it all as a dead
+      // band on one side.
+      const mapY = y + (mapMaxH - drawH) / 2;
       pdf.setDrawColor(210);
-      pdf.rect(mapX - 2, y - 2, drawW + 4, drawH + 4);
-      pdf.addImage(mapImg, "PNG", mapX, y, drawW, drawH);
+      pdf.rect(mapX - 2, mapY - 2, drawW + 4, drawH + 4);
+      pdf.addImage(mapImg, "PNG", mapX, mapY, drawW, drawH);
 
       // --- Space labels, drawn natively (not part of the rasterised map) ---
       // The export copy carries no text or dots (see renderNothingFn) —
@@ -1014,7 +1121,9 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
       // DOM is clean on screen. Drawing the labels here with jsPDF's own
       // text is exact regardless of rotation, and prints crisper (real
       // text, not pixels).
-      const scaleToPdf = drawW / canvasW;
+      // drawW maps to cropW (the auto-cropped content box), not the full
+      // canvasW — see the crop computed above the html2canvas call.
+      const scaleToPdf = drawW / cropW;
       pdf.setFont("helvetica", "bold");
       for (const t of tables) {
         const bx = (t as any).x ?? 0;
@@ -1026,8 +1135,8 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
         if (!label) continue;
         const bw = ((t as any).displayWidth ?? t.width ?? 50) as number;
         const bh = ((t as any).displayHeight ?? t.height ?? 50) as number;
-        const cx = mapX + (bx + bw / 2) * scaleToPdf;
-        const cy = y + (by + bh / 2) * scaleToPdf;
+        const cx = mapX + (bx - cropMinX + bw / 2) * scaleToPdf;
+        const cy = mapY + (by - cropMinY + bh / 2) * scaleToPdf;
         // The label always renders upright — SpaceLayout counter-rotates it
         // to cancel the tile's own rotation — so the space actually
         // available for that upright text is the tile's VISUAL footprint,
@@ -1046,6 +1155,45 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
         pdf.setTextColor(17, 24, 39);
         const fitted = fitText(pdf, label, Math.max(6, footW - 3));
         pdf.text(fitted, cx, cy + fs * 0.32, { align: "center" });
+
+        // "Show Space Names" — the space's own code (e.g. "C1"), printed
+        // just outside the box's bottom edge rather than inside it, so it
+        // reads as a grid reference alongside whichever vendor/brand label
+        // is shown inside (skipped when that label already IS the space
+        // name — e.g. an unbooked stall — to avoid printing it twice).
+        // Own size formula (not just fs reused) — it's a secondary/reference
+        // label so it gets its own ceiling, PLUS its own user-adjustable
+        // scale (options.spaceNameScale, independent of the main label's
+        // options.labelScale) since organizers want to size the two
+        // separately, not in lockstep. Hugging the box: jsPDF's y is the
+        // text BASELINE, so closing the visual gap means only clearing the
+        // glyphs' own ascent (~0.75× font size) above the baseline, plus a
+        // small fixed pad.
+        if (options.showSpaceNames) {
+          const spaceName = t.tableName || t.name || t.positionId || "";
+          if (spaceName && spaceName !== label) {
+            const spaceNameFs =
+              (big
+                ? Math.max(4, Math.min(9, footH * 0.5))
+                : Math.max(2.5, Math.min(4, footH * 0.28))) *
+              options.spaceNameScale;
+            pdf.setFontSize(spaceNameFs);
+            pdf.setFont("helvetica", "bold");
+            pdf.setTextColor(71, 85, 105); // slate-600 — distinct from the main label
+            const fittedSpaceName = fitText(
+              pdf,
+              spaceName,
+              Math.max(6, footW - 3),
+            );
+            pdf.text(
+              fittedSpaceName,
+              cx,
+              cy + footH / 2 + spaceNameFs * 0.75 + 0.5,
+              { align: "center" },
+            );
+            pdf.setTextColor(17, 24, 39);
+          }
+        }
       }
       pdf.setTextColor(0, 0, 0);
 
@@ -1261,7 +1409,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
         open={!!exportConfigSize}
         onOpenChange={(open) => !open && setExportConfigSize(null)}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               Export {exportConfigSize?.toUpperCase()} —{" "}
@@ -1328,6 +1476,53 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
                 onCheckedChange={setExportIncludeDirectory}
               />
             </div>
+
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <Label htmlFor="export-space-names-toggle">
+                  Show Space Names
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Prints each space's own code (e.g. "C1") just outside its
+                  box on the map, in addition to the label above.
+                </p>
+              </div>
+              <Switch
+                id="export-space-names-toggle"
+                checked={exportShowSpaceNames}
+                onCheckedChange={setExportShowSpaceNames}
+              />
+            </div>
+
+            {exportShowSpaceNames && (
+              <div>
+                <div className="flex items-center justify-between">
+                  <Label>Space Name Text Size</Label>
+                  <span className="text-xs text-muted-foreground">
+                    {Math.round(exportSpaceNameScale * 100)}%
+                  </span>
+                </div>
+                <Slider
+                  className="mt-2"
+                  min={0.5}
+                  max={2.5}
+                  step={0.1}
+                  value={[exportSpaceNameScale]}
+                  onValueChange={([v]) => setExportSpaceNameScale(v)}
+                />
+                {/* Same rough visual proxy as the label-size preview below —
+                    not the real PDF font metrics, just a concrete reference
+                    for "bigger/smaller" at this specific scale. */}
+                <div className="mt-3 rounded-lg border bg-slate-50 p-3 flex items-center justify-center">
+                  <span
+                    className="font-bold text-slate-600"
+                    style={{ fontSize: `${9 * exportSpaceNameScale}px` }}
+                  >
+                    C1
+                  </span>
+                </div>
+              </div>
+            )}
 
             <div>
               <div className="flex items-center justify-between">
@@ -1397,6 +1592,8 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
                     labelField: exportLabelField,
                     includeDirectory: exportIncludeDirectory,
                     labelScale: exportLabelScale,
+                    showSpaceNames: exportShowSpaceNames,
+                    spaceNameScale: exportSpaceNameScale,
                   });
                 }
               }}
