@@ -53,6 +53,15 @@ async function bootstrap() {
   app.use(compression());
 
   async function getAllowedDomains(): Promise<string[]> {
+    // CORS_ORIGINS (comma-separated) lets a white-label deployment allow its
+    // own domain without touching this file — the eventsh.com deployment
+    // doesn't need to set it, since the hardcoded list below covers it.
+    if (process.env.CORS_ORIGINS) {
+      return process.env.CORS_ORIGINS.split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean);
+    }
+
     const domains = [
       "https://eventsh.com",
       "https://thefoxsg.com",

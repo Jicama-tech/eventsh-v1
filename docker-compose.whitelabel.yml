@@ -1,0 +1,63 @@
+# White-label, single-tenant deployment stack — one of these per customer,
+# each with its own MongoDB (full data isolation) and its own env file.
+# See docs/WHITE_LABEL_DEPLOYMENT.md for the full walkthrough.
+#
+# This is separate from backend/docker-compose.yml, which is dev-only (just a
+# local Mongo for `npm run start:dev`) and is left untouched.
+#
+# Usage:
+#   cp .env.whitelabel.example .env.whitelabel   # then fill it in
+#   docker compose -f docker-compose.whitelabel.yml --env-file .env.whitelabel build
+#   docker compose -f docker-compose.whitelabel.yml --env-file .env.whitelabel up -d
+#
+# The explicit --env-file is what makes ${VITE_API_URL} etc. below resolve for
+# the frontend's build args, AND is what `env_file: .env.whitelabel` reads for
+# the backend's runtime env — one file serves both.
+
+services:
+  mongo:
+    image: mongo:6
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    # Not published to the host by default — only the backend needs to reach
+    # it, over the compose network. Swapping this whole service out for an
+    # external managed Mongo URI (Atlas, etc.) is fine: just remove this
+    # service and point MONGO_URI in .env.whitelabel at it instead.
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    env_file:
+      - .env.whitelabel
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    volumes:
+      - uploads-data:/app/uploads
+      # WhatsApp defaults OFF for new white-label deployments (matches the
+      # platform's existing email-first phase-out). Uncomment if a tenant
+      # deliberately sets WHATSAPP_ENABLED=true in .env.whitelabel — the
+      # baileys session otherwise has nowhere persistent to store its pairing.
+      # - whatsapp-auth-data:/app/whatsapp_auth
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+        VITE_APPYFLOW_KEY_SECRET: ${VITE_APPYFLOW_KEY_SECRET}
+        VITE_PUBLIC_BASE: ${VITE_PUBLIC_BASE}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+
+volumes:
+  mongo-data:
+  uploads-data:
+  # whatsapp-auth-data:
