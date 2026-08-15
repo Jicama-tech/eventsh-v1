@@ -46,6 +46,8 @@ import { FilesModule } from "./modules/files/files.module";
 import { SponsorsModule } from "./modules/sponsors/sponsors.module";
 import { AnalyticsModule } from "./modules/analytics/analytics.module";
 import { ExpensesModule } from "./modules/expenses/expenses.module";
+import { PlatformRegistryModule } from "./modules/platform-registry/platform-registry.module";
+import { PlatformSyncModule } from "./modules/platform-sync/platform-sync.module";
 
 @Module({
   imports: [
@@ -102,6 +104,8 @@ import { ExpensesModule } from "./modules/expenses/expenses.module";
     SponsorsModule,
     ExpensesModule,
     AnalyticsModule,
+    PlatformRegistryModule,
+    PlatformSyncModule,
   ],
   providers: [
     // Read-only demo sessions can never mutate real data via the API.

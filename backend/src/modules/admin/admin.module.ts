@@ -20,6 +20,10 @@ import {
   ExhibitorMembership,
   ExhibitorMembershipSchema,
 } from "../memberships/schemas/exhibitor-membership.schema";
+import {
+  WhiteLabelSyncedUser,
+  WhiteLabelSyncedUserSchema,
+} from "../platform-registry/schemas/white-label-synced-user.schema";
 import { MailModule } from "../roles/mail.module";
 import { MailService } from "../roles/mail.service";
 import { PaymentsModule } from "../payments/payments.module";
@@ -42,6 +46,7 @@ import { PaymentsModule } from "../payments/payments.module";
       { name: "PlatformBillingRates", schema: PlatformBillingRatesSchema },
       { name: "PaymentConfig", schema: PaymentConfigSchema },
       { name: ExhibitorMembership.name, schema: ExhibitorMembershipSchema },
+      { name: WhiteLabelSyncedUser.name, schema: WhiteLabelSyncedUserSchema },
     ]),
     MailModule,
     JwtModule.register({

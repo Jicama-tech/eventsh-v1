@@ -49,6 +49,7 @@ import {
   Download,
   ShieldCheck,
   CheckCircle2,
+  Globe,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -89,6 +90,21 @@ interface Summary {
   operators: number;
   agents: number;
   multiRole: number;
+  whiteLabelUsers: number;
+}
+
+// Reported in via a white-label instance's async sync push — see
+// backend/src/modules/platform-registry. Kept as its own section below
+// rather than merged into the main table: these come from other
+// deployments' separate databases, not this one.
+interface WhiteLabelSyncedUser {
+  instanceId: string;
+  sourceType: "organizer" | "vendor" | "attendee" | "operator";
+  name?: string;
+  email?: string;
+  role?: string;
+  sourceCreatedAt?: string;
+  syncedAt: string;
 }
 
 const ROLE_STYLE: Record<
@@ -140,6 +156,9 @@ function RoleBadge({ role }: { role: string }) {
 
 export function UsersPage() {
   const [data, setData] = useState<UnifiedUser[]>([]);
+  const [whiteLabelUsers, setWhiteLabelUsers] = useState<
+    WhiteLabelSyncedUser[]
+  >([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -161,6 +180,7 @@ export function UsersPage() {
       const json = await res.json();
       setSummary(json.summary || null);
       setData(json.users || []);
+      setWhiteLabelUsers(json.whiteLabelUsers || []);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -299,6 +319,13 @@ export function UsersPage() {
           icon: Layers,
           bg: "bg-emerald-50",
           color: "text-emerald-600",
+        },
+        {
+          title: "White-Label",
+          value: summary.whiteLabelUsers,
+          icon: Globe,
+          bg: "bg-sky-50",
+          color: "text-sky-600",
         },
       ]
     : [];
@@ -539,6 +566,60 @@ export function UsersPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* White-label users — reported in from other deployments' own
+          databases via the async platform-registry sync, not this one's
+          native collections. Only shown once there's at least one, so it's
+          invisible on a plain (non-white-label) deployment. */}
+      {whiteLabelUsers.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base sm:text-lg">
+              White-Label Instance Users
+            </CardTitle>
+            <CardDescription>
+              Reported in from customers' own white-label deployments —
+              separate databases, synced in periodically.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="font-semibold">Instance</TableHead>
+                    <TableHead className="font-semibold">Type</TableHead>
+                    <TableHead className="font-semibold">Person</TableHead>
+                    <TableHead className="font-semibold">Contact</TableHead>
+                    <TableHead className="font-semibold">Synced</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {whiteLabelUsers.map((u, i) => (
+                    <TableRow key={`${u.instanceId}-${u.sourceType}-${i}`}>
+                      <TableCell className="text-xs font-mono">
+                        {u.instanceId}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-[11px] capitalize">
+                          {u.sourceType}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">{u.name || "—"}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {u.email || "—"}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                        {new Date(u.syncedAt).toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Detail Dialog */}
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
