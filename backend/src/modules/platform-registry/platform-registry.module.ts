@@ -4,6 +4,7 @@ import { JwtModule } from "@nestjs/jwt";
 import { PlatformRegistryController } from "./platform-registry.controller";
 import { PlatformRegistryService } from "./platform-registry.service";
 import { InstanceLicenseGuard } from "./guards/instance-license.guard";
+import { AdminRolesGuard } from "../auth/guards/admin-roles.guard";
 import {
   WhiteLabelInstance,
   WhiteLabelInstanceSchema,
@@ -33,7 +34,7 @@ import {
     }),
   ],
   controllers: [PlatformRegistryController],
-  providers: [PlatformRegistryService, InstanceLicenseGuard],
+  providers: [PlatformRegistryService, InstanceLicenseGuard, AdminRolesGuard],
   exports: [MongooseModule],
 })
 export class PlatformRegistryModule {}

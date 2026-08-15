@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { AdminRolesGuard } from "../auth/guards/admin-roles.guard";
 import { InstanceLicenseGuard } from "./guards/instance-license.guard";
 import { PlatformRegistryService } from "./platform-registry.service";
 import { RegisterInstanceDto } from "./dto/register-instance.dto";
@@ -12,8 +13,14 @@ export class PlatformRegistryController {
   // Admin-only. Registers a new white-label instance ahead of provisioning
   // it — see PlatformRegistryService.registerInstance for the licenseKey
   // handling.
+  //
+  // AdminRolesGuard added alongside the pre-existing JwtAuthGuard: a code
+  // review on the Container branch found JwtAuthGuard alone only proves
+  // "some valid eventsh JWT" — organizer/vendor tokens are also valid JWTs,
+  // so any logged-in organizer could previously register instances or list
+  // every white-label customer's domain + sync stats below.
   @Post("instances")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, AdminRolesGuard)
   registerInstance(@Body() dto: RegisterInstanceDto) {
     return this.registryService.registerInstance(dto);
   }
@@ -21,7 +28,7 @@ export class PlatformRegistryController {
   // Admin-only. Lists registered instances + their latest sync stats, for
   // the Super Admin UI.
   @Get("instances")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, AdminRolesGuard)
   listInstances() {
     return this.registryService.listInstances();
   }

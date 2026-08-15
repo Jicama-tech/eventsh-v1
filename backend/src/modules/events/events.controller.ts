@@ -40,8 +40,14 @@ import { computePlanExpiry } from "../plans/plan-validity.util";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import { buildDefaultStorefrontSettings } from "../organizer-stores/default-settings";
+import { OrganizerOrApiKeyGuard } from "../organizers/guards/organizer-or-api-key.guard";
+import { ThrottlerGuard } from "@nestjs/throttler";
 
-function generateFileName(req: any, file: any, cb: any) {
+// Exported so the standalone uploads module (uploads/uploads.controller.ts —
+// backs SingAdvisor-style clients that upload an image separately from
+// create/update, e.g. before the event exists yet) reuses the exact same
+// storage/filename/filter behavior instead of duplicating it.
+export function generateFileName(req: any, file: any, cb: any) {
   const ext = path.extname(file.originalname);
   const filename = `${uuidv4()}${ext}`;
   cb(null, filename);
@@ -69,7 +75,7 @@ function sanitizeSectionVisibility(input: any): Record<string, boolean> {
   return out;
 }
 
-const imageFilter = (req: any, file: any, cb: any) => {
+export const imageFilter = (req: any, file: any, cb: any) => {
   // Accept the formats the cropper / browsers commonly emit. Webp is what
   // the rest of the pipeline already converts to (see WebpValidationPipe);
   // accepting it on intake avoids re-crop loops that produce webp blobs.
@@ -319,7 +325,12 @@ export class EventsController {
   }
 
   @Post("create-event")
-  @UseGuards(AuthGuard("jwt"))
+  // OrganizerOrApiKeyGuard: accepts the existing browser JWT session
+  // unchanged, OR a Phase-4 machine caller's x-organizer-id/x-api-key
+  // headers (e.g. SingAdvisor's admin, locked to exactly one Organizer).
+  // ThrottlerGuard added alongside it — machine traffic patterns differ
+  // from browser users, and this is the first API-key-reachable surface.
+  @UseGuards(OrganizerOrApiKeyGuard, ThrottlerGuard)
   @UseInterceptors(
     FileFieldsInterceptor(
       [
@@ -363,6 +374,14 @@ export class EventsController {
     @Req() req: any,
   ) {
     try {
+      // multer's interceptor only runs for multipart/form-data requests — a
+      // plain JSON POST (e.g. a Phase-4 API-key caller like SingAdvisor,
+      // which uploads images via the separate /uploads/events endpoint and
+      // never sends files here) leaves `files` as `undefined` rather than an
+      // empty object, which crashed every `files.banner`/`files.gallery`/etc.
+      // access below. Confirmed via a real request: "Cannot read properties
+      // of undefined (reading 'banner')".
+      files = files || ({} as typeof files);
       const roles: string[] = req.user?.roles || [];
       const isOrganizer = roles.includes("organizer") || roles.includes("admin");
       const isIndividual = roles.includes("individual");
@@ -796,6 +815,33 @@ export class EventsController {
     }
   }
 
+  // Public single-event-by-slug lookup, scoped to one organizer — a slug is
+  // only unique per organizer (see createEvent.dto.ts's `slug` comment), so
+  // there's no bare "/events/slug/:slug" route the way a single-tenant
+  // backend (e.g. SingAdvisor's own) has. Built for exactly that shape of
+  // client: unauthenticated (this is the equivalent of eventFront's public
+  // page load), always visibility-filtered like publicOnly above.
+  @Get("organizer/:organizerId/slug/:slug")
+  async getEventByOrganizerAndSlug(
+    @Param("organizerId") organizerId: string,
+    @Param("slug") slug: string,
+  ) {
+    try {
+      const event = await this.eventsService.findByOrganizerAndSlug(
+        organizerId,
+        slug,
+      );
+      return {
+        success: true,
+        message: "Event retrieved successfully",
+        data: event,
+      };
+    } catch (error) {
+      console.error("Error in getEventByOrganizerAndSlug:", error);
+      throw error;
+    }
+  }
+
   // ── Volunteer Google sign-in (redirect flow) ──────────────────────────────
   // Step 1: kick off the OAuth redirect. The eventId rides along in `state` so
   // the callback knows which event's volunteer allow-list to check.
@@ -992,7 +1038,8 @@ export class EventsController {
   }
 
   @Put(":id")
-  @UseGuards(AuthGuard("jwt"))
+  // See createEvent above — same OrganizerOrApiKeyGuard + ThrottlerGuard rationale.
+  @UseGuards(OrganizerOrApiKeyGuard, ThrottlerGuard)
   @UseInterceptors(
     FileFieldsInterceptor(
       [
@@ -1035,6 +1082,9 @@ export class EventsController {
     @Req() req: any,
   ) {
     try {
+      // See createEvent above — same undefined-`files` fix for non-multipart
+      // (Phase-4 API-key/JSON) callers.
+      files = files || ({} as typeof files);
       const updateRoles: string[] = req.user?.roles || [];
       const updateIsIndividual = updateRoles.includes("individual");
       // Parse JSON strings from FormData
@@ -1376,7 +1426,8 @@ export class EventsController {
   }
 
   @Patch(":id/publish")
-  @UseGuards(AuthGuard("jwt"))
+  // See createEvent above — same OrganizerOrApiKeyGuard + ThrottlerGuard rationale.
+  @UseGuards(OrganizerOrApiKeyGuard, ThrottlerGuard)
   async setPublished(
     @Param("id") id: string,
     @Body("published") published: boolean,
@@ -1420,7 +1471,8 @@ export class EventsController {
   }
 
   @Delete(":id")
-  @UseGuards(AuthGuard("jwt"))
+  // See createEvent above — same OrganizerOrApiKeyGuard + ThrottlerGuard rationale.
+  @UseGuards(OrganizerOrApiKeyGuard, ThrottlerGuard)
   async deleteEvent(@Param("id") id: string, @Req() req: any) {
     try {
       const event = await this.eventsService.remove(id);

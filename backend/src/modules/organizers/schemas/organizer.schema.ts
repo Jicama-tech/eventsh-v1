@@ -273,6 +273,19 @@ export class Organizer {
   })
   receiptType: ReceiptType;
 
+  // --- Direct API integration (Phase 4: clients with their own frontend +
+  // database, consuming eventsh purely as a backend API — e.g. SingAdvisor).
+  // Same "generate once, store only the hash" pattern as
+  // WhiteLabelInstance.licenseKeyHash (platform-registry module) — the
+  // plaintext key is returned once from POST /organizers/:id/api-key/generate
+  // and never persisted. A null hash means this organizer has no active key
+  // (ApiKeyGuard/OrganizerOrApiKeyGuard reject with no key configured).
+  @Prop({ default: null })
+  apiKeyHash?: string | null;
+
+  @Prop({ default: null })
+  apiKeyGeneratedAt?: Date | null;
+
   // --- Referral / Provider tracking (Agent referral system) ---
   @Prop({ default: "self" })
   provider?: string; // "self" | "Agent" | future providers

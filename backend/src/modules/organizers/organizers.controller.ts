@@ -24,6 +24,9 @@ import { UpdateOrganizerDto } from "./dto/updateOrganizer.dto";
 import { diskStorage } from "multer";
 import { extname } from "path";
 import { WebpValidationPipe } from "../../seed/parse-webp.pipe";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { AdminRolesGuard } from "../auth/guards/admin-roles.guard";
+import { ThrottlerGuard } from "@nestjs/throttler";
 
 function qrStorage() {
   return diskStorage({
@@ -208,5 +211,26 @@ export class OrganizersController {
     } catch (error) {
       throw error;
     }
+  }
+
+  // ----- Direct API integration (Phase 4) -----------------------------------
+  // Admin-only: mints/rotates the API key a machine caller (a client with
+  // their own frontend + DB, e.g. SingAdvisor) uses on the
+  // OrganizerOrApiKeyGuard-protected endpoints below, via
+  // `x-organizer-id`/`x-api-key` headers. The plaintext key is returned in
+  // this response ONLY — never persisted, never retrievable again after this
+  // call (rotate to get a new one). Not exposed to organizers themselves;
+  // this is a platform-owner action, matching how WhiteLabelInstance license
+  // keys are issued in platform-registry.
+  @Post(":id/api-key/generate")
+  @UseGuards(JwtAuthGuard, AdminRolesGuard, ThrottlerGuard)
+  async generateApiKey(@Param("id") id: string) {
+    return this.organizersService.generateApiKey(id);
+  }
+
+  @Patch(":id/api-key/revoke")
+  @UseGuards(JwtAuthGuard, AdminRolesGuard, ThrottlerGuard)
+  async revokeApiKey(@Param("id") id: string) {
+    return this.organizersService.revokeApiKey(id);
   }
 }
