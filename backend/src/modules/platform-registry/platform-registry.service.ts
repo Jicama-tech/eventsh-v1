@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import * as bcrypt from "bcrypt";
@@ -23,13 +23,40 @@ export class PlatformRegistryService {
     private readonly syncedUserModel: Model<WhiteLabelSyncedUserDocument>,
   ) {}
 
-  // Registers a new white-label deployment ahead of provisioning it. The
-  // plaintext licenseKey is returned exactly once — only its hash is ever
-  // stored (bcrypt, same handling as every other secret in this codebase) —
-  // hand both values to the customer's deployment as
+  // Registers a new white-label deployment ahead of provisioning it — OR
+  // (integrationType "api-client", Phase 4.5) registers a tracking-only
+  // entry for a client consuming eventsh purely as a backend API, linked to
+  // its real Organizer row. Only "full-instance" (the default — every
+  // registration before this type existed was one) generates a license
+  // key: an api-client integration has no separate deployment to run
+  // platform-sync.service.ts's periodic job from, so there's nothing for
+  // that credential to authenticate. The plaintext licenseKey (when
+  // generated) is returned exactly once — only its hash is ever stored
+  // (bcrypt, same handling as every other secret in this codebase) — hand
+  // both values to the customer's deployment as
   // PLATFORM_REGISTRY_URL/INSTANCE_LICENSE_KEY.
   async registerInstance(dto: RegisterInstanceDto) {
+    const integrationType = dto.integrationType || "full-instance";
+    if (integrationType === "api-client" && !dto.organizerId) {
+      throw new BadRequestException(
+        "organizerId is required when integrationType is \"api-client\"",
+      );
+    }
+
     const instanceId = crypto.randomBytes(8).toString("hex");
+
+    if (integrationType === "api-client") {
+      await this.instanceModel.create({
+        instanceId,
+        companyName: dto.companyName,
+        domain: dto.domain,
+        integrationType,
+        organizerId: dto.organizerId,
+        status: "active",
+      });
+      return { instanceId };
+    }
+
     const licenseKey = crypto.randomBytes(24).toString("hex");
     const licenseKeyHash = await bcrypt.hash(licenseKey, 10);
 
@@ -38,6 +65,7 @@ export class PlatformRegistryService {
       companyName: dto.companyName,
       domain: dto.domain,
       licenseKeyHash,
+      integrationType,
       status: "active",
     });
 
@@ -48,7 +76,7 @@ export class PlatformRegistryService {
     return this.instanceModel
       .find()
       .select(
-        "instanceId companyName domain status lastSyncAt lastSyncStats createdAt",
+        "instanceId companyName domain status integrationType organizerId lastSyncAt lastSyncStats createdAt",
       )
       .sort({ createdAt: -1 })
       .lean();

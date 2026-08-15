@@ -26,7 +26,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Building2, Plus, RefreshCw, Copy, Check } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Building2, Plus, RefreshCw, Copy, Check, Cable } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const apiURL = __API_URL__;
@@ -36,6 +43,12 @@ interface WhiteLabelInstance {
   companyName: string;
   domain: string;
   status: "active" | "inactive";
+  // Defaults to "full-instance" server-side when absent — every row
+  // registered before this field existed was one (Phase 4.5b).
+  integrationType?: "full-instance" | "api-client";
+  // Only set for "api-client" rows — links to the real Organizer this
+  // integration is scoped to. Manage its key from the Organizers page.
+  organizerId?: string;
   lastSyncAt?: string;
   lastSyncStats?: Record<string, number>;
   createdAt: string;
@@ -48,12 +61,22 @@ export function WhiteLabelInstancesPage() {
   const [registerOpen, setRegisterOpen] = useState(false);
   const [companyName, setCompanyName] = useState("");
   const [domain, setDomain] = useState("");
+  // Phase 4.5b — which kind of integration this row tracks. "full-instance"
+  // (default): a separate Docker deployment (Phases 1-3). "api-client": a
+  // client with its own frontend + database consuming eventsh purely as a
+  // backend API (Phase 4), scoped to a real Organizer on this backend.
+  const [integrationType, setIntegrationType] = useState<
+    "full-instance" | "api-client"
+  >("full-instance");
+  const [organizerId, setOrganizerId] = useState("");
   const [saving, setSaving] = useState(false);
   // Shown exactly once, right after registering — the backend never
   // returns the plaintext license key again (only its hash is stored).
+  // licenseKey is absent for "api-client" rows — there's no separate
+  // deployment to authenticate, so nothing was generated.
   const [newCredentials, setNewCredentials] = useState<{
     instanceId: string;
-    licenseKey: string;
+    licenseKey?: string;
   } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const { toast } = useToast();
@@ -89,6 +112,13 @@ export function WhiteLabelInstancesPage() {
       });
       return;
     }
+    if (integrationType === "api-client" && !organizerId.trim()) {
+      toast({
+        title: "Organizer ID is required for an API Client integration",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       setSaving(true);
       const res = await fetch(`${apiURL}/platform-registry/instances`, {
@@ -97,13 +127,20 @@ export function WhiteLabelInstancesPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ companyName, domain }),
+        body: JSON.stringify({
+          companyName,
+          domain,
+          integrationType,
+          ...(integrationType === "api-client" ? { organizerId } : {}),
+        }),
       });
       if (!res.ok) throw new Error(`Failed: ${res.statusText}`);
       const data = await res.json();
       setNewCredentials(data);
       setCompanyName("");
       setDomain("");
+      setOrganizerId("");
+      setIntegrationType("full-instance");
       fetchInstances();
     } catch (err: any) {
       toast({ title: "Couldn't register instance", description: err.message, variant: "destructive" });
@@ -168,6 +205,7 @@ export function WhiteLabelInstancesPage() {
                 <TableHeader>
                   <TableRow className="bg-muted/50">
                     <TableHead className="font-semibold">Company</TableHead>
+                    <TableHead className="font-semibold">Type</TableHead>
                     <TableHead className="font-semibold">Domain</TableHead>
                     <TableHead className="font-semibold">Status</TableHead>
                     <TableHead className="font-semibold">Last Stats</TableHead>
@@ -183,6 +221,23 @@ export function WhiteLabelInstancesPage() {
                         <div className="text-xs text-muted-foreground font-mono">
                           {inst.instanceId}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {inst.integrationType === "api-client" ? (
+                          <div>
+                            <Badge variant="outline" className="gap-1">
+                              <Cable className="h-3 w-3" />
+                              API Client
+                            </Badge>
+                            {inst.organizerId && (
+                              <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                                org: {inst.organizerId}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <Badge variant="outline">Full Instance</Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {inst.domain}
@@ -233,15 +288,17 @@ export function WhiteLabelInstancesPage() {
               <DialogHeader>
                 <DialogTitle>Instance registered</DialogTitle>
                 <DialogDescription>
-                  Copy these now — the license key is shown only once and
-                  can't be retrieved again. Hand both to the customer's
-                  deployment as env vars (see docs/WHITE_LABEL_DEPLOYMENT.md).
+                  {newCredentials.licenseKey
+                    ? "Copy these now — the license key is shown only once and can't be retrieved again. Hand both to the customer's deployment as env vars (see docs/WHITE_LABEL_DEPLOYMENT.md)."
+                    : "This API Client integration is now tracked centrally. Generate its Organizer's API key from the Organizers page (Direct API Access section) — that's a separate credential from this registry entry."}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3 mt-2">
                 {[
                   { label: "INSTANCE_ID", value: newCredentials.instanceId },
-                  { label: "INSTANCE_LICENSE_KEY", value: newCredentials.licenseKey },
+                  ...(newCredentials.licenseKey
+                    ? [{ label: "INSTANCE_LICENSE_KEY", value: newCredentials.licenseKey }]
+                    : []),
                 ].map((f) => (
                   <div key={f.label}>
                     <Label className="text-xs text-muted-foreground">{f.label}</Label>
@@ -276,13 +333,35 @@ export function WhiteLabelInstancesPage() {
           ) : (
             <>
               <DialogHeader>
-                <DialogTitle>Register a white-label instance</DialogTitle>
+                <DialogTitle>Register an instance</DialogTitle>
                 <DialogDescription>
                   Creates a registry entry ahead of provisioning the actual
-                  deployment.
+                  deployment — or, for an API Client, tracks a client that
+                  already consumes eventsh via its own Organizer API key.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3 mt-2">
+                <div>
+                  <Label>Integration type</Label>
+                  <Select
+                    value={integrationType}
+                    onValueChange={(v) =>
+                      setIntegrationType(v as "full-instance" | "api-client")
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="full-instance">
+                        Full Instance — separate Docker deployment
+                      </SelectItem>
+                      <SelectItem value="api-client">
+                        API Client — own frontend + database, calls the API
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div>
                   <Label>Company name</Label>
                   <Input
@@ -299,6 +378,21 @@ export function WhiteLabelInstancesPage() {
                     placeholder="app.acmeevents.com"
                   />
                 </div>
+                {integrationType === "api-client" && (
+                  <div>
+                    <Label>Organizer ID</Label>
+                    <Input
+                      value={organizerId}
+                      onChange={(e) => setOrganizerId(e.target.value)}
+                      placeholder="Mongo _id from the Organizers page"
+                      className="font-mono text-xs"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      The single Organizer this client is locked to. Generate
+                      its API key afterward from the Organizers page.
+                    </p>
+                  </div>
+                )}
               </div>
               <DialogFooter className="mt-4">
                 <Button variant="outline" onClick={() => setRegisterOpen(false)}>

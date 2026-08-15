@@ -843,6 +843,10 @@ export class AdminService {
         revenue: t.revenue,
         bankTransferEnabled: !!o.bankTransferEnabled,
         razorpayStatus: o.razorpay?.status || null,
+        // Phase 4.5c — Direct API Access control on the Super Admin's
+        // organizer detail dialog. Never expose the hash itself, just
+        // whether one is currently set.
+        hasApiKey: !!o.apiKeyHash,
         receiptType: o.receiptType,
         operationsPausedFromDate: o.operationsPausedFromDate || null,
         operationsPausedToDate: o.operationsPausedToDate || null,
