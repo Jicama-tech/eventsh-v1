@@ -578,7 +578,15 @@ export class EventsController {
 
       // Sponsor logos — rebuild from the manifest so existing URLs (on edit)
       // and freshly uploaded files combine in the order the organizer arranged.
-      body.sponsors = this.rebuildSponsors(body, files.sponsorLogos) ?? [];
+      // Only overwrite when the rebuild actually produced something — mirrors
+      // the gallery guard just above. A JSON-only API-client caller (no
+      // multipart manifest/files at all) already sends `sponsors` as a plain
+      // array of pre-uploaded URLs, same convention as `gallery`/`image`;
+      // unconditionally forcing it to [] here silently discarded that data
+      // (found live: a create-event call with sponsors: ["url"] came back
+      // sponsors: [] every time, with no error).
+      const rebuiltSponsorsOnCreate = this.rebuildSponsors(body, files.sponsorLogos);
+      if (rebuiltSponsorsOnCreate !== undefined) body.sponsors = rebuiltSponsorsOnCreate;
 
       if (
         files.addOnImages &&
@@ -1263,15 +1271,23 @@ export class EventsController {
       // Never persist the helper manifest onto the event document.
       delete body.galleryManifest;
 
-      // Sponsors — merge existing + new via the manifest. Only touch the field
-      // when the client actually sent sponsor data, so an unrelated update
-      // never wipes existing sponsor logos.
+      // Sponsors — merge existing + new via the manifest. Only overwrite when
+      // the manifest/files-based rebuild actually produced something — same
+      // guard as gallery just above (which has no else-branch deletion at
+      // all). The `delete body.sponsors` this replaced was backwards from
+      // its own comment's stated intent: it fired whenever no *multipart*
+      // manifest/files were present, which is also exactly the shape of a
+      // JSON-only API-client update explicitly sending `sponsors` as a plain
+      // array of pre-uploaded URLs — deleting the key there discarded the
+      // client's real update silently (findByIdAndUpdate's partial $set
+      // leaves a missing key's DB value untouched, so the update appeared to
+      // succeed while sponsors never actually changed). Leaving body.sponsors
+      // untouched in the fallback case does the right thing either way: an
+      // unrelated edit that never mentioned sponsors has nothing there to
+      // begin with (correctly left alone), and a JSON client's own array is
+      // already sitting in body.sponsors from the request itself.
       const rebuiltSponsors = this.rebuildSponsors(body, files.sponsorLogos);
-      if (rebuiltSponsors !== undefined) {
-        body.sponsors = rebuiltSponsors;
-      } else {
-        delete body.sponsors;
-      }
+      if (rebuiltSponsors !== undefined) body.sponsors = rebuiltSponsors;
 
       // 3. Handle Add-On Images (Mapping new files to correct items)
       if (
