@@ -39,7 +39,16 @@ export class TicketsController {
   // browser would), and the door/QR-scan lookups are public by design (the
   // QR payload itself is the secret, not the lookup endpoint).
   private assertOwnsTicket(req: any, ticket: { organizerId: any }) {
-    if (String(ticket.organizerId) !== req.user?.userId) {
+    // findOne/findByTicketId both .populate("eventId organizerId"), so
+    // ticket.organizerId is a full Organizer document here, not a bare
+    // ObjectId/string — String(fullDocument) is never equal to the plain
+    // hex id in req.user.userId ("[object Object]" vs "507f..."), which
+    // silently rejected every organizer-owned request (mark-attendance,
+    // resend-email, update, delete) regardless of real ownership. Read
+    // ._id off the populated doc when present, falling back to the raw
+    // value for any caller that already has an unpopulated ticket.
+    const organizerId = ticket.organizerId?._id ?? ticket.organizerId;
+    if (String(organizerId) !== req.user?.userId) {
       throw new ForbiddenException("Not authorized to manage this ticket");
     }
   }
