@@ -173,12 +173,16 @@ fields line up directly by name and type. Concrete deltas found:
 | 9 | `speakers` vs `speakerProfiles` | `EventInput` sends both a bare-string `speakers?: string[]` and a rich `speakerProfiles?: SpeakerProfile[]`. eventsh has one field, `speakers?: SpeakerDto[]`, matching `speakerProfiles`'s shape. | Send `speakerProfiles` content as eventsh's `speakers`; drop the bare-string list. |
 | 10 | `visitorTypes` | Required in `EventInput`, optional in `CreateEventDto`; shapes otherwise match closely. `EventInput` allows `soldCount`, which eventsh treats as server-computed. | Drop `soldCount` when sending; everything else maps directly. |
 | 11 | `sponsorTypes` | Shapes match on the fields checked; eventsh additionally supports `collectPayment`/`customOptions` (non-cash tiers). | Confirm SingAdvisor's `SponsorType` includes these if that feature is wanted; otherwise no change. |
-| 12 | Everything else (`reelLinks`, `adBar`, age restrictions, `dresscode`, `specialInstructions`, `refundPolicy`, `termsAndConditions`, `customSections`, `image`, `gallery`, `tags`, `features`, `socialMedia`, `visibility`, `slug`, `category`, `eventType`, `status`/`published`) | Matches directly by name and type. | None. |
+| 12 | `eventType` | **Originally logged here as "confirmed compatible, no change needed" — wrong.** Same field name, incompatible meaning: SingAdvisor's `EventForm.tsx` (line 352) is a free-text input defaulting to the literal string `"general"`; eventsh's schema constrains the same-named field to a strict `enum: ["commercial", "personal"]`. Found via live reproduction (Puppeteer form submit through SingAdvisor's own `/admin/events/new`), not caught by the original name/type audit — the field name and TS type (`string`) matched, but the actual accepted values didn't. Every create-event submission from SingAdvisor's UI failed with `` `general` is not a valid enum value for path `eventType` ``. **Fixed**: `toEventshPayload()` hardcodes `eventType: "commercial"` on write (SingAdvisor's events are always public/business), and folds SingAdvisor's own free-text value into eventsh's `category` field as a fallback when `category` is blank (never forwarding the literal `"general"` default). Verified end-to-end: repro script now succeeds, and the created event was confirmed in MongoDB to have `eventType: "commercial"` set. | Done — no further action; flagging here so this audit's "confirmed compatible" claim isn't taken at face value for other same-named fields either. |
+| 13 | Everything else (`reelLinks`, `adBar`, age restrictions, `dresscode`, `specialInstructions`, `refundPolicy`, `termsAndConditions`, `customSections`, `image`, `gallery`, `tags`, `features`, `socialMedia`, `visibility`, `slug`, `category`, `status`/`published`) | Matches directly by name and type. Not independently re-verified live one-by-one after the `eventType` finding above — treat as lower-confidence than "tested" until each is actually exercised. | None currently planned; re-check individually if a similar silent-mismatch bug turns up. |
 
-**Bottom line**: a genuinely small diff, as expected. 3 dropped/renamed
-fields, one duplicate to collapse, one still-unverified shape (`agenda` vs
-`functions`). The one real risk (#1, request shape) is tested, fixed, and
-verified end-to-end.
+**Bottom line**: a genuinely small diff, as expected, but not a risk-free
+one — item 12 (`eventType`) was originally marked "confirmed compatible"
+by a same-name/same-type audit and turned out to be a real, undetected
+enum mismatch that blocked every event creation until caught by actually
+running the flow. 3 dropped/renamed fields, one duplicate to collapse, one
+still-unverified shape (`agenda` vs `functions`). The one real payload-shape
+risk (#1, request shape) is tested, fixed, and verified end-to-end.
 
 ### Public read-side gaps found and closed
 
