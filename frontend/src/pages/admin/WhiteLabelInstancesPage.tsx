@@ -39,6 +39,7 @@ import { useToast } from "@/hooks/use-toast";
 const apiURL = __API_URL__;
 
 interface WhiteLabelInstance {
+  _id: string;
   instanceId: string;
   companyName: string;
   domain: string;
@@ -56,6 +57,7 @@ interface WhiteLabelInstance {
 
 export function WhiteLabelInstancesPage() {
   const [instances, setInstances] = useState<WhiteLabelInstance[]>([]);
+  const [statsById, setStatsById] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [registerOpen, setRegisterOpen] = useState(false);
@@ -91,7 +93,23 @@ export function WhiteLabelInstancesPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`Failed: ${res.statusText}`);
-      setInstances(await res.json());
+      const rows = await res.json();
+      setInstances(rows);
+      // Billing view per row: GET /platform-registry/instances/:id/stats
+      // computes events/tickets/revenue centrally for api-client rows and
+      // returns the sync-reported figures for full-instance rows. Best
+      // effort per row — a single failure must not blank the whole list.
+      const statsById: Record<string, any> = {};
+      await Promise.allSettled(
+        rows.map(async (inst: WhiteLabelInstance) => {
+          const sres = await fetch(
+            `${apiURL}/platform-registry/instances/${inst._id}/stats`,
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          if (sres.ok) statsById[inst._id] = await sres.json();
+        }),
+      );
+      setStatsById(statsById);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -251,11 +269,29 @@ export function WhiteLabelInstancesPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {inst.lastSyncStats && Object.keys(inst.lastSyncStats).length > 0
-                          ? Object.entries(inst.lastSyncStats)
-                              .map(([k, v]) => `${k.replace("Count", "")}: ${v}`)
-                              .join(" · ")
-                          : "—"}
+                        {statsById[inst._id] ? (
+                          <span>
+                            <span className="font-medium text-foreground">
+                              {statsById[inst._id].eventCount ?? 0} events
+                            </span>{" "}
+                            · {statsById[inst._id].ticketCount ?? 0} tickets ·{" "}
+                            <span className="font-medium text-foreground">
+                              {statsById[inst._id].revenue != null
+                                ? `$${statsById[inst._id].revenue}`
+                                : "revenue n/a"}
+                            </span>
+                            {statsById[inst._id].source === "sync" &&
+                              statsById[inst._id].revenue == null &&
+                              " (no sync yet)"}
+                          </span>
+                        ) : inst.lastSyncStats &&
+                          Object.keys(inst.lastSyncStats).length > 0 ? (
+                          Object.entries(inst.lastSyncStats)
+                            .map(([k, v]) => `${k.replace("Count", "")}: ${v}`)
+                            .join(" · ")
+                        ) : (
+                          "—"
+                        )}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                         {inst.lastSyncAt

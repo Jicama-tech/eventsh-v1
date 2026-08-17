@@ -52,6 +52,17 @@ export class SyncStatsDto {
   @IsOptional()
   @IsNumber()
   eventCount?: number;
+
+  @IsOptional()
+  @IsNumber()
+  ticketCount?: number;
+
+  /** Sum of confirmed ticket totals, in the instance's local currency major
+   * units (the same figure the admin module's organizers-overview reports),
+   * so the platform owner can bill per white-label instance. */
+  @IsOptional()
+  @IsNumber()
+  revenue?: number;
 }
 
 export class SyncUsersDto {

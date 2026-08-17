@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, NotFoundException, Param, Post, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { AdminRolesGuard } from "../auth/guards/admin-roles.guard";
 import { InstanceLicenseGuard } from "./guards/instance-license.guard";
@@ -31,6 +31,19 @@ export class PlatformRegistryController {
   @UseGuards(JwtAuthGuard, AdminRolesGuard)
   listInstances() {
     return this.registryService.listInstances();
+  }
+
+  // Admin-only. Per-instance billing view: events + tickets + revenue.
+  // api-client rows are joined against the CENTRAL database (their
+  // organizer's data lives here); full-instance rows surface the stats
+  // their own deployment reported via the sync channel. See
+  // PlatformRegistryService.getInstanceStats for the exact shapes.
+  @Get("instances/:id/stats")
+  @UseGuards(JwtAuthGuard, AdminRolesGuard)
+  async getInstanceStats(@Param("id") id: string) {
+    const stats = await this.registryService.getInstanceStats(id);
+    if (!stats) throw new NotFoundException("No instance with that id");
+    return stats;
   }
 
   // Server-to-server (a white-label instance's own platform-sync.service.ts

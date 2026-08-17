@@ -31,6 +31,8 @@ export class PlatformSyncService {
     @InjectModel("Vendor") private readonly vendorModel: Model<any>,
     @InjectModel("User") private readonly userModel: Model<any>,
     @InjectModel("Operator") private readonly operatorModel: Model<any>,
+    @InjectModel("Event") private readonly eventModel: Model<any>,
+    @InjectModel("Ticket") private readonly ticketModel: Model<any>,
   ) {}
 
   private isConfigured(): boolean {
@@ -61,15 +63,27 @@ export class PlatformSyncService {
   async syncNow(): Promise<{ skipped: true } | { skipped: false; usersSent: number }> {
     if (!this.isConfigured()) return { skipped: true };
 
-    const [organizers, vendors, attendees, operators] = await Promise.all([
-      this.organizerModel.find().select("name email createdAt").lean(),
-      this.vendorModel.find().select("name email createdAt").lean(),
-      this.userModel
-        .find()
-        .select("name firstName lastName email createdAt roles")
-        .lean(),
-      this.operatorModel.find().select("name email createdAt").lean(),
-    ]);
+    const [organizers, vendors, attendees, operators, eventCount, ticketAgg] =
+      await Promise.all([
+        this.organizerModel.find().select("name email createdAt").lean(),
+        this.vendorModel.find().select("name email createdAt").lean(),
+        this.userModel
+          .find()
+          .select("name firstName lastName email createdAt roles")
+          .lean(),
+        this.operatorModel.find().select("name email createdAt").lean(),
+        this.eventModel.countDocuments({}).exec(),
+        // Revenue = sum of ticket totals where payment was confirmed — the
+        // same aggregation the admin module's organizers-overview uses, so
+        // the registry's number and the admin panel's number never drift.
+        this.ticketModel.aggregate([
+          { $match: { paymentConfirmed: true } },
+          { $group: { _id: null, tickets: { $sum: 1 }, revenue: { $sum: "$totalAmount" } } },
+        ]),
+      ]);
+
+    const tickets = ticketAgg[0]?.tickets ?? 0;
+    const revenue = ticketAgg[0]?.revenue ?? 0;
 
     const payload = {
       instanceId: process.env.INSTANCE_ID,
@@ -78,6 +92,9 @@ export class PlatformSyncService {
         vendorCount: vendors.length,
         attendeeCount: attendees.length,
         operatorCount: operators.length,
+        eventCount,
+        ticketCount: tickets,
+        revenue,
       },
       users: {
         organizers: organizers.map((o) => toRecord(o, "organizer")),

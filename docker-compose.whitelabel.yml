@@ -20,10 +20,15 @@ services:
     restart: unless-stopped
     volumes:
       - mongo-data:/data/db
-    # Not published to the host by default — only the backend needs to reach
-    # it, over the compose network. Swapping this whole service out for an
-    # external managed Mongo URI (Atlas, etc.) is fine: just remove this
-    # service and point MONGO_URI in .env.whitelabel at it instead.
+    # Published on a non-default host port (27018) so local DB tools
+    # (Compass, mongosh) can inspect the data without conflicting with any
+    # other Mongo on the host's default 27017. Only the backend needs to
+    # reach it, over the compose network; this mapping is inspection-only.
+    # Swapping this whole service out for an external managed Mongo URI
+    # (Atlas, etc.) is fine: just remove this service and point MONGO_URI in
+    # .env.whitelabel at it instead.
+    ports:
+      - "${MONGO_PORT:-27018}:27017"
 
   backend:
     build:

@@ -13,6 +13,8 @@ import {
   WhiteLabelSyncedUser,
   WhiteLabelSyncedUserSchema,
 } from "./schemas/white-label-synced-user.schema";
+import { Event, EventSchema } from "../events/schemas/event.schema";
+import { Ticket, TicketSchema } from "../tickets/entities/ticket.entity";
 
 // Receiving side of the central instance registry (Phase 2 of the
 // white-label plan) — meaningfully populated only on the canonical
@@ -27,6 +29,9 @@ import {
         name: WhiteLabelSyncedUser.name,
         schema: WhiteLabelSyncedUserSchema,
       },
+      // For the api-client billing join (getInstanceStats).
+      { name: Event.name, schema: EventSchema },
+      { name: Ticket.name, schema: TicketSchema },
     ]),
     JwtModule.register({
       secret: process.env.JWT_ACCESS_SECRET || "secretKey",

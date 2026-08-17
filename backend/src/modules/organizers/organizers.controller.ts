@@ -11,6 +11,7 @@ import {
   ParseUUIDPipe,
   UploadedFile,
   BadRequestException,
+  ForbiddenException,
   UsePipes,
   ValidationPipe,
 } from "@nestjs/common";
@@ -27,6 +28,7 @@ import { WebpValidationPipe } from "../../seed/parse-webp.pipe";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { AdminRolesGuard } from "../auth/guards/admin-roles.guard";
 import { ThrottlerGuard } from "@nestjs/throttler";
+import { OrganizerOrApiKeyGuard } from "./guards/organizer-or-api-key.guard";
 
 function qrStorage() {
   return diskStorage({
@@ -123,22 +125,43 @@ export class OrganizersController {
   }
 
   // ----- Personal / custom sending email -----------------------------------
-  // Guarded: returns the decrypted SMTP password so the organizer can view it,
-  // so it must require an authenticated request (not a public-by-id read).
+  // Guarded with OrganizerOrApiKeyGuard so BOTH an organizer's own JWT and a
+  // machine caller (x-organizer-id + x-api-key, e.g. SingAdvisor's admin
+  // proxying through its Backend) can manage the config. PATCH and test were
+  // previously UNGUARDED, and none of the three verified ownership — an
+  // authenticated caller could read (incl. the DECRYPTED SMTP password) or
+  // overwrite ANY organizer's config by id. Ownership is enforced in the
+  // handler itself (the guard only proves *some* valid caller identity).
   @Get(":id/email-config")
-  @UseGuards(AuthGuard("jwt"))
-  async getEmailConfig(@Param("id") id: string) {
+  @UseGuards(OrganizerOrApiKeyGuard, ThrottlerGuard)
+  async getEmailConfig(@Req() req: any, @Param("id") id: string) {
+    this.assertOwnsEmailConfig(req, id);
     return this.organizersService.getEmailConfig(id);
   }
 
   @Patch(":id/email-config")
-  async updateEmailConfig(@Param("id") id: string, @Body() body: any) {
+  @UseGuards(OrganizerOrApiKeyGuard, ThrottlerGuard)
+  async updateEmailConfig(@Req() req: any, @Param("id") id: string, @Body() body: any) {
+    this.assertOwnsEmailConfig(req, id);
     return this.organizersService.updateEmailConfig(id, body);
   }
 
   @Post(":id/email-config/test")
-  async testEmailConfig(@Param("id") id: string, @Body() body: any) {
+  @UseGuards(OrganizerOrApiKeyGuard, ThrottlerGuard)
+  async testEmailConfig(@Req() req: any, @Param("id") id: string, @Body() body: any) {
+    this.assertOwnsEmailConfig(req, id);
     return this.organizersService.sendTestEmailConfig(id, body, body?.to);
+  }
+
+  /** The guard resolves the caller identity into req.user; the config itself
+   * is organizer-private (decrypted SMTP password lives here), so only the
+   * organizer themselves (or a platform admin) may touch it. */
+  private assertOwnsEmailConfig(req: any, id: string) {
+    const userId = String(req.user?.userId);
+    const isAdmin = Array.isArray(req.user?.roles) && req.user.roles.includes("admin");
+    if (!isAdmin && userId !== id) {
+      throw new ForbiddenException("Not your email configuration");
+    }
   }
 
   @Patch("profile/:id")
