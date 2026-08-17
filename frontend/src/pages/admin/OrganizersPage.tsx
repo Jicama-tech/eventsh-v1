@@ -50,6 +50,10 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  KeyRound,
+  Copy,
+  Check,
+  Ban,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { OrganizerBillingDialog } from "./OrganizerBillingDialog";
@@ -86,6 +90,9 @@ interface Organizer {
   revenue: number;
   bankTransferEnabled: boolean;
   razorpayStatus: string | null;
+  // Phase 4.5c — whether this organizer currently has a Direct API Access
+  // key (never the key itself, just its presence).
+  hasApiKey?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -120,6 +127,12 @@ export function OrganizersPage() {
   const [selected, setSelected] = useState<Organizer | null>(null);
   // The billing dialog opens with this organizer's id; null when closed.
   const [billingFor, setBillingFor] = useState<string | null>(null);
+  // Phase 4.5c — Direct API Access (organizer API key for Phase-4 machine
+  // callers, e.g. SingAdvisor). Shown exactly once right after
+  // generate/rotate — the backend never returns the plaintext again.
+  const [apiKeyBusy, setApiKeyBusy] = useState(false);
+  const [revealedApiKey, setRevealedApiKey] = useState<string | null>(null);
+  const [apiKeyCopied, setApiKeyCopied] = useState(false);
   const { toast } = useToast();
 
   const token = sessionStorage.getItem("token");
@@ -226,6 +239,70 @@ export function OrganizersPage() {
         variant: "destructive",
       });
     }
+  };
+
+  // Phase 4.5c — mints/rotates this organizer's API key. Rotating silently
+  // invalidates the previous key (only the latest hash is ever stored), so
+  // this is safe to call again on an organizer that already has one.
+  const generateApiKey = async (id: string) => {
+    try {
+      setApiKeyBusy(true);
+      const res = await fetch(`${apiURL}/organizers/${id}/api-key/generate`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`Failed: ${res.statusText}`);
+      const data = await res.json();
+      setRevealedApiKey(data.apiKey);
+      setOrganizers((prev) =>
+        prev.map((o) => (o._id === id ? { ...o, hasApiKey: true } : o)),
+      );
+      setSelected((prev) =>
+        prev && prev._id === id ? { ...prev, hasApiKey: true } : prev,
+      );
+    } catch (err: any) {
+      toast({
+        title: "Couldn't generate key",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setApiKeyBusy(false);
+    }
+  };
+
+  const revokeApiKey = async (id: string) => {
+    try {
+      setApiKeyBusy(true);
+      const res = await fetch(`${apiURL}/organizers/${id}/api-key/revoke`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`Failed: ${res.statusText}`);
+      setRevealedApiKey(null);
+      setOrganizers((prev) =>
+        prev.map((o) => (o._id === id ? { ...o, hasApiKey: false } : o)),
+      );
+      setSelected((prev) =>
+        prev && prev._id === id ? { ...prev, hasApiKey: false } : prev,
+      );
+      toast({ title: "API key revoked" });
+    } catch (err: any) {
+      toast({
+        title: "Couldn't revoke key",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setApiKeyBusy(false);
+    }
+  };
+
+  const copyApiKey = () => {
+    if (!revealedApiKey) return;
+    navigator.clipboard.writeText(revealedApiKey);
+    setApiKeyCopied(true);
+    setTimeout(() => setApiKeyCopied(false), 1500);
   };
 
   const exportCSV = () => {
@@ -489,7 +566,10 @@ export function OrganizersPage() {
                     <TableRow
                       key={o._id}
                       className="hover:bg-muted/30 cursor-pointer"
-                      onClick={() => setSelected(o)}
+                      onClick={() => {
+                        setSelected(o);
+                        setRevealedApiKey(null);
+                      }}
                     >
                       <TableCell>
                         <div className="font-medium text-sm">
@@ -599,7 +679,10 @@ export function OrganizersPage() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => setSelected(o)}
+                            onClick={() => {
+                              setSelected(o);
+                              setRevealedApiKey(null);
+                            }}
                             title="View details"
                           >
                             <Eye className="h-4 w-4" />
@@ -630,7 +713,15 @@ export function OrganizersPage() {
       />
 
       {/* Detail Dialog */}
-      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+      <Dialog
+        open={!!selected}
+        onOpenChange={(o) => {
+          if (!o) {
+            setSelected(null);
+            setRevealedApiKey(null);
+          }
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -812,6 +903,78 @@ export function OrganizersPage() {
                       : "—"}
                   </p>
                 </div>
+              </div>
+
+              {/* Direct API Access — Phase 4.5c. A machine caller with its
+                  own frontend + database (e.g. SingAdvisor) authenticates
+                  as this one Organizer via x-organizer-id/x-api-key. */}
+              <div className="border rounded-lg p-3 bg-muted/30 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium flex items-center gap-1">
+                    <KeyRound className="h-3 w-3" />
+                    Direct API Access
+                  </p>
+                  <Badge variant={selected.hasApiKey ? "default" : "secondary"}>
+                    {selected.hasApiKey ? "Key active" : "No key"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  For a client with its own frontend + database consuming
+                  eventsh purely as a backend API (locked to this one
+                  Organizer — never lets them create additional organizers).
+                </p>
+                {revealedApiKey ? (
+                  <div className="space-y-1">
+                    <p className="text-xs text-amber-600 font-medium">
+                      Copy this now — it won't be shown again.
+                    </p>
+                    <div className="flex gap-2">
+                      <Input
+                        readOnly
+                        value={revealedApiKey}
+                        className="font-mono text-xs"
+                      />
+                      <Button size="icon" variant="outline" onClick={copyApiKey}>
+                        {apiKeyCopied ? (
+                          <Check className="h-4 w-4" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Organizer ID (send as{" "}
+                      <code className="font-mono">x-organizer-id</code>):{" "}
+                      <code className="font-mono">{selected._id}</code>
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={apiKeyBusy}
+                      onClick={() => generateApiKey(selected._id)}
+                    >
+                      <RefreshCw
+                        className={`h-3.5 w-3.5 mr-1.5 ${apiKeyBusy ? "animate-spin" : ""}`}
+                      />
+                      {selected.hasApiKey ? "Rotate key" : "Generate key"}
+                    </Button>
+                    {selected.hasApiKey && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={apiKeyBusy}
+                        className="text-red-600 hover:text-red-700"
+                        onClick={() => revokeApiKey(selected._id)}
+                      >
+                        <Ban className="h-3.5 w-3.5 mr-1.5" />
+                        Revoke
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}

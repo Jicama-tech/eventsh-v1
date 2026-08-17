@@ -51,6 +51,24 @@ export class OtpService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    // WHATSAPP_ENABLED/WHATSAPP_OTP_ENABLED (see the `whatsAppEnabled`/
+    // `whatsAppOtpEnabled` getters below) were originally just kill-switches
+    // for OUTBOUND sends on the existing SaaS deployment — connecting still
+    // happened regardless, which was fine there (an already-paired session
+    // stays alive either way). A fresh white-label deployment has no
+    // existing pairing though, and defaults both flags to false — without
+    // this guard it would attempt a live QR-pairing flow on every single
+    // boot for a feature it isn't using, and lose that attempt on restart
+    // since whatsapp_auth isn't a mounted volume unless WhatsApp is
+    // actually enabled (see docker-compose.whitelabel.yml). Only skip the
+    // connection when BOTH are off — either one still true means some
+    // outbound path needs a live session, matching existing behaviour.
+    if (!this.whatsAppEnabled && !this.whatsAppOtpEnabled) {
+      this.logger.log(
+        "WhatsApp fully disabled (WHATSAPP_ENABLED=false, WHATSAPP_OTP_ENABLED=false) — skipping connection.",
+      );
+      return;
+    }
     await this.initWhatsApp();
   }
 

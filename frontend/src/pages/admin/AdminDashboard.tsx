@@ -44,6 +44,7 @@ import {
   Receipt,
   MessageSquare,
   Sparkles,
+  Globe,
 } from "lucide-react";
 import { useFetchWithLoading } from "@/hooks/useFetchWithLoading";
 import { useToast } from "@/hooks/use-toast";
@@ -83,6 +84,11 @@ const SettingsPage = lazy(() =>
 const ShowcaseEventsPage = lazy(() =>
   import("./ShowcaseEventsPage").then((m) => ({
     default: m.ShowcaseEventsPage,
+  })),
+);
+const WhiteLabelInstancesPage = lazy(() =>
+  import("./WhiteLabelInstancesPage").then((m) => ({
+    default: m.WhiteLabelInstancesPage,
   })),
 );
 
@@ -363,6 +369,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       icon: Receipt,
     },
     { id: "billing-rates", label: "Billing Rates", icon: Receipt },
+    { id: "white-label", label: "White-Label Instances", icon: Globe },
     { id: "app-feedback", label: "App Feedback", icon: MessageSquare },
     { id: "payment-feedback", label: "Payment Feedback", icon: MessageSquare },
     { id: "settings", label: "Settings", icon: SettingsIcon },
@@ -871,6 +878,12 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
               <TabsContent value="billing-rates" className="mt-0">
                 <Suspense fallback={<TabLoader />}>
                   <BillingRatesPage />
+                </Suspense>
+              </TabsContent>
+
+              <TabsContent value="white-label" className="mt-0">
+                <Suspense fallback={<TabLoader />}>
+                  <WhiteLabelInstancesPage />
                 </Suspense>
               </TabsContent>
 

@@ -129,10 +129,21 @@ export function CouponsManager() {
     setCoupon((prev: any) => ({ ...prev, [key]: value }));
   };
 
+  // Coupon writes now go through OrganizerOrApiKeyGuard on the backend
+  // (previously fully unauthenticated) — every mutating call below attaches
+  // the same organizer JWT the rest of the dashboard already uses.
+  const authHeaders = () => {
+    const token = sessionStorage.getItem("token");
+    return {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+  };
+
   const createCoupon = async (payload: any) => {
     const res = await fetch(`${apiURL}/coupons/create-coupon`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -145,7 +156,7 @@ export function CouponsManager() {
   const updateCoupon = async (id: string, payload: any) => {
     const res = await fetch(`${apiURL}/coupons/update-coupon/${id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -206,6 +217,7 @@ export function CouponsManager() {
     try {
       const res = await fetch(`${apiURL}/coupons/delete-coupon/${id}`, {
         method: "DELETE",
+        headers: authHeaders(),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -222,7 +234,7 @@ export function CouponsManager() {
     try {
       const res = await fetch(`${apiURL}/coupons/update-coupon/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({ isActive }),
       });
       if (!res.ok) {

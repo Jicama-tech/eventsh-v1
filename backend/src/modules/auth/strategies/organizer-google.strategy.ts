@@ -9,8 +9,11 @@ export class GoogleOrganizerStrategy extends PassportStrategy(
 ) {
   constructor() {
     super({
-      clientID: process.env.GOOGLE_CLIENT_ID || "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+      // See google.strategy.ts — an empty clientID/clientSecret crashes the
+      // whole app at boot (passport-oauth2's own constructor throws), not
+      // just this login flow.
+      clientID: process.env.GOOGLE_CLIENT_ID || "not-configured",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "not-configured",
       callbackURL:
         process.env.GOOGLE_ORGANIZER_REDIRECT_URI ||
         "http://localhost:8080/auth/google-organizer/redirect", // ← SHOPKEEPER CALLBACK
