@@ -2,21 +2,25 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Patch,
   Post,
+  Req,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { ThrottlerGuard } from "@nestjs/throttler";
 import { diskStorage } from "multer";
 import { v4 as uuidv4 } from "uuid";
 import * as path from "path";
 import * as fs from "fs";
 
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { OrganizerOrApiKeyGuard } from "../organizers/guards/organizer-or-api-key.guard";
 import { SponsorsService } from "./sponsors.service";
 import { CreateSponsorRequestDto } from "./dto/create-sponsor-request.dto";
 import { CreateSponsorDto } from "./dto/create-sponsor.dto";
@@ -140,15 +144,31 @@ export class SponsorsController {
 
   // ---------- ORGANIZER: sponsor CRM (own directory) ----------
 
+  // Ownership check shared by every organizer-CRM route below — :organizerId
+  // is a raw URL param, never cross-checked before Phase 4.5d, so any
+  // logged-in organizer/vendor could manage a DIFFERENT organizer's sponsor
+  // directory by supplying a different id in the URL. OrganizerOrApiKeyGuard
+  // only proves "some valid caller" (browser JWT or API key); this is what
+  // proves that caller owns the specific organizerId in the URL.
+  private assertOwnsOrganizer(req: any, organizerId: string) {
+    if (req.user?.userId !== organizerId) {
+      throw new ForbiddenException(
+        "Not authorized to manage this organizer's sponsors",
+      );
+    }
+  }
+
   // Multipart so the organizer can attach the company logo while adding.
   @Post("create-by-organizer/:organizerId")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(OrganizerOrApiKeyGuard, ThrottlerGuard)
   @UseInterceptors(sponsorUpload("logo"))
   async createForOrganizer(
     @Param("organizerId") organizerId: string,
     @Body() dto: CreateSponsorDto,
+    @Req() req: any,
     @UploadedFile() file?: any,
   ) {
+    this.assertOwnsOrganizer(req, organizerId);
     const logo = file
       ? `/uploads/sponsors/${(file as any).filename}`
       : undefined;
@@ -161,14 +181,16 @@ export class SponsorsController {
   }
 
   @Patch("update-by-organizer/:organizerId/:sponsorId")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(OrganizerOrApiKeyGuard, ThrottlerGuard)
   @UseInterceptors(sponsorUpload("logo"))
   async updateForOrganizer(
     @Param("organizerId") organizerId: string,
     @Param("sponsorId") sponsorId: string,
     @Body() dto: UpdateSponsorDto,
+    @Req() req: any,
     @UploadedFile() file?: any,
   ) {
+    this.assertOwnsOrganizer(req, organizerId);
     const logo = file
       ? `/uploads/sponsors/${(file as any).filename}`
       : undefined;
@@ -183,11 +205,13 @@ export class SponsorsController {
 
   // Which events this directory sponsor has backed (eye icon in the CRM).
   @Get("history/:organizerId/:sponsorId")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(OrganizerOrApiKeyGuard, ThrottlerGuard)
   async sponsorEventHistory(
     @Param("organizerId") organizerId: string,
     @Param("sponsorId") sponsorId: string,
+    @Req() req: any,
   ) {
+    this.assertOwnsOrganizer(req, organizerId);
     const data = await this.sponsorsService.sponsorEventHistory(
       organizerId,
       sponsorId,
@@ -196,19 +220,25 @@ export class SponsorsController {
   }
 
   @Get("list-by-organizer/:organizerId")
-  @UseGuards(JwtAuthGuard)
-  async listSponsorsForOrganizer(@Param("organizerId") organizerId: string) {
+  @UseGuards(OrganizerOrApiKeyGuard, ThrottlerGuard)
+  async listSponsorsForOrganizer(
+    @Param("organizerId") organizerId: string,
+    @Req() req: any,
+  ) {
+    this.assertOwnsOrganizer(req, organizerId);
     const { data, currency } =
       await this.sponsorsService.listSponsorsForOrganizer(organizerId);
     return { success: true, message: "Sponsors fetched", data, currency };
   }
 
   @Delete("delete-by-organizer/:organizerId/:sponsorId")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(OrganizerOrApiKeyGuard, ThrottlerGuard)
   async deleteForOrganizer(
     @Param("organizerId") organizerId: string,
     @Param("sponsorId") sponsorId: string,
+    @Req() req: any,
   ) {
+    this.assertOwnsOrganizer(req, organizerId);
     const { message } = await this.sponsorsService.deleteForOrganizer(
       organizerId,
       sponsorId,

@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 import { JwtModule } from "@nestjs/jwt";
 import { SponsorsService } from "./sponsors.service";
@@ -11,6 +11,7 @@ import { Sponsor, SponsorSchema } from "./schemas/sponsor.schema";
 import { EventSchema } from "../events/schemas/event.schema";
 import { OrganizerSchema } from "../organizers/schemas/organizer.schema";
 import { MailModule } from "../roles/mail.module";
+import { OrganizersModule } from "../organizers/organizers.module";
 
 @Module({
   imports: [
@@ -29,6 +30,9 @@ import { MailModule } from "../roles/mail.module";
       secret: process.env.JWT_SECRET || "secretKey",
       signOptions: { expiresIn: "1d" },
     }),
+    // Exports OrganizerOrApiKeyGuard — used on the organizer-CRM endpoints
+    // below (Phase 4.5d).
+    forwardRef(() => OrganizersModule),
   ],
   controllers: [SponsorsController],
   providers: [SponsorsService],

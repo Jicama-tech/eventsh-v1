@@ -607,11 +607,98 @@ export class EventsService {
         this.eventModel.countDocuments(query).exec(),
       ]);
 
-      return { events, total };
+      // Only enrich the public read path — this is an extra aggregation
+      // query per request, and the organizer's own dashboard (publicOnly
+      // false) is the hottest, highest-traffic path through this method on
+      // the shared SaaS. Public consumers (the storefront, and Phase-4
+      // clients like SingAdvisor whose remaining-capacity math needs a real
+      // soldCount) get it; the internal dashboard list is untouched.
+      const enrichedEvents = publicOnly
+        ? await this.attachSoldCounts(events)
+        : events;
+
+      return { events: enrichedEvents, total };
     } catch (error) {
       console.error("Error fetching organizer events:", error);
       throw error;
     }
+  }
+
+  // Scoped by design — an event's slug is only unique per organizer, not
+  // globally (see the DTO's `slug` comment), so there's no bare
+  // "/events/slug/:slug" analog to a single-tenant backend's route. Public
+  // read: same visibility filter as findByOrganizer's publicOnly branch.
+  async findByOrganizerAndSlug(
+    organizerId: string,
+    slug: string,
+  ): Promise<Event> {
+    try {
+      const query: any = {
+        organizer: organizerId,
+        slug: normalizeSlug(slug),
+        visibility: { $ne: "private" },
+      };
+      const event = await this.eventModel
+        .findOne(query)
+        .populate("organizer")
+        .exec();
+      if (!event) {
+        throw new NotFoundException(
+          `Event with slug "${slug}" not found for this organizer`,
+        );
+      }
+      const [enriched] = await this.attachSoldCounts([event]);
+      return enriched;
+    } catch (error) {
+      console.error("Error finding event by organizer + slug:", error);
+      throw error;
+    }
+  }
+
+  // Live-computes each event's per-tier soldCount from the tickets
+  // collection and returns plain objects with visitorTypes enriched. Ticket
+  // sales are tracked only in the separate `tickets` collection — nothing on
+  // the Event document itself stores this — so a Phase-4 client reading raw
+  // event documents (e.g. SingAdvisor's `remainingCapacity()` helper, which
+  // does `maxCount - soldCount`) would otherwise always get `undefined`.
+  // One aggregation covers every event passed in, not one query each.
+  private async attachSoldCounts(events: EventDocument[]): Promise<any[]> {
+    if (events.length === 0) return [];
+    const eventIds = events.map((e) => e._id);
+    const ticketsCol = this.eventModel.db.collection("tickets");
+    const rows = await ticketsCol
+      .aggregate([
+        { $match: { eventId: { $in: eventIds }, status: { $ne: "cancelled" } } },
+        { $unwind: "$ticketDetails" },
+        {
+          $group: {
+            _id: {
+              eventId: "$eventId",
+              tierId: "$ticketDetails.tierId",
+            },
+            sold: { $sum: "$ticketDetails.quantity" },
+          },
+        },
+      ])
+      .toArray()
+      .catch(() => [] as any[]);
+
+    const soldMap = new Map<string, number>();
+    for (const row of rows as any[]) {
+      const key = `${row._id.eventId}:${row._id.tierId}`;
+      soldMap.set(key, (soldMap.get(key) || 0) + (row.sold || 0));
+    }
+
+    return events.map((ev) => {
+      const obj: any = ev.toObject ? ev.toObject() : ev;
+      if (Array.isArray(obj.visitorTypes)) {
+        obj.visitorTypes = obj.visitorTypes.map((vt: any) => ({
+          ...vt,
+          soldCount: soldMap.get(`${obj._id}:${vt.id}`) || 0,
+        }));
+      }
+      return obj;
+    });
   }
 
   async update(id: string, updateEventDto: UpdateEventDto): Promise<Event> {

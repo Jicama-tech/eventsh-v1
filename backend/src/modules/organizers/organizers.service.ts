@@ -8,6 +8,8 @@ import {
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
+import * as bcrypt from "bcrypt";
+import * as crypto from "crypto";
 import {
   Organizer,
   OrganizerDocument,
@@ -1949,6 +1951,52 @@ export class OrganizersService {
     } catch (error) {
       throw error;
     }
+  }
+
+  // ----- Direct API integration (Phase 4) -----------------------------------
+  // Generates (or rotates) this organizer's API key for machine callers —
+  // a client with their own frontend + database consuming eventsh purely as
+  // a backend API (see ApiKeyGuard/OrganizerOrApiKeyGuard). Same "generate
+  // once, store only the hash" pattern as
+  // PlatformRegistryService.registerInstance's licenseKey: the plaintext is
+  // returned exactly once and never persisted. Calling this again on an
+  // organizer that already has a key silently rotates it — the old key
+  // stops working immediately (no grace overlap), since only the latest
+  // hash is stored.
+  async generateApiKey(id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException("Invalid organizer id");
+    }
+    const organizer = await this.organizerModel.findById(id).select("_id");
+    if (!organizer) throw new NotFoundException("Organizer not found");
+
+    const apiKey = crypto.randomBytes(24).toString("hex");
+    const apiKeyHash = await bcrypt.hash(apiKey, 10);
+
+    await this.organizerModel.updateOne(
+      { _id: id },
+      { $set: { apiKeyHash, apiKeyGeneratedAt: new Date() } },
+    );
+
+    return { organizerId: id, apiKey };
+  }
+
+  // Revokes the organizer's current key (e.g. on integration teardown) —
+  // ApiKeyGuard/OrganizerOrApiKeyGuard reject any request once apiKeyHash is
+  // null, regardless of what key the caller presents.
+  async revokeApiKey(id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException("Invalid organizer id");
+    }
+    const organizer = await this.organizerModel.findById(id).select("_id");
+    if (!organizer) throw new NotFoundException("Organizer not found");
+
+    await this.organizerModel.updateOne(
+      { _id: id },
+      { $set: { apiKeyHash: null, apiKeyGeneratedAt: null } },
+    );
+
+    return { organizerId: id, revoked: true };
   }
 
   async cancelSubscription(id: string) {

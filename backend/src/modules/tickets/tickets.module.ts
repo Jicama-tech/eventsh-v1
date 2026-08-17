@@ -13,6 +13,7 @@ import { WhatsAppService } from "../otp/whatsapp.service";
 import { OtpModule } from "../otp/otp.module";
 import { OtpService } from "../otp/otp.service";
 import { UsersModule } from "../users/users.module";
+import { OrganizersModule } from "../organizers/organizers.module";
 
 @Module({
   imports: [
@@ -24,6 +25,9 @@ import { UsersModule } from "../users/users.module";
     MailModule,
     UsersModule,
     forwardRef(() => OtpModule),
+    // Exports OrganizerOrApiKeyGuard — used on the organizer-admin ticket
+    // routes below (Phase 4, Tickets cutover).
+    forwardRef(() => OrganizersModule),
   ],
   controllers: [TicketsController],
   providers: [TicketsService],

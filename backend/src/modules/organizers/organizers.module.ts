@@ -14,6 +14,9 @@ import { PlanSchema } from "../plans/entities/plan.entity";
 import { OtpService } from "../otp/otp.service";
 import { OperatorsModule } from "../operators/operators.module";
 import { OperatorSchema } from "../operators/entities/operator.entity";
+import { ApiKeyGuard } from "./guards/api-key.guard";
+import { OrganizerOrApiKeyGuard } from "./guards/organizer-or-api-key.guard";
+import { AdminRolesGuard } from "../auth/guards/admin-roles.guard";
 
 @Module({
   imports: [
@@ -29,8 +32,20 @@ import { OperatorSchema } from "../operators/entities/operator.entity";
     forwardRef(() => OperatorsModule),
     MailModule,
   ],
-  providers: [OrganizersService, JwtService, MailService],
+  providers: [
+    OrganizersService,
+    JwtService,
+    MailService,
+    ApiKeyGuard,
+    OrganizerOrApiKeyGuard,
+    AdminRolesGuard,
+  ],
   controllers: [OrganizersController],
-  exports: [OrganizersService, MongooseModule],
+  // MongooseModule re-export lets any module importing OrganizersModule
+  // (e.g. EventsModule) inject the Organizer model — including inside
+  // ApiKeyGuard/OrganizerOrApiKeyGuard, which both need it. Exporting the
+  // guards themselves means other modules can reference the class directly
+  // in @UseGuards() without re-declaring them as their own providers.
+  exports: [OrganizersService, MongooseModule, ApiKeyGuard, OrganizerOrApiKeyGuard],
 })
 export class OrganizersModule {}

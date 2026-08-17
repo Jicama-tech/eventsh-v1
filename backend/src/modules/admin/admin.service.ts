@@ -44,6 +44,11 @@ export class AdminService {
     // memberships module's typed schema into the admin module.
     @InjectModel("ExhibitorMembership")
     private exhibitorMembershipModel: Model<any>,
+    // White-label users reported in via the platform-registry sync (Phase 2
+    // of the white-label plan) — injected by name to avoid pulling that
+    // module's schema into the admin module, same as ExhibitorMembership above.
+    @InjectModel("WhiteLabelSyncedUser")
+    private whiteLabelSyncedUserModel: Model<any>,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
     private readonly paymentsService: PaymentsService
@@ -838,6 +843,10 @@ export class AdminService {
         revenue: t.revenue,
         bankTransferEnabled: !!o.bankTransferEnabled,
         razorpayStatus: o.razorpay?.status || null,
+        // Phase 4.5c — Direct API Access control on the Super Admin's
+        // organizer detail dialog. Never expose the hash itself, just
+        // whether one is currently set.
+        hasApiKey: !!o.apiKeyHash,
         receiptType: o.receiptType,
         operationsPausedFromDate: o.operationsPausedFromDate || null,
         operationsPausedToDate: o.operationsPausedToDate || null,
@@ -1212,7 +1221,24 @@ export class AdminService {
       multiRole: list.filter((u) => u.roles.length > 1).length,
     };
 
-    return { summary, users: list };
+    // White-label users, reported in via each instance's async sync push
+    // (platform-sync.service.ts). Kept as a separate, clearly-tagged array
+    // rather than folded into the merge-by-email logic above — that logic
+    // is built to de-duplicate ONE deployment's own users across roles, not
+    // to reconcile identities across other instances' separate databases.
+    // The frontend renders these alongside `users`, tagged with
+    // instanceId/sourceType.
+    const whiteLabelUsers = await this.whiteLabelSyncedUserModel
+      .find()
+      .select("instanceId sourceType name email role sourceCreatedAt syncedAt")
+      .sort({ syncedAt: -1 })
+      .lean();
+
+    return {
+      summary: { ...summary, whiteLabelUsers: whiteLabelUsers.length },
+      users: list,
+      whiteLabelUsers,
+    };
   }
 
   async login(dto: LoginDto) {

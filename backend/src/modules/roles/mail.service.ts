@@ -108,7 +108,7 @@ export class MailService {
   }) {
     await this.transporter.sendMail({
       from: `"EventSH" <${process.env.SMTP_USER}>`,
-      to: "admin@eventsh.com", // admin email
+      to: process.env.ADMIN_EMAIL || "admin@eventsh.com",
       subject: `Approval Request for New ${data.role}`,
       html: `
         <h1>Approval Needed</h1>
@@ -371,16 +371,16 @@ export class MailService {
               </p>
               
               <div style="text-align: center; margin: 30px 0;">
-                <a href="https://eventsh.com/support" class="btn">Contact Support</a>
+                <a href="${process.env.FRONTEND_BASE_URL || "https://eventsh.com"}/support" class="btn">Contact Support</a>
               </div>
             </div>
-            
+
             <div class="footer">
               <p style="margin: 0 0 10px 0;"><strong>EventSH - Events Management Platform</strong></p>
               <p style="margin: 0 0 15px 0;">This is an automated security email. Please do not reply to this message.</p>
               <p style="margin: 0; font-size: 12px; opacity: 0.8;">
                 © ${new Date().getFullYear()} EventSH. All rights reserved.<br>
-                If you have questions, contact us at <a href="mailto:support@eventsh.com" style="color: #4f46e5;">support@eventsh.com</a>
+                If you have questions, contact us at <a href="mailto:${process.env.SUPPORT_EMAIL || process.env.ADMIN_EMAIL || "support@eventsh.com"}" style="color: #4f46e5;">${process.env.SUPPORT_EMAIL || process.env.ADMIN_EMAIL || "support@eventsh.com"}</a>
               </p>
             </div>
           </div>
@@ -403,12 +403,13 @@ export class MailService {
       data.planName && data.validityInDays
         ? `<p>You've been auto-assigned the <strong>${data.planName}</strong> plan (valid for ${data.validityInDays} days). You can upgrade anytime from <em>Settings → Subscription</em>.</p>`
         : `<p>You can browse plans anytime from <em>Settings → Subscription</em>.</p>`;
+    const loginUrl = `${process.env.FRONTEND_BASE_URL || "https://eventsh.com"}/login`;
     const body = `
       <div style="font-family: sans-serif; max-width: 600px; color: #1f2937; line-height: 1.6;">
         <h2>Welcome aboard, ${data.name}! 🎉</h2>
         <p>Your organizer account for <strong>${data.organizationName}</strong> is live and active.</p>
         ${planLine}
-        <p>Log in via WhatsApp OTP at <a href="https://eventsh.com/login">eventsh.com/login</a> to start creating events.</p>
+        <p>Log in via WhatsApp OTP at <a href="${loginUrl}">${loginUrl}</a> to start creating events.</p>
         <p>Cheers,<br/>The EventSH Team</p>
       </div>`;
     await this.transporter.sendMail({

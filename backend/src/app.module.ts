@@ -4,11 +4,12 @@ import { MongooseModule } from "@nestjs/mongoose";
 import { ConfigModule } from "@nestjs/config";
 import { DemoReadonlyGuard } from "./common/guards/demo-readonly.guard";
 import { ScheduleModule } from "@nestjs/schedule";
+import { ThrottlerModule } from "@nestjs/throttler";
 import { AuthModule } from "./modules/auth/auth.module";
 import { UsersModule } from "./modules/users/users.module";
 import { EventsModule } from "./modules/events/events.module";
 import { OrganizersModule } from "./modules/organizers/organizers.module";
-// import { UploadsModule } from "./modules/uploads/uploads.module";
+import { UploadsModule } from "./modules/uploads/uploads.module";
 import { AdminModule } from "./modules/admin/admin.module";
 import { RolesModule } from "./modules/roles/roles.module";
 import { MailModule } from "./modules/roles/mail.module";
@@ -46,11 +47,22 @@ import { FilesModule } from "./modules/files/files.module";
 import { SponsorsModule } from "./modules/sponsors/sponsors.module";
 import { AnalyticsModule } from "./modules/analytics/analytics.module";
 import { ExpensesModule } from "./modules/expenses/expenses.module";
+import { PlatformRegistryModule } from "./modules/platform-registry/platform-registry.module";
+import { PlatformSyncModule } from "./modules/platform-sync/platform-sync.module";
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
+    // @nestjs/throttler was installed but never wired up anywhere in the
+    // app. Registered here (module-level only — NOT as a global APP_GUARD,
+    // so existing browser traffic patterns on the shared SaaS are
+    // completely unaffected) so ThrottlerGuard can be applied explicitly to
+    // the new Phase-4 API-key-reachable surface, where machine traffic
+    // patterns differ from browser users. 60 requests / 60s per IP+route by
+    // default; override per-route with @Throttle() if a specific endpoint
+    // needs a different limit.
+    ThrottlerModule.forRoot([{ name: "default", ttl: 60000, limit: 60 }]),
     MailModule,
     MongooseModule.forRoot(
       process.env.MONGO_URI || "mongodb://127.0.0.1:27017/eventsh_dev",
@@ -67,7 +79,10 @@ import { ExpensesModule } from "./modules/expenses/expenses.module";
     FilesModule,
     EventsModule,
     OrganizersModule,
-    // UploadsModule,
+    // Standalone POST /uploads/events (Phase 4 — see uploads.controller.ts).
+    // The module used to be scaffolded and unused; this is a fresh
+    // implementation, not a resurrection of old dead code.
+    UploadsModule,
     AdminModule,
     RolesModule,
     PaymentsModule,
@@ -102,6 +117,8 @@ import { ExpensesModule } from "./modules/expenses/expenses.module";
     SponsorsModule,
     ExpensesModule,
     AnalyticsModule,
+    PlatformRegistryModule,
+    PlatformSyncModule,
   ],
   providers: [
     // Read-only demo sessions can never mutate real data via the API.

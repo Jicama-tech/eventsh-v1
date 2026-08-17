@@ -1,6 +1,9 @@
 node_modules
 dist
 .env
-uploads
+# Anchored to the repo-root runtime disk-storage folder only — a bare
+# "uploads" here also silently matched src/modules/uploads/ (this module's
+# own source code), which would have gotten it gitignored by accident.
+/uploads
 npm-debug.log
 whatsapp_auth
