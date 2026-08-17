@@ -1217,11 +1217,16 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
         });
 
         // "Show Space Names" — the space's own code (e.g. "C1"), printed
-        // just outside the box's RIGHT edge (not inside it, not below it),
-        // vertically centred on the box — so it reads as a grid reference
-        // alongside whichever vendor/brand label is shown inside (skipped
-        // when that label already IS the space name — e.g. an unbooked
-        // stall — to avoid printing it twice).
+        // just outside the box (not inside it) so it reads as a grid
+        // reference alongside whichever vendor/brand label is shown inside
+        // (skipped when that label already IS the space name — e.g. an
+        // unbooked stall — to avoid printing it twice).
+        // Which side it prints on is ADAPTIVE, not fixed: a space sitting in
+        // the bottom half of the printed map gets its label ABOVE the box
+        // instead of below, and a space in the top half gets it below —
+        // each pushed toward the page's centre rather than toward the edge
+        // it's already closest to, so it never prints at (or past) the
+        // sheet's boundary.
         // Own size formula (not just fs reused) — it's a secondary/reference
         // label so it gets its own ceiling, PLUS its own user-adjustable
         // scale (options.spaceNameScale, independent of the main label's
@@ -1238,13 +1243,19 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
             pdf.setFontSize(spaceNameFs);
             pdf.setFont("helvetica", "bold");
             pdf.setTextColor(71, 85, 105); // slate-600 — distinct from the main label
-            const fittedSpaceName = fitText(pdf, spaceName, footW);
-            pdf.text(
-              fittedSpaceName,
-              cx + footW / 2 + 3,
-              cy + spaceNameFs * 0.32,
-              { align: "left" },
+            const fittedSpaceName = fitText(
+              pdf,
+              spaceName,
+              Math.max(6, footW - 3),
             );
+            // Box's vertical centre within the printed (cropped) area —
+            // below the midline means "bottom half of the venue".
+            const localCenterY = by - cropMinY + bh / 2;
+            const inBottomHalf = localCenterY > cropH / 2;
+            const labelY = inBottomHalf
+              ? cy - footH / 2 - spaceNameFs * 0.25 - 0.5 // above the box
+              : cy + footH / 2 + spaceNameFs * 0.75 + 0.5; // below the box
+            pdf.text(fittedSpaceName, cx, labelY, { align: "center" });
             pdf.setTextColor(17, 24, 39);
           }
         }

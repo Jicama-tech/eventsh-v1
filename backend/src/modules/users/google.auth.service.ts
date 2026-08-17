@@ -6,11 +6,14 @@ export class GoogleAuthService {
   private client: OAuth2Client;
 
   constructor() {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    if (!clientId) {
-      throw new InternalServerErrorException("Missing GOOGLE_OAUTH_CLIENT_ID");
-    }
-    this.client = new OAuth2Client(clientId);
+    // OAuth2Client's own constructor doesn't require a clientId — the
+    // missing-config check below is intentionally deferred to actual use
+    // (verifyIdToken), not here. This is an @Injectable() provider, so Nest
+    // constructs it eagerly at app boot regardless of whether Google auth
+    // is ever used; throwing here would crash the whole app on a fresh
+    // white-label deployment that hasn't configured Google OAuth yet,
+    // instead of just failing the one login flow that needs it.
+    this.client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
   }
 
   /**
@@ -18,6 +21,9 @@ export class GoogleAuthService {
    * @param idToken Google ID token from frontend Google sign-in
    */
   async verifyIdToken(idToken: string) {
+    if (!process.env.GOOGLE_CLIENT_ID) {
+      throw new InternalServerErrorException("Missing GOOGLE_OAUTH_CLIENT_ID");
+    }
     try {
       const ticket = await this.client.verifyIdToken({
         idToken,

@@ -678,6 +678,30 @@ export function OrganizerStorefront({
     }
   };
 
+  // ── Storefront layout variants (white-label plan, Phase 3b) ──
+  // Each of header/banner/allProducts/footer below picks one of a small set
+  // of pre-built JSX variants ("modern"/"minimal"/"mega" today) via a plain
+  // string match further down this render — e.g. `{header === "modern" && (...)}`,
+  // `{header === "mega" && (...)}`. The variant key itself comes from
+  // Organizer Settings → Storefront Customizer
+  // (organizerStorefrontCustomizer.tsx), which just needs a new button
+  // added to offer a new key.
+  //
+  // To add a NEW variant (e.g. for a white-label customer's own header
+  // design): add `{header === "yourkey" && (...)}` alongside the existing
+  // blocks below, using the same `general`/`design`/`features` variables
+  // and `getImageUrl`/`scrollToSection`/`handleCartClick` helpers already
+  // in scope here — no other file needs to change. This keeps every variant
+  // in one place rather than threading this component's ~30 pieces of
+  // shared state through prop boundaries into separate files, which isn't
+  // safe to do without being able to click through cart/checkout afterward
+  // to confirm nothing broke.
+  //
+  // NOTE: `design.layout.featuredProducts` / `design.layout.quickPicks`
+  // (below, and in the OrganizerStore interface above) are declared in the
+  // schema and editable in the customizer, but — confirmed while adding the
+  // "mega" header — nothing in this file actually branches on their value.
+  // They're dead/unwired fields today, not a variant system in use.
   const header = settings?.settings?.design.layout.header || "modern";
   const banner = settings?.settings?.design.showBanner
     ? settings?.settings?.design?.layout.banner
@@ -1039,6 +1063,184 @@ export function OrganizerStorefront({
               </div>
             </nav>
           </>
+        )}
+        {/* Navigation - Mega Header. New variant (no existing "modern"/
+            "minimal" code above was touched to add this) — a two-tier header
+            matching the bolder, more branded look of the other "mega"
+            section variants (see banner === "mega" above): a slim utility
+            bar (contact info + socials) over a bigger main nav row. */}
+        {header === "mega" && (
+          <div className="sticky top-0 z-40">
+            <div
+              className="hidden md:block text-white"
+              style={{ backgroundColor: design.secondaryColor }}
+            >
+              <div className="max-w-7xl mx-auto px-4 lg:px-8 h-9 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-4">
+                  {general.contactInfo?.phone && (
+                    <span className="flex items-center gap-1.5">
+                      <Phone className="h-3 w-3" />
+                      {general.contactInfo.phone}
+                    </span>
+                  )}
+                  {general.contactInfo?.email && (
+                    <span className="flex items-center gap-1.5">
+                      <Mail className="h-3 w-3" />
+                      {general.contactInfo.email}
+                    </span>
+                  )}
+                </div>
+                {features.showSocialMedia && (
+                  <div className="flex items-center gap-3">
+                    {general.contactInfo?.showInstagram &&
+                      general.contactInfo?.instagramLink && (
+                        <a
+                          href={general.contactInfo.instagramLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="hover:opacity-80"
+                        >
+                          <FaInstagram className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    {general.contactInfo?.showFacebook &&
+                      general.contactInfo?.facebookLink && (
+                        <a
+                          href={general.contactInfo.facebookLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="hover:opacity-80"
+                        >
+                          <FaFacebook className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    {general.contactInfo?.showTwitter &&
+                      general.contactInfo?.twitterLink && (
+                        <a
+                          href={general.contactInfo.twitterLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="hover:opacity-80"
+                        >
+                          <FaTwitter className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    {general.contactInfo?.showTiktok &&
+                      general.contactInfo?.tiktokLink && (
+                        <a
+                          href={general.contactInfo.tiktokLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="hover:opacity-80"
+                        >
+                          <FaTiktok className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <nav className="bg-white shadow-sm border-b border-gray-200">
+              <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
+                <div className="flex justify-between items-center h-16 sm:h-20">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="md:hidden p-1 sm:p-2"
+                    onClick={() => setSidebarOpen(!sidebarOpen)}
+                  >
+                    <Menu className="h-5 w-5" />
+                  </Button>
+
+                  <div className="flex items-center gap-3">
+                    {general.logo ? (
+                      <img
+                        src={getImageUrl(general.logo)}
+                        alt="Logo"
+                        className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          e.currentTarget.nextElementSibling?.classList.remove(
+                            "hidden",
+                          );
+                        }}
+                      />
+                    ) : null}
+                    <div
+                      className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center text-white font-bold text-lg sm:text-xl ${
+                        general.logo ? "hidden" : ""
+                      }`}
+                      style={{ backgroundColor: design.primaryColor }}
+                    >
+                      {general.storeName.charAt(0).toUpperCase()}
+                    </div>
+                    <h1
+                      className="font-bold text-lg sm:text-xl lg:text-2xl text-gray-900 truncate"
+                      style={{ fontFamily: design.fontFamily }}
+                    >
+                      {general.storeName}
+                    </h1>
+                  </div>
+
+                  <div className="hidden md:flex items-center gap-6 lg:gap-10 mx-auto">
+                    <button
+                      onClick={() => scrollToSection("home")}
+                      className="font-semibold text-sm lg:text-base text-gray-900 hover:text-primary transition-colors"
+                    >
+                      Home
+                    </button>
+                    <button
+                      onClick={() => scrollToSection("events")}
+                      className="font-semibold text-sm lg:text-base text-gray-600 hover:text-primary transition-colors"
+                    >
+                      Events
+                    </button>
+                    <button
+                      onClick={() => scrollToSection("about")}
+                      className="font-semibold text-sm lg:text-base text-gray-600 hover:text-primary transition-colors"
+                    >
+                      About
+                    </button>
+                    <button
+                      onClick={() => scrollToSection("contact")}
+                      className="font-semibold text-sm lg:text-base text-gray-600 hover:text-primary transition-colors"
+                    >
+                      Contact
+                    </button>
+                  </div>
+
+                  <div className="flex items-center space-x-1 sm:space-x-3">
+                    {features.showWishlist && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-gray-600 hover:text-primary p-1 sm:p-2"
+                      >
+                        <Heart className="h-4 w-4 sm:h-5 sm:w-5" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="buttonOutline"
+                      size="lg"
+                      onClick={handleCartClick}
+                      className="relative"
+                    >
+                      <Ticket className="h-5 w-5" />
+                      {cartCount > 0 && (
+                        <span
+                          className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white"
+                          style={{ backgroundColor: design.primaryColor }}
+                        >
+                          {cartCount > 99 ? "99+" : cartCount}
+                        </span>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </nav>
+          </div>
         )}
         {/* Mobile Sidebar */}
         {sidebarOpen && (

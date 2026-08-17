@@ -4,16 +4,20 @@ node_modules/
 # Build outputs
 dist/
 build/
-docs/
 
 # Environment files
 .env
 .env.local
 .env.production
 .env.staging
+.env.whitelabel
 
-# Uploads (user-generated content)
-uploads/
+# Uploads (user-generated content) — anchored to the repo-root and
+# backend-root runtime disk-storage folders only. An unanchored "uploads/"
+# also matched backend/src/modules/uploads/ (real source code, not runtime
+# state) and silently gitignored it.
+/uploads/
+/backend/uploads/
 
 # WhatsApp auth session
 whatsapp_auth/
@@ -38,3 +42,4 @@ coverage/
 # Temp files
 *.tmp
 *.bak
+.env.whitelabel
