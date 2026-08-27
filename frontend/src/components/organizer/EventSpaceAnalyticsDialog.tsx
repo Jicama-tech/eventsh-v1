@@ -241,57 +241,125 @@ export function EventSpaceAnalyticsDialog({
   const safeName = String(eventTitle).replace(/[^a-z0-9]/gi, "_");
   const stamp = new Date().toISOString().slice(0, 10);
 
-  // Flat rows for the spreadsheet — one line per brand booking, plus a line
-  // for templates that have no bookings yet so they still appear.
+  // Flat rows for the spreadsheet — one row per SOLD space, with one column
+  // per event add-on so the organizer can see (and total) what each vendor
+  // added on. Price is the price actually charged for that space — the
+  // per-space snapshot on the stall's selectedTables entry, which already
+  // resolved member vs regular pricing at booking time; falls back to the
+  // placed space's member/regular template price if that snapshot is
+  // missing (older bookings).
   const buildRows = (): string[][] => {
+    const addOnCatalog: { id: string; name: string }[] = Array.isArray(
+      detail?.addOnItems,
+    )
+      ? detail.addOnItems.map((a: any) => ({
+          id: String(a.id),
+          name: a.name || "Add-on",
+        }))
+      : [];
+
     const header = [
-      "Template",
-      "Price",
-      "Total Spaces",
-      "Booked",
-      "Available",
+      "Space Template",
+      "Space Name",
       "Brand",
-      "Spaces Booked",
-      "Space Names",
-      "Status",
-      "Email",
-      "Phone",
+      "Vendor Name",
+      ...addOnCatalog.map((a) => a.name),
+      "Price",
     ];
     const rows: string[][] = [header];
-    for (const t of templates) {
-      const available = Math.max(0, t.total - t.booked);
-      if (t.brands.length === 0) {
-        rows.push([
-          t.name,
-          t.price != null ? String(t.price) : "",
-          String(t.total),
-          String(t.booked),
-          String(available),
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-        ]);
-        continue;
-      }
-      for (const b of t.brands) {
-        rows.push([
-          t.name,
-          t.price != null ? String(t.price) : "",
-          String(t.total),
-          String(t.booked),
-          String(available),
-          b.name,
-          String(b.spaces),
-          b.spaceNames.join(" | "),
-          b.status,
-          emailOf(b.stall),
-          phoneOf(b.stall),
-        ]);
+
+    const placed = flattenPlaced(detail?.venueTables);
+    const liveStalls = stalls.filter((s) => SOLD_STATUSES.has(s?.status));
+    const posToStall = new Map<string, any>();
+    for (const s of liveStalls) {
+      for (const t of s.selectedTables || []) {
+        if (t?.positionId && !posToStall.has(t.positionId)) {
+          posToStall.set(t.positionId, s);
+        }
       }
     }
+
+    // Add-ons are chosen once per booking (stall), not per space, so only
+    // credit a vendor's add-on quantities/revenue to totals once — on the
+    // first sold-space row we emit for that vendor. Later rows for the
+    // same vendor show 0s to avoid double-counting the totals below.
+    const addOnsCreditedFor = new Set<string>();
+
+    let totalSpacesSold = 0;
+    let totalSpaceRevenue = 0;
+    const addOnQtyTotals = new Map<string, number>();
+    const addOnRevenueTotals = new Map<string, number>();
+
+    for (const tpl of templates) {
+      const tplPlaced = placed.filter((p) => String(p.id) === tpl.id);
+      for (const p of tplPlaced) {
+        const s = posToStall.get(p.positionId);
+        if (!s) continue; // unbooked space — not "sold"
+
+        const spaceName = p.name || p.tableName || p.positionId;
+        const selT = (s.selectedTables || []).find(
+          (t: any) => t.positionId === p.positionId,
+        );
+        const isMember = !!s?.shopkeeperId?.isMember;
+        const price =
+          selT?.price != null
+            ? selT.price
+            : (isMember && p.memberPrice != null
+                ? p.memberPrice
+                : (p.tablePrice ?? tpl.price)) || 0;
+
+        const stallKey = String(s._id);
+        const firstForVendor = !addOnsCreditedFor.has(stallKey);
+        if (firstForVendor) addOnsCreditedFor.add(stallKey);
+
+        const addOnCells = addOnCatalog.map((a) => {
+          const sel = (s.selectedAddOns || []).find(
+            (x: any) => String(x.addOnId) === a.id,
+          );
+          const qty = sel?.quantity || 0;
+          if (firstForVendor && qty) {
+            addOnQtyTotals.set(a.id, (addOnQtyTotals.get(a.id) || 0) + qty);
+            addOnRevenueTotals.set(
+              a.id,
+              (addOnRevenueTotals.get(a.id) || 0) + qty * (sel?.price || 0),
+            );
+          }
+          return String(firstForVendor ? qty : 0);
+        });
+
+        rows.push([
+          tpl.name,
+          spaceName,
+          brandNameOf(s),
+          s?.shopkeeperId?.name || brandNameOf(s),
+          ...addOnCells,
+          String(price),
+        ]);
+
+        totalSpacesSold += 1;
+        totalSpaceRevenue += Number(price) || 0;
+      }
+    }
+
+    const addOnRevenueSum = Array.from(addOnRevenueTotals.values()).reduce(
+      (a, b) => a + b,
+      0,
+    );
+    const blankAddOnCols = addOnCatalog.map(() => "");
+
+    rows.push([]);
+    rows.push(["TOTALS", "", "", "", ...blankAddOnCols, ""]);
+    rows.push(["Total Spaces Sold", String(totalSpacesSold)]);
+    rows.push(["Total Space Revenue", totalSpaceRevenue.toFixed(2)]);
+    rows.push(["Total Add-On Revenue", addOnRevenueSum.toFixed(2)]);
+    rows.push([
+      "Total Revenue",
+      (totalSpaceRevenue + addOnRevenueSum).toFixed(2),
+    ]);
+    addOnCatalog.forEach((a) => {
+      rows.push([`Total ${a.name} Sold`, String(addOnQtyTotals.get(a.id) || 0)]);
+    });
+
     return rows;
   };
 
