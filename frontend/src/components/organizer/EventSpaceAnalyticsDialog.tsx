@@ -280,15 +280,13 @@ export function EventSpaceAnalyticsDialog({
     }
 
     // Add-ons are chosen once per booking (stall), not per space, so only
-    // credit a vendor's add-on quantities/revenue to totals once — on the
-    // first sold-space row we emit for that vendor. Later rows for the
-    // same vendor show 0s to avoid double-counting the totals below.
+    // credit a vendor's add-on quantities to totals once — on the first
+    // sold-space row we emit for that vendor. Later rows for the same
+    // vendor show 0s to avoid double-counting the totals row below.
     const addOnsCreditedFor = new Set<string>();
 
     let totalSpacesSold = 0;
-    let totalSpaceRevenue = 0;
     const addOnQtyTotals = new Map<string, number>();
-    const addOnRevenueTotals = new Map<string, number>();
 
     for (const tpl of templates) {
       const tplPlaced = placed.filter((p) => String(p.id) === tpl.id);
@@ -319,10 +317,6 @@ export function EventSpaceAnalyticsDialog({
           const qty = sel?.quantity || 0;
           if (firstForVendor && qty) {
             addOnQtyTotals.set(a.id, (addOnQtyTotals.get(a.id) || 0) + qty);
-            addOnRevenueTotals.set(
-              a.id,
-              (addOnRevenueTotals.get(a.id) || 0) + qty * (sel?.price || 0),
-            );
           }
           return String(firstForVendor ? qty : 0);
         });
@@ -337,28 +331,20 @@ export function EventSpaceAnalyticsDialog({
         ]);
 
         totalSpacesSold += 1;
-        totalSpaceRevenue += Number(price) || 0;
       }
     }
 
-    const addOnRevenueSum = Array.from(addOnRevenueTotals.values()).reduce(
-      (a, b) => a + b,
-      0,
-    );
-    const blankAddOnCols = addOnCatalog.map(() => "");
-
-    rows.push([]);
-    rows.push(["TOTALS", "", "", "", ...blankAddOnCols, ""]);
-    rows.push(["Total Spaces Sold", String(totalSpacesSold)]);
-    rows.push(["Total Space Revenue", totalSpaceRevenue.toFixed(2)]);
-    rows.push(["Total Add-On Revenue", addOnRevenueSum.toFixed(2)]);
+    // Single totals row, aligned under the same columns as the table above —
+    // total spaces sold under Space Name, total sold per add-on under each
+    // add-on's own column.
     rows.push([
-      "Total Revenue",
-      (totalSpaceRevenue + addOnRevenueSum).toFixed(2),
+      "TOTAL",
+      `${totalSpacesSold} spaces sold`,
+      "",
+      "",
+      ...addOnCatalog.map((a) => String(addOnQtyTotals.get(a.id) || 0)),
+      "",
     ]);
-    addOnCatalog.forEach((a) => {
-      rows.push([`Total ${a.name} Sold`, String(addOnQtyTotals.get(a.id) || 0)]);
-    });
 
     return rows;
   };
