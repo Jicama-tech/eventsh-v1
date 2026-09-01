@@ -44,7 +44,15 @@ const LandingPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a] text-slate-200 selection:bg-primary/30">
+    <div
+      className={
+        template.rootClassName ??
+        "min-h-screen bg-[#1a1a1a] text-slate-200 selection:bg-primary/30"
+      }
+    >
+      {/* Route-scoped stylesheet/webfonts, for a template that brings its own */}
+      {template.Styles && <template.Styles />}
+
       <template.Nav
         isOpen={isOpen}
         setIsOpen={setIsOpen}
@@ -53,6 +61,10 @@ const LandingPage = () => {
       />
 
       <template.Hero onShowLogin={onShowLogin} />
+
+      {template.Replaces && <template.Replaces />}
+      {template.Modules && <template.Modules />}
+      {template.Screens && <template.Screens />}
 
       <template.SeeItInAction
         showcaseEvents={showcaseEvents}
@@ -63,11 +75,13 @@ const LandingPage = () => {
       {/* Public AI chatbot — FAQ + first-event onboarding (inline Google auth) */}
       <PublicChatbot />
 
+      {template.HowItWorks && <template.HowItWorks />}
+
       <TestimonialsCarousel />
 
       <template.CTA onShowLogin={onShowLogin} onContactUs={contactUs} />
 
-      <Footer />
+      {template.Footer ? <template.Footer /> : <Footer />}
     </div>
   );
 };
