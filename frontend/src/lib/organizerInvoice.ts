@@ -107,14 +107,15 @@ export async function buildOrganizerInvoice(opts: InvoiceOptions): Promise<{
   const uen = company.uen || "";
   let y = 60;
 
-  const colQty = right - 210;
-  const colRate = right - 120;
+  // Item, quantity, line total. There is deliberately no rate column: the
+  // per-unit price is internal pricing, and the organizer only needs to see
+  // what they are being charged for, how many, and what it comes to.
+  const colQty = right - 150;
 
   const drawColumnHeader = () => {
     pdf.setFont("helvetica", "bold").setFontSize(8).setTextColor(120);
     pdf.text("DESCRIPTION", left, y);
     pdf.text("QTY", colQty, y, { align: "right" });
-    pdf.text("RATE", colRate, y, { align: "right" });
     pdf.text("AMOUNT", right, y, { align: "right" });
     pdf.setTextColor(0);
     y += 8;
@@ -125,8 +126,8 @@ export async function buildOrganizerInvoice(opts: InvoiceOptions): Promise<{
   /**
    * Break to a new page when `needed` points won't fit above the footer.
    * `repeatHeader` re-prints the column titles, so a reader landing on page
-   * three still knows which column is the rate and which is the amount — it
-   * is off for the totals and payment blocks, which aren't table rows.
+   * three still knows which column is which — it is off for the totals and
+   * payment blocks, which aren't table rows.
    */
   const ensure = (needed: number, repeatHeader = false) => {
     if (y + needed > pageH - 90) {
@@ -186,9 +187,8 @@ export async function buildOrganizerInvoice(opts: InvoiceOptions): Promise<{
   const lineItem = (desc: string, qty: number, rate: number) => {
     ensure(18, true);
     pdf.setFont("helvetica", "normal").setFontSize(9);
-    pdf.text(desc.slice(0, 58), left + 12, y);
+    pdf.text(desc.slice(0, 64), left + 12, y);
     pdf.text(String(qty), colQty, y, { align: "right" });
-    pdf.text(moneyPdf(rate, cur), colRate, y, { align: "right" });
     pdf.text(moneyPdf(qty * rate, cur), right, y, { align: "right" });
     y += 15;
   };
@@ -268,20 +268,23 @@ export async function buildOrganizerInvoice(opts: InvoiceOptions): Promise<{
   }
 
   // ── Totals ──
+  // Labels sit just left of the amounts, clear of the QTY column.
+  const totalsLabelX = right - 100;
+  const totalsRuleX = right - 260;
   ensure(100);
-  pdf.setDrawColor(200).line(colQty - 60, y, right, y);
+  pdf.setDrawColor(200).line(totalsRuleX, y, right, y);
   y += 18;
   const totalRow = (label: string, value: number, bold = false) => {
     pdf
       .setFont("helvetica", bold ? "bold" : "normal")
       .setFontSize(bold ? 11 : 9.5);
-    pdf.text(label, colRate, y, { align: "right" });
+    pdf.text(label, totalsLabelX, y, { align: "right" });
     pdf.text(moneyPdf(value, cur), right, y, { align: "right" });
     y += bold ? 22 : 16;
   };
   totalRow("Subtotal", billing.totals.billable);
   totalRow("Payments received", billing.totals.paid);
-  pdf.setDrawColor(150).line(colQty - 60, y - 7, right, y - 7);
+  pdf.setDrawColor(150).line(totalsRuleX, y - 7, right, y - 7);
   y += 7;
   totalRow("Amount due", billing.totals.owed, true);
 
