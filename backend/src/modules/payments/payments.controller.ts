@@ -39,6 +39,11 @@ export class PaymentsController {
     return this.paymentsService.decodeQrFromUrl(imageUrl);
   }
 
+  /**
+   * `static=1` returns a re-usable QR with no amount in it — the payer types
+   * the sum. That is what the super-admin invoice embeds, so the PDF keeps
+   * working after the amount it was generated for has been part-paid.
+   */
   @Get("generate-qr")
   async generateQr(
     @Query("scheme") scheme: "UPI" | "PAYNOW",
@@ -46,10 +51,13 @@ export class PaymentsController {
     @Query("payeeName") payeeName: string,
     @Query("amount") amount: string,
     @Query("billNumber") billNumber?: string,
-    @Query("currency") currency = scheme === "PAYNOW" ? "SGD" : "INR"
+    @Query("currency") currency = scheme === "PAYNOW" ? "SGD" : "INR",
+    @Query("static") staticQr?: string
   ) {
     if (!payeeId || !payeeName)
       throw new BadRequestException("Missing payeeId or payeeName");
+
+    const isStatic = staticQr === "1" || staticQr === "true";
 
     try {
       return await this.paymentsService.generateQrCode(
@@ -61,6 +69,7 @@ export class PaymentsController {
           billNumber,
           currency,
           editableAmount: false,
+          staticQr: isStatic,
           countryCode: scheme === "PAYNOW" ? "SG" : "IN",
         },
         billNumber

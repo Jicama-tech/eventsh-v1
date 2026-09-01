@@ -691,7 +691,7 @@ export function OrganizersPage() {
                             size="sm"
                             variant="ghost"
                             onClick={() => setBillingFor(o._id)}
-                            title="View billing & events"
+                            title="Expenses & invoice"
                           >
                             <Receipt className="h-4 w-4" />
                           </Button>
@@ -706,7 +706,8 @@ export function OrganizersPage() {
         </CardContent>
       </Card>
 
-      {/* Billing dialog (events + amounts + payment ledger) */}
+      {/* Expenses dialog: what this organizer owes Eventsh in platform
+          fees, the payment ledger, a PayNow QR and the invoice PDF. */}
       <OrganizerBillingDialog
         organizerId={billingFor}
         onClose={() => setBillingFor(null)}

@@ -57,9 +57,10 @@ export class AdminService {
   // ===========================================================================
   //  Super-admin billing — per-organizer aggregation + payment ledger.
   //  Rates are now editable via /admin/billing-rates. Defaults if no doc:
-  //  $20 per booked stall, $20 per booked round-table, $5 per booked chair
-  //  (additive: a fully booked 8-chair table is $20+$40), $20 per Confirmed
-  //  SpeakerRequest. Currency: USD.
+  //  20 per booked stall, 20 per booked round-table, 5 per booked chair
+  //  (additive: a fully booked 8-chair table is 20+40), 20 per Confirmed
+  //  SpeakerRequest. Currency: SGD — the platform invoices and collects in
+  //  Singapore dollars only.
   // ===========================================================================
   private static readonly DEFAULT_RATES = {
     stallRate: 20,
@@ -69,8 +70,17 @@ export class AdminService {
     // Flat fee charged per ExhibitorMembership currently active for the
     // organizer. Set to 0 here to stop billing memberships.
     membershipRate: 5,
-    currency: "USD",
+    currency: "SGD",
   };
+
+  /**
+   * Eventsh's own Singapore corporate PayNow proxy and the merchant name that
+   * goes into the EMVCo payload. Seeded as defaults so a deployment can
+   * invoice and take PayNow before anyone opens Settings — the super-admin
+   * still overrides both there, and a saved value always wins.
+   */
+  private static readonly DEFAULT_COMPANY_UEN = "202607897M";
+  private static readonly DEFAULT_COMPANY_NAME = "EVENTSH";
 
   /**
    * Returns the currently-active billing rates. The collection holds at most
@@ -401,16 +411,16 @@ export class AdminService {
     const doc: any = await this.paymentConfigModel.findOne({}).lean();
     if (!doc) {
       return {
-        companyName: "",
-        companyUEN: "",
+        companyName: AdminService.DEFAULT_COMPANY_NAME,
+        companyUEN: AdminService.DEFAULT_COMPANY_UEN,
         platformUPIId: "",
         upiQrImagePath: "",
         persisted: false,
       };
     }
     return {
-      companyName: doc.companyName || "",
-      companyUEN: doc.companyUEN || "",
+      companyName: doc.companyName || AdminService.DEFAULT_COMPANY_NAME,
+      companyUEN: doc.companyUEN || AdminService.DEFAULT_COMPANY_UEN,
       platformUPIId: doc.platformUPIId || "",
       upiQrImagePath: doc.upiQrImagePath || "",
       updatedAt: doc.updatedAt,

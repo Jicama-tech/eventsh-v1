@@ -48,17 +48,28 @@ export class PaymentsService {
     if (!config.payeeId || !config.payeeName || !config.scheme) {
       throw new BadRequestException("Missing required payment config");
     }
-    if (isNaN(Number(config.amount)) || Number(config.amount) <= 0) {
+    // A static QR deliberately carries no amount — the payer types it — so the
+    // amount check only applies to dynamic ones.
+    const isStatic = !!config.staticQr;
+    if (
+      !isStatic &&
+      (isNaN(Number(config.amount)) || Number(config.amount) <= 0)
+    ) {
       throw new BadRequestException("Invalid amount");
     }
 
-    const payloadHeader = this.tlv("00", "01") + this.tlv("01", "12");
+    // Point of initiation: "11" static (re-usable, no amount), "12" dynamic
+    // (one transaction, amount baked in).
+    const payloadHeader =
+      this.tlv("00", "01") + this.tlv("01", isStatic ? "11" : "12");
 
     let merchantAccountInfo = "";
     if (config.scheme === "PAYNOW") {
       const proxyTypeValue = config.payeeId.match(/^\d{9}[A-Z]$/) ? "2" : "0";
       const proxyValue = config.payeeId.replace(/[\s+]/g, "");
-      const editableFlag = config.editableAmount ? "0" : "1";
+      // PayNow tag 03 is the editable-amount indicator. A static QR has no
+      // amount to lock, so it is always editable.
+      const editableFlag = isStatic ? "1" : config.editableAmount ? "0" : "1";
       const mai =
         this.tlv("00", "SG.PAYNOW") +
         this.tlv("01", proxyTypeValue) +
@@ -77,7 +88,11 @@ export class PaymentsService {
 
     const mcc = "0000";
     const currencyNumeric = this.getCurrencyCode(config.currency);
-    const amountStr = parseFloat(config.amount).toFixed(2);
+    // Tag 54 is omitted entirely on a static QR — an empty or zero amount
+    // field is not the same thing, and some bank apps reject it.
+    const amountField = isStatic
+      ? ""
+      : this.tlv("54", parseFloat(config.amount).toFixed(2));
     const countryCode = config.countryCode.toUpperCase();
     const merchantName = config.payeeName.slice(0, 25);
     const merchantCity = "UNKNOWN";
@@ -93,7 +108,7 @@ export class PaymentsService {
       merchantAccountInfo +
       this.tlv("52", mcc) +
       this.tlv("53", currencyNumeric) +
-      this.tlv("54", amountStr) +
+      amountField +
       this.tlv("58", countryCode) +
       this.tlv("59", merchantName) +
       this.tlv("60", merchantCity) +
@@ -213,7 +228,8 @@ export class PaymentsService {
       let intent = `${config.scheme.toLowerCase()}://pay?pa=${encodeURIComponent(
         config.payeeId
       )}&pn=${encodeURIComponent(config.payeeName)}`;
-      if (config.amount) intent += `&am=${encodeURIComponent(config.amount)}`;
+      if (config.amount && !config.staticQr)
+        intent += `&am=${encodeURIComponent(config.amount)}`;
       if (refId) intent += `&tr=${encodeURIComponent(refId)}`;
       if (config.currency)
         intent += `&cu=${encodeURIComponent(config.currency)}`;
