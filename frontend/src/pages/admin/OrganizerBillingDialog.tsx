@@ -18,7 +18,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Receipt, Plus, X, QrCode, ExternalLink } from "lucide-react";
+import {
+  Loader2,
+  Receipt,
+  Plus,
+  X,
+  QrCode,
+  ExternalLink,
+  FileText,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { adminFetch } from "@/lib/adminFetch";
 
@@ -91,10 +99,22 @@ interface BreakdownResponse {
   }>;
 }
 
-const fmtUsd = (v: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(
-    v || 0,
-  );
+/**
+ * Platform fees are billed in a single currency, read off the live rates
+ * rather than hardcoded, so changing it in Settings -> Billing rates flows
+ * through to every figure here and to the invoice. Defaults to SGD, which is
+ * the only currency the platform collects in.
+ */
+const money = (v: number, currency = "SGD") =>
+  new Intl.NumberFormat("en-SG", {
+    style: "currency",
+    currency: currency || "SGD",
+    // "SGD 2,015.00", not "$2,015.00" — en-SG renders its own currency as a
+    // bare "$", which on an admin screen is indistinguishable from USD.
+    currencyDisplay: "code",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(v || 0);
 
 interface PaymentConfig {
   companyName: string;
@@ -103,25 +123,18 @@ interface PaymentConfig {
 }
 
 /**
- * Map the organizer's stored country to a QR scheme + currency. Registration
- * writes 2-letter ISO codes ("IN" / "SG", see organizerRegister.tsx:28), but
- * older rows occasionally hold the full name — accept both.
+ * The platform invoices and collects in SGD only, so the super-admin side
+ * always settles through corporate PayNow against the company UEN, wherever
+ * the organizer happens to be registered. This deliberately no longer
+ * branches on organizer.country — the organizer-facing checkout
+ * (BillingPaymentDialog) still carries its own region logic and is
+ * unchanged.
  */
-type Region =
-  | { scheme: "UPI"; currency: "INR"; label: "UPI · India" }
-  | { scheme: "PAYNOW"; currency: "SGD"; label: "PayNow · Singapore" }
-  | null;
-
-function regionFromCountry(country?: string): Region {
-  const c = (country || "").trim().toLowerCase();
-  if (c === "in" || c === "india") {
-    return { scheme: "UPI", currency: "INR", label: "UPI · India" };
-  }
-  if (c === "sg" || c === "singapore" || c === "sgp") {
-    return { scheme: "PAYNOW", currency: "SGD", label: "PayNow · Singapore" };
-  }
-  return null;
-}
+const SETTLEMENT = {
+  scheme: "PAYNOW" as const,
+  currency: "SGD" as const,
+  label: "PayNow · Singapore",
+};
 
 export function OrganizerBillingDialog({
   organizerId,
@@ -149,12 +162,19 @@ export function OrganizerBillingDialog({
   // pulled from the singleton platform PaymentConfig (set by super-admin in
   // Settings → Payment Settings). Amount defaults to totals.owed but is
   // editable in case partial payment is being collected.
-  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
+  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(
+    null,
+  );
   const [qrAmount, setQrAmount] = useState("");
   const [qrLoading, setQrLoading] = useState(false);
   const [qrImage, setQrImage] = useState<string | null>(null);
   const [qrIntent, setQrIntent] = useState<string | null>(null);
   const [qrError, setQrError] = useState<string | null>(null);
+  // Static is the default: the same QR keeps working after a part-payment,
+  // and it is what goes on the invoice. Untick to lock a specific amount
+  // into a one-shot QR instead.
+  const [qrStatic, setQrStatic] = useState(true);
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
 
   const fetchBilling = async () => {
     if (!organizerId) return;
@@ -199,6 +219,7 @@ export function OrganizerBillingDialog({
       setQrIntent(null);
       setQrError(null);
       setQrAmount("");
+      setQrStatic(true);
       fetchBilling();
       fetchPaymentConfig();
     }
@@ -274,41 +295,62 @@ export function OrganizerBillingDialog({
     }
   };
 
-  const region = useMemo(
-    () => regionFromCountry(data?.organizer.country),
-    [data?.organizer.country],
-  );
+  // Billing currency comes from the live rates so every figure on screen, in
+  // the QR and on the invoice agree.
+  const cur = data?.rates.currency || SETTLEMENT.currency;
 
-  // The payee proxy (UPI VPA for India, corporate UEN for Singapore) comes
-  // from the singleton PaymentConfig the super-admin maintains. If the
-  // matching field isn't set, surface a pointer to Settings rather than
-  // silently letting the QR endpoint reject the request.
-  const proxy = useMemo(() => {
-    if (!region || !paymentConfig) return "";
-    return region.scheme === "UPI"
-      ? paymentConfig.platformUPIId
-      : paymentConfig.companyUEN;
-  }, [region, paymentConfig]);
+  // The payee proxy is the company UEN from the singleton PaymentConfig the
+  // super-admin maintains (seeded server-side, editable in Settings). If it
+  // is somehow empty, point at Settings rather than letting the QR endpoint
+  // reject the request.
+  const proxy = paymentConfig?.companyUEN || "";
 
-  const generateQr = async () => {
-    if (!region) return;
-    const amt = Number(qrAmount);
-    if (!Number.isFinite(amt) || amt <= 0) {
-      setQrError("Enter a positive amount");
-      return;
-    }
+  /**
+   * Ask the backend for a PayNow QR. `staticQr` builds a re-usable
+   * amount-less one against the company UEN (the default, and what the
+   * invoice embeds); otherwise the amount is baked in for a single payment.
+   * Returns the QR so the invoice can await it, and also parks it in state
+   * for the on-screen panel.
+   */
+  const requestQr = async (opts: {
+    staticQr: boolean;
+    amount?: number;
+    billNumber: string;
+  }): Promise<{ qr: string; intent: string }> => {
     if (!proxy) {
-      setQrError(
-        region.scheme === "UPI"
-          ? "Platform UPI ID isn't set. Configure it in Settings → Payment Settings."
-          : "Company UEN isn't set. Configure it in Settings → Payment Settings.",
+      throw new Error(
+        "Company UEN isn't set. Configure it in Settings → Payment Settings.",
       );
-      return;
     }
     if (!paymentConfig?.companyName) {
-      setQrError(
+      throw new Error(
         "Company Name isn't set. Configure it in Settings → Payment Settings.",
       );
+    }
+    const params = new URLSearchParams({
+      scheme: SETTLEMENT.scheme,
+      payeeId: proxy,
+      payeeName: paymentConfig.companyName,
+      amount: opts.staticQr ? "" : (opts.amount ?? 0).toFixed(2),
+      billNumber: opts.billNumber,
+      currency: SETTLEMENT.currency,
+      ...(opts.staticQr ? { static: "1" } : {}),
+    });
+    // /payments/generate-qr is public (no JWT guard) — fetch directly.
+    const res = await fetch(`${apiURL}/payments/generate-qr?${params}`);
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(txt || `HTTP ${res.status}`);
+    }
+    return (await res.json()) as { qr: string; intent: string };
+  };
+
+  const billNumber = `ORG-${organizerId?.slice(-6) || "BILL"}`;
+
+  const generateQr = async () => {
+    const amt = Number(qrAmount);
+    if (!qrStatic && (!Number.isFinite(amt) || amt <= 0)) {
+      setQrError("Enter a positive amount");
       return;
     }
     setQrLoading(true);
@@ -316,21 +358,11 @@ export function OrganizerBillingDialog({
     setQrImage(null);
     setQrIntent(null);
     try {
-      const params = new URLSearchParams({
-        scheme: region.scheme,
-        payeeId: proxy,
-        payeeName: paymentConfig.companyName,
-        amount: amt.toFixed(2),
-        billNumber: `ORG-${organizerId?.slice(-6) || "BILL"}`,
-        currency: region.currency,
+      const json = await requestQr({
+        staticQr: qrStatic,
+        amount: amt,
+        billNumber,
       });
-      // /payments/generate-qr is public (no JWT guard) — fetch directly.
-      const res = await fetch(`${apiURL}/payments/generate-qr?${params}`);
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(txt || `HTTP ${res.status}`);
-      }
-      const json = (await res.json()) as { qr: string; intent: string };
       setQrImage(json.qr);
       setQrIntent(json.intent);
     } catch (e: any) {
@@ -340,12 +372,52 @@ export function OrganizerBillingDialog({
     }
   };
 
+  /**
+   * Pull the static QR, then hand everything to the invoice builder. The
+   * layout itself lives in lib/organizerInvoice so it can be exercised
+   * without standing up the dialog, and so jspdf only loads on demand.
+   */
+  const downloadInvoice = async () => {
+    if (!data) return;
+    setInvoiceBusy(true);
+    try {
+      const qr = await requestQr({ staticQr: true, billNumber });
+      const { buildOrganizerInvoice } = await import("@/lib/organizerInvoice");
+      const { pdf, invoiceNo, fileName } = await buildOrganizerInvoice({
+        billing: data,
+        company: {
+          name: paymentConfig?.companyName || "Eventsh",
+          uen: paymentConfig?.companyUEN || "",
+        },
+        qrDataUrl: qr.qr,
+      });
+      pdf.save(fileName);
+      toast({ title: "Invoice downloaded", description: invoiceNo });
+    } catch (e: any) {
+      toast({
+        variant: "destructive",
+        title: "Couldn't generate the invoice",
+        description: e?.message,
+      });
+    } finally {
+      setInvoiceBusy(false);
+    }
+  };
+
   const summary = useMemo(() => {
     if (!data) return null;
     return [
-      { label: "Total billable", value: data.totals.billable, color: "text-slate-900" },
-      { label: "Total paid", value: data.totals.paid, color: "text-emerald-600" },
-      { label: "Outstanding", value: data.totals.owed, color: "text-rose-600" },
+      {
+        label: "Total expense",
+        value: data.totals.billable,
+        color: "text-slate-900",
+      },
+      {
+        label: "Paid to Eventsh",
+        value: data.totals.paid,
+        color: "text-emerald-600",
+      },
+      { label: "Still owed", value: data.totals.owed, color: "text-rose-600" },
     ];
   }, [data]);
 
@@ -354,19 +426,43 @@ export function OrganizerBillingDialog({
       <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Receipt className="h-5 w-5 text-amber-600" />
-              {data?.organizer.organizationName ||
-                data?.organizer.name ||
-                "Organizer billing"}
-            </DialogTitle>
-            <DialogDescription>
-              Platform fee: ${data?.rates.stall ?? 20}/stall · $
-              {data?.rates.roundTable ?? 20}/booked-table · $
-              {data?.rates.chair ?? 5}/chair · ${data?.rates.speaker ?? 20}
-              /speaker · ${data?.rates.membership ?? 5}/active-membership
-              /speaker
-            </DialogDescription>
+            <div className="flex items-start justify-between gap-4 pr-6">
+              <div>
+                <DialogTitle className="flex items-center gap-2">
+                  <Receipt className="h-5 w-5 text-amber-600" />
+                  {data?.organizer.organizationName ||
+                    data?.organizer.name ||
+                    "Organizer expenses"}
+                </DialogTitle>
+                <DialogDescription>
+                  What this organizer owes Eventsh in platform fees, in {cur}.
+                  Rates: {money(data?.rates.stall ?? 20, cur)}/stall ·{" "}
+                  {money(data?.rates.roundTable ?? 20, cur)}/booked-table ·{" "}
+                  {money(data?.rates.chair ?? 5, cur)}/chair ·{" "}
+                  {money(data?.rates.speaker ?? 20, cur)}/speaker ·{" "}
+                  {money(data?.rates.membership ?? 5, cur)}/active-membership
+                </DialogDescription>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={downloadInvoice}
+                disabled={!data || invoiceBusy}
+                className="shrink-0"
+              >
+                {invoiceBusy ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Building…
+                  </>
+                ) : (
+                  <>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Generate invoice
+                  </>
+                )}
+              </Button>
+            </div>
           </DialogHeader>
 
           {loading && (
@@ -388,7 +484,7 @@ export function OrganizerBillingDialog({
                       {s.label}
                     </div>
                     <div className={`text-2xl font-bold ${s.color}`}>
-                      {fmtUsd(s.value)}
+                      {money(s.value, cur)}
                     </div>
                   </div>
                 ))}
@@ -411,10 +507,16 @@ export function OrganizerBillingDialog({
                       <TableHeader>
                         <TableRow>
                           <TableHead>Event</TableHead>
-                          <TableHead className="text-center">Stalls sold</TableHead>
-                          <TableHead className="text-center">Tables booked</TableHead>
+                          <TableHead className="text-center">
+                            Stalls sold
+                          </TableHead>
+                          <TableHead className="text-center">
+                            Tables booked
+                          </TableHead>
                           <TableHead className="text-center">Chairs</TableHead>
-                          <TableHead className="text-center">Speakers</TableHead>
+                          <TableHead className="text-center">
+                            Speakers
+                          </TableHead>
                           <TableHead className="text-right">Amount</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -447,7 +549,7 @@ export function OrganizerBillingDialog({
                               {e.speakersBooked}
                             </TableCell>
                             <TableCell className="text-right font-semibold">
-                              {fmtUsd(e.amount)}
+                              {money(e.amount, cur)}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -475,9 +577,7 @@ export function OrganizerBillingDialog({
                           <TableHead className="text-center">
                             Active count
                           </TableHead>
-                          <TableHead className="text-center">
-                            Rate
-                          </TableHead>
+                          <TableHead className="text-center">Rate</TableHead>
                           <TableHead className="text-right">Amount</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -495,10 +595,10 @@ export function OrganizerBillingDialog({
                             {data.memberships.active}
                           </TableCell>
                           <TableCell className="text-center">
-                            {fmtUsd(data.rates.membership)}
+                            {money(data.rates.membership, cur)}
                           </TableCell>
                           <TableCell className="text-right font-semibold">
-                            {fmtUsd(data.memberships.amount)}
+                            {money(data.memberships.amount, cur)}
                           </TableCell>
                         </TableRow>
                       </TableBody>
@@ -507,130 +607,135 @@ export function OrganizerBillingDialog({
                 </div>
               )}
 
-              {/* Pay-by-QR panel — scheme auto-picked from organizer.country */}
+              {/* Pay-by-QR panel — always corporate PayNow against the
+                  company UEN, since the platform collects in SGD only. */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600 flex items-center gap-2">
                     <QrCode className="h-4 w-4" />
                     Pay by QR
                   </h3>
-                  {region ? (
-                    <span className="text-xs font-medium rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5">
-                      {region.label}
-                    </span>
-                  ) : (
-                    <span className="text-xs font-medium rounded-full bg-slate-100 text-slate-600 border px-2 py-0.5">
-                      {data.organizer.country || "No country set"}
-                    </span>
-                  )}
+                  <span className="text-xs font-medium rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5">
+                    {SETTLEMENT.label}
+                  </span>
                 </div>
 
-                {!region ? (
-                  <div className="rounded-md border bg-slate-50 p-3 text-sm text-slate-600">
-                    QR payment isn't available for this organizer's region (
-                    {data.organizer.country || "country not set"}). Use{" "}
-                    <em>Record payment</em> below to log a manual settlement.
+                <div className="rounded-md border bg-slate-50 p-3 space-y-3">
+                  <label className="flex items-start gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={qrStatic}
+                      onChange={(e) => setQrStatic(e.target.checked)}
+                      disabled={qrLoading}
+                    />
+                    <span>
+                      Static UEN QR
+                      <span className="block text-xs text-slate-500">
+                        Re-usable, carries no amount — the payer types it. This
+                        is the QR the invoice embeds. Untick to lock a single
+                        amount into the QR instead.
+                      </span>
+                    </span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
+                    <div className="sm:col-span-2">
+                      <Label className="text-xs">Amount ({cur})</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={qrStatic ? "" : qrAmount}
+                        onChange={(e) => setQrAmount(e.target.value)}
+                        placeholder={
+                          qrStatic ? "Payer enters the amount" : "0.00"
+                        }
+                        disabled={qrLoading || qrStatic}
+                      />
+                    </div>
+                    <div className="sm:col-span-2 flex justify-end">
+                      <Button onClick={generateQr} disabled={qrLoading}>
+                        {qrLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Generating…
+                          </>
+                        ) : (
+                          <>
+                            <QrCode className="h-4 w-4 mr-2" />
+                            {qrImage ? "Regenerate" : "Generate QR"}
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
-                ) : (
-                  <div className="rounded-md border bg-slate-50 p-3 space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
-                      <div className="sm:col-span-2">
-                        <Label className="text-xs">
-                          Amount ({region.currency})
-                        </Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={qrAmount}
-                          onChange={(e) => setQrAmount(e.target.value)}
-                          placeholder="0.00"
-                          disabled={qrLoading}
-                        />
-                      </div>
-                      <div className="sm:col-span-2 flex justify-end">
-                        <Button onClick={generateQr} disabled={qrLoading}>
-                          {qrLoading ? (
+
+                  <div className="text-xs text-slate-500">
+                    Payee:{" "}
+                    <span className="font-mono text-slate-700">
+                      {proxy || "— not configured —"}
+                    </span>
+                    {paymentConfig?.companyName && (
+                      <>
+                        {" · "}
+                        <span>{paymentConfig.companyName}</span>
+                      </>
+                    )}
+                  </div>
+
+                  {qrError && (
+                    <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded px-3 py-2">
+                      {qrError}
+                    </div>
+                  )}
+
+                  {qrImage && (
+                    <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start">
+                      <img
+                        src={qrImage}
+                        alt={`${SETTLEMENT.label} payment QR`}
+                        className="w-48 h-48 rounded-md border bg-white p-2"
+                      />
+                      <div className="flex-1 space-y-2 text-sm">
+                        <div>
+                          Scan this QR with any{" "}
+                          <strong>PayNow-enabled bank app</strong>
+                          {qrStatic ? (
                             <>
-                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                              Generating…
+                              {" "}
+                              to pay <strong>{proxy}</strong>. The QR has no
+                              amount in it — the payer enters what they are
+                              settling.
                             </>
                           ) : (
                             <>
-                              <QrCode className="h-4 w-4 mr-2" />
-                              {qrImage ? "Regenerate" : "Generate QR"}
+                              {" "}
+                              to pay{" "}
+                              <strong>{money(Number(qrAmount), cur)}</strong>.
                             </>
                           )}
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="text-xs text-slate-500">
-                      Payee:{" "}
-                      <span className="font-mono text-slate-700">
-                        {proxy || "— not configured —"}
-                      </span>
-                      {paymentConfig?.companyName && (
-                        <>
-                          {" · "}
-                          <span>{paymentConfig.companyName}</span>
-                        </>
-                      )}
-                    </div>
-
-                    {qrError && (
-                      <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded px-3 py-2">
-                        {qrError}
-                      </div>
-                    )}
-
-                    {qrImage && (
-                      <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start">
-                        <img
-                          src={qrImage}
-                          alt={`${region.label} payment QR`}
-                          className="w-48 h-48 rounded-md border bg-white p-2"
-                        />
-                        <div className="flex-1 space-y-2 text-sm">
-                          <div>
-                            Scan this QR with any{" "}
-                            <strong>
-                              {region.scheme === "UPI"
-                                ? "UPI app (GPay, PhonePe, Paytm…)"
-                                : "PayNow-enabled bank app"}
-                            </strong>{" "}
-                            to pay{" "}
-                            <strong>
-                              {Number(qrAmount).toFixed(2)} {region.currency}
-                            </strong>
-                            .
-                          </div>
-                          {qrIntent && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              asChild
+                        </div>
+                        {qrIntent && (
+                          <Button variant="outline" size="sm" asChild>
+                            <a
+                              href={qrIntent}
+                              target="_blank"
+                              rel="noopener noreferrer"
                             >
-                              <a
-                                href={qrIntent}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                <ExternalLink className="h-4 w-4 mr-2" />
-                                Open in payment app
-                              </a>
-                            </Button>
-                          )}
-                          <div className="text-xs text-slate-500">
-                            Once the transfer completes, click{" "}
-                            <em>Record payment</em> below to log it against
-                            this bill.
-                          </div>
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                              Open in payment app
+                            </a>
+                          </Button>
+                        )}
+                        <div className="text-xs text-slate-500">
+                          Once the transfer completes, click{" "}
+                          <em>Record payment</em> below to log it against this
+                          bill.
                         </div>
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Payments + record-payment form */}
@@ -659,7 +764,7 @@ export function OrganizerBillingDialog({
                 {showPay && (
                   <div className="rounded-md border bg-slate-50 p-3 mb-3 grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
                     <div>
-                      <Label className="text-xs">Amount (USD)</Label>
+                      <Label className="text-xs">Amount ({cur})</Label>
                       <Input
                         type="number"
                         min={0}
@@ -729,7 +834,7 @@ export function OrganizerBillingDialog({
                               )}
                             </TableCell>
                             <TableCell className="text-right font-semibold text-emerald-700">
-                              {fmtUsd(p.amount)}
+                              {money(p.amount, cur)}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -756,9 +861,7 @@ export function OrganizerBillingDialog({
       >
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              {breakdown?.event.title || "Loading…"}
-            </DialogTitle>
+            <DialogTitle>{breakdown?.event.title || "Loading…"}</DialogTitle>
             <DialogDescription>
               {breakdown?.event.startDate &&
                 new Date(breakdown.event.startDate).toLocaleDateString()}
@@ -834,7 +937,10 @@ function Section({
       ) : (
         <ul className="rounded-md border divide-y bg-white">
           {rows.map((r, i) => (
-            <li key={i} className="px-3 py-2 text-sm flex justify-between gap-3">
+            <li
+              key={i}
+              className="px-3 py-2 text-sm flex justify-between gap-3"
+            >
               <span className="font-medium">{r.primary}</span>
               {r.secondary && (
                 <span className="text-slate-500 text-xs truncate">
