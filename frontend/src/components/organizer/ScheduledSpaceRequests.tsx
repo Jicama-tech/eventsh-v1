@@ -28,6 +28,7 @@ import { useCountry } from "@/hooks/useCountry";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { isFieldEnabled } from "@/lib/registrationFormFields";
 import StatusTimeline from "@/components/StatusTimeline";
+import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
@@ -285,16 +286,16 @@ const ScheduledSpaceRequests = ({
       case "Rejected":
         return "bg-red-100 text-red-700";
       case "Cancelled":
-        return "bg-gray-100 text-gray-700";
+        return "bg-muted text-muted-foreground";
       default:
-        return "bg-gray-100 text-gray-600";
+        return "bg-muted text-muted-foreground";
     }
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="animate-spin text-gray-400" size={24} />
+        <Loader2 className="animate-spin text-muted-foreground" size={24} />
       </div>
     );
   }
@@ -303,9 +304,9 @@ const ScheduledSpaceRequests = ({
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <CalendarClock size={48} className="mx-auto mb-3 text-gray-300" />
-          <p className="text-gray-500">No scheduled space requests yet</p>
-          <p className="text-xs text-gray-400 mt-1">
+          <CalendarClock size={48} className="mx-auto mb-3 text-muted-foreground" />
+          <p className="text-muted-foreground">No scheduled space requests yet</p>
+          <p className="text-xs text-muted-foreground mt-1">
             Requests appear here once a visitor registers from the "Book a
             Scheduled Space" card on the event page.
           </p>
@@ -340,7 +341,7 @@ const ScheduledSpaceRequests = ({
           <div className="flex flex-wrap items-center gap-3 mb-4">
             <input
               type="text"
-              placeholder="Search name, email, organization…"
+              placeholder={t("Search name, email, organization\u2026")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-64 rounded-md border px-3 py-2 text-sm"
@@ -358,14 +359,14 @@ const ScheduledSpaceRequests = ({
               <option value="Rejected">Rejected</option>
               <option value="Cancelled">Cancelled</option>
             </select>
-            <span className="ml-auto text-sm text-gray-500">
+            <span className="ml-auto text-sm text-muted-foreground">
               Showing {filtered.length} of {requests.length}
             </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-gray-500">
+                <tr className="border-b text-left text-muted-foreground">
                   <th className="pb-3 pr-4 font-medium">Registrant</th>
                   <th className="pb-3 pr-4 font-medium">Referral Code</th>
                   <th className="pb-3 pr-4 font-medium">Selected Slots</th>
@@ -378,7 +379,7 @@ const ScheduledSpaceRequests = ({
               <tbody>
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-gray-500">
+                    <td colSpan={7} className="py-8 text-center text-muted-foreground">
                       No requests match your filters.
                     </td>
                   </tr>
@@ -386,30 +387,30 @@ const ScheduledSpaceRequests = ({
                 {filtered.map((req) => (
                   <tr
                     key={req._id}
-                    className="border-b last:border-0 hover:bg-gray-50"
+                    className="border-b last:border-0 hover:bg-muted"
                   >
                     <td className="py-3 pr-4">
-                      <p className="font-medium text-gray-800">{req.name}</p>
-                      <p className="text-xs text-gray-400">{req.email}</p>
+                      <p className="font-medium text-foreground">{req.name}</p>
+                      <p className="text-xs text-muted-foreground">{req.email}</p>
                     </td>
                     <td className="py-3 pr-4">
                       {req.referralCode ? (
-                        <span className="font-mono text-xs text-gray-700">
+                        <span className="font-mono text-xs text-muted-foreground">
                           {req.referralCode}
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-400">—</span>
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
                     <td className="py-3 pr-4">
                       {(req.selectedSlots || []).length === 0 ? (
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-muted-foreground">
                           Not picked yet
                         </span>
                       ) : (
                         <div className="space-y-0.5">
                           {req.selectedSlots.map((s: any, i: number) => (
-                            <p key={i} className="text-xs text-gray-600">
+                            <p key={i} className="text-xs text-muted-foreground">
                               {s.spaceName} — {s.date} {s.startTime}-
                               {s.endTime}
                             </p>
@@ -464,51 +465,51 @@ const ScheduledSpaceRequests = ({
 
             <div className="space-y-4">
               <div className="rounded-lg border p-3 space-y-1">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Registrant
                 </p>
-                <p className="font-semibold text-gray-800">{selected.name}</p>
-                <p className="text-xs text-gray-500">{selected.email}</p>
+                <p className="font-semibold text-foreground">{selected.name}</p>
+                <p className="text-xs text-muted-foreground">{selected.email}</p>
                 {scheduledSpaceFieldOn("whatsappNumber") &&
                   selected.whatsappNumber && (
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-muted-foreground">
                       WhatsApp: {selected.whatsappNumber}
                     </p>
                   )}
                 {scheduledSpaceFieldOn("phone") && selected.phone && (
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-muted-foreground">
                     Phone: {selected.phone}
                   </p>
                 )}
                 {scheduledSpaceFieldOn("facilityType") &&
                   selected.facilityTypeRequested && (
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-muted-foreground">
                       Space type: {selected.facilityTypeRequested}
                     </p>
                   )}
                 {scheduledSpaceFieldOn("organization") &&
                   selected.organization && (
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-muted-foreground">
                       {selected.organization}
                     </p>
                   )}
                 {selected.referralCode && (
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-muted-foreground">
                     Referral code: <span className="font-mono">{selected.referralCode}</span>
                   </p>
                 )}
                 {scheduledSpaceFieldOn("purpose") && selected.purpose && (
-                  <p className="text-sm text-gray-600 mt-1">
+                  <p className="text-sm text-muted-foreground mt-1">
                     {selected.purpose}
                   </p>
                 )}
                 {scheduledSpaceFieldOn("companions") &&
                   (selected.companions || []).length > 0 && (
                     <div className="pt-1">
-                      <p className="text-xs font-semibold text-gray-500">
+                      <p className="text-xs font-semibold text-muted-foreground">
                         Coming with:
                       </p>
-                      <p className="text-xs text-gray-600">
+                      <p className="text-xs text-muted-foreground">
                         {selected.companions.join(", ")}
                       </p>
                     </div>
@@ -517,13 +518,13 @@ const ScheduledSpaceRequests = ({
 
               {(selected.selectedSlots || []).length > 0 && (
                 <div className="rounded-lg border p-3 space-y-1">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
                     Selected Slots
                   </p>
                   {selected.selectedSlots.map((s: any, i: number) => (
                     <div
                       key={i}
-                      className="flex justify-between text-sm text-gray-700"
+                      className="flex justify-between text-sm text-muted-foreground"
                     >
                       <span>
                         {s.spaceName} — {s.date} {s.startTime}-{s.endTime}
@@ -552,7 +553,7 @@ const ScheduledSpaceRequests = ({
                       <p className="text-xs text-amber-700">
                         Transaction ID / Reference
                       </p>
-                      <p className="font-mono font-bold text-sm text-gray-800 bg-white rounded px-3 py-1.5 border border-amber-200 mt-1">
+                      <p className="font-mono font-bold text-sm text-foreground bg-background rounded px-3 py-1.5 border border-amber-200 mt-1">
                         {selected.transactionId}
                       </p>
                     </div>
@@ -635,12 +636,10 @@ const ScheduledSpaceRequests = ({
               {selected.status === "Pending" && (
                 <div className="space-y-2">
                   <div>
-                    <Label htmlFor="approve-notes" className="text-xs">
-                      Notes (optional)
-                    </Label>
+                    <Label htmlFor="approve-notes" className="text-xs">{t("Notes (optional)")}</Label>
                     <Textarea
                       id="approve-notes"
-                      placeholder="Add any notes for the registrant..."
+                      placeholder={t("Add any notes for the registrant...")}
                       value={approveNote}
                       onChange={(e) => setApproveNote(e.target.value)}
                       rows={2}
@@ -665,12 +664,10 @@ const ScheduledSpaceRequests = ({
                     </Button>
                   </div>
                   <div>
-                    <Label htmlFor="reject-reason" className="text-xs">
-                      Rejection reason (shown to the registrant, optional)
-                    </Label>
+                    <Label htmlFor="reject-reason" className="text-xs">{t("Rejection reason (shown to the registrant, optional)")}</Label>
                     <Textarea
                       id="reject-reason"
-                      placeholder="Add a reason if you're rejecting..."
+                      placeholder={t("Add a reason if you're rejecting...")}
                       value={rejectReason}
                       onChange={(e) => setRejectReason(e.target.value)}
                       rows={2}
@@ -690,12 +687,10 @@ const ScheduledSpaceRequests = ({
               {selected.status === "Processing" && (
                 <div className="space-y-2">
                   <div>
-                    <Label htmlFor="confirm-notes" className="text-xs">
-                      Notes (optional)
-                    </Label>
+                    <Label htmlFor="confirm-notes" className="text-xs">{t("Notes (optional)")}</Label>
                     <Textarea
                       id="confirm-notes"
-                      placeholder="Add any notes for the registrant..."
+                      placeholder={t("Add any notes for the registrant...")}
                       value={confirmNote}
                       onChange={(e) => setConfirmNote(e.target.value)}
                       rows={2}
@@ -722,12 +717,10 @@ const ScheduledSpaceRequests = ({
                 selected.status === "Processing") && (
                 <div className="space-y-2">
                   <div>
-                    <Label htmlFor="cancel-notes" className="text-xs">
-                      Cancellation reason (optional)
-                    </Label>
+                    <Label htmlFor="cancel-notes" className="text-xs">{t("Cancellation reason (optional)")}</Label>
                     <Textarea
                       id="cancel-notes"
-                      placeholder="Add a reason if you're cancelling..."
+                      placeholder={t("Add a reason if you're cancelling...")}
                       value={cancelReason}
                       onChange={(e) => setCancelReason(e.target.value)}
                       rows={2}
@@ -750,7 +743,7 @@ const ScheduledSpaceRequests = ({
                   change status. */}
               <div className="rounded-lg border p-3">
                 <div className="flex items-center justify-between gap-3 mb-2">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Status History & Notes
                   </p>
                   {!noteFormOpen && (
@@ -768,7 +761,7 @@ const ScheduledSpaceRequests = ({
                 {noteFormOpen && (
                   <div className="mb-3 rounded-md border bg-muted/30 p-2 space-y-2">
                     <Textarea
-                      placeholder="What happened? Visible on the timeline."
+                      placeholder={t("What happened? Visible on the timeline.")}
                       value={standaloneNote}
                       onChange={(e) => setStandaloneNote(e.target.value)}
                       rows={2}

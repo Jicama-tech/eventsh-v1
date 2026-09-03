@@ -24,6 +24,7 @@ import QRCodeLib from "qrcode";
 import { jwtDecode } from "jwt-decode";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";
+import { t } from "@/i18n/t";
 
 interface EventQRCodeProps {
   event: {
@@ -272,9 +273,7 @@ export function EventQRCode({ event, apiURL, onClose }: EventQRCodeProps) {
                 <QrCode className="h-5 w-5" />
                 <span>Event QR Code</span>
               </CardTitle>
-              <CardDescription>
-                Share this QR code for instant event access
-              </CardDescription>
+              <CardDescription>{t("Share this QR code for instant event access")}</CardDescription>
             </div>
             <Button variant="buttonOutline" size="sm" onClick={onClose}>
               <X className="h-4 w-4" />
@@ -316,7 +315,7 @@ export function EventQRCode({ event, apiURL, onClose }: EventQRCodeProps) {
 
           {/* QR Code Display */}
           <div className="flex flex-col items-center space-y-4">
-            <div className="bg-white p-4 rounded-lg border-2 border-dashed border-border">
+            <div className="bg-background p-4 rounded-lg border-2 border-dashed border-border">
               {qrCodeDataURL ? (
                 <img
                   src={qrCodeDataURL}
@@ -411,7 +410,7 @@ export function EventQRCode({ event, apiURL, onClose }: EventQRCodeProps) {
           {/* Usage Instructions */}
           <Card>
             <CardContent className="p-4">
-              <h4 className="font-semibold mb-2">How to use this QR Code:</h4>
+              <h4 className="font-semibold mb-2">{t("How to use this QR Code:")}</h4>
               <ul className="text-sm text-muted-foreground space-y-1">
                 <li>• Users can scan this QR code with their phone camera</li>
                 <li>• It will direct them to the event registration page</li>

@@ -22,6 +22,7 @@ import {
   Edit,
   Trash2,
 } from "lucide-react";
+import { t } from "@/i18n/t";
 
 interface UserDetailViewProps {
   user: any;
@@ -326,7 +327,7 @@ export function UserDetailView({
             <>
               <Separator />
               <div>
-                <h4 className="font-semibold mb-2">Additional Notes</h4>
+                <h4 className="font-semibold mb-2">{t("Additional Notes")}</h4>
                 <p className="text-sm text-muted-foreground">{user.notes}</p>
               </div>
             </>

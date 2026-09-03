@@ -39,6 +39,7 @@ import {
   Sparkles,
   PackageOpen,
 } from "lucide-react";
+import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
@@ -568,9 +569,7 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
           )}
 
           <div>
-            <Label className="text-xs text-muted-foreground">
-              Instructions (optional)
-            </Label>
+            <Label className="text-xs text-muted-foreground">{t("Instructions (optional)")}</Label>
             <Textarea
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
@@ -596,13 +595,13 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
                   <Input
                     value={r.label}
                     onChange={(e) => updateReq(i, { label: e.target.value })}
-                    placeholder="Requirement (e.g. Catering)"
+                    placeholder={t("Requirement (e.g. Catering)")}
                     className="flex-1 font-medium"
                   />
                   <Input
                     value={r.quantity || ""}
                     onChange={(e) => updateReq(i, { quantity: e.target.value })}
-                    placeholder="Qty (e.g. 200)"
+                    placeholder={t("Qty (e.g. 200)")}
                     className="w-32 shrink-0 text-sm"
                   />
                   <Button
@@ -621,7 +620,7 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
                   onChange={(e) =>
                     updateReq(i, { description: e.target.value })
                   }
-                  placeholder="Description (optional)"
+                  placeholder={t("Description (optional)")}
                   className="text-sm"
                 />
 
@@ -953,7 +952,7 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
 
                 {/* The quotation */}
                 <section className="rounded-xl border p-3">
-                  <h4 className="mb-2 font-semibold">Quotation</h4>
+                  <h4 className="mb-2 font-semibold">{t("Quotation")}</h4>
                   {selected.quotationItems &&
                   selected.quotationItems.length > 0 ? (
                     <div className="space-y-1.5">
@@ -1447,7 +1446,7 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
             )}
             {selectedPay.balance > 0 && (
               <div>
-                <Label className="text-xs">Amount paid now</Label>
+                <Label className="text-xs">{t("Amount paid now")}</Label>
                 <Input
                   type="number"
                   value={payAmount}
@@ -1461,17 +1460,15 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
               </div>
             )}
             <div>
-              <Label className="text-xs">Reference (optional)</Label>
+              <Label className="text-xs">{t("Reference (optional)")}</Label>
               <Input
                 value={payReference}
                 onChange={(e) => setPayReference(e.target.value)}
-                placeholder="UTR / transaction ref"
+                placeholder={t("UTR / transaction ref")}
               />
             </div>
             <div>
-              <Label className="text-xs">
-                Payment screenshot (image or PDF)
-              </Label>
+              <Label className="text-xs">{t("Payment screenshot (image or PDF)")}</Label>
               <Input
                 type="file"
                 accept="image/*,application/pdf"
@@ -1479,11 +1476,11 @@ export default function SupplierRequests({ eventId }: { eventId: string }) {
               />
             </div>
             <div>
-              <Label className="text-xs">Note (optional)</Label>
+              <Label className="text-xs">{t("Note (optional)")}</Label>
               <Textarea
                 value={payNote}
                 onChange={(e) => setPayNote(e.target.value)}
-                placeholder="Anything the supplier should know."
+                placeholder={t("Anything the supplier should know.")}
               />
             </div>
           </div>

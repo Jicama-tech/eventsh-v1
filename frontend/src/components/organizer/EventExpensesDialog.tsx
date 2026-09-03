@@ -29,6 +29,7 @@ import {
   Trash2,
   Clock,
 } from "lucide-react";
+import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
@@ -275,7 +276,7 @@ export default function EventExpensesDialog({
           {addOpen && (
             <div className="grid gap-2 rounded-xl border bg-muted/20 p-3 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <Label className="text-xs">What was it for? *</Label>
+                <Label className="text-xs">{t("What was it for? *")}</Label>
                 <Input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
@@ -283,7 +284,7 @@ export default function EventExpensesDialog({
                 />
               </div>
               <div>
-                <Label className="text-xs">Amount *</Label>
+                <Label className="text-xs">{t("Amount *")}</Label>
                 <Input
                   type="number"
                   min="0"
@@ -293,7 +294,7 @@ export default function EventExpensesDialog({
                 />
               </div>
               <div>
-                <Label className="text-xs">Category</Label>
+                <Label className="text-xs">{t("Category")}</Label>
                 <Select value={category} onValueChange={setCategory}>
                   <SelectTrigger>
                     <SelectValue />
@@ -308,15 +309,15 @@ export default function EventExpensesDialog({
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">Paid to</Label>
+                <Label className="text-xs">{t("Paid to")}</Label>
                 <Input
                   value={paidTo}
                   onChange={(e) => setPaidTo(e.target.value)}
-                  placeholder="Shop / person"
+                  placeholder={t("Shop / person")}
                 />
               </div>
               <div>
-                <Label className="text-xs">Receipt (image or PDF)</Label>
+                <Label className="text-xs">{t("Receipt (image or PDF)")}</Label>
                 <Input
                   type="file"
                   accept="image/*,application/pdf"
@@ -324,7 +325,7 @@ export default function EventExpensesDialog({
                 />
               </div>
               <div className="sm:col-span-2">
-                <Label className="text-xs">Note (optional)</Label>
+                <Label className="text-xs">{t("Note (optional)")}</Label>
                 <Textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}

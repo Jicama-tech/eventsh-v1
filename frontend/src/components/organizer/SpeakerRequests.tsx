@@ -80,6 +80,7 @@ import {
   Download,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { t } from "@/i18n/t";
 
 interface SpeakerRequestsProps {
   organizerId: string;
@@ -351,7 +352,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
       Unpaid: { variant: "destructive", color: "text-red-600" },
       Partial: { variant: "secondary", color: "text-yellow-600" },
       Paid: { variant: "default", color: "text-green-600" },
-      Waived: { variant: "outline", color: "text-gray-500" },
+      Waived: { variant: "outline", color: "text-muted-foreground" },
     };
     const config = map[paymentStatus] || map.Waived;
     return <Badge variant={config.variant}>{paymentStatus}</Badge>;
@@ -373,7 +374,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Events</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t("Total Events")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{stats.totalEvents}</div>
@@ -381,7 +382,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Speaker Requests</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t("Total Speaker Requests")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{stats.totalRequests}</div>
@@ -390,7 +391,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Confirmed Speakers</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t("Confirmed Speakers")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-green-600">{stats.confirmed}</div>
@@ -398,7 +399,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Pending Review</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t("Pending Review")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-yellow-600">{stats.pending}</div>
@@ -411,8 +412,8 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Speaker Management</CardTitle>
-              <CardDescription>View and manage speakers for all your events</CardDescription>
+              <CardTitle>{t("Speaker Management")}</CardTitle>
+              <CardDescription>{t("View and manage speakers for all your events")}</CardDescription>
             </div>
             <Button onClick={refreshData} disabled={refreshing} variant="outline" size="sm">
               <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
@@ -426,7 +427,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search events..."
+                placeholder={t("Search events...")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
@@ -526,9 +527,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
               <Mic className="h-5 w-5" />
               Speakers - {selectedEvent?.title}
             </DialogTitle>
-            <DialogDescription>
-              All speakers and applications for this event
-            </DialogDescription>
+            <DialogDescription>{t("All speakers and applications for this event")}</DialogDescription>
           </DialogHeader>
 
           {loadingSpeakers ? (
@@ -700,22 +699,22 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
               </div>
 
               {selectedSpeaker.bio && (
-                <div><Label className="text-xs font-medium">Bio</Label><p className="text-sm text-muted-foreground mt-1">{selectedSpeaker.bio}</p></div>
+                <div><Label className="text-xs font-medium">{t("Bio")}</Label><p className="text-sm text-muted-foreground mt-1">{selectedSpeaker.bio}</p></div>
               )}
               {selectedSpeaker.expertise && (
-                <div><Label className="text-xs font-medium">Expertise</Label><p className="text-sm mt-1">{selectedSpeaker.expertise}</p></div>
+                <div><Label className="text-xs font-medium">{t("Expertise")}</Label><p className="text-sm mt-1">{selectedSpeaker.expertise}</p></div>
               )}
               {selectedSpeaker.previousSpeakingExperience && (
-                <div><Label className="text-xs font-medium">Previous Experience</Label><p className="text-sm mt-1">{selectedSpeaker.previousSpeakingExperience}</p></div>
+                <div><Label className="text-xs font-medium">{t("Previous Experience")}</Label><p className="text-sm mt-1">{selectedSpeaker.previousSpeakingExperience}</p></div>
               )}
               {selectedSpeaker.equipmentNeeded && (
-                <div><Label className="text-xs font-medium">Equipment Needed</Label><p className="text-sm mt-1">{selectedSpeaker.equipmentNeeded}</p></div>
+                <div><Label className="text-xs font-medium">{t("Equipment Needed")}</Label><p className="text-sm mt-1">{selectedSpeaker.equipmentNeeded}</p></div>
               )}
 
               {selectedSpeaker.socialLinks && (
                 <div className="flex gap-4 flex-wrap">
                   {selectedSpeaker.socialLinks.linkedin && <a href={selectedSpeaker.socialLinks.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />LinkedIn</a>}
-                  {selectedSpeaker.socialLinks.twitter && <a href={selectedSpeaker.socialLinks.twitter} target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Twitter</a>}
+                  {selectedSpeaker.socialLinks.twitter && <a href={selectedSpeaker.socialLinks.twitter} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Twitter</a>}
                   {selectedSpeaker.socialLinks.instagram && <a href={selectedSpeaker.socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="text-pink-600 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Instagram</a>}
                   {selectedSpeaker.socialLinks.youtube && <a href={selectedSpeaker.socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="text-red-600 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />YouTube</a>}
                   {selectedSpeaker.socialLinks.facebook && <a href={selectedSpeaker.socialLinks.facebook} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Facebook</a>}
@@ -726,10 +725,10 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
               {/* Sessions */}
               {(selectedSpeaker.sessions?.length > 0 || selectedSpeaker.slots?.length > 0) && (
                 <div>
-                  <Label className="text-xs font-medium">Sessions</Label>
+                  <Label className="text-xs font-medium">{t("Sessions")}</Label>
                   <div className="space-y-2 mt-2">
                     {(selectedSpeaker.sessions || selectedSpeaker.slots || []).map((s: any, i: number) => (
-                      <div key={i} className="bg-slate-50 rounded-lg p-3 border text-sm">
+                      <div key={i} className="bg-muted rounded-lg p-3 border text-sm">
                         <p className="font-medium">{s.topic || s.agenda}</p>
                         {s.description && <p className="text-muted-foreground text-xs mt-1">{s.description}</p>}
                         <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
@@ -769,18 +768,18 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
       <Dialog open={showFeeDialog} onOpenChange={setShowFeeDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Set Speaker Fee</DialogTitle>
-            <DialogDescription>Optionally charge this speaker for their session slot</DialogDescription>
+            <DialogTitle>{t("Set Speaker Fee")}</DialogTitle>
+            <DialogDescription>{t("Optionally charge this speaker for their session slot")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <Checkbox checked={feeCharged} onCheckedChange={(c) => setFeeCharged(!!c)} />
-              <Label>Charge this speaker for their slot</Label>
+              <Label>{t("Charge this speaker for their slot")}</Label>
             </div>
             {feeCharged && (
               <div>
-                <Label className="text-sm">Fee Amount</Label>
-                <Input type="number" min={0} value={feeAmount} onChange={(e) => setFeeAmount(Number(e.target.value))} placeholder="Enter fee amount" />
+                <Label className="text-sm">{t("Fee Amount")}</Label>
+                <Input type="number" min={0} value={feeAmount} onChange={(e) => setFeeAmount(Number(e.target.value))} placeholder={t("Enter fee amount")} />
               </div>
             )}
           </div>
@@ -795,14 +794,12 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
       <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Update Payment Status</DialogTitle>
-            <DialogDescription>
-              Update the payment status for this speaker booking
-            </DialogDescription>
+            <DialogTitle>{t("Update Payment Status")}</DialogTitle>
+            <DialogDescription>{t("Update the payment status for this speaker booking")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Payment Status</Label>
+              <Label>{t("Payment Status")}</Label>
               <Select value={paymentStatusUpdate} onValueChange={(v: "Partial" | "Paid") => setPaymentStatusUpdate(v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -812,8 +809,8 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
               </Select>
             </div>
             <div>
-              <Label>Notes (Optional)</Label>
-              <Textarea placeholder="Add payment details or notes..." value={actionNotes} onChange={(e) => setActionNotes(e.target.value)} rows={3} />
+              <Label>{t("Notes (Optional)")}</Label>
+              <Textarea placeholder={t("Add payment details or notes...")} value={actionNotes} onChange={(e) => setActionNotes(e.target.value)} rows={3} />
             </div>
           </div>
           <DialogFooter>

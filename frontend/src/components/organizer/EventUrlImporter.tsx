@@ -177,14 +177,14 @@ export function EventUrlImporter({
             Import event details from a URL
           </span>
         </div>
-        <p className="text-xs text-slate-600">
+        <p className="text-xs text-muted-foreground">
           Paste a JotForm, Eventbrite, Luma, Meetup, or any event landing-page
           link. AI reads the page and pre-fills the empty fields below — you
           can edit anything before saving.
         </p>
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               value={url}
               onChange={(e) => setUrl(e.target.value)}

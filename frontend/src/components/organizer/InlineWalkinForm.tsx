@@ -70,6 +70,7 @@ function shortRand(len = 6) {
 }
 
 import { symbolForCountry } from "@/data/currencies";
+import { t } from "@/i18n/t";
 function formatPrice(country: string, n: number) {
   return `${symbolForCountry(country)}${n}`;
 }
@@ -308,7 +309,7 @@ export function InlineWalkinForm({
 
   if (!payload.events.length) {
     return (
-      <div className="mt-2 p-2 text-xs text-slate-500 italic">
+      <div className="mt-2 p-2 text-xs text-muted-foreground italic">
         Nothing to book — create + publish an event first.
       </div>
     );
@@ -316,7 +317,7 @@ export function InlineWalkinForm({
 
   // Compact wrapper styled like other inline form bubbles
   const wrap = (children: React.ReactNode) => (
-    <div className="mt-2 border rounded-lg bg-slate-50 p-2.5 max-w-md">
+    <div className="mt-2 border rounded-lg bg-muted p-2.5 max-w-md">
       {children}
       <canvas ref={canvasRef} style={{ display: "none" }} />
     </div>
@@ -324,31 +325,31 @@ export function InlineWalkinForm({
 
   if (step === "done" && confirmation) {
     return wrap(
-      <div className="bg-white border border-emerald-200 rounded-md p-3 text-center">
+      <div className="bg-background border border-emerald-200 rounded-md p-3 text-center">
         <div className="mx-auto w-9 h-9 rounded-full bg-emerald-50 flex items-center justify-center mb-1.5">
           <CheckCircle2 className="h-5 w-5 text-emerald-600" />
         </div>
-        <p className="text-xs font-semibold text-slate-900">Ticket booked</p>
-        <p className="text-[10px] font-mono text-slate-500 mb-2">
+        <p className="text-xs font-semibold text-foreground">Ticket booked</p>
+        <p className="text-[10px] font-mono text-muted-foreground mb-2">
           {confirmation.ticketId}
         </p>
-        <div className="text-[11px] text-slate-700 text-left bg-slate-50 rounded p-2 space-y-0.5">
+        <div className="text-[11px] text-muted-foreground text-left bg-muted rounded p-2 space-y-0.5">
           <div>
-            <span className="text-slate-500">Customer:</span>{" "}
+            <span className="text-muted-foreground">Customer:</span>{" "}
             <span className="font-medium">{confirmation.name}</span>
           </div>
           <div>
-            <span className="text-slate-500">WhatsApp:</span>{" "}
+            <span className="text-muted-foreground">WhatsApp:</span>{" "}
             <span className="font-medium">{confirmation.whatsapp}</span>
           </div>
           {confirmation.email && (
             <div>
-              <span className="text-slate-500">Email:</span>{" "}
+              <span className="text-muted-foreground">Email:</span>{" "}
               <span className="font-medium">{confirmation.email}</span>
             </div>
           )}
         </div>
-        <p className="text-[10px] text-slate-500 mt-2">
+        <p className="text-[10px] text-muted-foreground mt-2">
           Sent to WhatsApp{confirmation.email ? " + email" : ""} with QR.
         </p>
       </div>,
@@ -357,17 +358,17 @@ export function InlineWalkinForm({
 
   if (step === "qr_payment") {
     return wrap(
-      <div className="bg-white border rounded-md p-3 text-center">
+      <div className="bg-background border rounded-md p-3 text-center">
         <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[9px] font-bold uppercase mb-1.5">
           <QrCode className="h-3 w-3" />
           {country === "SG" ? "PayNow" : "UPI"}
         </div>
-        <p className="text-[11px] text-slate-500">Customer scans</p>
-        <p className="text-lg font-bold text-slate-900 mb-2">
+        <p className="text-[11px] text-muted-foreground">Customer scans</p>
+        <p className="text-lg font-bold text-foreground mb-2">
           {sym}
           {totalPrice}
         </p>
-        <div className="mx-auto w-fit bg-white p-2 border rounded">
+        <div className="mx-auto w-fit bg-background p-2 border rounded">
           {qrPayload ? <QRCode value={qrPayload} size={170} level="M" /> : null}
         </div>
         <div className="mt-3 flex gap-2">
@@ -406,22 +407,22 @@ export function InlineWalkinForm({
         <div className="flex items-center justify-between gap-2">
           <button
             type="button"
-            className="text-[11px] text-slate-500 hover:text-slate-700 flex items-center gap-1"
+            className="text-[11px] text-muted-foreground hover:text-muted-foreground flex items-center gap-1"
             onClick={() => setStep(event.visitorTypes.length > 1 ? "pick_type" : "pick_event")}
           >
             <ArrowLeft className="h-3 w-3" /> Back
           </button>
-          <span className="text-[10px] uppercase tracking-wide font-semibold text-slate-500">
+          <span className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
             Customer details
           </span>
         </div>
-        <div className="border rounded-md p-2 bg-white flex items-center justify-between text-xs">
+        <div className="border rounded-md p-2 bg-background flex items-center justify-between text-xs">
           <div className="truncate">
-            <span className="font-semibold text-slate-800">{event.title}</span>
-            <span className="text-slate-400"> · {effectiveType.name}</span>
+            <span className="font-semibold text-foreground">{event.title}</span>
+            <span className="text-muted-foreground"> · {effectiveType.name}</span>
           </div>
           <span
-            className={`font-semibold ${totalPrice > 0 ? "text-slate-800" : "text-emerald-600"}`}
+            className={`font-semibold ${totalPrice > 0 ? "text-foreground" : "text-emerald-600"}`}
           >
             {totalPrice > 0 ? `${sym}${totalPrice}` : "FREE"}
           </span>
@@ -429,17 +430,17 @@ export function InlineWalkinForm({
 
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <Label className="text-[10px]">First name *</Label>
+            <Label className="text-[10px]">{t("First name *")}</Label>
             <Input
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               className="h-8 text-xs"
-              placeholder="John"
+              placeholder={t("John")}
               disabled={submitting || qrPreparing}
             />
           </div>
           <div>
-            <Label className="text-[10px]">Last name *</Label>
+            <Label className="text-[10px]">{t("Last name *")}</Label>
             <Input
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
@@ -451,7 +452,7 @@ export function InlineWalkinForm({
         </div>
         <div>
           <Label className="text-[10px]">
-            Email <span className="text-slate-400">(optional)</span>
+            Email <span className="text-muted-foreground">(optional)</span>
           </Label>
           <Input
             value={email}
@@ -463,7 +464,7 @@ export function InlineWalkinForm({
           />
         </div>
         <div>
-          <Label className="text-[10px]">WhatsApp *</Label>
+          <Label className="text-[10px]">{t("WhatsApp *")}</Label>
           <div className="flex gap-1">
             <Select
               value={dial}
@@ -495,7 +496,7 @@ export function InlineWalkinForm({
         {/* Payment method when paid */}
         {totalPrice > 0 && (
           <div>
-            <Label className="text-[10px] mb-1 block">Payment</Label>
+            <Label className="text-[10px] mb-1 block">{t("Payment")}</Label>
             <div className="grid grid-cols-2 gap-1.5">
               <button
                 type="button"
@@ -504,11 +505,11 @@ export function InlineWalkinForm({
                 className={`flex items-center gap-1.5 p-1.5 rounded border text-left ${
                   paymentMethod === "cash"
                     ? "border-emerald-500 bg-emerald-50"
-                    : "border-slate-200 bg-white hover:border-slate-300"
+                    : "border-border bg-background hover:border-border"
                 } disabled:opacity-50`}
               >
                 <Banknote
-                  className={`h-3.5 w-3.5 ${paymentMethod === "cash" ? "text-emerald-600" : "text-slate-500"}`}
+                  className={`h-3.5 w-3.5 ${paymentMethod === "cash" ? "text-emerald-600" : "text-muted-foreground"}`}
                 />
                 <span className="text-[11px] font-semibold">Cash</span>
               </button>
@@ -519,11 +520,11 @@ export function InlineWalkinForm({
                 className={`flex items-center gap-1.5 p-1.5 rounded border text-left ${
                   paymentMethod === "qr"
                     ? "border-blue-500 bg-blue-50"
-                    : "border-slate-200 bg-white hover:border-slate-300"
+                    : "border-border bg-background hover:border-border"
                 } disabled:opacity-50`}
               >
                 <QrCode
-                  className={`h-3.5 w-3.5 ${paymentMethod === "qr" ? "text-blue-600" : "text-slate-500"}`}
+                  className={`h-3.5 w-3.5 ${paymentMethod === "qr" ? "text-blue-600" : "text-muted-foreground"}`}
                 />
                 <span className="text-[11px] font-semibold">
                   QR ({country === "SG" ? "PayNow" : "UPI"})
@@ -567,16 +568,16 @@ export function InlineWalkinForm({
         <div className="flex items-center justify-between gap-2">
           <button
             type="button"
-            className="text-[11px] text-slate-500 hover:text-slate-700 flex items-center gap-1"
+            className="text-[11px] text-muted-foreground hover:text-muted-foreground flex items-center gap-1"
             onClick={() => setStep("pick_event")}
           >
             <ArrowLeft className="h-3 w-3" /> Back
           </button>
-          <span className="text-[10px] uppercase tracking-wide font-semibold text-slate-500">
+          <span className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
             Pick ticket type
           </span>
         </div>
-        <p className="text-xs text-slate-700 font-medium truncate">
+        <p className="text-xs text-muted-foreground font-medium truncate">
           {event.title}
         </p>
         <div className="grid grid-cols-2 gap-1.5">
@@ -587,20 +588,20 @@ export function InlineWalkinForm({
                 setTypeId(t.id);
                 setStep("customer");
               }}
-              className="border rounded p-1.5 text-left bg-white hover:border-blue-400 hover:shadow-sm transition"
+              className="border rounded p-1.5 text-left bg-background hover:border-blue-400 hover:shadow-sm transition"
             >
               <div className="flex items-center justify-between gap-1">
                 <span className="text-[11px] font-semibold truncate">
                   {t.name}
                 </span>
                 <span
-                  className={`text-[11px] font-bold ${t.price > 0 ? "text-slate-800" : "text-emerald-600"}`}
+                  className={`text-[11px] font-bold ${t.price > 0 ? "text-foreground" : "text-emerald-600"}`}
                 >
                   {t.price > 0 ? `${sym}${t.price}` : "FREE"}
                 </span>
               </div>
               {t.description && (
-                <p className="text-[9px] text-slate-400 line-clamp-2 mt-0.5">
+                <p className="text-[9px] text-muted-foreground line-clamp-2 mt-0.5">
                   {t.description}
                 </p>
               )}
@@ -615,10 +616,10 @@ export function InlineWalkinForm({
   return wrap(
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wide font-semibold text-slate-500">
+        <span className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
           Pick event
         </span>
-        <span className="text-[10px] text-slate-400">
+        <span className="text-[10px] text-muted-foreground">
           {payload.events.length} available
         </span>
       </div>
@@ -633,13 +634,13 @@ export function InlineWalkinForm({
             <button
               key={ev.id}
               onClick={() => advanceFromEvent(ev.id)}
-              className="w-full border rounded p-1.5 text-left bg-white hover:border-blue-400 hover:shadow-sm transition flex items-center justify-between gap-2"
+              className="w-full border rounded p-1.5 text-left bg-background hover:border-blue-400 hover:shadow-sm transition flex items-center justify-between gap-2"
             >
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold text-slate-800 truncate">
+                <p className="text-[11px] font-semibold text-foreground truncate">
                   {ev.title}
                 </p>
-                <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                   {start && (
                     <span className="flex items-center gap-0.5">
                       <CalendarDays className="h-2.5 w-2.5" />
@@ -659,7 +660,7 @@ export function InlineWalkinForm({
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 <span
-                  className={`text-[11px] font-bold ${types.length === 0 ? "text-emerald-600" : "text-slate-800"}`}
+                  className={`text-[11px] font-bold ${types.length === 0 ? "text-emerald-600" : "text-foreground"}`}
                 >
                   {types.length === 0
                     ? "FREE"

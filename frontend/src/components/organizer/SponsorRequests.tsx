@@ -56,6 +56,7 @@ import {
   Eye,
   Download,
 } from "lucide-react";
+import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
@@ -334,7 +335,7 @@ export default function SponsorRequests({ eventId }: { eventId?: string } = {}) 
               <div className="relative w-48">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search company, email…"
+                  placeholder={t("Search company, email\u2026")}
                   className="pl-8"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -506,9 +507,7 @@ export default function SponsorRequests({ eventId }: { eventId?: string } = {}) 
                     organizer can drop it straight into print or a deck. */}
                 {selected.logo && (
                   <section className="rounded-xl border p-3">
-                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Business logo
-                    </h4>
+                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("Business logo")}</h4>
                     <div className="flex flex-wrap items-center gap-3">
                       <img
                         src={`${apiURL}${selected.logo}`}
@@ -590,7 +589,7 @@ export default function SponsorRequests({ eventId }: { eventId?: string } = {}) 
                 {/* Non-cash tier — what the sponsor chose instead of paying */}
                 {selected.collectPayment === false && (
                   <section className="rounded-xl border p-3">
-                    <h4 className="mb-2 font-semibold">Chosen rewards</h4>
+                    <h4 className="mb-2 font-semibold">{t("Chosen rewards")}</h4>
                     {selected.selectedOptions &&
                     selected.selectedOptions.length > 0 ? (
                       <div className="flex flex-wrap gap-1.5">

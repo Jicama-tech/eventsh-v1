@@ -35,6 +35,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscription } from "@/hooks/useSubscription";
+import { t } from "@/i18n/t";
 
 interface MembershipPlan {
   _id: string;
@@ -383,7 +384,7 @@ export function MembershipPanel({ view = "full" }: MembershipPanelProps = {}) {
                     {m.exhibitorWhatsapp ? ` · ${m.exhibitorWhatsapp}` : ""}
                   </div>
                 </div>
-                <Badge variant="outline" className="bg-white">
+                <Badge variant="outline" className="bg-background">
                   {typeof m.planId === "object" ? m.planId.name : "Plan"}
                 </Badge>
                 <div className="text-sm font-medium">
@@ -442,7 +443,7 @@ export function MembershipPanel({ view = "full" }: MembershipPanelProps = {}) {
               {plans.map((p) => (
                 <div
                   key={p._id}
-                  className="rounded-xl border p-4 bg-white shadow-sm flex flex-col gap-2"
+                  className="rounded-xl border p-4 bg-background shadow-sm flex flex-col gap-2"
                   style={{ borderColor: p.color + "55" }}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -473,7 +474,7 @@ export function MembershipPanel({ view = "full" }: MembershipPanelProps = {}) {
                     {p.durationDays} days
                   </div>
                   {p.perks.length > 0 && (
-                    <ul className="list-disc pl-4 text-xs text-slate-700 space-y-0.5 mt-1">
+                    <ul className="list-disc pl-4 text-xs text-muted-foreground space-y-0.5 mt-1">
                       {p.perks.slice(0, 5).map((perk, i) => (
                         <li key={i}>{perk}</li>
                       ))}
@@ -586,29 +587,29 @@ export function MembershipPanel({ view = "full" }: MembershipPanelProps = {}) {
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label>Name *</Label>
+              <Label>{t("Name *")}</Label>
               <Input
                 value={form.name}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, name: e.target.value }))
                 }
-                placeholder="Gold"
+                placeholder={t("Gold")}
               />
             </div>
             <div>
-              <Label>Description</Label>
+              <Label>{t("Description")}</Label>
               <Textarea
                 rows={2}
                 value={form.description}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, description: e.target.value }))
                 }
-                placeholder="Short pitch shown on the storefront card"
+                placeholder={t("Short pitch shown on the storefront card")}
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Price *</Label>
+                <Label>{t("Price *")}</Label>
                 <Input
                   type="number"
                   min={0}
@@ -619,7 +620,7 @@ export function MembershipPanel({ view = "full" }: MembershipPanelProps = {}) {
                 />
               </div>
               <div>
-                <Label>Duration (days) *</Label>
+                <Label>{t("Duration (days) *")}</Label>
                 <Input
                   type="number"
                   min={1}
@@ -634,7 +635,7 @@ export function MembershipPanel({ view = "full" }: MembershipPanelProps = {}) {
               </div>
             </div>
             <div>
-              <Label>Perks</Label>
+              <Label>{t("Perks")}</Label>
               <div className="flex gap-2 mt-1">
                 <Input
                   value={perkInput}
@@ -645,7 +646,7 @@ export function MembershipPanel({ view = "full" }: MembershipPanelProps = {}) {
                       addPerk();
                     }
                   }}
-                  placeholder="Priority stall selection"
+                  placeholder={t("Priority stall selection")}
                 />
                 <Button type="button" onClick={addPerk}>
                   <Plus className="h-4 w-4" />
@@ -671,7 +672,7 @@ export function MembershipPanel({ view = "full" }: MembershipPanelProps = {}) {
             </div>
             <div className="grid grid-cols-2 gap-3 items-end">
               <div>
-                <Label>Card color</Label>
+                <Label>{t("Card color")}</Label>
                 <Input
                   type="color"
                   value={form.color}
@@ -682,7 +683,7 @@ export function MembershipPanel({ view = "full" }: MembershipPanelProps = {}) {
                 />
               </div>
               <div className="flex items-center justify-end gap-2">
-                <Label htmlFor="published-toggle">Publish on storefront</Label>
+                <Label htmlFor="published-toggle">{t("Publish on storefront")}</Label>
                 <Switch
                   id="published-toggle"
                   checked={form.published}

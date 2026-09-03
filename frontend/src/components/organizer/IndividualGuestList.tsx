@@ -20,6 +20,7 @@ import {
   Users,
 } from "lucide-react";
 import EventRsvpPanel from "./EventRsvpPanel";
+import { t } from "@/i18n/t";
 
 interface IndividualEventCard {
   id: string;
@@ -129,7 +130,7 @@ export default function IndividualGuestList({
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-rose-100">
           <CalendarHeart className="h-7 w-7 text-rose-500" />
         </div>
-        <h2 className="text-lg font-semibold text-foreground">No events yet</h2>
+        <h2 className="text-lg font-semibold text-foreground">{t("No events yet")}</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Create your event first — ask the Assistant to set up your function,
           then your guests&apos; RSVPs will show up here.
@@ -146,9 +147,7 @@ export default function IndividualGuestList({
           <Users className="h-5 w-5 text-rose-500" />
         </div>
         <div>
-          <h1 className="text-lg sm:text-xl font-bold leading-tight">
-            Guest List
-          </h1>
+          <h1 className="text-lg sm:text-xl font-bold leading-tight">{t("Guest List")}</h1>
           <p className="text-xs sm:text-sm text-muted-foreground">
             Pick an event to view its guests
           </p>
@@ -159,11 +158,11 @@ export default function IndividualGuestList({
         {events.map((ev) => (
           <div
             key={ev.id}
-            className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
+            className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background p-3 shadow-sm"
           >
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <div className="truncate text-sm sm:text-base font-semibold text-slate-900">
+                <div className="truncate text-sm sm:text-base font-semibold text-foreground">
                   {ev.title || "Untitled event"}
                 </div>
                 {ev.status && (
@@ -179,7 +178,7 @@ export default function IndividualGuestList({
                 )}
               </div>
               {ev.date && (
-                <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
                   <Calendar className="h-3 w-3" />
                   {new Date(ev.date).toLocaleDateString()}
                 </div>

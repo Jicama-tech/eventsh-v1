@@ -86,6 +86,7 @@ import { Separator } from "@radix-ui/react-separator";
 import { useToast } from "@/hooks/use-toast";
 import { jwtDecode } from "jwt-decode";
 import { JSX } from "react/jsx-runtime";
+import { t } from "@/i18n/t";
 
 // ============ INTERFACES ============
 
@@ -802,9 +803,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Requests
-              </CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{t("Total Requests")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">{stallStats.total}</div>
@@ -816,9 +815,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Confirmed Stalls
-              </CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{t("Confirmed Stalls")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-green-600">
@@ -834,9 +831,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Revenue
-              </CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{t("Total Revenue")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-blue-600">
@@ -850,9 +845,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Payment Status
-              </CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{t("Payment Status")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-1">
@@ -883,8 +876,8 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="requests">Stall Requests</TabsTrigger>
-          <TabsTrigger value="shopkeepers">Shopkeepers</TabsTrigger>
+          <TabsTrigger value="requests">{t("Stall Requests")}</TabsTrigger>
+          <TabsTrigger value="shopkeepers">{t("Shopkeepers")}</TabsTrigger>
         </TabsList>
 
         {/* Stall Requests Tab */}
@@ -893,10 +886,8 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Stall Requests Management</CardTitle>
-                  <CardDescription>
-                    View and manage all stall booking requests for your events
-                  </CardDescription>
+                  <CardTitle>{t("Stall Requests Management")}</CardTitle>
+                  <CardDescription>{t("View and manage all stall booking requests for your events")}</CardDescription>
                 </div>
                 <Button
                   onClick={refreshData}
@@ -920,7 +911,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="Search by shopkeeper, business, or event..."
+                      placeholder={t("Search by shopkeeper, business, or event...")}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-10"
@@ -929,7 +920,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                 </div>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Filter by status" />
+                    <SelectValue placeholder={t("Filter by status")} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Status</SelectItem>
@@ -942,7 +933,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                 </Select>
                 <Select value={paymentFilter} onValueChange={setPaymentFilter}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Filter by payment" />
+                    <SelectValue placeholder={t("Filter by payment")} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Payments</SelectItem>
@@ -1124,7 +1115,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
         <TabsContent value="shopkeepers" className="space-y-4">
           <section className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Shopkeeper Management</h2>
+              <h2 className="text-2xl font-bold">{t("Shopkeeper Management")}</h2>
               <div className="flex items-center space-x-4">
                 <Button onClick={() => setShowShopkeeperForm(true)}>
                   <Plus className="h-4 w-4 mr-2" />
@@ -1143,9 +1134,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   <Store className="h-5 w-5" />
                   Registered Shopkeepers
                 </CardTitle>
-                <CardDescription>
-                  Manage shopkeepers participating in your events
-                </CardDescription>
+                <CardDescription>{t("Manage shopkeepers participating in your events")}</CardDescription>
               </CardHeader>
               <CardContent>
                 {!shopkeeper ? (
@@ -1270,10 +1259,8 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
       <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Stall Request Details</DialogTitle>
-            <DialogDescription>
-              Complete information about the stall booking request
-            </DialogDescription>
+            <DialogTitle>{t("Stall Request Details")}</DialogTitle>
+            <DialogDescription>{t("Complete information about the stall booking request")}</DialogDescription>
           </DialogHeader>
 
           {selectedRequest && (
@@ -1282,7 +1269,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               <div className="grid grid-cols-2 gap-4">
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm">Request Status</CardTitle>
+                    <CardTitle className="text-sm">{t("Request Status")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     {(() => {
@@ -1295,7 +1282,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                 </Card>
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm">Payment Status</CardTitle>
+                    <CardTitle className="text-sm">{t("Payment Status")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     {getPaymentBadge(selectedRequest.paymentStatus)}
@@ -1306,29 +1293,23 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               {/* Shopkeeper Info */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">
-                    Shopkeeper Information
-                  </CardTitle>
+                  <CardTitle className="text-lg">{t("Shopkeeper Information")}</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label className="text-muted-foreground">Name</Label>
+                    <Label className="text-muted-foreground">{t("Name")}</Label>
                     <p className="font-medium">
                       {selectedRequest.shopkeeperId?.name}
                     </p>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">
-                      Business Name
-                    </Label>
+                    <Label className="text-muted-foreground">{t("Business Name")}</Label>
                     <p className="font-medium">
                       {selectedRequest.shopkeeperId?.shopName}
                     </p>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">
-                      Business Email
-                    </Label>
+                    <Label className="text-muted-foreground">{t("Business Email")}</Label>
                     <p className="font-medium">
                       <a
                         href={`mailto:${selectedRequest.shopkeeperId?.businessEmail}`}
@@ -1342,15 +1323,13 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   </div>
 
                   <div>
-                    <Label className="text-muted-foreground">Phone</Label>
+                    <Label className="text-muted-foreground">{t("Phone")}</Label>
                     <p className="font-medium">
                       {selectedRequest.shopkeeperId?.phone}
                     </p>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">
-                      Business Type
-                    </Label>
+                    <Label className="text-muted-foreground">{t("Business Type")}</Label>
                     <p className="font-medium">
                       {selectedRequest.shopkeeperId?.businessCategory}
                     </p>
@@ -1377,29 +1356,29 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               {/* Event Info */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Event Information</CardTitle>
+                  <CardTitle className="text-lg">{t("Event Information")}</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label className="text-muted-foreground">Event Title</Label>
+                    <Label className="text-muted-foreground">{t("Event Title")}</Label>
                     <p className="font-medium">
                       {selectedRequest.eventId.title}
                     </p>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">Location</Label>
+                    <Label className="text-muted-foreground">{t("Location")}</Label>
                     <p className="font-medium">
                       {selectedRequest.eventId.location}
                     </p>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">Start Date</Label>
+                    <Label className="text-muted-foreground">{t("Start Date")}</Label>
                     <p className="font-medium">
                       {formatDate(selectedRequest.eventId.startDate)}
                     </p>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">End Date</Label>
+                    <Label className="text-muted-foreground">{t("End Date")}</Label>
                     <p className="font-medium">
                       {formatDate(selectedRequest.eventId.endDate)}
                     </p>
@@ -1411,14 +1390,14 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               {selectedRequest.selectedTables.length > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Selected Tables</CardTitle>
+                    <CardTitle className="text-lg">{t("Selected Tables")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
                       {selectedRequest.selectedTables.map((table, index) => (
                         <div
                           key={index}
-                          className="flex justify-between items-center p-3 bg-gray-50 rounded"
+                          className="flex justify-between items-center p-3 bg-muted rounded"
                         >
                           <div>
                             <p className="font-medium">{table.tableName}</p>
@@ -1445,14 +1424,14 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               {selectedRequest.selectedAddOns.length > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Selected Add-ons</CardTitle>
+                    <CardTitle className="text-lg">{t("Selected Add-ons")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
                       {selectedRequest.selectedAddOns.map((addon, index) => (
                         <div
                           key={index}
-                          className="flex justify-between items-center p-3 bg-gray-50 rounded"
+                          className="flex justify-between items-center p-3 bg-muted rounded"
                         >
                           <div>
                             <p className="font-medium">{addon.name}</p>
@@ -1478,7 +1457,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               {/* Price Summary */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Price Summary</CardTitle>
+                  <CardTitle className="text-lg">{t("Price Summary")}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex justify-between">
@@ -1514,7 +1493,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               {/* Timeline */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Timeline</CardTitle>
+                  <CardTitle className="text-lg">{t("Timeline")}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex items-start gap-3">
@@ -1629,7 +1608,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               {selectedRequest.notes && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Notes</CardTitle>
+                    <CardTitle className="text-lg">{t("Notes")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm">{selectedRequest.notes}</p>
@@ -1641,9 +1620,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               {selectedRequest.cancellationReason && (
                 <Card className="border-red-200">
                   <CardHeader>
-                    <CardTitle className="text-lg text-red-600">
-                      Cancellation Reason
-                    </CardTitle>
+                    <CardTitle className="text-lg text-red-600">{t("Cancellation Reason")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm">
@@ -1670,7 +1647,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirm Stall Request</DialogTitle>
+            <DialogTitle>{t("Confirm Stall Request")}</DialogTitle>
             <DialogDescription>
               Are you sure you want to confirm this stall request? The
               shopkeeper will be notified and can proceed to select tables.
@@ -1679,10 +1656,10 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
 
           <div className="space-y-4">
             <div>
-              <Label htmlFor="confirm-notes">Notes (Optional)</Label>
+              <Label htmlFor="confirm-notes">{t("Notes (Optional)")}</Label>
               <Textarea
                 id="confirm-notes"
-                placeholder="Add any notes for the shopkeeper..."
+                placeholder={t("Add any notes for the shopkeeper...")}
                 value={actionNotes}
                 onChange={(e) => setActionNotes(e.target.value)}
                 rows={3}
@@ -1721,7 +1698,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Cancel Stall Request</DialogTitle>
+            <DialogTitle>{t("Cancel Stall Request")}</DialogTitle>
             <DialogDescription>
               Please provide a reason for cancelling this stall request. The
               shopkeeper will be notified.
@@ -1735,7 +1712,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               </Label>
               <Textarea
                 id="cancel-reason"
-                placeholder="Enter the reason for cancellation..."
+                placeholder={t("Enter the reason for cancellation...")}
                 value={cancellationReason}
                 onChange={(e) => setCancellationReason(e.target.value)}
                 rows={3}
@@ -1743,10 +1720,10 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               />
             </div>
             <div>
-              <Label htmlFor="cancel-notes">Additional Notes (Optional)</Label>
+              <Label htmlFor="cancel-notes">{t("Additional Notes (Optional)")}</Label>
               <Textarea
                 id="cancel-notes"
-                placeholder="Add any additional notes..."
+                placeholder={t("Add any additional notes...")}
                 value={actionNotes}
                 onChange={(e) => setActionNotes(e.target.value)}
                 rows={2}
@@ -1790,15 +1767,13 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
       <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Update Payment Status</DialogTitle>
-            <DialogDescription>
-              Update the payment status for this stall booking
-            </DialogDescription>
+            <DialogTitle>{t("Update Payment Status")}</DialogTitle>
+            <DialogDescription>{t("Update the payment status for this stall booking")}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div>
-              <Label htmlFor="payment-status">Payment Status</Label>
+              <Label htmlFor="payment-status">{t("Payment Status")}</Label>
               <Select
                 value={paymentStatusUpdate}
                 onValueChange={(value: "Partial" | "Paid") =>
@@ -1824,10 +1799,10 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               )}
             </div>
             <div>
-              <Label htmlFor="payment-notes">Notes (Optional)</Label>
+              <Label htmlFor="payment-notes">{t("Notes (Optional)")}</Label>
               <Textarea
                 id="payment-notes"
-                placeholder="Add payment details or notes..."
+                placeholder={t("Add payment details or notes...")}
                 value={actionNotes}
                 onChange={(e) => setActionNotes(e.target.value)}
                 rows={3}
@@ -1869,9 +1844,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               <Send className="h-5 w-5" />
               Send Stall Invitations
             </DialogTitle>
-            <DialogDescription>
-              Select shopkeepers to invite them to participate in your event
-            </DialogDescription>
+            <DialogDescription>{t("Select shopkeepers to invite them to participate in your event")}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -1879,7 +1852,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Input
-                  placeholder="Search shopkeepers by name or business..."
+                  placeholder={t("Search shopkeepers by name or business...")}
                   className="flex-1"
                   onChange={(e) => {
                     // You can add search filtering here
@@ -1919,7 +1892,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   {shopkeeperList.map((shopkeeper) => (
                     <div
                       key={shopkeeper._id}
-                      className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                      className="p-4 hover:bg-muted cursor-pointer transition-colors"
                       onClick={() => handleShopkeeperToggle(shopkeeper._id)}
                     >
                       <div className="flex items-start gap-3">
@@ -1930,7 +1903,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                           onChange={() =>
                             handleShopkeeperToggle(shopkeeper._id)
                           }
-                          className="mt-1 w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                          className="mt-1 w-4 h-4 rounded border-border text-blue-600 cursor-pointer"
                         />
 
                         {/* Shopkeeper Info */}
@@ -2020,9 +1993,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
 
             {/* Invitation Message */}
             <div className="space-y-2">
-              <Label htmlFor="invitation-message">
-                Invitation Message (Optional)
-              </Label>
+              <Label htmlFor="invitation-message">{t("Invitation Message (Optional)")}</Label>
               <Textarea
                 id="invitation-message"
                 placeholder="Add a personal message for the shopkeepers... (e.g., 'We're excited to have you at our event! Please select your preferred stall.')"

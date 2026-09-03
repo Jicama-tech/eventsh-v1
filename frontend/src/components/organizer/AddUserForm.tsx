@@ -27,6 +27,7 @@ import {
   AlertTriangle,
   Pill,
 } from "lucide-react";
+import { t } from "@/i18n/t";
 
 interface AddUserFormProps {
   onClose: () => void;
@@ -109,19 +110,19 @@ export function AddUserForm({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="fullName">Full Name *</Label>
+                  <Label htmlFor="fullName">{t("Full Name *")}</Label>
                   <Input
                     id="fullName"
                     value={formData.fullName}
                     onChange={(e) =>
                       setFormData({ ...formData, fullName: e.target.value })
                     }
-                    placeholder="Enter full name"
+                    placeholder={t("Enter full name")}
                     required
                   />
                 </div>
                 <div>
-                  <Label htmlFor="email">Email *</Label>
+                  <Label htmlFor="email">{t("Email *")}</Label>
                   <Input
                     id="email"
                     type="email"
@@ -137,7 +138,7 @@ export function AddUserForm({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="phone">Phone Number</Label>
+                  <Label htmlFor="phone">{t("Phone Number")}</Label>
                   <Input
                     id="phone"
                     value={formData.phone}
@@ -148,7 +149,7 @@ export function AddUserForm({
                   />
                 </div>
                 <div>
-                  <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                  <Label htmlFor="dateOfBirth">{t("Date of Birth")}</Label>
                   <Input
                     id="dateOfBirth"
                     type="date"
@@ -162,7 +163,7 @@ export function AddUserForm({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="gender">Gender</Label>
+                  <Label htmlFor="gender">{t("Gender")}</Label>
                   <Select
                     value={formData.gender}
                     onValueChange={(value) =>
@@ -170,7 +171,7 @@ export function AddUserForm({
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select gender" />
+                      <SelectValue placeholder={t("Select gender")} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="male">Male</SelectItem>
@@ -183,7 +184,7 @@ export function AddUserForm({
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="bloodType">Blood Type</Label>
+                  <Label htmlFor="bloodType">{t("Blood Type")}</Label>
                   <Select
                     value={formData.bloodType}
                     onValueChange={(value) =>
@@ -191,7 +192,7 @@ export function AddUserForm({
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select blood type" />
+                      <SelectValue placeholder={t("Select blood type")} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="A+">A+</SelectItem>
@@ -208,14 +209,14 @@ export function AddUserForm({
               </div>
 
               <div>
-                <Label htmlFor="address">Address</Label>
+                <Label htmlFor="address">{t("Address")}</Label>
                 <Textarea
                   id="address"
                   value={formData.address}
                   onChange={(e) =>
                     setFormData({ ...formData, address: e.target.value })
                   }
-                  placeholder="Enter complete address"
+                  placeholder={t("Enter complete address")}
                   rows={2}
                 />
               </div>
@@ -230,9 +231,7 @@ export function AddUserForm({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="emergencyContactName">
-                    Emergency Contact Name
-                  </Label>
+                  <Label htmlFor="emergencyContactName">{t("Emergency Contact Name")}</Label>
                   <Input
                     id="emergencyContactName"
                     value={formData.emergencyContactName}
@@ -242,13 +241,11 @@ export function AddUserForm({
                         emergencyContactName: e.target.value,
                       })
                     }
-                    placeholder="Contact person name"
+                    placeholder={t("Contact person name")}
                   />
                 </div>
                 <div>
-                  <Label htmlFor="emergencyContactPhone">
-                    Emergency Contact Phone
-                  </Label>
+                  <Label htmlFor="emergencyContactPhone">{t("Emergency Contact Phone")}</Label>
                   <Input
                     id="emergencyContactPhone"
                     value={formData.emergencyContactPhone}
@@ -282,12 +279,12 @@ export function AddUserForm({
                   onChange={(e) =>
                     setFormData({ ...formData, allergies: e.target.value })
                   }
-                  placeholder="List allergies separated by commas"
+                  placeholder={t("List allergies separated by commas")}
                 />
               </div>
 
               <div>
-                <Label htmlFor="chronicConditions">Chronic Conditions</Label>
+                <Label htmlFor="chronicConditions">{t("Chronic Conditions")}</Label>
                 <Input
                   id="chronicConditions"
                   value={formData.chronicConditions}
@@ -297,7 +294,7 @@ export function AddUserForm({
                       chronicConditions: e.target.value,
                     })
                   }
-                  placeholder="List chronic conditions separated by commas"
+                  placeholder={t("List chronic conditions separated by commas")}
                 />
               </div>
 
@@ -318,21 +315,21 @@ export function AddUserForm({
                       currentMedications: e.target.value,
                     })
                   }
-                  placeholder="List current medications separated by commas"
+                  placeholder={t("List current medications separated by commas")}
                 />
               </div>
             </div>
 
             {/* Additional Notes */}
             <div>
-              <Label htmlFor="notes">Additional Notes</Label>
+              <Label htmlFor="notes">{t("Additional Notes")}</Label>
               <Textarea
                 id="notes"
                 value={formData.notes}
                 onChange={(e) =>
                   setFormData({ ...formData, notes: e.target.value })
                 }
-                placeholder="Any additional notes or information..."
+                placeholder={t("Any additional notes or information...")}
                 rows={3}
               />
             </div>

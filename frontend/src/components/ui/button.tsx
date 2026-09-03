@@ -12,10 +12,22 @@ const buttonVariants = cva(
         default: "bg-primary text-primary-foreground hover:bg-primary/90",
         destructive:
           "border-2 border-destructive text-destructive hover:bg-destructive/90 hover:text-white/90",
+        // `hover:bg-white/30` used to sit on buttonOutline. On a light page
+        // that reads as a faint lift, but over a dark surface a 30% white
+        // wash turns flat grey — and with hover:text-primary on top it came
+        // out grey-with-blue. Now that this app has a dark theme, that hits
+        // the dashboard sidebar, which uses this variant. kioscart-v1 fixed
+        // the same line for the same reason; a primary tint works in both.
+        //
+        // outline/outline1 hovered to `bg-seconday/80` — "secondary"
+        // misspelled, so Tailwind emitted nothing and those buttons had no
+        // hover at all. Spelling it correctly would give a loud cyan wash
+        // (--secondary is 199 89% 48%), so they follow the same tint.
         buttonOutline:
-          "border border-input bg-background hover:bg-white/30 hover:text-primary",
-        outline: "border border-input bg-background hover:bg-seconday/80",
-        outline1: "bg-background hover:bg-seconday/80",
+          "border border-input bg-background hover:bg-primary/10 hover:text-primary hover:border-primary/40",
+        outline:
+          "border border-input bg-background hover:bg-primary/10 hover:text-primary hover:border-primary/40",
+        outline1: "bg-background hover:bg-primary/10 hover:text-primary",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-primary/10 hover:text-primary",

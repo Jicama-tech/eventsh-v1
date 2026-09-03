@@ -31,6 +31,7 @@ import {
   Search,
   Plus,
 } from "lucide-react";
+import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
@@ -470,10 +471,10 @@ export function KioskMode() {
   const Header = (
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center gap-2">
-        <Monitor className="h-5 w-5 text-slate-600" />
-        <h2 className="text-xl font-bold text-slate-800">Walk-in Booking</h2>
-        <span className="text-slate-300 mx-1">›</span>
-        <span className="text-sm text-slate-500">{crumbs[step]}</span>
+        <Monitor className="h-5 w-5 text-muted-foreground" />
+        <h2 className="text-xl font-bold text-foreground">{t("Walk-in Booking")}</h2>
+        <span className="text-muted-foreground mx-1">›</span>
+        <span className="text-sm text-muted-foreground">{crumbs[step]}</span>
       </div>
       {step !== "events_list" && step !== "confirmation" && (
         <Button variant="outline" size="sm" onClick={goEvents}>
@@ -499,9 +500,9 @@ export function KioskMode() {
         {/* Search */}
         <div className="flex gap-2 mb-3">
           <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search events…"
+              placeholder={t("Search events\u2026")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9 h-9"
@@ -511,10 +512,10 @@ export function KioskMode() {
 
         {loadingEvents ? (
           <div className="flex-1 flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center text-slate-400">
+          <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground">
             <CalendarDays className="h-8 w-8 mb-2" />
             <p className="text-sm">
               {events.length === 0
@@ -534,13 +535,13 @@ export function KioskMode() {
                 return (
                   <div
                     key={ev._id}
-                    className="border rounded-lg p-2 bg-white hover:shadow-sm transition-shadow flex flex-col"
+                    className="border rounded-lg p-2 bg-background hover:shadow-sm transition-shadow flex flex-col"
                   >
-                    <p className="text-xs font-medium text-slate-800 truncate">
+                    <p className="text-xs font-medium text-foreground truncate">
                       {ev.title}
                     </p>
                     {start && (
-                      <p className="text-[10px] text-slate-400 truncate">
+                      <p className="text-[10px] text-muted-foreground truncate">
                         {start.toLocaleDateString(undefined, {
                           month: "short",
                           day: "numeric",
@@ -549,7 +550,7 @@ export function KioskMode() {
                       </p>
                     )}
                     {(ev.venue || ev.location) && (
-                      <p className="text-[10px] text-slate-400 truncate flex items-center gap-1">
+                      <p className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
                         <MapPin className="h-2.5 w-2.5" />
                         {ev.venue || ev.location}
                       </p>
@@ -561,7 +562,7 @@ export function KioskMode() {
                           className={`text-xs font-semibold ${
                             types.length === 0
                               ? "text-emerald-600"
-                              : "text-slate-800"
+                              : "text-foreground"
                           }`}
                         >
                           {types.length === 0
@@ -569,7 +570,7 @@ export function KioskMode() {
                             : `${getSymbol()}${minPrice}${types.length > 1 ? "+" : ""}`}
                         </span>
                         {types.length > 1 && (
-                          <span className="text-[10px] text-slate-400 block">
+                          <span className="text-[10px] text-muted-foreground block">
                             {types.length} types
                           </span>
                         )}
@@ -597,8 +598,8 @@ export function KioskMode() {
     return (
       <div className="flex flex-col h-[calc(100vh-180px)]">
         {Header}
-        <p className="text-xs text-slate-500 mb-3">
-          <span className="font-semibold text-slate-700">
+        <p className="text-xs text-muted-foreground mb-3">
+          <span className="font-semibold text-muted-foreground">
             {selectedEvent.title}
           </span>
         </p>
@@ -607,25 +608,25 @@ export function KioskMode() {
             {(selectedEvent.visitorTypes || []).map((t) => (
               <div
                 key={t.id}
-                className="border rounded-lg p-2 bg-white hover:shadow-sm transition-shadow flex flex-col"
+                className="border rounded-lg p-2 bg-background hover:shadow-sm transition-shadow flex flex-col"
               >
-                <p className="text-xs font-medium text-slate-800 truncate">
+                <p className="text-xs font-medium text-foreground truncate">
                   {t.name}
                 </p>
                 {t.description && (
-                  <p className="text-[10px] text-slate-400 line-clamp-2 mt-0.5">
+                  <p className="text-[10px] text-muted-foreground line-clamp-2 mt-0.5">
                     {t.description}
                   </p>
                 )}
                 {typeof t.maxCount === "number" && t.maxCount > 0 && (
-                  <p className="text-[10px] text-slate-400 mt-0.5">
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
                     {t.maxCount} left
                   </p>
                 )}
                 <div className="flex items-center justify-between mt-1.5">
                   <span
                     className={`text-xs font-semibold ${
-                      Number(t.price) > 0 ? "text-slate-800" : "text-emerald-600"
+                      Number(t.price) > 0 ? "text-foreground" : "text-emerald-600"
                     }`}
                   >
                     {Number(t.price) > 0
@@ -656,16 +657,16 @@ export function KioskMode() {
         {Header}
         <div className="flex-1 overflow-y-auto w-full">
           {/* Selection summary */}
-          <div className="border rounded-lg p-2.5 mb-3 bg-slate-50 flex items-center justify-between">
+          <div className="border rounded-lg p-2.5 mb-3 bg-muted flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold text-slate-800 truncate">
+              <p className="text-xs font-semibold text-foreground truncate">
                 {selectedEvent.title}
               </p>
-              <p className="text-[10px] text-slate-500">{selectedType.name}</p>
+              <p className="text-[10px] text-muted-foreground">{selectedType.name}</p>
             </div>
             <span
               className={`text-sm font-semibold ${
-                totalPrice > 0 ? "text-slate-800" : "text-emerald-600"
+                totalPrice > 0 ? "text-foreground" : "text-emerald-600"
               }`}
             >
               {totalPrice > 0 ? `${getSymbol()}${totalPrice}` : "FREE"}
@@ -673,20 +674,20 @@ export function KioskMode() {
           </div>
 
           {/* Customer form */}
-          <div className="space-y-3 bg-white border rounded-lg p-3">
+          <div className="space-y-3 bg-background border rounded-lg p-3">
             <div className="grid sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label htmlFor="kiosk-fname">First name *</Label>
+                <Label htmlFor="kiosk-fname">{t("First name *")}</Label>
                 <Input
                   id="kiosk-fname"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  placeholder="John"
+                  placeholder={t("John")}
                   disabled={submitting}
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="kiosk-lname">Last name *</Label>
+                <Label htmlFor="kiosk-lname">{t("Last name *")}</Label>
                 <Input
                   id="kiosk-lname"
                   value={lastName}
@@ -700,7 +701,7 @@ export function KioskMode() {
             <div className="space-y-1">
               <Label htmlFor="kiosk-email">
                 Email{" "}
-                <span className="text-slate-400 font-normal">(optional)</span>
+                <span className="text-muted-foreground font-normal">(optional)</span>
               </Label>
               <Input
                 id="kiosk-email"
@@ -710,13 +711,13 @@ export function KioskMode() {
                 placeholder="customer@example.com"
                 disabled={submitting}
               />
-              <p className="text-[10px] text-slate-500">
+              <p className="text-[10px] text-muted-foreground">
                 If provided, the ticket is also emailed.
               </p>
             </div>
 
             <div className="space-y-1">
-              <Label>WhatsApp number *</Label>
+              <Label>{t("WhatsApp number *")}</Label>
               <div className="flex gap-2">
                 <Select
                   value={whatsappCountryCode}
@@ -745,7 +746,7 @@ export function KioskMode() {
                   className="flex-1"
                 />
               </div>
-              <p className="text-[10px] text-slate-500">
+              <p className="text-[10px] text-muted-foreground">
                 The ticket QR code is sent here.
               </p>
             </div>
@@ -753,9 +754,7 @@ export function KioskMode() {
             {/* Payment method — only when ticket has a price */}
             {totalPrice > 0 && (
               <div className="pt-2 border-t">
-                <Label className="text-xs font-semibold text-slate-600 mb-1.5 block">
-                  Payment method
-                </Label>
+                <Label className="text-xs font-semibold text-muted-foreground mb-1.5 block">{t("Payment method")}</Label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -764,23 +763,23 @@ export function KioskMode() {
                     className={`flex items-center gap-2 p-2.5 rounded-md border transition text-left ${
                       paymentMethod === "cash"
                         ? "border-emerald-500 bg-emerald-50"
-                        : "border-slate-200 bg-white hover:border-slate-300"
+                        : "border-border bg-background hover:border-border"
                     } disabled:opacity-50`}
                   >
                     <div
                       className={`w-8 h-8 rounded flex items-center justify-center ${
                         paymentMethod === "cash"
                           ? "bg-emerald-500 text-white"
-                          : "bg-slate-100 text-slate-600"
+                          : "bg-muted text-muted-foreground"
                       }`}
                     >
                       <Banknote className="h-4 w-4" />
                     </div>
                     <div>
-                      <div className="text-xs font-semibold text-slate-900">
+                      <div className="text-xs font-semibold text-foreground">
                         Cash
                       </div>
-                      <div className="text-[10px] text-slate-500">
+                      <div className="text-[10px] text-muted-foreground">
                         At counter
                       </div>
                     </div>
@@ -792,23 +791,23 @@ export function KioskMode() {
                     className={`flex items-center gap-2 p-2.5 rounded-md border transition text-left ${
                       paymentMethod === "qr"
                         ? "border-blue-500 bg-blue-50"
-                        : "border-slate-200 bg-white hover:border-slate-300"
+                        : "border-border bg-background hover:border-border"
                     } disabled:opacity-50`}
                   >
                     <div
                       className={`w-8 h-8 rounded flex items-center justify-center ${
                         paymentMethod === "qr"
                           ? "bg-blue-500 text-white"
-                          : "bg-slate-100 text-slate-600"
+                          : "bg-muted text-muted-foreground"
                       }`}
                     >
                       <QrCode className="h-4 w-4" />
                     </div>
                     <div>
-                      <div className="text-xs font-semibold text-slate-900">
+                      <div className="text-xs font-semibold text-foreground">
                         QR
                       </div>
-                      <div className="text-[10px] text-slate-500">
+                      <div className="text-[10px] text-muted-foreground">
                         {(organizerInfo?.country || "").toUpperCase() === "SG"
                           ? "PayNow"
                           : "UPI"}
@@ -877,26 +876,26 @@ export function KioskMode() {
       <div className="flex flex-col h-[calc(100vh-180px)]">
         {Header}
         <div className="flex-1 flex items-start justify-center pt-2 overflow-y-auto">
-          <div className="max-w-sm w-full bg-white border rounded-lg p-4 text-center">
+          <div className="max-w-sm w-full bg-background border rounded-lg p-4 text-center">
             <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold uppercase tracking-wide mb-2">
               <QrCode className="h-3 w-3" />
               {methodLabel}
             </div>
-            <p className="text-xs text-slate-500">Customer scans to pay</p>
-            <p className="text-2xl font-bold text-slate-900 mb-3">
+            <p className="text-xs text-muted-foreground">Customer scans to pay</p>
+            <p className="text-2xl font-bold text-foreground mb-3">
               {getSymbol()}
               {totalPrice}
             </p>
-            <div className="mx-auto w-fit bg-white p-3 border rounded-lg">
+            <div className="mx-auto w-fit bg-background p-3 border rounded-lg">
               {qrPayload ? (
                 <QRCode value={qrPayload} size={200} level="M" />
               ) : (
-                <div className="w-[200px] h-[200px] flex items-center justify-center text-slate-400 text-xs">
+                <div className="w-[200px] h-[200px] flex items-center justify-center text-muted-foreground text-xs">
                   No QR
                 </div>
               )}
             </div>
-            <p className="text-[10px] text-slate-400 mt-2 truncate">
+            <p className="text-[10px] text-muted-foreground mt-2 truncate">
               {selectedEvent.title} · {selectedType.name}
             </p>
             <div className="mt-4 flex gap-2">
@@ -940,39 +939,37 @@ export function KioskMode() {
       <div className="flex flex-col h-[calc(100vh-180px)]">
         {Header}
         <div className="flex-1 flex items-start justify-center pt-2">
-          <div className="max-w-sm w-full bg-white border rounded-lg p-4 text-center">
+          <div className="max-w-sm w-full bg-background border rounded-lg p-4 text-center">
             <div className="mx-auto w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center mb-2">
               <CheckCircle2 className="h-6 w-6 text-emerald-600" />
             </div>
-            <h2 className="text-base font-semibold text-slate-900 mb-0.5">
-              Ticket booked
-            </h2>
-            <div className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-mono mb-3">
+            <h2 className="text-base font-semibold text-foreground mb-0.5">{t("Ticket booked")}</h2>
+            <div className="inline-flex items-center px-2 py-0.5 rounded bg-muted text-muted-foreground text-[10px] font-mono mb-3">
               {confirmation.ticketId}
             </div>
-            <div className="text-xs text-slate-700 space-y-1.5 text-left border rounded-md p-2.5 bg-slate-50">
+            <div className="text-xs text-muted-foreground space-y-1.5 text-left border rounded-md p-2.5 bg-muted">
               <div className="flex justify-between gap-2">
-                <span className="text-slate-500">Customer</span>
+                <span className="text-muted-foreground">Customer</span>
                 <span className="font-medium text-right">
                   {confirmation.customerName}
                 </span>
               </div>
               <div className="flex justify-between gap-2">
-                <span className="text-slate-500">WhatsApp</span>
+                <span className="text-muted-foreground">WhatsApp</span>
                 <span className="font-medium text-right">
                   {confirmation.whatsapp}
                 </span>
               </div>
               {confirmation.email && (
                 <div className="flex justify-between gap-2">
-                  <span className="text-slate-500">Email</span>
+                  <span className="text-muted-foreground">Email</span>
                   <span className="font-medium text-right break-all">
                     {confirmation.email}
                   </span>
                 </div>
               )}
             </div>
-            <p className="text-[10px] text-slate-500 mt-2 inline-flex items-center gap-1">
+            <p className="text-[10px] text-muted-foreground mt-2 inline-flex items-center gap-1">
               <Sparkles className="h-3 w-3 text-amber-500" />
               Sent to WhatsApp{confirmation.email ? " + email" : ""}
             </p>

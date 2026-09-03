@@ -10,6 +10,8 @@ import {
   useNavigate,
 } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
+import { ThemeProvider } from "@/components/theme-provider";
+import { I18nProvider } from "@/i18n";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { CountryProvider } from "./hooks/useCountry";
@@ -591,21 +593,36 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const App = () => (
   <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
     <HelmetProvider>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <AuthProvider>
-              <CountryProvider>
-                <SubscriptionProvider>
-                  <AppContent />
-                </SubscriptionProvider>
-              </CountryProvider>
-            </AuthProvider>
-          </BrowserRouter>
-        </TooltipProvider>
-      </QueryClientProvider>
+      {/* Light/dark for the dashboard. `enableSystem` is off on purpose: most
+          of the app still paints with literal light colours (bg-white,
+          bg-slate-50 and friends) rather than theme tokens, so following the
+          OS would drop a visitor whose machine is dark into a half-converted
+          screen they never asked for. Dark stays opt-in via ThemeToggle until
+          that repaint is finished, then this can become `enableSystem`. */}
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="light"
+        enableSystem={false}
+        disableTransitionOnChange
+      >
+        <I18nProvider>
+          <QueryClientProvider client={queryClient}>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <AuthProvider>
+                  <CountryProvider>
+                    <SubscriptionProvider>
+                      <AppContent />
+                    </SubscriptionProvider>
+                  </CountryProvider>
+                </AuthProvider>
+              </BrowserRouter>
+            </TooltipProvider>
+          </QueryClientProvider>
+        </I18nProvider>
+      </ThemeProvider>
     </HelmetProvider>
   </GoogleOAuthProvider>
 );

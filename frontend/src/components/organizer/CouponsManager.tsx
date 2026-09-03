@@ -28,6 +28,7 @@ import { Edit3, Plus, Trash } from "lucide-react";
 import { jwtDecode } from "jwt-decode";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";
+import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
@@ -253,7 +254,7 @@ export function CouponsManager() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold">Coupons</h3>
+        <h3 className="text-lg font-semibold">{t("Coupons")}</h3>
         <Button onClick={handleAddCoupon}>+ Add Coupon</Button>
       </div>
 
@@ -322,9 +323,9 @@ export function CouponsManager() {
           <div className="space-y-3">
             <div className="flex flex-col-2 gap-4">
               <div className="space-y-1 flex-1">
-                <Label>Coupon Code</Label>
+                <Label>{t("Coupon Code")}</Label>
                 <Input
-                  placeholder="SAVE20"
+                  placeholder={t("SAVE20")}
                   value={coupon.code}
                   onChange={(e) =>
                     handleChange("code", e.target.value.toUpperCase())
@@ -334,13 +335,13 @@ export function CouponsManager() {
               </div>
 
               <div className="space-y-1 flex-1">
-                <Label>Discount Type</Label>
+                <Label>{t("Discount Type")}</Label>
                 <Select
                   value={coupon.discountType}
                   onValueChange={(value) => handleChange("discountType", value)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select discount type" />
+                    <SelectValue placeholder={t("Select discount type")} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="PERCENTAGE">Percentage</SelectItem>
@@ -353,7 +354,7 @@ export function CouponsManager() {
             <div className="flex flex-col-2 gap-4">
               {coupon.discountType === "PERCENTAGE" && (
                 <div className="space-y-1 flex-1">
-                  <Label>Discount Percentage (%) *</Label>
+                  <Label>{t("Discount Percentage (%) *")}</Label>
                   <Input
                     type="number"
                     placeholder="10"
@@ -368,7 +369,7 @@ export function CouponsManager() {
 
               {coupon.discountType === "FLAT" && (
                 <div className="space-y-1 flex-1">
-                  <Label>Flat Discount Amount *</Label>
+                  <Label>{t("Flat Discount Amount *")}</Label>
                   <Input
                     type="number"
                     placeholder="100"
@@ -382,7 +383,7 @@ export function CouponsManager() {
               )}
 
               <div className="space-y-1 flex-1">
-                <Label>Minimum Order Amount *</Label>
+                <Label>{t("Minimum Order Amount *")}</Label>
                 <Input
                   type="number"
                   placeholder="500"
@@ -397,7 +398,7 @@ export function CouponsManager() {
 
             <div className="flex flex-col-2 gap-4">
               <div className="space-y-1 flex-1">
-                <Label>Maximum Usage</Label>
+                <Label>{t("Maximum Usage")}</Label>
                 <Input
                   type="number"
                   placeholder="50"
@@ -408,7 +409,7 @@ export function CouponsManager() {
               </div>
 
               <div className="space-y-1 flex-1">
-                <Label>Expiry Date</Label>
+                <Label>{t("Expiry Date")}</Label>
                 <div className="relative">
                   <Input
                     type="date"
@@ -424,7 +425,7 @@ export function CouponsManager() {
           </div>
 
           <div className="space-y-1">
-            <Label>Linked Events (Optional)</Label>
+            <Label>{t("Linked Events (Optional)")}</Label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -504,7 +505,7 @@ export function CouponsManager() {
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Delete Coupon</DialogTitle>
+            <DialogTitle>{t("Delete Coupon")}</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete this coupon? This action cannot be
               undone.

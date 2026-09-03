@@ -40,6 +40,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { t } from "@/i18n/t";
 
 /**
  * Speaker CRM — the organizer's persistent speaker roster.
@@ -328,7 +329,7 @@ export default function SpeakerCRM() {
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search name, email, company..."
+                placeholder={t("Search name, email, company...")}
                 className="pl-8"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -380,7 +381,7 @@ export default function SpeakerCRM() {
                     <TableRow key={s._id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">
+                          <div className="w-9 h-9 rounded-full overflow-hidden bg-muted flex items-center justify-center flex-shrink-0">
                             {s.image ? (
                               <img
                                 src={imageUrl(s.image)}
@@ -388,7 +389,7 @@ export default function SpeakerCRM() {
                                 className="w-full h-full object-cover"
                               />
                             ) : (
-                              <span className="text-xs font-bold text-gray-500">
+                              <span className="text-xs font-bold text-muted-foreground">
                                 {s.name?.charAt(0)?.toUpperCase()}
                               </span>
                             )}
@@ -470,7 +471,7 @@ export default function SpeakerCRM() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">
+              <div className="w-10 h-10 rounded-full overflow-hidden bg-muted flex items-center justify-center flex-shrink-0">
                 {detail?.speaker?.image ? (
                   <img
                     src={imageUrl(detail.speaker.image)}
@@ -478,7 +479,7 @@ export default function SpeakerCRM() {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <span className="text-sm font-bold text-gray-500">
+                  <span className="text-sm font-bold text-muted-foreground">
                     {detail?.speaker?.name?.charAt(0)?.toUpperCase()}
                   </span>
                 )}
@@ -492,9 +493,7 @@ export default function SpeakerCRM() {
                 </p>
               </div>
             </DialogTitle>
-            <DialogDescription className="sr-only">
-              Sessions delivered and applications made by this speaker.
-            </DialogDescription>
+            <DialogDescription className="sr-only">{t("Sessions delivered and applications made by this speaker.")}</DialogDescription>
           </DialogHeader>
 
           {detailLoading ? (
@@ -665,16 +664,14 @@ export default function SpeakerCRM() {
             <DialogTitle>
               {form.id ? "Edit Speaker" : "Add Speaker"}
             </DialogTitle>
-            <DialogDescription>
-              Saved to your roster and reusable on any future event.
-            </DialogDescription>
+            <DialogDescription>{t("Saved to your roster and reusable on any future event.")}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             {/* Headshot */}
             <div className="flex items-center gap-4">
               <div
-                className="w-20 h-20 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-gray-50 flex-shrink-0"
+                className="w-20 h-20 rounded-full border-2 border-dashed border-border flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-muted flex-shrink-0"
                 onClick={() =>
                   document.getElementById("speaker-crm-photo")?.click()
                 }
@@ -709,17 +706,17 @@ export default function SpeakerCRM() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs">Full Name *</Label>
+                <Label className="text-xs">{t("Full Name *")}</Label>
                 <Input
                   value={form.name}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, name: e.target.value }))
                   }
-                  placeholder="Speaker's name"
+                  placeholder={t("Speaker's name")}
                 />
               </div>
               <div>
-                <Label className="text-xs">Email *</Label>
+                <Label className="text-xs">{t("Email *")}</Label>
                 <Input
                   type="email"
                   value={form.email}
@@ -733,7 +730,7 @@ export default function SpeakerCRM() {
                 </p>
               </div>
               <div>
-                <Label className="text-xs">Phone</Label>
+                <Label className="text-xs">{t("Phone")}</Label>
                 <Input
                   value={form.phone}
                   onChange={(e) =>
@@ -743,7 +740,7 @@ export default function SpeakerCRM() {
                 />
               </div>
               <div>
-                <Label className="text-xs">Role / Title</Label>
+                <Label className="text-xs">{t("Role / Title")}</Label>
                 <Input
                   value={form.title}
                   onChange={(e) =>
@@ -753,17 +750,17 @@ export default function SpeakerCRM() {
                 />
               </div>
               <div>
-                <Label className="text-xs">Company / Organization</Label>
+                <Label className="text-xs">{t("Company / Organization")}</Label>
                 <Input
                   value={form.organization}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, organization: e.target.value }))
                   }
-                  placeholder="Company / University"
+                  placeholder={t("Company / University")}
                 />
               </div>
               <div>
-                <Label className="text-xs">Area of Expertise</Label>
+                <Label className="text-xs">{t("Area of Expertise")}</Label>
                 <Input
                   value={form.expertise}
                   onChange={(e) =>
@@ -775,19 +772,19 @@ export default function SpeakerCRM() {
             </div>
 
             <div>
-              <Label className="text-xs">Bio</Label>
+              <Label className="text-xs">{t("Bio")}</Label>
               <Textarea
                 rows={2}
                 value={form.bio}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, bio: e.target.value }))
                 }
-                placeholder="Short bio shown on the event page"
+                placeholder={t("Short bio shown on the event page")}
               />
             </div>
 
             <div>
-              <Label className="text-xs">Previous Speaking Experience</Label>
+              <Label className="text-xs">{t("Previous Speaking Experience")}</Label>
               <Textarea
                 rows={2}
                 value={form.previousSpeakingExperience}
@@ -797,7 +794,7 @@ export default function SpeakerCRM() {
                     previousSpeakingExperience: e.target.value,
                   }))
                 }
-                placeholder="Conferences, events or talks they've given"
+                placeholder={t("Conferences, events or talks they've given")}
               />
             </div>
 
@@ -810,7 +807,7 @@ export default function SpeakerCRM() {
                     socialLinks: { ...f.socialLinks, linkedin: e.target.value },
                   }))
                 }
-                placeholder="LinkedIn URL"
+                placeholder={t("LinkedIn URL")}
               />
               <Input
                 value={form.socialLinks.twitter}
@@ -820,7 +817,7 @@ export default function SpeakerCRM() {
                     socialLinks: { ...f.socialLinks, twitter: e.target.value },
                   }))
                 }
-                placeholder="Twitter URL"
+                placeholder={t("Twitter URL")}
               />
               <Input
                 value={form.socialLinks.website}
@@ -830,19 +827,19 @@ export default function SpeakerCRM() {
                     socialLinks: { ...f.socialLinks, website: e.target.value },
                   }))
                 }
-                placeholder="Website URL"
+                placeholder={t("Website URL")}
               />
             </div>
 
             <div>
-              <Label className="text-xs">Private notes</Label>
+              <Label className="text-xs">{t("Private notes")}</Label>
               <Textarea
                 rows={2}
                 value={form.organizerNotes}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, organizerNotes: e.target.value }))
                 }
-                placeholder="Only you can see this"
+                placeholder={t("Only you can see this")}
               />
             </div>
 

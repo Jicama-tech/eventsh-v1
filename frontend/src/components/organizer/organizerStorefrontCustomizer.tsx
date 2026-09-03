@@ -41,6 +41,7 @@ import { jwtDecode } from "jwt-decode";
 import { ModuleGate } from "@/components/ui/ModuleGate";
 import { useEffect } from "react";
 import ImageCropModal from "../ui/imageCropModal";
+import { t } from "@/i18n/t";
 
 interface OrganizerStorefrontCustomizerProps {
   onBack: () => void;
@@ -815,9 +816,7 @@ export function OrganizerStorefrontCustomizer({
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center space-x-4">
             <div>
-              <h1 className="text-3xl font-bold">
-                Organization Store Customizer
-              </h1>
+              <h1 className="text-3xl font-bold">{t("Organization Store Customizer")}</h1>
               <p className="text-sm text-muted-foreground">
                 Design your perfect store experience
               </p>
@@ -831,8 +830,8 @@ export function OrganizerStorefrontCustomizer({
                 onClick={() => setViewMode("settings")}
                 className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   viewMode === "settings"
-                    ? "bg-white shadow-sm text-slate-900"
-                    : "text-slate-500 hover:text-slate-700"
+                    ? "bg-background shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-muted-foreground"
                 }`}
               >
                 <Layout className="h-4 w-4 inline mr-1.5" />
@@ -843,8 +842,8 @@ export function OrganizerStorefrontCustomizer({
                 onClick={() => setViewMode("preview")}
                 className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   viewMode === "preview"
-                    ? "bg-white shadow-sm text-slate-900"
-                    : "text-slate-500 hover:text-slate-700"
+                    ? "bg-background shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-muted-foreground"
                 }`}
               >
                 <Eye className="h-4 w-4 inline mr-1.5" />
@@ -898,15 +897,13 @@ export function OrganizerStorefrontCustomizer({
               <ModuleGate moduleKey="storefront" sectionKey="general">
               <Card>
                 <CardHeader>
-                  <CardTitle>Organization Store Information</CardTitle>
-                  <CardDescription>
-                    Basic information about your store
-                  </CardDescription>
+                  <CardTitle>{t("Organization Store Information")}</CardTitle>
+                  <CardDescription>{t("Basic information about your store")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="storeName">Organization Store Name</Label>
+                      <Label htmlFor="storeName">{t("Organization Store Name")}</Label>
                       <Input
                         id="storeName"
                         value={settings.general.storeName}
@@ -917,11 +914,11 @@ export function OrganizerStorefrontCustomizer({
                             e.target.value,
                           )
                         }
-                        placeholder="Your Store Name"
+                        placeholder={t("Your Store Name")}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="website">Website URL</Label>
+                      <Label htmlFor="website">{t("Website URL")}</Label>
                       <Input
                         id="website"
                         value={settings.general.contactInfo.website}
@@ -939,21 +936,19 @@ export function OrganizerStorefrontCustomizer({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="tagline">Tagline</Label>
+                    <Label htmlFor="tagline">{t("Tagline")}</Label>
                     <Input
                       id="tagline"
                       value={settings.general.tagline}
                       onChange={(e) =>
                         handleInputChange("general", "tagline", e.target.value)
                       }
-                      placeholder="A brief description of your store"
+                      placeholder={t("A brief description of your store")}
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="description">
-                      Organization Store Description
-                    </Label>
+                    <Label htmlFor="description">{t("Organization Store Description")}</Label>
                     <Textarea
                       id="description"
                       value={settings.general.description}
@@ -964,7 +959,7 @@ export function OrganizerStorefrontCustomizer({
                           e.target.value,
                         )
                       }
-                      placeholder="Detailed description of your store"
+                      placeholder={t("Detailed description of your store")}
                       rows={3}
                     />
                   </div>
@@ -973,14 +968,14 @@ export function OrganizerStorefrontCustomizer({
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Contact Information</CardTitle>
-                  <CardDescription>How customers can reach you</CardDescription>
+                  <CardTitle>{t("Contact Information")}</CardTitle>
+                  <CardDescription>{t("How customers can reach you")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {/* Phone & Email */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="phone">Phone Number</Label>
+                      <Label htmlFor="phone">{t("Phone Number")}</Label>
                       <Input
                         id="phone"
                         value={settings.general.contactInfo.phone}
@@ -997,7 +992,7 @@ export function OrganizerStorefrontCustomizer({
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="email">Email Address</Label>
+                      <Label htmlFor="email">{t("Email Address")}</Label>
                       <Input
                         id="email"
                         value={settings.general.contactInfo.email}
@@ -1016,7 +1011,7 @@ export function OrganizerStorefrontCustomizer({
 
                   {/* Address */}
                   <div className="space-y-2">
-                    <Label htmlFor="address">Address</Label>
+                    <Label htmlFor="address">{t("Address")}</Label>
                     <Input
                       id="address"
                       value={settings.general.contactInfo.address}
@@ -1037,7 +1032,7 @@ export function OrganizerStorefrontCustomizer({
                     <div className="space-y-2">
                       <Label htmlFor="hours">
                         Business Hours:{" "}
-                        <span className="text-l text-gray-400">
+                        <span className="text-l text-muted-foreground">
                           (Mon-Fri: 9AM-6PM, Sat-Sun: 10AM-4PM)
                         </span>
                       </Label>
@@ -1052,12 +1047,12 @@ export function OrganizerStorefrontCustomizer({
                             e.target.value,
                           )
                         }
-                        placeholder="Mon-Fri: 9AM-6PM, Sat-Sun: 10AM-4PM"
+                        placeholder={t("Mon-Fri: 9AM-6PM, Sat-Sun: 10AM-4PM")}
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="slug">Organizer Store Link (slug)</Label>
+                      <Label htmlFor="slug">{t("Organizer Store Link (slug)")}</Label>
                       <div className="flex items-center">
                         <span className="text-muted-foreground mr-1 text-sm">
                           [www.eventsh.com/]
@@ -1094,10 +1089,8 @@ export function OrganizerStorefrontCustomizer({
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Social Media Links</CardTitle>
-                  <CardDescription>
-                    How Customers Can Connect You
-                  </CardDescription>
+                  <CardTitle>{t("Social Media Links")}</CardTitle>
+                  <CardDescription>{t("How Customers Can Connect You")}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {/* Social Media Toggles */}
@@ -1272,10 +1265,8 @@ export function OrganizerStorefrontCustomizer({
               <ModuleGate moduleKey="storefront" sectionKey="design">
               <Card>
                 <CardHeader>
-                  <CardTitle>Theme & Colors</CardTitle>
-                  <CardDescription>
-                    Customize the visual appearance of your store
-                  </CardDescription>
+                  <CardTitle>{t("Theme & Colors")}</CardTitle>
+                  <CardDescription>{t("Customize the visual appearance of your store")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1322,10 +1313,10 @@ export function OrganizerStorefrontCustomizer({
                       </div>
 
                       <div className="space-y-4">
-                        <Label>Custom Colors</Label>
+                        <Label>{t("Custom Colors")}</Label>
                         <div className="space-y-3">
                           <div className="flex items-center space-x-2">
-                            <Label className="w-20">Primary</Label>
+                            <Label className="w-20">{t("Primary")}</Label>
                             <input
                               type="color"
                               value={settings.design.primaryColor}
@@ -1352,7 +1343,7 @@ export function OrganizerStorefrontCustomizer({
                             />
                           </div>
                           <div className="flex items-center space-x-2">
-                            <Label className="w-20">Secondary</Label>
+                            <Label className="w-20">{t("Secondary")}</Label>
                             <input
                               type="color"
                               value={settings.design.secondaryColor}
@@ -1384,7 +1375,7 @@ export function OrganizerStorefrontCustomizer({
 
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <Label htmlFor="fontFamily">Font Family</Label>
+                        <Label htmlFor="fontFamily">{t("Font Family")}</Label>
                         <Select
                           value={settings.design.fontFamily}
                           onValueChange={(value) =>
@@ -1405,7 +1396,7 @@ export function OrganizerStorefrontCustomizer({
                       </div>
 
                       {/* <div className="space-y-2">
-                      <Label htmlFor="theme">Theme Mode</Label>
+                      <Label htmlFor="theme">{t("Theme Mode")}</Label>
                       <Select
                         value={settings.design.theme}
                         onValueChange={(value) =>
@@ -1429,16 +1420,14 @@ export function OrganizerStorefrontCustomizer({
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Layout & Banner</CardTitle>
-                  <CardDescription>
-                    Choose your store layout and banner settings
-                  </CardDescription>
+                  <CardTitle>{t("Layout & Banner")}</CardTitle>
+                  <CardDescription>{t("Choose your store layout and banner settings")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="relative">
                     {/* Advertisement Bar */}
                     <div className="flex items-center justify-between mt-4">
-                      <Label>Advertisement Bar</Label>
+                      <Label>{t("Advertisement Bar")}</Label>
                       <Switch
                         checked={settings.design.layout.visibleAdvertismentBar}
                         onCheckedChange={(checked) =>
@@ -1450,9 +1439,7 @@ export function OrganizerStorefrontCustomizer({
                     {visibleAdvertisementBar && (
                       <div className="space-y-3 mt-2">
                         <div>
-                          <Label htmlFor="advertiseText">
-                            Announcement Text
-                          </Label>
+                          <Label htmlFor="advertiseText">{t("Announcement Text")}</Label>
                           <Input
                             id="advertiseText"
                             value={settings.design.layout.advertiseText ?? ""}
@@ -1474,9 +1461,7 @@ export function OrganizerStorefrontCustomizer({
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* Background Color */}
                             <div className="space-y-2">
-                              <Label className="text-sm font-semibold text-foreground tracking-tight">
-                                Background Color
-                              </Label>
+                              <Label className="text-sm font-semibold text-foreground tracking-tight">{t("Background Color")}</Label>
                               <div className="flex items-center gap-3 p-3 bg-background border border-border rounded-lg shadow-sm hover:shadow-md transition-all duration-200">
                                 <input
                                   type="color"
@@ -1519,9 +1504,7 @@ export function OrganizerStorefrontCustomizer({
 
                             {/* Text Color */}
                             <div className="space-y-2">
-                              <Label className="text-sm font-semibold text-foreground tracking-tight">
-                                Text Color
-                              </Label>
+                              <Label className="text-sm font-semibold text-foreground tracking-tight">{t("Text Color")}</Label>
                               <div className="flex items-center gap-3 p-3 bg-background border border-border rounded-lg shadow-sm hover:shadow-md transition-all duration-200">
                                 <input
                                   type="color"
@@ -1576,7 +1559,7 @@ export function OrganizerStorefrontCustomizer({
 
                     {/* HEADER DESIGN */}
                     <div className="space-y-4 mt-4">
-                      <Label>Header Design</Label>
+                      <Label>{t("Header Design")}</Label>
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {/* Modern */}
@@ -1588,7 +1571,7 @@ export function OrganizerStorefrontCustomizer({
                           }`}
                           onClick={() => handleLayoutChange("header", "modern")}
                         >
-                          <h4 className="font-medium">Modern</h4>
+                          <h4 className="font-medium">{t("Modern")}</h4>
 
                           <p className="text-sm text-muted-foreground">
                             Bold top bar with logo, navigation and primary
@@ -1607,7 +1590,7 @@ export function OrganizerStorefrontCustomizer({
                             handleLayoutChange("header", "minimal")
                           }
                         >
-                          <h4 className="font-medium">Minimal</h4>
+                          <h4 className="font-medium">{t("Minimal")}</h4>
                           <p className="text-sm text-muted-foreground">
                             Clean header with compact logo and simple navigation
                             for a focused look.
@@ -1623,7 +1606,7 @@ export function OrganizerStorefrontCustomizer({
                           }`}
                           onClick={() => handleLayoutChange("header", "mega")}
                         >
-                          <h4 className="font-medium">Mega</h4>
+                          <h4 className="font-medium">{t("Mega")}</h4>
                           <p className="text-sm text-muted-foreground">
                             Expanded header with space for menus, categories and
                             promos.
@@ -1634,7 +1617,7 @@ export function OrganizerStorefrontCustomizer({
 
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5 mt-4 mb-4">
-                        <Label>Show Banner (Hero Section)</Label>
+                        <Label>{t("Show Banner (Hero Section)")}</Label>
                         <p className="text-sm text-muted-foreground">
                           Display a hero banner on your homepage
                         </p>
@@ -1650,7 +1633,7 @@ export function OrganizerStorefrontCustomizer({
                     {settings.design.showBanner && (
                       <div className="space-y-4">
                         <div className="space-y-2">
-                          <Label>Banner Image</Label>
+                          <Label>{t("Banner Image")}</Label>
                           {bannerPreview || settings.design.bannerImage ? (
                             <div className="space-y-2">
                               <div className="relative">
@@ -1747,7 +1730,7 @@ export function OrganizerStorefrontCustomizer({
 
                         <div className="space-y-4 mt-4">
                           <div className="flex items-center justify-between mt-4">
-                            <Label>Banner Design (Hero Design)</Label>
+                            <Label>{t("Banner Design (Hero Design)")}</Label>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             {/* Modern */}
@@ -1761,7 +1744,7 @@ export function OrganizerStorefrontCustomizer({
                                 handleLayoutChange("banner", "modern")
                               }
                             >
-                              <h4 className="font-medium">Full Width</h4>
+                              <h4 className="font-medium">{t("Full Width")}</h4>
                               <p className="text-sm text-muted-foreground">
                                 Single large hero banner spanning full viewport
                                 width. Perfect for maximum visual impact.
@@ -1779,7 +1762,7 @@ export function OrganizerStorefrontCustomizer({
                                 handleLayoutChange("banner", "minimal")
                               }
                             >
-                              <h4 className="font-medium">Compact</h4>
+                              <h4 className="font-medium">{t("Compact")}</h4>
                               <p className="text-sm text-muted-foreground">
                                 Smaller banner optimized for text overlay and
                                 quick navigation focus.
@@ -1797,7 +1780,7 @@ export function OrganizerStorefrontCustomizer({
                                 handleLayoutChange("banner", "mega")
                               }
                             >
-                              <h4 className="font-medium">Dual Slider</h4>
+                              <h4 className="font-medium">{t("Dual Slider")}</h4>
                               <p className="text-sm text-muted-foreground">
                                 Supports 2 banner images with carousel slider
                                 for multiple promotions.
@@ -1911,7 +1894,7 @@ export function OrganizerStorefrontCustomizer({
                         )}
 
                         <div className="space-y-2">
-                          <Label htmlFor="bannerHeight">Banner Height</Label>
+                          <Label htmlFor="bannerHeight">{t("Banner Height")}</Label>
                           <Select
                             value={settings.design.bannerHeight}
                             onValueChange={(value) =>
@@ -1942,7 +1925,7 @@ export function OrganizerStorefrontCustomizer({
 
                     <div className="space-y-4 mt-4">
                       <div className="flex items-center justify-between mt-4">
-                        <Label>Show Statistics</Label>
+                        <Label>{t("Show Statistics")}</Label>
                         <Switch
                           checked={
                             settings.design.layout.visibleStatisticsSection
@@ -1960,7 +1943,7 @@ export function OrganizerStorefrontCustomizer({
                     {/* FEATURED PRODUCT DESIGN */}
                     <div className="space-y-4 mt-4">
                       <div className="flex items-center justify-between mt-4">
-                        <Label>Featured Product Design</Label>
+                        <Label>{t("Featured Product Design")}</Label>
                         <Switch
                           checked={
                             settings.design.layout.visibleFeaturedProducts
@@ -1978,7 +1961,7 @@ export function OrganizerStorefrontCustomizer({
                     {/* Quick Picks DESIGN */}
                     <div className="space-y-4 mt-4">
                       <div className="flex items-center justify-between mt-4">
-                        <Label>Quick Picks Design</Label>
+                        <Label>{t("Quick Picks Design")}</Label>
                         <Switch
                           checked={settings.design.layout.visibleQuickPicks}
                           onCheckedChange={(checked) =>
@@ -1990,7 +1973,7 @@ export function OrganizerStorefrontCustomizer({
 
                     {/* All Products DESIGN */}
                     <div className="space-y-4 mt-4">
-                      <Label>All Products Card Design</Label>
+                      <Label>{t("All Products Card Design")}</Label>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {/* Modern */}
                         <div
@@ -2003,7 +1986,7 @@ export function OrganizerStorefrontCustomizer({
                             handleLayoutChange("allProducts", "modern")
                           }
                         >
-                          <h4 className="font-medium">Single Card</h4>
+                          <h4 className="font-medium">{t("Single Card")}</h4>
                           <p className="text-sm text-muted-foreground">
                             Large single product card per row with bigger
                             images, bold pricing and clear primary actions.
@@ -2021,7 +2004,7 @@ export function OrganizerStorefrontCustomizer({
                             handleLayoutChange("allProducts", "minimal")
                           }
                         >
-                          <h4 className="font-medium">Double Cards</h4>
+                          <h4 className="font-medium">{t("Double Cards")}</h4>
                           <p className="text-sm text-muted-foreground">
                             Two product cards per row for a balanced grid that
                             keeps details readable while showing more items.
@@ -2039,7 +2022,7 @@ export function OrganizerStorefrontCustomizer({
                             handleLayoutChange("allProducts", "mega")
                           }
                         >
-                          <h4 className="font-medium">Triple Cards</h4>
+                          <h4 className="font-medium">{t("Triple Cards")}</h4>
                           <p className="text-sm text-muted-foreground">
                             Three compact product cards per row, optimized for
                             fast browsing and higher product density.
@@ -2050,7 +2033,7 @@ export function OrganizerStorefrontCustomizer({
 
                     <div className="space-y-4 mt-4">
                       <div className="flex items-center justify-between mt-4">
-                        <Label>Show About Us</Label>
+                        <Label>{t("Show About Us")}</Label>
                         <Switch
                           checked={settings.design.layout.visibleAboutUs}
                           onCheckedChange={(checked) =>
@@ -2064,9 +2047,7 @@ export function OrganizerStorefrontCustomizer({
                       <>
                         <div className="space-y-3 mt-2">
                           <div>
-                            <Label htmlFor="aboutUsHeading">
-                              About Us Heading
-                            </Label>
+                            <Label htmlFor="aboutUsHeading">{t("About Us Heading")}</Label>
                             <Input
                               id="aboutUsHeading"
                               value={
@@ -2083,7 +2064,7 @@ export function OrganizerStorefrontCustomizer({
                           </div>
 
                           <div className="space-y-4 p-4 border border-border rounded-xl bg-gradient-to-r bg-muted/30">
-                            <Label htmlFor="aboutUsText">About Us Text</Label>
+                            <Label htmlFor="aboutUsText">{t("About Us Text")}</Label>
                             <textarea
                               id="aboutUsText"
                               value={settings.design.layout.aboutUsText ?? ""}
@@ -2093,14 +2074,14 @@ export function OrganizerStorefrontCustomizer({
                                   e.target.value,
                                 )
                               }
-                              placeholder="Tell us about your business..."
+                              placeholder={t("Tell us about your business...")}
                               className="w-full p-2 border border-border rounded-md"
                             />
                           </div>
                         </div>
 
                         <div className="space-y-2">
-                          <Label>About US Image</Label>
+                          <Label>{t("About US Image")}</Label>
                           {aboutUsPreview || settings.design.aboutUsImage ? (
                             <div className="space-y-2">
                               <div className="relative">
@@ -2199,7 +2180,7 @@ export function OrganizerStorefrontCustomizer({
 
                     <div className="space-y-4 mt-4">
                       <div className="flex items-center justify-between mt-4">
-                        <Label>Show Contact Us</Label>
+                        <Label>{t("Show Contact Us")}</Label>
                         <Switch
                           checked={settings.design.layout.visibleContactUs}
                           onCheckedChange={(checked) =>
@@ -2211,7 +2192,7 @@ export function OrganizerStorefrontCustomizer({
 
                     {/* FOOTER DESIGN */}
                     <div className="space-y-4 mt-4">
-                      <Label>Footer Design</Label>
+                      <Label>{t("Footer Design")}</Label>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {/* Modern */}
                         <div
@@ -2222,7 +2203,7 @@ export function OrganizerStorefrontCustomizer({
                           }`}
                           onClick={() => handleLayoutChange("footer", "modern")}
                         >
-                          <h4 className="font-medium">Modern</h4>
+                          <h4 className="font-medium">{t("Modern")}</h4>
                           <p className="text-sm text-muted-foreground">
                             Multi‑column footer with links, social icons and
                             newsletter.
@@ -2240,7 +2221,7 @@ export function OrganizerStorefrontCustomizer({
                             handleLayoutChange("footer", "minimal")
                           }
                         >
-                          <h4 className="font-medium">Minimal</h4>
+                          <h4 className="font-medium">{t("Minimal")}</h4>
                           <p className="text-sm text-muted-foreground">
                             Simple single‑row footer with basic links and
                             copyright.
@@ -2256,7 +2237,7 @@ export function OrganizerStorefrontCustomizer({
                           }`}
                           onClick={() => handleLayoutChange("footer", "mega")}
                         >
-                          <h4 className="font-medium">Mega</h4>
+                          <h4 className="font-medium">{t("Mega")}</h4>
                           <p className="text-sm text-muted-foreground">
                             Detailed footer with multiple sections for
                             navigation and info.
@@ -2273,7 +2254,7 @@ export function OrganizerStorefrontCustomizer({
               {/* Sponsors */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Sponsors</CardTitle>
+                  <CardTitle>{t("Sponsors")}</CardTitle>
                   <CardDescription>
                     Shown as a logo strip in your storefront hero. Add each
                     sponsor's logo image URL and an optional website link.
@@ -2287,17 +2268,17 @@ export function OrganizerStorefrontCustomizer({
                         className="grid items-end gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_1.4fr_1.4fr_auto]"
                       >
                         <div>
-                          <Label className="text-xs">Name</Label>
+                          <Label className="text-xs">{t("Name")}</Label>
                           <Input
                             value={sp.name || ""}
                             onChange={(e) =>
                               updateSponsor(idx, "name", e.target.value)
                             }
-                            placeholder="Acme Co."
+                            placeholder={t("Acme Co.")}
                           />
                         </div>
                         <div>
-                          <Label className="text-xs">Logo</Label>
+                          <Label className="text-xs">{t("Logo")}</Label>
                           <div
                             onDragOver={(e) => e.preventDefault()}
                             onDrop={(e) => {
@@ -2305,7 +2286,7 @@ export function OrganizerStorefrontCustomizer({
                               const f = e.dataTransfer.files?.[0];
                               if (f) uploadSponsorLogo(idx, sp.id, f);
                             }}
-                            className="mt-1 flex items-center gap-3 rounded-lg border-2 border-dashed border-gray-300 p-2"
+                            className="mt-1 flex items-center gap-3 rounded-lg border-2 border-dashed border-border p-2"
                           >
                             {sp.imageUrl ? (
                               <img
@@ -2314,7 +2295,7 @@ export function OrganizerStorefrontCustomizer({
                                 className="h-10 w-auto max-w-[120px] object-contain"
                               />
                             ) : (
-                              <span className="text-xs text-gray-400">
+                              <span className="text-xs text-muted-foreground">
                                 Drag &amp; drop a logo
                               </span>
                             )}
@@ -2337,7 +2318,7 @@ export function OrganizerStorefrontCustomizer({
                           </div>
                         </div>
                         <div>
-                          <Label className="text-xs">Website (optional)</Label>
+                          <Label className="text-xs">{t("Website (optional)")}</Label>
                           <Input
                             value={sp.link || ""}
                             onChange={(e) =>
@@ -2372,10 +2353,8 @@ export function OrganizerStorefrontCustomizer({
               <div className="filter select-none pointer-events-none">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Store Features</CardTitle>
-                    <CardDescription>
-                      Enable or disable features for your storefront
-                    </CardDescription>
+                    <CardTitle>{t("Store Features")}</CardTitle>
+                    <CardDescription>{t("Enable or disable features for your storefront")}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2414,21 +2393,19 @@ export function OrganizerStorefrontCustomizer({
             <div className="filter select-none pointer-events-none">
               <Card>
                 <CardHeader>
-                  <CardTitle>SEO Settings</CardTitle>
-                  <CardDescription>
-                    Optimize your store for search engines
-                  </CardDescription>
+                  <CardTitle>{t("SEO Settings")}</CardTitle>
+                  <CardDescription>{t("Optimize your store for search engines")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="metaTitle">Meta Title</Label>
+                    <Label htmlFor="metaTitle">{t("Meta Title")}</Label>
                     <Input
                       id="metaTitle"
                       value={settings.seo.metaTitle}
                       onChange={(e) =>
                         handleInputChange("seo", "metaTitle", e.target.value)
                       }
-                      placeholder="Your Store - Product Category"
+                      placeholder={t("Your Store - Product Category")}
                     />
                     <p className="text-xs text-muted-foreground">
                       Recommended: 50-60 characters
@@ -2436,7 +2413,7 @@ export function OrganizerStorefrontCustomizer({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="metaDescription">Meta Description</Label>
+                    <Label htmlFor="metaDescription">{t("Meta Description")}</Label>
                     <Textarea
                       id="metaDescription"
                       value={settings.seo.metaDescription}
@@ -2447,7 +2424,7 @@ export function OrganizerStorefrontCustomizer({
                           e.target.value,
                         )
                       }
-                      placeholder="A brief description of your store for search results"
+                      placeholder={t("A brief description of your store for search results")}
                       rows={3}
                     />
                     <p className="text-xs text-muted-foreground">
@@ -2456,7 +2433,7 @@ export function OrganizerStorefrontCustomizer({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="keywords">Keywords</Label>
+                    <Label htmlFor="keywords">{t("Keywords")}</Label>
                     <Input
                       id="keywords"
                       value={settings.seo.keywords}
@@ -2471,9 +2448,7 @@ export function OrganizerStorefrontCustomizer({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="customCode">
-                      Custom Code (Analytics, etc.)
-                    </Label>
+                    <Label htmlFor="customCode">{t("Custom Code (Analytics, etc.)")}</Label>
                     <Textarea
                       id="customCode"
                       value={settings.seo.customCode}
@@ -2598,7 +2573,7 @@ function EventfrontPreview({
           <div className="w-3 h-3 rounded-full bg-yellow-400" />
           <div className="w-3 h-3 rounded-full bg-green-400" />
         </div>
-        <div className="flex-1 bg-white rounded-lg px-4 py-1.5 text-sm text-muted-foreground font-mono ml-3 border truncate">
+        <div className="flex-1 bg-background rounded-lg px-4 py-1.5 text-sm text-muted-foreground font-mono ml-3 border truncate">
           {storeUrl?.replace("?preview=true", "") ||
             "https://eventsh.com/your-eventfront"}
         </div>
@@ -2606,7 +2581,7 @@ function EventfrontPreview({
 
       {storeUrl ? (
         <div
-          className="border rounded-xl overflow-hidden shadow-lg bg-white"
+          className="border rounded-xl overflow-hidden shadow-lg bg-background"
           style={{ height: "75vh" }}
         >
           <iframe
@@ -2619,11 +2594,11 @@ function EventfrontPreview({
         </div>
       ) : (
         <div
-          className="border rounded-xl overflow-hidden shadow-lg bg-white flex items-center justify-center"
+          className="border rounded-xl overflow-hidden shadow-lg bg-background flex items-center justify-center"
           style={{ height: "75vh" }}
         >
           <div className="text-center text-muted-foreground">
-            <Layout className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+            <Layout className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <p className="text-lg font-medium">No eventfront configured yet</p>
             <p className="text-sm mt-1">
               Save your eventfront settings first to see the preview.

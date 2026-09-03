@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Eye, EyeOff, Loader2, Mail, Send } from "lucide-react";
+import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
@@ -180,7 +181,7 @@ export default function EmailSenderSettings() {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <Label className="text-xs">From name</Label>
+          <Label className="text-xs">{t("From name")}</Label>
           <Input
             value={cfg.fromName}
             onChange={(e) => set("fromName", e.target.value)}
@@ -188,7 +189,7 @@ export default function EmailSenderSettings() {
           />
         </div>
         <div>
-          <Label className="text-xs">From email</Label>
+          <Label className="text-xs">{t("From email")}</Label>
           <Input
             type="email"
             value={cfg.fromEmail}
@@ -197,7 +198,7 @@ export default function EmailSenderSettings() {
           />
         </div>
         <div>
-          <Label className="text-xs">SMTP host</Label>
+          <Label className="text-xs">{t("SMTP host")}</Label>
           <Input
             value={cfg.smtpHost}
             onChange={(e) => set("smtpHost", e.target.value)}
@@ -206,7 +207,7 @@ export default function EmailSenderSettings() {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label className="text-xs">Port</Label>
+            <Label className="text-xs">{t("Port")}</Label>
             <Input
               type="number"
               value={cfg.smtpPort}
@@ -215,7 +216,7 @@ export default function EmailSenderSettings() {
             />
           </div>
           <div className="flex flex-col justify-end pb-1">
-            <Label className="text-xs">SSL</Label>
+            <Label className="text-xs">{t("SSL")}</Label>
             <div className="flex h-10 items-center">
               <Switch
                 checked={cfg.smtpSecure}
@@ -225,7 +226,7 @@ export default function EmailSenderSettings() {
           </div>
         </div>
         <div>
-          <Label className="text-xs">SMTP username</Label>
+          <Label className="text-xs">{t("SMTP username")}</Label>
           <Input
             value={cfg.smtpUser}
             onChange={(e) => set("smtpUser", e.target.value)}
@@ -279,7 +280,7 @@ export default function EmailSenderSettings() {
 
       <div className="flex flex-col gap-2 border-t pt-4 sm:flex-row sm:items-end">
         <div className="flex-1">
-          <Label className="text-xs">Send a test email to</Label>
+          <Label className="text-xs">{t("Send a test email to")}</Label>
           <Input
             type="email"
             value={testTo}

@@ -63,6 +63,7 @@ import {
   Download,
   FileSpreadsheet,
 } from "lucide-react";
+import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
@@ -447,7 +448,7 @@ export default function SuppliersDirectory() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search suppliers…"
+            placeholder={t("Search suppliers\u2026")}
             className="pl-9"
           />
         </div>
@@ -747,7 +748,7 @@ export default function SuppliersDirectory() {
       >
         <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Import complete</DialogTitle>
+            <DialogTitle>{t("Import complete")}</DialogTitle>
             <DialogDescription>
               {bulkResult?.totalRows ?? 0} rows processed.
             </DialogDescription>
@@ -930,18 +931,16 @@ function SupplierFormDialog({
           <DialogTitle>
             {mode === "edit" ? "Edit Supplier" : "Add Supplier"}
           </DialogTitle>
-          <DialogDescription>
-            Service providers you work with — reused across all your events.
-          </DialogDescription>
+          <DialogDescription>{t("Service providers you work with \u2014 reused across all your events.")}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={submit} className="grid gap-4 py-2">
           <div className="grid gap-1.5">
-            <Label>Name *</Label>
+            <Label>{t("Name *")}</Label>
             <Input
               value={form.name}
               onChange={(e) => set({ name: e.target.value })}
-              placeholder="Contact person's name"
+              placeholder={t("Contact person's name")}
             />
             {errors.name && (
               <span className="text-xs text-red-600">{errors.name}</span>
@@ -949,7 +948,7 @@ function SupplierFormDialog({
           </div>
 
           <div className="grid gap-1.5">
-            <Label>Company Name</Label>
+            <Label>{t("Company Name")}</Label>
             <Input
               value={form.companyName}
               onChange={(e) => set({ companyName: e.target.value })}
@@ -958,7 +957,7 @@ function SupplierFormDialog({
           </div>
 
           <div className="grid gap-1.5">
-            <Label>Service Provided</Label>
+            <Label>{t("Service Provided")}</Label>
             <Input
               value={form.serviceCategory}
               onChange={(e) => set({ serviceCategory: e.target.value })}
@@ -967,7 +966,7 @@ function SupplierFormDialog({
           </div>
 
           <div className="grid gap-1.5">
-            <Label>Gmail (login email)</Label>
+            <Label>{t("Gmail (login email)")}</Label>
             <Input
               type="email"
               value={form.email}
@@ -980,7 +979,7 @@ function SupplierFormDialog({
           </div>
 
           <div className="grid gap-1.5">
-            <Label>Business Email</Label>
+            <Label>{t("Business Email")}</Label>
             <Input
               type="email"
               value={form.businessEmail}
@@ -995,7 +994,7 @@ function SupplierFormDialog({
           </div>
 
           <div className="grid gap-1.5">
-            <Label>Contact Number</Label>
+            <Label>{t("Contact Number")}</Label>
             <div className="flex gap-2">
               <Select
                 value={form.dialCode}
@@ -1015,7 +1014,7 @@ function SupplierFormDialog({
               <Input
                 value={form.phone}
                 onChange={(e) => set({ phone: e.target.value })}
-                placeholder="Phone number"
+                placeholder={t("Phone number")}
                 className="flex-1"
               />
             </div>

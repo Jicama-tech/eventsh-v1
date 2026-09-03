@@ -20,6 +20,12 @@ import { getLandingTemplate, ShowcaseEvent } from "@/pages/landing/templates";
 // SeeItInAction already covers.
 const template = getLandingTemplate();
 
+// The public assistant is a floating bubble rather than a full-width band —
+// the same shape as the organizer dashboard's ChatbotWidget, and the reason
+// the band could be dropped: a popup costs no page height, so the chat is
+// reachable from anywhere on the page without pushing the argument down a
+// screen. Render <PublicChatbot /> with no mode to get the old band back.
+
 const LandingPage = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
@@ -72,16 +78,22 @@ const LandingPage = () => {
         onOpenDemoDashboard={(eventId) => startDemoDashboard(eventId)}
       />
 
-      {/* Public AI chatbot — FAQ + first-event onboarding (inline Google auth) */}
-      <PublicChatbot />
+
 
       {template.HowItWorks && <template.HowItWorks />}
 
-      <TestimonialsCarousel />
+      {/* Feedback ("Used Eventsh? Tell us how it went.") is hidden for now —
+          flip showFeedback back to true to bring the banner and its modal
+          back. Featured testimonials still render when there are any. */}
+      <TestimonialsCarousel showFeedback={false} />
 
       <template.CTA onShowLogin={onShowLogin} onContactUs={contactUs} />
 
       {template.Footer ? <template.Footer /> : <Footer />}
+
+      {/* Public AI chatbot — FAQ + first-event onboarding (inline Google
+          auth). Mounted last so the bubble sits above every section. */}
+      <PublicChatbot mode="floating" />
     </div>
   );
 };

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bot, Send, Sparkles, Loader2, ArrowRight } from "lucide-react";
+import { Bot, Send, Sparkles, Loader2, ArrowRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -39,7 +39,21 @@ const INITIAL_GREETING: PublicMessage = {
   ],
 };
 
-export function PublicChatbot() {
+interface PublicChatbotProps {
+  /**
+   * "section" (default) renders the chat as a full-width band in the page
+   * flow — how it has always rendered. "floating" renders it as a
+   * bottom-right bubble that opens a panel, the same shape as the organizer
+   * dashboard's ChatbotWidget in its floating mode, so a visitor can ask a
+   * question from anywhere on the page without it taking a whole screen.
+   */
+  mode?: "section" | "floating";
+}
+
+export function PublicChatbot({ mode = "section" }: PublicChatbotProps = {}) {
+  const isFloating = mode === "floating";
+  // Section mode is always "open" — there is nothing to open.
+  const [open, setOpen] = useState(!isFloating);
   const [messages, setMessages] = useState<PublicMessage[]>([INITIAL_GREETING]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -50,7 +64,10 @@ export function PublicChatbot() {
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, loading]);
+    // `open` is a dependency too: in floating mode the scroller does not exist
+    // until the panel mounts, so without it a returning visitor reopens the
+    // panel scrolled to the top of the transcript.
+  }, [messages, loading, open]);
 
   // Hand off to the existing Organizer Login page, which already owns
   // the working Google OAuth flow (server-side redirect + multi-account
@@ -138,41 +155,37 @@ export function PublicChatbot() {
     send(action.action);
   };
 
-  return (
-    <section className="py-20 md:py-28 bg-[#0a0a0c] relative overflow-hidden">
-      {/* Decorative glow */}
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-blue-500/5 pointer-events-none" />
-      <div className="container mx-auto px-4 relative z-10">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/30 text-primary text-sm font-medium mb-4">
-            <Sparkles className="h-4 w-4" />
-            Talk to EventSH AI
-          </div>
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">
-            Ask anything, or start your first event
-          </h2>
-          <p className="text-base md:text-lg text-slate-400 max-w-2xl mx-auto">
-            New here? Just chat. Ready to publish? Say "create my first event" — I'll
-            sign you in with Google and take you straight to your dashboard.
-          </p>
+  const card = (
+    <div
+      className={`lc-card rounded-2xl border border-white/10 bg-[#13131a] shadow-2xl overflow-hidden ${
+        isFloating ? "lc-card-float" : "max-w-3xl mx-auto"
+      }`}
+    >
+      {/* Header */}
+      <div className="lc-head flex items-center gap-3 px-5 py-4 border-b border-white/10 bg-[#1a1a22]">
+        <div className="lc-avatar h-9 w-9 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center">
+          <Bot className="lc-boticon h-5 w-5 text-primary" />
         </div>
-
-        <div className="max-w-3xl mx-auto rounded-2xl border border-white/10 bg-[#13131a] shadow-2xl overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center gap-3 px-5 py-4 border-b border-white/10 bg-[#1a1a22]">
-            <div className="h-9 w-9 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center">
-              <Bot className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <div className="text-white font-semibold">EventSH AI</div>
-              <div className="text-xs text-slate-500">Always here, no sign-up to chat</div>
-            </div>
-          </div>
+        <div>
+          <div className="lc-name text-white font-semibold">EventSH AI</div>
+          <div className="lc-sub text-xs text-slate-500">Always here, no sign-up to chat</div>
+        </div>
+        {isFloating && (
+          <button
+            type="button"
+            className="lc-close ml-auto"
+            onClick={() => setOpen(false)}
+            aria-label="Close the chat"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
 
           {/* Messages */}
           <div
             ref={scrollRef}
-            className="px-5 py-6 h-[420px] overflow-y-auto space-y-4 bg-[#0f0f15]"
+            className="lc-msgs px-5 py-6 h-[420px] overflow-y-auto space-y-4 bg-[#0f0f15]"
           >
             {messages.map((msg, i) => (
               <div
@@ -180,10 +193,10 @@ export function PublicChatbot() {
                 className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[85%] rounded-2xl px-4 py-3 ${
+                  className={`lc-bubble max-w-[85%] rounded-2xl px-4 py-3 ${
                     msg.role === "user"
-                      ? "bg-primary text-white"
-                      : "bg-[#1f1f28] text-slate-200 border border-white/5"
+                      ? "is-user bg-primary text-white"
+                      : "is-bot bg-[#1f1f28] text-slate-200 border border-white/5"
                   }`}
                 >
                   <div className="text-sm leading-relaxed whitespace-pre-wrap">
@@ -200,9 +213,9 @@ export function PublicChatbot() {
                             key={j}
                             onClick={() => onPillClick(qa)}
                             disabled={loading}
-                            className={`text-xs font-medium px-3 py-1.5 rounded-full transition-all disabled:opacity-50 ${
+                            className={`lc-pill text-xs font-medium px-3 py-1.5 rounded-full transition-all disabled:opacity-50 ${
                               isCreate
-                                ? "bg-primary text-white hover:bg-primary/90"
+                                ? "is-primary bg-primary text-white hover:bg-primary/90"
                                 : "bg-white/5 text-slate-300 hover:bg-white/10 border border-white/10"
                             }`}
                           >
@@ -220,8 +233,8 @@ export function PublicChatbot() {
             ))}
             {loading && (
               <div className="flex justify-start">
-                <div className="bg-[#1f1f28] border border-white/5 rounded-2xl px-4 py-3 flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <div className="lc-bubble is-bot bg-[#1f1f28] border border-white/5 rounded-2xl px-4 py-3 flex items-center gap-2">
+                  <Loader2 className="lc-spinner h-4 w-4 animate-spin text-primary" />
                   <span className="text-sm text-slate-400">Thinking…</span>
                 </div>
               </div>
@@ -234,25 +247,65 @@ export function PublicChatbot() {
               e.preventDefault();
               send(input);
             }}
-            className="flex items-center gap-2 px-5 py-4 border-t border-white/10 bg-[#1a1a22]"
+            className="lc-form flex items-center gap-2 px-5 py-4 border-t border-white/10 bg-[#1a1a22]"
           >
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask about pricing, tickets, or just say hi…"
               disabled={loading}
-              className="bg-[#0f0f15] border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-primary/50"
+              className="lc-input bg-[#0f0f15] border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-primary/50"
             />
             <Button
               type="submit"
               size="icon"
               disabled={loading || !input.trim()}
-              className="bg-primary hover:bg-primary/90 flex-shrink-0"
+              className="lc-send bg-primary hover:bg-primary/90 flex-shrink-0"
             >
               <Send className="h-4 w-4" />
             </Button>
           </form>
+    </div>
+  );
+
+  // ---- floating: a launcher bubble that opens the panel ----
+  if (isFloating) {
+    return (
+      <>
+        <button
+          type="button"
+          className={`lc-launcher${open ? " is-open" : ""}`}
+          onClick={() => setOpen((v) => !v)}
+          aria-label={open ? "Close the chat" : "Ask EventSH AI"}
+          aria-expanded={open}
+        >
+          {open ? <X className="h-6 w-6" /> : <Sparkles className="h-6 w-6" />}
+        </button>
+        {open && <div className="lc-float">{card}</div>}
+      </>
+    );
+  }
+
+  // ---- section: the original full-width band ----
+  return (
+    <section className="landing-chatbot py-20 md:py-28 bg-[#0a0a0c] relative overflow-hidden">
+      {/* Decorative glow */}
+      <div className="lc-glow absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-blue-500/5 pointer-events-none" />
+      <div className="container mx-auto px-4 relative z-10">
+        <div className="text-center mb-10">
+          <div className="lc-badge inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/30 text-primary text-sm font-medium mb-4">
+            <Sparkles className="h-4 w-4" />
+            Talk to EventSH AI
+          </div>
+          <h2 className="lc-h2 text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">
+            Ask anything, or start your first event
+          </h2>
+          <p className="lc-lede text-base md:text-lg text-slate-400 max-w-2xl mx-auto">
+            New here? Just chat. Ready to publish? Say "create my first event" — I'll
+            sign you in with Google and take you straight to your dashboard.
+          </p>
         </div>
+        {card}
       </div>
     </section>
   );
@@ -272,7 +325,7 @@ function formatMarkdown(text: string): JSX.Element {
     const token = m[0];
     if (token.startsWith("**")) {
       parts.push(
-        <strong key={`b${key++}`} className="text-white font-semibold">
+        <strong key={`b${key++}`} className="lc-strong text-white font-semibold">
           {token.slice(2, -2)}
         </strong>,
       );
@@ -280,7 +333,7 @@ function formatMarkdown(text: string): JSX.Element {
       parts.push(
         <code
           key={`c${key++}`}
-          className="px-1.5 py-0.5 rounded bg-white/10 text-primary text-xs"
+          className="lc-code px-1.5 py-0.5 rounded bg-white/10 text-primary text-xs"
         >
           {token.slice(1, -1)}
         </code>,
