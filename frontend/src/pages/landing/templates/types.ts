@@ -49,11 +49,33 @@ export interface CTASectionProps {
   onContactUs: () => void;
 }
 
+// A section that needs nothing from the page — most of a template's own
+// static content sections.
+type StaticSection = ComponentType<Record<string, never>>;
+
 export interface LandingTemplate {
+  // Class on the page wrapper. A template whose look lives in its own scoped
+  // stylesheet (see templates/genz) names its scope here; omitted, the page
+  // keeps its original dark Tailwind shell.
+  rootClassName?: string;
+  // Rendered first, before any section: where a template injects a
+  // route-scoped stylesheet, its webfonts and any fixed overlay it needs.
+  Styles?: StaticSection;
   Nav: ComponentType<NavSectionProps>;
   Hero: ComponentType<HeroSectionProps>;
+  // Optional sections between the hero and the showcase. A template that
+  // doesn't supply one simply doesn't get it — the default template supplies
+  // none of them, so its page is unchanged.
+  Replaces?: StaticSection;
+  Modules?: StaticSection;
+  Screens?: StaticSection;
   SeeItInAction: ComponentType<SeeItInActionSectionProps>;
+  // Rendered after the public chatbot, before the testimonials.
+  HowItWorks?: StaticSection;
   CTA: ComponentType<CTASectionProps>;
+  // Replaces the shared site footer for this route only. Without it the page
+  // renders components/ui/footer as before.
+  Footer?: StaticSection;
   // Available but not currently rendered by LandingPage.tsx — they were
   // already disabled pre-refactor (`{false && ...}`). Kept here (and their
   // section components kept in default/) so a future toggle, or a

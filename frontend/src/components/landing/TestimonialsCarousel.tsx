@@ -53,7 +53,18 @@ function initialsOf(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export function TestimonialsCarousel() {
+interface TestimonialsCarouselProps {
+  /**
+   * Whether to show the "Used Eventsh? Tell us how it went." banner and its
+   * modal. Off on the landing page for now (see LandingPage.tsx); the
+   * carousel of existing testimonials is unaffected.
+   */
+  showFeedback?: boolean;
+}
+
+export function TestimonialsCarousel({
+  showFeedback = true,
+}: TestimonialsCarouselProps = {}) {
   const [items, setItems] = useState<FeaturedItem[] | null>(null);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -87,9 +98,12 @@ export function TestimonialsCarousel() {
 
   // When there's nothing to feature yet we still surface the CTA so visitors
   // can leave the first feedback — but skip the carousel headline + slides.
+  // With the CTA hidden there is nothing left to render, so the section goes
+  // entirely rather than leaving an empty band of padding.
   if (items !== null && items.length === 0) {
+    if (!showFeedback) return null;
     return (
-      <section className="py-20 sm:py-24 bg-[#0a0a0c]">
+      <section className="landing-testimonials py-20 sm:py-24 bg-[#0a0a0c]">
         <div className="container mx-auto px-4">
           <FeedbackCta onOpen={() => setModalOpen(true)} />
         </div>
@@ -99,19 +113,19 @@ export function TestimonialsCarousel() {
   }
 
   return (
-    <section className="py-20 sm:py-24 bg-[#0a0a0c]">
+    <section className="landing-testimonials py-20 sm:py-24 bg-[#0a0a0c]">
       <div className="container mx-auto px-4">
         <div className="text-center max-w-2xl mx-auto mb-10">
-          <p className="text-xs font-semibold tracking-[0.25em] text-slate-500 uppercase mb-3">
+          <p className="lt-eyebrow text-xs font-semibold tracking-[0.25em] text-slate-500 uppercase mb-3">
             What our community says
           </p>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white tracking-tight">
+          <h2 className="lt-h2 text-3xl sm:text-4xl md:text-5xl font-bold text-white tracking-tight">
             Real words from the people who run, exhibit, and attend events on
             Eventsh.
           </h2>
           {stats && stats.count > 0 && (
-            <div className="mt-6 inline-flex items-center gap-2 text-sm text-slate-400">
-              <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+            <div className="lt-stats mt-6 inline-flex items-center gap-2 text-sm text-slate-400">
+              <Star className="lt-star is-on h-4 w-4 fill-yellow-400 text-yellow-400" />
               <span className="font-semibold text-white">{stats.avg}</span>
               <span>/ 5</span>
               <span className="text-slate-600">·</span>
@@ -144,19 +158,19 @@ export function TestimonialsCarousel() {
           >
             {items.map((t) => (
               <SwiperSlide key={t._id} className="h-auto">
-                <div className="h-full bg-[#121216] rounded-2xl p-6 sm:p-7 border border-white/5 hover:border-white/15 transition-all flex flex-col">
+                <div className="lt-card h-full bg-[#121216] rounded-2xl p-6 sm:p-7 border border-white/5 hover:border-white/15 transition-all flex flex-col">
                   <div className="flex items-center gap-3 mb-4">
                     <div
-                      className="h-12 w-12 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 ring-2 ring-white/5"
+                      className="lt-avatar h-12 w-12 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 ring-2 ring-white/5"
                       style={{ background: gradientFor(t._id + t.name) }}
                     >
                       {initialsOf(t.name)}
                     </div>
                     <div className="min-w-0">
-                      <div className="font-semibold text-white truncate">
+                      <div className="lt-name font-semibold text-white truncate">
                         {t.name}
                       </div>
-                      <div className="text-xs text-slate-500 truncate">
+                      <div className="lt-role text-xs text-slate-500 truncate">
                         {[ROLE_LABEL[t.role || "general"], t.city]
                           .filter(Boolean)
                           .join(" · ")}
@@ -170,13 +184,13 @@ export function TestimonialsCarousel() {
                         size={16}
                         className={
                           t.rating >= n
-                            ? "fill-yellow-400 text-yellow-400"
-                            : "text-slate-700"
+                            ? "lt-star is-on fill-yellow-400 text-yellow-400"
+                            : "lt-star text-slate-700"
                         }
                       />
                     ))}
                   </div>
-                  <p className="text-sm text-slate-300 leading-relaxed flex-1">
+                  <p className="lt-quote text-sm text-slate-300 leading-relaxed flex-1">
                     "{t.comment}"
                   </p>
                 </div>
@@ -185,8 +199,12 @@ export function TestimonialsCarousel() {
           </Swiper>
         )}
 
-        <FeedbackCta onOpen={() => setModalOpen(true)} />
-        <AppFeedbackModal open={modalOpen} onOpenChange={setModalOpen} />
+        {showFeedback && (
+          <>
+            <FeedbackCta onOpen={() => setModalOpen(true)} />
+            <AppFeedbackModal open={modalOpen} onOpenChange={setModalOpen} />
+          </>
+        )}
       </div>
 
       {/* Swiper-specific overrides — the default bullets are too dark against
@@ -209,16 +227,16 @@ export function TestimonialsCarousel() {
 // the rest of the landing page sections.
 function FeedbackCta({ onOpen }: { onOpen: () => void }) {
   return (
-    <div className="mt-12 max-w-3xl mx-auto rounded-2xl border border-white/5 bg-[#121216] p-8 text-center hover:border-white/15 transition-colors">
-      <MessageSquare className="h-8 w-8 mx-auto text-primary mb-3" />
-      <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
+    <div className="lt-cta mt-12 max-w-3xl mx-auto rounded-2xl border border-white/5 bg-[#121216] p-8 text-center hover:border-white/15 transition-colors">
+      <MessageSquare className="lt-cta-icon h-8 w-8 mx-auto text-primary mb-3" />
+      <h3 className="lt-cta-h text-xl sm:text-2xl font-bold text-white mb-2">
         Used Eventsh? Tell us how it went.
       </h3>
-      <p className="text-sm text-slate-400 mb-5 max-w-md mx-auto">
+      <p className="lt-cta-p text-sm text-slate-400 mb-5 max-w-md mx-auto">
         Organizer, vendor, speaker, or visitor — your honest feedback shapes
         the next release.
       </p>
-      <Button size="lg" onClick={onOpen}>
+      <Button size="lg" className="lt-cta-btn" onClick={onOpen}>
         Share your thoughts
       </Button>
     </div>

@@ -26,6 +26,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
@@ -461,7 +462,7 @@ export default function GuestRoomDialog({
                   {guest.attendees.map((a, i) => (
                     <div
                       key={i}
-                      className="flex items-center justify-between gap-2 rounded bg-white px-2 py-1 text-xs text-stone-700"
+                      className="flex items-center justify-between gap-2 rounded bg-background px-2 py-1 text-xs text-stone-700"
                     >
                       <span className="font-medium">{a.name}</span>
                       <span className="text-stone-500">
@@ -501,7 +502,7 @@ export default function GuestRoomDialog({
                 <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
                   {fnOptions.length > 1 && (
                     <div className="min-[400px]:col-span-2">
-                      <Label className="text-xs">For function</Label>
+                      <Label className="text-xs">{t("For function")}</Label>
                       <Select
                         value={r.functionId}
                         onValueChange={(v) => changeFunction(i, v)}
@@ -520,7 +521,7 @@ export default function GuestRoomDialog({
                     </div>
                   )}
                   <div>
-                    <Label className="text-xs">Room type</Label>
+                    <Label className="text-xs">{t("Room type")}</Label>
                     <Select
                       value={r.roomType}
                       onValueChange={(v) => changeType(i, v)}
@@ -555,7 +556,7 @@ export default function GuestRoomDialog({
                     />
                   </div>
                   <div className="min-[400px]:col-span-2">
-                    <Label className="text-xs">Room name / number</Label>
+                    <Label className="text-xs">{t("Room name / number")}</Label>
                     <Input
                       value={r.roomName}
                       onChange={(e) => patch(i, { roomName: e.target.value })}
@@ -563,7 +564,7 @@ export default function GuestRoomDialog({
                     />
                   </div>
                   <div className="min-[400px]:col-span-2">
-                    <Label className="text-xs">Notes (optional)</Label>
+                    <Label className="text-xs">{t("Notes (optional)")}</Label>
                     <Input
                       value={r.notes}
                       onChange={(e) => patch(i, { notes: e.target.value })}
@@ -572,7 +573,7 @@ export default function GuestRoomDialog({
                   </div>
                   {attendeeNames.length > 0 && (
                     <div className="min-[400px]:col-span-2">
-                      <Label className="text-xs">Who's in this room?</Label>
+                      <Label className="text-xs">{t("Who's in this room?")}</Label>
                       {(() => {
                         // Hide people already placed in another room — only show
                         // those free, plus whoever is already in this room.
@@ -596,7 +597,7 @@ export default function GuestRoomDialog({
                                   className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition ${
                                     on
                                       ? "border-rose-400 bg-rose-500 text-white"
-                                      : "border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
+                                      : "border-stone-200 bg-background text-stone-600 hover:bg-stone-50"
                                   }`}
                                 >
                                   {on && <Check className="h-3 w-3" />}
@@ -627,7 +628,7 @@ export default function GuestRoomDialog({
                           {r.sharedRsvpIds.map((rid) => (
                             <span
                               key={rid}
-                              className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-white px-2 py-0.5 text-xs text-stone-700"
+                              className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-background px-2 py-0.5 text-xs text-stone-700"
                             >
                               {guestById.get(rid)?.name || "Another party"}
                               <button
@@ -648,7 +649,7 @@ export default function GuestRoomDialog({
                   {shareFor === i ? (
                     <div className="space-y-2">
                       <div>
-                        <Label className="text-xs">Share with RSVP</Label>
+                        <Label className="text-xs">{t("Share with RSVP")}</Label>
                         <Select
                           value={shareTarget}
                           onValueChange={(v) => {
@@ -657,7 +658,7 @@ export default function GuestRoomDialog({
                           }}
                         >
                           <SelectTrigger>
-                            <SelectValue placeholder="Pick a party…" />
+                            <SelectValue placeholder={t("Pick a party\u2026")} />
                           </SelectTrigger>
                           <SelectContent>
                             {otherGuests.map((g) => (
@@ -724,7 +725,7 @@ export default function GuestRoomDialog({
                                         className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition ${
                                           on
                                             ? "border-amber-400 bg-amber-500 text-white"
-                                            : "border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
+                                            : "border-stone-200 bg-background text-stone-600 hover:bg-stone-50"
                                         }`}
                                       >
                                         {on && <Check className="h-3 w-3" />}

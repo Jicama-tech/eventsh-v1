@@ -1,0 +1,465 @@
+/*
+ * Scoped stylesheet for the organizer sign-in screen.
+ *
+ * Same design language as the eventshub landing template (see
+ * pages/landing/templates/eventshub/hub.css): acid lime and hot pink on a
+ * near-black violet, Bricolage headlines with one italic serif word, sticker
+ * eyebrows, hard offset shadows, grain and drifting blobs. Someone who clicks
+ * "Start free" on the landing page should not feel they have left the site.
+ *
+ * Everything is nested under `.ehl`, and the colours are literal rather than
+ * theme tokens: like the landing page, this screen commits to one dark design
+ * and deliberately opts out of the app's light/dark theming. Injected on
+ * mount and removed on unmount by AuthStyles, so it never touches the
+ * dashboard.
+ *
+ * The palette is repeated here rather than imported from hub.css because the
+ * two are independent surfaces — the landing template can be swapped out via
+ * VITE_LANDING_TEMPLATE without taking sign-in with it.
+ */
+
+.ehl {
+  --ink: #0a0710;
+  --surface: #150f1f;
+  --raised: #1d1430;
+  --line: rgba(255, 255, 255, 0.12);
+  --line-soft: rgba(255, 255, 255, 0.055);
+  --text: #f5f0fb;
+  --muted: #a99cbd;
+  --dim: #7a6e8f;
+
+  --lime: #c9ff3d;
+  --lime2: #e2ff8f;
+  --pink: #ff4d9d;
+  --violet: #a97bff;
+  --cyan: #3de0ff;
+
+  --display: "Bricolage Grotesque", "Space Grotesk", system-ui, sans-serif;
+  --body: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --mono: "Space Mono", "SF Mono", Menlo, monospace;
+  --serif: "Instrument Serif", Georgia, serif;
+
+  --r: 22px;
+
+  position: relative;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: var(--ink);
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ehl *,
+.ehl *::before,
+.ehl *::after {
+  box-sizing: border-box;
+}
+
+.ehl h1,
+.ehl h2,
+.ehl h3 {
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  margin: 0;
+  text-wrap: balance;
+}
+.ehl p {
+  margin: 0;
+}
+.ehl a {
+  color: inherit;
+  text-decoration: none;
+}
+.ehl :focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+/* ---------------- backdrop ---------------- */
+.ehl-grain {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.ehl-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image:
+    linear-gradient(var(--line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+  background-size: 58px 58px;
+  -webkit-mask-image: radial-gradient(70% 60% at 40% 40%, #000, transparent 78%);
+  mask-image: radial-gradient(70% 60% at 40% 40%, #000, transparent 78%);
+}
+.ehl-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.45;
+  pointer-events: none;
+  z-index: 0;
+}
+.ehl-blob.b1 {
+  width: 520px;
+  height: 520px;
+  background: #7b2ff7;
+  top: -180px;
+  left: -140px;
+  animation: ehl-drift 19s ease-in-out infinite;
+}
+.ehl-blob.b2 {
+  width: 420px;
+  height: 420px;
+  background: #ff2d87;
+  bottom: -200px;
+  right: -80px;
+  animation: ehl-drift 23s ease-in-out infinite reverse;
+}
+@keyframes ehl-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(36px, -28px) scale(1.08);
+  }
+}
+
+/* ---------------- layout ---------------- */
+.ehl-wrap {
+  position: relative;
+  z-index: 2;
+  min-height: 100dvh;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: clamp(24px, 5vw, 56px);
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: clamp(28px, 4vw, 56px);
+  align-items: center;
+}
+@media (min-width: 940px) {
+  .ehl-wrap {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 440px);
+  }
+}
+
+/* ---------------- pitch column ---------------- */
+/* flex, not inline-flex: as an inline box the sticker eyebrow below runs on
+   beside it instead of starting its own line. */
+.ehl-back {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 26px;
+  transition: color 0.16s;
+}
+.ehl-back:hover {
+  color: var(--lime);
+}
+.ehl-kick {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--lime);
+  border-radius: 999px;
+  padding: 6px 14px;
+  transform: rotate(-1.4deg);
+}
+.ehl-pitch h1 {
+  font-size: clamp(34px, 5.2vw, 60px);
+  margin: 20px 0 18px;
+  line-height: 0.98;
+}
+.ehl-swoon {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: var(--lime);
+}
+.ehl-lede {
+  color: var(--muted);
+  font-size: clamp(15px, 1.5vw, 18px);
+  max-width: 46ch;
+}
+.ehl-points {
+  list-style: none;
+  padding: 0;
+  margin: 30px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+.ehl-points li {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  font-size: 14.5px;
+  color: var(--text);
+}
+.ehl-points li::before {
+  content: "✓";
+  color: var(--lime);
+  font-weight: 700;
+  flex: none;
+}
+@media (max-width: 939px) {
+  .ehl-points {
+    display: none;
+  }
+}
+
+/* ---------------- card ---------------- */
+.ehl-card {
+  position: relative;
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--r);
+  padding: clamp(24px, 3vw, 34px);
+  box-shadow: 8px 8px 0 rgba(169, 123, 255, 0.5);
+}
+.ehl-card-head {
+  margin-bottom: 24px;
+}
+.ehl-bulb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--lime);
+  box-shadow: 0 0 14px 3px rgba(201, 255, 61, 0.5);
+  display: inline-block;
+  margin-right: 9px;
+}
+.ehl-brand {
+  display: flex;
+  align-items: center;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 19px;
+  letter-spacing: -0.04em;
+  margin-bottom: 16px;
+}
+.ehl-card h2 {
+  font-size: clamp(24px, 3vw, 30px);
+  margin-bottom: 10px;
+}
+.ehl-card-head p {
+  color: var(--muted);
+  font-size: 14.5px;
+}
+
+.ehl-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 10px;
+}
+
+.ehl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  font-family: var(--body);
+  font-size: 15.5px;
+  font-weight: 700;
+  padding: 15px 24px;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    background 0.16s ease,
+    border-color 0.16s ease;
+}
+.ehl-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.ehl-btn-p {
+  background: var(--lime);
+  color: var(--ink);
+  box-shadow: 4px 4px 0 rgba(169, 123, 255, 0.9);
+}
+.ehl-btn-p:hover:not(:disabled) {
+  background: var(--lime2);
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 7px 0 rgba(169, 123, 255, 0.9);
+}
+.ehl-btn-g {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  border-color: var(--line);
+}
+.ehl-btn-g:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--violet);
+}
+.ehl-btn-t {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  font-size: 13.5px;
+  padding: 10px 16px;
+}
+.ehl-btn-t:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.ehl-note {
+  color: var(--dim);
+  font-size: 13px;
+  text-align: center;
+  margin-top: 16px;
+}
+.ehl-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* the account <select> trigger */
+.ehl-select {
+  width: 100%;
+  height: 52px;
+  background: var(--ink);
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 15px;
+  padding-inline: 16px;
+}
+.ehl-select:hover {
+  border-color: var(--violet);
+}
+.ehl-select span {
+  color: inherit;
+}
+
+.ehl-trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+.ehl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: var(--ink);
+}
+.ehl-chip.lime {
+  color: var(--lime);
+  border-color: rgba(201, 255, 61, 0.35);
+}
+.ehl-chip.pink {
+  color: var(--pink);
+  border-color: rgba(255, 77, 157, 0.35);
+}
+
+.ehl-pending {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pink);
+  border: 1px solid rgba(255, 77, 157, 0.4);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+/* ---------------- checking state ---------------- */
+.ehl-checking {
+  position: relative;
+  z-index: 2;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 16px;
+}
+.ehl-checking p {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.ehl-spin {
+  color: var(--lime);
+}
+
+/* The account dropdown portals to <body>, outside `.ehl`, so it carries its
+   own copy of the palette — without it every var() below resolves to nothing
+   and the menu renders transparent. Same reason the landing template repeats
+   its tokens on the feedback modal. */
+[role="listbox"].ehl-menu,
+.ehl-menu {
+  background: #150f1f;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  color: #f5f0fb;
+  font-family: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  border-radius: 16px;
+}
+.ehl-menu [role="option"] {
+  border-radius: 10px;
+}
+.ehl-menu [role="option"]:focus,
+.ehl-menu [role="option"][data-highlighted] {
+  background: rgba(201, 255, 61, 0.12);
+  color: #c9ff3d;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ehl *,
+  .ehl *::before,
+  .ehl *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -8,9 +8,10 @@ import { Steps } from "./Steps";
 import { FAQ } from "./FAQ";
 import { CTA } from "./CTA";
 
-// The original eventsh landing page, split into swappable sections. This is
-// the template used when no VITE_LANDING_TEMPLATE is set (or it doesn't
-// match a registered key) — see templates/index.ts.
+// The original eventsh landing page, split into swappable sections. It is no
+// longer what eventsh.com serves — the genz template is — but it stays
+// registered under the "default" key, so VITE_LANDING_TEMPLATE=default brings
+// it back. See templates/index.ts.
 export const defaultTemplate: LandingTemplate = {
   Nav,
   Hero,

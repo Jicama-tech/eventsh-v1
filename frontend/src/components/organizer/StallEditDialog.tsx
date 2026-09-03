@@ -32,6 +32,7 @@ import { toast } from "@/hooks/use-toast";
 import { useCountry } from "@/hooks/useCountry";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import StallPaymentPanel from "../user/StallPaymentPanel";
+import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
@@ -563,18 +564,18 @@ export function StallEditDialog({
         ) : step === "edit" ? (
           <div className="space-y-4">
             {/* Tab switcher */}
-            <div className="flex gap-1 rounded-lg bg-slate-100 p-1 text-sm">
+            <div className="flex gap-1 rounded-lg bg-muted p-1 text-sm">
               <button
                 type="button"
                 onClick={() => setTab("details")}
-                className={`flex-1 rounded-md px-3 py-1.5 font-medium ${tab === "details" ? "bg-white shadow" : "text-muted-foreground"}`}
+                className={`flex-1 rounded-md px-3 py-1.5 font-medium ${tab === "details" ? "bg-background shadow" : "text-muted-foreground"}`}
               >
                 Details
               </button>
               <button
                 type="button"
                 onClick={() => setTab("spaces")}
-                className={`flex-1 rounded-md px-3 py-1.5 font-medium ${tab === "spaces" ? "bg-white shadow" : "text-muted-foreground"}`}
+                className={`flex-1 rounded-md px-3 py-1.5 font-medium ${tab === "spaces" ? "bg-background shadow" : "text-muted-foreground"}`}
               >
                 Spaces &amp; Add-ons
               </button>
@@ -608,9 +609,7 @@ export function StallEditDialog({
                   return (
                     <div>
                       <div className="flex items-center justify-between gap-2">
-                        <Label className="text-xs text-muted-foreground">
-                          Registration No.
-                        </Label>
+                        <Label className="text-xs text-muted-foreground">{t("Registration No.")}</Label>
                         {form.registrationNumber ? (
                           regVerified ? (
                             <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-600">
@@ -691,10 +690,10 @@ export function StallEditDialog({
                         onClick={() => toggleSpace(t)}
                         className={`flex items-center justify-between gap-2 rounded-lg border-2 px-3 py-2 text-left text-sm transition-colors ${
                           disabled
-                            ? "border-gray-200 bg-gray-100 opacity-60 cursor-not-allowed"
+                            ? "border-border bg-muted opacity-60 cursor-not-allowed"
                             : checked
                               ? "border-blue-500 bg-blue-50"
-                              : "border-gray-200 hover:border-blue-300"
+                              : "border-border hover:border-blue-300"
                         }`}
                       >
                         <div className="min-w-0">
@@ -713,7 +712,7 @@ export function StallEditDialog({
                           className={`h-5 w-5 shrink-0 rounded border-2 flex items-center justify-center ${
                             checked
                               ? "bg-blue-600 border-blue-600"
-                              : "border-gray-300"
+                              : "border-border"
                           }`}
                         >
                           {checked && <Check className="h-3 w-3 text-white" />}
@@ -728,7 +727,7 @@ export function StallEditDialog({
             {/* Add-ons */}
             {addOnItems.length > 0 && (
               <div>
-                <h4 className="font-semibold text-sm mb-2">Add-ons</h4>
+                <h4 className="font-semibold text-sm mb-2">{t("Add-ons")}</h4>
                 <div className="space-y-2">
                   {addOnItems.map((a) => {
                     const max = Number(a.maxPerSpace ?? a.maxPerTemplate ?? 99);
@@ -777,7 +776,7 @@ export function StallEditDialog({
             )}
 
             {/* Totals */}
-            <div className="rounded-lg bg-slate-50 border p-3 text-sm space-y-1">
+            <div className="rounded-lg bg-muted border p-3 text-sm space-y-1">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Current total</span>
                 <span className="font-medium">

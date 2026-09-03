@@ -105,6 +105,7 @@ import {
 import MarriageMonogram from "@/components/user/MarriageMonogram";
 import MarriageMotif from "@/components/user/MarriageMotif";
 import MarriageFloral from "@/components/user/MarriageFloral";
+import { t } from "@/i18n/t";
 
 // One row in a function's own schedule/timeline — what happens, when and where
 // WITHIN that ceremony (e.g. 6:00 PM Welcome drinks · Foyer).
@@ -1456,7 +1457,7 @@ export function MarriageEventForm({
       {/* Content column */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Sticky header with hamburger + title + actions. */}
-        <div className="sticky top-0 z-20 border-b bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/80">
+        <div className="sticky top-0 z-20 border-b bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <div className="flex items-center justify-between gap-2 p-3 sm:p-4">
             <div className="flex min-w-0 items-center gap-2">
               <Button
@@ -1519,24 +1520,12 @@ export function MarriageEventForm({
           <div className="hidden border-t md:block">
             <Tabs value={currentTab} onValueChange={setCurrentTab}>
               <TabsList className="grid h-12 w-full grid-cols-6 bg-transparent">
-                <TabsTrigger value="couple" className="text-sm">
-                  Couple &amp; Hosts
-                </TabsTrigger>
-                <TabsTrigger value="functions" className="text-sm">
-                  Functions
-                </TabsTrigger>
-                <TabsTrigger value="media" className="text-sm">
-                  Media
-                </TabsTrigger>
-                <TabsTrigger value="story" className="text-sm">
-                  Story
-                </TabsTrigger>
-                <TabsTrigger value="design" className="text-sm">
-                  Design
-                </TabsTrigger>
-                <TabsTrigger value="settings" className="text-sm">
-                  Settings
-                </TabsTrigger>
+                <TabsTrigger value="couple" className="text-sm">{t("Couple &amp; Hosts")}</TabsTrigger>
+                <TabsTrigger value="functions" className="text-sm">{t("Functions")}</TabsTrigger>
+                <TabsTrigger value="media" className="text-sm">{t("Media")}</TabsTrigger>
+                <TabsTrigger value="story" className="text-sm">{t("Story")}</TabsTrigger>
+                <TabsTrigger value="design" className="text-sm">{t("Design")}</TabsTrigger>
+                <TabsTrigger value="settings" className="text-sm">{t("Settings")}</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -1556,7 +1545,7 @@ export function MarriageEventForm({
               <CardContent className="space-y-5">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <Label>Partner 1 name *</Label>
+                    <Label>{t("Partner 1 name *")}</Label>
                     <Input
                       value={form.partner1Name}
                       onChange={(e) =>
@@ -1566,7 +1555,7 @@ export function MarriageEventForm({
                     />
                   </div>
                   <div>
-                    <Label>Partner 2 name *</Label>
+                    <Label>{t("Partner 2 name *")}</Label>
                     <Input
                       value={form.partner2Name}
                       onChange={(e) =>
@@ -1578,7 +1567,7 @@ export function MarriageEventForm({
                 </div>
 
                 <div>
-                  <Label>Event title</Label>
+                  <Label>{t("Event title")}</Label>
                   <Input
                     value={form.title}
                     onChange={(e) => setField("title", e.target.value)}
@@ -1593,7 +1582,7 @@ export function MarriageEventForm({
                 </div>
 
                 <div>
-                  <Label>Invitation title</Label>
+                  <Label>{t("Invitation title")}</Label>
                   <Input
                     value={form.invitationTitle}
                     onChange={(e) =>
@@ -1608,7 +1597,7 @@ export function MarriageEventForm({
                 </div>
 
                 <div>
-                  <Label>Hosted by</Label>
+                  <Label>{t("Hosted by")}</Label>
                   <Input
                     value={form.hostNames}
                     onChange={(e) => setField("hostNames", e.target.value)}
@@ -1618,42 +1607,42 @@ export function MarriageEventForm({
 
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div>
-                    <Label>Contact name</Label>
+                    <Label>{t("Contact name")}</Label>
                     <Input
                       value={form.contactName}
                       onChange={(e) =>
                         setField("contactName", e.target.value)
                       }
-                      placeholder="Point of contact"
+                      placeholder={t("Point of contact")}
                     />
                   </div>
                   <div>
-                    <Label>Contact phone</Label>
+                    <Label>{t("Contact phone")}</Label>
                     <PhoneField
                       value={form.contactPhone}
                       onChange={(v) => setField("contactPhone", v)}
-                      placeholder="Phone number"
+                      placeholder={t("Phone number")}
                     />
                   </div>
                   <div>
-                    <Label>Contact email</Label>
+                    <Label>{t("Contact email")}</Label>
                     <Input
                       type="email"
                       value={form.contactEmail}
                       onChange={(e) =>
                         setField("contactEmail", e.target.value)
                       }
-                      placeholder="Email"
+                      placeholder={t("Email")}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <Label>Welcome note</Label>
+                  <Label>{t("Welcome note")}</Label>
                   <Textarea
                     value={form.description}
                     onChange={(e) => setField("description", e.target.value)}
-                    placeholder="A short welcome message for your guests…"
+                    placeholder={t("A short welcome message for your guests\u2026")}
                     rows={3}
                   />
                 </div>
@@ -1751,7 +1740,7 @@ export function MarriageEventForm({
 
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="sm:col-span-2">
-                        <Label>Function name *</Label>
+                        <Label>{t("Function name *")}</Label>
                         <Input
                           value={fn.name}
                           onChange={(e) =>
@@ -1761,7 +1750,7 @@ export function MarriageEventForm({
                         />
                       </div>
                       <div>
-                        <Label>Date</Label>
+                        <Label>{t("Date")}</Label>
                         <Input
                           type="date"
                           value={fn.date}
@@ -1772,7 +1761,7 @@ export function MarriageEventForm({
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <Label>Start time</Label>
+                          <Label>{t("Start time")}</Label>
                           <Input
                             type="time"
                             value={fn.time}
@@ -1782,7 +1771,7 @@ export function MarriageEventForm({
                           />
                         </div>
                         <div>
-                          <Label>End time</Label>
+                          <Label>{t("End time")}</Label>
                           <Input
                             type="time"
                             value={fn.endTime}
@@ -1795,7 +1784,7 @@ export function MarriageEventForm({
                         </div>
                       </div>
                       <div>
-                        <Label>Venue name</Label>
+                        <Label>{t("Venue name")}</Label>
                         <Input
                           value={fn.venueName}
                           onChange={(e) =>
@@ -1807,7 +1796,7 @@ export function MarriageEventForm({
                         />
                       </div>
                       <div>
-                        <Label>Dress code</Label>
+                        <Label>{t("Dress code")}</Label>
                         <Input
                           value={fn.dressCode}
                           onChange={(e) =>
@@ -1819,28 +1808,28 @@ export function MarriageEventForm({
                         />
                       </div>
                       <div className="sm:col-span-2">
-                        <Label>Address</Label>
+                        <Label>{t("Address")}</Label>
                         <Input
                           value={fn.address}
                           onChange={(e) =>
                             updateFunction(fn.id, { address: e.target.value })
                           }
-                          placeholder="Full venue address"
+                          placeholder={t("Full venue address")}
                         />
                       </div>
                       <div className="sm:col-span-2">
-                        <Label>Notes</Label>
+                        <Label>{t("Notes")}</Label>
                         <Textarea
                           value={fn.notes}
                           onChange={(e) =>
                             updateFunction(fn.id, { notes: e.target.value })
                           }
-                          placeholder="Anything guests should know for this function…"
+                          placeholder={t("Anything guests should know for this function\u2026")}
                           rows={2}
                         />
                       </div>
                       <div className="sm:col-span-2">
-                        <Label>Accommodation for this function (optional)</Label>
+                        <Label>{t("Accommodation for this function (optional)")}</Label>
                         <Textarea
                           value={fn.accommodation ?? ""}
                           onChange={(e) =>
@@ -1858,7 +1847,7 @@ export function MarriageEventForm({
                           schedule on the public wedding page. */}
                       <div className="sm:col-span-2">
                         <div className="mb-2 flex items-center justify-between">
-                          <Label>Timeline for this function</Label>
+                          <Label>{t("Timeline for this function")}</Label>
                           <Button
                             type="button"
                             size="sm"
@@ -1890,9 +1879,9 @@ export function MarriageEventForm({
                             {(fn.timeline ?? []).map((it, tIdx) => (
                               <div
                                 key={it.id}
-                                className="flex flex-col gap-2 rounded-lg border bg-slate-50 p-2 sm:flex-row sm:items-center"
+                                className="flex flex-col gap-2 rounded-lg border bg-muted p-2 sm:flex-row sm:items-center"
                               >
-                                <span className="hidden w-5 text-center text-xs font-semibold text-slate-400 sm:block">
+                                <span className="hidden w-5 text-center text-xs font-semibold text-muted-foreground sm:block">
                                   {tIdx + 1}
                                 </span>
                                 <Input
@@ -1907,7 +1896,7 @@ export function MarriageEventForm({
                                       ),
                                     })
                                   }
-                                  className="bg-white sm:w-32"
+                                  className="bg-background sm:w-32"
                                 />
                                 <Input
                                   value={it.title}
@@ -1920,8 +1909,8 @@ export function MarriageEventForm({
                                       ),
                                     })
                                   }
-                                  placeholder="What's happening (e.g. Welcome drinks)"
-                                  className="flex-1 bg-white"
+                                  placeholder={t("What's happening (e.g. Welcome drinks)")}
+                                  className="flex-1 bg-background"
                                 />
                                 <Input
                                   value={it.location}
@@ -1934,8 +1923,8 @@ export function MarriageEventForm({
                                       ),
                                     })
                                   }
-                                  placeholder="Where (optional)"
-                                  className="bg-white sm:w-44"
+                                  placeholder={t("Where (optional)")}
+                                  className="bg-background sm:w-44"
                                 />
                                 <Button
                                   type="button"
@@ -1988,7 +1977,7 @@ export function MarriageEventForm({
                 </p>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <Label>Bar color</Label>
+                    <Label>{t("Bar color")}</Label>
                     <div className="flex items-center gap-2">
                       <input
                         type="color"
@@ -2008,7 +1997,7 @@ export function MarriageEventForm({
                     </div>
                   </div>
                   <div>
-                    <Label>Text color</Label>
+                    <Label>{t("Text color")}</Label>
                     <div className="flex items-center gap-2">
                       <input
                         type="color"
@@ -2029,7 +2018,7 @@ export function MarriageEventForm({
                   </div>
                 </div>
                 <div>
-                  <Label>Custom message (optional)</Label>
+                  <Label>{t("Custom message (optional)")}</Label>
                   <Input
                     value={form.adBarMessage}
                     onChange={(e) => setField("adBarMessage", e.target.value)}
@@ -2095,15 +2084,15 @@ export function MarriageEventForm({
           <TabsContent value="story" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Your Story</CardTitle>
+                <CardTitle>{t("Your Story")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div>
-                  <Label>How we met</Label>
+                  <Label>{t("How we met")}</Label>
                   <Textarea
                     value={form.howWeMet}
                     onChange={(e) => setField("howWeMet", e.target.value)}
-                    placeholder="The short version of where it all began…"
+                    placeholder={t("The short version of where it all began\u2026")}
                     rows={3}
                   />
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -2115,7 +2104,7 @@ export function MarriageEventForm({
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label>Our Story timeline</Label>
+                      <Label>{t("Our Story timeline")}</Label>
                       <p className="text-xs text-muted-foreground">
                         Add as many moments as you like — each with a title,
                         date, rich text and an optional photo. They render as a
@@ -2133,7 +2122,7 @@ export function MarriageEventForm({
                   </div>
 
                   {storyTimeline.length === 0 && (
-                    <div className="rounded-lg border border-dashed bg-slate-50 p-6 text-center text-sm text-muted-foreground">
+                    <div className="rounded-lg border border-dashed bg-muted p-6 text-center text-sm text-muted-foreground">
                       No moments yet. Click <strong>Add moment</strong> to start
                       your story timeline.
                     </div>
@@ -2142,7 +2131,7 @@ export function MarriageEventForm({
                   {storyTimeline.map((m, idx) => (
                     <div
                       key={m.id}
-                      className="rounded-lg border bg-white p-4 space-y-3"
+                      className="rounded-lg border bg-background p-4 space-y-3"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-rose-100 text-xs font-semibold text-rose-600">
@@ -2186,7 +2175,7 @@ export function MarriageEventForm({
 
                       <div className="grid gap-3 sm:grid-cols-3">
                         <div className="sm:col-span-2">
-                          <Label className="text-xs">Title</Label>
+                          <Label className="text-xs">{t("Title")}</Label>
                           <Input
                             value={m.title}
                             onChange={(e) =>
@@ -2196,7 +2185,7 @@ export function MarriageEventForm({
                           />
                         </div>
                         <div>
-                          <Label className="text-xs">Date / label</Label>
+                          <Label className="text-xs">{t("Date / label")}</Label>
                           <Input
                             value={m.date}
                             onChange={(e) =>
@@ -2208,8 +2197,8 @@ export function MarriageEventForm({
                       </div>
 
                       <div>
-                        <Label className="text-xs">Story</Label>
-                        <div className="rounded-md bg-white">
+                        <Label className="text-xs">{t("Story")}</Label>
+                        <div className="rounded-md bg-background">
                           <Suspense
                             fallback={
                               <div className="h-[150px] animate-pulse rounded-md border bg-muted" />
@@ -2222,7 +2211,7 @@ export function MarriageEventForm({
                               onChange={(content) =>
                                 updateStoryMoment(m.id, { content })
                               }
-                              placeholder="Tell this part of your journey…"
+                              placeholder={t("Tell this part of your journey\u2026")}
                               className="[&_.ql-editor]:min-h-[130px]"
                             />
                           </Suspense>
@@ -2230,7 +2219,7 @@ export function MarriageEventForm({
                       </div>
 
                       <div>
-                        <Label className="text-xs">Photo (optional)</Label>
+                        <Label className="text-xs">{t("Photo (optional)")}</Label>
                         {m.image ? (
                           <div className="relative mt-1 w-full max-w-xs overflow-hidden rounded-md border">
                             <img
@@ -2253,7 +2242,7 @@ export function MarriageEventForm({
                             </button>
                           </div>
                         ) : (
-                          <label className="mt-1 flex h-24 w-full max-w-xs cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed bg-slate-50 text-sm text-muted-foreground hover:bg-slate-100">
+                          <label className="mt-1 flex h-24 w-full max-w-xs cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed bg-muted text-sm text-muted-foreground hover:bg-muted">
                             <ImagePlus className="h-5 w-5" />
                             Add a photo
                             <input
@@ -2280,17 +2269,17 @@ export function MarriageEventForm({
                 RSVP confirmation email every guest receives. */}
             <Card>
               <CardHeader>
-                <CardTitle>Guest Information</CardTitle>
+                <CardTitle>{t("Guest Information")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div>
-                  <Label>Accommodations</Label>
+                  <Label>{t("Accommodations")}</Label>
                   <Textarea
                     value={form.accommodations}
                     onChange={(e) =>
                       setField("accommodations", e.target.value)
                     }
-                    placeholder="Suggested hotels, room blocks, booking codes, nearby stays…"
+                    placeholder={t("Suggested hotels, room blocks, booking codes, nearby stays\u2026")}
                     rows={4}
                   />
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -2298,7 +2287,7 @@ export function MarriageEventForm({
                   </p>
                 </div>
                 <div>
-                  <Label>Additional information</Label>
+                  <Label>{t("Additional information")}</Label>
                   <Textarea
                     value={form.additionalInfo}
                     onChange={(e) =>
@@ -2340,7 +2329,7 @@ export function MarriageEventForm({
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Choose a template" />
+                        <SelectValue placeholder={t("Choose a template")} />
                       </SelectTrigger>
                       <SelectContent>
                         {LAYOUT_TEMPLATES.map((o) => (
@@ -2383,7 +2372,7 @@ export function MarriageEventForm({
                         onValueChange={(v) => applyPreset(v)}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Pick a palette (or fine-tune below)" />
+                          <SelectValue placeholder={t("Pick a palette (or fine-tune below)")} />
                         </SelectTrigger>
                         <SelectContent>
                           {MARRIAGE_PRESETS.map((p) => (
@@ -2410,9 +2399,7 @@ export function MarriageEventForm({
 
                     {/* Custom colors */}
                     <div>
-                      <Label className="text-sm font-semibold">
-                        Custom colors
-                      </Label>
+                      <Label className="text-sm font-semibold">{t("Custom colors")}</Label>
                       <div className="mt-3 grid gap-4 sm:grid-cols-2">
                         <ColorField
                           label="Accent (primary)"
@@ -2441,11 +2428,11 @@ export function MarriageEventForm({
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Typography &amp; layout</CardTitle>
+                    <CardTitle>{t("Typography &amp; layout")}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-5">
                     <div>
-                      <Label className="text-sm">Heading font</Label>
+                      <Label className="text-sm">{t("Heading font")}</Label>
                       <Select
                         value={theme.headingFont}
                         onValueChange={(v) =>
@@ -2474,7 +2461,7 @@ export function MarriageEventForm({
 
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
-                        <Label className="text-sm">Display size</Label>
+                        <Label className="text-sm">{t("Display size")}</Label>
                         <Select
                           value={theme.fontScale}
                           onValueChange={(v) =>
@@ -2497,7 +2484,7 @@ export function MarriageEventForm({
                         </Select>
                       </div>
                       <div>
-                        <Label className="text-sm">Hero height</Label>
+                        <Label className="text-sm">{t("Hero height")}</Label>
                         <Select
                           value={theme.heroHeight}
                           onValueChange={(v) =>
@@ -2522,7 +2509,7 @@ export function MarriageEventForm({
                     </div>
 
                     <div>
-                      <Label className="text-sm">Name layout</Label>
+                      <Label className="text-sm">{t("Name layout")}</Label>
                       <Select
                         value={theme.heroLayout}
                         onValueChange={(v) =>
@@ -2571,7 +2558,7 @@ export function MarriageEventForm({
                     </div>
 
                     <div>
-                      <Label className="text-sm">Corner style</Label>
+                      <Label className="text-sm">{t("Corner style")}</Label>
                       <div className="mt-2 flex gap-2">
                         {(["rounded", "minimal"] as const).map((c) => (
                           <Button
@@ -2601,11 +2588,11 @@ export function MarriageEventForm({
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Hero</CardTitle>
+                    <CardTitle>{t("Hero")}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-5">
                     <div>
-                      <Label className="text-sm">Top emblem</Label>
+                      <Label className="text-sm">{t("Top emblem")}</Label>
                       <Select
                         value={theme.topMotif}
                         onValueChange={(v) =>
@@ -2632,7 +2619,7 @@ export function MarriageEventForm({
                       </p>
                     </div>
                     <div>
-                      <Label className="text-sm">Floral framing</Label>
+                      <Label className="text-sm">{t("Floral framing")}</Label>
                       <Select
                         value={theme.floralAccents}
                         onValueChange={(v) =>
@@ -2659,7 +2646,7 @@ export function MarriageEventForm({
                       </p>
                     </div>
                     <div>
-                      <Label className="text-sm">Floral style</Label>
+                      <Label className="text-sm">{t("Floral style")}</Label>
                       <Select
                         value={theme.floralStyle}
                         onValueChange={(v) =>
@@ -2686,7 +2673,7 @@ export function MarriageEventForm({
                       </p>
                     </div>
                     <div>
-                      <Label className="text-sm">Hero tagline</Label>
+                      <Label className="text-sm">{t("Hero tagline")}</Label>
                       <Input
                         value={theme.heroTagline}
                         onChange={(e) =>
@@ -2704,7 +2691,7 @@ export function MarriageEventForm({
                     </div>
                     <div className="flex items-center justify-between rounded-lg border p-3">
                       <div>
-                        <Label className="text-sm">Show monogram</Label>
+                        <Label className="text-sm">{t("Show monogram")}</Label>
                         <p className="text-xs text-muted-foreground">
                           A circular badge with the couple's initials.
                         </p>
@@ -2718,7 +2705,7 @@ export function MarriageEventForm({
                     </div>
                     {theme.showMonogram && (
                       <div>
-                        <Label className="text-sm">Monogram style</Label>
+                        <Label className="text-sm">{t("Monogram style")}</Label>
                         <Select
                           value={theme.monogramStyle}
                           onValueChange={(v) =>
@@ -2747,7 +2734,7 @@ export function MarriageEventForm({
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Sections</CardTitle>
+                    <CardTitle>{t("Sections")}</CardTitle>
                     <p className="text-sm text-muted-foreground">
                       Show or hide each part of the wedding page.
                     </p>
@@ -2774,11 +2761,11 @@ export function MarriageEventForm({
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Style details</CardTitle>
+                    <CardTitle>{t("Style details")}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-5">
                     <div>
-                      <Label className="text-sm">Section heading style</Label>
+                      <Label className="text-sm">{t("Section heading style")}</Label>
                       <Select
                         value={theme.headingStyle}
                         onValueChange={(v) =>
@@ -2801,7 +2788,7 @@ export function MarriageEventForm({
                       </Select>
                     </div>
                     <div>
-                      <Label className="text-sm">Background pattern</Label>
+                      <Label className="text-sm">{t("Background pattern")}</Label>
                       <Select
                         value={theme.backgroundPattern}
                         onValueChange={(v) =>
@@ -2825,7 +2812,7 @@ export function MarriageEventForm({
                       </Select>
                     </div>
                     <div>
-                      <Label className="text-sm">Hero photo filter</Label>
+                      <Label className="text-sm">{t("Hero photo filter")}</Label>
                       <Select
                         value={theme.heroFilter}
                         onValueChange={(v) =>
@@ -2852,7 +2839,7 @@ export function MarriageEventForm({
                       </p>
                     </div>
                     <div>
-                      <Label className="text-sm">Photo gallery layout</Label>
+                      <Label className="text-sm">{t("Photo gallery layout")}</Label>
                       <Select
                         value={theme.galleryLayout}
                         onValueChange={(v) =>
@@ -2880,7 +2867,7 @@ export function MarriageEventForm({
                       </p>
                     </div>
                     <div>
-                      <Label className="text-sm">Our Story layout</Label>
+                      <Label className="text-sm">{t("Our Story layout")}</Label>
                       <Select
                         value={theme.storyLayout}
                         onValueChange={(v) =>
@@ -2907,9 +2894,7 @@ export function MarriageEventForm({
                       </p>
                     </div>
                     <div>
-                      <Label className="text-sm">
-                        Function timeline design
-                      </Label>
+                      <Label className="text-sm">{t("Function timeline design")}</Label>
                       <Select
                         value={theme.functionTimelineLayout}
                         onValueChange={(v) =>
@@ -2938,7 +2923,7 @@ export function MarriageEventForm({
                     </div>
                     <div className="flex items-center justify-between rounded-lg border p-3">
                       <div>
-                        <Label className="text-sm">Animations</Label>
+                        <Label className="text-sm">{t("Animations")}</Label>
                         <p className="text-xs text-muted-foreground">
                           Subtle motion — fade-ins and a slow Ken-Burns zoom on
                           the hero photo.
@@ -2953,7 +2938,7 @@ export function MarriageEventForm({
                     </div>
                     <div className="flex items-center justify-between rounded-lg border p-3">
                       <div>
-                        <Label className="text-sm">Falling petals</Label>
+                        <Label className="text-sm">{t("Falling petals")}</Label>
                         <p className="text-xs text-muted-foreground">
                           A gentle shower of petals drifting down the page.
                         </p>
@@ -2971,7 +2956,7 @@ export function MarriageEventForm({
 
               {/* ---- Live preview ---- */}
               <div className="lg:sticky lg:top-[150px] lg:self-start">
-                <Label className="text-sm font-semibold">Live preview</Label>
+                <Label className="text-sm font-semibold">{t("Live preview")}</Label>
                 <div
                   style={{
                     ...themePalette.vars,
@@ -3051,11 +3036,11 @@ export function MarriageEventForm({
           <TabsContent value="settings" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Settings</CardTitle>
+                <CardTitle>{t("Settings")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div>
-                  <Label>Visibility</Label>
+                  <Label>{t("Visibility")}</Label>
                   <Select
                     value={form.visibility}
                     onValueChange={(v) => setField("visibility", v)}
@@ -3079,7 +3064,7 @@ export function MarriageEventForm({
 
                 <div className="flex items-center justify-between rounded-lg border p-4">
                   <div>
-                    <Label className="text-base">Publish now</Label>
+                    <Label className="text-base">{t("Publish now")}</Label>
                     <p className="text-sm text-muted-foreground">
                       Off saves it as a draft you can publish later. Publishing
                       makes the public event link live.

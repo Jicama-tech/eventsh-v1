@@ -60,6 +60,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n/t";
 
 interface TicketSalesManagementProps {
   events: any[];
@@ -179,7 +180,7 @@ export function TicketSalesManagement({
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold">Ticket Sales Analytics</h2>
+          <h2 className="text-3xl font-bold">{t("Ticket Sales Analytics")}</h2>
           <p className="text-muted-foreground">
             Track and manage your event ticket sales
           </p>
@@ -201,10 +202,10 @@ export function TicketSalesManagement({
         <CardContent className="pt-6">
           <div className="flex flex-wrap gap-4 items-end">
             <div className="flex-1 min-w-[200px]">
-              <Label htmlFor="event-filter">Event</Label>
+              <Label htmlFor="event-filter">{t("Event")}</Label>
               <Select value={selectedEvent} onValueChange={setSelectedEvent}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select event" />
+                  <SelectValue placeholder={t("Select event")} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Events</SelectItem>
@@ -218,10 +219,10 @@ export function TicketSalesManagement({
             </div>
 
             <div className="flex-1 min-w-[150px]">
-              <Label htmlFor="period-filter">Time Period</Label>
+              <Label htmlFor="period-filter">{t("Time Period")}</Label>
               <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select period" />
+                  <SelectValue placeholder={t("Select period")} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="today">Today</SelectItem>
@@ -236,7 +237,7 @@ export function TicketSalesManagement({
             {selectedPeriod === "custom" && (
               <>
                 <div>
-                  <Label>From Date</Label>
+                  <Label>{t("From Date")}</Label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
@@ -262,7 +263,7 @@ export function TicketSalesManagement({
                 </div>
 
                 <div>
-                  <Label>To Date</Label>
+                  <Label>{t("To Date")}</Label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
@@ -301,9 +302,7 @@ export function TicketSalesManagement({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Tickets Sold
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Total Tickets Sold")}</CardTitle>
             <Ticket className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -319,7 +318,7 @@ export function TicketSalesManagement({
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Total Revenue")}</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -335,7 +334,7 @@ export function TicketSalesManagement({
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Events</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Active Events")}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -348,9 +347,7 @@ export function TicketSalesManagement({
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Avg. Ticket Price
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Avg. Ticket Price")}</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -368,18 +365,16 @@ export function TicketSalesManagement({
       {/* Sales Timeline and Detailed Analytics */}
       <Tabs defaultValue="timeline" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="timeline">Sales</TabsTrigger>
-          <TabsTrigger value="tickets">Ticket Details</TabsTrigger>
-          <TabsTrigger value="events">By Event</TabsTrigger>
+          <TabsTrigger value="timeline">{t("Sales")}</TabsTrigger>
+          <TabsTrigger value="tickets">{t("Ticket Details")}</TabsTrigger>
+          <TabsTrigger value="events">{t("By Event")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="timeline" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Daily Sales Timeline</CardTitle>
-              <CardDescription>
-                Ticket sales and revenue over the selected period
-              </CardDescription>
+              <CardTitle>{t("Daily Sales Timeline")}</CardTitle>
+              <CardDescription>{t("Ticket sales and revenue over the selected period")}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -413,10 +408,8 @@ export function TicketSalesManagement({
         <TabsContent value="tickets" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Ticket Performance</CardTitle>
-              <CardDescription>
-                Detailed breakdown of each ticket type
-              </CardDescription>
+              <CardTitle>{t("Ticket Performance")}</CardTitle>
+              <CardDescription>{t("Detailed breakdown of each ticket type")}</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -633,13 +626,13 @@ export function TicketSalesManagement({
           >
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="eventId">Event</Label>
+                <Label htmlFor="eventId">{t("Event")}</Label>
                 <Select
                   name="eventId"
                   defaultValue={editingTicket?.eventId?.toString()}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select event" />
+                    <SelectValue placeholder={t("Select event")} />
                   </SelectTrigger>
                   <SelectContent>
                     {events.map((event) => (
@@ -652,7 +645,7 @@ export function TicketSalesManagement({
               </div>
 
               <div>
-                <Label htmlFor="ticketType">Ticket Type Name</Label>
+                <Label htmlFor="ticketType">{t("Ticket Type Name")}</Label>
                 <Input
                   name="ticketType"
                   defaultValue={editingTicket?.ticketType}
@@ -664,7 +657,7 @@ export function TicketSalesManagement({
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="price">Price ($)</Label>
+                <Label htmlFor="price">{t("Price ($)")}</Label>
                 <Input
                   name="price"
                   type="number"
@@ -676,7 +669,7 @@ export function TicketSalesManagement({
               </div>
 
               <div>
-                <Label htmlFor="quantity">Available Quantity</Label>
+                <Label htmlFor="quantity">{t("Available Quantity")}</Label>
                 <Input
                   name="quantity"
                   type="number"
@@ -687,7 +680,7 @@ export function TicketSalesManagement({
               </div>
 
               <div>
-                <Label htmlFor="maxPerCustomer">Max per Customer</Label>
+                <Label htmlFor="maxPerCustomer">{t("Max per Customer")}</Label>
                 <Input
                   name="maxPerCustomer"
                   type="number"
@@ -698,22 +691,22 @@ export function TicketSalesManagement({
             </div>
 
             <div>
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description">{t("Description")}</Label>
               <Textarea
                 name="description"
-                placeholder="Describe what's included with this ticket type..."
+                placeholder={t("Describe what's included with this ticket type...")}
                 rows={3}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="saleStartDate">Sale Start Date</Label>
+                <Label htmlFor="saleStartDate">{t("Sale Start Date")}</Label>
                 <Input name="saleStartDate" type="datetime-local" />
               </div>
 
               <div>
-                <Label htmlFor="saleEndDate">Sale End Date</Label>
+                <Label htmlFor="saleEndDate">{t("Sale End Date")}</Label>
                 <Input name="saleEndDate" type="datetime-local" />
               </div>
             </div>
@@ -721,7 +714,7 @@ export function TicketSalesManagement({
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <Label htmlFor="earlyBird">Early Bird Pricing</Label>
+                  <Label htmlFor="earlyBird">{t("Early Bird Pricing")}</Label>
                   <p className="text-sm text-muted-foreground">
                     Mark this as an early bird ticket
                   </p>
@@ -731,7 +724,7 @@ export function TicketSalesManagement({
 
               <div className="flex items-center justify-between">
                 <div>
-                  <Label htmlFor="isTransferable">Transferable</Label>
+                  <Label htmlFor="isTransferable">{t("Transferable")}</Label>
                   <p className="text-sm text-muted-foreground">
                     Allow customers to transfer tickets
                   </p>

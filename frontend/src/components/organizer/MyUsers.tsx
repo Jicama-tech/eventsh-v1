@@ -200,6 +200,7 @@ import { useCountryCodes } from "@/hooks/useCountryCodes";
 import { phoneNationalLength } from "@/data/countries";
 import SuppliersDirectory from "@/components/organizer/SuppliersDirectory";
 import SponsorsDirectory from "@/components/organizer/SponsorsDirectory";
+import { t } from "@/i18n/t";
 
 interface Country {
   name: string;
@@ -985,9 +986,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">
-            Relationship Management
-          </h2>
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">{t("Relationship Management")}</h2>
           <p className="text-muted-foreground">
             Manage Visitors and Exhibitors across your events.
           </p>
@@ -1007,9 +1006,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Visitors
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Total Visitors")}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -1021,9 +1018,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Exhibitors
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Total Exhibitors")}</CardTitle>
             <Store className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -1035,7 +1030,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Total Revenue")}</CardTitle>
             {country === "IN" ? (
               <FaRupeeSign className="h-4 w-4 text-muted-foreground" />
             ) : (
@@ -1053,7 +1048,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tickets Sold</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Tickets Sold")}</CardTitle>
             <Ticket className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -1072,18 +1067,18 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
       >
         <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
           <TabsList className="grid w-full sm:w-[700px] grid-cols-5">
-            <TabsTrigger value="visitors">Visitors</TabsTrigger>
-            <TabsTrigger value="exhibitors">Exhibitors</TabsTrigger>
-            <TabsTrigger value="speakers">Speakers</TabsTrigger>
-            <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
-            <TabsTrigger value="sponsors">Sponsors</TabsTrigger>
+            <TabsTrigger value="visitors">{t("Visitors")}</TabsTrigger>
+            <TabsTrigger value="exhibitors">{t("Exhibitors")}</TabsTrigger>
+            <TabsTrigger value="speakers">{t("Speakers")}</TabsTrigger>
+            <TabsTrigger value="suppliers">{t("Suppliers")}</TabsTrigger>
+            <TabsTrigger value="sponsors">{t("Sponsors")}</TabsTrigger>
           </TabsList>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search name, email..."
+                placeholder={t("Search name, email...")}
                 className="pl-8"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -1091,7 +1086,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
             </div>
             <Select value={eventFilter} onValueChange={setEventFilter}>
               <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter Event" />
+                <SelectValue placeholder={t("Filter Event")} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="All">All Events</SelectItem>
@@ -1110,10 +1105,8 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
           <Card>
             <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <CardTitle>Visitor Management</CardTitle>
-                <CardDescription>
-                  View and manage users who purchased tickets.
-                </CardDescription>
+                <CardTitle>{t("Visitor Management")}</CardTitle>
+                <CardDescription>{t("View and manage users who purchased tickets.")}</CardDescription>
               </div>
               <div className="flex gap-2 flex-wrap">
                 <input
@@ -1286,10 +1279,8 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
           <Card>
             <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <CardTitle>Exhibitor Management</CardTitle>
-                <CardDescription>
-                  View and manage shopkeepers participating in stalls.
-                </CardDescription>
+                <CardTitle>{t("Exhibitor Management")}</CardTitle>
+                <CardDescription>{t("View and manage shopkeepers participating in stalls.")}</CardDescription>
               </div>
               <div className="flex gap-2 flex-wrap">
                 <input
@@ -1682,7 +1673,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
       <Dialog open={showVisitorDetails} onOpenChange={setShowVisitorDetails}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Visitor Details</DialogTitle>
+            <DialogTitle>{t("Visitor Details")}</DialogTitle>
             <DialogDescription>
               Full history for {selectedVisitor?.name}
             </DialogDescription>
@@ -1693,7 +1684,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               <div className="md:col-span-1 space-y-4">
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">Contact Info</CardTitle>
+                    <CardTitle className="text-sm">{t("Contact Info")}</CardTitle>
                   </CardHeader>
                   <CardContent className="text-sm space-y-2">
                     <div className="flex items-center gap-2">
@@ -1712,7 +1703,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                 </Card>
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">Summary</CardTitle>
+                    <CardTitle className="text-sm">{t("Summary")}</CardTitle>
                   </CardHeader>
                   <CardContent className="text-sm space-y-2">
                     <div className="flex justify-between">
@@ -1738,7 +1729,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               </div>
               {/* Main History */}
               <div className="md:col-span-2">
-                <h3 className="font-semibold mb-2">Ticket History</h3>
+                <h3 className="font-semibold mb-2">{t("Ticket History")}</h3>
                 <ScrollArea className="h-[400px]">
                   <div className="space-y-3">
                     {selectedVisitor.tickets.map((t, idx) => (
@@ -1803,10 +1794,8 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
       >
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Stall Request Details</DialogTitle>
-            <DialogDescription>
-              Complete information about the stall booking request
-            </DialogDescription>
+            <DialogTitle>{t("Stall Request Details")}</DialogTitle>
+            <DialogDescription>{t("Complete information about the stall booking request")}</DialogDescription>
           </DialogHeader>
 
           {stallRequest && (
@@ -1815,7 +1804,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               <div className="grid grid-cols-2 gap-4">
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm">Request Status</CardTitle>
+                    <CardTitle className="text-sm">{t("Request Status")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     {getStatusBadge(stallRequest.status)}
@@ -1823,7 +1812,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                 </Card>
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm">Payment Status</CardTitle>
+                    <CardTitle className="text-sm">{t("Payment Status")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     {getPaymentBadge(stallRequest.paymentStatus)}
@@ -1838,13 +1827,13 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                     <p className="font-semibold text-sm text-amber-900">Transaction Details from Vendor</p>
                     {stallRequest.transactionId && (
                       <div>
-                        <Label className="text-xs text-amber-700">Transaction ID</Label>
-                        <p className="font-mono font-bold text-sm bg-white rounded px-3 py-1.5 border border-amber-200 mt-1">{stallRequest.transactionId}</p>
+                        <Label className="text-xs text-amber-700">{t("Transaction ID")}</Label>
+                        <p className="font-mono font-bold text-sm bg-background rounded px-3 py-1.5 border border-amber-200 mt-1">{stallRequest.transactionId}</p>
                       </div>
                     )}
                     {stallRequest.transactionScreenshot && (
                       <div>
-                        <Label className="text-xs text-amber-700">Payment Screenshot</Label>
+                        <Label className="text-xs text-amber-700">{t("Payment Screenshot")}</Label>
                         <a href={`${__API_URL__}${stallRequest.transactionScreenshot}`} target="_blank" rel="noopener noreferrer">
                           <img src={`${__API_URL__}${stallRequest.transactionScreenshot}`} alt="Transaction" className="max-w-xs max-h-60 rounded-lg border border-amber-200 mt-1 hover:shadow-md transition-shadow" />
                         </a>
@@ -1860,14 +1849,12 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               {/* Shopkeeper Info */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">
-                    Shopkeeper Information
-                  </CardTitle>
+                  <CardTitle className="text-lg">{t("Shopkeeper Information")}</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4">
                   {/* Basic Info */}
                   <div>
-                    <Label className="text-muted-foreground">Owner Name</Label>
+                    <Label className="text-muted-foreground">{t("Owner Name")}</Label>
                     <div className="flex items-center gap-2">
                       <p className="font-medium">
                         {stallRequest.shopkeeperId?.name}
@@ -1884,9 +1871,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   </div>
 
                   <div>
-                    <Label className="text-muted-foreground">
-                      Business Name
-                    </Label>
+                    <Label className="text-muted-foreground">{t("Business Name")}</Label>
                     <p className="font-medium">
                       {stallRequest.shopkeeperId?.shopName || stallRequest.shopkeeperId?.businessName || "Not provided"}
                     </p>
@@ -1894,9 +1879,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
 
                   {/* Contact Info */}
                   <div>
-                    <Label className="text-muted-foreground">
-                      Business Email
-                    </Label>
+                    <Label className="text-muted-foreground">{t("Business Email")}</Label>
                     <p className="font-medium">
                       <a
                         href={`mailto:${stallRequest.shopkeeperId?.businessEmail}`}
@@ -1929,7 +1912,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
 
                   {/* Location & Social */}
                   <div>
-                    <Label className="text-muted-foreground">Country / Nationality</Label>
+                    <Label className="text-muted-foreground">{t("Country / Nationality")}</Label>
                     <p className="font-medium">
                       {(() => {
                         const code = stallRequest.shopkeeperId?.countryCode || stallRequest.shopkeeperId?.country || "";
@@ -1947,7 +1930,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   </div>
 
                   <div>
-                    <Label className="text-muted-foreground">Instagram</Label>
+                    <Label className="text-muted-foreground">{t("Instagram")}</Label>
                     <p className="font-medium">
                       {stallRequest.shopkeeperId?.instagramHandle ? (
                         <a
@@ -1975,20 +1958,20 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                       const code = stallRequest.shopkeeperId?.countryCode || stallRequest.shopkeeperId?.country || "";
                       const isIN = code === "+91" || code === "IN";
                       if (isIN && stallRequest.shopkeeperId?.GSTNumber) {
-                        return (<><Label className="text-muted-foreground">GST Number</Label><p className="font-medium uppercase">{stallRequest.shopkeeperId.GSTNumber}</p></>);
+                        return (<><Label className="text-muted-foreground">{t("GST Number")}</Label><p className="font-medium uppercase">{stallRequest.shopkeeperId.GSTNumber}</p></>);
                       }
                       if (stallRequest.shopkeeperId?.UENNumber) {
-                        return (<><Label className="text-muted-foreground">UEN Number</Label><p className="font-medium uppercase">{stallRequest.shopkeeperId.UENNumber}</p></>);
+                        return (<><Label className="text-muted-foreground">{t("UEN Number")}</Label><p className="font-medium uppercase">{stallRequest.shopkeeperId.UENNumber}</p></>);
                       }
                       if (stallRequest.registrationNumber) {
-                        return (<><Label className="text-muted-foreground">Registration No.</Label><p className="font-medium uppercase">{stallRequest.registrationNumber}</p></>);
+                        return (<><Label className="text-muted-foreground">{t("Registration No.")}</Label><p className="font-medium uppercase">{stallRequest.registrationNumber}</p></>);
                       }
-                      return (<><Label className="text-muted-foreground">Registration</Label><p className="font-medium text-muted-foreground italic text-sm">Not Provided</p></>);
+                      return (<><Label className="text-muted-foreground">{t("Registration")}</Label><p className="font-medium text-muted-foreground italic text-sm">Not Provided</p></>);
                     })()}
                   </div>
 
                   <div>
-                    <Label className="text-muted-foreground">Category</Label>
+                    <Label className="text-muted-foreground">{t("Category")}</Label>
                     <p className="font-medium">
                       {stallRequest.shopkeeperId?.businessCategory}
                     </p>
@@ -1997,9 +1980,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   {/* Financial/System Details (New) */}
                   {/* <div className="pt-2 border-t col-span-2 grid grid-cols-2 gap-4">
                     <div>
-                      <Label className="text-muted-foreground text-xs">
-                        Member Since
-                      </Label>
+                      <Label className="text-muted-foreground text-xs">{t("Member Since")}</Label>
                       <p className="text-sm">
                         {new Date(
                           stallRequest.shopkeeperId?.createdAt,
@@ -2012,9 +1993,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   </div> */}
 
                   <div>
-                    <Label className="text-muted-foreground">
-                      No. Of Operators
-                    </Label>
+                    <Label className="text-muted-foreground">{t("No. Of Operators")}</Label>
                     <p className="font-medium">
                       {stallRequest.noOfOperators || "Not Provided"}
                     </p>
@@ -2022,9 +2001,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
 
                   {/* Full Address */}
                   <div className="pt-2 border-t col-span-2">
-                    <Label className="text-muted-foreground text-xs">
-                      Business Address
-                    </Label>
+                    <Label className="text-muted-foreground text-xs">{t("Business Address")}</Label>
                     <p className="text-sm leading-tight mt-1 italic">
                       {stallRequest.shopkeeperId?.address}
                     </p>
@@ -2035,15 +2012,13 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               {/* Event Info */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Event Information</CardTitle>
+                  <CardTitle className="text-lg">{t("Event Information")}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {/* Header Info */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label className="text-muted-foreground">
-                        Event Title
-                      </Label>
+                      <Label className="text-muted-foreground">{t("Event Title")}</Label>
                       <div className="flex items-center gap-2">
                         <p className="font-bold text-lg">
                           {stallRequest.eventId?.title || "Unknown Event"}
@@ -2060,7 +2035,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                       </div>
                     </div>
                     <div>
-                      <Label className="text-muted-foreground">Category</Label>
+                      <Label className="text-muted-foreground">{t("Category")}</Label>
                       <p className="font-medium">
                         {stallRequest.eventId?.category || "—"}
                       </p>
@@ -2097,9 +2072,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   {/* Event Features — only show if at least one is active */}
                   {stallRequest.eventId?.features && Object.values(stallRequest.eventId.features).some(Boolean) && (
                   <div>
-                    <Label className="text-muted-foreground mb-2 block text-xs uppercase tracking-wider">
-                      Included Features
-                    </Label>
+                    <Label className="text-muted-foreground mb-2 block text-xs uppercase tracking-wider">{t("Included Features")}</Label>
                     <div className="flex flex-wrap gap-2">
                       {stallRequest.eventId?.features?.parking && (
                         <Badge
@@ -2140,15 +2113,13 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   {/* Management Details */}
                   <div className="grid grid-cols-2 gap-4 border-t pt-4">
                     <div>
-                      <Label className="text-muted-foreground">
-                        Dress Code
-                      </Label>
+                      <Label className="text-muted-foreground">{t("Dress Code")}</Label>
                       <p className="text-sm font-medium">
                         {stallRequest.eventId?.dresscode || "Casual"}
                       </p>
                     </div>
                     <div>
-                      <Label className="text-muted-foreground">Age Limit</Label>
+                      <Label className="text-muted-foreground">{t("Age Limit")}</Label>
                       <p className="text-sm font-medium">
                         {stallRequest.eventId?.ageRestriction || "No Limit"}
                       </p>
@@ -2158,9 +2129,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   {/* Stall Booking Stats — only if event has tickets */}
                   {(stallRequest.eventId?.ticketPrice || stallRequest.eventId?.visitorTypes?.length > 0) && (
                     <div className="border-t pt-4">
-                      <Label className="text-muted-foreground block mb-2">
-                        Ticketing
-                      </Label>
+                      <Label className="text-muted-foreground block mb-2">{t("Ticketing")}</Label>
                       <div className="flex gap-4 text-sm">
                         <div className="text-center p-2 border rounded-md flex-1">
                           <span className="block text-xs text-muted-foreground">
@@ -2185,9 +2154,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   {/* Gallery Preview */}
                   {stallRequest.eventId?.gallery?.length > 0 && (
                     <div className="border-t pt-4">
-                      <Label className="text-muted-foreground block mb-2">
-                        Event Gallery
-                      </Label>
+                      <Label className="text-muted-foreground block mb-2">{t("Event Gallery")}</Label>
                       <div className="flex gap-2 overflow-x-auto pb-2">
                         {stallRequest.eventId?.gallery?.map((img: string, idx: number) => (
                           <img
@@ -2207,14 +2174,14 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               {stallRequest.selectedTables.length > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Selected Tables</CardTitle>
+                    <CardTitle className="text-lg">{t("Selected Tables")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
                       {stallRequest.selectedTables.map((table, index) => (
                         <div
                           key={index}
-                          className="flex justify-between items-center p-3 bg-gray-50 rounded"
+                          className="flex justify-between items-center p-3 bg-muted rounded"
                         >
                           <div>
                             <p className="font-medium">{table.tableName}</p>
@@ -2241,14 +2208,14 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               {stallRequest.selectedAddOns.length > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Selected Add-ons</CardTitle>
+                    <CardTitle className="text-lg">{t("Selected Add-ons")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
                       {stallRequest.selectedAddOns.map((addon, index) => (
                         <div
                           key={index}
-                          className="flex justify-between items-center p-3 bg-gray-50 rounded"
+                          className="flex justify-between items-center p-3 bg-muted rounded"
                         >
                           <div>
                             <p className="font-medium">{addon.name}</p>
@@ -2274,7 +2241,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               {/* Price Summary */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Price Summary</CardTitle>
+                  <CardTitle className="text-lg">{t("Price Summary")}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex justify-between">
@@ -2310,7 +2277,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               {/* Timeline */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Timeline</CardTitle>
+                  <CardTitle className="text-lg">{t("Timeline")}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex items-start gap-3">
@@ -2423,7 +2390,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               {stallRequest.notes && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Notes</CardTitle>
+                    <CardTitle className="text-lg">{t("Notes")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm">{stallRequest.notes}</p>
@@ -2435,9 +2402,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               {stallRequest.cancellationReason && (
                 <Card className="border-red-200">
                   <CardHeader>
-                    <CardTitle className="text-lg text-red-600">
-                      Cancellation Reason
-                    </CardTitle>
+                    <CardTitle className="text-lg text-red-600">{t("Cancellation Reason")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm">{stallRequest.cancellationReason}</p>
@@ -2462,14 +2427,14 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
       >
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Exhibitor Details</DialogTitle>
+            <DialogTitle>{t("Exhibitor Details")}</DialogTitle>
           </DialogHeader>
           {selectedExhibitor && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="md:col-span-1 space-y-4">
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">Business Info</CardTitle>
+                    <CardTitle className="text-sm">{t("Business Info")}</CardTitle>
                   </CardHeader>
                   <CardContent className="text-sm space-y-2">
                     <div className="font-bold text-lg">
@@ -2524,7 +2489,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                 </Card>
               </div>
               <div className="md:col-span-2">
-                <h3 className="font-semibold mb-2">Stall Requests</h3>
+                <h3 className="font-semibold mb-2">{t("Stall Requests")}</h3>
                 <ScrollArea className="h-[400px]">
                   <div className="space-y-3">
                     {selectedExhibitor.requests.map((req, idx) => (
@@ -2588,9 +2553,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               Send Invitations to{" "}
               {inviteType === "visitor" ? "Visitors" : "Exhibitors"}
             </DialogTitle>
-            <DialogDescription>
-              Select events and recipients to broadcast a message.
-            </DialogDescription>
+            <DialogDescription>{t("Select events and recipients to broadcast a message.")}</DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[400px]">
@@ -2603,7 +2566,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                 {events.map((event) => (
                   <div
                     key={event._id}
-                    className="flex items-center space-x-2 mb-2 p-2 hover:bg-slate-50 rounded"
+                    className="flex items-center space-x-2 mb-2 p-2 hover:bg-muted rounded"
                   >
                     <Checkbox
                       id={`evt-${event._id}`}
@@ -2661,7 +2624,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
 
               {/* Mini search inside dialog */}
               <Input
-                placeholder="Search list..."
+                placeholder={t("Search list...")}
                 className="h-8 mb-2 text-xs"
                 // Note: You might want a local state for this dialog search
               />
@@ -2678,7 +2641,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                     return (
                       <div
                         key={id}
-                        className="flex items-center space-x-2 mb-2 p-2 hover:bg-slate-50 rounded"
+                        className="flex items-center space-x-2 mb-2 p-2 hover:bg-muted rounded"
                       >
                         <Checkbox
                           id={`rec-${id}`}
@@ -2710,9 +2673,9 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
           </div>
 
           <div className="mt-2">
-            <Label>Invitation Message (Optional)</Label>
+            <Label>{t("Invitation Message (Optional)")}</Label>
             <Textarea
-              placeholder="We'd love to see you at our upcoming event!"
+              placeholder={t("We'd love to see you at our upcoming event!")}
               value={invitationMessage}
               onChange={(e) => setInvitationMessage(e.target.value)}
             />
@@ -2752,9 +2715,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               <QrCode className="h-5 w-5" />
               Ticket QR Code
             </DialogTitle>
-            <DialogDescription>
-              Scan this QR code to verify the ticket
-            </DialogDescription>
+            <DialogDescription>{t("Scan this QR code to verify the ticket")}</DialogDescription>
           </DialogHeader>
 
           <div className="flex justify-center p-4">
@@ -3044,7 +3005,7 @@ export function AddCustomerDialog({
               type="text"
               value={formData.firstName}
               onChange={(e) => handleChange("firstName", e.target.value)}
-              placeholder="Enter first name"
+              placeholder={t("Enter first name")}
               className={errors.firstName ? "border-red-500" : ""}
               disabled={submitting}
             />
@@ -3063,7 +3024,7 @@ export function AddCustomerDialog({
               type="text"
               value={formData.lastName}
               onChange={(e) => handleChange("lastName", e.target.value)}
-              placeholder="Enter last name"
+              placeholder={t("Enter last name")}
               className={errors.lastName ? "border-red-500" : ""}
               disabled={submitting}
             />
@@ -3118,7 +3079,7 @@ export function AddCustomerDialog({
                 <SelectContent>
                   <div className="p-2">
                     <Input
-                      placeholder="Search country..."
+                      placeholder={t("Search country...")}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="mb-2"
@@ -3139,7 +3100,7 @@ export function AddCustomerDialog({
                           <span className="font-medium">
                             {country.dialCode}
                           </span>
-                          <span className="text-gray-500 text-sm">
+                          <span className="text-muted-foreground text-sm">
                             {country.name}
                           </span>
                         </div>
@@ -3171,7 +3132,7 @@ export function AddCustomerDialog({
               </p>
             )}
             {selectedCountry && formData.whatsAppNumber && (
-              <p className="text-gray-500 text-xs mt-1">
+              <p className="text-muted-foreground text-xs mt-1">
                 Full number: {selectedCountry.dialCode}
                 {formData.whatsAppNumber}
               </p>
@@ -3182,7 +3143,7 @@ export function AddCustomerDialog({
           <div>
             <Label htmlFor="email" className="font-medium mb-2 block">
               Email{" "}
-              <span className="text-gray-400 text-xs font-normal">
+              <span className="text-muted-foreground text-xs font-normal">
                 (Optional)
               </span>
             </Label>
@@ -3470,15 +3431,13 @@ export function AddExhibitorDialog({
           <DialogTitle>
             {mode === "edit" ? "Edit Exhibitor" : "Add New Exhibitor"}
           </DialogTitle>
-          <DialogDescription>
-            Fill in the details for the shopkeeper.
-          </DialogDescription>
+          <DialogDescription>{t("Fill in the details for the shopkeeper.")}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>First Name*</Label>
+              <Label>{t("First Name*")}</Label>
               <Input
                 value={formData.firstName}
                 onChange={(e) =>
@@ -3490,7 +3449,7 @@ export function AddExhibitorDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label>Last Name*</Label>
+              <Label>{t("Last Name*")}</Label>
               <Input
                 value={formData.lastName}
                 onChange={(e) =>
@@ -3501,7 +3460,7 @@ export function AddExhibitorDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Shop Name*</Label>
+            <Label>{t("Shop Name*")}</Label>
             <Input
               value={formData.shopName}
               onChange={(e) =>
@@ -3512,13 +3471,13 @@ export function AddExhibitorDialog({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Select Country*</Label>
+              <Label>{t("Select Country*")}</Label>
               <Select
                 value={formData.country}
                 onValueChange={handleCountryChange}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Country" />
+                  <SelectValue placeholder={t("Country")} />
                 </SelectTrigger>
                 <SelectContent>
                   {SUPPORTED_COUNTRIES.map((c) => (
@@ -3530,7 +3489,7 @@ export function AddExhibitorDialog({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Business Category*</Label>
+              <Label>{t("Business Category*")}</Label>
               {/* Shared dynamic picker — categories added here sync to
                   the /categories pool used by Space Layout and the
                   public stall form. Single-select shape mirrors the old
@@ -3541,7 +3500,7 @@ export function AddExhibitorDialog({
                   setFormData({ ...formData, businessCategory: val })
                 }
                 baseline={BUSINESS_CATEGORIES}
-                placeholder="Category"
+                placeholder={t("Category")}
               />
             </div>
           </div>
@@ -3555,7 +3514,7 @@ export function AddExhibitorDialog({
               fires. */}
           <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3">
             <div>
-              <Label className="text-sm font-medium">Active member</Label>
+              <Label className="text-sm font-medium">{t("Active member")}</Label>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Turn on to mark this exhibitor as a member. They'll see
                 Member pricing on Space templates that have it configured.
@@ -3581,7 +3540,7 @@ export function AddExhibitorDialog({
               is due to renew. */}
           {formData.isMember && (
             <div className="space-y-2">
-              <Label>Membership end date</Label>
+              <Label>{t("Membership end date")}</Label>
               <Input
                 type="date"
                 min={new Date().toISOString().slice(0, 10)}
@@ -3602,7 +3561,7 @@ export function AddExhibitorDialog({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>WhatsApp Number*</Label>
+              <Label>{t("WhatsApp Number*")}</Label>
               <div className="flex">
                 <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 bg-muted text-muted-foreground text-sm">
                   {formData.dialCode}
@@ -3633,7 +3592,7 @@ export function AddExhibitorDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label>Phone Number*</Label>
+              <Label>{t("Phone Number*")}</Label>
               <div className="flex">
                 <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 bg-muted text-muted-foreground text-sm">
                   {formData.dialCode}
@@ -3691,7 +3650,7 @@ export function AddExhibitorDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Address*</Label>
+            <Label>{t("Address*")}</Label>
             <Input
               value={formData.address}
               onChange={(e) =>

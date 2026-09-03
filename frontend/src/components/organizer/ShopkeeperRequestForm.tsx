@@ -20,6 +20,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { X, Plus, Store, User, FileText, CreditCard } from "lucide-react";
+import { t } from "@/i18n/t";
 
 interface ShopkeeperRequestFormProps {
   onClose: () => void;
@@ -194,10 +195,8 @@ export function ShopkeeperRequestForm({
         <CardHeader>
           <div className="flex justify-between items-center">
             <div>
-              <CardTitle>Shopkeeper Registration Request</CardTitle>
-              <CardDescription>
-                Apply to participate as a vendor in our events
-              </CardDescription>
+              <CardTitle>{t("Shopkeeper Registration Request")}</CardTitle>
+              <CardDescription>{t("Apply to participate as a vendor in our events")}</CardDescription>
             </div>
             <Button variant="buttonOutline" size="sm" onClick={onClose}>
               <X className="h-4 w-4" />
@@ -229,7 +228,7 @@ export function ShopkeeperRequestForm({
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="businessName">Business Name *</Label>
+                    <Label htmlFor="businessName">{t("Business Name *")}</Label>
                     <Input
                       id="businessName"
                       value={formData.businessName}
@@ -239,19 +238,19 @@ export function ShopkeeperRequestForm({
                           businessName: e.target.value,
                         })
                       }
-                      placeholder="Enter your business name"
+                      placeholder={t("Enter your business name")}
                       required
                     />
                   </div>
                   <div>
-                    <Label htmlFor="businessType">Business Type *</Label>
+                    <Label htmlFor="businessType">{t("Business Type *")}</Label>
                     <Select
                       onValueChange={(value) =>
                         setFormData({ ...formData, businessType: value })
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select business type" />
+                        <SelectValue placeholder={t("Select business type")} />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="sole-proprietorship">
@@ -267,14 +266,14 @@ export function ShopkeeperRequestForm({
                 </div>
 
                 <div>
-                  <Label htmlFor="businessCategory">Business Category *</Label>
+                  <Label htmlFor="businessCategory">{t("Business Category *")}</Label>
                   <Select
                     onValueChange={(value) =>
                       setFormData({ ...formData, businessCategory: value })
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select your business category" />
+                      <SelectValue placeholder={t("Select your business category")} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="food-beverage">
@@ -300,9 +299,7 @@ export function ShopkeeperRequestForm({
                 </div>
 
                 <div>
-                  <Label htmlFor="businessDescription">
-                    Business Description *
-                  </Label>
+                  <Label htmlFor="businessDescription">{t("Business Description *")}</Label>
                   <Textarea
                     id="businessDescription"
                     value={formData.businessDescription}
@@ -312,7 +309,7 @@ export function ShopkeeperRequestForm({
                         businessDescription: e.target.value,
                       })
                     }
-                    placeholder="Describe your business, products, and services..."
+                    placeholder={t("Describe your business, products, and services...")}
                     rows={4}
                     required
                   />
@@ -320,7 +317,7 @@ export function ShopkeeperRequestForm({
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <Label htmlFor="establishedYear">Established Year</Label>
+                    <Label htmlFor="establishedYear">{t("Established Year")}</Label>
                     <Input
                       id="establishedYear"
                       type="number"
@@ -337,9 +334,7 @@ export function ShopkeeperRequestForm({
                     />
                   </div>
                   <div>
-                    <Label htmlFor="registrationNumber">
-                      Registration Number
-                    </Label>
+                    <Label htmlFor="registrationNumber">{t("Registration Number")}</Label>
                     <Input
                       id="registrationNumber"
                       value={formData.registrationNumber}
@@ -349,18 +344,18 @@ export function ShopkeeperRequestForm({
                           registrationNumber: e.target.value,
                         })
                       }
-                      placeholder="Business registration #"
+                      placeholder={t("Business registration #")}
                     />
                   </div>
                   <div>
-                    <Label htmlFor="taxId">Tax ID / EIN</Label>
+                    <Label htmlFor="taxId">{t("Tax ID / EIN")}</Label>
                     <Input
                       id="taxId"
                       value={formData.taxId}
                       onChange={(e) =>
                         setFormData({ ...formData, taxId: e.target.value })
                       }
-                      placeholder="Tax identification number"
+                      placeholder={t("Tax identification number")}
                     />
                   </div>
                 </div>
@@ -372,19 +367,19 @@ export function ShopkeeperRequestForm({
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="ownerName">Owner/Contact Person *</Label>
+                    <Label htmlFor="ownerName">{t("Owner/Contact Person *")}</Label>
                     <Input
                       id="ownerName"
                       value={formData.ownerName}
                       onChange={(e) =>
                         setFormData({ ...formData, ownerName: e.target.value })
                       }
-                      placeholder="Full name"
+                      placeholder={t("Full name")}
                       required
                     />
                   </div>
                   <div>
-                    <Label htmlFor="email">Email Address *</Label>
+                    <Label htmlFor="email">{t("Email Address *")}</Label>
                     <Input
                       id="email"
                       type="email"
@@ -400,7 +395,7 @@ export function ShopkeeperRequestForm({
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <Label htmlFor="phone">Primary Phone *</Label>
+                    <Label htmlFor="phone">{t("Primary Phone *")}</Label>
                     <Input
                       id="phone"
                       value={formData.phone}
@@ -412,7 +407,7 @@ export function ShopkeeperRequestForm({
                     />
                   </div>
                   <div>
-                    <Label htmlFor="alternatePhone">Alternate Phone</Label>
+                    <Label htmlFor="alternatePhone">{t("Alternate Phone")}</Label>
                     <Input
                       id="alternatePhone"
                       value={formData.alternatePhone}
@@ -426,7 +421,7 @@ export function ShopkeeperRequestForm({
                     />
                   </div>
                   <div>
-                    <Label htmlFor="website">Website</Label>
+                    <Label htmlFor="website">{t("Website")}</Label>
                     <Input
                       id="website"
                       value={formData.website}
@@ -439,7 +434,7 @@ export function ShopkeeperRequestForm({
                 </div>
 
                 <div>
-                  <Label htmlFor="businessAddress">Business Address *</Label>
+                  <Label htmlFor="businessAddress">{t("Business Address *")}</Label>
                   <Input
                     id="businessAddress"
                     value={formData.businessAddress}
@@ -449,38 +444,38 @@ export function ShopkeeperRequestForm({
                         businessAddress: e.target.value,
                       })
                     }
-                    placeholder="Street address"
+                    placeholder={t("Street address")}
                     required
                   />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
-                    <Label htmlFor="city">City *</Label>
+                    <Label htmlFor="city">{t("City *")}</Label>
                     <Input
                       id="city"
                       value={formData.city}
                       onChange={(e) =>
                         setFormData({ ...formData, city: e.target.value })
                       }
-                      placeholder="City"
+                      placeholder={t("City")}
                       required
                     />
                   </div>
                   <div>
-                    <Label htmlFor="state">State/Province *</Label>
+                    <Label htmlFor="state">{t("State/Province *")}</Label>
                     <Input
                       id="state"
                       value={formData.state}
                       onChange={(e) =>
                         setFormData({ ...formData, state: e.target.value })
                       }
-                      placeholder="State"
+                      placeholder={t("State")}
                       required
                     />
                   </div>
                   <div>
-                    <Label htmlFor="zipCode">ZIP/Postal Code *</Label>
+                    <Label htmlFor="zipCode">{t("ZIP/Postal Code *")}</Label>
                     <Input
                       id="zipCode"
                       value={formData.zipCode}
@@ -492,14 +487,14 @@ export function ShopkeeperRequestForm({
                     />
                   </div>
                   <div>
-                    <Label htmlFor="country">Country *</Label>
+                    <Label htmlFor="country">{t("Country *")}</Label>
                     <Input
                       id="country"
                       value={formData.country}
                       onChange={(e) =>
                         setFormData({ ...formData, country: e.target.value })
                       }
-                      placeholder="Country"
+                      placeholder={t("Country")}
                       required
                     />
                   </div>
@@ -511,7 +506,7 @@ export function ShopkeeperRequestForm({
             {currentStep === 3 && (
               <div className="space-y-4">
                 <div>
-                  <Label>Select Events to Participate *</Label>
+                  <Label>{t("Select Events to Participate *")}</Label>
                   <div className="grid grid-cols-1 gap-2 mt-2 max-h-48 overflow-y-auto border rounded-md p-4">
                     {events.map((event) => (
                       <div
@@ -543,9 +538,7 @@ export function ShopkeeperRequestForm({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="spaceRequired">
-                      Space Required (sq ft)
-                    </Label>
+                    <Label htmlFor="spaceRequired">{t("Space Required (sq ft)")}</Label>
                     <Input
                       id="spaceRequired"
                       type="number"
@@ -561,9 +554,7 @@ export function ShopkeeperRequestForm({
                     />
                   </div>
                   <div>
-                    <Label htmlFor="expectedRevenue">
-                      Expected Revenue per Event
-                    </Label>
+                    <Label htmlFor="expectedRevenue">{t("Expected Revenue per Event")}</Label>
                     <Input
                       id="expectedRevenue"
                       value={formData.expectedRevenue}
@@ -579,7 +570,7 @@ export function ShopkeeperRequestForm({
                 </div>
 
                 <div>
-                  <Label>Booth Requirements</Label>
+                  <Label>{t("Booth Requirements")}</Label>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
                     <div className="flex items-center space-x-2">
                       <Checkbox
@@ -592,7 +583,7 @@ export function ShopkeeperRequestForm({
                           })
                         }
                       />
-                      <Label htmlFor="electricity">Electricity</Label>
+                      <Label htmlFor="electricity">{t("Electricity")}</Label>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Checkbox
@@ -605,7 +596,7 @@ export function ShopkeeperRequestForm({
                           })
                         }
                       />
-                      <Label htmlFor="wifi">WiFi Access</Label>
+                      <Label htmlFor="wifi">{t("WiFi Access")}</Label>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Checkbox
@@ -618,15 +609,13 @@ export function ShopkeeperRequestForm({
                           })
                         }
                       />
-                      <Label htmlFor="storage">Storage Space</Label>
+                      <Label htmlFor="storage">{t("Storage Space")}</Label>
                     </div>
                   </div>
                 </div>
 
                 <div>
-                  <Label htmlFor="boothRequirements">
-                    Additional Booth Requirements
-                  </Label>
+                  <Label htmlFor="boothRequirements">{t("Additional Booth Requirements")}</Label>
                   <Textarea
                     id="boothRequirements"
                     value={formData.boothRequirements}
@@ -636,7 +625,7 @@ export function ShopkeeperRequestForm({
                         boothRequirements: e.target.value,
                       })
                     }
-                    placeholder="Describe any special requirements for your booth setup..."
+                    placeholder={t("Describe any special requirements for your booth setup...")}
                     rows={3}
                   />
                 </div>
@@ -647,12 +636,12 @@ export function ShopkeeperRequestForm({
             {currentStep === 4 && (
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="productCategories">Product Categories</Label>
+                  <Label htmlFor="productCategories">{t("Product Categories")}</Label>
                   <div className="flex space-x-2 mb-2">
                     <Input
                       value={currentCategory}
                       onChange={(e) => setCurrentCategory(e.target.value)}
-                      placeholder="Add product category"
+                      placeholder={t("Add product category")}
                       onKeyPress={(e) =>
                         e.key === "Enter" &&
                         (e.preventDefault(), addProductCategory())
@@ -687,9 +676,7 @@ export function ShopkeeperRequestForm({
                 </div>
 
                 <div>
-                  <Label htmlFor="productDescription">
-                    Product/Service Description *
-                  </Label>
+                  <Label htmlFor="productDescription">{t("Product/Service Description *")}</Label>
                   <Textarea
                     id="productDescription"
                     value={formData.productDescription}
@@ -699,7 +686,7 @@ export function ShopkeeperRequestForm({
                         productDescription: e.target.value,
                       })
                     }
-                    placeholder="Describe the products or services you'll offer..."
+                    placeholder={t("Describe the products or services you'll offer...")}
                     rows={4}
                     required
                   />
@@ -707,7 +694,7 @@ export function ShopkeeperRequestForm({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="priceRange">Price Range</Label>
+                    <Label htmlFor="priceRange">{t("Price Range")}</Label>
                     <Input
                       id="priceRange"
                       value={formData.priceRange}
@@ -718,7 +705,7 @@ export function ShopkeeperRequestForm({
                     />
                   </div>
                   <div>
-                    <Label htmlFor="yearsInBusiness">Years in Business</Label>
+                    <Label htmlFor="yearsInBusiness">{t("Years in Business")}</Label>
                     <Input
                       id="yearsInBusiness"
                       type="number"
@@ -736,9 +723,7 @@ export function ShopkeeperRequestForm({
                 </div>
 
                 <div>
-                  <Label htmlFor="specialOffers">
-                    Special Offers for Event
-                  </Label>
+                  <Label htmlFor="specialOffers">{t("Special Offers for Event")}</Label>
                   <Textarea
                     id="specialOffers"
                     value={formData.specialOffers}
@@ -748,15 +733,13 @@ export function ShopkeeperRequestForm({
                         specialOffers: e.target.value,
                       })
                     }
-                    placeholder="Any special discounts or offers for event attendees..."
+                    placeholder={t("Any special discounts or offers for event attendees...")}
                     rows={3}
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="previousEvents">
-                    Previous Event Experience
-                  </Label>
+                  <Label htmlFor="previousEvents">{t("Previous Event Experience")}</Label>
                   <Textarea
                     id="previousEvents"
                     value={formData.previousEvents}
@@ -766,7 +749,7 @@ export function ShopkeeperRequestForm({
                         previousEvents: e.target.value,
                       })
                     }
-                    placeholder="List previous events you've participated in..."
+                    placeholder={t("List previous events you've participated in...")}
                     rows={3}
                   />
                 </div>
@@ -778,7 +761,7 @@ export function ShopkeeperRequestForm({
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="businessLicense">Business License</Label>
+                    <Label htmlFor="businessLicense">{t("Business License")}</Label>
                     <Input
                       id="businessLicense"
                       type="file"
@@ -787,9 +770,7 @@ export function ShopkeeperRequestForm({
                     />
                   </div>
                   <div>
-                    <Label htmlFor="insuranceCertificate">
-                      Insurance Certificate
-                    </Label>
+                    <Label htmlFor="insuranceCertificate">{t("Insurance Certificate")}</Label>
                     <Input
                       id="insuranceCertificate"
                       type="file"
@@ -802,7 +783,7 @@ export function ShopkeeperRequestForm({
                 </div>
 
                 <div>
-                  <Label>Payment Methods Accepted</Label>
+                  <Label>{t("Payment Methods Accepted")}</Label>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
                     {[
                       "Cash",
@@ -833,7 +814,7 @@ export function ShopkeeperRequestForm({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="accountName">Bank Account Name</Label>
+                    <Label htmlFor="accountName">{t("Bank Account Name")}</Label>
                     <Input
                       id="accountName"
                       value={formData.bankDetails.accountName}
@@ -846,11 +827,11 @@ export function ShopkeeperRequestForm({
                           },
                         })
                       }
-                      placeholder="Account holder name"
+                      placeholder={t("Account holder name")}
                     />
                   </div>
                   <div>
-                    <Label htmlFor="bankName">Bank Name</Label>
+                    <Label htmlFor="bankName">{t("Bank Name")}</Label>
                     <Input
                       id="bankName"
                       value={formData.bankDetails.bankName}
@@ -863,14 +844,14 @@ export function ShopkeeperRequestForm({
                           },
                         })
                       }
-                      placeholder="Bank name"
+                      placeholder={t("Bank name")}
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
-                    <Label htmlFor="facebook">Facebook</Label>
+                    <Label htmlFor="facebook">{t("Facebook")}</Label>
                     <Input
                       id="facebook"
                       value={formData.socialMedia.facebook}
@@ -883,11 +864,11 @@ export function ShopkeeperRequestForm({
                           },
                         })
                       }
-                      placeholder="Facebook page"
+                      placeholder={t("Facebook page")}
                     />
                   </div>
                   <div>
-                    <Label htmlFor="instagram">Instagram</Label>
+                    <Label htmlFor="instagram">{t("Instagram")}</Label>
                     <Input
                       id="instagram"
                       value={formData.socialMedia.instagram}
@@ -904,7 +885,7 @@ export function ShopkeeperRequestForm({
                     />
                   </div>
                   <div>
-                    <Label htmlFor="twitter">Twitter</Label>
+                    <Label htmlFor="twitter">{t("Twitter")}</Label>
                     <Input
                       id="twitter"
                       value={formData.socialMedia.twitter}
@@ -921,7 +902,7 @@ export function ShopkeeperRequestForm({
                     />
                   </div>
                   <div>
-                    <Label htmlFor="linkedin">LinkedIn</Label>
+                    <Label htmlFor="linkedin">{t("LinkedIn")}</Label>
                     <Input
                       id="linkedin"
                       value={formData.socialMedia.linkedin}
@@ -934,13 +915,13 @@ export function ShopkeeperRequestForm({
                           },
                         })
                       }
-                      placeholder="LinkedIn profile"
+                      placeholder={t("LinkedIn profile")}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <Label htmlFor="specialRequests">Special Requests</Label>
+                  <Label htmlFor="specialRequests">{t("Special Requests")}</Label>
                   <Textarea
                     id="specialRequests"
                     value={formData.specialRequests}
@@ -950,7 +931,7 @@ export function ShopkeeperRequestForm({
                         specialRequests: e.target.value,
                       })
                     }
-                    placeholder="Any special requests or requirements..."
+                    placeholder={t("Any special requests or requirements...")}
                     rows={3}
                   />
                 </div>
@@ -967,9 +948,7 @@ export function ShopkeeperRequestForm({
                         })
                       }
                     />
-                    <Label htmlFor="marketingPermission">
-                      I agree to receive marketing communications
-                    </Label>
+                    <Label htmlFor="marketingPermission">{t("I agree to receive marketing communications")}</Label>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Checkbox
@@ -983,9 +962,7 @@ export function ShopkeeperRequestForm({
                       }
                       required
                     />
-                    <Label htmlFor="dataProcessingConsent">
-                      I consent to the processing of my personal data *
-                    </Label>
+                    <Label htmlFor="dataProcessingConsent">{t("I consent to the processing of my personal data *")}</Label>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Checkbox
@@ -999,9 +976,7 @@ export function ShopkeeperRequestForm({
                       }
                       required
                     />
-                    <Label htmlFor="termsAccepted">
-                      I accept the terms and conditions *
-                    </Label>
+                    <Label htmlFor="termsAccepted">{t("I accept the terms and conditions *")}</Label>
                   </div>
                 </div>
               </div>

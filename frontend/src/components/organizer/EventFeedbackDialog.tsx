@@ -14,6 +14,7 @@ import { Loader2, Star, RefreshCcw, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscription } from "@/hooks/useSubscription";
 import PaymentFeedbackPanel from "./PaymentFeedbackPanel";
+import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
@@ -72,7 +73,7 @@ function Stars({ value }: { value: number }) {
           className={
             value >= n
               ? "fill-yellow-400 text-yellow-400"
-              : "text-gray-300"
+              : "text-muted-foreground"
           }
         />
       ))}
@@ -194,7 +195,7 @@ export function EventFeedbackDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Feedback</DialogTitle>
+          <DialogTitle>{t("Feedback")}</DialogTitle>
           <DialogDescription>
             {eventTitle ? `${eventTitle} · ` : ""}Aggregate and individual
             feedback for this event.
@@ -211,9 +212,9 @@ export function EventFeedbackDialog({
           </div>
         ) : allowedAudiences.length === 0 ? (
           <div className="py-10 text-center text-muted-foreground space-y-3">
-            <Lock className="h-8 w-8 mx-auto text-slate-400" />
+            <Lock className="h-8 w-8 mx-auto text-muted-foreground" />
             <div>
-              <p className="font-medium text-slate-700">
+              <p className="font-medium text-muted-foreground">
                 Feedback isn't included in your current plan
               </p>
               <p className="text-xs mt-1">

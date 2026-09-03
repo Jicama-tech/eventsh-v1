@@ -67,6 +67,7 @@ import {
   Paperclip,
   Download,
 } from "lucide-react";
+import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
@@ -477,7 +478,7 @@ export default function SponsorsDirectory() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search sponsors…"
+              placeholder={t("Search sponsors\u2026")}
               className="pl-9"
             />
           </div>
@@ -816,7 +817,7 @@ export default function SponsorsDirectory() {
 
               {history?.sponsor?.notes && (
                 <section className="rounded-xl border p-3">
-                  <h4 className="mb-1 font-semibold">Notes</h4>
+                  <h4 className="mb-1 font-semibold">{t("Notes")}</h4>
                   <p className="text-xs text-muted-foreground">
                     {history.sponsor.notes}
                   </p>
@@ -852,13 +853,11 @@ export default function SponsorsDirectory() {
             <DialogTitle>
               {editingId ? "Edit sponsor" : "Add sponsor"}
             </DialogTitle>
-            <DialogDescription>
-              Keep your own record of the businesses sponsoring your events.
-            </DialogDescription>
+            <DialogDescription>{t("Keep your own record of the businesses sponsoring your events.")}</DialogDescription>
           </DialogHeader>
           <div className="-mr-2 grid flex-1 gap-3 overflow-y-auto pr-2 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <Label className="text-xs">Company name *</Label>
+              <Label className="text-xs">{t("Company name *")}</Label>
               <Input
                 value={form.companyName}
                 onChange={(e) =>
@@ -870,13 +869,13 @@ export default function SponsorsDirectory() {
             {/* Company logo — shown on the event page once a sponsorship
                 for this business is confirmed. */}
             <div className="sm:col-span-2">
-              <Label className="text-xs">Company logo</Label>
+              <Label className="text-xs">{t("Company logo")}</Label>
               <div className="mt-1 flex items-center gap-3">
                 {logoPreview ? (
                   <img
                     src={logoPreview}
                     alt="Logo preview"
-                    className="h-16 w-16 rounded border bg-white object-contain p-1"
+                    className="h-16 w-16 rounded border bg-background object-contain p-1"
                   />
                 ) : (
                   <div className="flex h-16 w-16 items-center justify-center rounded border bg-muted/30">
@@ -909,7 +908,7 @@ export default function SponsorsDirectory() {
               </div>
             </div>
             <div>
-              <Label className="text-xs">Contact person</Label>
+              <Label className="text-xs">{t("Contact person")}</Label>
               <Input
                 value={form.contactName}
                 onChange={(e) =>
@@ -918,7 +917,7 @@ export default function SponsorsDirectory() {
               />
             </div>
             <div>
-              <Label className="text-xs">Email</Label>
+              <Label className="text-xs">{t("Email")}</Label>
               <Input
                 type="email"
                 value={form.email}
@@ -929,7 +928,7 @@ export default function SponsorsDirectory() {
               />
             </div>
             <div>
-              <Label className="text-xs">Business email</Label>
+              <Label className="text-xs">{t("Business email")}</Label>
               <Input
                 type="email"
                 value={form.businessEmail}
@@ -940,7 +939,7 @@ export default function SponsorsDirectory() {
               />
             </div>
             <div>
-              <Label className="text-xs">Phone</Label>
+              <Label className="text-xs">{t("Phone")}</Label>
               <div className="flex gap-2">
                 <Select
                   value={form.countryCode}
@@ -969,7 +968,7 @@ export default function SponsorsDirectory() {
               </div>
             </div>
             <div className="sm:col-span-2">
-              <Label className="text-xs">Website</Label>
+              <Label className="text-xs">{t("Website")}</Label>
               <Input
                 value={form.website}
                 onChange={(e) =>
@@ -979,13 +978,13 @@ export default function SponsorsDirectory() {
               />
             </div>
             <div className="sm:col-span-2">
-              <Label className="text-xs">Notes</Label>
+              <Label className="text-xs">{t("Notes")}</Label>
               <Textarea
                 value={form.notes}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, notes: e.target.value }))
                 }
-                placeholder="Anything worth remembering about this sponsor."
+                placeholder={t("Anything worth remembering about this sponsor.")}
               />
             </div>
           </div>

@@ -128,6 +128,7 @@ interface ShopkeeperSettingsProps {
 }
 
 import { useCountryCodes } from "@/hooks/useCountryCodes";
+import { t } from "@/i18n/t";
 
 interface Country {
   name: string;
@@ -1811,7 +1812,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
       <div className="sticky top-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b py-4 -mx-6 px-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+            <h1 className="text-3xl font-bold tracking-tight">{t("Settings")}</h1>
             <p className="text-muted-foreground max-w-auto">
               Configure your Organization and business settings
             </p>
@@ -1878,10 +1879,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
         <TabsContent value="profile" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Profile</CardTitle>
-              {/* <CardDescription>
-                Manage Organizer details and public info
-              </CardDescription> */}
+              <CardTitle>{t("Profile")}</CardTitle>
+              {/* <CardDescription>{t("Manage Organizer details and public info")}</CardDescription> */}
             </CardHeader>
 
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1898,9 +1897,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                         <CreditCard className="w-5 h-5 text-green-600" />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-lg text-green-800">
-                          Document Verified ✓
-                        </h3>
+                        <h3 className="font-semibold text-lg text-green-800">{t("Document Verified \u2713")}</h3>
                         <p className="text-sm text-green-600">
                           Secure & protected
                         </p>
@@ -1927,14 +1924,14 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   </div>
 
                   {/* ✅ BLURRED COUNTRY - SHOW SELECTED VALUE */}
-                  <div className="grid gap-2 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                    <Label className="flex items-center gap-2 text-sm font-medium text-gray-600">
+                  <div className="grid gap-2 p-4 bg-muted border border-border rounded-lg">
+                    <Label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                       <Globe className="w-4 h-4" />
                       Country
                     </Label>
-                    <div className="flex items-center gap-3 p-3 bg-white border rounded-md opacity-60">
-                      <Globe className="w-4 h-4 text-gray-400" />
-                      <span className="font-medium text-gray-700">
+                    <div className="flex items-center gap-3 p-3 bg-background border rounded-md opacity-60">
+                      <Globe className="w-4 h-4 text-muted-foreground" />
+                      <span className="font-medium text-muted-foreground">
                         {countries.find((c) => c.code === selectedCountry)
                           ?.name || "India"}
                         (
@@ -1946,15 +1943,15 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   </div>
 
                   {/* ✅ BLURRED NUMBER - SHOW ACTUAL VALUE */}
-                  <div className="grid gap-2 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                    <Label className="flex items-center gap-2 text-sm font-medium text-gray-600">
+                  <div className="grid gap-2 p-4 bg-muted border border-border rounded-lg">
+                    <Label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                       <CreditCard className="w-4 h-4" />
                       {selectedCountry === "IN" ? "GST Number" : "UEN Number"}
                     </Label>
-                    <div className="flex items-center justify-between p-3 bg-white border rounded-md opacity-60">
+                    <div className="flex items-center justify-between p-3 bg-background border rounded-md opacity-60">
                       <div className="flex items-center gap-3">
-                        <CreditCard className="w-4 h-4 text-gray-400" />
-                        <span className="font-mono text-lg font-semibold text-gray-700 tracking-wider">
+                        <CreditCard className="w-4 h-4 text-muted-foreground" />
+                        <span className="font-mono text-lg font-semibold text-muted-foreground tracking-wider">
                           {selectedCountry === "IN"
                             ? shopProfile.GSTNumber
                             : shopProfile.UENNumber}
@@ -1991,7 +1988,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       }}
                     >
                       <SelectTrigger className="h-11">
-                        <SelectValue placeholder="Select a country" />
+                        <SelectValue placeholder={t("Select a country")} />
                       </SelectTrigger>
                       <SelectContent>
                         {countries.map((country) => (
@@ -2050,7 +2047,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                           it.
                         </p>
                       )}
-                      <p className="text-xs text-gray-600">
+                      <p className="text-xs text-muted-foreground">
                         Your GST Identification Number (GSTIN)
                       </p>
                     </div>
@@ -2099,7 +2096,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                           it.
                         </p>
                       )}
-                      <p className="text-xs text-gray-600">
+                      <p className="text-xs text-muted-foreground">
                         Your Unique Entity Number (UEN)
                       </p>
 
@@ -2111,7 +2108,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       >
                         <DialogContent className="max-w-sm">
                           <DialogHeader>
-                            <DialogTitle>Verify PayNow (SGD 1.00)</DialogTitle>
+                            <DialogTitle>{t("Verify PayNow (SGD 1.00)")}</DialogTitle>
                             <DialogDescription>
                               Scan this QR with your banking app and confirm the
                               payee name is your business. It's a live SGD 1.00
@@ -2134,14 +2131,14 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                                 <img
                                   src={qrUrl}
                                   alt="PayNow $1 verification QR"
-                                  className="w-64 h-64 object-contain border rounded-lg bg-white"
+                                  className="w-64 h-64 object-contain border rounded-lg bg-background"
                                 />
                                 {payee && (
                                   <p className="text-sm font-medium">
                                     Paying to {payee}
                                   </p>
                                 )}
-                                <p className="text-xs text-gray-500 text-center">
+                                <p className="text-xs text-muted-foreground text-center">
                                   Amount: SGD 1.00 — if your bank app shows your
                                   own business name as the payee, your UEN is set
                                   up correctly.
@@ -2195,9 +2192,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                         <FileText className="w-5 h-5 text-blue-600" />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-lg text-blue-800">
-                          Verification Details
-                        </h3>
+                        <h3 className="font-semibold text-lg text-blue-800">{t("Verification Details")}</h3>
                         <p className="text-sm text-blue-600">
                           Official business information
                         </p>
@@ -2273,13 +2268,13 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg">
-                        <p className="font-mono text-sm tracking-wide text-gray-800">
+                        <p className="font-mono text-sm tracking-wide text-foreground">
                           {gstDetails.taxpayerInfo?.pradr?.addr?.bno || ""}{" "}
                           {gstDetails.taxpayerInfo?.pradr?.addr?.st || ""},{" "}
                           {gstDetails.taxpayerInfo?.pradr?.addr?.loc || ""},{" "}
                           {gstDetails.taxpayerInfo?.pradr?.addr?.dst || ""}
                         </p>
-                        <p className="text-xs text-gray-600 mt-1">
+                        <p className="text-xs text-muted-foreground mt-1">
                           {gstDetails.taxpayerInfo?.pradr?.addr?.stcd || ""} -{" "}
                           {gstDetails.taxpayerInfo?.pradr?.addr?.pncd || ""}
                         </p>
@@ -2305,7 +2300,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
               {/* OWNER NAME */}
               <div>
-                <Label>Owner Name</Label>
+                <Label>{t("Owner Name")}</Label>
                 <Input
                   value={shopProfile.ownerName}
                   onChange={(e) =>
@@ -2314,13 +2309,13 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       ownerName: e.target.value,
                     }))
                   }
-                  placeholder="Owner full name"
+                  placeholder={t("Owner full name")}
                 />
               </div>
 
               {/* SHOP NAME */}
               <div>
-                <Label>Organization Name</Label>
+                <Label>{t("Organization Name")}</Label>
                 <Input
                   value={shopProfile.organizationName}
                   onChange={(e) =>
@@ -2329,13 +2324,13 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       organizationName: e.target.value,
                     }))
                   }
-                  placeholder="Business or storefront name"
+                  placeholder={t("Business or storefront name")}
                 />
               </div>
 
               {/* PRIMARY EMAIL */}
               <div>
-                <Label>Primary Email</Label>
+                <Label>{t("Primary Email")}</Label>
                 <Input
                   type="email"
                   value={shopProfile.email}
@@ -2351,7 +2346,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
               {/* BUSINESS EMAIL */}
               <div>
-                <Label>Business Email</Label>
+                <Label>{t("Business Email")}</Label>
                 <Input
                   type="email"
                   value={shopProfile.businessEmail}
@@ -2379,7 +2374,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   <div className="w-32">
                     <Select value={countryCode} onValueChange={setCountryCode}>
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Code" />
+                        <SelectValue placeholder={t("Code")} />
                       </SelectTrigger>
                       <SelectContent>
                         {loadingCountries ? (
@@ -2408,7 +2403,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   <Input
                     type="tel"
                     maxLength={10}
-                    placeholder="Enter number"
+                    placeholder={t("Enter number")}
                     value={whatsAppNumber}
                     onChange={(e) =>
                       setwhatsAppNumber(e.target.value.replace(/\D/g, ""))
@@ -2425,7 +2420,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   back-compat. The eventfront's contact card renders the
                   whole array. */}
               <div>
-                <Label>Phone numbers</Label>
+                <Label>{t("Phone numbers")}</Label>
                 <p className="text-[11px] text-muted-foreground mb-2">
                   Add as many contact numbers as you want — they'll show up
                   on your event pages.
@@ -2471,11 +2466,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     return (
                       <div
                         key={idx}
-                        className="rounded-lg border bg-white p-2.5 space-y-2"
+                        className="rounded-lg border bg-background p-2.5 space-y-2"
                       >
                         {/* Label for this number — e.g. "Reception", a name */}
                         <Input
-                          placeholder="Name / label (e.g. Reception, EventSH)"
+                          placeholder={t("Name / label (e.g. Reception, EventSH)")}
                           value={label}
                           onChange={(e) => writeName(e.target.value)}
                           className="h-8 text-sm"
@@ -2487,7 +2482,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                               onValueChange={(v) => writeRow(v, digits)}
                             >
                               <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Code" />
+                                <SelectValue placeholder={t("Code")} />
                               </SelectTrigger>
                               <SelectContent>
                                 {loadingCountries ? (
@@ -2515,7 +2510,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                           <Input
                             type="tel"
                             inputMode="numeric"
-                            placeholder="Enter number"
+                            placeholder={t("Enter number")}
                             value={digits}
                             onChange={(e) =>
                               writeRow(dial, e.target.value.replace(/\D/g, ""))
@@ -2567,7 +2562,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
               {/* ADDRESS */}
               <div className="md:col-span-2">
-                <Label>Address</Label>
+                <Label>{t("Address")}</Label>
                 <Textarea
                   value={shopProfile.address}
                   onChange={(e) =>
@@ -2576,13 +2571,13 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       address: e.target.value,
                     }))
                   }
-                  placeholder="Full business address"
+                  placeholder={t("Full business address")}
                 />
               </div>
 
               {/* BUSINESS CATEGORY */}
               <div className="md:col-span-2">
-                <Label>Category</Label>
+                <Label>{t("Category")}</Label>
                 {showAddCategory ? (
                   <div className="flex gap-2">
                     <Input
@@ -2598,7 +2593,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                           setNewCategoryName("");
                         }
                       }}
-                      placeholder="New category name"
+                      placeholder={t("New category name")}
                       maxLength={50}
                       disabled={savingCategory}
                     />
@@ -2632,11 +2627,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select a category" />
+                      <SelectValue placeholder={t("Select a category")} />
                     </SelectTrigger>
                     <SelectContent>
                       {categories.length === 0 ? (
-                        <div className="px-2 py-1.5 text-sm text-gray-500">
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
                           Loading...
                         </div>
                       ) : (
@@ -2667,7 +2662,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
               {/* TAX PERCENTAGE */}
               <div>
-                <Label>Tax %</Label>
+                <Label>{t("Tax %")}</Label>
                 <Input
                   type="number"
                   min="0"
@@ -2687,7 +2682,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               {/* DESCRIPTION — shown publicly in "About Organizer" on the
                   event page (this is the same text captured at registration). */}
               <div className="md:col-span-2">
-                <Label>Description (About Organizer)</Label>
+                <Label>{t("Description (About Organizer)")}</Label>
                 <Textarea
                   value={shopProfile.description}
                   onChange={(e) =>
@@ -2705,8 +2700,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               </div>
 
               <div className="md:col-span-2">
-                <Label className="mb-2 block">Terms & Conditions</Label>
-                <div className="bg-white dark:bg-slate-950 rounded-md">
+                <Label className="mb-2 block">{t("Terms & Conditions")}</Label>
+                <div className="bg-background dark:bg-slate-950 rounded-md">
                   <Suspense
                     fallback={
                       <div className="h-[150px] border rounded-md animate-pulse bg-muted" />
@@ -2777,7 +2772,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label>From name</Label>
+                  <Label>{t("From name")}</Label>
                   <Input
                     value={emailCfg.fromName}
                     onChange={(e) =>
@@ -2787,7 +2782,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>From email</Label>
+                  <Label>{t("From email")}</Label>
                   <Input
                     type="email"
                     value={emailCfg.fromEmail}
@@ -2798,7 +2793,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>SMTP host</Label>
+                  <Label>{t("SMTP host")}</Label>
                   <Input
                     value={emailCfg.smtpHost}
                     onChange={(e) =>
@@ -2809,7 +2804,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label>SMTP port</Label>
+                    <Label>{t("SMTP port")}</Label>
                     <Input
                       type="number"
                       value={emailCfg.smtpPort}
@@ -2824,7 +2819,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>SSL</Label>
+                    <Label>{t("SSL")}</Label>
                     <div className="flex items-center h-10">
                       <Switch
                         checked={emailCfg.smtpSecure}
@@ -2839,7 +2834,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>SMTP username</Label>
+                  <Label>{t("SMTP username")}</Label>
                   <Input
                     value={emailCfg.smtpUser}
                     onChange={(e) =>
@@ -2886,7 +2881,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
               <div className="flex flex-col sm:flex-row gap-3 sm:items-end pt-2 border-t">
                 <div className="space-y-1.5 flex-1">
-                  <Label>Send a test email to</Label>
+                  <Label>{t("Send a test email to")}</Label>
                   <Input
                     type="email"
                     value={emailTestTo}
@@ -2922,9 +2917,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 <Package className="w-5 h-5" />
                 Subscription Plan
               </CardTitle>
-              <CardDescription>
-                Your current plan and what's included
-              </CardDescription>
+              <CardDescription>{t("Your current plan and what's included")}</CardDescription>
             </CardHeader>
             <CardContent>
               {loadingSubscription ? (
@@ -2933,7 +2926,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 </div>
               ) : !subscription?.subscribed ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  <ShieldCheck className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <ShieldCheck className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
                   <p className="text-lg font-medium">No Active Plan</p>
                   <p className="text-sm mt-1 mb-4">
                     Choose a plan to get started.
@@ -3055,7 +3048,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   {/* Features list */}
                   {subscription.features?.length > 0 && (
                     <div>
-                      <h4 className="text-sm font-semibold mb-2">Features</h4>
+                      <h4 className="text-sm font-semibold mb-2">{t("Features")}</h4>
                       <div className="flex flex-wrap gap-2">
                         {subscription.features.map((f: string, i: number) => (
                           <Badge key={i} variant="secondary">
@@ -3070,9 +3063,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   {subscription.modules &&
                     Object.keys(subscription.modules).length > 0 && (
                       <div>
-                        <h4 className="text-sm font-semibold mb-3">
-                          Module Access
-                        </h4>
+                        <h4 className="text-sm font-semibold mb-3">{t("Module Access")}</h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {[
                             { key: "events", label: "Events" },
@@ -3128,7 +3119,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                                 className={`px-3 py-2 rounded-lg border ${
                                   on
                                     ? "bg-green-50 border-green-200"
-                                    : "bg-gray-50 border-gray-200 opacity-60"
+                                    : "bg-muted border-border opacity-60"
                                 }`}
                               >
                                 <div className="flex items-center justify-between">
@@ -3167,7 +3158,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           <Dialog open={changePlanOpen} onOpenChange={setChangePlanOpen}>
             <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Choose a Plan</DialogTitle>
+                <DialogTitle>{t("Choose a Plan")}</DialogTitle>
                 <DialogDescription>
                   Select a plan to switch to. You'll be moved to the new plan
                   immediately and the validity timer resets.
@@ -3302,9 +3293,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 <UserPlus2 className="w-5 h-5" />
                 Operator Settings
               </CardTitle>
-              <CardDescription>
-                Create and manage your shop operators here
-              </CardDescription>
+              <CardDescription>{t("Create and manage your shop operators here")}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between mb-4">
@@ -3411,7 +3400,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                           a booking narrows the space list to this
                           operator's spaces (plus any unassigned ones). */}
                       {op.referralEnabled && (
-                        <div className="flex items-center justify-between rounded-lg border bg-slate-50 px-3 py-2">
+                        <div className="flex items-center justify-between rounded-lg border bg-muted px-3 py-2">
                           <div>
                             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                               Referral Code
@@ -3475,13 +3464,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     ? "Edit Operator"
                     : "Add Operator"}
                 </DialogTitle>
-                <DialogDescription>
-                  Operators can manage orders on behalf of your shop.
-                </DialogDescription>
+                <DialogDescription>{t("Operators can manage orders on behalf of your shop.")}</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 mt-2 flex-1 overflow-y-auto px-6">
                 <div className="space-y-1">
-                  <Label>Operator Name *</Label>
+                  <Label>{t("Operator Name *")}</Label>
                   <Input
                     placeholder="e.g. John Doe"
                     value={operatorForm.name}
@@ -3494,7 +3481,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>WhatsApp Number (optional)</Label>
+                  <Label>{t("WhatsApp Number (optional)")}</Label>
                   <div className="flex items-center space-x-2">
                     <div className="w-32">
                       <Select
@@ -3507,7 +3494,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                         }
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Code" />
+                          <SelectValue placeholder={t("Code")} />
                         </SelectTrigger>
                         <SelectContent>
                           {loadingCountries ? (
@@ -3533,7 +3520,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     </div>
                     <Input
                       type="tel"
-                      placeholder="Enter number"
+                      placeholder={t("Enter number")}
                       maxLength={10}
                       value={operatorForm.operatorLocalNumber}
                       onChange={(e) =>
@@ -3550,7 +3537,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <Label>Operator Email *</Label>
+                  <Label>{t("Operator Email *")}</Label>
                   <div className="flex items-center">
                     <Input
                       placeholder="e.g. johndoe"
@@ -3576,7 +3563,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <Label>Company Email (optional)</Label>
+                  <Label>{t("Company Email (optional)")}</Label>
                   <Input
                     type="email"
                     placeholder="e.g. info@yourcompany.com"
@@ -3595,7 +3582,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 </div>
                 <div className="flex items-start justify-between gap-3 rounded-md border p-3">
                   <div className="space-y-0.5">
-                    <Label>Allow Emails</Label>
+                    <Label>{t("Allow Emails")}</Label>
                     <p className="text-xs text-muted-foreground">
                       When on, this operator receives notification emails (new
                       vendor requests, payment alerts). Turn off to stop emails
@@ -3614,7 +3601,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 </div>
                 <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
                   <div>
-                    <Label>Expenses Approval</Label>
+                    <Label>{t("Expenses Approval")}</Label>
                     <p className="text-xs text-muted-foreground">
                       When on, this operator can approve or reject expenses the
                       team logs against an event. Off by default.
@@ -3632,7 +3619,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 </div>
                 <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
                   <div>
-                    <Label>Scheduled Space Referral Code</Label>
+                    <Label>{t("Scheduled Space Referral Code")}</Label>
                     <p className="text-xs text-muted-foreground">
                       When on, this operator gets a referral code visitors
                       can enter to narrow a Scheduled Space booking to their
@@ -3818,14 +3805,12 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   <Palette className="w-5 h-5" />
                   Store Branding
                 </CardTitle>
-                <CardDescription>
-                  Customize your store's appearance and colors
-                </CardDescription>
+                <CardDescription>{t("Customize your store's appearance and colors")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <Label>Primary Color</Label>
+                    <Label>{t("Primary Color")}</Label>
                     <Input
                       type="color"
                       value={branding.primaryColor}
@@ -3838,7 +3823,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     />
                   </div>
                   <div>
-                    <Label>Secondary Color</Label>
+                    <Label>{t("Secondary Color")}</Label>
                     <Input
                       type="color"
                       value={branding.secondaryColor}
@@ -3864,14 +3849,12 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   <Package className="w-5 h-5" />
                   Product Settings
                 </CardTitle>
-                <CardDescription>
-                  Configure product management options
-                </CardDescription>
+                <CardDescription>{t("Configure product management options")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <Label>Default Currency</Label>
+                    <Label>{t("Default Currency")}</Label>
                     <Select
                       value={productSettings.defaultCurrency}
                       onValueChange={(value) =>
@@ -3893,7 +3876,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     </Select>
                   </div>
                   <div>
-                    <Label>Tax Rate (%)</Label>
+                    <Label>{t("Tax Rate (%)")}</Label>
                     <Input
                       type="number"
                       step="0.1"
@@ -3920,13 +3903,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
         <TabsContent value="payments" className="space-y-4">
           {/* STATIC QR TOGGLE */}
-          <div className="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition bg-white">
+          <div className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted transition bg-background">
             <div className="flex items-center gap-3">
               <QrCode className="w-5 h-5 text-blue-600" />
               <div>
-                <Label className="font-semibold text-slate-900">
-                  Static QR Code
-                </Label>
+                <Label className="font-semibold text-foreground">{t("Static QR Code")}</Label>
                 <p className="text-xs text-muted-foreground">
                   Upload a UPI/PayNow QR for offline scan payments
                 </p>
@@ -3952,14 +3933,12 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   <QrCode className="w-5 h-5" />
                   Upload Static QR
                 </CardTitle>
-                <CardDescription>
-                  PNG or JPG format, recommended 512×512px
-                </CardDescription>
+                <CardDescription>{t("PNG or JPG format, recommended 512\u00d7512px")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col md:flex-row gap-6 items-start">
                   {/* QR PREVIEW */}
-                  <div className="w-48 h-48 rounded-lg border-2 border-blue-300 flex items-center justify-center overflow-hidden bg-white flex-shrink-0">
+                  <div className="w-48 h-48 rounded-lg border-2 border-blue-300 flex items-center justify-center overflow-hidden bg-background flex-shrink-0">
                     {paymentQrPreview ? (
                       <img
                         src={paymentQrPreview}
@@ -3985,9 +3964,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   {/* UPLOAD SECTION */}
                   <div className="flex-1 space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="staticQrUpload" className="font-semibold">
-                        Choose QR Image
-                      </Label>
+                      <Label htmlFor="staticQrUpload" className="font-semibold">{t("Choose QR Image")}</Label>
                       <Input
                         id="staticQrUpload"
                         type="file"
@@ -4001,8 +3978,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     </div>
 
                     {shopProfile?.paymentURL && (
-                      <div className="space-y-2 p-3 bg-white rounded-lg border border-blue-200">
-                        <p className="text-xs font-semibold text-slate-900">
+                      <div className="space-y-2 p-3 bg-background rounded-lg border border-blue-200">
+                        <p className="text-xs font-semibold text-foreground">
                           Public URL (Read-only)
                         </p>
                         <Input
@@ -4031,13 +4008,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           )}
 
           {/* DYNAMIC QR TOGGLE */}
-          <div className="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition bg-white">
+          <div className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted transition bg-background">
             <div className="flex items-center gap-3">
               <Zap className="w-5 h-5 text-amber-600" />
               <div>
-                <Label className="font-semibold text-slate-900">
-                  Dynamic QR Code
-                </Label>
+                <Label className="font-semibold text-foreground">{t("Dynamic QR Code")}</Label>
                 <p className="text-xs text-muted-foreground">
                   Auto-generate QR with exact amount at checkout
                 </p>
@@ -4077,7 +4052,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* HOW IT WORKS */}
-                <div className="bg-white border border-amber-200 rounded-lg p-4">
+                <div className="bg-background border border-amber-200 rounded-lg p-4">
                   <div className="flex gap-3">
                     <Info className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-amber-900 space-y-2">
@@ -4101,13 +4076,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           )}
 
           {/* CARD PAYMENTS TOGGLE */}
-          {/* <div className="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition bg-white">
+          {/* <div className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted transition bg-background">
             <div className="flex items-center gap-3">
               <CreditCard className="w-5 h-5 text-emerald-600" />
               <div>
-                <Label className="font-semibold text-slate-900">
-                  Card Payments
-                </Label>
+                <Label className="font-semibold text-foreground">{t("Card Payments")}</Label>
                 <p className="text-xs text-muted-foreground">
                   Accept Visa, Mastercard, Amex via Stripe
                 </p>
@@ -4126,13 +4099,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
           {/* CARD PAYMENTS SECTION - APPEARS RIGHT BELOW TOGGLE */}
           {/* 🔘 RAZORPAY CARD PAYMENTS TOGGLE */}
-          <div className="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition bg-white">
+          <div className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted transition bg-background">
             <div className="flex items-center gap-3">
               <CreditCard className="w-5 h-5 text-indigo-600" />
               <div>
-                <Label className="font-semibold text-slate-900">
-                  Credit Cards Payments
-                </Label>
+                <Label className="font-semibold text-foreground">{t("Credit Cards Payments")}</Label>
                 <p className="text-xs text-muted-foreground">
                   Accept cards, UPI, netbanking via Razorpay
                 </p>
@@ -4166,7 +4137,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               <CardContent className="space-y-6">
                 {/* CONNECTION STATUS */}
                 {razorpaySettings?.isConnected ? (
-                  <div className="bg-white border border-indigo-200 rounded-lg p-4">
+                  <div className="bg-background border border-indigo-200 rounded-lg p-4">
                     <div className="flex items-start gap-3">
                       <CheckCircle2 className="w-5 h-5 text-indigo-600 mt-0.5 flex-shrink-0" />
                       <div>
@@ -4184,7 +4155,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-white border border-indigo-200 rounded-lg p-4">
+                  <div className="bg-background border border-indigo-200 rounded-lg p-4">
                     <div className="flex items-start gap-3">
                       <AlertCircle className="w-5 h-5 text-indigo-600 mt-0.5 flex-shrink-0" />
                       <div className="flex-1">
@@ -4204,12 +4175,10 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                             <Label
                               htmlFor="rzpBusinessName"
                               className="text-xs font-semibold"
-                            >
-                              Business Name
-                            </Label>
+                            >{t("Business Name")}</Label>
                             <Input
                               id="rzpBusinessName"
-                              placeholder="Registered business name"
+                              placeholder={t("Registered business name")}
                               value={razorpaySettings.businessName || ""}
                               onChange={(e) =>
                                 setRazorpaySettings((prev) => ({
@@ -4225,9 +4194,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                             <Label
                               htmlFor="rzpBusinessType"
                               className="text-xs font-semibold"
-                            >
-                              Business Type
-                            </Label>
+                            >{t("Business Type")}</Label>
                             <Select
                               value={razorpaySettings.businessType || "sole"}
                               onValueChange={(value) =>
@@ -4265,12 +4232,10 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                                 <Label
                                   htmlFor="rzpPan"
                                   className="text-xs font-semibold"
-                                >
-                                  PAN Number
-                                </Label>
+                                >{t("PAN Number")}</Label>
                                 <Input
                                   id="rzpPan"
-                                  placeholder="AAABP5055K"
+                                  placeholder={t("AAABP5055K")}
                                   value={razorpaySettings.panNumber || ""}
                                   onChange={(e) =>
                                     setRazorpaySettings((prev) => ({
@@ -4292,9 +4257,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                                 <Label
                                   htmlFor="rzpGst"
                                   className="text-xs font-semibold"
-                                >
-                                  GST Number (Optional)
-                                </Label>
+                                >{t("GST Number (Optional)")}</Label>
                                 <Input
                                   id="rzpGst"
                                   placeholder="27AAPFU0055F1Z5"
@@ -4317,9 +4280,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                               <Label
                                 htmlFor="rzpUen"
                                 className="text-xs font-semibold"
-                              >
-                                UEN Number
-                              </Label>
+                              >{t("UEN Number")}</Label>
                               <Input
                                 id="rzpUen"
                                 placeholder="123456789A"
@@ -4346,9 +4307,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                             <Label
                               htmlFor="rzpEmail"
                               className="text-xs font-semibold"
-                            >
-                              Business Email
-                            </Label>
+                            >{t("Business Email")}</Label>
                             <Input
                               id="rzpEmail"
                               type="email"
@@ -4368,9 +4327,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                             <Label
                               htmlFor="rzpPhone"
                               className="text-xs font-semibold"
-                            >
-                              Business Phone
-                            </Label>
+                            >{t("Business Phone")}</Label>
                             <Input
                               id="rzpPhone"
                               placeholder="+91 98xxxxxx"
@@ -4390,12 +4347,10 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                             <Label
                               htmlFor="rzpAccountHolder"
                               className="text-xs font-semibold"
-                            >
-                              Account Holder Name
-                            </Label>
+                            >{t("Account Holder Name")}</Label>
                             <Input
                               id="rzpAccountHolder"
-                              placeholder="Name on bank account"
+                              placeholder={t("Name on bank account")}
                               value={razorpaySettings.accountHolderName || ""}
                               onChange={(e) =>
                                 setRazorpaySettings((prev) => ({
@@ -4411,9 +4366,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                             <Label
                               htmlFor="rzpBankName"
                               className="text-xs font-semibold"
-                            >
-                              Bank Name
-                            </Label>
+                            >{t("Bank Name")}</Label>
                             <Select
                               value={razorpaySettings.bankName || ""}
                               onValueChange={(value) =>
@@ -4427,7 +4380,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                                 id="rzpBankName"
                                 className="text-sm"
                               >
-                                <SelectValue placeholder="Select bank" />
+                                <SelectValue placeholder={t("Select bank")} />
                               </SelectTrigger>
                               <SelectContent>
                                 {shopProfile?.country === "IN" ? (
@@ -4469,13 +4422,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                             <Label
                               htmlFor="rzpAccountNumber"
                               className="text-xs font-semibold"
-                            >
-                              Account Number
-                            </Label>
+                            >{t("Account Number")}</Label>
                             <Input
                               id="rzpAccountNumber"
                               type="password"
-                              placeholder="Your bank account number"
+                              placeholder={t("Your bank account number")}
                               value={razorpaySettings.bankAccountNumber || ""}
                               onChange={(e) =>
                                 setRazorpaySettings((prev) => ({
@@ -4588,15 +4539,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
                 {/* OPTIONAL SETTINGS AFTER CONNECT (similar to Stripe card settings) */}
                 {razorpaySettings?.isConnected && (
-                  <div className="space-y-4 p-4 bg-white border border-indigo-200 rounded-lg">
-                    <h4 className="font-semibold text-slate-900">
-                      Payment Options
-                    </h4>
+                  <div className="space-y-4 p-4 bg-background border border-indigo-200 rounded-lg">
+                    <h4 className="font-semibold text-foreground">{t("Payment Options")}</h4>
 
                     <div className="space-y-2">
-                      <Label className="text-sm font-semibold">
-                        Enable payment methods
-                      </Label>
+                      <Label className="text-sm font-semibold">{t("Enable payment methods")}</Label>
                       <div className="grid grid-cols-2 gap-2 text-sm">
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input
@@ -4693,9 +4640,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     <CreditCard className="w-5 h-5" />
                     Bank Transfer
                   </CardTitle>
-                  <CardDescription>
-                    Accept bank transfers for international payments
-                  </CardDescription>
+                  <CardDescription>{t("Accept bank transfers for international payments")}</CardDescription>
                 </div>
                 <Switch
                   checked={shopProfile.bankTransferEnabled}
@@ -4713,7 +4658,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Account Holder Name *</Label>
+                    <Label>{t("Account Holder Name *")}</Label>
                     <Input
                       value={shopProfile.accountHolderName}
                       onChange={(e) =>
@@ -4722,11 +4667,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                           accountHolderName: e.target.value,
                         })
                       }
-                      placeholder="Full name as on bank account"
+                      placeholder={t("Full name as on bank account")}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Bank Name *</Label>
+                    <Label>{t("Bank Name *")}</Label>
                     <Input
                       value={shopProfile.bankName}
                       onChange={(e) =>
@@ -4742,7 +4687,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Account Number *</Label>
+                    <Label>{t("Account Number *")}</Label>
                     <Input
                       value={shopProfile.bankAccountNumber}
                       onChange={(e) =>
@@ -4751,11 +4696,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                           bankAccountNumber: e.target.value,
                         })
                       }
-                      placeholder="Bank account number"
+                      placeholder={t("Bank account number")}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Branch</Label>
+                    <Label>{t("Branch")}</Label>
                     <Input
                       value={shopProfile.bankBranch}
                       onChange={(e) =>
@@ -4764,7 +4709,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                           bankBranch: e.target.value,
                         })
                       }
-                      placeholder="Branch name"
+                      placeholder={t("Branch name")}
                     />
                   </div>
                 </div>
@@ -4773,7 +4718,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 {selectedCountry === "IN" ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>IFSC Code *</Label>
+                      <Label>{t("IFSC Code *")}</Label>
                       <Input
                         value={shopProfile.bankIfscCode}
                         onChange={(e) =>
@@ -4790,7 +4735,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       </p>
                     </div>
                     <div className="space-y-2">
-                      <Label>Account Type *</Label>
+                      <Label>{t("Account Type *")}</Label>
                       <select
                         className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                         value={shopProfile.bankAccountType}
@@ -4811,7 +4756,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>SWIFT / BIC Code *</Label>
+                        <Label>{t("SWIFT / BIC Code *")}</Label>
                         <Input
                           value={shopProfile.bankSwiftCode}
                           onChange={(e) =>
@@ -4828,7 +4773,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                         </p>
                       </div>
                       <div className="space-y-2">
-                        <Label>Bank Code + Branch Code</Label>
+                        <Label>{t("Bank Code + Branch Code")}</Label>
                         <Input
                           value={shopProfile.bankBranchCode}
                           onChange={(e) =>
@@ -4845,7 +4790,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label>PayNow ID (UEN / Mobile / NRIC)</Label>
+                      <Label>{t("PayNow ID (UEN / Mobile / NRIC)")}</Label>
                       <Input
                         value={shopProfile.payNowId}
                         onChange={(e) =>
@@ -4876,14 +4821,12 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   <Truck className="w-5 h-5" />
                   Shipping Settings
                 </CardTitle>
-                <CardDescription>
-                  Configure shipping options and rates
-                </CardDescription>
+                <CardDescription>{t("Configure shipping options and rates")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <Label>Free Shipping Threshold</Label>
+                    <Label>{t("Free Shipping Threshold")}</Label>
                     <Input
                       type="number"
                       step="0.01"
@@ -4898,7 +4841,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     />
                   </div>
                   <div>
-                    <Label>Default Shipping Cost</Label>
+                    <Label>{t("Default Shipping Cost")}</Label>
                     <Input
                       type="number"
                       step="0.01"
@@ -4924,16 +4867,14 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 <ReceiptTextIcon className="w-5 h-5" />
                 Receipt Settings
               </CardTitle>
-              <CardDescription>
-                Customize your order receipt appearance and details
-              </CardDescription>
+              <CardDescription>{t("Customize your order receipt appearance and details")}</CardDescription>
             </CardHeader>
 
             <CardContent className="space-y-6">
               {/* RECEIPT TYPE */}
               <div className="space-y-4 border-t pt-4">
                 <div>
-                  <Label className="text-sm font-medium">Receipt Type</Label>
+                  <Label className="text-sm font-medium">{t("Receipt Type")}</Label>
                   <p className="text-xs text-muted-foreground">
                     Choose receipt paper size for printing
                   </p>
@@ -5009,9 +4950,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   {/* TOGGLE */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm font-medium">
-                        Print Contact QR
-                      </Label>
+                      <Label className="text-sm font-medium">{t("Print Contact QR")}</Label>
                       <p className="text-xs text-muted-foreground">
                         Prints WhatsApp QR on receipt
                       </p>
@@ -5035,9 +4974,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   {/* NUMBER SELECTION */}
                   {shopProfile.whatsAppQR && (
                     <div className="pl-4 space-y-3">
-                      <Label className="text-xs text-muted-foreground">
-                        Select WhatsApp number to print on receipt
-                      </Label>
+                      <Label className="text-xs text-muted-foreground">{t("Select WhatsApp number to print on receipt")}</Label>
 
                       <div className="grid gap-3 sm:grid-cols-2">
                         {/* WhatsApp Number */}
@@ -5119,9 +5056,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 {/* Instagram QR */}
                 <div className="flex items-center justify-between mt-4">
                   <div>
-                    <Label className="text-sm font-medium">
-                      Print Instagram QR
-                    </Label>
+                    <Label className="text-sm font-medium">{t("Print Instagram QR")}</Label>
                     <p className="text-xs text-muted-foreground">
                       Prints Instagram QR on receipt
                     </p>
@@ -5139,9 +5074,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
 
                 {shopProfile.instagramQR && (
                   <div className="pl-4 space-y-1">
-                    <Label htmlFor="instagramHandle" className="text-xs">
-                      Instagram Handle
-                    </Label>
+                    <Label htmlFor="instagramHandle" className="text-xs">{t("Instagram Handle")}</Label>
                     <Input
                       id="instagramHandle"
                       placeholder="https://instagram.com/yourhandle"
@@ -5167,9 +5100,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 <Bell className="w-5 h-5" />
                 Notification Settings
               </CardTitle>
-              <CardDescription>
-                Choose which notifications you want to receive
-              </CardDescription>
+              <CardDescription>{t("Choose which notifications you want to receive")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-4">

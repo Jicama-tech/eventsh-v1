@@ -72,6 +72,7 @@ interface PlatformConfig {
 }
 
 import { symbolForCode } from "@/data/currencies";
+import { t } from "@/i18n/t";
 function symbolFor(currency: string) {
   return symbolForCode(currency);
 }
@@ -270,7 +271,7 @@ export function InlinePlatformFeeForm({
   if (step === "pick_event") {
     if (loadingRows) {
       return (
-        <div className="flex items-center gap-2 text-sm text-slate-500 py-3">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground py-3">
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading your outstanding fees…
         </div>
@@ -293,23 +294,23 @@ export function InlinePlatformFeeForm({
     const sym = symbolFor(cur);
     return (
       <div className="space-y-3">
-        <div className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1">
+        <div className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1">
           <Wallet className="h-3.5 w-3.5" /> Pay platform fees
         </div>
         <div className="space-y-2">
-          <Label className="text-sm">Which event are you paying for?</Label>
+          <Label className="text-sm">{t("Which event are you paying for?")}</Label>
           <Select
             value={selectedEventId}
             onValueChange={setSelectedEventId}
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Pick an event…" />
+              <SelectValue placeholder={t("Pick an event\u2026")} />
             </SelectTrigger>
             <SelectContent>
               {rows.map((r) => (
                 <SelectItem key={r.eventId} value={r.eventId}>
                   <span className="font-medium">{r.title}</span>
-                  <span className="text-slate-500 ml-2">
+                  <span className="text-muted-foreground ml-2">
                     — {sym}
                     {r.amount.toFixed(2)}
                   </span>
@@ -342,24 +343,24 @@ export function InlinePlatformFeeForm({
     const sym = pending ? symbolFor(pending.currency) : "$";
     return (
       <div className="space-y-3">
-        <div className="rounded-lg border bg-slate-50 px-3 py-2 flex items-center justify-between">
+        <div className="rounded-lg border bg-muted px-3 py-2 flex items-center justify-between">
           <div>
-            <div className="text-[10px] uppercase tracking-wide text-slate-500">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
               Amount due
             </div>
-            <div className="text-2xl font-bold text-slate-900">
+            <div className="text-2xl font-bold text-foreground">
               {sym}
               {pending ? pending.amount.toFixed(2) : "…"}
             </div>
           </div>
           <div className="text-right">
-            <div className="text-[10px] uppercase tracking-wide text-slate-500">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
               Reference
             </div>
-            <div className="font-mono text-xs text-slate-700">
+            <div className="font-mono text-xs text-muted-foreground">
               {pending?.ref || "…"}
             </div>
-            <div className="text-[10px] text-slate-500 mt-0.5">
+            <div className="text-[10px] text-muted-foreground mt-0.5">
               {pending?.scheme === "UPI"
                 ? "UPI · India"
                 : pending?.scheme === "PAYNOW"
@@ -370,7 +371,7 @@ export function InlinePlatformFeeForm({
         </div>
 
         {qrLoading || initiating ? (
-          <div className="flex items-center justify-center py-8 gap-2 text-slate-500">
+          <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Generating QR…
           </div>
         ) : qrError ? (
@@ -382,9 +383,9 @@ export function InlinePlatformFeeForm({
             <img
               src={qrImage}
               alt="Platform-fee payment QR"
-              className="w-48 h-48 rounded-md border bg-white p-2"
+              className="w-48 h-48 rounded-md border bg-background p-2"
             />
-            <p className="text-xs text-slate-600 text-center">
+            <p className="text-xs text-muted-foreground text-center">
               Scan with your{" "}
               <strong>
                 {pending?.scheme === "UPI"
@@ -445,7 +446,7 @@ export function InlinePlatformFeeForm({
         <div className="font-semibold">Awaiting admin confirmation</div>
         <div className="text-amber-800 mt-0.5">
           Reference{" "}
-          <code className="bg-white border px-1 rounded text-xs">
+          <code className="bg-background border px-1 rounded text-xs">
             {pending?.ref}
           </code>
           . Once verified, your event-fee receipt is sent to your email and

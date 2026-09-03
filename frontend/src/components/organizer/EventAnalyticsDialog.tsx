@@ -41,6 +41,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCurrency } from "@/hooks/useCurrencyhook";
+import { t } from "@/i18n/t";
 
 // --- Types ---
 interface TicketData {
@@ -168,7 +169,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-[95vw] w-[1200px] h-[90vh] flex flex-col p-0">
-        <DialogHeader className="p-6 border-b bg-slate-50/50">
+        <DialogHeader className="p-6 border-b bg-muted/50">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <DialogTitle className="text-2xl font-bold flex items-center gap-2">
@@ -186,7 +187,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                 </span>
               </div>
             </div>
-            <div className="bg-white p-3 rounded-xl border shadow-sm flex items-center gap-4">
+            <div className="bg-background p-3 rounded-xl border shadow-sm flex items-center gap-4">
               <div>
                 <p className="text-[10px] uppercase font-bold text-muted-foreground leading-none">
                   Gross Revenue
@@ -195,7 +196,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                   {formatPrice(grandTotalRevenue)}
                 </p>
               </div>
-              <div className="h-8 w-[1px] bg-slate-200"></div>
+              <div className="h-8 w-[1px] bg-muted"></div>
               <TrendingUp className="text-green-500 w-8 h-8" />
             </div>
           </div>
@@ -203,10 +204,8 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
 
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
           {/* LEFT SIDEBAR: QUICK STATS */}
-          <div className="w-full md:w-80 border-r bg-slate-50/30 p-4 space-y-4 overflow-y-auto">
-            <h3 className="text-xs font-bold uppercase text-slate-500 mb-2">
-              Performance Summary
-            </h3>
+          <div className="w-full md:w-80 border-r bg-muted/30 p-4 space-y-4 overflow-y-auto">
+            <h3 className="text-xs font-bold uppercase text-muted-foreground mb-2">{t("Performance Summary")}</h3>
 
             <Card className="border-none shadow-none bg-blue-600 text-white">
               <CardContent className="p-4">
@@ -234,7 +233,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
               </CardContent>
             </Card>
 
-            <div className="p-4 rounded-lg border bg-white space-y-3">
+            <div className="p-4 rounded-lg border bg-background space-y-3">
               <h4 className="text-xs font-bold flex items-center gap-1">
                 <Info className="w-3 h-3" /> Event Health
               </h4>
@@ -246,7 +245,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                     {stalls.length > 0 ? Math.round((stallsBooked / stalls.length) * 100) : 0}%
                   </span>
                 </div>
-                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
                   <div
                     className="bg-purple-500 h-full transition-all"
                     style={{ width: `${stalls.length > 0 ? Math.round((stallsBooked / stalls.length) * 100) : 0}%` }}
@@ -266,7 +265,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                           {confirmedTickets}{totalCapacity > 0 ? `/${totalCapacity}` : ""} ({ticketPercent}%)
                         </span>
                       </div>
-                      <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
                         <div
                           className="bg-blue-500 h-full transition-all"
                           style={{ width: `${Math.min(ticketPercent, 100)}%` }}
@@ -288,7 +287,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                           {paidStalls}/{stallsBooked} ({paymentPercent}%)
                         </span>
                       </div>
-                      <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
                         <div
                           className="bg-green-500 h-full transition-all"
                           style={{ width: `${paymentPercent}%` }}
@@ -320,7 +319,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
 
           {/* MAIN CONTENT: TABS WITH LISTS */}
           {/* MAIN CONTENT: TABS WITH LISTS */}
-          <div className="flex-1 flex flex-col bg-white overflow-hidden">
+          <div className="flex-1 flex flex-col bg-background overflow-hidden">
             <Tabs
               defaultValue="tickets"
               className="flex-1 flex flex-col overflow-hidden"
@@ -330,22 +329,18 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                   <TabsTrigger
                     value="tickets"
                     className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none bg-transparent px-0 font-bold"
-                  >
-                    Ticket Holders
-                  </TabsTrigger>
+                  >{t("Ticket Holders")}</TabsTrigger>
                   <TabsTrigger
                     value="stalls"
                     className="data-[state=active]:border-b-2 data-[state=active]:border-purple-600 rounded-none bg-transparent px-0 font-bold"
-                  >
-                    Exhibitors/Stalls
-                  </TabsTrigger>
+                  >{t("Exhibitors/Stalls")}</TabsTrigger>
                 </TabsList>
 
                 <div className="flex items-center gap-3">
                   <div className="relative">
                     <Search className="w-3 h-3 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <Input
-                      placeholder="Search records..."
+                      placeholder={t("Search records...")}
                       className="h-8 w-48 pl-8 text-xs"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
@@ -369,21 +364,21 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
               >
                 <ScrollArea className="h-[calc(90vh-200px)] w-full">
                   <Table>
-                    <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+                    <TableHeader className="bg-muted sticky top-0 z-10 shadow-sm">
                       <TableRow>
-                        <TableHead className="text-[11px] uppercase font-bold bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold bg-muted">
                           Order Date
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase font-bold bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold bg-muted">
                           Customer
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase font-bold bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold bg-muted">
                           Contact
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase font-bold text-right bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold text-right bg-muted">
                           Amount
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase font-bold text-center bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold text-center bg-muted">
                           Status
                         </TableHead>
                       </TableRow>
@@ -445,21 +440,21 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
               >
                 <ScrollArea className="h-[calc(90vh-200px)] w-full">
                   <Table>
-                    <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+                    <TableHeader className="bg-muted sticky top-0 z-10 shadow-sm">
                       <TableRow>
-                        <TableHead className="text-[11px] uppercase font-bold bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold bg-muted">
                           Shop Name
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase font-bold bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold bg-muted">
                           Exhibitor
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase font-bold bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold bg-muted">
                           Tables
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase font-bold text-right bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold text-right bg-muted">
                           Grand Total
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase font-bold text-center bg-slate-50">
+                        <TableHead className="text-[11px] uppercase font-bold text-center bg-muted">
                           Status
                         </TableHead>
                       </TableRow>
@@ -493,7 +488,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                                   <Badge
                                     key={i}
                                     variant="outline"
-                                    className="text-[9px] bg-white"
+                                    className="text-[9px] bg-background"
                                   >
                                     {t.tableName}
                                   </Badge>
