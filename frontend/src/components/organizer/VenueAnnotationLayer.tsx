@@ -10,6 +10,7 @@ import {
   Arrow,
 } from "react-konva";
 import type Konva from "konva";
+import { t } from "@/i18n/t";
 
 /**
  * AutoCAD-style annotation layer for the venue designer.
@@ -517,7 +518,7 @@ export default function VenueAnnotationLayer({
             if (e.key === "Enter") closeEditor(true);
             if (e.key === "Escape") closeEditor(false);
           }}
-          placeholder="Type label…"
+          placeholder={t("Type label\u2026")}
           style={{
             position: "absolute",
             left: editing.left,

@@ -110,7 +110,7 @@ const FeatureIcon = ({
 }) => {
   if (!feature) return null;
   return (
-    <div className="flex items-center gap-2 p-2 rounded-md bg-gray-100 text-gray-700">
+    <div className="flex items-center gap-2 p-2 rounded-md bg-muted text-muted-foreground">
       {icon}
       <span className="text-sm">{label}</span>
     </div>
@@ -148,10 +148,10 @@ export function EnhancedEventsDetailDialog({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[95%] md:max-w-[900px] lg:max-w-[1200px] max-h-[95vh] overflow-y-auto p-6">
         <DialogHeader className="border-b pb-4 mb-4">
-          <DialogTitle className="text-3xl font-extrabold tracking-tight text-gray-900">
+          <DialogTitle className="text-3xl font-extrabold tracking-tight text-foreground">
             {event.title}
           </DialogTitle>
-          <DialogDescription className="text-gray-600 mt-1">
+          <DialogDescription className="text-muted-foreground mt-1">
             {event.description}
           </DialogDescription>
         </DialogHeader>
@@ -248,7 +248,7 @@ export function EnhancedEventsDetailDialog({
             {/* Event Details */}
             <Card className="shadow-sm">
               <CardHeader>
-                <CardTitle className="text-xl flex items-center gap-2 text-gray-800">
+                <CardTitle className="text-xl flex items-center gap-2 text-foreground">
                   <Info className="h-5 w-5 text-blue-600" />
                   Event Details
                 </CardTitle>
@@ -256,52 +256,52 @@ export function EnhancedEventsDetailDialog({
               <CardContent className="space-y-4">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-gray-500" />
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
                     <div className="text-sm">
                       <p className="font-semibold">Dates</p>
-                      <p className="text-gray-600">
+                      <p className="text-muted-foreground">
                         {format(new Date(event.startDate), "PPP")} -{" "}
                         {format(new Date(event.endDate), "PPP")}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-gray-500" />
+                    <Clock className="h-4 w-4 text-muted-foreground" />
                     <div className="text-sm">
                       <p className="font-semibold">Time</p>
-                      <p className="text-gray-600">
+                      <p className="text-muted-foreground">
                         {event.time} - {event.endTime}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-gray-500" />
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
                     <div className="text-sm">
                       <p className="font-semibold">Location</p>
-                      <p className="text-gray-600">{event.location}</p>
+                      <p className="text-muted-foreground">{event.location}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Ticket className="h-4 w-4 text-gray-500" />
+                    <Ticket className="h-4 w-4 text-muted-foreground" />
                     <div className="text-sm">
                       <p className="font-semibold">Tickets</p>
-                      <p className="text-gray-600">
+                      <p className="text-muted-foreground">
                         Total: {event.totalTickets || "Unlimited"}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-gray-500" />
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
                     <div className="text-sm">
                       <p className="font-semibold">Price</p>
-                      <p className="text-gray-600">${event.ticketPrice}</p>
+                      <p className="text-muted-foreground">${event.ticketPrice}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-gray-500" />
+                    <Users className="h-4 w-4 text-muted-foreground" />
                     <div className="text-sm">
                       <p className="font-semibold">Age Restriction</p>
-                      <p className="text-gray-600">{event.ageRestriction}</p>
+                      <p className="text-muted-foreground">{event.ageRestriction}</p>
                     </div>
                   </div>
                 </div>
@@ -325,7 +325,7 @@ export function EnhancedEventsDetailDialog({
             {(ticketsRevenue > 0 || stallsRevenue > 0) && (
               <Card className="shadow-sm">
                 <CardHeader>
-                  <CardTitle className="text-xl flex items-center gap-2 text-gray-800">
+                  <CardTitle className="text-xl flex items-center gap-2 text-foreground">
                     <DollarSign className="h-5 w-5 text-green-600" />
                     Revenue Breakdown
                   </CardTitle>
@@ -376,7 +376,7 @@ export function EnhancedEventsDetailDialog({
             {/* Features & Tags */}
             <Card className="shadow-sm">
               <CardHeader>
-                <CardTitle className="text-xl flex items-center gap-2 text-gray-800">
+                <CardTitle className="text-xl flex items-center gap-2 text-foreground">
                   <Tag className="h-5 w-5 text-orange-600" />
                   Features & Tags
                 </CardTitle>
@@ -431,7 +431,7 @@ export function EnhancedEventsDetailDialog({
             {event.gallery && event.gallery.length > 0 && (
               <Card className="shadow-sm">
                 <CardHeader>
-                  <CardTitle className="text-xl flex items-center gap-2 text-gray-800">
+                  <CardTitle className="text-xl flex items-center gap-2 text-foreground">
                     <Camera className="h-5 w-5 text-pink-600" />
                     Event Gallery
                   </CardTitle>
@@ -462,7 +462,7 @@ export function EnhancedEventsDetailDialog({
               event.specialInstructions) && (
               <Card className="shadow-sm">
                 <CardHeader>
-                  <CardTitle className="text-xl flex items-center gap-2 text-gray-800">
+                  <CardTitle className="text-xl flex items-center gap-2 text-foreground">
                     <FileText className="h-5 w-5 text-indigo-600" />
                     Policies & Instructions
                   </CardTitle>
@@ -471,7 +471,7 @@ export function EnhancedEventsDetailDialog({
                   {event.dresscode && (
                     <div>
                       <p className="font-semibold text-sm mb-1">Dress Code</p>
-                      <p className="text-sm text-gray-600">{event.dresscode}</p>
+                      <p className="text-sm text-muted-foreground">{event.dresscode}</p>
                     </div>
                   )}
                   {event.refundPolicy && (
@@ -479,7 +479,7 @@ export function EnhancedEventsDetailDialog({
                       <p className="font-semibold text-sm mb-1">
                         Refund Policy
                       </p>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-muted-foreground">
                         {event.refundPolicy}
                       </p>
                     </div>
@@ -489,7 +489,7 @@ export function EnhancedEventsDetailDialog({
                       <p className="font-semibold text-sm mb-1">
                         Terms & Conditions
                       </p>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-muted-foreground">
                         {event.termsAndConditions}
                       </p>
                     </div>
@@ -499,7 +499,7 @@ export function EnhancedEventsDetailDialog({
                       <p className="font-semibold text-sm mb-1">
                         Special Instructions
                       </p>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-muted-foreground">
                         {event.specialInstructions}
                       </p>
                     </div>
@@ -514,7 +514,7 @@ export function EnhancedEventsDetailDialog({
             {/* Organizer Details */}
             <Card className="shadow-sm">
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2 text-gray-800">
+                <CardTitle className="text-lg flex items-center gap-2 text-foreground">
                   <Users className="h-5 w-5 text-teal-600" />
                   Organizer
                 </CardTitle>
@@ -526,7 +526,7 @@ export function EnhancedEventsDetailDialog({
                   </p>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  <Mail className="h-4 w-4 text-gray-500" />
+                  <Mail className="h-4 w-4 text-muted-foreground" />
                   <a
                     href={`mailto:${event.organizerDetails.email}`}
                     className="text-blue-600 hover:underline"
@@ -535,14 +535,14 @@ export function EnhancedEventsDetailDialog({
                   </a>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  <Phone className="h-4 w-4 text-gray-500" />
-                  <span className="text-gray-600">
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">
                     {event.organizerDetails.phone}
                   </span>
                 </div>
                 {event.organizerDetails.website && (
                   <div className="flex items-center gap-2 text-sm">
-                    <Globe className="h-4 w-4 text-gray-500" />
+                    <Globe className="h-4 w-4 text-muted-foreground" />
                     <a
                       href={event.organizerDetails.website}
                       target="_blank"
@@ -562,7 +562,7 @@ export function EnhancedEventsDetailDialog({
               event.socialMedia.twitter) && (
               <Card className="shadow-sm">
                 <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2 text-gray-800">
+                  <CardTitle className="text-lg flex items-center gap-2 text-foreground">
                     <Globe className="h-5 w-5 text-blue-600" />
                     Social Media
                   </CardTitle>

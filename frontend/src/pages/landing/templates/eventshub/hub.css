@@ -1,0 +1,1947 @@
+/*
+ * Scoped stylesheet for the "eventshub" landing template.
+ *
+ * Structure is the EventsHub campaign page — problem, before/after, twelve
+ * value cells, ledger, two worlds, comparison, rollout, FAQ. Paint is the
+ * genz palette: acid lime and hot pink on a near-black violet, Bricolage
+ * headlines with one italic serif word, sticker eyebrows, hard offset
+ * shadows and a grain overlay.
+ *
+ * Everything is nested under `.eh` — the root class LandingPage puts on its
+ * wrapper for this template — because the page still renders two shared
+ * Tailwind components inside it (PublicChatbot, TestimonialsCarousel) and the
+ * rest of the app must not be repainted. Injected on mount and removed on
+ * unmount by Styles.tsx.
+ */
+
+.eh {
+  --ink: #0a0710;
+  --surface: #150f1f;
+  --raised: #1d1430;
+  --raised2: #261a3d;
+  --line: rgba(255, 255, 255, 0.12);
+  --line-soft: rgba(255, 255, 255, 0.055);
+  --text: #f5f0fb;
+  --muted: #a99cbd;
+  --dim: #7a6e8f;
+
+  /* Lime is the accent and means Eventsh, the way amber did in the campaign:
+     one colour for "us", so the comparison column and the net position read
+     at a glance. Everything else is semantic — pink is a problem, mint is
+     money in, cyan is data/partial, violet is a secondary tier. */
+  --lime: #c9ff3d;
+  --lime2: #e2ff8f;
+  --lime-wash: rgba(201, 255, 61, 0.1);
+  --pink: #ff4d9d;
+  --pink-wash: rgba(255, 77, 157, 0.12);
+  --violet: #a97bff;
+  --cyan: #3de0ff;
+  --mint: #35e08a;
+
+  --display: "Bricolage Grotesque", "Space Grotesk", system-ui, sans-serif;
+  --body: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --mono: "Space Mono", "SF Mono", Menlo, monospace;
+  --serif: "Instrument Serif", Georgia, serif;
+
+  --pad: clamp(20px, 5vw, 56px);
+  --maxw: 1200px;
+  --r: 22px;
+
+  background: var(--ink);
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+.eh *,
+.eh *::before,
+.eh *::after {
+  box-sizing: border-box;
+}
+
+/* Element-level resets are keyed on `.eh-wrap`, never on `.eh`, because
+   PublicChatbot and TestimonialsCarousel render inside this page too and are
+   plain Tailwind. A bare `.eh p{margin:0}` outranks their `mx-auto` and
+   `mb-*` utilities (one class + one element beats one class) and silently
+   breaks their layout. Every section this template owns sits in an
+   `.eh-wrap`; theirs use Tailwind's own container, so this is the boundary. */
+.eh-wrap a {
+  color: inherit;
+  text-decoration: none;
+}
+.eh-wrap p {
+  margin: 0;
+}
+.eh-wrap img {
+  max-width: 100%;
+  display: block;
+}
+.eh-wrap h1,
+.eh-wrap h2,
+.eh-wrap h3,
+.eh-wrap h4,
+.eh-wrap h5 {
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  margin: 0;
+  text-wrap: balance;
+}
+.eh :focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+/* the grain that keeps the flat gradients from looking like plastic */
+.eh-grain {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ---------------- layout primitives ---------------- */
+.eh-wrap {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding-inline: var(--pad);
+}
+/* For sections that are a single column of reading — the comparison table
+   and the FAQ. At the full 1200px the table's two narrow verdict columns end
+   up marooned against the right edge. */
+.eh-wrap.narrow {
+  max-width: 940px;
+}
+/* `eh-sec` marks a section this template owns — a bare `.eh section` would
+   also restyle the two shared Tailwind sections on the page. */
+.eh-sec {
+  position: relative;
+  padding: clamp(56px, 8vw, 104px) 0;
+}
+.eh-sec.tight {
+  padding-top: 0;
+}
+.eh-head {
+  max-width: 64ch;
+  margin-bottom: clamp(28px, 4vw, 52px);
+}
+.eh-head h2 {
+  font-size: clamp(32px, 5vw, 58px);
+  margin: 16px 0 16px;
+}
+.eh-lede {
+  color: var(--muted);
+  font-size: clamp(15px, 1.5vw, 18px);
+  line-height: 1.55;
+  max-width: 58ch;
+}
+.eh-mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* the sticker eyebrow — a rotated hard-edged pill, not a line of small caps */
+.eh-kick {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--lime);
+  border-radius: 999px;
+  padding: 6px 14px;
+  transform: rotate(-1.4deg);
+}
+.eh-kick.pink {
+  background: var(--pink);
+  color: #fff;
+}
+.eh-kick.cyan {
+  background: var(--cyan);
+}
+.eh-kick.violet {
+  background: var(--violet);
+  color: #fff;
+}
+
+/* the italic serif word — the one bit of grown-up type, used as contrast */
+.eh-swoon {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.eh-limet {
+  color: var(--lime);
+}
+.eh-pinkt {
+  color: var(--pink);
+}
+.eh-cyant {
+  color: var(--cyan);
+}
+
+/* the blurred colour blobs behind the hero and the final CTA */
+.eh-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.45;
+  pointer-events: none;
+  z-index: 0;
+}
+.eh-blob.b1 {
+  width: 520px;
+  height: 520px;
+  background: #7b2ff7;
+  animation: eh-drift 19s ease-in-out infinite;
+}
+.eh-blob.b2 {
+  width: 420px;
+  height: 420px;
+  background: #ff2d87;
+  animation: eh-drift 23s ease-in-out infinite reverse;
+}
+@keyframes eh-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(36px, -28px) scale(1.08);
+  }
+}
+
+/* ---------------- buttons ---------------- */
+.eh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-family: var(--body);
+  font-size: 15px;
+  font-weight: 700;
+  padding: 13px 24px;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    background 0.16s ease,
+    border-color 0.16s ease;
+}
+.eh-btn-p {
+  background: var(--lime);
+  color: var(--ink);
+  box-shadow: 4px 4px 0 rgba(169, 123, 255, 0.9);
+}
+.eh-btn-p:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 7px 0 rgba(169, 123, 255, 0.9);
+}
+.eh-btn-pink {
+  background: var(--pink);
+  color: #fff;
+  box-shadow: 4px 4px 0 rgba(201, 255, 61, 0.9);
+}
+.eh-btn-pink:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 7px 0 rgba(201, 255, 61, 0.9);
+}
+.eh-btn-g {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  border-color: var(--line);
+}
+.eh-btn-g:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--violet);
+}
+.eh-btn-sm {
+  padding: 9px 17px;
+  font-size: 13px;
+}
+.eh-btn-lg {
+  padding: 15px 28px;
+  font-size: 16px;
+}
+
+/* ---------------- header ---------------- */
+.eh-nav {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  background: rgba(10, 7, 16, 0.82);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line-soft);
+}
+.eh-nav-in {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding-inline: var(--pad);
+  height: 68px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.eh-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 21px;
+  letter-spacing: -0.04em;
+  color: var(--text);
+  text-decoration: none;
+}
+.eh-brand img {
+  height: 30px;
+  width: auto;
+  display: block;
+}
+.eh-nav-links {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+.eh-nav-links a {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--muted);
+  padding: 8px 13px;
+  border-radius: 999px;
+  text-decoration: none;
+  transition:
+    color 0.16s,
+    background 0.16s;
+}
+.eh-nav-links a:hover {
+  color: var(--ink);
+  background: var(--lime);
+}
+@media (max-width: 980px) {
+  .eh-nav-links {
+    display: none;
+  }
+}
+.eh-nav-cta {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  margin-left: auto;
+}
+@media (min-width: 981px) {
+  .eh-nav-cta {
+    margin-left: 0;
+  }
+}
+.eh-burger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 2px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  cursor: pointer;
+}
+@media (max-width: 980px) {
+  .eh-burger {
+    display: inline-flex;
+  }
+}
+.eh-mobile {
+  overflow: hidden;
+  border-top: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+.eh-mobile .eh-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-block: 18px;
+}
+.eh-mobile a {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 10px 0;
+  text-decoration: none;
+}
+
+/* ---------------- hero ---------------- */
+.eh-hero {
+  position: relative;
+  padding: clamp(44px, 6.5vw, 84px) 0 clamp(32px, 5vw, 64px);
+  overflow: hidden;
+}
+.eh-hero .b1 {
+  top: -180px;
+  left: -140px;
+}
+.eh-hero .b2 {
+  bottom: -200px;
+  right: 4%;
+}
+.eh-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image:
+    linear-gradient(var(--line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+  background-size: 58px 58px;
+  -webkit-mask-image: radial-gradient(66% 54% at 46% 34%, #000, transparent 76%);
+  mask-image: radial-gradient(66% 54% at 46% 34%, #000, transparent 76%);
+}
+.eh-hero-grid {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: clamp(30px, 4vw, 52px);
+  align-items: center;
+}
+@media (min-width: 1000px) {
+  .eh-hero-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.96fr);
+  }
+}
+/* Grid items default to min-width:auto, which lets the floor plan's twelve
+   columns push the demo card wider than the phone and clip it. */
+.eh-hero-grid > * {
+  min-width: 0;
+}
+.eh-hero h1 {
+  font-size: clamp(40px, 6.4vw, 76px);
+  margin: 20px 0 18px;
+  line-height: 0.98;
+}
+.eh-hero-btns {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 28px;
+}
+.eh-hero-note {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  /* clears the buttons' 4px hard shadow, not just their box */
+  margin-top: 24px;
+  letter-spacing: 0.04em;
+}
+
+/* ---------------- browser / floor demo ---------------- */
+/* The sticker hangs off the corner, so it lives on this shell rather than on
+   .eh-demo — the card itself needs overflow:hidden to clip the floor grid to
+   its rounded corners, and that would slice the sticker in half. */
+.eh-demo-shell {
+  position: relative;
+}
+.eh-demo {
+  position: relative;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--r);
+  background: linear-gradient(160deg, var(--raised2), var(--surface));
+  overflow: hidden;
+  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.65);
+}
+.eh-sticker {
+  position: absolute;
+  z-index: 5;
+  top: -16px;
+  left: -12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  background: var(--pink);
+  color: #fff;
+  box-shadow: 3px 3px 0 rgba(10, 7, 16, 0.6);
+  transform: rotate(-3deg);
+}
+.eh-demo-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+}
+.eh-dots {
+  display: flex;
+  gap: 5px;
+}
+.eh-dots i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: block;
+}
+.eh-dots i:nth-child(1) {
+  background: var(--pink);
+}
+.eh-dots i:nth-child(2) {
+  background: var(--lime);
+}
+.eh-dots i:nth-child(3) {
+  background: var(--cyan);
+}
+.eh-url {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.eh-url b {
+  color: var(--lime);
+  font-weight: 700;
+}
+.eh-live {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mint);
+}
+.eh-live i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mint);
+  display: block;
+  animation: eh-pulse 1.8s ease-in-out infinite;
+}
+@keyframes eh-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.eh-floor {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-auto-rows: 30px;
+  gap: 5px;
+  padding: 16px;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.eh-cell {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--dim);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2;
+  padding: 2px;
+  transition:
+    background 0.18s,
+    border-color 0.18s,
+    color 0.18s;
+}
+.eh-cell .px {
+  font-size: 8.5px;
+}
+.eh-cell:hover:not(.sold) {
+  border-color: var(--lime);
+  color: var(--text);
+}
+.eh-cell.sold {
+  border-color: rgba(53, 224, 138, 0.45);
+  background: rgba(53, 224, 138, 0.12);
+  color: var(--mint);
+}
+.eh-cell.tA {
+  border-left: 3px solid rgba(201, 255, 61, 0.6);
+}
+.eh-cell.tB {
+  border-left: 3px solid rgba(61, 224, 255, 0.6);
+}
+.eh-cell.tC {
+  border-left: 3px solid rgba(169, 123, 255, 0.6);
+}
+.eh-zone {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.eh-zone.stage {
+  background: var(--lime-wash);
+  border: 1px solid rgba(201, 255, 61, 0.35);
+  color: var(--lime);
+}
+.eh-demo-foot {
+  display: flex;
+  gap: 18px;
+  padding: 13px 16px;
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
+  flex-wrap: wrap;
+}
+.eh-demo-foot div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.eh-demo-foot span {
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.eh-demo-foot b {
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.eh-demo-foot b.a {
+  color: var(--lime);
+}
+.eh-demo-foot b.g {
+  color: var(--mint);
+}
+/* On a phone twelve columns only fit if the cell chrome shrinks with them. */
+@media (max-width: 560px) {
+  .eh-floor {
+    padding: 10px;
+    gap: 3px;
+    grid-auto-rows: 26px;
+  }
+  .eh-cell,
+  .eh-zone {
+    font-size: 8px;
+    border-radius: 5px;
+  }
+  .eh-cell .px {
+    font-size: 7.5px;
+  }
+  .eh-demo-foot {
+    gap: 14px;
+    padding: 12px;
+  }
+  .eh-demo-foot b {
+    font-size: 14px;
+  }
+}
+
+/* ---------------- stat strip ---------------- */
+.eh-strip {
+  border-block: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+.eh-strip-in {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+@media (min-width: 820px) {
+  .eh-strip-in {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+.eh-stat {
+  padding: 26px var(--pad);
+  border-right: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+@media (min-width: 820px) {
+  .eh-stat {
+    border-bottom: 0;
+  }
+  .eh-stat:last-child {
+    border-right: 0;
+  }
+}
+.eh-stat b {
+  display: block;
+  font-family: var(--display);
+  font-size: clamp(30px, 3.4vw, 44px);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  color: var(--lime);
+  line-height: 1;
+  margin-bottom: 8px;
+}
+.eh-stat:nth-child(2) b {
+  color: var(--pink);
+}
+.eh-stat:nth-child(3) b {
+  color: var(--cyan);
+}
+.eh-stat:nth-child(4) b {
+  color: var(--violet);
+}
+.eh-stat span {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---------------- pain cards ---------------- */
+.eh-pains {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+@media (min-width: 760px) {
+  .eh-pains {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.eh-pain {
+  border: 2px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  padding: 20px 22px;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+.eh-pain:nth-child(odd) {
+  transform: rotate(-0.5deg);
+}
+.eh-pain:nth-child(even) {
+  transform: rotate(0.5deg);
+}
+.eh-pain:hover {
+  transform: rotate(0deg) translate(-2px, -2px);
+  box-shadow: 6px 6px 0 rgba(169, 123, 255, 0.5);
+}
+.eh-pain.alert {
+  border-color: rgba(255, 77, 157, 0.5);
+}
+.eh-pain .who {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 8px;
+}
+.eh-pain .msg {
+  font-size: 18px;
+  line-height: 1.3;
+}
+.eh-pain.alert .msg {
+  color: var(--pink);
+}
+.eh-pain.file .msg {
+  font-family: var(--mono);
+  font-size: 15px;
+  color: var(--muted);
+}
+
+/* ---------------- before / after ---------------- */
+.eh-ba {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+@media (min-width: 880px) {
+  .eh-ba {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.eh-col {
+  border: 2px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+  padding: 28px 26px 32px;
+  position: relative;
+  overflow: hidden;
+}
+.eh-col::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 5px;
+  background: var(--pink);
+}
+.eh-col.after::before {
+  background: var(--lime);
+}
+.eh-col.after {
+  box-shadow: 6px 6px 0 rgba(201, 255, 61, 0.22);
+}
+.eh-col .hd {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--pink);
+  margin-bottom: 20px;
+}
+.eh-col.after .hd {
+  color: var(--lime);
+}
+.eh-col ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.eh-col li {
+  font-size: 15px;
+  color: var(--muted);
+  line-height: 1.4;
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+}
+.eh-col li::before {
+  content: "—";
+  color: var(--dim);
+  flex: none;
+}
+.eh-col.after li {
+  color: var(--text);
+}
+.eh-col.after li::before {
+  content: "✓";
+  color: var(--lime);
+  font-weight: 700;
+}
+
+/* ---------------- value map ---------------- */
+.eh-vgrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  border: 2px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+@media (min-width: 680px) {
+  .eh-vgrid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (min-width: 1040px) {
+  .eh-vgrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+.eh-vcell {
+  padding: 26px 24px 28px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  transition: background 0.2s;
+}
+.eh-vcell:hover {
+  background: var(--raised);
+}
+.eh-vcell .n {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  display: block;
+  margin-bottom: 14px;
+}
+.eh-vcell:nth-child(3n + 1) .n {
+  color: var(--lime);
+}
+.eh-vcell:nth-child(3n + 2) .n {
+  color: var(--pink);
+}
+.eh-vcell:nth-child(3n + 3) .n {
+  color: var(--cyan);
+}
+.eh-vcell h3 {
+  font-size: 19px;
+  line-height: 1.14;
+  margin-bottom: 9px;
+}
+.eh-vcell p {
+  font-size: 13.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.eh-vcell.lead {
+  background: linear-gradient(150deg, rgba(201, 255, 61, 0.14), transparent 62%);
+}
+
+/* ---------------- ledger ---------------- */
+.eh-ledger {
+  border: 2px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.eh-lrow {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.eh-lrow:last-child {
+  border-bottom: 0;
+}
+.eh-lrow span {
+  color: var(--muted);
+}
+.eh-lrow b {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.eh-lrow.p b {
+  color: var(--mint);
+}
+.eh-lrow.n b {
+  color: var(--pink);
+}
+.eh-lrow.t {
+  background: var(--raised);
+  border-top: 2px solid var(--line);
+  padding-block: 18px;
+}
+.eh-lrow.t span {
+  color: var(--text);
+}
+.eh-lrow.t b {
+  color: var(--lime);
+  font-size: 19px;
+}
+.eh-pays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+.eh-pay {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text);
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 15px;
+  background: var(--surface);
+}
+.eh-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  justify-content: center;
+}
+.eh-notes h3 {
+  font-size: 21px;
+  margin-bottom: 9px;
+}
+
+/* ---------------- two worlds ---------------- */
+.eh-worlds {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+@media (min-width: 880px) {
+  .eh-worlds {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.eh-world {
+  border: 2px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+  padding: clamp(24px, 3vw, 34px);
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  align-items: flex-start;
+  position: relative;
+  overflow: hidden;
+}
+.eh-world::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 5px;
+  background: var(--lime);
+}
+.eh-world.personal::before {
+  background: var(--pink);
+}
+.eh-world h3 {
+  font-size: clamp(22px, 2.8vw, 30px);
+}
+.eh-world ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.eh-world li {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: var(--ink);
+}
+
+/* ---------------- comparison ---------------- */
+.eh-cmp {
+  border: 2px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+  background: var(--surface);
+}
+.eh-cmp-scroll {
+  overflow-x: auto;
+}
+.eh-cmp table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 560px;
+}
+.eh-cmp th,
+.eh-cmp td {
+  text-align: left;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 13.5px;
+}
+.eh-cmp thead th {
+  background: var(--raised);
+  border-bottom: 2px solid var(--line);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-weight: 700;
+}
+.eh-cmp thead th.us {
+  color: var(--lime);
+}
+.eh-cmp tbody tr:last-child td {
+  border-bottom: 0;
+}
+.eh-cmp td.c {
+  width: 132px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.eh-cmp td.c.no {
+  color: var(--dim);
+}
+.eh-cmp td.c.part {
+  color: var(--cyan);
+}
+.eh-cmp td.c.yes {
+  color: var(--lime);
+  font-weight: 700;
+}
+.eh-cmp tbody tr:hover {
+  background: var(--raised);
+}
+
+/* ---------------- rollout steps ---------------- */
+.eh-steps {
+  border: 2px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+  background: var(--surface);
+}
+.eh-step {
+  display: grid;
+  grid-template-columns: 46px 1fr auto;
+  gap: 16px;
+  align-items: center;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.eh-step:last-child {
+  border-bottom: 0;
+}
+.eh-step .sn {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--lime);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.eh-step:nth-child(even) .sn {
+  background: var(--pink);
+  color: #fff;
+}
+.eh-step h3 {
+  font-size: 18px;
+  line-height: 1.15;
+}
+.eh-step p {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.eh-step .tm {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.eh-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  border: 2px solid var(--ink);
+  background: var(--lime);
+  border-radius: 18px;
+  padding: 20px 24px;
+  margin-top: 18px;
+  box-shadow: 6px 6px 0 rgba(169, 123, 255, 0.9);
+}
+.eh-total span {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(10, 7, 16, 0.75);
+}
+.eh-total b {
+  font-family: var(--display);
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  color: var(--ink);
+}
+
+/* ---------------- faq ---------------- */
+.eh-faq {
+  border-top: 2px solid var(--line);
+}
+.eh-faq details {
+  border-bottom: 2px solid var(--line);
+  padding: 20px 0;
+}
+.eh-faq summary {
+  font-family: var(--display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+}
+.eh-faq summary::-webkit-details-marker {
+  display: none;
+}
+.eh-faq summary::after {
+  content: "+";
+  font-family: var(--mono);
+  color: var(--lime);
+  font-size: 20px;
+  flex: none;
+}
+.eh-faq details[open] summary::after {
+  content: "–";
+  color: var(--pink);
+}
+.eh-faq details p {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 14.5px;
+  max-width: 70ch;
+}
+
+/* ---------------- live demos ---------------- */
+.eh-demos {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+@media (min-width: 700px) {
+  .eh-demos {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (min-width: 1040px) {
+  .eh-demos {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+.eh-demo-card {
+  border: 2px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+.eh-demo-card:hover {
+  transform: translate(-3px, -3px);
+  box-shadow: 8px 8px 0 rgba(169, 123, 255, 0.55);
+}
+.eh-shot {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: var(--raised);
+  cursor: pointer;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+}
+.eh-shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.eh-demo-body {
+  padding: 20px 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  flex: 1;
+}
+.eh-demo-body .kind {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.eh-demo-body h4 {
+  font-size: 20px;
+  line-height: 1.15;
+}
+.eh-demo-body p {
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.eh-open {
+  margin-top: auto;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.eh-open button {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+}
+.eh-open button.hi {
+  color: var(--lime);
+}
+.eh-open button:hover {
+  color: var(--pink);
+}
+
+/* ---------------- cta ---------------- */
+.eh-cta {
+  position: relative;
+  overflow: hidden;
+  border: 2px solid var(--line);
+  border-radius: 28px;
+  padding: clamp(36px, 6vw, 76px) clamp(20px, 4vw, 48px);
+  text-align: center;
+  background: var(--surface);
+}
+/* The card clips its own corners, so the blobs have to overlap it rather
+   than sit outside — pushed fully out they'd be invisible, not subtle. */
+.eh-cta .b1 {
+  top: -180px;
+  left: -80px;
+}
+.eh-cta .b2 {
+  bottom: -200px;
+  right: -60px;
+}
+.eh-cta > * {
+  position: relative;
+  z-index: 2;
+}
+.eh-cta > .eh-blob {
+  z-index: 0;
+}
+.eh-cta h2 {
+  font-size: clamp(32px, 5.2vw, 58px);
+  margin: 18px 0 16px;
+}
+.eh-cta .eh-lede {
+  margin: 0 auto;
+}
+.eh-cta-btns {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 28px;
+}
+
+/* ---------------- footer ---------------- */
+.eh-foot {
+  border-top: 2px solid var(--line);
+  background: var(--surface);
+  padding: 48px 0 32px;
+  position: relative;
+  z-index: 2;
+}
+.eh-foot-in {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 30px;
+}
+@media (min-width: 820px) {
+  .eh-foot-in {
+    grid-template-columns: 1.5fr 1fr 1fr 1.2fr;
+  }
+}
+.eh-foot h5 {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin: 0 0 14px;
+  font-weight: 700;
+}
+.eh-foot ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.eh-foot li {
+  font-size: 13px;
+  color: var(--muted);
+}
+.eh-foot a:hover {
+  color: var(--lime);
+}
+.eh-foot-blurb {
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 34ch;
+  margin-top: 14px;
+}
+.eh-socials {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+.eh-socials a {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 2px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  transition:
+    color 0.16s,
+    border-color 0.16s,
+    background 0.16s;
+}
+.eh-socials a:hover {
+  color: var(--ink);
+  background: var(--lime);
+  border-color: var(--ink);
+}
+.eh-socials svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.eh-foot-base {
+  margin-top: 36px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--dim);
+}
+
+/* ---------------- motion ---------------- */
+@media (prefers-reduced-motion: reduce) {
+  .eh *,
+  .eh *::before,
+  .eh *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ============================================================
+   The two shared components the page renders inside this scope:
+   PublicChatbot (.landing-chatbot) and TestimonialsCarousel
+   (.landing-testimonials). Both are plain Tailwind and are shared with the
+   other landing templates, so they are painted from here rather than
+   rewritten — they carry stable hook classes (lc-*, lt-*) that do nothing
+   on their own, and a `.eh .lc-x` selector outranks the single Tailwind
+   utility class it overrides without needing !important.
+   ============================================================ */
+
+/* ---------------- public chatbot ---------------- */
+.eh .landing-chatbot {
+  background: var(--ink);
+}
+.eh .lc-glow {
+  background:
+    radial-gradient(46% 60% at 18% 0%, rgba(201, 255, 61, 0.12), transparent 70%),
+    radial-gradient(40% 55% at 88% 100%, rgba(255, 77, 157, 0.12), transparent 72%);
+}
+.eh .lc-badge {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--lime);
+  border: 2px solid var(--ink);
+  transform: rotate(-1.4deg);
+}
+.eh .lc-h2 {
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  color: var(--text);
+}
+.eh .lc-lede {
+  font-family: var(--body);
+  color: var(--muted);
+}
+.eh .lc-card {
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.65);
+}
+.eh .lc-head {
+  background: var(--raised);
+  border-bottom: 1px solid var(--line);
+}
+.eh .lc-avatar {
+  background: var(--lime);
+  border: 2px solid var(--ink);
+}
+.eh .lc-boticon {
+  color: var(--ink);
+}
+.eh .lc-name {
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.eh .lc-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.eh .lc-msgs {
+  background: var(--ink);
+}
+.eh .lc-bubble.is-user {
+  background: var(--lime);
+  color: var(--ink);
+  font-weight: 500;
+}
+.eh .lc-bubble.is-bot {
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+.eh .lc-spinner {
+  color: var(--lime);
+}
+.eh .lc-strong {
+  color: var(--lime);
+}
+.eh .lc-bubble.is-user .lc-strong {
+  color: var(--ink);
+}
+.eh .lc-code {
+  font-family: var(--mono);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--cyan);
+}
+.eh .lc-pill {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+.eh .lc-pill:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+/* The one pill that starts the sign-up carries the accent — as the only
+   coloured pill in the row it reads as the action, not as decoration. */
+.eh .lc-pill.is-primary {
+  background: var(--pink);
+  color: #fff;
+  border-color: var(--ink);
+}
+.eh .lc-pill.is-primary:hover:not(:disabled) {
+  background: #ff6aae;
+  color: #fff;
+}
+.eh .lc-form {
+  background: var(--raised);
+  border-top: 1px solid var(--line);
+}
+.eh .lc-input {
+  font-family: var(--body);
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+}
+.eh .lc-input::placeholder {
+  color: var(--dim);
+}
+.eh .lc-input:focus-visible {
+  border-color: var(--lime);
+  box-shadow: none;
+}
+.eh .lc-send {
+  background: var(--lime);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 3px 3px 0 rgba(169, 123, 255, 0.9);
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+.eh .lc-send:hover:not(:disabled) {
+  background: var(--lime2);
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 rgba(169, 123, 255, 0.9);
+}
+
+/* ---------------- testimonials ---------------- */
+.eh .landing-testimonials {
+  background: var(--ink);
+}
+.eh .lt-eyebrow {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--cyan);
+  border-radius: 999px;
+  padding: 6px 14px;
+  transform: rotate(-1.4deg);
+}
+.eh .lt-h2 {
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  color: var(--text);
+}
+.eh .lt-stats {
+  font-family: var(--mono);
+  color: var(--muted);
+}
+.eh .lt-stats span {
+  color: inherit;
+}
+.eh .lt-star {
+  color: var(--dim);
+  fill: none;
+}
+.eh .lt-star.is-on {
+  color: var(--lime);
+  fill: var(--lime);
+}
+.eh .lt-card {
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--r);
+}
+.eh .lt-card:hover {
+  border-color: var(--violet);
+}
+.eh .lt-avatar {
+  border: 2px solid var(--ink);
+  box-shadow: 0 0 0 2px var(--line);
+}
+.eh .lt-name {
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.eh .lt-role {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.eh .lt-quote {
+  color: var(--muted);
+}
+.eh .testimonial-swiper .swiper-pagination-bullet {
+  background: var(--dim);
+  opacity: 1;
+}
+.eh .testimonial-swiper .swiper-pagination-bullet-active {
+  background: var(--lime);
+}
+
+/* the "tell us how it went" banner */
+.eh .lt-cta {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: 6px 6px 0 rgba(255, 77, 157, 0.22);
+}
+.eh .lt-cta::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 5px;
+  background: var(--pink);
+}
+.eh .lt-cta-icon {
+  color: var(--pink);
+}
+.eh .lt-cta-h {
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.eh .lt-cta-p {
+  color: var(--muted);
+}
+.eh .lt-cta-btn {
+  font-family: var(--body);
+  font-weight: 700;
+  background: var(--lime);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 4px 4px 0 rgba(169, 123, 255, 0.9);
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    background 0.16s ease;
+}
+.eh .lt-cta-btn:hover {
+  background: var(--lime2);
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 7px 0 rgba(169, 123, 255, 0.9);
+}
+
+/* ---------------- feedback modal ----------------
+   AppFeedbackModal is a Radix dialog: it portals to <body>, outside the `.eh`
+   wrapper, so these rules cannot be scoped the way everything else here is.
+   They are still route-scoped in practice — Styles.tsx adds this stylesheet
+   on mount and removes it on unmount, so it does not exist on the other
+   pages that open the same modal from the shared footer. The selectors are
+   qualified (two classes, or the dialog role) so they beat the component's
+   own single-class Tailwind utilities regardless of stylesheet order. */
+/* Portalling to <body> also means the modal sits outside the element that
+   declares the palette, so it has to carry its own copy of the tokens —
+   without this every var() below resolves to nothing and the dialog renders
+   transparent. */
+[role="dialog"].lf-modal {
+  --ink: #0a0710;
+  --surface: #150f1f;
+  --raised: #1d1430;
+  --line: rgba(255, 255, 255, 0.12);
+  --text: #f5f0fb;
+  --muted: #a99cbd;
+  --dim: #7a6e8f;
+  --lime: #c9ff3d;
+  --lime2: #e2ff8f;
+  --mint: #35e08a;
+  --display: "Bricolage Grotesque", "Space Grotesk", system-ui, sans-serif;
+  --body: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --mono: "Space Mono", "SF Mono", Menlo, monospace;
+  --r: 22px;
+
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--r);
+  color: var(--text);
+  font-family: var(--body);
+}
+.lf-modal .lf-title {
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.lf-modal .lf-desc {
+  color: var(--muted);
+}
+.lf-modal .lf-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.lf-modal .lf-input {
+  font-family: var(--body);
+  background: var(--ink);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+.lf-modal .lf-input::placeholder {
+  color: var(--dim);
+}
+.lf-modal .lf-input:focus-visible {
+  border-color: var(--lime);
+  box-shadow: none;
+}
+.lf-modal .lf-star {
+  color: var(--dim);
+  fill: none;
+}
+.lf-modal .lf-star.is-on {
+  color: var(--lime);
+  fill: var(--lime);
+}
+.lf-modal .lf-check {
+  color: var(--mint);
+}
+.lf-modal .lf-btn {
+  font-family: var(--body);
+  font-weight: 700;
+  background: var(--lime);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+}
+.lf-modal .lf-btn:hover {
+  background: var(--lime2);
+}
+.lf-modal .lf-btn-ghost {
+  font-family: var(--body);
+  color: var(--muted);
+  border-radius: 999px;
+}
+.lf-modal .lf-btn-ghost:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+/* The role dropdown portals to <body> as well, and lands as a sibling of the
+   dialog rather than inside it — so it needs the tokens too. */
+[role="listbox"].lf-select,
+.lf-select {
+  background: #150f1f;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f5f0fb;
+  font-family: "Space Grotesk", system-ui, -apple-system, sans-serif;
+}
+
+/* ---------------- chatbot, floating mode ----------------
+   PublicChatbot in mode="floating" — a launcher bubble and a docked panel,
+   the same shape as the organizer dashboard's ChatbotWidget. The panel reuses
+   every .lc-* rule above; only the shell is different. */
+.eh .lc-launcher {
+  position: fixed;
+  z-index: 70;
+  right: 20px;
+  bottom: 20px;
+  width: 58px;
+  height: 58px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lime);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  box-shadow: 5px 5px 0 rgba(169, 123, 255, 0.9);
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    background 0.16s ease;
+}
+.eh .lc-launcher:hover {
+  background: var(--lime2);
+  transform: translate(-2px, -2px);
+  box-shadow: 8px 8px 0 rgba(169, 123, 255, 0.9);
+}
+.eh .lc-launcher.is-open {
+  background: var(--pink);
+  color: #fff;
+}
+.eh .lc-float {
+  position: fixed;
+  z-index: 69;
+  right: 20px;
+  bottom: 92px;
+  width: min(400px, calc(100vw - 40px));
+  animation: eh-pop 0.18s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+@keyframes eh-pop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+.eh .lc-card-float {
+  display: flex;
+  flex-direction: column;
+  /* leaves room for the launcher and its shadow below */
+  max-height: min(600px, calc(100dvh - 130px));
+}
+/* In the band the transcript is a fixed 420px; docked it has to give way to
+   the viewport instead, or the panel runs off the top of a short screen. */
+.eh .lc-card-float .lc-msgs {
+  height: auto !important;
+  flex: 1;
+  min-height: 200px;
+}
+.eh .lc-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    color 0.16s,
+    border-color 0.16s,
+    background 0.16s;
+}
+.eh .lc-close:hover {
+  color: var(--ink);
+  background: var(--pink);
+  border-color: var(--ink);
+}
+@media (max-width: 480px) {
+  .eh .lc-launcher {
+    right: 14px;
+    bottom: 14px;
+    width: 52px;
+    height: 52px;
+  }
+  .eh .lc-float {
+    right: 14px;
+    left: 14px;
+    bottom: 78px;
+    width: auto;
+  }
+}

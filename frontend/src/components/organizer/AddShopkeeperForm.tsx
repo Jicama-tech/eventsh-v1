@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Store, X } from "lucide-react";
+import { t } from "@/i18n/t";
 
 interface AddShopkeeperFormProps {
   isOpen: boolean;
@@ -140,38 +141,38 @@ export function AddShopkeeperForm({
           {/* Basic Information */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Basic Information</CardTitle>
+              <CardTitle className="text-lg">{t("Basic Information")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="shopName">Shop Name *</Label>
+                  <Label htmlFor="shopName">{t("Shop Name *")}</Label>
                   <Input
                     id="shopName"
                     value={formData.shopName}
                     onChange={(e) =>
                       handleInputChange("shopName", e.target.value)
                     }
-                    placeholder="Enter shop name"
+                    placeholder={t("Enter shop name")}
                     required
                   />
                 </div>
                 <div>
-                  <Label htmlFor="contactPerson">Contact Person</Label>
+                  <Label htmlFor="contactPerson">{t("Contact Person")}</Label>
                   <Input
                     id="contactPerson"
                     value={formData.contactPerson}
                     onChange={(e) =>
                       handleInputChange("contactPerson", e.target.value)
                     }
-                    placeholder="Owner/Manager name"
+                    placeholder={t("Owner/Manager name")}
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="email">Email *</Label>
+                  <Label htmlFor="email">{t("Email *")}</Label>
                   <Input
                     id="email"
                     type="email"
@@ -182,7 +183,7 @@ export function AddShopkeeperForm({
                   />
                 </div>
                 <div>
-                  <Label htmlFor="phone">Phone *</Label>
+                  <Label htmlFor="phone">{t("Phone *")}</Label>
                   <Input
                     id="phone"
                     type="tel"
@@ -196,7 +197,7 @@ export function AddShopkeeperForm({
               </div>
 
               <div>
-                <Label htmlFor="category">Category *</Label>
+                <Label htmlFor="category">{t("Category *")}</Label>
                 <Select
                   value={formData.category}
                   onValueChange={(value) =>
@@ -204,7 +205,7 @@ export function AddShopkeeperForm({
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select business category" />
+                    <SelectValue placeholder={t("Select business category")} />
                   </SelectTrigger>
                   <SelectContent>
                     {categories.map((category) => (
@@ -217,25 +218,25 @@ export function AddShopkeeperForm({
               </div>
 
               <div>
-                <Label htmlFor="description">Business Description</Label>
+                <Label htmlFor="description">{t("Business Description")}</Label>
                 <Textarea
                   id="description"
                   value={formData.description}
                   onChange={(e) =>
                     handleInputChange("description", e.target.value)
                   }
-                  placeholder="Brief description of products/services"
+                  placeholder={t("Brief description of products/services")}
                   rows={3}
                 />
               </div>
 
               <div>
-                <Label htmlFor="address">Business Address</Label>
+                <Label htmlFor="address">{t("Business Address")}</Label>
                 <Textarea
                   id="address"
                   value={formData.address}
                   onChange={(e) => handleInputChange("address", e.target.value)}
-                  placeholder="Complete business address"
+                  placeholder={t("Complete business address")}
                   rows={2}
                 />
               </div>
@@ -245,11 +246,11 @@ export function AddShopkeeperForm({
           {/* Online Presence */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Online Presence</CardTitle>
+              <CardTitle className="text-lg">{t("Online Presence")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label htmlFor="website">Website</Label>
+                <Label htmlFor="website">{t("Website")}</Label>
                 <Input
                   id="website"
                   type="url"
@@ -260,14 +261,14 @@ export function AddShopkeeperForm({
               </div>
 
               <div>
-                <Label htmlFor="socialMedia">Social Media</Label>
+                <Label htmlFor="socialMedia">{t("Social Media")}</Label>
                 <Input
                   id="socialMedia"
                   value={formData.socialMedia}
                   onChange={(e) =>
                     handleInputChange("socialMedia", e.target.value)
                   }
-                  placeholder="Instagram, Facebook, etc."
+                  placeholder={t("Instagram, Facebook, etc.")}
                 />
               </div>
             </CardContent>
@@ -276,53 +277,51 @@ export function AddShopkeeperForm({
           {/* Business Details */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Business Details</CardTitle>
+              <CardTitle className="text-lg">{t("Business Details")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="businessLicense">
-                    Business License Number
-                  </Label>
+                  <Label htmlFor="businessLicense">{t("Business License Number")}</Label>
                   <Input
                     id="businessLicense"
                     value={formData.businessLicense}
                     onChange={(e) =>
                       handleInputChange("businessLicense", e.target.value)
                     }
-                    placeholder="License number"
+                    placeholder={t("License number")}
                   />
                 </div>
                 <div>
-                  <Label htmlFor="taxId">Tax ID</Label>
+                  <Label htmlFor="taxId">{t("Tax ID")}</Label>
                   <Input
                     id="taxId"
                     value={formData.taxId}
                     onChange={(e) => handleInputChange("taxId", e.target.value)}
-                    placeholder="Tax identification number"
+                    placeholder={t("Tax identification number")}
                   />
                 </div>
               </div>
 
               <div>
-                <Label htmlFor="bankAccount">Bank Account Details</Label>
+                <Label htmlFor="bankAccount">{t("Bank Account Details")}</Label>
                 <Input
                   id="bankAccount"
                   value={formData.bankAccount}
                   onChange={(e) =>
                     handleInputChange("bankAccount", e.target.value)
                   }
-                  placeholder="Account details for payments"
+                  placeholder={t("Account details for payments")}
                 />
               </div>
 
               <div>
-                <Label htmlFor="notes">Additional Notes</Label>
+                <Label htmlFor="notes">{t("Additional Notes")}</Label>
                 <Textarea
                   id="notes"
                   value={formData.notes}
                   onChange={(e) => handleInputChange("notes", e.target.value)}
-                  placeholder="Any additional information or special requirements"
+                  placeholder={t("Any additional information or special requirements")}
                   rows={3}
                 />
               </div>

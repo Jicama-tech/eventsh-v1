@@ -3,6 +3,12 @@ import { useCountry } from "@/hooks/useCountry";
 import { useSubscription } from "@/hooks/useSubscription";
 import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { LanguageToggle } from "@/components/language-toggle";
+import {
+  EventFormShell,
+  eventFormTitle,
+} from "@/components/organizer/EventFormShell";
 import {
   Card,
   CardContent,
@@ -60,6 +66,7 @@ import { jwtDecode } from "jwt-decode";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useNavigate } from "react-router-dom";
+import { t } from "@/i18n/t";
 
 // Lazy-load heavy tab components (only loaded when their tab is active)
 const CreateEventForm = lazy(() =>
@@ -218,8 +225,8 @@ function RoundTableBookingsTab({ apiURL }: { apiURL: string }) {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-2xl sm:text-3xl font-bold">Round Table Bookings</h2>
-      <p className="text-gray-500 text-sm">
+      <h2 className="text-2xl sm:text-3xl font-bold">{t("Round Table Bookings")}</h2>
+      <p className="text-muted-foreground text-sm">
         View and manage round table seat bookings across your events.
       </p>
 
@@ -251,7 +258,7 @@ function RoundTableBookingsTab({ apiURL }: { apiURL: string }) {
             </Suspense>
           ) : (
             <Card>
-              <CardContent className="py-8 text-center text-gray-500">
+              <CardContent className="py-8 text-center text-muted-foreground">
                 Select an event above to view its round table bookings.
               </CardContent>
             </Card>
@@ -259,7 +266,7 @@ function RoundTableBookingsTab({ apiURL }: { apiURL: string }) {
         </div>
       ) : (
         <Card>
-          <CardContent className="py-8 text-center text-gray-500">
+          <CardContent className="py-8 text-center text-muted-foreground">
             No events found. Create an event first.
           </CardContent>
         </Card>
@@ -379,8 +386,13 @@ export function OrganizerDashboard({
 
   // UI State
   const [organizerId, setOrganizerId] = useState("");
-  // Chatbot is the landing tab — organizer sees AI panel first.
-  const [activeTab, setActiveTab] = useState("chatbot");
+  // Analytics is the landing tab for organizers; the assistant is the
+  // bottom-right bubble instead of a tab (see the ChatbotWidget mount at the
+  // end of this file). Individuals keep the chatbot as their landing tab —
+  // they have no sidebar, so that page is their whole dashboard.
+  const [activeTab, setActiveTab] = useState(
+    isIndividual ? "chatbot" : "dashboard",
+  );
   // Individual "Guest List" tab: event pre-selected when jumping from a My
   // Events card's Guest List button.
   const [guestListEventId, setGuestListEventId] = useState<string>("");
@@ -968,7 +980,7 @@ export function OrganizerDashboard({
 
   // In a demo, only these tabs open their content; every other tab click
   // surfaces the register/contact prompt instead of navigating.
-  const DEMO_VIEW_TABS = ["chatbot", "dashboard", "eventAttendees", "events"];
+  const DEMO_VIEW_TABS = ["dashboard", "eventAttendees", "events"];
   const handleTabChange = (tab: string) => {
     if (demoMode && !DEMO_VIEW_TABS.includes(tab)) {
       setShowDemoPrompt(true);
@@ -981,46 +993,45 @@ export function OrganizerDashboard({
   // --- Configuration ---
 
   const navigationItems = [
-    { id: "chatbot", label: "Chatbot", icon: Bot, moduleKey: null },
     {
       id: "dashboard",
-      label: "Analytics",
+      label: t("nav.dashboard"),
       icon: Store,
       moduleKey: "analytics",
     },
     {
       id: "kiosk",
-      label: "In-Person Booking",
+      label: t("nav.kiosk"),
       icon: Ticket,
       moduleKey: "kiosk",
     },
     {
       id: "eventAttendees",
-      label: "Participants",
+      label: t("nav.eventAttendees"),
       icon: Users,
       moduleKey: "participants",
     },
     {
       id: "platformFees",
-      label: "Platform Fees",
+      label: t("nav.platformFees"),
       icon: Receipt,
       moduleKey: null,
     },
     {
       id: "users",
-      label: "CRM",
+      label: t("nav.users"),
       icon: Users,
       moduleKey: "stalls",
     },
     {
       id: "events",
-      label: "Events/Coupons",
+      label: t("nav.events"),
       icon: CalendarDays,
       moduleKey: "events",
     },
     {
       id: "feedback",
-      label: "Feedback",
+      label: t("nav.feedback"),
       icon: MessageSquare,
       moduleKey: "feedback",
     },
@@ -1029,29 +1040,29 @@ export function OrganizerDashboard({
       // organizer's subscription doesn't include the membership module,
       // so plans without it don't see an empty sidebar entry.
       id: "membership",
-      label: "Membership",
+      label: t("nav.membership"),
       icon: Award,
       moduleKey: "membership",
     },
     {
       id: "support",
-      label: "Support",
+      label: t("nav.support"),
       icon: LifeBuoy,
       moduleKey: null,
     },
     {
       id: "storefront",
-      label: "Eventfront",
+      label: t("nav.storefront"),
       icon: Globe,
       isAction: true,
       moduleKey: "storefront",
     },
-    { id: "settings", label: "Settings", icon: Settings, moduleKey: null },
+    { id: "settings", label: t("nav.settings"), icon: Settings, moduleKey: null },
   ];
 
   if (showPreview) {
     return (
-      <div className="min-h-screen bg-white">
+      <div className="min-h-screen bg-background">
         <EventfrontTemplate onBack={() => setShowPreview(false)} />
       </div>
     );
@@ -1073,7 +1084,7 @@ export function OrganizerDashboard({
           <span className="flex items-center gap-2">
             <button
               onClick={() => (window.location.href = "/register")}
-              className="rounded-full bg-white px-3 py-0.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
+              className="rounded-full bg-background px-3 py-0.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
             >
               Register free
             </button>
@@ -1116,6 +1127,11 @@ export function OrganizerDashboard({
           </div>
 
           <div className="flex items-center space-x-2 sm:space-x-4">
+            {/* Theme and language sit ahead of the page actions so they stay
+                in the same place for organizers and Individuals alike, whose
+                header actions differ below. */}
+            <LanguageToggle />
+            <ThemeToggle />
             {!isIndividual && (
               <Button
                 variant="outline"
@@ -1124,7 +1140,7 @@ export function OrganizerDashboard({
                 onClick={() => setActiveTab("help")}
               >
                 <HelpCircle className="h-4 w-4" />
-                Need Help?
+                {t("hdr.help")}
               </Button>
             )}
             {isIndividual ? (
@@ -1322,11 +1338,11 @@ export function OrganizerDashboard({
           <aside className="hidden md:flex w-56 flex-shrink-0 border-r bg-muted/30">
             <nav className="flex-1 space-y-1 overflow-y-auto p-4">
               {[
-                { id: "chatbot", label: "Assistant", icon: Bot },
-                { id: "events", label: "My Events", icon: CalendarDays },
-                { id: "guest-list", label: "Guest List", icon: Users },
-                { id: "email-settings", label: "Settings", icon: Settings },
-                { id: "help", label: "Help", icon: HelpCircle },
+                { id: "chatbot", label: t("navi.chatbot"), icon: Bot },
+                { id: "events", label: t("navi.events"), icon: CalendarDays },
+                { id: "guest-list", label: t("navi.guest-list"), icon: Users },
+                { id: "email-settings", label: t("navi.email-settings"), icon: Settings },
+                { id: "help", label: t("navi.help"), icon: HelpCircle },
               ].map((item) => {
                 const Icon = item.icon;
                 return (
@@ -1379,7 +1395,12 @@ export function OrganizerDashboard({
               onValueChange={setActiveTab}
               className={activeTab === "chatbot" ? "h-full" : "w-full"}
             >
-              {/* AI Assistant — landing tab. Fills the entire main area. */}
+              {/* AI Assistant as a full page — Individuals only. They have
+                  no sidebar, so this is their dashboard. Organizers reach the
+                  same assistant from the floating bubble instead, and must not
+                  mount it here as well: two live instances would each hold
+                  their own transcript. */}
+              {isIndividual && (
               <TabsContent
                 value="chatbot"
                 className="mt-0 h-full data-[state=inactive]:hidden"
@@ -1414,6 +1435,7 @@ export function OrganizerDashboard({
                   onOpenAddExhibitor={handleOpenAddExhibitor}
                 />
               </TabsContent>
+              )}
 
               <TabsContent value="dashboard" className="mt-0">
                 <ModuleGate moduleKey="analytics" hideWhenLocked>
@@ -1422,12 +1444,8 @@ export function OrganizerDashboard({
                     {/* Quick Actions */}
                     {/* <Card>
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-lg sm:text-xl">
-                        Quick Actions
-                      </CardTitle>
-                      <CardDescription className="text-sm">
-                        Manage your organization efficiently
-                      </CardDescription>
+                      <CardTitle className="text-lg sm:text-xl">{t("Quick Actions")}</CardTitle>
+                      <CardDescription className="text-sm">{t("Manage your organization efficiently")}</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -1590,9 +1608,7 @@ export function OrganizerDashboard({
                   <Suspense fallback={<TabLoader />}>
                     <div className="space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                        <h2 className="text-2xl sm:text-3xl font-bold">
-                          Speaker Requests
-                        </h2>
+                        <h2 className="text-2xl sm:text-3xl font-bold">{t("Speaker Requests")}</h2>
                         <p className="text-muted-foreground">
                           Manage speaker applications for your events and track
                           session assignments
@@ -1609,9 +1625,7 @@ export function OrganizerDashboard({
                   <Suspense fallback={<TabLoader />}>
                     <div className="space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                        <h2 className="text-2xl sm:text-3xl font-bold">
-                          Shopkeeper & Vendor Requests
-                        </h2>
+                        <h2 className="text-2xl sm:text-3xl font-bold">{t("Shopkeeper & Vendor Requests")}</h2>
                       </div>
 
                       <VendorRequests
@@ -1705,7 +1719,7 @@ export function OrganizerDashboard({
               <TabsContent value="email-settings" className="mt-0">
                 <Suspense fallback={<TabLoader />}>
                   <div className="w-full space-y-4">
-                    <h2 className="text-xl font-bold">Email settings</h2>
+                    <h2 className="text-xl font-bold">{t("Email settings")}</h2>
                     <EmailSenderSettings />
                   </div>
                 </Suspense>
@@ -1724,9 +1738,9 @@ export function OrganizerDashboard({
             {[
               // Settings & Help moved to the header menu (near Logout).
               // Assistant stays as the "home" tab so users can get back.
-              { id: "chatbot", label: "Assistant", icon: Bot },
-              { id: "events", label: "My Events", icon: CalendarDays },
-              { id: "guest-list", label: "Guest List", icon: Users },
+              { id: "chatbot", label: t("navi.chatbot"), icon: Bot },
+              { id: "events", label: t("navi.events"), icon: CalendarDays },
+              { id: "guest-list", label: t("navi.guest-list"), icon: Users },
             ].map((it) => {
               const Icon = it.icon;
               const active = activeTab === it.id;
@@ -1752,8 +1766,12 @@ export function OrganizerDashboard({
 
       {/* --- Modals and Forms (lazy-loaded on demand) --- */}
       <Suspense fallback={null}>
-        {/* Wrap CreateEventForm in a Dialog so it appears as a constrained
-            modal (matches the MyEvents flow), not a fullscreen takeover. */}
+        {/* The big forms run full-screen (matches the MyEvents flow, and
+            kioscart-v1's ProductForm): far more content than a centered card
+            can show. Still a Dialog rather than an inline swap, because the
+            form must not unmount while it is open — see handleUpdateEvent,
+            which deliberately leaves it mounted after a save so the local
+            edits survive. EventFormShell supplies the title bar. */}
         <Dialog
           open={showCreateEvent}
           onOpenChange={(open) => {
@@ -1763,19 +1781,9 @@ export function OrganizerDashboard({
             }
           }}
         >
-          <DialogContent
-            fullScreenOnMobile={isIndividual}
-            className="max-w-5xl max-h-[90vh] overflow-hidden p-0"
-          >
-            <div
-              className={`app-scroll ${
-                isIndividual
-                  ? "max-sm:flex-1 max-sm:min-h-0 sm:max-h-[90vh]"
-                  : "max-h-[90vh]"
-              }`}
-            >
-              {showCreateEvent &&
-                (() => {
+          <DialogContent fullScreen className="p-0">
+            {showCreateEvent &&
+              (() => {
                   const activeInitial = editingEvent ?? createDefaults;
                   // Personal → "Marriage Function" events use the dedicated
                   // wedding form; everything else uses the commercial form.
@@ -1790,22 +1798,26 @@ export function OrganizerDashboard({
                   const FormComponent = isMarriage
                     ? MarriageEventForm
                     : CreateEventForm;
+                  const close = () => {
+                    setShowCreateEvent(false);
+                    setEditingEvent(null);
+                    setCreateDefaults(null);
+                  };
                   return (
-                    <FormComponent
-                      onClose={() => {
-                        setShowCreateEvent(false);
-                        setEditingEvent(null);
-                        setCreateDefaults(null);
-                      }}
-                      onSave={
-                        editingEvent ? handleUpdateEvent : handleCreateEvent
-                      }
-                      editMode={!!editingEvent}
-                      initialData={activeInitial}
-                    />
+                    <EventFormShell
+                      title={eventFormTitle(!!isMarriage, !!editingEvent)}
+                    >
+                      <FormComponent
+                        onClose={close}
+                        onSave={
+                          editingEvent ? handleUpdateEvent : handleCreateEvent
+                        }
+                        editMode={!!editingEvent}
+                        initialData={activeInitial}
+                      />
+                    </EventFormShell>
                   );
                 })()}
-            </div>
           </DialogContent>
         </Dialog>
 
@@ -1871,13 +1883,16 @@ export function OrganizerDashboard({
         )}
       </Suspense>
 
-      {/* Floating EventSH AI bubble — only on non-chatbot tabs (chatbot tab has
-          the full panel). Hidden for individuals, who reach the assistant from
-          the bottom tab bar instead (the bubble would overlap it). */}
-      {activeTab !== "chatbot" && !isIndividual && (
+      {/* Floating EventSH AI bubble — the organizer's only way into the
+          assistant now that it is not a sidebar tab. It sits outside <Tabs>
+          and is not keyed on activeTab, so it stays mounted across tab
+          switches and the conversation survives navigation.
+
+          Hidden for individuals, who get the full-page assistant above and
+          reach it from the bottom tab bar — the bubble would overlap it. */}
+      {!isIndividual && (
         <ChatbotWidget
           navItems={navigationItems
-            .filter((n) => n.id !== "chatbot")
             .filter((n) => isTabAllowedForOperator(n.id) && isTabVisible(n.id))
             .map((n) => ({ id: n.id, label: n.label, icon: n.icon }))}
           onNavigate={(tab) => {

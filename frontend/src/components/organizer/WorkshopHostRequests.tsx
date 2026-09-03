@@ -17,6 +17,7 @@ import { GraduationCap, Loader2, Eye, Check, X } from "lucide-react";
 import { useCountry } from "@/hooks/useCountry";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { isFieldEnabled } from "@/lib/registrationFormFields";
+import { t } from "@/i18n/t";
 
 interface WorkshopHostRequestsProps {
   eventId: string;
@@ -234,16 +235,16 @@ const WorkshopHostRequests = ({
       case "Rejected":
         return "bg-red-100 text-red-700";
       case "Cancelled":
-        return "bg-gray-100 text-gray-700";
+        return "bg-muted text-muted-foreground";
       default:
-        return "bg-gray-100 text-gray-600";
+        return "bg-muted text-muted-foreground";
     }
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="animate-spin text-gray-400" size={24} />
+        <Loader2 className="animate-spin text-muted-foreground" size={24} />
       </div>
     );
   }
@@ -252,9 +253,9 @@ const WorkshopHostRequests = ({
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <GraduationCap size={48} className="mx-auto mb-3 text-gray-300" />
-          <p className="text-gray-500">No workshop host applications yet</p>
-          <p className="text-xs text-gray-400 mt-1">
+          <GraduationCap size={48} className="mx-auto mb-3 text-muted-foreground" />
+          <p className="text-muted-foreground">No workshop host applications yet</p>
+          <p className="text-xs text-muted-foreground mt-1">
             Turn on "Accept Workshop Host Applications" in the event's
             Workshops tab to let outside hosts apply.
           </p>
@@ -289,7 +290,7 @@ const WorkshopHostRequests = ({
           <div className="flex flex-wrap items-center gap-3 mb-4">
             <input
               type="text"
-              placeholder="Search host, email or workshop…"
+              placeholder={t("Search host, email or workshop\u2026")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-64 rounded-md border px-3 py-2 text-sm"
@@ -306,14 +307,14 @@ const WorkshopHostRequests = ({
               <option value="Rejected">Rejected</option>
               <option value="Cancelled">Cancelled</option>
             </select>
-            <span className="ml-auto text-sm text-gray-500">
+            <span className="ml-auto text-sm text-muted-foreground">
               Showing {filtered.length} of {requests.length}
             </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-gray-500">
+                <tr className="border-b text-left text-muted-foreground">
                   <th className="pb-3 pr-4 font-medium">Host</th>
                   <th className="pb-3 pr-4 font-medium">Workshop</th>
                   <th className="pb-3 pr-4 font-medium">Visitor Price</th>
@@ -326,7 +327,7 @@ const WorkshopHostRequests = ({
               <tbody>
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-gray-500">
+                    <td colSpan={7} className="py-8 text-center text-muted-foreground">
                       No applications match your filters.
                     </td>
                   </tr>
@@ -334,13 +335,13 @@ const WorkshopHostRequests = ({
                 {filtered.map((req) => (
                   <tr
                     key={req._id}
-                    className="border-b last:border-0 hover:bg-gray-50"
+                    className="border-b last:border-0 hover:bg-muted"
                   >
                     <td className="py-3 pr-4">
-                      <p className="font-medium text-gray-800">
+                      <p className="font-medium text-foreground">
                         {req.hostName}
                       </p>
-                      <p className="text-xs text-gray-400">{req.hostEmail}</p>
+                      <p className="text-xs text-muted-foreground">{req.hostEmail}</p>
                     </td>
                     <td className="py-3 pr-4">
                       <p className="font-medium">{req.workshopName}</p>
@@ -362,13 +363,13 @@ const WorkshopHostRequests = ({
                             <p className="font-semibold text-amber-700">
                               {formatPrice(req.amountOwed)}
                             </p>
-                            <p className="text-[10px] text-gray-400">
+                            <p className="text-[10px] text-muted-foreground">
                               {req.ticketsSold} ticket
                               {req.ticketsSold === 1 ? "" : "s"} sold
                             </p>
                           </div>
                         ) : (
-                          <span className="text-xs text-gray-400">
+                          <span className="text-xs text-muted-foreground">
                             No sales yet
                           </span>
                         )
@@ -419,18 +420,18 @@ const WorkshopHostRequests = ({
 
             <div className="space-y-4">
               <div className="rounded-lg border p-3 space-y-1">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Host
                 </p>
-                <p className="font-semibold text-gray-800">
+                <p className="font-semibold text-foreground">
                   {selected.hostName}
                 </p>
-                <p className="text-xs text-gray-500">{selected.hostEmail}</p>
+                <p className="text-xs text-muted-foreground">{selected.hostEmail}</p>
                 {workshopFieldOn("hostPhone") && selected.hostPhone && (
-                  <p className="text-xs text-gray-500">{selected.hostPhone}</p>
+                  <p className="text-xs text-muted-foreground">{selected.hostPhone}</p>
                 )}
                 {workshopFieldOn("hostBio") && selected.hostBio && (
-                  <p className="text-sm text-gray-600 mt-1">
+                  <p className="text-sm text-muted-foreground mt-1">
                     {selected.hostBio}
                   </p>
                 )}
@@ -445,13 +446,13 @@ const WorkshopHostRequests = ({
                   </p>
                   {workshopFieldOn("hostAccountName") &&
                     selected.hostAccountName && (
-                    <p className="text-sm text-gray-800">
+                    <p className="text-sm text-foreground">
                       {selected.hostAccountName}
                     </p>
                   )}
                   {workshopFieldOn("hostAccountDetails") &&
                     selected.hostAccountDetails && (
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-muted-foreground">
                       {selected.hostAccountDetails}
                     </p>
                   )}
@@ -464,7 +465,7 @@ const WorkshopHostRequests = ({
                     <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">
                       Owed to Host
                     </p>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       {selected.ticketsSold || 0} ticket
                       {selected.ticketsSold === 1 ? "" : "s"} sold
                     </p>
@@ -478,10 +479,10 @@ const WorkshopHostRequests = ({
               {workshopFieldOn("workshopDescription") &&
                 selected.workshopDescription && (
                 <div className="rounded-lg border p-3">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
                     Description
                   </p>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-muted-foreground">
                     {selected.workshopDescription}
                   </p>
                 </div>
@@ -493,12 +494,12 @@ const WorkshopHostRequests = ({
                 </div>
               ) : (
                 <div className="rounded-lg border p-3 space-y-3">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Adjust before approving
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label className="text-xs">Visitor Price</Label>
+                      <Label className="text-xs">{t("Visitor Price")}</Label>
                       <Input
                         type="number"
                         min="0"
@@ -512,7 +513,7 @@ const WorkshopHostRequests = ({
                       />
                     </div>
                     <div>
-                      <Label className="text-xs">Max Seats</Label>
+                      <Label className="text-xs">{t("Max Seats")}</Label>
                       <Input
                         type="number"
                         min="0"
@@ -523,7 +524,7 @@ const WorkshopHostRequests = ({
                       />
                     </div>
                     <div>
-                      <Label className="text-xs">Start Time</Label>
+                      <Label className="text-xs">{t("Start Time")}</Label>
                       <Input
                         type="time"
                         value={draft.proposedStartTime}
@@ -536,7 +537,7 @@ const WorkshopHostRequests = ({
                       />
                     </div>
                     <div>
-                      <Label className="text-xs">End Time</Label>
+                      <Label className="text-xs">{t("End Time")}</Label>
                       <Input
                         type="time"
                         value={draft.proposedEndTime}
@@ -561,7 +562,7 @@ const WorkshopHostRequests = ({
                   </label>
                   {draft.isCharged && (
                     <div>
-                      <Label className="text-xs">Hosting Fee</Label>
+                      <Label className="text-xs">{t("Hosting Fee")}</Label>
                       <Input
                         type="number"
                         min="0"

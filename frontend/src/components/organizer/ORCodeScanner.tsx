@@ -22,6 +22,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { OperatorVenueView } from "./OperatorVenueView";
+import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
@@ -876,17 +877,17 @@ export default function QRTicketScanner() {
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
         <Shield className="mx-auto h-12 w-12 text-blue-600 mb-4" />
-        <CardTitle>Volunteer Sign-In</CardTitle>
-        <p className="text-sm text-gray-600">
+        <CardTitle>{t("Volunteer Sign-In")}</CardTitle>
+        <p className="text-sm text-muted-foreground">
           Sign in with the Google account (Gmail) the organizer added to this
           event's volunteer list.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
         {eventData && (
-          <div className="bg-gray-50 p-4 rounded-lg">
+          <div className="bg-muted p-4 rounded-lg">
             <p className="font-medium">{eventData.title}</p>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               {eventData.organizer.organizationName}
             </p>
           </div>
@@ -921,7 +922,7 @@ export default function QRTicketScanner() {
             </svg>
             Continue with Google
           </Button>
-          <p className="text-xs text-gray-500 text-center">
+          <p className="text-xs text-muted-foreground text-center">
             Only Gmail IDs on this event's volunteer list can sign in.
           </p>
         </div>
@@ -935,14 +936,14 @@ export default function QRTicketScanner() {
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
         <Camera className="mx-auto h-12 w-12 text-blue-600 mb-4" />
-        <CardTitle>Select Scan Type</CardTitle>
-        <p className="text-sm text-gray-600">Choose what you want to scan</p>
+        <CardTitle>{t("Select Scan Type")}</CardTitle>
+        <p className="text-sm text-muted-foreground">Choose what you want to scan</p>
       </CardHeader>
       <CardContent className="space-y-4">
         {eventData && (
-          <div className="bg-gray-50 p-4 rounded-lg">
+          <div className="bg-muted p-4 rounded-lg">
             <p className="font-medium">{eventData.title}</p>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               {eventData.organizer.organizationName}
             </p>
           </div>
@@ -950,9 +951,9 @@ export default function QRTicketScanner() {
 
         {/* Signed-in volunteer banner + sign out. */}
         {volunteer && (
-          <div className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
+          <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
             <div className="min-w-0">
-              <p className="text-xs text-gray-500">Signed in as</p>
+              <p className="text-xs text-muted-foreground">Signed in as</p>
               <p className="truncate text-sm font-medium">
                 {volunteer.name || volunteer.email}
               </p>
@@ -1069,7 +1070,7 @@ export default function QRTicketScanner() {
         <CardTitle>
           {scanMode ? SCAN_MODE_COPY[scanMode].title : "Scan QR Code"}
         </CardTitle>
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-muted-foreground">
           {scanMode
             ? SCAN_MODE_COPY[scanMode].subtitle
             : "Point your camera at the QR code"}
@@ -1079,12 +1080,12 @@ export default function QRTicketScanner() {
         <div className="relative">
           <div
             id="qr-reader"
-            className="w-full rounded-lg overflow-hidden border-2 border-dashed border-gray-300"
+            className="w-full rounded-lg overflow-hidden border-2 border-dashed border-border"
             style={{ minHeight: "300px" }}
           />
 
           {isProcessing && (
-            <div className="absolute inset-0 bg-white bg-opacity-80 flex items-center justify-center rounded-lg">
+            <div className="absolute inset-0 bg-background bg-opacity-80 flex items-center justify-center rounded-lg">
               <div className="text-center">
                 <RefreshCw className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
                 <p className="text-sm font-medium">Processing...</p>
@@ -1098,7 +1099,7 @@ export default function QRTicketScanner() {
                 <XCircle className="h-12 w-12 text-red-600 mx-auto mb-2" />
                 <p className="font-medium text-red-800">Scan Failed</p>
                 <p className="text-sm text-red-600 mb-3">{errorMessage}</p>
-                <p className="text-xs text-gray-600">Restarting scanner...</p>
+                <p className="text-xs text-muted-foreground">Restarting scanner...</p>
               </div>
             </div>
           )}
@@ -1120,8 +1121,8 @@ export default function QRTicketScanner() {
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
         <Camera className="mx-auto h-12 w-12 text-green-600 mb-4" />
-        <CardTitle>Select Action</CardTitle>
-        <p className="text-sm text-gray-600">
+        <CardTitle>{t("Select Action")}</CardTitle>
+        <p className="text-sm text-muted-foreground">
           QR code scanned successfully. What would you like to do?
         </p>
       </CardHeader>
@@ -1193,14 +1194,12 @@ export default function QRTicketScanner() {
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
         <CheckCircle className="mx-auto h-16 w-16 text-green-600 mb-4" />
-        <CardTitle className="text-green-800">Attendance Marked!</CardTitle>
+        <CardTitle className="text-green-800">{t("Attendance Marked!")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {ticketData && (
           <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-            <h3 className="font-semibold text-green-800 mb-2">
-              Event Ticket Details
-            </h3>
+            <h3 className="font-semibold text-green-800 mb-2">{t("Event Ticket Details")}</h3>
             <div className="space-y-1 text-sm">
               <p>
                 <strong>Ticket ID:</strong> {ticketData.ticketId}
@@ -1230,7 +1229,7 @@ export default function QRTicketScanner() {
                 <div className="pt-2 border-t border-green-200">
                   <p className="font-semibold mb-1">Tickets:</p>
                   {ticketData.ticketDetails.map((d, i) => (
-                    <p key={i} className="text-xs text-gray-600">
+                    <p key={i} className="text-xs text-muted-foreground">
                       {d.ticketType} × {d.quantity}
                     </p>
                   ))}
@@ -1290,7 +1289,7 @@ export default function QRTicketScanner() {
               <div className="pt-2 border-t border-green-200">
                 <p className="font-semibold mb-1">Tables:</p>
                 {stallData.Tables.map((table) => (
-                  <p key={table.tableId} className="text-xs text-gray-600">
+                  <p key={table.tableId} className="text-xs text-muted-foreground">
                     {table.tableName} ({table.tableType}) — ${table.price}
                   </p>
                 ))}
@@ -1301,7 +1300,7 @@ export default function QRTicketScanner() {
               <div className="pt-2 border-t border-green-200">
                 <p className="font-semibold mb-1">Add-Ons:</p>
                 {stallData.AddOns.map((addOn) => (
-                  <p key={addOn.addOnId} className="text-xs text-gray-600">
+                  <p key={addOn.addOnId} className="text-xs text-muted-foreground">
                     {addOn.name} x{addOn.quantity} — ${addOn.price}
                   </p>
                 ))}
@@ -1333,8 +1332,8 @@ export default function QRTicketScanner() {
             Back
           </Button>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">QR Scanner</h1>
-            <p className="text-sm text-gray-600">
+            <h1 className="text-xl font-bold text-foreground">{t("QR Scanner")}</h1>
+            <p className="text-sm text-muted-foreground">
               {eventData?.title || "Loading event..."}
             </p>
           </div>
@@ -1368,11 +1367,11 @@ export default function QRTicketScanner() {
         {step !== "otp-verification" && (
           <Tabs defaultValue="scanner" className="mt-2">
             <TabsList>
-              <TabsTrigger value="scanner">Scanner</TabsTrigger>
+              <TabsTrigger value="scanner">{t("Scanner")}</TabsTrigger>
               {(eventData?.features?.hasStalls ||
                 eventData?.features?.hasRoundTables ||
                 eventData?.features?.hasSpeakers) && (
-                <TabsTrigger value="venue">Venue</TabsTrigger>
+                <TabsTrigger value="venue">{t("Venue")}</TabsTrigger>
               )}
             </TabsList>
             <TabsContent value="scanner" className="mt-4 space-y-4">
@@ -1402,13 +1401,13 @@ export default function QRTicketScanner() {
                     <p className="text-sm text-purple-600">Session: {speakerData.sessions[0].topic}</p>
                   )}
                   {speakerData.checkInTime && (
-                    <p className="text-xs text-gray-600">Check-in: {new Date(speakerData.checkInTime).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Check-in: {new Date(speakerData.checkInTime).toLocaleString()}</p>
                   )}
                   {speakerData.checkOutTime && (
-                    <p className="text-xs text-gray-600">Check-out: {new Date(speakerData.checkOutTime).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Check-out: {new Date(speakerData.checkOutTime).toLocaleString()}</p>
                   )}
                   {speakerData.duration && (
-                    <p className="text-xs text-gray-600">Duration: {speakerData.duration} minutes</p>
+                    <p className="text-xs text-muted-foreground">Duration: {speakerData.duration} minutes</p>
                   )}
                 </div>
                 <Button onClick={resetScanner} className="w-full">
@@ -1434,13 +1433,13 @@ export default function QRTicketScanner() {
                   <p className="text-sm text-amber-600">Table: {roundTableData.tableName} ({roundTableData.tableCategory})</p>
                   <p className="text-sm text-amber-600">Seats: {roundTableData.seats}</p>
                   {roundTableData.checkInTime && (
-                    <p className="text-xs text-gray-600">Check-in: {new Date(roundTableData.checkInTime).toLocaleTimeString()}</p>
+                    <p className="text-xs text-muted-foreground">Check-in: {new Date(roundTableData.checkInTime).toLocaleTimeString()}</p>
                   )}
                   {roundTableData.checkOutTime && (
-                    <p className="text-xs text-gray-600">Check-out: {new Date(roundTableData.checkOutTime).toLocaleTimeString()}</p>
+                    <p className="text-xs text-muted-foreground">Check-out: {new Date(roundTableData.checkOutTime).toLocaleTimeString()}</p>
                   )}
                   {roundTableData.durationMinutes && (
-                    <p className="text-xs text-gray-600">Duration: {roundTableData.durationMinutes} minutes</p>
+                    <p className="text-xs text-muted-foreground">Duration: {roundTableData.durationMinutes} minutes</p>
                   )}
                 </div>
                 <Button onClick={resetScanner} className="w-full">
@@ -1474,7 +1473,7 @@ export default function QRTicketScanner() {
                   </p>
                 )}
                 {workshopData.checkInTime && (
-                  <p className="text-xs text-gray-600">
+                  <p className="text-xs text-muted-foreground">
                     Check-in:{" "}
                     {new Date(workshopData.checkInTime).toLocaleTimeString()}
                   </p>
@@ -1493,7 +1492,7 @@ export default function QRTicketScanner() {
             <Card className="w-full max-w-md mx-auto">
               <CardHeader className="text-center">
                 <CheckCircle className="mx-auto h-16 w-16 text-green-500 mb-2" />
-                <CardTitle className="text-rose-700">Checked In!</CardTitle>
+                <CardTitle className="text-rose-700">{t("Checked In!")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="bg-rose-50 border border-rose-200 rounded-lg p-4 space-y-2">
@@ -1514,7 +1513,7 @@ export default function QRTicketScanner() {
                     </div>
                   )}
                   {scheduledSpaceData.checkInTime && (
-                    <p className="text-xs text-gray-600">
+                    <p className="text-xs text-muted-foreground">
                       Check-in:{" "}
                       {new Date(
                         scheduledSpaceData.checkInTime,
@@ -1536,9 +1535,9 @@ export default function QRTicketScanner() {
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <AlertCircle className="h-5 w-5 text-orange-500" />
-                  <CardTitle className="text-base">Confirm Check Out</CardTitle>
+                  <CardTitle className="text-base">{t("Confirm Check Out")}</CardTitle>
                 </div>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-sm text-muted-foreground mt-1">
                   Are you sure you want to <strong>Check Out</strong> this
                   {scanMode === "speaker-ticket" ? " speaker" : scanMode === "round-table" ? " visitor" : " exhibitor"}? This action cannot be undone.
                 </p>
@@ -1554,7 +1553,7 @@ export default function QRTicketScanner() {
 
                 <input
                   type="text"
-                  placeholder="Type CHECK_OUT to confirm"
+                  placeholder={t("Type CHECK_OUT to confirm")}
                   value={checkOutConfirmInput}
                   onChange={(e) => {
                     setCheckOutConfirmInput(e.target.value);
@@ -1609,7 +1608,7 @@ export default function QRTicketScanner() {
               {eventId ? (
                 <OperatorVenueView eventId={eventId} />
               ) : (
-                <div className="text-sm text-slate-500 italic text-center py-8">
+                <div className="text-sm text-muted-foreground italic text-center py-8">
                   No event id in URL.
                 </div>
               )}

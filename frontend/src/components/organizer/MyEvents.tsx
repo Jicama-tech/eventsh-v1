@@ -40,6 +40,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { CreateEventForm } from "./CreateEventForm";
+import { EventFormShell, eventFormTitle } from "./EventFormShell";
 import { MarriageEventForm } from "./MarriageEventForm";
 import { EventTypeChooser } from "./EventTypeChooser";
 import { CouponsManager } from "./CouponsManager";
@@ -79,6 +80,7 @@ import { format } from "date-fns";
 import { jwtDecode } from "jwt-decode";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";
+import { t } from "@/i18n/t";
 
 export interface Event {
   _id: string;
@@ -959,7 +961,7 @@ const MyEvents: React.FC = () => {
       case "completed":
         return "bg-blue-100 text-blue-800 border-blue-300";
       default:
-        return "bg-gray-100 text-gray-800 border-gray-300";
+        return "bg-muted text-foreground border-border";
     }
   };
 
@@ -982,7 +984,7 @@ const MyEvents: React.FC = () => {
         <div className="text-center space-y-4 max-w-md">
           <AlertTriangle className="h-12 w-12 text-destructive mx-auto" />
           <div>
-            <h3 className="text-lg font-medium mb-2">Unable to load events</h3>
+            <h3 className="text-lg font-medium mb-2">{t("Unable to load events")}</h3>
             <p className="text-muted-foreground mb-4">{error}</p>
             <Button onClick={handleRetry} className="flex items-center gap-2">
               <RefreshCw size={16} />
@@ -999,7 +1001,7 @@ const MyEvents: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-bold">Events</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold">{t("Events")}</h2>
           <p className="text-muted-foreground">
             Manage your event portfolio and track performance
           </p>
@@ -1018,7 +1020,7 @@ const MyEvents: React.FC = () => {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Events</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Total Events")}</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -1031,9 +1033,7 @@ const MyEvents: React.FC = () => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Upcoming Events
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Upcoming Events")}</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -1046,7 +1046,7 @@ const MyEvents: React.FC = () => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Total Revenue")}</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -1061,7 +1061,7 @@ const MyEvents: React.FC = () => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completed</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Completed")}</CardTitle>
             <Star className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -1078,8 +1078,8 @@ const MyEvents: React.FC = () => {
           the Events tab's "+ Create" button). */}
       <Tabs defaultValue="events" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="events">Events</TabsTrigger>
-          <TabsTrigger value="coupons">Coupons</TabsTrigger>
+          <TabsTrigger value="events">{t("Events")}</TabsTrigger>
+          <TabsTrigger value="coupons">{t("Coupons")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="events" className="space-y-4 m-0">
@@ -1088,12 +1088,12 @@ const MyEvents: React.FC = () => {
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <CardTitle>Event Management</CardTitle>
+            <CardTitle>{t("Event Management")}</CardTitle>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search events..."
+                  placeholder={t("Search events...")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 w-full sm:w-64"
@@ -1102,7 +1102,7 @@ const MyEvents: React.FC = () => {
 
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                 <SelectTrigger className="w-full sm:w-40">
-                  <SelectValue placeholder="Category" />
+                  <SelectValue placeholder={t("Category")} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Categories</SelectItem>
@@ -1116,7 +1116,7 @@ const MyEvents: React.FC = () => {
 
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-full sm:w-32">
-                  <SelectValue placeholder="Status" />
+                  <SelectValue placeholder={t("Status")} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
@@ -1416,30 +1416,29 @@ const MyEvents: React.FC = () => {
 
       {/* Create/Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden p-0">
-          <DialogHeader className="p-6 pb-0">
-            {/* <DialogTitle>
-              <h1 className="text-xl font-bold">
-                {editingEvent ? "Edit Event" : "Create New Event"}
-              </h1>
-            </DialogTitle> */}
-          </DialogHeader>
-          <div className="app-scroll max-h-[calc(90vh-80px)]">
-            {(() => {
-              const activeInitial =
-                editingEvent ?? duplicatingFrom ?? newEventDefaults;
-              // Personal → "Marriage Function" events use the dedicated
-              // wedding form; everything else uses the commercial form.
-              const isMarriage =
-                activeInitial?.eventType === "personal" &&
-                ((activeInitial as any)?.category === "Marriage Function" ||
-                  (activeInitial as any)?.categories?.includes?.(
-                    "Marriage Function",
-                  ));
-              const FormComponent = isMarriage
-                ? MarriageEventForm
-                : CreateEventForm;
-              return (
+        {/* Full-screen: these forms carry far more than a centered card can
+            show. EventFormShell supplies the title bar — which also gives the
+            dialog the DialogTitle Radix wants, and this one had none (the old
+            DialogHeader here was empty, its title commented out). */}
+        <DialogContent fullScreen className="p-0">
+          {(() => {
+            const activeInitial =
+              editingEvent ?? duplicatingFrom ?? newEventDefaults;
+            // Personal → "Marriage Function" events use the dedicated
+            // wedding form; everything else uses the commercial form.
+            const isMarriage =
+              activeInitial?.eventType === "personal" &&
+              ((activeInitial as any)?.category === "Marriage Function" ||
+                (activeInitial as any)?.categories?.includes?.(
+                  "Marriage Function",
+                ));
+            const FormComponent = isMarriage
+              ? MarriageEventForm
+              : CreateEventForm;
+            return (
+              <EventFormShell
+                title={eventFormTitle(!!isMarriage, !!editingEvent)}
+              >
                 <FormComponent
                   onClose={handleCloseDialog}
                   onSave={handleSaveEvent}
@@ -1447,9 +1446,9 @@ const MyEvents: React.FC = () => {
                   duplicateMode={!!duplicatingFrom}
                   initialData={activeInitial}
                 />
-              );
-            })()}
-          </div>
+              </EventFormShell>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 

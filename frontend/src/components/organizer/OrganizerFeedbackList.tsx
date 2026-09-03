@@ -22,6 +22,7 @@ import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscription } from "@/hooks/useSubscription";
 import { EventFeedbackDialog } from "./EventFeedbackDialog";
+import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
@@ -113,7 +114,7 @@ export function OrganizerFeedbackList() {
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search events"
+            placeholder={t("Search events")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="pl-8"
@@ -124,9 +125,9 @@ export function OrganizerFeedbackList() {
       {!canCollectFeedback ? (
         <Card>
           <CardContent className="py-12 text-center space-y-3">
-            <Lock className="h-8 w-8 mx-auto text-slate-400" />
+            <Lock className="h-8 w-8 mx-auto text-muted-foreground" />
             <div>
-              <p className="font-medium text-slate-700">
+              <p className="font-medium text-muted-foreground">
                 Feedback isn't included in your current plan
               </p>
               <p className="text-xs text-muted-foreground mt-1">

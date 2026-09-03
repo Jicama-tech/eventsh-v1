@@ -1194,7 +1194,11 @@ export class OrganizersService {
       organizationName?: string;
       email?: string;
       businessEmail?: string;
+      // Both casings accepted: the schema field is whatsAppNumber (capital W)
+      // and the in-house settings form sends that, while some JSON API
+      // clients (e.g. SingAdvisor) historically send the lowercase-p shape.
       whatsappNumber?: string;
+      whatsAppNumber?: string;
       phone?: string;
       contactPhones?: string[] | string;
       contactPhoneNames?: string[] | string;
@@ -1245,8 +1249,12 @@ export class OrganizersService {
         update.email = this.normalizeEmail(body.email);
       if (body.businessEmail !== undefined)
         update.businessEmail = this.normalizeEmail(body.businessEmail);
-      if (body.whatsappNumber !== undefined)
-        update.whatsappNumber = body.whatsappNumber;
+      // Write the schema-cased key (whatsAppNumber). The old code wrote
+      // lowercase-p `whatsappNumber`, which mongoose's strict mode silently
+      // stripped — WhatsApp changes never persisted from any client.
+      const whatsAppNumber = body.whatsAppNumber ?? body.whatsappNumber;
+      if (whatsAppNumber !== undefined)
+        update.whatsAppNumber = whatsAppNumber;
       if (body.phone !== undefined) update.phone = body.phone;
       // Multipart can't natively carry arrays — the frontend
       // JSON-stringifies the contactPhones list so the field survives

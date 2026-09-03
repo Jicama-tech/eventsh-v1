@@ -20,6 +20,7 @@ import {
   Receipt,
   Paperclip,
 } from "lucide-react";
+import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
@@ -359,9 +360,7 @@ export default function EventPnlDialog({
 
               <div className="grid gap-3 lg:grid-cols-2">
                 <section className="rounded-xl border">
-                  <h4 className="border-b bg-green-50/60 px-3 py-2 text-sm font-semibold text-green-800">
-                    Money in
-                  </h4>
+                  <h4 className="border-b bg-green-50/60 px-3 py-2 text-sm font-semibold text-green-800">{t("Money in")}</h4>
                   <ul className="divide-y">
                     {pnl.revenue.map((r) => (
                       <li
@@ -387,9 +386,7 @@ export default function EventPnlDialog({
                 </section>
 
                 <section className="rounded-xl border">
-                  <h4 className="border-b bg-red-50/60 px-3 py-2 text-sm font-semibold text-red-800">
-                    Money out
-                  </h4>
+                  <h4 className="border-b bg-red-50/60 px-3 py-2 text-sm font-semibold text-red-800">{t("Money out")}</h4>
                   <ul className="divide-y">
                     {pnl.costs.map((r) => (
                       <li

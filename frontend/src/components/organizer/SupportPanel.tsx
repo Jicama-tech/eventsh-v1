@@ -34,6 +34,7 @@ import {
   HelpingHand,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
@@ -248,7 +249,7 @@ export default function SupportPanel() {
       <div className="flex items-center gap-3">
         <LifeBuoy className="h-7 w-7 text-primary" />
         <div>
-          <h2 className="text-2xl sm:text-3xl font-bold">Support</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold">{t("Support")}</h2>
           <p className="text-sm text-muted-foreground">
             Report a bug, request a feature, or ask for help. Attach
             screenshots so we can see what you see.
@@ -259,16 +260,14 @@ export default function SupportPanel() {
       {/* ── Submit form ───────────────────────────────────────────────── */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Submit a support request</CardTitle>
-          <CardDescription>
-            We usually respond within 1 business day.
-          </CardDescription>
+          <CardTitle className="text-lg">{t("Submit a support request")}</CardTitle>
+          <CardDescription>{t("We usually respond within 1 business day.")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={submit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2">
-                <Label htmlFor="support-subject">Subject</Label>
+                <Label htmlFor="support-subject">{t("Subject")}</Label>
                 <Input
                   id="support-subject"
                   value={subject}
@@ -279,7 +278,7 @@ export default function SupportPanel() {
                 />
               </div>
               <div>
-                <Label htmlFor="support-category">Category</Label>
+                <Label htmlFor="support-category">{t("Category")}</Label>
                 <Select
                   value={category}
                   onValueChange={(v) => setCategory(v as Category)}
@@ -306,7 +305,7 @@ export default function SupportPanel() {
             </div>
 
             <div>
-              <Label htmlFor="support-description">Description</Label>
+              <Label htmlFor="support-description">{t("Description")}</Label>
               <Textarea
                 id="support-description"
                 value={description}
@@ -402,10 +401,8 @@ export default function SupportPanel() {
       {/* ── History ──────────────────────────────────────────────────── */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">My tickets</CardTitle>
-          <CardDescription>
-            Past requests you've submitted, newest first.
-          </CardDescription>
+          <CardTitle className="text-lg">{t("My tickets")}</CardTitle>
+          <CardDescription>{t("Past requests you've submitted, newest first.")}</CardDescription>
         </CardHeader>
         <CardContent>
           {loadingTickets ? (

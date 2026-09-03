@@ -21,6 +21,7 @@ import {
   X as XIcon,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { t } from "@/i18n/t";
 
 interface VenueConfigLite {
   id: string;
@@ -313,7 +314,7 @@ export function AIVenueDesignerDialog({
             {/* Messages */}
             <div
               ref={scrollRef}
-              className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4 min-h-0 bg-slate-50/50"
+              className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4 min-h-0 bg-muted/50"
             >
               {messages.map((m, i) => (
                 <ChatBubble
@@ -330,7 +331,7 @@ export function AIVenueDesignerDialog({
                   <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shrink-0">
                     <Bot className="h-4 w-4 text-white" />
                   </div>
-                  <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-sm shadow-sm px-3 py-2">
+                  <div className="bg-background border border-border rounded-2xl rounded-bl-sm shadow-sm px-3 py-2">
                     <div className="flex gap-1">
                       <span
                         className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce"
@@ -351,11 +352,11 @@ export function AIVenueDesignerDialog({
             </div>
 
             {/* Settings (collapsible) */}
-            <div className="border-t bg-white px-4 sm:px-6">
+            <div className="border-t bg-background px-4 sm:px-6">
               <button
                 type="button"
                 onClick={() => setShowSettings((v) => !v)}
-                className="w-full flex items-center justify-between py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-700"
+                className="w-full flex items-center justify-between py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-muted-foreground"
               >
                 <span>Spacing & orientation</span>
                 <ChevronDown
@@ -365,9 +366,7 @@ export function AIVenueDesignerDialog({
               {showSettings && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pb-3">
                   <div className="space-y-1">
-                    <Label htmlFor="ai-wall" className="text-xs">
-                      Wall margin (m)
-                    </Label>
+                    <Label htmlFor="ai-wall" className="text-xs">{t("Wall margin (m)")}</Label>
                     <Input
                       id="ai-wall"
                       type="number"
@@ -381,9 +380,7 @@ export function AIVenueDesignerDialog({
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="ai-gap" className="text-xs">
-                      Gap between stalls (m)
-                    </Label>
+                    <Label htmlFor="ai-gap" className="text-xs">{t("Gap between stalls (m)")}</Label>
                     <Input
                       id="ai-gap"
                       type="number"
@@ -397,7 +394,7 @@ export function AIVenueDesignerDialog({
                     />
                   </div>
                   <div className="space-y-1 col-span-2 sm:col-span-1">
-                    <Label className="text-xs">Stall orientation</Label>
+                    <Label className="text-xs">{t("Stall orientation")}</Label>
                     <div className="flex gap-1">
                       <button
                         type="button"
@@ -406,7 +403,7 @@ export function AIVenueDesignerDialog({
                         className={`flex-1 text-xs px-2 py-1.5 rounded-md border transition ${
                           stallOrientation === "horizontal"
                             ? "border-blue-500 bg-blue-50 text-blue-700 font-semibold"
-                            : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                            : "border-border bg-background text-muted-foreground hover:bg-muted"
                         } disabled:opacity-50`}
                       >
                         ▭ Horiz.
@@ -418,7 +415,7 @@ export function AIVenueDesignerDialog({
                         className={`flex-1 text-xs px-2 py-1.5 rounded-md border transition ${
                           stallOrientation === "vertical"
                             ? "border-blue-500 bg-blue-50 text-blue-700 font-semibold"
-                            : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                            : "border-border bg-background text-muted-foreground hover:bg-muted"
                         } disabled:opacity-50`}
                       >
                         ▯ Vert.
@@ -473,7 +470,7 @@ export function AIVenueDesignerDialog({
             {/* Input bar */}
             <form
               onSubmit={handleSubmit}
-              className="p-3 sm:p-4 border-t bg-white flex gap-2 items-center flex-shrink-0"
+              className="p-3 sm:p-4 border-t bg-background flex gap-2 items-center flex-shrink-0"
             >
               <input
                 ref={fileInputRef}
@@ -507,7 +504,7 @@ export function AIVenueDesignerDialog({
                       : "Describe the venue setup…"
                 }
                 disabled={loading}
-                className="flex-1 h-10 rounded-full bg-slate-100 border-0 focus-visible:ring-1 focus-visible:ring-blue-500 text-sm"
+                className="flex-1 h-10 rounded-full bg-muted border-0 focus-visible:ring-1 focus-visible:ring-blue-500 text-sm"
               />
               <Button
                 type="submit"
@@ -558,7 +555,7 @@ function ChatBubble({
       <div
         className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
           isUser
-            ? "bg-slate-200 text-slate-600"
+            ? "bg-muted text-muted-foreground"
             : "bg-gradient-to-br from-amber-500 to-orange-600"
         }`}
       >
@@ -572,7 +569,7 @@ function ChatBubble({
         className={`max-w-[85%] sm:max-w-[78%] px-3 py-2 text-sm leading-relaxed break-words ${
           isUser
             ? "bg-blue-600 text-white rounded-2xl rounded-br-sm"
-            : "bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-bl-sm shadow-sm"
+            : "bg-background border border-border text-foreground rounded-2xl rounded-bl-sm shadow-sm"
         }`}
       >
         <span className="whitespace-pre-wrap">{content}</span>
@@ -610,9 +607,9 @@ function ChatBubble({
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded bg-slate-50 border border-slate-200 px-2 py-1 text-center">
-      <div className="font-bold text-sm text-slate-900">{value}</div>
-      <div className="text-[9px] uppercase tracking-wide text-slate-500">
+    <div className="rounded bg-muted border border-border px-2 py-1 text-center">
+      <div className="font-bold text-sm text-foreground">{value}</div>
+      <div className="text-[9px] uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
     </div>
@@ -640,9 +637,9 @@ function PreviewCanvas({
   const stallTplById = new Map(templates.stalls.map((t) => [t.id, t]));
 
   return (
-    <div className="rounded-md border bg-slate-50 p-2 overflow-auto">
+    <div className="rounded-md border bg-muted p-2 overflow-auto">
       <div
-        className="relative bg-white border border-gray-200 rounded shadow-inner mx-auto"
+        className="relative bg-background border border-border rounded shadow-inner mx-auto"
         style={{ width: W, height: H }}
       >
         {result.positionedSpeakerZones.map((z) => (

@@ -27,8 +27,8 @@ type Role = "organizer" | "vendor" | "visitor" | "speaker" | "general";
 // Shared classNames so every input + select in the form matches the dark
 // theme used by the landing-page testimonial cards.
 const darkInputClass =
-  "bg-[#0a0a0c] border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-primary/40 focus-visible:border-white/20";
-const darkLabelClass = "text-xs text-slate-400";
+  "lf-input bg-[#0a0a0c] border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-primary/40 focus-visible:border-white/20";
+const darkLabelClass = "lf-label text-xs text-slate-400";
 
 function StarRating({
   value,
@@ -59,8 +59,8 @@ function StarRating({
               size={32}
               className={
                 filled
-                  ? "fill-yellow-400 text-yellow-400"
-                  : "text-slate-700"
+                  ? "lf-star is-on fill-yellow-400 text-yellow-400"
+                  : "lf-star text-slate-700"
               }
             />
           </button>
@@ -175,12 +175,12 @@ export function AppFeedbackModal({ open, onOpenChange }: Props) {
         if (!o) setTimeout(reset, 200); // wait for close animation
       }}
     >
-      <DialogContent className="max-w-md bg-[#121216] border-white/5 text-white">
+      <DialogContent className="lf-modal max-w-md bg-[#121216] border-white/5 text-white">
         <DialogHeader>
-          <DialogTitle className="text-white">
+          <DialogTitle className="lf-title text-white">
             Share your thoughts on Eventsh
           </DialogTitle>
-          <DialogDescription className="text-slate-400">
+          <DialogDescription className="lf-desc text-slate-400">
             We read every response. We'll send a one-time code to your email to
             verify it's really you.
           </DialogDescription>
@@ -202,7 +202,7 @@ export function AppFeedbackModal({ open, onOpenChange }: Props) {
             <Button
               onClick={requestOtp}
               disabled={otpSending || !email.trim()}
-              className="w-full"
+              className="lf-btn w-full"
             >
               {otpSending ? (
                 <>
@@ -246,7 +246,7 @@ export function AppFeedbackModal({ open, onOpenChange }: Props) {
                   <SelectTrigger className={darkInputClass}>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#0a0a0c] border-white/10 text-white">
+                  <SelectContent className="lf-select bg-[#0a0a0c] border-white/10 text-white">
                     <SelectItem value="organizer">Organizer</SelectItem>
                     <SelectItem value="vendor">Vendor</SelectItem>
                     <SelectItem value="visitor">Visitor</SelectItem>
@@ -294,7 +294,7 @@ export function AppFeedbackModal({ open, onOpenChange }: Props) {
                 !comment.trim() ||
                 rating < 1
               }
-              className="w-full"
+              className="lf-btn w-full"
             >
               {submitting ? (
                 <>
@@ -307,7 +307,7 @@ export function AppFeedbackModal({ open, onOpenChange }: Props) {
             <Button
               type="button"
               variant="ghost"
-              className="w-full text-slate-400 hover:text-white hover:bg-white/5"
+              className="lf-btn-ghost w-full text-slate-400 hover:text-white hover:bg-white/5"
               onClick={() => setStep("email")}
               disabled={submitting}
             >
@@ -318,13 +318,13 @@ export function AppFeedbackModal({ open, onOpenChange }: Props) {
 
         {step === "done" && (
           <div className="py-8 text-center space-y-3">
-            <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-400" />
+            <CheckCircle2 className="lf-check mx-auto h-14 w-14 text-emerald-400" />
             <p className="font-semibold text-lg text-white">Thanks!</p>
             <p className="text-sm text-slate-400">
               Your feedback is with the team. We feature highlights on the
               landing page, so you may see your words there soon.
             </p>
-            <Button onClick={() => onOpenChange(false)} className="w-full">
+            <Button onClick={() => onOpenChange(false)} className="lf-btn w-full">
               Close
             </Button>
           </div>

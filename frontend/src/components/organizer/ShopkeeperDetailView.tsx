@@ -45,6 +45,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { t } from "@/i18n/t";
 
 interface ShopkeeperDetailViewProps {
   shopkeeper: any;
@@ -102,9 +103,7 @@ export function ShopkeeperDetailView({
           {/* Quick Contact & Socials */}
           <Card className="border-t-4 border-t-blue-500">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Contact & Socials
-              </CardTitle>
+              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("Contact & Socials")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-3">
@@ -153,9 +152,7 @@ export function ShopkeeperDetailView({
           {/* Business Identification */}
           <Card className="border-t-4 border-t-orange-500">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Registration Details
-              </CardTitle>
+              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("Registration Details")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex justify-between items-center">

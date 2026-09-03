@@ -51,6 +51,7 @@ import { useCountry } from "@/hooks/useCountry";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { toast } from "@/hooks/use-toast";
 import { jwtDecode } from "jwt-decode";
+import { t } from "@/i18n/t";
 
 interface StatusHistoryEntry {
   status: string;
@@ -550,10 +551,8 @@ export function ExhibitorDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Stall Request Details</DialogTitle>
-          <DialogDescription>
-            Complete information about the stall booking request
-          </DialogDescription>
+          <DialogTitle>{t("Stall Request Details")}</DialogTitle>
+          <DialogDescription>{t("Complete information about the stall booking request")}</DialogDescription>
         </DialogHeader>
 
         {stallRequest && (
@@ -562,7 +561,7 @@ export function ExhibitorDetailDialog({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">Request Status</CardTitle>
+                  <CardTitle className="text-sm">{t("Request Status")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {(() => {
@@ -573,7 +572,7 @@ export function ExhibitorDetailDialog({
               </Card>
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">Payment Status</CardTitle>
+                  <CardTitle className="text-sm">{t("Payment Status")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {getPaymentBadge(stallRequest.paymentStatus)}
@@ -597,7 +596,7 @@ export function ExhibitorDetailDialog({
                             type="button"
                             size="sm"
                             variant="buttonOutline"
-                            className="h-7 border-amber-300 bg-white px-2 text-xs text-amber-800 hover:bg-amber-100"
+                            className="h-7 border-amber-300 bg-background px-2 text-xs text-amber-800 hover:bg-amber-100"
                             onClick={() => setExtendDialogOpen(true)}
                           >
                             <Clock className="mr-1 h-3.5 w-3.5" />
@@ -607,7 +606,7 @@ export function ExhibitorDetailDialog({
                             type="button"
                             size="sm"
                             variant="buttonOutline"
-                            className="h-7 border-red-200 bg-white px-2 text-xs text-red-600 hover:bg-red-50"
+                            className="h-7 border-red-200 bg-background px-2 text-xs text-red-600 hover:bg-red-50"
                             disabled={isRemovingHold}
                             onClick={handleRemoveHold}
                             title="Turn the hold timer off"
@@ -636,7 +635,7 @@ export function ExhibitorDetailDialog({
                           type="button"
                           size="sm"
                           variant="buttonOutline"
-                          className="h-7 shrink-0 border-amber-300 bg-white px-2 text-xs text-amber-800 hover:bg-amber-100"
+                          className="h-7 shrink-0 border-amber-300 bg-background px-2 text-xs text-amber-800 hover:bg-amber-100"
                           onClick={() => setStartHoldOpen(true)}
                         >
                           <Clock className="mr-1 h-3.5 w-3.5" />
@@ -706,9 +705,9 @@ export function ExhibitorDetailDialog({
                           Approval needed
                         </Badge>
                       </div>
-                      <div className="rounded-lg border border-amber-200 bg-white p-3 text-sm space-y-2">
+                      <div className="rounded-lg border border-amber-200 bg-background p-3 text-sm space-y-2">
                         <div className="flex justify-between">
-                          <span className="text-gray-500">Operators</span>
+                          <span className="text-muted-foreground">Operators</span>
                           <span className="font-medium">
                             {(stallRequest as any).noOfOperators || "—"} →{" "}
                             <span className="text-amber-700 font-bold">
@@ -717,13 +716,13 @@ export function ExhibitorDetailDialog({
                           </span>
                         </div>
                         <div>
-                          <span className="text-gray-500">Updated add-ons</span>
+                          <span className="text-muted-foreground">Updated add-ons</span>
                           <ul className="mt-1 space-y-0.5">
                             {(pa.selectedAddOns || []).map(
                               (a: any, i: number) => (
                                 <li
                                   key={i}
-                                  className="flex justify-between text-gray-700"
+                                  className="flex justify-between text-muted-foreground"
                                 >
                                   <span>
                                     {a.name} × {a.quantity}
@@ -739,7 +738,7 @@ export function ExhibitorDetailDialog({
                           </ul>
                         </div>
                         <div className="flex justify-between border-t border-amber-100 pt-2">
-                          <span className="text-gray-500">
+                          <span className="text-muted-foreground">
                             Difference paid by vendor
                           </span>
                           <span className="font-bold text-green-700">
@@ -748,7 +747,7 @@ export function ExhibitorDetailDialog({
                         </div>
                         {pa.transactionId && (
                           <div className="flex justify-between">
-                            <span className="text-gray-500">Transaction ID</span>
+                            <span className="text-muted-foreground">Transaction ID</span>
                             <span className="font-mono text-xs">
                               {pa.transactionId}
                             </span>
@@ -800,15 +799,15 @@ export function ExhibitorDetailDialog({
                         Decision needed
                       </Badge>
                     </div>
-                    <div className="rounded-lg border border-red-200 bg-white p-3 text-sm">
-                      <p className="text-xs text-gray-500">Reason</p>
-                      <p className="text-gray-800">
+                    <div className="rounded-lg border border-red-200 bg-background p-3 text-sm">
+                      <p className="text-xs text-muted-foreground">Reason</p>
+                      <p className="text-foreground">
                         {(stallRequest as any).pendingCancellation?.reason ||
                           "—"}
                       </p>
                     </div>
                     <div>
-                      <Label className="text-xs text-gray-600">
+                      <Label className="text-xs text-muted-foreground">
                         Note to vendor (e.g. when the refund will be returned) —
                         emailed to them
                       </Label>
@@ -870,7 +869,7 @@ export function ExhibitorDetailDialog({
                       <p className="text-xs text-amber-700">
                         Transaction ID / Reference
                       </p>
-                      <p className="font-mono font-bold text-sm text-gray-800 bg-white rounded px-3 py-1.5 border border-amber-200 mt-1">
+                      <p className="font-mono font-bold text-sm text-foreground bg-background rounded px-3 py-1.5 border border-amber-200 mt-1">
                         {(stallRequest as any).transactionId}
                       </p>
                     </div>
@@ -964,9 +963,7 @@ export function ExhibitorDetailDialog({
             {/* Shopkeeper Info */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">
-                  Shopkeeper Information
-                </CardTitle>
+                <CardTitle className="text-lg">{t("Shopkeeper Information")}</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {stallRequest.companyLogo && (
@@ -974,7 +971,7 @@ export function ExhibitorDetailDialog({
                     <DownloadableImage
                       path={stallRequest.companyLogo}
                       alt="Company Logo"
-                      className="w-16 h-16 rounded-md object-contain border bg-gray-50"
+                      className="w-16 h-16 rounded-md object-contain border bg-muted"
                     />
                     <div>
                       <p className="font-bold text-lg">
@@ -985,7 +982,7 @@ export function ExhibitorDetailDialog({
                 )}
 
                 <div>
-                  <Label className="text-muted-foreground">Owner Name</Label>
+                  <Label className="text-muted-foreground">{t("Owner Name")}</Label>
                   <div className="flex items-center gap-2">
                     <p className="font-medium">
                       {stallRequest.shopkeeperId?.name ||
@@ -1003,9 +1000,7 @@ export function ExhibitorDetailDialog({
                   </div>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground">
-                    Registered Business Name
-                  </Label>
+                  <Label className="text-muted-foreground">{t("Registered Business Name")}</Label>
                   <p className="font-medium">
                     {stallRequest.shopkeeperId?.businessName ||
                       stallRequest.shopkeeperId?.shopName ||
@@ -1014,17 +1009,13 @@ export function ExhibitorDetailDialog({
                 </div>
                 {stallRequest.displayName && (
                   <div>
-                    <Label className="text-muted-foreground">
-                      Display Name
-                    </Label>
+                    <Label className="text-muted-foreground">{t("Display Name")}</Label>
                     <p className="font-medium">{stallRequest.displayName}</p>
                   </div>
                 )}
                 {stallRequest.shopkeeperId?.email && (
                   <div>
-                    <Label className="text-muted-foreground">
-                      Primary Email
-                    </Label>
+                    <Label className="text-muted-foreground">{t("Primary Email")}</Label>
                     <p className="font-medium">
                       <a
                         href={`mailto:${stallRequest.shopkeeperId?.email}`}
@@ -1039,9 +1030,7 @@ export function ExhibitorDetailDialog({
                 )}
                 {stallRequest.shopkeeperId?.businessEmail && (
                   <div>
-                    <Label className="text-muted-foreground">
-                      Business Email
-                    </Label>
+                    <Label className="text-muted-foreground">{t("Business Email")}</Label>
                     <p className="font-medium">
                       <a
                         href={`mailto:${stallRequest.shopkeeperId?.businessEmail}`}
@@ -1072,9 +1061,7 @@ export function ExhibitorDetailDialog({
                   </div>
                 )}
                 <div>
-                  <Label className="text-muted-foreground">
-                    Country / Nationality
-                  </Label>
+                  <Label className="text-muted-foreground">{t("Country / Nationality")}</Label>
                   <p className="font-medium">
                     {(() => {
                       const code =
@@ -1098,7 +1085,7 @@ export function ExhibitorDetailDialog({
                   </p>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground">Instagram</Label>
+                  <Label className="text-muted-foreground">{t("Instagram")}</Label>
                   <p className="font-medium">
                     {stallRequest.shopkeeperId?.instagramHandle ? (
                       <a
@@ -1129,9 +1116,7 @@ export function ExhibitorDetailDialog({
                     if (isIN) {
                       return (
                         <>
-                          <Label className="text-muted-foreground">
-                            GST Number
-                          </Label>
+                          <Label className="text-muted-foreground">{t("GST Number")}</Label>
                           <p className="font-medium uppercase">
                             {stallRequest.shopkeeperId?.GSTNumber ||
                               "Not Provided"}
@@ -1142,9 +1127,7 @@ export function ExhibitorDetailDialog({
                     if (stallRequest.shopkeeperId?.UENNumber) {
                       return (
                         <>
-                          <Label className="text-muted-foreground">
-                            UEN Number
-                          </Label>
+                          <Label className="text-muted-foreground">{t("UEN Number")}</Label>
                           <p className="font-medium uppercase">
                             {stallRequest.shopkeeperId.UENNumber}
                           </p>
@@ -1154,9 +1137,7 @@ export function ExhibitorDetailDialog({
                     if (stallRequest.shopkeeperId?.GSTNumber) {
                       return (
                         <>
-                          <Label className="text-muted-foreground">
-                            GST Number
-                          </Label>
+                          <Label className="text-muted-foreground">{t("GST Number")}</Label>
                           <p className="font-medium uppercase">
                             {stallRequest.shopkeeperId.GSTNumber}
                           </p>
@@ -1166,9 +1147,7 @@ export function ExhibitorDetailDialog({
                     if (stallRequest.registrationNumber) {
                       return (
                         <>
-                          <Label className="text-muted-foreground">
-                            Registration No.
-                          </Label>
+                          <Label className="text-muted-foreground">{t("Registration No.")}</Label>
                           <p className="font-medium uppercase">
                             {stallRequest.registrationNumber}
                           </p>
@@ -1177,9 +1156,7 @@ export function ExhibitorDetailDialog({
                     }
                     return (
                       <>
-                        <Label className="text-muted-foreground">
-                          Registration
-                        </Label>
+                        <Label className="text-muted-foreground">{t("Registration")}</Label>
                         <p className="font-medium text-muted-foreground italic text-sm">
                           Not Provided
                         </p>
@@ -1189,7 +1166,7 @@ export function ExhibitorDetailDialog({
                 </div>
                 {stallFieldOn("businessCategory") && (
                 <div>
-                  <Label className="text-muted-foreground">Category</Label>
+                  <Label className="text-muted-foreground">{t("Category")}</Label>
                   <p className="font-medium">
                     {stallRequest.shopkeeperId?.businessCategory || "—"}
                   </p>
@@ -1197,16 +1174,12 @@ export function ExhibitorDetailDialog({
                 )}
 
                 <div>
-                  <Label className="text-muted-foreground">
-                    Applicant Name
-                  </Label>
+                  <Label className="text-muted-foreground">{t("Applicant Name")}</Label>
                   <p className="font-medium">{stallRequest.nameOfApplicant}</p>
                 </div>
                 {stallFieldOn("businessOwnerNationality") && (
                 <div>
-                  <Label className="text-muted-foreground">
-                    Owner Nationality
-                  </Label>
+                  <Label className="text-muted-foreground">{t("Owner Nationality")}</Label>
                   <p className="font-medium">
                     {stallRequest.businessOwnerNationality || "—"}
                   </p>
@@ -1214,15 +1187,13 @@ export function ExhibitorDetailDialog({
                 )}
                 {stallFieldOn("residency") && (
                 <div>
-                  <Label className="text-muted-foreground">Residency</Label>
+                  <Label className="text-muted-foreground">{t("Residency")}</Label>
                   <p className="font-medium">{stallRequest.residency || "—"}</p>
                 </div>
                 )}
                 {stallFieldOn("noOfOperators") && (
                 <div>
-                  <Label className="text-muted-foreground">
-                    No. Of Operators
-                  </Label>
+                  <Label className="text-muted-foreground">{t("No. Of Operators")}</Label>
                   <p className="font-medium">
                     {stallRequest.noOfOperators || "Not Provided"}
                   </p>
@@ -1230,9 +1201,7 @@ export function ExhibitorDetailDialog({
                 )}
 
                 <div>
-                  <Label className="text-muted-foreground">
-                    Coupon Assigned
-                  </Label>
+                  <Label className="text-muted-foreground">{t("Coupon Assigned")}</Label>
                   <p className="text-sm">
                     {stallRequest.eventId?.autoGenerateVendorCoupon === false
                       ? "None Assigned"
@@ -1242,9 +1211,7 @@ export function ExhibitorDetailDialog({
 
                 {stallRequest.registrationNumber && (
                   <div className="pt-2 border-t">
-                    <Label className="text-muted-foreground">
-                      Registration Number
-                    </Label>
+                    <Label className="text-muted-foreground">{t("Registration Number")}</Label>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium">
                         {stallRequest.registrationNumber}
@@ -1350,9 +1317,7 @@ export function ExhibitorDetailDialog({
                   stallRequest.shopkeeperId?.gstDetails && (
                     <div className="col-span-2 pt-2 border-t">
                       <div className="mb-2 flex items-center gap-2">
-                        <Label className="text-muted-foreground">
-                          GST Verification
-                        </Label>
+                        <Label className="text-muted-foreground">{t("GST Verification")}</Label>
                         <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
                           ✓ Verified
                         </Badge>
@@ -1398,9 +1363,7 @@ export function ExhibitorDetailDialog({
                   stallRequest.shopkeeperId?.uenDetails && (
                     <div className="col-span-2 pt-2 border-t">
                       <div className="mb-2 flex items-center gap-2">
-                        <Label className="text-muted-foreground">
-                          UEN Verification
-                        </Label>
+                        <Label className="text-muted-foreground">{t("UEN Verification")}</Label>
                         <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
                           ✓ Verified
                         </Badge>
@@ -1464,9 +1427,7 @@ export function ExhibitorDetailDialog({
                     .join(", ");
                   return (
                     <div className="pt-2 border-t">
-                      <Label className="text-muted-foreground">
-                        Preferred Space Type(s)
-                      </Label>
+                      <Label className="text-muted-foreground">{t("Preferred Space Type(s)")}</Label>
                       <p className="font-medium">{label}</p>
                     </div>
                   );
@@ -1474,9 +1435,7 @@ export function ExhibitorDetailDialog({
 
                 {stallRequest.registrationImage && (
                   <div className="col-span-2 pt-2 border-t">
-                    <Label className="text-muted-foreground block mb-2">
-                      Registration Document
-                    </Label>
+                    <Label className="text-muted-foreground block mb-2">{t("Registration Document")}</Label>
                     <DownloadableImage
                       path={stallRequest.registrationImage}
                       alt="Registration"
@@ -1486,9 +1445,7 @@ export function ExhibitorDetailDialog({
                 )}
 
                 <div className="pt-2 border-t col-span-2">
-                  <Label className="text-muted-foreground text-xs">
-                    Business Address
-                  </Label>
+                  <Label className="text-muted-foreground text-xs">{t("Business Address")}</Label>
                   <p className="text-sm leading-tight mt-1 italic">
                     {stallRequest.shopkeeperId?.address || "Not provided"}
                   </p>
@@ -1496,9 +1453,7 @@ export function ExhibitorDetailDialog({
 
                 {stallRequest.refundPaymentDescription && (
                   <div className="pt-2 border-t col-span-2">
-                    <Label className="text-muted-foreground text-xs">
-                      Refund Payment Details
-                    </Label>
+                    <Label className="text-muted-foreground text-xs">{t("Refund Payment Details")}</Label>
                     <p className="text-sm leading-tight mt-1 italic">
                       {stallRequest.refundPaymentDescription}
                     </p>
@@ -1507,10 +1462,8 @@ export function ExhibitorDetailDialog({
 
                 {stallRequest.productDescription && (
                   <div className="col-span-2 pt-2 border-t">
-                    <Label className="text-muted-foreground">
-                      Product Description
-                    </Label>
-                    <p className="text-sm mt-1 text-gray-700">
+                    <Label className="text-muted-foreground">{t("Product Description")}</Label>
+                    <p className="text-sm mt-1 text-muted-foreground">
                       {stallRequest.productDescription}
                     </p>
                   </div>
@@ -1519,9 +1472,7 @@ export function ExhibitorDetailDialog({
                 {stallRequest.productImage &&
                   stallRequest.productImage.length > 0 && (
                     <div className="col-span-2 pt-2 border-t">
-                      <Label className="text-muted-foreground mb-2 block">
-                        Product Images
-                      </Label>
+                      <Label className="text-muted-foreground mb-2 block">{t("Product Images")}</Label>
                       <div className="flex gap-2 overflow-x-auto">
                         {stallRequest.productImage.map(
                           (img: string, idx: number) => (
@@ -1542,12 +1493,12 @@ export function ExhibitorDetailDialog({
             {/* Event Info */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Event Information</CardTitle>
+                <CardTitle className="text-lg">{t("Event Information")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <Label className="text-muted-foreground">Event Title</Label>
+                    <Label className="text-muted-foreground">{t("Event Title")}</Label>
                     <div className="flex items-center gap-2">
                       <p className="font-bold text-lg">
                         {stallRequest.eventId?.title || "—"}
@@ -1555,7 +1506,7 @@ export function ExhibitorDetailDialog({
                     </div>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">Category</Label>
+                    <Label className="text-muted-foreground">{t("Category")}</Label>
                     <p className="font-medium">
                       {stallRequest.eventId?.category || "—"}
                     </p>
@@ -1591,9 +1542,7 @@ export function ExhibitorDetailDialog({
                 {stallRequest.eventId?.features &&
                   Object.values(stallRequest.eventId.features).some(Boolean) && (
                     <div>
-                      <Label className="text-muted-foreground mb-2 block text-xs uppercase tracking-wider">
-                        Included Features
-                      </Label>
+                      <Label className="text-muted-foreground mb-2 block text-xs uppercase tracking-wider">{t("Included Features")}</Label>
                       <div className="flex flex-wrap gap-2">
                         {stallRequest.eventId?.features?.parking && (
                           <Badge
@@ -1641,13 +1590,13 @@ export function ExhibitorDetailDialog({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4">
                   <div>
-                    <Label className="text-muted-foreground">Dress Code</Label>
+                    <Label className="text-muted-foreground">{t("Dress Code")}</Label>
                     <p className="text-sm font-medium">
                       {stallRequest.eventId?.dresscode || "Casual"}
                     </p>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">Age Limit</Label>
+                    <Label className="text-muted-foreground">{t("Age Limit")}</Label>
                     <p className="text-sm font-medium">
                       {stallRequest.eventId?.ageRestriction || "No Limit"}
                     </p>
@@ -1658,9 +1607,7 @@ export function ExhibitorDetailDialog({
                   ((stallRequest.eventId as any)?.visitorTypes?.length ?? 0) >
                     0) && (
                   <div className="border-t pt-4">
-                    <Label className="text-muted-foreground block mb-2">
-                      Ticketing
-                    </Label>
+                    <Label className="text-muted-foreground block mb-2">{t("Ticketing")}</Label>
                     <div className="flex gap-4 text-sm">
                       <div className="text-center p-2 border rounded-md flex-1">
                         <span className="block text-xs text-muted-foreground">
@@ -1686,9 +1633,7 @@ export function ExhibitorDetailDialog({
 
                 {stallRequest.eventId?.gallery?.length > 0 && (
                   <div className="border-t pt-4">
-                    <Label className="text-muted-foreground block mb-2">
-                      Event Gallery
-                    </Label>
+                    <Label className="text-muted-foreground block mb-2">{t("Event Gallery")}</Label>
                     <div className="flex gap-2 overflow-x-auto pb-2">
                       {stallRequest.eventId?.gallery.map((img, idx) => (
                         <img
@@ -1708,14 +1653,14 @@ export function ExhibitorDetailDialog({
             {stallRequest.selectedTables.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Selected Tables</CardTitle>
+                  <CardTitle className="text-lg">{t("Selected Tables")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
                     {stallRequest.selectedTables.map((table, index) => (
                       <div
                         key={index}
-                        className="flex justify-between items-center p-3 bg-gray-50 rounded"
+                        className="flex justify-between items-center p-3 bg-muted rounded"
                       >
                         <div>
                           <p className="font-medium">{table.tableName}</p>
@@ -1742,14 +1687,14 @@ export function ExhibitorDetailDialog({
             {stallRequest.selectedAddOns.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Selected Add-ons</CardTitle>
+                  <CardTitle className="text-lg">{t("Selected Add-ons")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
                     {stallRequest.selectedAddOns.map((addon, index) => (
                       <div
                         key={index}
-                        className="flex justify-between items-center p-3 bg-gray-50 rounded"
+                        className="flex justify-between items-center p-3 bg-muted rounded"
                       >
                         <div>
                           <p className="font-medium">{addon.name}</p>
@@ -1775,7 +1720,7 @@ export function ExhibitorDetailDialog({
             {/* Price Summary */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Price Summary</CardTitle>
+                <CardTitle className="text-lg">{t("Price Summary")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 <div className="flex justify-between">
@@ -1811,7 +1756,7 @@ export function ExhibitorDetailDialog({
             {/* Timeline */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Timeline</CardTitle>
+                <CardTitle className="text-lg">{t("Timeline")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-start gap-3">
@@ -1962,9 +1907,7 @@ export function ExhibitorDetailDialog({
                       <Label
                         htmlFor="add-stall-note"
                         className="text-sm font-medium"
-                      >
-                        Add a note
-                      </Label>
+                      >{t("Add a note")}</Label>
                       <Textarea
                         id="add-stall-note"
                         placeholder="What happened? (Visible to organizer, operator, volunteer and exhibitor on the timeline.)"
@@ -2019,7 +1962,7 @@ export function ExhibitorDetailDialog({
                   {stallRequest.statusHistory &&
                     stallRequest.statusHistory.length > 0 && (
                       <div className="relative space-y-0">
-                        <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" />
+                        <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-muted" />
 
                       {stallRequest.statusHistory.map(
                         (entry: StatusHistoryEntry, index: number) => {
@@ -2069,9 +2012,9 @@ export function ExhibitorDetailDialog({
                             },
                           };
                           const config = statusConfig[entry.status] || {
-                            bg: "bg-gray-100",
-                            text: "text-gray-700",
-                            border: "border-gray-300",
+                            bg: "bg-muted",
+                            text: "text-muted-foreground",
+                            border: "border-border",
                           };
 
                           return (
@@ -2131,9 +2074,7 @@ export function ExhibitorDetailDialog({
             {stallRequest.cancellationReason && (
               <Card className="border-red-200">
                 <CardHeader>
-                  <CardTitle className="text-lg text-red-600">
-                    Cancellation Reason
-                  </CardTitle>
+                  <CardTitle className="text-lg text-red-600">{t("Cancellation Reason")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm">{stallRequest.cancellationReason}</p>
@@ -2176,7 +2117,7 @@ export function ExhibitorDetailDialog({
     <Dialog open={startHoldOpen} onOpenChange={setStartHoldOpen}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Hold this space</DialogTitle>
+          <DialogTitle>{t("Hold this space")}</DialogTitle>
           <DialogDescription>
             Give this vendor extra time to complete payment. The space is held
             for the chosen duration and automatically released if they still
@@ -2185,7 +2126,7 @@ export function ExhibitorDetailDialog({
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <Label htmlFor="hold-hours">Hold for (hours)</Label>
+            <Label htmlFor="hold-hours">{t("Hold for (hours)")}</Label>
             <div className="flex flex-wrap gap-1.5">
               {[6, 12, 24, 48, 72].map((h) => (
                 <button
@@ -2195,7 +2136,7 @@ export function ExhibitorDetailDialog({
                   className={`rounded border px-2.5 py-1 text-xs font-semibold ${
                     holdHours === h
                       ? "border-amber-400 bg-amber-100 text-amber-900"
-                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                      : "border-border bg-background text-muted-foreground hover:bg-muted"
                   }`}
                 >
                   {h}h
@@ -2214,7 +2155,7 @@ export function ExhibitorDetailDialog({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="hold-note">Note (optional)</Label>
+            <Label htmlFor="hold-note">{t("Note (optional)")}</Label>
             <Textarea
               id="hold-note"
               value={holdNote}
@@ -2259,7 +2200,7 @@ export function ExhibitorDetailDialog({
     <Dialog open={extendDialogOpen} onOpenChange={setExtendDialogOpen}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Extend confirmation deadline</DialogTitle>
+          <DialogTitle>{t("Extend confirmation deadline")}</DialogTitle>
           <DialogDescription>
             Add more time for this vendor to confirm their payment. The vendor
             is emailed the new deadline and your note.
@@ -2267,7 +2208,7 @@ export function ExhibitorDetailDialog({
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <Label htmlFor="extend-hours">Extend by (hours)</Label>
+            <Label htmlFor="extend-hours">{t("Extend by (hours)")}</Label>
             <div className="flex flex-wrap gap-1.5">
               {[6, 12, 24, 48].map((h) => (
                 <button
@@ -2277,7 +2218,7 @@ export function ExhibitorDetailDialog({
                   className={`rounded border px-2.5 py-1 text-xs font-semibold ${
                     extendHours === h
                       ? "border-amber-400 bg-amber-100 text-amber-900"
-                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                      : "border-border bg-background text-muted-foreground hover:bg-muted"
                   }`}
                 >
                   {h}h
@@ -2296,7 +2237,7 @@ export function ExhibitorDetailDialog({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="extend-note">Note (reason for extension)</Label>
+            <Label htmlFor="extend-note">{t("Note (reason for extension)")}</Label>
             <Textarea
               id="extend-note"
               value={extendNote}

@@ -54,6 +54,7 @@ import {
 import { Helmet } from "react-helmet-async";
 import AnnouncementBar from "@/components/ui/adBar";
 import { useCurrency } from "@/hooks/useCurrencyhook";
+import { t } from "@/i18n/t";
 
 export interface organizerToken {
   sub: string;
@@ -566,12 +567,12 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
       )}
 
       {/* Top Dashboard Bar */}
-      <div className="bg-white dark:bg-gray-900 shadow-sm border-b p-3 sm:p-4 sticky top-0 z-50">
+      <div className="bg-background dark:bg-gray-900 shadow-sm border-b p-3 sm:p-4 sticky top-0 z-50">
         <div className="flex items-center justify-between max-w-7xl mx-auto px-2 sm:px-4">
           <Button
             variant="buttonOutline"
             onClick={onBack}
-            className="hover:bg-gray-50 dark:hover:bg-gray-800 text-xs sm:text-sm px-2 sm:px-4 py-1 sm:py-2"
+            className="hover:bg-muted dark:hover:bg-gray-800 text-xs sm:text-sm px-2 sm:px-4 py-1 sm:py-2"
             size="sm"
           >
             <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
@@ -605,7 +606,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
           )}
         {/* Navigation - Modern Header */}
         {header === "modern" && (
-          <nav className="bg-white shadow-sm border-b border-gray-200 sticky top-0 sm:top-0 z-40">
+          <nav className="bg-background shadow-sm border-b border-border sticky top-0 sm:top-0 z-40">
             <div className="max-w-7xl mx-auto px-2 sm:px-4">
               <div className="flex justify-between items-center h-14 sm:h-16">
                 <Button
@@ -642,7 +643,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                     </div>
                     <div>
                       <h1
-                        className="font-bold text-base sm:text-lg lg:text-xl text-gray-900 truncate max-w-auto sm:max-w-none"
+                        className="font-bold text-base sm:text-lg lg:text-xl text-foreground truncate max-w-auto sm:max-w-none"
                         style={{ fontFamily: design.fontFamily }}
                       >
                         {general.storeName}
@@ -652,25 +653,25 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                   <div className="hidden md:flex mr-15 space-x-4 lg:space-x-8">
                     <button
                       onClick={() => scrollToSection("home")}
-                      className="text-gray-900 hover:text-primary font-medium transition-colors text-sm lg:text-base"
+                      className="text-foreground hover:text-primary font-medium transition-colors text-sm lg:text-base"
                     >
                       Home
                     </button>
                     <button
                       onClick={() => scrollToSection("events")}
-                      className="text-gray-600 hover:text-primary transition-colors text-sm lg:text-base"
+                      className="text-muted-foreground hover:text-primary transition-colors text-sm lg:text-base"
                     >
                       Events
                     </button>
                     <button
                       onClick={() => scrollToSection("about")}
-                      className="text-gray-600 hover:text-primary transition-colors text-sm lg:text-base"
+                      className="text-muted-foreground hover:text-primary transition-colors text-sm lg:text-base"
                     >
                       About
                     </button>
                     <button
                       onClick={() => scrollToSection("contact")}
-                      className="text-gray-600 hover:text-primary transition-colors text-sm lg:text-base"
+                      className="text-muted-foreground hover:text-primary transition-colors text-sm lg:text-base"
                     >
                       Contact
                     </button>
@@ -682,7 +683,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-gray-600 hover:text-primary p-1 sm:p-2"
+                      className="text-muted-foreground hover:text-primary p-1 sm:p-2"
                     >
                       <Heart className="h-4 w-4 sm:h-5 sm:w-5" />
                     </Button>
@@ -711,31 +712,31 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
         {/* Navigation - Minimal Header */}
         {header === "minimal" && (
           <>
-            <nav className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
+            <nav className="bg-background shadow-sm border-b border-border sticky top-0 z-40">
               <div className="w-full px-3 sm:px-4 md:px-6">
                 <div className="flex justify-between items-center h-14 sm:h-16 md:h-18">
                   <div className="hidden md:flex space-x-4 lg:space-x-6 flex-shrink-0">
                     <button
                       onClick={() => scrollToSection("home")}
-                      className="text-gray-900 hover:text-primary font-medium hover:font-bold transition-all duration-200 text-xs lg:text-sm whitespace-nowrap"
+                      className="text-foreground hover:text-primary font-medium hover:font-bold transition-all duration-200 text-xs lg:text-sm whitespace-nowrap"
                     >
                       Home
                     </button>
                     <button
                       onClick={() => scrollToSection("events")}
-                      className="text-gray-600 hover:text-primary font-medium hover:font-bold transition-all duration-200 text-xs lg:text-sm whitespace-nowrap"
+                      className="text-muted-foreground hover:text-primary font-medium hover:font-bold transition-all duration-200 text-xs lg:text-sm whitespace-nowrap"
                     >
                       Events
                     </button>
                     <button
                       onClick={() => scrollToSection("about")}
-                      className="text-gray-600 hover:text-primary font-medium hover:font-bold transition-all duration-200 text-xs lg:text-sm whitespace-nowrap"
+                      className="text-muted-foreground hover:text-primary font-medium hover:font-bold transition-all duration-200 text-xs lg:text-sm whitespace-nowrap"
                     >
                       About
                     </button>
                     <button
                       onClick={() => scrollToSection("contact")}
-                      className="text-gray-600 hover:text-primary font-medium hover:font-bold transition-all duration-200 text-xs lg:text-sm whitespace-nowrap"
+                      className="text-muted-foreground hover:text-primary font-medium hover:font-bold transition-all duration-200 text-xs lg:text-sm whitespace-nowrap"
                     >
                       Contact
                     </button>
@@ -766,7 +767,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                       </div>
                       <div>
                         <h1
-                          className="font-bold text-sm sm:text-base md:text-lg lg:text-xl text-gray-900 truncate max-w-auto sm:max-w-auto md:max-w-none"
+                          className="font-bold text-sm sm:text-base md:text-lg lg:text-xl text-foreground truncate max-w-auto sm:max-w-auto md:max-w-none"
                           style={{ fontFamily: design.fontFamily }}
                         >
                           {general.storeName}
@@ -778,7 +779,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                   <div className="flex items-center space-x-1 sm:space-x-2 ml-auto flex-shrink-0">
                     <button
                       onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                      className="md:hidden text-gray-600 hover:text-primary transition-colors p-1.5 sm:p-2"
+                      className="md:hidden text-muted-foreground hover:text-primary transition-colors p-1.5 sm:p-2"
                       aria-label="Toggle menu"
                     >
                       {isMobileMenuOpen ? (
@@ -790,7 +791,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
 
                     {features.showWishlist && (
                       <button
-                        className="hidden sm:flex text-gray-600 hover:text-primary p-1.5 sm:p-2 flex-shrink-0"
+                        className="hidden sm:flex text-muted-foreground hover:text-primary p-1.5 sm:p-2 flex-shrink-0"
                         aria-label="Wishlist"
                       >
                         <Heart className="h-4 w-4 sm:h-5 sm:w-5 md:h-5 md:w-5" />
@@ -798,7 +799,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                     )}
 
                     <button
-                      className="relative text-gray-600 hover:text-primary transition-colors p-1.5 sm:p-2 flex-shrink-0"
+                      className="relative text-muted-foreground hover:text-primary transition-colors p-1.5 sm:p-2 flex-shrink-0"
                       aria-label="My tickets"
                     >
                       <Ticket className="h-5 w-5 sm:h-6 sm:w-6 md:h-6 md:w-6" />
@@ -807,14 +808,14 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                 </div>
 
                 {isMobileMenuOpen && (
-                  <div className="md:hidden bg-gray-50 border-t border-gray-200 animate-in fade-in duration-200">
+                  <div className="md:hidden bg-muted border-t border-border animate-in fade-in duration-200">
                     <div className="px-3 sm:px-4 py-2 sm:py-3 space-y-2 sm:space-y-3">
                       <button
                         onClick={() => {
                           scrollToSection("home");
                           closeMobileMenu();
                         }}
-                        className="block w-full text-left px-3 sm:px-4 py-2 sm:py-2.5 text-gray-900 hover:bg-gray-200 font-semibold transition-colors rounded text-sm sm:text-base"
+                        className="block w-full text-left px-3 sm:px-4 py-2 sm:py-2.5 text-foreground hover:bg-muted font-semibold transition-colors rounded text-sm sm:text-base"
                       >
                         Home
                       </button>
@@ -823,7 +824,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                           scrollToSection("events");
                           closeMobileMenu();
                         }}
-                        className="block w-full text-left px-3 sm:px-4 py-2 sm:py-2.5 text-gray-600 hover:bg-gray-200 font-semibold transition-colors rounded text-sm sm:text-base"
+                        className="block w-full text-left px-3 sm:px-4 py-2 sm:py-2.5 text-muted-foreground hover:bg-muted font-semibold transition-colors rounded text-sm sm:text-base"
                       >
                         Events
                       </button>
@@ -832,7 +833,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                           scrollToSection("about");
                           closeMobileMenu();
                         }}
-                        className="block w-full text-left px-3 sm:px-4 py-2 sm:py-2.5 text-gray-600 hover:bg-gray-200 font-semibold transition-colors rounded text-sm sm:text-base"
+                        className="block w-full text-left px-3 sm:px-4 py-2 sm:py-2.5 text-muted-foreground hover:bg-muted font-semibold transition-colors rounded text-sm sm:text-base"
                       >
                         About
                       </button>
@@ -841,7 +842,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                           scrollToSection("contact");
                           closeMobileMenu();
                         }}
-                        className="block w-full text-left px-3 sm:px-4 py-2 sm:py-2.5 text-gray-600 hover:bg-gray-200 font-semibold transition-colors rounded text-sm sm:text-base"
+                        className="block w-full text-left px-3 sm:px-4 py-2 sm:py-2.5 text-muted-foreground hover:bg-muted font-semibold transition-colors rounded text-sm sm:text-base"
                       >
                         Contact
                       </button>
@@ -859,9 +860,9 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
               className="fixed inset-0 bg-black/60 backdrop-blur-sm"
               onClick={() => setSidebarOpen(false)}
             />
-            <div className="fixed left-0 top-0 h-full w-72 sm:w-80 bg-white border-r border-gray-200 p-4 sm:p-6 shadow-2xl overflow-y-auto">
+            <div className="fixed left-0 top-0 h-full w-72 sm:w-80 bg-background border-r border-border p-4 sm:p-6 shadow-2xl overflow-y-auto">
               <div className="flex items-center justify-between mb-6 sm:mb-8">
-                <span className="font-bold text-lg sm:text-xl text-gray-900">
+                <span className="font-bold text-lg sm:text-xl text-foreground">
                   {general.storeName}
                 </span>
                 <Button
@@ -875,25 +876,25 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
               <nav className="space-y-4 sm:space-y-6">
                 <button
                   onClick={() => scrollToSection("home")}
-                  className="block w-full text-left py-3 text-base sm:text-lg font-semibold text-gray-900 hover:text-primary transition-colors border-b border-gray-100"
+                  className="block w-full text-left py-3 text-base sm:text-lg font-semibold text-foreground hover:text-primary transition-colors border-b border-border"
                 >
                   Home
                 </button>
                 <button
                   onClick={() => scrollToSection("events")}
-                  className="block w-full text-left py-3 text-base sm:text-lg text-gray-600 text-gray-600 hover:text-primary transition-colors border-b border-gray-100"
+                  className="block w-full text-left py-3 text-base sm:text-lg text-muted-foreground text-muted-foreground hover:text-primary transition-colors border-b border-border"
                 >
                   Events
                 </button>
                 <button
                   onClick={() => scrollToSection("about")}
-                  className="block w-full text-left py-3 text-base sm:text-lg text-gray-600 text-gray-600 hover:text-primary transition-colors border-b border-gray-100"
+                  className="block w-full text-left py-3 text-base sm:text-lg text-muted-foreground text-muted-foreground hover:text-primary transition-colors border-b border-border"
                 >
                   About
                 </button>
                 <button
                   onClick={() => scrollToSection("contact")}
-                  className="block w-full text-left py-3 text-base sm:text-lg text-gray-600 text-gray-600 hover:text-primary transition-colors border-b border-gray-100"
+                  className="block w-full text-left py-3 text-base sm:text-lg text-muted-foreground text-muted-foreground hover:text-primary transition-colors border-b border-border"
                 >
                   Contact
                 </button>
@@ -1150,7 +1151,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
 
               <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[0.8fr_1.2fr] gap-4 sm:gap-8 items-center relative z-10">
                 <div className="flex justify-center md:justify-end w-full order-1 lg:order-2">
-                  <div className="w-full max-w-[16rem] md:max-w-[14rem] lg:max-w-[32rem] h-56 sm:h-64 md:h-72 lg:h-[24rem] bg-gray-200 rounded-3xl overflow-hidden shadow-2xl relative">
+                  <div className="w-full max-w-[16rem] md:max-w-[14rem] lg:max-w-[32rem] h-56 sm:h-64 md:h-72 lg:h-[24rem] bg-muted rounded-3xl overflow-hidden shadow-2xl relative">
                     {design.bannerImage && (
                       <img
                         src={getImageUrl(design.bannerImage)}
@@ -1200,17 +1201,17 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               {/* Section label */}
               <div className="flex items-center gap-3 mb-8 sm:mb-10">
-                <div className="h-px flex-1 bg-gray-200" />
-                <span className="text-xs font-semibold tracking-[0.25em] text-gray-400 uppercase">
+                <div className="h-px flex-1 bg-muted" />
+                <span className="text-xs font-semibold tracking-[0.25em] text-muted-foreground uppercase">
                   By the numbers
                 </span>
-                <div className="h-px flex-1 bg-gray-200" />
+                <div className="h-px flex-1 bg-muted" />
               </div>
 
               {/* Bento grid: 2×2 on mobile, 4-across on lg */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 {/* Card 1 — Events */}
-                <div className="rounded-2xl sm:rounded-3xl p-5 sm:p-7 flex flex-col justify-between border border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow">
+                <div className="rounded-2xl sm:rounded-3xl p-5 sm:p-7 flex flex-col justify-between border border-border bg-background shadow-sm hover:shadow-md transition-shadow">
                   <Trophy
                     className="h-5 w-5 mb-6 sm:mb-8"
                     style={{ color: design.primaryColor }}
@@ -1222,14 +1223,14 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                     >
                       {events?.length || 0}+
                     </div>
-                    <div className="text-xs sm:text-sm text-gray-500 tracking-wide mt-2">
+                    <div className="text-xs sm:text-sm text-muted-foreground tracking-wide mt-2">
                       Events Organized
                     </div>
                   </div>
                 </div>
 
                 {/* Card 2 — Attendees */}
-                <div className="rounded-2xl sm:rounded-3xl p-5 sm:p-7 flex flex-col justify-between border border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow">
+                <div className="rounded-2xl sm:rounded-3xl p-5 sm:p-7 flex flex-col justify-between border border-border bg-background shadow-sm hover:shadow-md transition-shadow">
                   <Users
                     className="h-5 w-5 mb-6 sm:mb-8"
                     style={{ color: design.primaryColor }}
@@ -1241,14 +1242,14 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                     >
                       {happAttendees > 0 ? `${happAttendees}+` : "50K+"}
                     </div>
-                    <div className="text-xs sm:text-sm text-gray-500 tracking-wide mt-2">
+                    <div className="text-xs sm:text-sm text-muted-foreground tracking-wide mt-2">
                       Happy Attendees
                     </div>
                   </div>
                 </div>
 
                 {/* Card 3 — Rating */}
-                <div className="rounded-2xl sm:rounded-3xl p-5 sm:p-7 flex flex-col justify-between border border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow">
+                <div className="rounded-2xl sm:rounded-3xl p-5 sm:p-7 flex flex-col justify-between border border-border bg-background shadow-sm hover:shadow-md transition-shadow">
                   <Star className="h-5 w-5 text-yellow-500 mb-6 sm:mb-8 fill-yellow-500" />
                   <div>
                     <div className="flex items-end gap-1.5">
@@ -1258,16 +1259,16 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                       >
                         {organizerInfo?.rating || 4.9}
                       </span>
-                      <span className="text-gray-400 text-lg mb-1">/5</span>
+                      <span className="text-muted-foreground text-lg mb-1">/5</span>
                     </div>
-                    <div className="text-xs sm:text-sm text-gray-500 tracking-wide mt-2">
+                    <div className="text-xs sm:text-sm text-muted-foreground tracking-wide mt-2">
                       Average Rating
                     </div>
                   </div>
                 </div>
 
                 {/* Card 4 — Established */}
-                <div className="rounded-2xl sm:rounded-3xl p-5 sm:p-7 flex flex-col justify-between border border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow">
+                <div className="rounded-2xl sm:rounded-3xl p-5 sm:p-7 flex flex-col justify-between border border-border bg-background shadow-sm hover:shadow-md transition-shadow">
                   <TrendingUp
                     className="h-5 w-5 mb-6 sm:mb-8"
                     style={{ color: design.primaryColor }}
@@ -1281,7 +1282,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                         ? new Date(organizerInfo.createdAt).getFullYear()
                         : "2018"}
                     </div>
-                    <div className="text-xs sm:text-sm text-gray-500 tracking-wide mt-2">
+                    <div className="text-xs sm:text-sm text-muted-foreground tracking-wide mt-2">
                       Established
                     </div>
                   </div>
@@ -1307,11 +1308,9 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                     <h2
                       className="text-3xl sm:text-4xl lg:text-5xl font-bold"
                       style={gradientHeadingStyle}
-                    >
-                      Featured Event
-                    </h2>
+                    >{t("Featured Event")}</h2>
                   </div>
-                  <div className="h-px flex-1 bg-gray-200 hidden sm:block" />
+                  <div className="h-px flex-1 bg-muted hidden sm:block" />
                 </div>
 
                 {/* Bento grid: big left card + 2×2 smaller cards right */}
@@ -1440,10 +1439,10 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                         }).map((_, i) => (
                           <div
                             key={`ph-${i}`}
-                            className="rounded-2xl sm:rounded-3xl border border-dashed border-gray-200 flex items-center justify-center"
+                            className="rounded-2xl sm:rounded-3xl border border-dashed border-border flex items-center justify-center"
                             style={{ minHeight: "220px" }}
                           >
-                            <p className="text-gray-300 text-xs">More soon</p>
+                            <p className="text-muted-foreground text-xs">More soon</p>
                           </div>
                         ))}
                     </div>
@@ -1468,23 +1467,21 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                   <h2
                     className="text-3xl sm:text-4xl font-bold"
                     style={gradientHeadingStyle}
-                  >
-                    Quick Picks
-                  </h2>
+                  >{t("Quick Picks")}</h2>
                 </div>
                 {totalSlides > 1 && (
                   <div className="flex gap-2">
                     <button
                       onClick={prevSlide}
-                      className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center transition-all duration-200 shadow-sm"
+                      className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border border-border bg-background hover:bg-muted flex items-center justify-center transition-all duration-200 shadow-sm"
                     >
-                      <ChevronLeft className="h-4 w-4 text-gray-600" />
+                      <ChevronLeft className="h-4 w-4 text-muted-foreground" />
                     </button>
                     <button
                       onClick={nextSlide}
-                      className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center transition-all duration-200 shadow-sm"
+                      className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border border-border bg-background hover:bg-muted flex items-center justify-center transition-all duration-200 shadow-sm"
                     >
-                      <ChevronRight className="h-4 w-4 text-gray-600" />
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </button>
                   </div>
                 )}
@@ -1587,8 +1584,8 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                               slideIndex * 2,
                               slideIndex * 2 + 2,
                             ).length === 1 && (
-                              <div className="hidden sm:flex h-[360px] rounded-2xl sm:rounded-3xl border border-dashed border-gray-200 items-center justify-center">
-                                <p className="text-gray-300 text-sm">
+                              <div className="hidden sm:flex h-[360px] rounded-2xl sm:rounded-3xl border border-dashed border-border items-center justify-center">
+                                <p className="text-muted-foreground text-sm">
                                   More events coming soon
                                 </p>
                               </div>
@@ -1640,31 +1637,29 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                   <h2
                     className="text-3xl sm:text-4xl font-bold"
                     style={gradientHeadingStyle}
-                  >
-                    All Events
-                  </h2>
+                  >{t("All Events")}</h2>
                 </div>
               </div>
 
               {/* Search/filter bar */}
               {(features.showSearch || features.showFilters) && (
-                <div className="flex flex-wrap items-center gap-3 sm:gap-4 mb-8 p-3 sm:p-4 rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <div className="flex flex-wrap items-center gap-3 sm:gap-4 mb-8 p-3 sm:p-4 rounded-2xl border border-border bg-background shadow-sm">
                   {features.showSearch && (
                     <div className="flex-grow min-w-[180px] relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
-                        placeholder="Search events..."
+                        placeholder={t("Search events...")}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10 h-10 sm:h-11 w-full rounded-xl bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400"
+                        className="pl-10 h-10 sm:h-11 w-full rounded-xl bg-muted border-border text-foreground placeholder:text-muted-foreground"
                       />
                     </div>
                   )}
                   {features.showFilters && (
                     <div className="min-w-[150px]">
                       <Select value={sortBy} onValueChange={setSortBy}>
-                        <SelectTrigger className="h-10 sm:h-11 rounded-xl bg-gray-50 border-gray-200 text-gray-700">
-                          <SelectValue placeholder="Sort by" />
+                        <SelectTrigger className="h-10 sm:h-11 rounded-xl bg-muted border-border text-muted-foreground">
+                          <SelectValue placeholder={t("Sort by")} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="featured">Featured</SelectItem>
@@ -1858,23 +1853,21 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                   <h2
                     className="text-3xl sm:text-4xl font-bold"
                     style={gradientHeadingStyle}
-                  >
-                    All Events
-                  </h2>
+                  >{t("All Events")}</h2>
                 </div>
               </div>
 
               {/* Filters */}
               {(features.showSearch || features.showFilters) && (
-                <div className="flex flex-wrap items-center gap-3 mb-8 p-3 rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <div className="flex flex-wrap items-center gap-3 mb-8 p-3 rounded-2xl border border-border bg-background shadow-sm">
                   {features.showSearch && (
                     <div className="flex-grow min-w-[180px] relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
-                        placeholder="Search events..."
+                        placeholder={t("Search events...")}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10 h-10 rounded-xl bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400"
+                        className="pl-10 h-10 rounded-xl bg-muted border-border text-foreground placeholder:text-muted-foreground"
                       />
                     </div>
                   )}
@@ -1884,8 +1877,8 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                         value={selectedCategory}
                         onValueChange={setSelectedCategory}
                       >
-                        <SelectTrigger className="h-10 rounded-xl bg-gray-50 border-gray-200 text-gray-700">
-                          <SelectValue placeholder="Category" />
+                        <SelectTrigger className="h-10 rounded-xl bg-muted border-border text-muted-foreground">
+                          <SelectValue placeholder={t("Category")} />
                         </SelectTrigger>
                         <SelectContent>
                           {categories.map((cat) => (
@@ -2005,23 +1998,21 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                   <h2
                     className="text-3xl sm:text-4xl font-bold"
                     style={gradientHeadingStyle}
-                  >
-                    All Events
-                  </h2>
+                  >{t("All Events")}</h2>
                 </div>
               </div>
 
               {/* Filters */}
               {(features.showSearch || features.showFilters) && (
-                <div className="flex flex-wrap items-center gap-3 mb-8 p-3 rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <div className="flex flex-wrap items-center gap-3 mb-8 p-3 rounded-2xl border border-border bg-background shadow-sm">
                   {features.showSearch && (
                     <div className="flex-grow min-w-[180px] relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
-                        placeholder="Search events..."
+                        placeholder={t("Search events...")}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10 h-10 rounded-xl bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400"
+                        className="pl-10 h-10 rounded-xl bg-muted border-border text-foreground placeholder:text-muted-foreground"
                       />
                     </div>
                   )}
@@ -2031,8 +2022,8 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                         value={selectedCategory}
                         onValueChange={setSelectedCategory}
                       >
-                        <SelectTrigger className="h-10 rounded-xl bg-gray-50 border-gray-200 text-gray-700">
-                          <SelectValue placeholder="Category" />
+                        <SelectTrigger className="h-10 rounded-xl bg-muted border-border text-muted-foreground">
+                          <SelectValue placeholder={t("Category")} />
                         </SelectTrigger>
                         <SelectContent>
                           {categories.map((cat) => (
@@ -2052,7 +2043,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                   {filteredEvents.map((event) => (
                     <div
                       key={event.id}
-                      className="group cursor-pointer rounded-2xl sm:rounded-3xl overflow-hidden border border-gray-200 bg-white flex flex-col transition-all duration-300 hover:-translate-y-1 shadow-sm hover:shadow-lg"
+                      className="group cursor-pointer rounded-2xl sm:rounded-3xl overflow-hidden border border-border bg-background flex flex-col transition-all duration-300 hover:-translate-y-1 shadow-sm hover:shadow-lg"
                       onClick={() => handleEventClick(event.id)}
                     >
                       {/* Image */}
@@ -2093,18 +2084,18 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                           {event.name}
                         </h3>
                         <div className="flex flex-col gap-1.5">
-                          <span className="flex items-center gap-2 text-gray-500 text-xs">
+                          <span className="flex items-center gap-2 text-muted-foreground text-xs">
                             <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
                             {event.date} {event.time && `· ${event.time}`}
                           </span>
-                          <span className="flex items-center gap-2 text-gray-500 text-xs">
+                          <span className="flex items-center gap-2 text-muted-foreground text-xs">
                             <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
                             <span className="line-clamp-1">
                               {event.location}
                             </span>
                           </span>
                         </div>
-                        <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-100">
+                        <div className="flex items-center justify-between mt-auto pt-2 border-t border-border">
                           <span
                             className="text-lg font-bold"
                             style={{ color: design.secondaryColor }}
@@ -2137,7 +2128,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
         {features.showNewsletter && (
           <section className="py-10 sm:py-14 lg:py-20 px-4 sm:px-6 lg:px-8">
             <div className="max-w-7xl mx-auto">
-              <div className="relative rounded-3xl overflow-hidden p-8 sm:p-12 lg:p-16 border border-gray-200 bg-white shadow-sm">
+              <div className="relative rounded-3xl overflow-hidden p-8 sm:p-12 lg:p-16 border border-border bg-background shadow-sm">
                 {/* Decorative accent */}
                 <div
                   className="absolute -top-20 -right-20 w-64 h-64 rounded-full pointer-events-none opacity-20"
@@ -2158,10 +2149,8 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                     <h2
                       className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-3"
                       style={gradientHeadingStyle}
-                    >
-                      Stay Updated
-                    </h2>
-                    <p className="text-gray-500 text-base sm:text-lg leading-relaxed">
+                    >{t("Stay Updated")}</h2>
+                    <p className="text-muted-foreground text-base sm:text-lg leading-relaxed">
                       Subscribe for the latest event announcements, exclusive
                       offers, and insider picks.
                     </p>
@@ -2171,10 +2160,10 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                   <div className="w-full lg:w-auto lg:min-w-[380px]">
                     <div className="flex flex-col sm:flex-row gap-3">
                       <Input
-                        placeholder="Enter your email"
+                        placeholder={t("Enter your email")}
                         value={newsletterEmail}
                         onChange={(e) => setNewsletterEmail(e.target.value)}
-                        className="flex-1 h-12 rounded-2xl bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 text-sm"
+                        className="flex-1 h-12 rounded-2xl bg-muted border-border text-foreground placeholder:text-muted-foreground text-sm"
                       />
                       <Button
                         className="h-12 px-7 rounded-2xl font-medium text-sm border-0 whitespace-nowrap transition-all hover:scale-105"
@@ -2186,7 +2175,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                         Subscribe
                       </Button>
                     </div>
-                    <p className="text-gray-400 text-xs mt-2 text-center sm:text-left">
+                    <p className="text-muted-foreground text-xs mt-2 text-center sm:text-left">
                       No spam. Unsubscribe anytime.
                     </p>
                   </div>
@@ -2253,7 +2242,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                 <div className="flex flex-col gap-4">
                   {/* Attendees card */}
                   <div
-                    className="flex-1 rounded-2xl sm:rounded-3xl p-5 sm:p-6 flex flex-col justify-between border border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow"
+                    className="flex-1 rounded-2xl sm:rounded-3xl p-5 sm:p-6 flex flex-col justify-between border border-border bg-background shadow-sm hover:shadow-md transition-shadow"
                     style={{ minHeight: "148px" }}
                   >
                     <Users
@@ -2267,7 +2256,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                       >
                         {happAttendees > 0 ? `${happAttendees}+` : "0+"}
                       </div>
-                      <div className="text-gray-500 text-xs tracking-wide">
+                      <div className="text-muted-foreground text-xs tracking-wide">
                         Happy Attendees
                       </div>
                     </div>
@@ -2275,7 +2264,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
 
                   {/* Events card */}
                   <div
-                    className="flex-1 rounded-2xl sm:rounded-3xl p-5 sm:p-6 flex flex-col justify-between border border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow"
+                    className="flex-1 rounded-2xl sm:rounded-3xl p-5 sm:p-6 flex flex-col justify-between border border-border bg-background shadow-sm hover:shadow-md transition-shadow"
                     style={{ minHeight: "148px" }}
                   >
                     <TrendingUp
@@ -2289,7 +2278,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                       >
                         {events.length || 0}+
                       </div>
-                      <div className="text-gray-500 text-xs tracking-wide">
+                      <div className="text-muted-foreground text-xs tracking-wide">
                         Events Organized
                       </div>
                     </div>
@@ -2315,27 +2304,23 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                 <h2
                   className="text-3xl sm:text-4xl font-bold"
                   style={gradientHeadingStyle}
-                >
-                  Get In Touch
-                </h2>
+                >{t("Get In Touch")}</h2>
               </div>
-              <div className="h-px flex-1 bg-gray-200 hidden sm:block" />
+              <div className="h-px flex-1 bg-muted hidden sm:block" />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Phone */}
-              <div className="rounded-2xl sm:rounded-3xl p-6 sm:p-8 flex flex-col items-center text-center gap-4 border border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow">
-                <div className="w-12 h-12 rounded-2xl flex items-center justify-center border border-gray-200 bg-gray-50">
+              <div className="rounded-2xl sm:rounded-3xl p-6 sm:p-8 flex flex-col items-center text-center gap-4 border border-border bg-background shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center border border-border bg-muted">
                   <Phone
                     className="h-5 w-5"
                     style={{ color: design.primaryColor }}
                   />
                 </div>
                 <div>
-                  <h3 className="text-gray-900 font-semibold text-base mb-1">
-                    Phone
-                  </h3>
-                  <p className="text-gray-500 text-sm">
+                  <h3 className="text-foreground font-semibold text-base mb-1">{t("Phone")}</h3>
+                  <p className="text-muted-foreground text-sm">
                     {organizerInfo?.phoneNumber || "N/A"}
                   </p>
                 </div>
@@ -2346,18 +2331,16 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                 href={`mailto:${organizerInfo?.email || ""}`}
                 className="block focus:outline-none"
               >
-                <div className="rounded-2xl sm:rounded-3xl p-6 sm:p-8 flex flex-col items-center text-center gap-4 border border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center border border-gray-200 bg-gray-50">
+                <div className="rounded-2xl sm:rounded-3xl p-6 sm:p-8 flex flex-col items-center text-center gap-4 border border-border bg-background shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center border border-border bg-muted">
                     <Mail
                       className="h-5 w-5"
                       style={{ color: design.primaryColor }}
                     />
                   </div>
                   <div>
-                    <h3 className="text-gray-900 font-semibold text-base mb-1">
-                      Email
-                    </h3>
-                    <p className="text-gray-500 text-sm break-all">
+                    <h3 className="text-foreground font-semibold text-base mb-1">{t("Email")}</h3>
+                    <p className="text-muted-foreground text-sm break-all">
                       {organizerInfo?.email || "N/A"}
                     </p>
                   </div>
@@ -2371,15 +2354,15 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                 rel="noopener noreferrer"
                 className="block focus:outline-none"
               >
-                <div className="rounded-2xl sm:rounded-3xl p-6 sm:p-8 flex flex-col items-center text-center gap-4 border border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center border border-gray-200 bg-gray-50">
+                <div className="rounded-2xl sm:rounded-3xl p-6 sm:p-8 flex flex-col items-center text-center gap-4 border border-border bg-background shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center border border-border bg-muted">
                     <FaWhatsapp className="h-5 w-5 text-green-500" />
                   </div>
                   <div>
-                    <h3 className="text-gray-900 font-semibold text-base mb-1">
+                    <h3 className="text-foreground font-semibold text-base mb-1">
                       WhatsApp
                     </h3>
-                    <p className="text-gray-500 text-sm">
+                    <p className="text-muted-foreground text-sm">
                       {organizerInfo?.whatsAppNumber || "N/A"}
                     </p>
                   </div>
@@ -2443,9 +2426,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
 
                   {/* MOBILE/TABLET: Contact Section (Visible on sm and md, hidden on lg) */}
                   <div className="flex flex-col items-center lg:hidden w-full">
-                    <h4 className="text-lg font-semibold text-gray-700">
-                      Contact Us
-                    </h4>
+                    <h4 className="text-lg font-semibold text-muted-foreground">{t("Contact Us")}</h4>
                     <div className="flex flex-wrap items-center justify-center gap-3">
                       {general.contactInfo.phone && (
                         <a
@@ -2502,9 +2483,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                   {/* MOBILE/TABLET: Social Media Section (Visible on sm and md, hidden on lg) */}
                   {features.showSocialMedia && (
                     <div className="flex flex-col items-center lg:hidden w-full">
-                      <h4 className="text-lg font-bold text-black">
-                        Follow Us
-                      </h4>
+                      <h4 className="text-lg font-bold text-black">{t("Follow Us")}</h4>
                       <div className="flex items-center justify-center gap-3">
                         {whatsAppNumber && (
                           <a
@@ -2654,9 +2633,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
 
                 {/* Contact Info - DESKTOP ONLY (Hidden on sm and md, visible on lg) */}
                 <div className="hidden lg:block">
-                  <h4 className="font-semibold mb-4 text-lg text-black">
-                    Contact Info
-                  </h4>
+                  <h4 className="font-semibold mb-4 text-lg text-black">{t("Contact Info")}</h4>
                   <div className="space-y-3 text-sm text-muted-foreground">
                     {general.contactInfo.phone && (
                       <div className="flex items-center space-x-3">
@@ -2708,9 +2685,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
 
                 {/* Store Hours/Website - DESKTOP ONLY (Hidden on sm and md, visible on lg) */}
                 <div className="hidden lg:block">
-                  <h4 className="font-semibold mb-4 text-lg text-black">
-                    Store Hours
-                  </h4>
+                  <h4 className="font-semibold mb-4 text-lg text-black">{t("Store Hours")}</h4>
                   <div className="space-y-3 text-sm text-muted-foreground">
                     {general.contactInfo.hours && (
                       <div className="flex items-start space-x-3">
@@ -2754,7 +2729,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
               </div>
 
               {/* Footer Bar with Admin Login */}
-              <div className="border-t border-gray-200 pt-8 flex flex-col md:flex-row items-center justify-between text-sm text-gray-500">
+              <div className="border-t border-border pt-8 flex flex-col md:flex-row items-center justify-between text-sm text-muted-foreground">
                 <p>
                   &copy; 2025 {general.storeName}. All rights reserved. Powered
                   by{" "}
@@ -2776,7 +2751,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
         {footer === "minimal" && (
           <footer
             id="about"
-            className="bg-white border-t border-gray-200 py-8 sm:py-12"
+            className="bg-background border-t border-border py-8 sm:py-12"
           >
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex flex-col lg:flex-row items-center justify-between lg:gap-12 mb-4 gap-4 lg:gap-0">
@@ -2784,24 +2759,22 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                 <div className="flex flex-col items-center justify-center lg:justify-start gap-4 w-full lg:w-auto lg:flex-1 order-2 lg:order-1">
                   {/* MOBILE/TABLET VERSION - Contact Section with Title + Icons */}
                   <div className="flex flex-col items-center gap-1 lg:hidden w-full">
-                    <h4 className="text-lg font-bold text-gray-900">
-                      Contact Us
-                    </h4>
+                    <h4 className="text-lg font-bold text-foreground">{t("Contact Us")}</h4>
                     <div className="flex flex-wrap items-center justify-center gap-1">
                       <a
                         href={`tel:${general.contactInfo.phone}`}
-                        className="p-3 hover:bg-white-700/50 transition-all"
+                        className="p-3 hover:bg-background-700/50 transition-all"
                         aria-label="Phone"
                       >
-                        <Phone className="h-5 w-5 text-gray-500 hover:text-gray-900 transition-colors" />
+                        <Phone className="h-5 w-5 text-muted-foreground hover:text-foreground transition-colors" />
                       </a>
 
                       <a
                         href={`mailto:${general.contactInfo.email}`}
-                        className="p-3 hover:bg-white-700/50 transition-all"
+                        className="p-3 hover:bg-background-700/50 transition-all"
                         aria-label="Email"
                       >
-                        <Mail className="h-5 w-5 text-gray-500 hover:text-gray-900 transition-colors" />
+                        <Mail className="h-5 w-5 text-muted-foreground hover:text-foreground transition-colors" />
                       </a>
 
                       <a
@@ -2814,20 +2787,20 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                         }
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="p-3 hover:bg-white-700/50 transition-all"
+                        className="p-3 hover:bg-background-700/50 transition-all"
                         aria-label="Location"
                       >
-                        <MapPin className="h-5 w-5 text-gray-500 hover:text-gray-900 transition-colors" />
+                        <MapPin className="h-5 w-5 text-muted-foreground hover:text-foreground transition-colors" />
                       </a>
 
                       <a
                         href={general.contactInfo.website || "#"}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="p-3 hover:bg-white-700/50 transition-all"
+                        className="p-3 hover:bg-background-700/50 transition-all"
                         aria-label="Website"
                       >
-                        <Globe className="h-5 w-5 text-gray-500 hover:text-gray-900 transition-colors" />
+                        <Globe className="h-5 w-5 text-muted-foreground hover:text-foreground transition-colors" />
                       </a>
                     </div>
                   </div>
@@ -2838,20 +2811,20 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                       {general.contactInfo.phone && (
                         <a
                           href={`tel:${general.contactInfo.phone}`}
-                          className="p-3 hover:bg-white-700/50 transition-all"
+                          className="p-3 hover:bg-background-700/50 transition-all"
                           aria-label="Phone"
                         >
-                          <Phone className="h-5 w-5 lg:h-6 lg:w-6 text-gray-400 group-hover:text-primary transition-all duration-200" />
+                          <Phone className="h-5 w-5 lg:h-6 lg:w-6 text-muted-foreground group-hover:text-primary transition-all duration-200" />
                         </a>
                       )}
 
                       {general.contactInfo.email && (
                         <a
                           href={`mailto:${general.contactInfo.email}`}
-                          className="p-3 hover:bg-white-700/50 transition-all"
+                          className="p-3 hover:bg-background-700/50 transition-all"
                           aria-label="Email"
                         >
-                          <Mail className="h-5 w-5 lg:h-6 lg:w-6 text-gray-400 group-hover:text-primary transition-all duration-200" />
+                          <Mail className="h-5 w-5 lg:h-6 lg:w-6 text-muted-foreground group-hover:text-primary transition-all duration-200" />
                         </a>
                       )}
 
@@ -2862,10 +2835,10 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                           )}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="p-3 hover:bg-white-700/50 transition-all"
+                          className="p-3 hover:bg-background-700/50 transition-all"
                           aria-label="Location"
                         >
-                          <MapPin className="h-5 w-5 lg:h-6 lg:w-6 text-gray-400 group-hover:text-primary transition-all duration-200" />
+                          <MapPin className="h-5 w-5 lg:h-6 lg:w-6 text-muted-foreground group-hover:text-primary transition-all duration-200" />
                         </a>
                       )}
 
@@ -2878,10 +2851,10 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                           }
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="p-3 hover:bg-white-700/50 transition-all"
+                          className="p-3 hover:bg-background-700/50 transition-all"
                           aria-label="Website"
                         >
-                          <Globe className="h-5 w-5 lg:h-6 lg:w-6 text-gray-400 group-hover:text-primary transition-all duration-200" />
+                          <Globe className="h-5 w-5 lg:h-6 lg:w-6 text-muted-foreground group-hover:text-primary transition-all duration-200" />
                         </a>
                       )}
                     </div>
@@ -2930,9 +2903,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                 {features.showSocialMedia && (
                   <div className="flex flex-col items-center justify-center lg:justify-end gap-2 order-3 w-full lg:w-auto lg:flex-1">
                     {/* MOBILE/TABLET VERSION - "Follow Us" Title */}
-                    <h4 className="text-lg font-bold text-gray-900 lg:hidden">
-                      Follow Us
-                    </h4>
+                    <h4 className="text-lg font-bold text-foreground lg:hidden">{t("Follow Us")}</h4>
 
                     {/* Social Icons (Same for all views) */}
                     <div className="flex items-center justify-center lg:justify-end gap-3 lg:gap-4">
@@ -2945,9 +2916,9 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                           target="_blank"
                           rel="noopener noreferrer"
                           aria-label="WhatsApp"
-                          className="p-3 hover:bg-white-700/50 transition-all"
+                          className="p-3 hover:bg-background-700/50 transition-all"
                         >
-                          <FaWhatsapp className="h-5 w-5 lg:h-6 lg:w-6 text-gray-400 group-hover:text-primary transition-all duration-200" />
+                          <FaWhatsapp className="h-5 w-5 lg:h-6 lg:w-6 text-muted-foreground group-hover:text-primary transition-all duration-200" />
                         </a>
                       )}
 
@@ -2957,9 +2928,9 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                           target="_blank"
                           rel="noopener noreferrer"
                           aria-label="Instagram"
-                          className="p-3 hover:bg-white-700/50 transition-all"
+                          className="p-3 hover:bg-background-700/50 transition-all"
                         >
-                          <FaInstagram className="h-5 w-5 lg:h-6 lg:w-6 text-gray-400 group-hover:text-primary transition-all duration-200" />
+                          <FaInstagram className="h-5 w-5 lg:h-6 lg:w-6 text-muted-foreground group-hover:text-primary transition-all duration-200" />
                         </a>
                       )}
 
@@ -2969,9 +2940,9 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                           target="_blank"
                           rel="noopener noreferrer"
                           aria-label="Facebook"
-                          className="p-3 hover:bg-white-700/50 transition-all"
+                          className="p-3 hover:bg-background-700/50 transition-all"
                         >
-                          <FaFacebook className="h-5 w-5 text-gray-400 transition-all duration-200" />
+                          <FaFacebook className="h-5 w-5 text-muted-foreground transition-all duration-200" />
                         </a>
                       )}
 
@@ -2981,9 +2952,9 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                           target="_blank"
                           rel="noopener noreferrer"
                           aria-label="X (Twitter)"
-                          className="p-3 hover:bg-white-700/50 transition-all"
+                          className="p-3 hover:bg-background-700/50 transition-all"
                         >
-                          <FaTwitter className="h-5 w-5 text-gray-400 transition-all duration-200" />
+                          <FaTwitter className="h-5 w-5 text-muted-foreground transition-all duration-200" />
                         </a>
                       )}
                     </div>
@@ -2993,10 +2964,10 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
 
               <div className="border-t border-gray-800 pt-6 sm:pt-4 mt-4">
                 <div className="text-center space-y-1">
-                  <p className="text-sm sm:text-base text-gray-400">
+                  <p className="text-sm sm:text-base text-muted-foreground">
                     © 2025 {general.storeName}. All rights reserved.
                   </p>
-                  <p className="text-sm sm:text-base text-gray-500">
+                  <p className="text-sm sm:text-base text-muted-foreground">
                     Powered by
                     <span
                       className="ml-1 font-semibold"
@@ -3010,7 +2981,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                 <div className="flex justify-center">
                   <a
                     href="/login"
-                    className="font-semibold text-xs mt-2 text-gray-600 text-center hover:underline"
+                    className="font-semibold text-xs mt-2 text-muted-foreground text-center hover:underline"
                   >
                     Organizer Login
                   </a>
@@ -3095,12 +3066,12 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                   {/* MOBILE/TABLET: Contact Section with Title + Icons (ORDER 2) */}
                   {features.showSocialMedia && (
                     <div className="flex flex-col items-center gap-4 lg:hidden w-full order-2">
-                      <h4 className="text-lg font-bold">Contact Us</h4>
+                      <h4 className="text-lg font-bold">{t("Contact Us")}</h4>
                       <div className="flex flex-wrap items-center justify-center gap-3">
                         {general.contactInfo.phone && (
                           <a
                             href={`tel:${general.contactInfo.phone}`}
-                            className="p-3 hover:bg-white-700/50 transition-all"
+                            className="p-3 hover:bg-background-700/50 transition-all"
                             aria-label="Phone"
                           >
                             <Phone className="h-5 w-5 transition-colors" />
@@ -3110,7 +3081,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                         {general.contactInfo.email && (
                           <a
                             href={`mailto:${general.contactInfo.email}`}
-                            className="p-3 hover:bg-white-700/50 transition-all"
+                            className="p-3 hover:bg-background-700/50 transition-all"
                             aria-label="Email"
                           >
                             <Mail className="h-5 w-5 transition-colors" />
@@ -3124,7 +3095,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                             )}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-3 hover:bg-white-700/50 transition-all"
+                            className="p-3 hover:bg-background-700/50 transition-all"
                             aria-label="Location"
                           >
                             <MapPin className="h-5 w-5 transition-colors" />
@@ -3140,7 +3111,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                             }
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-3 hover:bg-white-700/50 transition-all"
+                            className="p-3 hover:bg-background-700/50 transition-all"
                             aria-label="Website"
                           >
                             <Globe className="h-5 w-5 transition-colors" />
@@ -3153,7 +3124,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                   {/* MOBILE/TABLET: Social Media Section with "Follow Us" Title (ORDER 3) */}
                   {features.showSocialMedia && (
                     <div className="flex flex-col items-center gap-4 lg:hidden w-full order-3">
-                      <h4 className="text-lg font-bold">Follow Us</h4>
+                      <h4 className="text-lg font-bold">{t("Follow Us")}</h4>
                       <div className="flex items-center justify-center gap-3">
                         <a
                           href={`https://wa.me/${whatsAppNumber?.replace(
@@ -3163,7 +3134,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                           target="_blank"
                           rel="noopener noreferrer"
                           aria-label="WhatsApp"
-                          className="p-3 hover:bg-white-700/50 transition-all"
+                          className="p-3 hover:bg-background-700/50 transition-all"
                         >
                           <FaWhatsapp className="h-5 w-5 transition-colors" />
                         </a>
@@ -3178,7 +3149,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                             target="_blank"
                             rel="noopener noreferrer"
                             aria-label="Instagram"
-                            className="p-3 hover:bg-white-700/50 transition-all"
+                            className="p-3 hover:bg-background-700/50 transition-all"
                           >
                             <FaInstagram className="h-5 w-5 transition-colors" />
                           </a>
@@ -3192,7 +3163,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                             target="_blank"
                             rel="noopener noreferrer"
                             aria-label="Facebook"
-                            className="p-3 hover:bg-white-700/50 transition-all"
+                            className="p-3 hover:bg-background-700/50 transition-all"
                           >
                             <FaFacebook className="h-5 w-5 transition-colors" />
                           </a>
@@ -3206,7 +3177,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                             target="_blank"
                             rel="noopener noreferrer"
                             aria-label="X (Twitter)"
-                            className="p-3 hover:bg-white-700/50 transition-all"
+                            className="p-3 hover:bg-background-700/50 transition-all"
                           >
                             <FaTwitter className="h-5 w-5 transition-colors" />
                           </a>
@@ -3228,7 +3199,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                         aria-label="WhatsApp"
                         className="p-3 transition-all"
                       >
-                        <FaWhatsapp className="h-5 w-5 text-gray-600 transition-colors" />
+                        <FaWhatsapp className="h-5 w-5 text-muted-foreground transition-colors" />
                       </a>
 
                       {settings.settings.general.contactInfo.instagramLink && (
@@ -3241,7 +3212,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                           aria-label="Instagram"
                           className="p-3 transition-all"
                         >
-                          <FaInstagram className="h-5 w-5 text-gray-600 transition-colors" />
+                          <FaInstagram className="h-5 w-5 text-muted-foreground transition-colors" />
                         </a>
                       )}
 
@@ -3255,7 +3226,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                           aria-label="Facebook"
                           className="p-3 transition-all"
                         >
-                          <FaFacebook className="h-5 w-5 text-gray-600 transition-colors"></FaFacebook>
+                          <FaFacebook className="h-5 w-5 text-muted-foreground transition-colors"></FaFacebook>
                         </a>
                       )}
 
@@ -3269,7 +3240,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                           aria-label="X (Twitter)"
                           className="p-3 transition-all"
                         >
-                          <FaTwitter className="h-5 w-5 text-gray-600 transition-colors"></FaTwitter>
+                          <FaTwitter className="h-5 w-5 text-muted-foreground transition-colors"></FaTwitter>
                         </a>
                       )}
                     </div>
@@ -3278,13 +3249,11 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
 
                 {/* C O L U M N 2 : Contact Info - DESKTOP ONLY */}
                 <div className="text-left w-fit mx-auto hidden lg:block">
-                  <h4 className="font-semibold mb-4 text-base sm:text-lg uppercase tracking-wide text-center">
-                    Contact Info
-                  </h4>
+                  <h4 className="font-semibold mb-4 text-base sm:text-lg uppercase tracking-wide text-center">{t("Contact Info")}</h4>
                   <div className="space-y-3 text-sm text-muted-foreground">
                     {general.contactInfo.address && (
                       <div className="flex items-start space-x-3">
-                        <MapPin className="h-4 w-4 flex-shrink-0 mt-0.5 text-gray-500" />
+                        <MapPin className="h-4 w-4 flex-shrink-0 mt-0.5 text-muted-foreground" />
                         <span className="leading-relaxed">
                           {general.contactInfo.address}
                         </span>
@@ -3292,7 +3261,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                     )}
                     {general.contactInfo.email && (
                       <div className="flex items-center space-x-3">
-                        <Mail className="h-4 w-4 flex-shrink-0 text-gray-500" />
+                        <Mail className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                         <span className="break-all">
                           {general.contactInfo.email}
                         </span>
@@ -3300,13 +3269,13 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                     )}
                     {general.contactInfo.phone && (
                       <div className="flex items-center space-x-3">
-                        <Phone className="h-4 w-4 flex-shrink-0 text-gray-500" />
+                        <Phone className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                         <span>{general.contactInfo.phone}</span>
                       </div>
                     )}
                     {whatsAppNumber && (
                       <div className="flex items-center space-x-3">
-                        <FaWhatsapp className="h-4 w-4 sm:h-5 sm:w-5 text-gray-500 flex-shrink-0" />
+                        <FaWhatsapp className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground flex-shrink-0" />
                         <a
                           href={`https://wa.me/${whatsAppNumber.replace(
                             /\D/g,
@@ -3325,13 +3294,11 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
 
                 {/* C O L U M N 3 : Store Details - DESKTOP ONLY */}
                 <div className="text-left w-fit mx-auto hidden lg:block">
-                  <h4 className="font-semibold mb-4 text-base sm:text-lg uppercase tracking-wide text-center">
-                    Store Details
-                  </h4>
+                  <h4 className="font-semibold mb-4 text-base sm:text-lg uppercase tracking-wide text-center">{t("Store Details")}</h4>
                   <div className="space-y-3 text-sm text-muted-foreground">
                     {general.contactInfo.hours && (
                       <div className="flex items-start space-x-3">
-                        <Clock className="h-4 w-4 mt-0.5 flex-shrink-0 text-gray-500" />
+                        <Clock className="h-4 w-4 mt-0.5 flex-shrink-0 text-muted-foreground" />
                         <div className="flex flex-col gap-1">
                           {general.contactInfo.hours
                             .split(",")
@@ -3345,7 +3312,7 @@ export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
                     )}
                     {general.contactInfo.website && (
                       <div className="flex items-center space-x-3">
-                        <Globe className="h-4 w-4 flex-shrink-0 text-gray-500" />
+                        <Globe className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                         <a
                           href={
                             general.contactInfo.website.startsWith("http")

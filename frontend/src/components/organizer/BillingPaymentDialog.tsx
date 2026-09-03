@@ -50,6 +50,7 @@ interface PlatformConfig {
 }
 
 import { symbolForCode } from "@/data/currencies";
+import { t } from "@/i18n/t";
 function symbolFor(currency: string) {
   return symbolForCode(currency);
 }
@@ -209,7 +210,7 @@ export function BillingPaymentDialog({
         </DialogHeader>
 
         {initiating || !pending ? (
-          <div className="flex items-center justify-center py-10 gap-2 text-slate-500">
+          <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Preparing your
             checkout…
           </div>
@@ -218,13 +219,11 @@ export function BillingPaymentDialog({
             <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-50 border border-amber-200">
               <Hourglass className="h-6 w-6 text-amber-600 shrink-0" />
               <div>
-                <h4 className="font-semibold text-amber-900">
-                  Awaiting admin confirmation
-                </h4>
+                <h4 className="font-semibold text-amber-900">{t("Awaiting admin confirmation")}</h4>
                 <p className="text-sm text-amber-800 mt-1">
                   We've notified the admin. Once they verify your transfer
                   (reference{" "}
-                  <code className="bg-white border px-1 rounded text-xs">
+                  <code className="bg-background border px-1 rounded text-xs">
                     {pending.ref}
                   </code>
                   ), the event-fee receipt will be sent to your email and
@@ -235,24 +234,24 @@ export function BillingPaymentDialog({
           </div>
         ) : (
           <div className="space-y-4 py-2">
-            <div className="rounded-lg border bg-slate-50 px-4 py-3 flex items-center justify-between">
+            <div className="rounded-lg border bg-muted px-4 py-3 flex items-center justify-between">
               <div>
-                <div className="text-xs uppercase tracking-wide text-slate-500">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">
                   Amount due
                 </div>
-                <div className="text-3xl font-bold text-slate-900">
+                <div className="text-3xl font-bold text-foreground">
                   {symbolFor(pending.currency)}
                   {pending.amount}
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-xs uppercase tracking-wide text-slate-500">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">
                   Reference
                 </div>
-                <div className="font-mono text-sm text-slate-700">
+                <div className="font-mono text-sm text-muted-foreground">
                   {pending.ref}
                 </div>
-                <div className="text-xs text-slate-500 mt-1">
+                <div className="text-xs text-muted-foreground mt-1">
                   {pending.scheme === "UPI"
                     ? "UPI · India"
                     : "PayNow · Singapore"}
@@ -261,7 +260,7 @@ export function BillingPaymentDialog({
             </div>
 
             {qrLoading ? (
-              <div className="flex items-center justify-center py-10 gap-2 text-slate-500">
+              <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" /> Generating QR…
               </div>
             ) : qrError ? (
@@ -273,7 +272,7 @@ export function BillingPaymentDialog({
                 <img
                   src={qrImage}
                   alt="Event-fee payment QR"
-                  className="w-56 h-56 rounded-md border bg-white p-2"
+                  className="w-56 h-56 rounded-md border bg-background p-2"
                 />
                 <div className="flex-1 space-y-2 text-sm">
                   <p>
@@ -302,7 +301,7 @@ export function BillingPaymentDialog({
                       </a>
                     </Button>
                   )}
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted-foreground">
                     After paying, click <em>I have paid</em> below. The admin
                     will verify and confirm the payment.
                   </p>

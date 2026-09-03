@@ -33,6 +33,7 @@ import { toast } from "@/hooks/use-toast";
 import { ExhibitorDetailDialog } from "./ExhibitorDetailDialog";
 import SpaceLayout from "./SpaceLayout";
 import type { StallRequest } from "./shopKeeper";
+import { t } from "@/i18n/t";
 
 /** Resolve an event image field to an absolute URL — mirrors the pattern
  * used for the event card thumbnail (relative paths are served off the API
@@ -645,11 +646,11 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
           <div className="font-semibold text-sm">
             {t.tableName || t.name || "Stall"}
           </div>
-          <div className="text-xs text-slate-600">
+          <div className="text-xs text-muted-foreground">
             Booked by {booking.vendorName}
           </div>
           {booking.businessName && (
-            <div className="text-xs text-slate-500">{booking.businessName}</div>
+            <div className="text-xs text-muted-foreground">{booking.businessName}</div>
           )}
           {booking.vendorEmail && (
             <div className="text-[11px] text-muted-foreground">
@@ -662,7 +663,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
             </div>
           )}
           {booking.totalPaid != null && (
-            <div className="text-[11px] text-slate-500 mt-1">
+            <div className="text-[11px] text-muted-foreground mt-1">
               Total paid:{" "}
               {new Intl.NumberFormat("en-US", {
                 style: "currency",
@@ -688,7 +689,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
                   className="flex items-center gap-2 text-xs"
                 >
                   <span
-                    className="w-3 h-3 rounded-full border border-gray-300 shrink-0"
+                    className="w-3 h-3 rounded-full border border-border shrink-0"
                     style={{ backgroundColor: d.color }}
                   />
                   <span className="flex-1 truncate">{d.name}</span>
@@ -721,7 +722,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12 text-slate-500 gap-2">
+      <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
         <Loader2 className="h-5 w-5 animate-spin" /> Loading venue layout…
       </div>
     );
@@ -735,7 +736,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
   }
   if (!event) {
     return (
-      <div className="text-sm text-slate-500 italic text-center py-8">
+      <div className="text-sm text-muted-foreground italic text-center py-8">
         No venue data found for this event.
       </div>
     );
@@ -744,7 +745,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
   const venueConfigs: VenueConfig[] = event.venueConfig || [];
   if (venueConfigs.length === 0) {
     return (
-      <div className="text-sm text-slate-500 italic text-center py-8">
+      <div className="text-sm text-muted-foreground italic text-center py-8">
         No venue layouts defined for this event.
       </div>
     );
@@ -933,7 +934,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
               />
             ))}
             {dots.length > 8 && (
-              <span className="text-[7px] font-bold text-slate-600 ml-0.5">
+              <span className="text-[7px] font-bold text-muted-foreground ml-0.5">
                 +{dots.length - 8}
               </span>
             )}
@@ -1483,7 +1484,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Label spaces with</Label>
+              <Label>{t("Label spaces with")}</Label>
               <Select
                 value={exportLabelField}
                 onValueChange={(v) =>
@@ -1527,9 +1528,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
 
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div>
-                <Label htmlFor="export-directory-toggle">
-                  Include Exhibitor Directory
-                </Label>
+                <Label htmlFor="export-directory-toggle">{t("Include Exhibitor Directory")}</Label>
                 <p className="text-xs text-muted-foreground">
                   Adds page(s) listing every booked stall against its
                   exhibitor after the map.
@@ -1544,9 +1543,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
 
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div>
-                <Label htmlFor="export-space-names-toggle">
-                  Show Space Names
-                </Label>
+                <Label htmlFor="export-space-names-toggle">{t("Show Space Names")}</Label>
                 <p className="text-xs text-muted-foreground">
                   Prints each space's own code (e.g. "C1") just outside its
                   box on the map, in addition to the label above.
@@ -1562,7 +1559,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
             {exportShowSpaceNames && (
               <div>
                 <div className="flex items-center justify-between">
-                  <Label>Space Name Text Size</Label>
+                  <Label>{t("Space Name Text Size")}</Label>
                   <span className="text-xs text-muted-foreground">
                     {Math.round(exportSpaceNameScale * 100)}%
                   </span>
@@ -1578,9 +1575,9 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
                 {/* Same rough visual proxy as the label-size preview below —
                     not the real PDF font metrics, just a concrete reference
                     for "bigger/smaller" at this specific scale. */}
-                <div className="mt-3 rounded-lg border bg-slate-50 p-3 flex items-center justify-center">
+                <div className="mt-3 rounded-lg border bg-muted p-3 flex items-center justify-center">
                   <span
-                    className="font-bold text-slate-600"
+                    className="font-bold text-muted-foreground"
                     style={{ fontSize: `${9 * exportSpaceNameScale}px` }}
                   >
                     C1
@@ -1591,7 +1588,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
 
             <div>
               <div className="flex items-center justify-between">
-                <Label>Label Text Size</Label>
+                <Label>{t("Label Text Size")}</Label>
                 <span className="text-xs text-muted-foreground">
                   {Math.round(exportLabelScale * 100)}%
                 </span>
@@ -1608,7 +1605,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
                   metrics and per-tile auto-fit, not this CSS box. It's here
                   so "bigger/smaller" has an immediate, concrete reference
                   instead of a bare percentage. */}
-              <div className="mt-3 rounded-lg border bg-slate-50 p-4 flex items-center justify-center">
+              <div className="mt-3 rounded-lg border bg-muted p-4 flex items-center justify-center">
                 <div
                   className="rounded-md flex items-center justify-center text-center px-2 py-3 text-white font-bold shadow-sm"
                   style={{
@@ -1678,10 +1675,10 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
           events). Selecting a venue shows ONLY that venue's layout. */}
       {venueConfigs.length > 1 && (
         <div className="space-y-1.5">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Select venue
           </div>
-          <div className="flex gap-1 flex-wrap rounded-lg bg-slate-100 p-1 w-fit">
+          <div className="flex gap-1 flex-wrap rounded-lg bg-muted p-1 w-fit">
             {venueConfigs.map((vc, i) => (
               <button
                 key={vc.id}
@@ -1690,7 +1687,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                   vc.id === venueConfig.id
                     ? "bg-blue-600 text-white shadow-sm"
-                    : "text-slate-600 hover:bg-white/70"
+                    : "text-muted-foreground hover:bg-white/70"
                 }`}
               >
                 {vc.name || `Venue ${i + 1}`}
@@ -1701,13 +1698,13 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
       )}
 
       {/* Legend */}
-      <div className="rounded-md border bg-slate-50 px-3 py-2 text-[11px] text-slate-600 flex flex-wrap items-center gap-3">
+      <div className="rounded-md border bg-muted px-3 py-2 text-[11px] text-muted-foreground flex flex-wrap items-center gap-3">
         <span className="font-semibold uppercase tracking-wide">Legend:</span>
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-3 bg-slate-300 border border-slate-400 rounded-sm" />
           Space colour = its own template
         </span>
-        <span className="flex items-center gap-1 font-medium text-slate-700">
+        <span className="flex items-center gap-1 font-medium text-muted-foreground">
           Booked → shows the exhibitor's name on the tile
         </span>
         <span className="flex items-center gap-1">
@@ -1726,7 +1723,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
           <span className="inline-block w-3 h-3 bg-rose-600 rounded-full" />
           Exit
         </span>
-        <span className="ml-auto text-slate-500">
+        <span className="ml-auto text-muted-foreground">
           Hover a booked stall to see vendor + add-ons
         </span>
       </div>
@@ -1736,7 +1733,7 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
           spacing/proportions match the eventfront exactly. */}
       <div
         ref={venueScrollRef}
-        className="relative border-2 border-dashed border-gray-300 rounded-xl bg-slate-50 overflow-auto p-4"
+        className="relative border-2 border-dashed border-border rounded-xl bg-muted overflow-auto p-4"
       >
         <div
           className="mx-auto"

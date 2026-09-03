@@ -17,6 +17,7 @@ import {
   Ticket,
   LayoutGrid,
 } from "lucide-react";
+import { t } from "@/i18n/t";
 
 interface FAQItem {
   q: string;
@@ -195,7 +196,7 @@ const faqData: FAQSection[] = [
   {
     title: "Settings & Customization",
     icon: Settings,
-    color: "text-gray-600",
+    color: "text-muted-foreground",
     items: [
       {
         q: "What can I configure in Settings?",
@@ -309,7 +310,7 @@ const individualFaqData: FAQSection[] = [
   {
     title: "Settings & Account",
     icon: Settings,
-    color: "text-slate-600",
+    color: "text-muted-foreground",
     items: [
       {
         q: "Where are Settings and Help?",
@@ -352,7 +353,7 @@ export function HelpFAQ({ isIndividual = false }: { isIndividual?: boolean }) {
       {/* Header */}
       <div className="text-center space-y-2">
         <HelpCircle className="h-12 w-12 text-primary mx-auto" />
-        <h2 className="text-2xl font-bold">Help Center</h2>
+        <h2 className="text-2xl font-bold">{t("Help Center")}</h2>
         <p className="text-muted-foreground">
           {isIndividual
             ? "Everything you need to plan your event and manage your guest list"
@@ -365,7 +366,7 @@ export function HelpFAQ({ isIndividual = false }: { isIndividual?: boolean }) {
       <div className="relative max-w-lg mx-auto">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Search FAQs... (e.g. 'speaker', 'payment', 'QR code')"
+          placeholder={t("Search FAQs... (e.g. 'speaker', 'payment', 'QR code')")}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="pl-10 h-12 text-base"
@@ -389,7 +390,7 @@ export function HelpFAQ({ isIndividual = false }: { isIndividual?: boolean }) {
           return (
             <Card key={section.title}>
               <CardHeader
-                className="cursor-pointer hover:bg-gray-50 transition-colors"
+                className="cursor-pointer hover:bg-muted transition-colors"
                 onClick={() => setExpandedSection(isExpanded ? null : section.title)}
               >
                 <div className="flex items-center justify-between">
@@ -420,7 +421,7 @@ export function HelpFAQ({ isIndividual = false }: { isIndividual?: boolean }) {
                         className="border rounded-lg overflow-hidden"
                       >
                         <button
-                          className="w-full text-left p-4 hover:bg-gray-50 transition-colors flex items-start justify-between gap-3"
+                          className="w-full text-left p-4 hover:bg-muted transition-colors flex items-start justify-between gap-3"
                           onClick={() => setExpandedItem(isItemExpanded ? null : itemKey)}
                         >
                           <span className="font-medium text-sm">{item.q}</span>
@@ -431,7 +432,7 @@ export function HelpFAQ({ isIndividual = false }: { isIndividual?: boolean }) {
                           )}
                         </button>
                         {isItemExpanded && (
-                          <div className="px-4 pb-4 text-sm text-muted-foreground leading-relaxed bg-gray-50/50">
+                          <div className="px-4 pb-4 text-sm text-muted-foreground leading-relaxed bg-muted/50">
                             {item.a}
                           </div>
                         )}

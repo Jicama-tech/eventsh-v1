@@ -23,6 +23,7 @@ import {
   Legend,
 } from "recharts";
 import { TrendingUp, Calendar, Ticket, DollarSign } from "lucide-react";
+import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
@@ -138,7 +139,7 @@ export function OrganizerAnalyticsCharts() {
             note: "tickets",
           },
         ].map((s, i) => (
-          <Card key={i} className="border-slate-100">
+          <Card key={i} className="border-border">
             <CardContent className="p-3">
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs text-muted-foreground truncate">
@@ -160,7 +161,7 @@ export function OrganizerAnalyticsCharts() {
       {!hasData ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            <TrendingUp className="h-10 w-10 mx-auto mb-2 text-gray-300" />
+            <TrendingUp className="h-10 w-10 mx-auto mb-2 text-muted-foreground" />
             <p className="text-sm">No tickets sold yet — charts will appear once you start receiving orders.</p>
           </CardContent>
         </Card>
@@ -173,9 +174,7 @@ export function OrganizerAnalyticsCharts() {
                 <TrendingUp className="h-4 w-4 text-emerald-500" />
                 Revenue & Tickets — Last 30 days
               </CardTitle>
-              <CardDescription>
-                Daily ticket revenue (confirmed payments only) and tickets sold
-              </CardDescription>
+              <CardDescription>{t("Daily ticket revenue (confirmed payments only) and tickets sold")}</CardDescription>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={260}>
@@ -257,7 +256,7 @@ export function OrganizerAnalyticsCharts() {
                 <Calendar className="h-4 w-4 text-blue-500" />
                 Top Events by Revenue
               </CardTitle>
-              <CardDescription>Top 5 events all-time</CardDescription>
+              <CardDescription>{t("Top 5 events all-time")}</CardDescription>
             </CardHeader>
             <CardContent>
               {data.topEvents.length === 0 ? (
@@ -301,7 +300,7 @@ export function OrganizerAnalyticsCharts() {
                 <Ticket className="h-4 w-4 text-purple-500" />
                 Tickets by Status
               </CardTitle>
-              <CardDescription>Distribution across all events</CardDescription>
+              <CardDescription>{t("Distribution across all events")}</CardDescription>
             </CardHeader>
             <CardContent>
               {data.statusBreakdown.length === 0 ? (

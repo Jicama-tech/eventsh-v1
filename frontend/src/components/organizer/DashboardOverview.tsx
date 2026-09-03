@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/dialog";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";
+import { t } from "@/i18n/t";
 
 // Updated STAT_ICONS to include new metrics
 const STAT_ICONS = {
@@ -1368,7 +1369,7 @@ export default function DashboardOverview({
   return (
     <div className="space-y-6">
       <div className="flex justify-between">
-        <h2 className="text-2xl sm:text-3xl font-bold">Dashboard</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold">{t("Dashboard")}</h2>
       </div>
 
       {/* Stats Grid */}
@@ -1378,11 +1379,14 @@ export default function DashboardOverview({
           return (
             <Card
               key={index}
-              className="transition-all hover:bg-gray-50 dark:hover:bg-gray-800"
+              className="transition-all hover:bg-muted dark:hover:bg-gray-800"
             >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                {/* stat.title stays English in the array: it doubles as the
+                    STAT_ICONS key and as the "Total Revenue" comparison
+                    below. Translate at the point of render instead. */}
                 <CardTitle className="text-sm font-medium">
-                  {stat.title}
+                  {t(stat.title)}
                 </CardTitle>
                 <Icon className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
@@ -1408,7 +1412,7 @@ export default function DashboardOverview({
           then Upcoming, then Past. */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold">Events</h3>
+          <h3 className="text-lg font-semibold">{t("Events")}</h3>
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 font-medium text-green-700">
               <span className="h-2 w-2 rounded-full bg-green-500" />
@@ -1418,7 +1422,7 @@ export default function DashboardOverview({
               <span className="h-2 w-2 rounded-full bg-blue-500" />
               {upcomingEvents.length} Upcoming
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-600">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 font-medium text-muted-foreground">
               <span className="h-2 w-2 rounded-full bg-gray-400" />
               {pastEvents.length} Past
             </span>

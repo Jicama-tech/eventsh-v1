@@ -246,11 +246,11 @@ export function PlatformFeesPanel() {
         </CardHeader>
         <CardContent>
           {loading && events.length === 0 ? (
-            <div className="flex items-center justify-center py-10 text-slate-500 gap-2">
+            <div className="flex items-center justify-center py-10 text-muted-foreground gap-2">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading…
             </div>
           ) : events.length === 0 ? (
-            <div className="py-10 text-center text-slate-500">
+            <div className="py-10 text-center text-muted-foreground">
               No events yet — once attendees, exhibitors, or speakers
               register, fees will appear here.
             </div>
@@ -279,7 +279,7 @@ export function PlatformFeesPanel() {
                       <TableRow key={e.eventId}>
                         <TableCell>
                           <div className="font-medium">{e.title}</div>
-                          <div className="text-xs text-slate-500">
+                          <div className="text-xs text-muted-foreground">
                             {e.startDate
                               ? new Date(e.startDate).toLocaleDateString()
                               : ""}
@@ -315,7 +315,7 @@ export function PlatformFeesPanel() {
                               admin
                             </Badge>
                           ) : isAwaiting ? (
-                            <Badge variant="outline" className="text-slate-500">
+                            <Badge variant="outline" className="text-muted-foreground">
                               <Hourglass className="h-3 w-3 mr-1" /> In
                               progress
                             </Badge>
@@ -324,12 +324,12 @@ export function PlatformFeesPanel() {
                               Owed
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="text-slate-400">
+                            <Badge variant="outline" className="text-muted-foreground">
                               —
                             </Badge>
                           )}
                           {claim?.ref && (
-                            <div className="text-[10px] font-mono text-slate-400 mt-1">
+                            <div className="text-[10px] font-mono text-muted-foreground mt-1">
                               {claim.ref}
                             </div>
                           )}
@@ -414,11 +414,11 @@ export function PlatformFeesPanel() {
             </CardHeader>
             <CardContent>
               {loading && (!data?.memberships?.rows?.length) ? (
-                <div className="flex items-center justify-center py-10 text-slate-500 gap-2">
+                <div className="flex items-center justify-center py-10 text-muted-foreground gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" /> Loading…
                 </div>
               ) : !data?.memberships?.rows?.length ? (
-                <div className="py-10 text-center text-slate-500">
+                <div className="py-10 text-center text-muted-foreground">
                   No active exhibitor memberships yet — once one is
                   confirmed, the platform fee row appears here.
                 </div>
@@ -445,7 +445,7 @@ export function PlatformFeesPanel() {
                             <div className="font-medium">
                               {m.exhibitorName || m.exhibitorEmail || "—"}
                             </div>
-                            <div className="text-xs text-slate-500">
+                            <div className="text-xs text-muted-foreground">
                               {m.exhibitorEmail}
                               {m.exhibitorWhatsapp
                                 ? ` · ${m.exhibitorWhatsapp}`

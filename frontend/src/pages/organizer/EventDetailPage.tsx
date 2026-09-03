@@ -38,6 +38,7 @@ import {
   MapIcon,
 } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrencyhook";
+import { t } from "@/i18n/t";
 
 interface Organizer {
   _id: string;
@@ -137,7 +138,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-muted">
         <p>Loading event details...</p>
       </div>
     );
@@ -145,7 +146,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
 
   if (error || !eventData) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4 text-center">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-muted p-4 text-center">
         <p className="text-red-500 font-semibold mb-4">{error}</p>
         <Button onClick={onBack}>Go Back</Button>
       </div>
@@ -223,24 +224,24 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-muted">
       {/* Header */}
-      <header className="bg-white border-b sticky top-0 z-50 shadow-sm">
+      <header className="bg-background border-b sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <Button
                 variant="ghost"
                 onClick={onBack}
-                className="p-2 hover:bg-gray-100"
+                className="p-2 hover:bg-muted"
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               <div className="hidden sm:block">
-                <h1 className="text-lg font-semibold text-gray-900 truncate max-w-md">
+                <h1 className="text-lg font-semibold text-foreground truncate max-w-md">
                   {title}
                 </h1>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-muted-foreground">
                   by {organizer.organizationName}
                 </p>
               </div>
@@ -255,7 +256,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
               >
                 <Heart
                   className={`h-5 w-5 ${
-                    isFavorited ? "fill-red-500 text-red-500" : "text-gray-600"
+                    isFavorited ? "fill-red-500 text-red-500" : "text-muted-foreground"
                   }`}
                 />
               </Button>
@@ -265,15 +266,15 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                 onClick={handleShare}
                 className="hover:bg-blue-50"
               >
-                <Share2 className="h-5 w-5 text-gray-600" />
+                <Share2 className="h-5 w-5 text-muted-foreground" />
               </Button>
             </div>
           </div>
 
           {/* Mobile title */}
           <div className="sm:hidden mt-2">
-            <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
-            <p className="text-sm text-gray-500">by {organizer.name}</p>
+            <h1 className="text-lg font-semibold text-foreground">{title}</h1>
+            <p className="text-sm text-muted-foreground">by {organizer.name}</p>
           </div>
         </div>
       </header>
@@ -290,7 +291,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                 className="w-full h-64 sm:h-80 lg:h-96 object-cover rounded-xl shadow-lg"
               />
               <div className="absolute top-4 left-4 flex gap-2">
-                <Badge className="bg-white/90 text-gray-800 shadow-sm">
+                <Badge className="bg-white/90 text-foreground shadow-sm">
                   {category}
                 </Badge>
                 <Badge className="bg-blue-600 text-white shadow-sm">
@@ -302,10 +303,10 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
             {/* Event Info */}
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">
+                <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-4">
                   {title}
                 </h2>
-                <p className="text-lg text-gray-600 leading-relaxed">
+                <p className="text-lg text-muted-foreground leading-relaxed">
                   {description}
                 </p>
               </div>
@@ -316,8 +317,8 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                   <div className="flex items-center space-x-3">
                     <CalendarDays className="h-6 w-6 text-blue-600" />
                     <div>
-                      <p className="font-medium text-gray-900">Event Dates</p>
-                      <p className="text-gray-600">
+                      <p className="font-medium text-foreground">Event Dates</p>
+                      <p className="text-muted-foreground">
                         {new Date(startDate).toLocaleDateString("en-US", {
                           weekday: "long",
                           year: "numeric",
@@ -340,8 +341,8 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                   <div className="flex items-center space-x-3">
                     <MapPin className="h-6 w-6 text-blue-600" />
                     <div>
-                      <p className="font-medium text-gray-900">Location</p>
-                      <p className="text-gray-600">{location}</p>
+                      <p className="font-medium text-foreground">Location</p>
+                      <p className="text-muted-foreground">{location}</p>
                     </div>
                   </div>
                 </Card>
@@ -350,8 +351,8 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                   <div className="flex items-center space-x-3">
                     <Clock className="h-6 w-6 text-blue-600" />
                     <div>
-                      <p className="font-medium text-gray-900">Time</p>
-                      <p className="text-gray-600">
+                      <p className="font-medium text-foreground">Time</p>
+                      <p className="text-muted-foreground">
                         {time}
                         {eventData.endTime && ` - ${eventData.endTime}`}
                       </p>
@@ -363,8 +364,8 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                   <div className="flex items-center space-x-3">
                     <Ticket className="h-6 w-6 text-blue-600" />
                     <div>
-                      <p className="font-medium text-gray-900">Ticket Price</p>
-                      <p className="text-gray-600">
+                      <p className="font-medium text-foreground">Ticket Price</p>
+                      <p className="text-muted-foreground">
                         {ticketPrice === "0" ? "Free" : ticketPrice.includes("-") ? `${formatPrice(Number(ticketPrice.split("-")[0]))} - ${formatPrice(Number(ticketPrice.split("-")[1]))}` : formatPrice(Number(ticketPrice))}
                       </p>
                     </div>
@@ -378,7 +379,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                   <Badge
                     key={index}
                     variant="buttonOutline"
-                    className="border-gray-300 text-gray-600"
+                    className="border-border text-muted-foreground"
                   >
                     {tag}
                   </Badge>
@@ -391,7 +392,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
             {/* Gallery */}
             {gallery && gallery.length > 0 && (
               <section>
-                <h2 className="text-xl font-bold mb-4">Event Gallery</h2>
+                <h2 className="text-xl font-bold mb-4">{t("Event Gallery")}</h2>
                 <div className="relative">
                   <img
                     src={gallery[currentImageIndex]}
@@ -401,7 +402,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white"
+                    className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-background"
                     onClick={prevImage}
                   >
                     <ChevronLeft className="h-6 w-6" />
@@ -409,7 +410,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-background"
                     onClick={nextImage}
                   >
                     <ChevronRight className="h-6 w-6" />
@@ -421,21 +422,21 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
             {/* Other Details */}
             <Tabs defaultValue="details" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="details">Event Details</TabsTrigger>
-                <TabsTrigger value="organizer">Organizer</TabsTrigger>
+                <TabsTrigger value="details">{t("Event Details")}</TabsTrigger>
+                <TabsTrigger value="organizer">{t("Organizer")}</TabsTrigger>
               </TabsList>
               <TabsContent value="details" className="mt-4 space-y-6">
                 {/* Features */}
                 {features && (
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-lg">Key Features</CardTitle>
+                      <CardTitle className="text-lg">{t("Key Features")}</CardTitle>
                     </CardHeader>
                     <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                       <div className="flex items-center space-x-2">
                         <Utensils
                           className={`h-5 w-5 ${
-                            features.food ? "text-green-500" : "text-gray-400"
+                            features.food ? "text-green-500" : "text-muted-foreground"
                           }`}
                         />
                         <span className="text-sm font-medium">Food</span>
@@ -445,7 +446,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                           className={`h-5 w-5 ${
                             features.parking
                               ? "text-green-500"
-                              : "text-gray-400"
+                              : "text-muted-foreground"
                           }`}
                         />
                         <span className="text-sm font-medium">Parking</span>
@@ -453,7 +454,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                       <div className="flex items-center space-x-2">
                         <Wifi
                           className={`h-5 w-5 ${
-                            features.wifi ? "text-green-500" : "text-gray-400"
+                            features.wifi ? "text-green-500" : "text-muted-foreground"
                           }`}
                         />
                         <span className="text-sm font-medium">Wi-Fi</span>
@@ -463,7 +464,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                           className={`h-5 w-5 ${
                             features.photography
                               ? "text-green-500"
-                              : "text-gray-400"
+                              : "text-muted-foreground"
                           }`}
                         />
                         <span className="text-sm font-medium">Photography</span>
@@ -473,7 +474,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                           className={`h-5 w-5 ${
                             features.security
                               ? "text-green-500"
-                              : "text-gray-400"
+                              : "text-muted-foreground"
                           }`}
                         />
                         <span className="text-sm font-medium">Security</span>
@@ -483,7 +484,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                           className={`h-5 w-5 ${
                             features.accessibility
                               ? "text-green-500"
-                              : "text-gray-400"
+                              : "text-muted-foreground"
                           }`}
                         />
                         <span className="text-sm font-medium">
@@ -497,14 +498,12 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                 {/* Additional Information */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">
-                      Additional Information
-                    </CardTitle>
+                    <CardTitle className="text-lg">{t("Additional Information")}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {ageRestriction && (
                       <div className="flex items-center justify-between">
-                        <span className="font-medium text-gray-700">
+                        <span className="font-medium text-muted-foreground">
                           Age Restriction:
                         </span>
                         <Badge variant="secondary">{ageRestriction}</Badge>
@@ -512,18 +511,18 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                     )}
                     {dresscode && (
                       <div className="flex items-center justify-between">
-                        <span className="font-medium text-gray-700">
+                        <span className="font-medium text-muted-foreground">
                           Dress Code:
                         </span>
-                        <p className="text-gray-600">{dresscode}</p>
+                        <p className="text-muted-foreground">{dresscode}</p>
                       </div>
                     )}
                     {refundPolicy && (
                       <div className="space-y-2">
-                        <span className="font-medium text-gray-700">
+                        <span className="font-medium text-muted-foreground">
                           Refund Policy:
                         </span>
-                        <p className="text-gray-600">{refundPolicy}</p>
+                        <p className="text-muted-foreground">{refundPolicy}</p>
                       </div>
                     )}
                   </CardContent>
@@ -550,32 +549,32 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                       <CardTitle className="text-xl">
                         {organizer.name}
                       </CardTitle>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-muted-foreground">
                         {organizer.organizationName}
                       </p>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <p className="text-gray-600 leading-relaxed">
+                    <p className="text-muted-foreground leading-relaxed">
                       {organizer.bio}
                     </p>
                     <Separator />
                     <div className="space-y-2">
-                      <div className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded">
-                        <Phone className="h-4 w-4 text-gray-500" />
-                        <span className="text-sm text-gray-700">
+                      <div className="flex items-center space-x-3 p-2 hover:bg-muted rounded">
+                        <Phone className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">
                           {organizer.phone}
                         </span>
                       </div>
-                      <div className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded">
-                        <Mail className="h-4 w-4 text-gray-500" />
-                        <span className="text-sm text-gray-700">
+                      <div className="flex items-center space-x-3 p-2 hover:bg-muted rounded">
+                        <Mail className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">
                           {organizer.email}
                         </span>
                       </div>
-                      <div className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded">
-                        <MapPin className="h-4 w-4 text-gray-500" />
-                        <span className="text-sm text-gray-700">
+                      <div className="flex items-center space-x-3 p-2 hover:bg-muted rounded">
+                        <MapPin className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">
                           {organizer.address}
                         </span>
                       </div>
@@ -587,7 +586,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                             href={socialMedia.facebook}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-gray-500 hover:text-gray-900"
+                            className="text-muted-foreground hover:text-foreground"
                           >
                             <Facebook className="h-5 w-5" />
                           </a>
@@ -597,7 +596,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                             href={socialMedia.instagram}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-gray-500 hover:text-gray-900"
+                            className="text-muted-foreground hover:text-foreground"
                           >
                             <Instagram className="h-5 w-5" />
                           </a>
@@ -607,7 +606,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                             href={socialMedia.twitter}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-gray-500 hover:text-gray-900"
+                            className="text-muted-foreground hover:text-foreground"
                           >
                             <Twitter className="h-5 w-5" />
                           </a>
@@ -623,23 +622,23 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
           {/* Sidebar */}
           <div className="lg:col-span-1 space-y-6">
             <Card className="p-6">
-              <CardTitle className="text-xl font-bold mb-4">Tickets</CardTitle>
+              <CardTitle className="text-xl font-bold mb-4">{t("Tickets")}</CardTitle>
               <div className="flex items-center justify-between mb-4">
-                <p className="text-3xl font-bold text-gray-900">
+                <p className="text-3xl font-bold text-foreground">
                   {ticketPrice === "0" ? "Free" : ticketPrice.includes("-") ? `${formatPrice(Number(ticketPrice.split("-")[0]))} - ${formatPrice(Number(ticketPrice.split("-")[1]))}` : formatPrice(Number(ticketPrice))}
                 </p>
                 <Badge variant="secondary">
                   {availableTickets} Tickets Left
                 </Badge>
               </div>
-              <p className="text-sm text-gray-600 mb-4">
+              <p className="text-sm text-muted-foreground mb-4">
                 This is a mock ticket purchase section.
               </p>
               <div className="space-y-4">
                 <div>
                   <label
                     htmlFor="ticket-quantity"
-                    className="text-sm font-medium text-gray-700"
+                    className="text-sm font-medium text-muted-foreground"
                   >
                     Quantity
                   </label>
@@ -677,50 +676,50 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
             {/* Contact Organizer */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Contact Organizer</CardTitle>
+                <CardTitle className="text-lg">{t("Contact Organizer")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded">
-                  <Phone className="h-4 w-4 text-gray-500" />
-                  <span className="text-sm text-gray-700">
+                <div className="flex items-center space-x-3 p-2 hover:bg-muted rounded">
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">
                     {organizer.phone}
                   </span>
                 </div>
 
-                <div className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded">
-                  <Mail className="h-4 w-4 text-gray-500" />
-                  <span className="text-sm text-gray-700">
+                <div className="flex items-center space-x-3 p-2 hover:bg-muted rounded">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">
                     {organizer.email}
                   </span>
                 </div>
 
-                <div className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded">
-                  <MapPin className="h-4 w-4 text-gray-500" />
-                  <span className="text-sm text-gray-700">
+                <div className="flex items-center space-x-3 p-2 hover:bg-muted rounded">
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">
                     {organizer.address}
                   </span>
                 </div>
 
                 {socialMedia && socialMedia.facebook && (
-                  <div className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded">
-                    <Facebook className="h-4 w-4 text-gray-500" />
-                    <span className="text-sm text-gray-700">
+                  <div className="flex items-center space-x-3 p-2 hover:bg-muted rounded">
+                    <Facebook className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
                       {socialMedia.facebook}
                     </span>
                   </div>
                 )}
                 {socialMedia && socialMedia.instagram && (
-                  <div className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded">
-                    <Instagram className="h-4 w-4 text-gray-500" />
-                    <span className="text-sm text-gray-700">
+                  <div className="flex items-center space-x-3 p-2 hover:bg-muted rounded">
+                    <Instagram className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
                       {socialMedia.instagram}
                     </span>
                   </div>
                 )}
                 {socialMedia && socialMedia.twitter && (
-                  <div className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded">
-                    <Twitter className="h-4 w-4 text-gray-500" />
-                    <span className="text-sm text-gray-700">
+                  <div className="flex items-center space-x-3 p-2 hover:bg-muted rounded">
+                    <Twitter className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
                       {socialMedia.twitter}
                     </span>
                   </div>

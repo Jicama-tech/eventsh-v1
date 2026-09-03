@@ -20,6 +20,7 @@ import {
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { t } from "@/i18n/t";
 
 interface IndividualEventCard {
   id: string;
@@ -91,9 +92,7 @@ export default function IndividualMyEvents({
             <Calendar className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-lg sm:text-xl font-bold leading-tight">
-              My Events
-            </h1>
+            <h1 className="text-lg sm:text-xl font-bold leading-tight">{t("My Events")}</h1>
             <p className="text-xs sm:text-sm text-muted-foreground">
               {events.length
                 ? `${events.length} event${events.length === 1 ? "" : "s"}`
@@ -126,9 +125,7 @@ export default function IndividualMyEvents({
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
             <Calendar className="h-7 w-7 text-primary" />
           </div>
-          <h2 className="text-lg font-semibold text-foreground">
-            No events yet
-          </h2>
+          <h2 className="text-lg font-semibold text-foreground">{t("No events yet")}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Create your first event to get started — you can also just ask the
             Assistant to set it up for you.
@@ -143,10 +140,10 @@ export default function IndividualMyEvents({
           {events.map((ev) => (
             <div
               key={ev.id}
-              className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
+              className="rounded-lg border border-border bg-background p-3 shadow-sm"
             >
               <div className="mb-1 flex items-start justify-between gap-2">
-                <div className="truncate text-sm sm:text-base font-semibold text-slate-900">
+                <div className="truncate text-sm sm:text-base font-semibold text-foreground">
                   {ev.title}
                 </div>
                 {ev.status && (
@@ -162,12 +159,12 @@ export default function IndividualMyEvents({
                 )}
               </div>
               {ev.date && (
-                <div className="mb-2 flex items-center gap-1 text-xs text-slate-500">
+                <div className="mb-2 flex items-center gap-1 text-xs text-muted-foreground">
                   <Calendar className="h-3 w-3" />
                   {new Date(ev.date).toLocaleDateString()}
                 </div>
               )}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-700">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1">
                   {ev.isRsvp ? (
                     <Users className="h-3 w-3 text-rose-500" />
@@ -175,7 +172,7 @@ export default function IndividualMyEvents({
                     <Ticket className="h-3 w-3 text-blue-500" />
                   )}
                   <span className="font-medium">{ev.ticketCount ?? 0}</span>
-                  <span className="text-slate-400">
+                  <span className="text-muted-foreground">
                     {ev.isRsvp ? "RSVPs" : "sold"}
                   </span>
                 </div>
@@ -186,7 +183,7 @@ export default function IndividualMyEvents({
                   >
                     <Crown className="h-3 w-3 text-amber-500" />
                     <span className="font-medium">{ev.ticketTypeCount}</span>
-                    <span className="text-slate-400">
+                    <span className="text-muted-foreground">
                       {ev.ticketTypeCount === 1 ? "ticket type" : "ticket types"}
                     </span>
                   </div>

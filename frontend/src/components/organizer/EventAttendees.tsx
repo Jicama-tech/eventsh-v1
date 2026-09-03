@@ -100,6 +100,7 @@ import { Textarea } from "../ui/textarea";
 import { ExhibitorDetailDialog } from "./ExhibitorDetailDialog";
 import { StallEditDialog } from "./StallEditDialog";
 import SponsorRequests from "./SponsorRequests";
+import { t } from "@/i18n/t";
 // jsPDF and html2canvas are dynamically imported when needed
 
 export interface StatusHistoryEntry {
@@ -1954,17 +1955,17 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   const EventFilters = () => (
     <div className="flex gap-4 mb-4 flex-wrap">
       <div className="flex items-center space-x-2">
-        <Label htmlFor="event-filter">Search Events:</Label>
+        <Label htmlFor="event-filter">{t("Search Events:")}</Label>
         <Input
           id="event-filter"
-          placeholder="Filter by event name..."
+          placeholder={t("Filter by event name...")}
           value={eventFilter}
           onChange={(e) => setEventFilter(e.target.value)}
           className="w-64"
         />
       </div>
       <div className="flex items-center space-x-2">
-        <Label htmlFor="status-filter">Status:</Label>
+        <Label htmlFor="status-filter">{t("Status:")}</Label>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-32">
             <SelectValue placeholder="All" />
@@ -1977,10 +1978,10 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         </Select>
       </div>
       <div className="flex items-center space-x-2">
-        <Label htmlFor="date-sort">Sort by Date:</Label>
+        <Label htmlFor="date-sort">{t("Sort by Date:")}</Label>
         <Select value={dateSort} onValueChange={setDateSort}>
           <SelectTrigger className="w-32">
-            <SelectValue placeholder="Sort by Date" />
+            <SelectValue placeholder={t("Sort by Date")} />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="latest">Latest First</SelectItem>
@@ -1994,17 +1995,17 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   const TicketFilters = () => (
     <div className="flex gap-4 mb-4 flex-wrap">
       <div className="flex items-center space-x-2">
-        <Label htmlFor="ticket-filter">Search Customers:</Label>
+        <Label htmlFor="ticket-filter">{t("Search Customers:")}</Label>
         <Input
           id="ticket-filter"
-          placeholder="Filter by name or email..."
+          placeholder={t("Filter by name or email...")}
           value={ticketFilter}
           onChange={(e) => setTicketFilter(e.target.value)}
           className="w-64"
         />
       </div>
       <div className="flex items-center space-x-2">
-        <Label htmlFor="attendance-filter">Attendance:</Label>
+        <Label htmlFor="attendance-filter">{t("Attendance:")}</Label>
         <Select value={attendeesFilter} onValueChange={setAttendeesFilter}>
           <SelectTrigger className="w-32">
             <SelectValue placeholder="All" />
@@ -2410,7 +2411,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     } else if (s?.status === "Cancelled" || s?.status === "Returned") {
       // Soft-deleted / settled — kept in the list for refund/records but shown
       // muted so it reads as inactive.
-      base = "bg-slate-50 text-slate-400 border-l-4 border-slate-300";
+      base = "bg-muted text-muted-foreground border-l-4 border-border";
       ring = "ring-slate-400";
     }
     const emph = emphasized ? `ring-2 ring-offset-1 ${ring} animate-pulse` : "";
@@ -2497,7 +2498,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       {/* Header */}
       <div className="flex items-center gap-2">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Participants</h2>
+          <h2 className="text-3xl font-bold tracking-tight">{t("Participants")}</h2>
           <p className="text-muted-foreground">
             Manage attendance for your events and track customer participation
           </p>
@@ -2508,7 +2509,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Events</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Total Events")}</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -2521,7 +2522,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Live Events</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Live Events")}</CardTitle>
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -2534,9 +2535,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Participants
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Total Participants")}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -2549,9 +2548,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Today's Attendees
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Today's Attendees")}</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -2567,7 +2564,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           which contains tabs for Visitors / Exhibitors / Speakers / Round Tables. */}
       <Card>
         <CardHeader>
-          <CardTitle>Participants</CardTitle>
+          <CardTitle>{t("Participants")}</CardTitle>
           <CardDescription>
             View attendance for visitors, exhibitors, speakers and round
             tables across all your events.
@@ -2650,10 +2647,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         <TabsContent value="shopkeeper" className="space-y-4 pt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Exhibitor Management</CardTitle>
-              <CardDescription>
-                View and manage attendance for Exhibitors of all your events
-              </CardDescription>
+              <CardTitle>{t("Exhibitor Management")}</CardTitle>
+              <CardDescription>{t("View and manage attendance for Exhibitors of all your events")}</CardDescription>
             </CardHeader>
             <CardContent>
               <EventFilters />
@@ -2738,9 +2733,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Event Attendance - {selectedEvent?.title}</DialogTitle>
-            <DialogDescription>
-              Detailed attendance information and customer ticket details
-            </DialogDescription>
+            <DialogDescription>{t("Detailed attendance information and customer ticket details")}</DialogDescription>
           </DialogHeader>
 
           {selectedEvent && (
@@ -2901,27 +2894,25 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   className={`flex w-full justify-start overflow-x-auto md:grid ${colsClass} [&>button]:shrink-0 [&>button]:whitespace-nowrap`}
                 >
                   {sections.visitors && (
-                    <TabsTrigger value="visitors">Visitors</TabsTrigger>
+                    <TabsTrigger value="visitors">{t("Visitors")}</TabsTrigger>
                   )}
                   {sections.exhibitors && (
-                    <TabsTrigger value="exhibitors">Exhibitors</TabsTrigger>
+                    <TabsTrigger value="exhibitors">{t("Exhibitors")}</TabsTrigger>
                   )}
                   {sections.speakers && (
-                    <TabsTrigger value="speakers">Speakers</TabsTrigger>
+                    <TabsTrigger value="speakers">{t("Speakers")}</TabsTrigger>
                   )}
                   {sections.roundtables && (
-                    <TabsTrigger value="roundtables">Round Tables</TabsTrigger>
+                    <TabsTrigger value="roundtables">{t("Round Tables")}</TabsTrigger>
                   )}
                   {sections.workshopRequests && (
-                    <TabsTrigger value="workshopRequests">Workshop</TabsTrigger>
+                    <TabsTrigger value="workshopRequests">{t("Workshop")}</TabsTrigger>
                   )}
                   {sections.sponsors && (
-                    <TabsTrigger value="sponsors">Sponsors</TabsTrigger>
+                    <TabsTrigger value="sponsors">{t("Sponsors")}</TabsTrigger>
                   )}
                   {sections.scheduledSpaces && (
-                    <TabsTrigger value="scheduledSpaces">
-                      Scheduled Spaces
-                    </TabsTrigger>
+                    <TabsTrigger value="scheduledSpaces">{t("Scheduled Spaces")}</TabsTrigger>
                   )}
                 </TabsList>
 
@@ -2936,7 +2927,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
               {/* Tickets Table */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Attendance Details</CardTitle>
+                  <CardTitle className="text-lg">{t("Attendance Details")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <TicketFilters />
@@ -3069,9 +3060,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 <TabsContent value="exhibitors" className="pt-4">
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-lg">
-                        Exhibitor Bookings
-                      </CardTitle>
+                      <CardTitle className="text-lg">{t("Exhibitor Bookings")}</CardTitle>
                     </CardHeader>
                     <CardContent>
                       {stallsLoading ? (
@@ -3088,7 +3077,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                           {/* Exhibitors filter — search + status + payment. */}
                           <div className="flex flex-wrap items-center gap-3 mb-4">
                             <Input
-                              placeholder="Search exhibitor, business or email…"
+                              placeholder={t("Search exhibitor, business or email\u2026")}
                               value={exhibitorSearch}
                               onChange={(e) => setExhibitorSearch(e.target.value)}
                               className="w-64"
@@ -3098,7 +3087,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                               onValueChange={setExhibitorStatusFilter}
                             >
                               <SelectTrigger className="w-40">
-                                <SelectValue placeholder="Status" />
+                                <SelectValue placeholder={t("Status")} />
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="all">All statuses</SelectItem>
@@ -3117,7 +3106,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                               onValueChange={setExhibitorPaymentFilter}
                             >
                               <SelectTrigger className="w-36">
-                                <SelectValue placeholder="Payment" />
+                                <SelectValue placeholder={t("Payment")} />
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="all">All payments</SelectItem>
@@ -3130,7 +3119,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                               onValueChange={setExhibitorSort}
                             >
                               <SelectTrigger className="w-48" title="Sort by">
-                                <SelectValue placeholder="Sort by" />
+                                <SelectValue placeholder={t("Sort by")} />
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="name-asc">
@@ -3402,7 +3391,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 <TabsContent value="speakers" className="pt-4">
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-lg">Speakers</CardTitle>
+                      <CardTitle className="text-lg">{t("Speakers")}</CardTitle>
                     </CardHeader>
                     <CardContent>
                       {loadingSpeakers ? (
@@ -3419,7 +3408,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                           {/* Speakers filter — search + request status. */}
                           <div className="flex flex-wrap items-center gap-3 mb-4">
                             <Input
-                              placeholder="Search speaker, org, email or topic…"
+                              placeholder={t("Search speaker, org, email or topic\u2026")}
                               value={speakerSearch}
                               onChange={(e) => setSpeakerSearch(e.target.value)}
                               className="w-64"
@@ -3429,7 +3418,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                               onValueChange={setSpeakerStatusFilter}
                             >
                               <SelectTrigger className="w-40">
-                                <SelectValue placeholder="Status" />
+                                <SelectValue placeholder={t("Status")} />
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="all">All statuses</SelectItem>
@@ -3650,9 +3639,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <Card className="lg:col-span-2">
                   <CardHeader>
-                    <CardTitle className="text-sm font-medium text-muted-foreground uppercase">
-                      Event Details
-                    </CardTitle>
+                    <CardTitle className="text-sm font-medium text-muted-foreground uppercase">{t("Event Details")}</CardTitle>
                   </CardHeader>
                   <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="flex items-center gap-3">
@@ -3701,15 +3688,13 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
                 <Card className="bg-slate-900 text-white border-none">
                   <CardHeader>
-                    <CardTitle className="text-sm font-medium text-slate-400 uppercase">
-                      Stall Revenue
-                    </CardTitle>
+                    <CardTitle className="text-sm font-medium text-muted-foreground uppercase">{t("Stall Revenue")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="text-3xl font-bold text-green-400">
                       {formatPrice(totalStallRevenue)}
                     </div>
-                    <p className="text-xs text-slate-400 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       Total revenue from all stalls
                     </p>
                   </CardContent>
@@ -3750,12 +3735,12 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
               {/* 3. Exhibitors Table */}
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle>Participating Exhibitors</CardTitle>
+                  <CardTitle>{t("Participating Exhibitors")}</CardTitle>
                   <Badge variant="outline">{exhibitorsCount} Total</Badge>
                 </CardHeader>
                 <CardContent>
                   <Table>
-                    <TableHeader className="bg-slate-50">
+                    <TableHeader className="bg-muted">
                       <TableRow>
                         <TableHead>Exhibitor/Shop</TableHead>
                         <TableHead>Stalls / Tables</TableHead>
@@ -4001,16 +3986,14 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 </Badge>
               )}
             </DialogTitle>
-            <DialogDescription>
-              Booking details, attendance and ticket delivery.
-            </DialogDescription>
+            <DialogDescription>{t("Booking details, attendance and ticket delivery.")}</DialogDescription>
           </DialogHeader>
 
           {selectedVisitor && (
             <div className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Visitor</CardTitle>
+                  <CardTitle className="text-base">{t("Visitor")}</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                   <div>
@@ -4044,7 +4027,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Booking</CardTitle>
+                  <CardTitle className="text-base">{t("Booking")}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
                   {Array.isArray(selectedVisitor.ticketDetails) &&
@@ -4103,7 +4086,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Attendance</CardTitle>
+                  <CardTitle className="text-base">{t("Attendance")}</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                   <div>
@@ -4134,7 +4117,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Ticket email</CardTitle>
+                  <CardTitle className="text-base">{t("Ticket email")}</CardTitle>
                   <CardDescription>
                     Sends the very same ticket generated at payment — same QR,
                     same PDF. The existing ticket stays valid.
@@ -4272,16 +4255,14 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 </p>
               </div>
             </DialogTitle>
-            <DialogDescription>
-              Everything this speaker submitted, and the full approval trail.
-            </DialogDescription>
+            <DialogDescription>{t("Everything this speaker submitted, and the full approval trail.")}</DialogDescription>
           </DialogHeader>
 
           {selectedSpeaker && (
             <div className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Profile</CardTitle>
+                  <CardTitle className="text-base">{t("Profile")}</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                   <div>
@@ -4406,7 +4387,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 selectedSpeaker.sessions.length > 0 && (
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-base">Sessions</CardTitle>
+                      <CardTitle className="text-base">{t("Sessions")}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       {selectedSpeaker.sessions.map((s: any, i: number) => (
@@ -4437,7 +4418,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Status & Payment</CardTitle>
+                  <CardTitle className="text-base">{t("Status & Payment")}</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                   <div>
@@ -4487,7 +4468,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   happened. */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Timeline</CardTitle>
+                  <CardTitle className="text-base">{t("Timeline")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {(() => {
@@ -4622,7 +4603,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirm Stall Request</DialogTitle>
+            <DialogTitle>{t("Confirm Stall Request")}</DialogTitle>
             <DialogDescription>
               Are you sure you want to confirm this stall request? The
               shopkeeper will be notified and can proceed to select tables.
@@ -4631,10 +4612,10 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
           <div className="space-y-4">
             <div>
-              <Label htmlFor="confirm-notes">Notes (Optional)</Label>
+              <Label htmlFor="confirm-notes">{t("Notes (Optional)")}</Label>
               <Textarea
                 id="confirm-notes"
-                placeholder="Add any notes for the shopkeeper..."
+                placeholder={t("Add any notes for the shopkeeper...")}
                 value={actionNotes}
                 onChange={(e) => setActionNotes(e.target.value)}
                 rows={3}
@@ -4673,7 +4654,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Cancel Stall Request</DialogTitle>
+            <DialogTitle>{t("Cancel Stall Request")}</DialogTitle>
             <DialogDescription>
               Please provide a reason for cancelling this stall request. The
               shopkeeper will be notified.
@@ -4687,7 +4668,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
               </Label>
               <Textarea
                 id="cancel-reason"
-                placeholder="Enter the reason for cancellation..."
+                placeholder={t("Enter the reason for cancellation...")}
                 value={cancellationReason}
                 onChange={(e) => setCancellationReason(e.target.value)}
                 rows={3}
@@ -4695,10 +4676,10 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
               />
             </div>
             <div>
-              <Label htmlFor="cancel-notes">Additional Notes (Optional)</Label>
+              <Label htmlFor="cancel-notes">{t("Additional Notes (Optional)")}</Label>
               <Textarea
                 id="cancel-notes"
-                placeholder="Add any additional notes..."
+                placeholder={t("Add any additional notes...")}
                 value={actionNotes}
                 onChange={(e) => setActionNotes(e.target.value)}
                 rows={2}
@@ -4915,7 +4896,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           <div className="space-y-4">
             {selectedRequest?.paymentStatus !== "Paid" && (
               <div>
-                <Label htmlFor="payment-status">Payment Status</Label>
+                <Label htmlFor="payment-status">{t("Payment Status")}</Label>
                 <Select
                   value={paymentStatusUpdate}
                   onValueChange={(value: "Partial" | "Paid") =>
@@ -4942,10 +4923,10 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
               </div>
             )}
             <div>
-              <Label htmlFor="payment-notes">Notes (Optional)</Label>
+              <Label htmlFor="payment-notes">{t("Notes (Optional)")}</Label>
               <Textarea
                 id="payment-notes"
-                placeholder="Add payment details or notes..."
+                placeholder={t("Add payment details or notes...")}
                 value={actionNotes}
                 onChange={(e) => setActionNotes(e.target.value)}
                 rows={3}
@@ -4954,13 +4935,13 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
             {/* Either field is enough — the organizer might only have the
                 transaction ID, or only a screenshot, or both. */}
-            <div className="rounded-lg border bg-gray-50/60 p-3 space-y-3">
+            <div className="rounded-lg border bg-muted/60 p-3 space-y-3">
               <p className="text-xs text-muted-foreground">
                 Payment proof{selectedRequest?.paymentStatus !== "Paid" && " (optional)"} — attach if the vendor sent a
                 transaction ID or screenshot on WhatsApp.
               </p>
               <div>
-                <Label htmlFor="pay-txn-id">Transaction ID / Reference</Label>
+                <Label htmlFor="pay-txn-id">{t("Transaction ID / Reference")}</Label>
                 <Input
                   id="pay-txn-id"
                   placeholder="e.g. UPI123456789 or bank ref"
@@ -4969,7 +4950,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 />
               </div>
               <div>
-                <Label htmlFor="pay-screenshot">Payment Screenshot</Label>
+                <Label htmlFor="pay-screenshot">{t("Payment Screenshot")}</Label>
                 <Input
                   id="pay-screenshot"
                   type="file"
@@ -5040,15 +5021,15 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
             const pa: any = (selectedRequest as any)?.pendingAmendment;
             if (!pa) return null;
             return (
-              <div className="space-y-2 rounded-lg border bg-slate-50 p-3 text-sm">
+              <div className="space-y-2 rounded-lg border bg-muted p-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Operators</span>
+                  <span className="text-muted-foreground">Operators</span>
                   <span className="font-medium">
                     {(selectedRequest as any)?.noOfOperators} → {pa.noOfOperators}
                   </span>
                 </div>
                 <div>
-                  <span className="text-gray-500">Updated add-ons</span>
+                  <span className="text-muted-foreground">Updated add-ons</span>
                   <ul className="mt-1 space-y-0.5">
                     {(pa.selectedAddOns || []).map((a: any, i: number) => (
                       <li key={i} className="flex justify-between">
@@ -5063,7 +5044,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   </ul>
                 </div>
                 <div className="flex justify-between border-t pt-2">
-                  <span className="text-gray-500">Difference paid</span>
+                  <span className="text-muted-foreground">Difference paid</span>
                   <span className="font-bold text-green-700">
                     {formatPrice(pa.amountDue || 0)}
                   </span>
@@ -5100,7 +5081,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Return Deposit</DialogTitle>
+            <DialogTitle>{t("Return Deposit")}</DialogTitle>
             <DialogDescription>
               Confirm that the deposit has been returned to the shopkeeper. Add
               a note for the record.
@@ -5109,7 +5090,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
           <div className="space-y-4">
             <div>
-              <Label htmlFor="return-deposit-notes">Notes (Optional)</Label>
+              <Label htmlFor="return-deposit-notes">{t("Notes (Optional)")}</Label>
               <Textarea
                 id="return-deposit-notes"
                 placeholder="e.g. Deposit returned via bank transfer on 12 Jan..."
