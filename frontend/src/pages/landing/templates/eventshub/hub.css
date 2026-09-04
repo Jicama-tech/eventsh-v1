@@ -308,11 +308,27 @@
   letter-spacing: -0.04em;
   color: var(--text);
   text-decoration: none;
+  /* The brand is a flex item in a row that also holds the links and the CTA.
+     Without this it is allowed to shrink, and the logo squashes on narrow
+     screens instead of the links wrapping away. */
+  flex: none;
 }
 .eh-brand img {
-  height: 30px;
+  /* The asset is 1696x608, so height drives the size and width follows the
+     2.8:1 ratio. Never set both. */
+  height: 34px;
   width: auto;
   display: block;
+}
+/* Bigger in the nav than in the footer — the 68px bar has the room for it,
+   and the logo is the only branding up there. */
+.eh-nav .eh-brand img {
+  height: 42px;
+}
+@media (max-width: 600px) {
+  .eh-nav .eh-brand img {
+    height: 34px;
+  }
 }
 .eh-nav-links {
   display: flex;
