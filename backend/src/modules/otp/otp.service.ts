@@ -177,6 +177,16 @@ export class OtpService implements OnModuleInit {
   private get whatsAppEnabled() {
     return process.env.WHATSAPP_ENABLED !== "false";
   }
+  /**
+   * Public read of the outbound kill-switch, and whether a paired session is
+   * actually live. Callers that offer WhatsApp as a *choice* need this: the
+   * send methods below return quietly when the flag is off, which is right
+   * for a best-effort mirror but would let a deliberate "send on WhatsApp"
+   * report success while delivering nothing.
+   */
+  get whatsAppOutboundStatus(): { enabled: boolean; connected: boolean } {
+    return { enabled: this.whatsAppEnabled, connected: !!this.sock };
+  }
   private get whatsAppOtpEnabled() {
     return process.env.WHATSAPP_OTP_ENABLED !== "false";
   }

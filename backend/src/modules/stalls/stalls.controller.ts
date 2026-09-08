@@ -539,15 +539,35 @@ export class StallsController {
    */
   @Post("bulk-send-tickets")
   async bulkSendTickets(
-    @Body() body: { eventId?: string; message?: string },
+    @Body()
+    body: {
+      eventId?: string;
+      message?: string;
+      channels?: { email?: boolean; whatsapp?: boolean };
+    },
   ) {
     if (!body?.eventId) {
       throw new BadRequestException("eventId is required");
     }
+    const channels = body.channels ?? { email: true };
+    if (!channels.email && !channels.whatsapp) {
+      throw new BadRequestException("Pick at least one channel");
+    }
     return await this.stallsService.bulkSendStallTickets(
       body.eventId,
       body.message,
+      channels,
     );
+  }
+
+  /**
+   * Whether WhatsApp can actually deliver right now, so the dashboard can
+   * offer it honestly instead of showing a channel that silently drops.
+   * GET /stalls/whatsapp-status
+   */
+  @Get("whatsapp-status")
+  whatsappStatus() {
+    return this.stallsService.whatsAppStatus();
   }
 
   /**

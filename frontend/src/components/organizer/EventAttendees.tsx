@@ -368,7 +368,35 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     sent: number;
     skipped: { vendor?: string; reason: string }[];
     failed: { vendor?: string; reason: string }[];
+    whatsapp?: {
+      enabled: boolean;
+      connected: boolean;
+      sent: number;
+      skipped: { vendor?: string; reason: string }[];
+      failed: { vendor?: string; reason: string }[];
+    };
   } | null>(null);
+  const [bulkEmail, setBulkEmail] = useState(true);
+  const [bulkWhatsApp, setBulkWhatsApp] = useState(false);
+  // Whether WhatsApp can actually deliver. Checked rather than assumed: the
+  // send is a no-op when WHATSAPP_ENABLED=false or no device is paired, and
+  // offering a channel that quietly drops is worse than not offering it.
+  const [waStatus, setWaStatus] = useState<{
+    enabled: boolean;
+    connected: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!bulkSendOpen || waStatus) return;
+    (async () => {
+      try {
+        const res = await fetch(`${apiURL}/stalls/whatsapp-status`);
+        if (res.ok) setWaStatus(await res.json());
+      } catch {
+        setWaStatus({ enabled: false, connected: false });
+      }
+    })();
+  }, [bulkSendOpen, waStatus]);
 
   // Who will actually receive one. Mirrors the server's rule (Paid only, and
   // an email on file) so the count in the dialog matches what happens.
@@ -378,6 +406,12 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       (st?.shopkeeperId?.email ||
         st?.shopkeeperId?.companyEmail ||
         st?.shopkeeperId?.vendorEmail),
+  );
+
+  const bulkWaRecipients = stalls.filter(
+    (st: any) =>
+      st?.paymentStatus === "Paid" &&
+      (st?.shopkeeperId?.whatsAppNumber || st?.shopkeeperId?.whatsappNumber),
   );
 
   const handleBulkSend = async () => {
@@ -395,6 +429,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         body: JSON.stringify({
           eventId: selectedEvent._id,
           message: bulkMessage.trim() || undefined,
+          channels: { email: bulkEmail, whatsapp: bulkWhatsApp },
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -403,7 +438,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       }
       setBulkResult(data);
       toast({
-        title: `Sent ${data.sent} of ${data.total}`,
+        title: `Email ${data.sent} of ${data.total}${
+          data.whatsapp ? ` · WhatsApp ${data.whatsapp.sent}` : ""
+        }`,
         description:
           data.failed?.length || data.skipped?.length
             ? "Some didn't go out — see the breakdown."
@@ -4681,6 +4718,16 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   </ul>
                 </div>
               )}
+              {bulkResult.whatsapp && (
+                <p className="font-medium">
+                  WhatsApp: {bulkResult.whatsapp.sent} sent
+                  {bulkResult.whatsapp.skipped.length > 0 &&
+                    `, ${bulkResult.whatsapp.skipped.length} without a number`}
+                  {bulkResult.whatsapp.failed.length > 0 &&
+                    `, ${bulkResult.whatsapp.failed.length} failed`}
+                  .
+                </p>
+              )}
               {bulkResult.failed?.length > 0 && (
                 <div>
                   <p className="text-red-600 dark:text-red-400">
@@ -4697,7 +4744,50 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
               )}
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Send by</p>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={bulkEmail}
+                    onChange={(e) => setBulkEmail(e.target.checked)}
+                    className="h-4 w-4 accent-primary"
+                  />
+                  Email ({bulkRecipients.length})
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={bulkWhatsApp}
+                    disabled={!waStatus?.enabled || !waStatus?.connected}
+                    onChange={(e) => setBulkWhatsApp(e.target.checked)}
+                    className="h-4 w-4 accent-primary disabled:opacity-50"
+                  />
+                  <span
+                    className={
+                      !waStatus?.enabled || !waStatus?.connected
+                        ? "text-muted-foreground"
+                        : ""
+                    }
+                  >
+                    WhatsApp ({bulkWaRecipients.length})
+                  </span>
+                </label>
+                {waStatus && !waStatus.enabled && (
+                  <p className="rounded-md border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-2 text-xs text-amber-800 dark:text-amber-300">
+                    WhatsApp sending is switched off for this deployment
+                    (WHATSAPP_ENABLED=false). Messages would be dropped
+                    silently, so the option is disabled.
+                  </p>
+                )}
+                {waStatus?.enabled && !waStatus.connected && (
+                  <p className="rounded-md border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-2 text-xs text-amber-800 dark:text-amber-300">
+                    No WhatsApp device is paired right now, so nothing could be
+                    delivered. Re-pair it and reopen this dialog.
+                  </p>
+                )}
+              </div>
               <label className="text-sm font-medium" htmlFor="bulk-message">
                 Your message <span className="text-muted-foreground">(optional)</span>
               </label>
@@ -4735,7 +4825,11 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 </Button>
                 <Button
                   onClick={handleBulkSend}
-                  disabled={bulkSending || bulkRecipients.length === 0}
+                  disabled={
+                    bulkSending ||
+                    (!bulkEmail && !bulkWhatsApp) ||
+                    (bulkEmail && !bulkWhatsApp && bulkRecipients.length === 0)
+                  }
                 >
                   <Send className="mr-2 h-4 w-4" />
                   {bulkSending

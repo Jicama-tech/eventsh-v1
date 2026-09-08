@@ -4943,6 +4943,11 @@ export class StallsService {
   //   • Email send fails  → SURFACED (SMTP timeout / auth / blocked port / bad
   //     organizer email config). Swallowing this would tell the organizer the
   //     ticket went out when nothing did.
+  /** Outbound WhatsApp readiness — see otp.service.whatsAppOutboundStatus. */
+  whatsAppStatus() {
+    return this.otpService.whatsAppOutboundStatus;
+  }
+
   /**
    * Re-send stall tickets to every confirmed exhibitor on an event, with an
    * optional organizer-written note and a "N days to go" line.
@@ -4958,11 +4963,21 @@ export class StallsService {
   async bulkSendStallTickets(
     eventId: string,
     customMessage?: string,
+    channels: { email?: boolean; whatsapp?: boolean } = { email: true },
   ): Promise<{
     total: number;
     sent: number;
     skipped: { stallId: string; vendor?: string; reason: string }[];
     failed: { stallId: string; vendor?: string; reason: string }[];
+    whatsapp?: {
+      /** False when WHATSAPP_ENABLED=false — nothing was attempted. */
+      enabled: boolean;
+      /** False when no device is paired; sends would throw. */
+      connected: boolean;
+      sent: number;
+      skipped: { stallId: string; vendor?: string; reason: string }[];
+      failed: { stallId: string; vendor?: string; reason: string }[];
+    };
   }> {
     if (!Types.ObjectId.isValid(eventId)) {
       throw new BadRequestException("Invalid event ID format");
@@ -4972,35 +4987,107 @@ export class StallsService {
       .populate("shopkeeperId")
       .lean();
 
-    const skipped: { stallId: string; vendor?: string; reason: string }[] = [];
-    const failed: { stallId: string; vendor?: string; reason: string }[] = [];
+    type Row = { stallId: string; vendor?: string; reason: string };
+    const skipped: Row[] = [];
+    const failed: Row[] = [];
     let sent = 0;
+
+    const wantEmail = channels.email !== false;
+    const wantWhatsApp = !!channels.whatsapp;
+    const waStatus = this.otpService.whatsAppOutboundStatus;
+    // Attempt WhatsApp only when it can actually deliver. sendMediaMessage
+    // returns quietly when the kill-switch is off, so without this the run
+    // would report a pile of successful sends that never left the building.
+    const waUsable = wantWhatsApp && waStatus.enabled && waStatus.connected;
+    const waSkipped: Row[] = [];
+    const waFailed: Row[] = [];
+    let waSent = 0;
 
     for (const stall of stalls) {
       const vendor = (stall.shopkeeperId as any) || {};
       const name = vendor?.name || vendor?.brandName;
       const id = String(stall._id);
-      if (!this.vendorEmailRecipients(vendor)) {
-        skipped.push({ stallId: id, vendor: name, reason: "No email on file" });
-        continue;
+
+      if (wantEmail) {
+        if (!this.vendorEmailRecipients(vendor)) {
+          skipped.push({ stallId: id, vendor: name, reason: "No email on file" });
+        } else {
+          try {
+            await this.resendStallTicket(id, customMessage);
+            sent += 1;
+          } catch (err: any) {
+            failed.push({
+              stallId: id,
+              vendor: name,
+              reason: err?.message || "Send failed",
+            });
+          }
+        }
       }
-      try {
-        await this.resendStallTicket(id, customMessage);
-        sent += 1;
-      } catch (err: any) {
-        failed.push({
-          stallId: id,
-          vendor: name,
-          reason: err?.message || "Send failed",
-        });
+
+      if (waUsable) {
+        const wa = vendor?.whatsAppNumber || vendor?.whatsappNumber;
+        if (!wa) {
+          waSkipped.push({
+            stallId: id,
+            vendor: name,
+            reason: "No WhatsApp number on file",
+          });
+        } else {
+          try {
+            // Render (or re-render) the PDF so there is a file on disk to
+            // attach — downloadStallTicket writes it to uploads/stallTickets.
+            await this.downloadStallTicket(id);
+            const pdfPath = path.join(
+              process.cwd(),
+              "uploads",
+              "stallTickets",
+              `stall_ticket_${id}.pdf`,
+            );
+            // No `email` argument: the email half is its own channel above,
+            // and passing it here would double-send when both are ticked.
+            await this.otpService.sendMediaMessage(
+              wa,
+              pdfPath,
+              customMessage?.trim() || "Your stall ticket",
+              "stall-ticket.pdf",
+            );
+            waSent += 1;
+          } catch (err: any) {
+            waFailed.push({
+              stallId: id,
+              vendor: name,
+              reason: err?.message || "WhatsApp send failed",
+            });
+          }
+        }
       }
     }
 
     this.logger.log(
-      `Bulk stall ticket send for event ${eventId}: ${sent} sent, ` +
-        `${skipped.length} skipped, ${failed.length} failed`,
+      `Bulk stall ticket send for event ${eventId}: email ${sent} sent/` +
+        `${skipped.length} skipped/${failed.length} failed; whatsapp ` +
+        (wantWhatsApp
+          ? `${waSent} sent/${waSkipped.length} skipped/${waFailed.length} failed`
+          : "not requested"),
     );
-    return { total: stalls.length, sent, skipped, failed };
+    return {
+      total: stalls.length,
+      sent,
+      skipped,
+      failed,
+      ...(wantWhatsApp
+        ? {
+            whatsapp: {
+              enabled: waStatus.enabled,
+              connected: waStatus.connected,
+              sent: waSent,
+              skipped: waSkipped,
+              failed: waFailed,
+            },
+          }
+        : {}),
+    };
   }
 
   async resendStallTicket(stallId: string, customMessage?: string) {
