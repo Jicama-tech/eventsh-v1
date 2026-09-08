@@ -1252,7 +1252,13 @@ export function OrganizerDashboard({
           `}
           >
             <div className="h-full flex flex-col">
-              <nav className="p-3 sm:p-4 space-y-1 sm:space-y-2 flex-1 overflow-y-auto">
+              {/* overflow-x-hidden is not redundant: CSS computes an
+                  unset overflow-x to `auto` as soon as overflow-y is set,
+                  so this container grew a horizontal scrollbar whenever a
+                  button was a pixel wider than the rail — most visible
+                  collapsed, where the rail is only 4rem. The nav should
+                  never scroll sideways, so say so. */}
+              <nav className="p-3 sm:p-4 space-y-1 sm:space-y-2 flex-1 overflow-y-auto overflow-x-hidden">
                 <TooltipProvider delayDuration={0}>
                   {sidebarItems
                     .filter(
