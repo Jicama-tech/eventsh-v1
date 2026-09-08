@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { statAccent } from "@/lib/accents";
+import { statAccent, STATUS_ACCENTS } from "@/lib/accents";
 import { useSubscription } from "@/hooks/useSubscription";
 import { ModuleGate } from "@/components/ui/ModuleGate";
 import { Button } from "@/components/ui/button";
@@ -587,7 +587,7 @@ export default function DashboardOverview({
               {/* Metric 1: Tickets Sold — the attendee-count metric. */}
               {canAttendees && (
               <div className="text-center">
-                <div className="text-xl font-bold text-stat-sky">
+                <div className={`text-xl font-bold ${statAccent(0).icon}`}>
                   {ticketsSold}
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -599,7 +599,7 @@ export default function DashboardOverview({
               {/* Metric 2: Stalls Booked — shown against the total sellable
                   spaces in the venue so it reads as "booked of available". */}
               <div className="text-center">
-                <div className="text-xl font-bold text-stat-teal">
+                <div className={`text-xl font-bold ${statAccent(4).icon}`}>
                   {stallsBooked}
                   {sellableSpaces > 0 && (
                     <span className="text-sm font-semibold text-muted-foreground">
@@ -616,7 +616,7 @@ export default function DashboardOverview({
               {/* Metric 3: Total Revenue */}
               {canRevenue && (
               <div className="text-center">
-                <div className="text-xl font-bold text-stat-emerald">
+                <div className={`text-xl font-bold ${statAccent(1).icon}`}>
                   {formatPrice(revenue)}
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -628,7 +628,7 @@ export default function DashboardOverview({
               {/* Metric 4: Tickets Revenue */}
               {canRevenue && (
               <div className="text-center">
-                <div className="text-lg font-semibold text-stat-indigo">
+                <div className={`text-lg font-semibold ${statAccent(5).icon}`}>
                   {formatPrice(ticketsRevenue)}
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -640,7 +640,7 @@ export default function DashboardOverview({
               {/* Metric 5: Stalls Revenue */}
               {canRevenue && (
               <div className="text-center">
-                <div className="text-lg font-semibold text-stat-violet">
+                <div className={`text-lg font-semibold ${statAccent(2).icon}`}>
                   {formatPrice(stallsRevenue)}
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -651,7 +651,7 @@ export default function DashboardOverview({
 
               {/* Metric 6: Pending Stalls */}
               <div className="text-center">
-                <div className="text-lg font-semibold text-stat-orange">
+                <div className={`text-lg font-semibold ${STATUS_ACCENTS.warning.icon}`}>
                   {stallsPending}
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -1426,7 +1426,7 @@ export default function DashboardOverview({
                 </span>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
+                <div className={`text-2xl font-bold ${accent.icon}`}>
                   {stat.title === "Total Revenue"
                     ? formatPrice(stat.value)
                     : stat.value}

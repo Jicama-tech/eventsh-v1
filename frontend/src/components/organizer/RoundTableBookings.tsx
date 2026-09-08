@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { statAccent, STATUS_ACCENTS } from "@/lib/accents";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -164,7 +165,7 @@ const RoundTableBookings = ({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-stat-indigo">
+            <p className={`text-2xl font-bold ${statAccent(0).icon}`}>
               {bookings.length}
             </p>
             <p className="text-xs text-muted-foreground">Total Bookings</p>
@@ -174,12 +175,12 @@ const RoundTableBookings = ({
           <CardContent className="p-4 text-center">
             {submittedCount > 0 ? (
               <>
-                <p className="text-2xl font-bold text-stat-amber">{submittedCount}</p>
+                <p className={`text-2xl font-bold ${STATUS_ACCENTS.warning.icon}`}>{submittedCount}</p>
                 <p className="text-xs text-muted-foreground font-medium">Awaiting Confirmation</p>
               </>
             ) : (
               <>
-                <p className="text-2xl font-bold text-stat-emerald">{confirmedCount}</p>
+                <p className={`text-2xl font-bold ${STATUS_ACCENTS.good.icon}`}>{confirmedCount}</p>
                 <p className="text-xs text-muted-foreground">Confirmed</p>
               </>
             )}
@@ -187,13 +188,13 @@ const RoundTableBookings = ({
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-stat-violet">{totalSeats}</p>
+            <p className={`text-2xl font-bold ${statAccent(2).icon}`}>{totalSeats}</p>
             <p className="text-xs text-muted-foreground">Seats Booked</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-stat-sky">
+            <p className={`text-2xl font-bold ${statAccent(5).icon}`}>
               {formatPrice(totalRevenue)}
             </p>
             <p className="text-xs text-muted-foreground">Revenue</p>

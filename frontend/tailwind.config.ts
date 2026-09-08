@@ -19,18 +19,6 @@ export default {
     },
     extend: {
       colors: {
-        // Accent palette for dashboard tiles / sidebar icons. Uses the
-        // <alpha-value> placeholder so the /10 tint syntax works.
-        stat: {
-          violet: "hsl(var(--stat-violet) / <alpha-value>)",
-          emerald: "hsl(var(--stat-emerald) / <alpha-value>)",
-          amber: "hsl(var(--stat-amber) / <alpha-value>)",
-          rose: "hsl(var(--stat-rose) / <alpha-value>)",
-          sky: "hsl(var(--stat-sky) / <alpha-value>)",
-          teal: "hsl(var(--stat-teal) / <alpha-value>)",
-          indigo: "hsl(var(--stat-indigo) / <alpha-value>)",
-          orange: "hsl(var(--stat-orange) / <alpha-value>)",
-        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

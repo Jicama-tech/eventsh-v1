@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { statAccent } from "@/lib/accents";
+import { statAccent, STATUS_ACCENTS } from "@/lib/accents";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -390,7 +390,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
             <CardTitle className="text-sm font-medium text-muted-foreground">{t("Total Events")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-stat-indigo">{stats.totalEvents}</div>
+            <div className={`text-3xl font-bold ${statAccent(0).icon}`}>{stats.totalEvents}</div>
           </CardContent>
         </Card>
         <Card className={`border-l-4 ${statAccent(1).ring}`}>
@@ -398,24 +398,24 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
             <CardTitle className="text-sm font-medium text-muted-foreground">{t("Total Speaker Requests")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-stat-sky">{stats.totalRequests}</div>
+            <div className={`text-3xl font-bold ${statAccent(1).icon}`}>{stats.totalRequests}</div>
             <p className="text-xs text-muted-foreground mt-1">{stats.pending} pending approval</p>
           </CardContent>
         </Card>
-        <Card className={`border-l-4 ${statAccent(2).ring}`}>
+        <Card className={`border-l-4 ${STATUS_ACCENTS.good.ring}`}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">{t("Confirmed Speakers")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-stat-emerald">{stats.confirmed}</div>
+            <div className={`text-3xl font-bold ${STATUS_ACCENTS.good.icon}`}>{stats.confirmed}</div>
           </CardContent>
         </Card>
-        <Card className={`border-l-4 ${statAccent(3).ring}`}>
+        <Card className={`border-l-4 ${STATUS_ACCENTS.warning.ring}`}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">{t("Pending Review")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-stat-amber">{stats.pending}</div>
+            <div className={`text-3xl font-bold ${STATUS_ACCENTS.warning.icon}`}>{stats.pending}</div>
           </CardContent>
         </Card>
       </div>

@@ -200,7 +200,9 @@ export default function IndividualAnalytics() {
                 <tile.icon className={`h-5 w-5 ${accent.icon}`} />
               </span>
               <div className="min-w-0">
-                <p className="text-xl font-bold leading-tight">{tile.value}</p>
+                <p className={`text-xl font-bold leading-tight ${accent.icon}`}>
+                  {tile.value}
+                </p>
                 <p className="truncate text-xs text-muted-foreground">
                   {tile.label}
                 </p>

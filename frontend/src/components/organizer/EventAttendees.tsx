@@ -2595,7 +2595,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-stat-indigo">{stats.totalEvents}</div>
+            <div className={`text-2xl font-bold ${statAccent(0).icon}`}>{stats.totalEvents}</div>
             <p className="text-xs text-muted-foreground">
               All your organized events
             </p>
@@ -2608,7 +2608,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-stat-rose">{stats.liveEvents}</div>
+            <div className={`text-2xl font-bold ${statAccent(1).icon}`}>{stats.liveEvents}</div>
             <p className="text-xs text-muted-foreground">
               Currently active events
             </p>
@@ -2621,7 +2621,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-stat-violet">{stats.totalAttendees}</div>
+            <div className={`text-2xl font-bold ${statAccent(2).icon}`}>{stats.totalAttendees}</div>
             <p className="text-xs text-muted-foreground">
               Visitors + exhibitors + speakers + round-table seats
             </p>
@@ -2634,7 +2634,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-stat-amber">{stats.todaysAttendees}</div>
+            <div className={`text-2xl font-bold ${statAccent(3).icon}`}>{stats.todaysAttendees}</div>
             <p className="text-xs text-muted-foreground">
               People attended today
             </p>
@@ -2893,7 +2893,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Tickets Sold
                       </div>
-                      <div className="text-2xl font-bold text-stat-sky">
+                      <div className={`text-2xl font-bold ${statAccent(0).icon}`}>
                         {totalTicketsSold}
                       </div>
                     </div>
@@ -2901,7 +2901,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Attended
                       </div>
-                      <div className="text-2xl font-bold text-stat-emerald">
+                      <div className={`text-2xl font-bold ${statAccent(1).icon}`}>
                         {totalAttended}
                       </div>
                     </div>
@@ -2909,7 +2909,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Revenue
                       </div>
-                      <div className="text-2xl font-bold text-stat-teal">
+                      <div className={`text-2xl font-bold ${statAccent(2).icon}`}>
                         {formatPrice(totalRevenue)}
                       </div>
                     </div>

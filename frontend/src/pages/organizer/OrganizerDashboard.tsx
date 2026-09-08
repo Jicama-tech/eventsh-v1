@@ -70,6 +70,7 @@ import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useNavigate } from "react-router-dom";
 import { t } from "@/i18n/t";
 import { EventTypeChooser } from "@/components/organizer/EventTypeChooser";
+import { STAT_ACCENTS } from "@/lib/accents";
 import {
   accountRoles,
   isIndividualAccount,
@@ -1133,21 +1134,21 @@ export function OrganizerDashboard({
    * primary fill behind it, and a coloured glyph on that would fight it.
    */
   const NAV_ACCENTS: Record<string, string> = {
-    dashboard: "text-stat-indigo",
-    kiosk: "text-stat-amber",
-    eventAttendees: "text-stat-violet",
-    platformFees: "text-stat-orange",
-    users: "text-stat-teal",
-    events: "text-stat-sky",
-    feedback: "text-stat-rose",
-    membership: "text-stat-amber",
-    support: "text-stat-emerald",
-    storefront: "text-stat-violet",
+    dashboard: STAT_ACCENTS[0].icon,
+    kiosk: STAT_ACCENTS[2].icon,
+    eventAttendees: STAT_ACCENTS[4].icon,
+    platformFees: STAT_ACCENTS[3].icon,
+    users: STAT_ACCENTS[5].icon,
+    events: STAT_ACCENTS[0].icon,
+    feedback: STAT_ACCENTS[3].icon,
+    membership: STAT_ACCENTS[2].icon,
+    support: STAT_ACCENTS[1].icon,
+    storefront: STAT_ACCENTS[4].icon,
     settings: "text-muted-foreground",
-    "guest-list": "text-stat-rose",
-    "email-settings": "text-stat-teal",
-    help: "text-stat-emerald",
-    "become-organizer": "text-stat-orange",
+    "guest-list": STAT_ACCENTS[3].icon,
+    "email-settings": STAT_ACCENTS[5].icon,
+    help: STAT_ACCENTS[1].icon,
+    "become-organizer": STAT_ACCENTS[3].icon,
   };
 
   const individualNavItems = INDIVIDUAL_NAV_ITEMS.map((item) => ({
