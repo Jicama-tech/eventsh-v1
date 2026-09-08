@@ -63,6 +63,7 @@ import {
   Trash2,
   Pencil,
   RotateCcw,
+  Send,
 } from "lucide-react";
 import {
   FaFacebook,
@@ -354,8 +355,70 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   >("latest");
   const [attendanceTimeSort, setAttendanceTimeSort] = useState<
     "none" | "latest" | "oldest"
-  >("latest");
-  const [stalls, setStalls] = useState<any[]>([]);
+  >("latest");const [stalls, setStalls] = useState<any[]>([]);
+  // --- Bulk ticket send (Exhibitors tab) -------------------------------
+  // Re-sends the stall ticket to every confirmed exhibitor on this event,
+  // with an organizer-written note and a countdown the server adds.
+  const [bulkSendOpen, setBulkSendOpen] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState("");
+  const [bulkSending, setBulkSending] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{
+    total: number;
+    sent: number;
+    skipped: { vendor?: string; reason: string }[];
+    failed: { vendor?: string; reason: string }[];
+  } | null>(null);
+
+  // Who will actually receive one. Mirrors the server's rule (Paid only, and
+  // an email on file) so the count in the dialog matches what happens.
+  const bulkRecipients = stalls.filter(
+    (st: any) =>
+      st?.paymentStatus === "Paid" &&
+      (st?.shopkeeperId?.email ||
+        st?.shopkeeperId?.companyEmail ||
+        st?.shopkeeperId?.vendorEmail),
+  );
+
+  const handleBulkSend = async () => {
+    if (!selectedEvent?._id) return;
+    setBulkSending(true);
+    setBulkResult(null);
+    try {
+      const token = sessionStorage.getItem("token");
+      const res = await fetch(`${apiURL}/stalls/bulk-send-tickets`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          eventId: selectedEvent._id,
+          message: bulkMessage.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.message || `Send failed (${res.status})`);
+      }
+      setBulkResult(data);
+      toast({
+        title: `Sent ${data.sent} of ${data.total}`,
+        description:
+          data.failed?.length || data.skipped?.length
+            ? "Some didn't go out — see the breakdown."
+            : "Every confirmed exhibitor has their ticket.",
+      });
+    } catch (e: any) {
+      toast({
+        title: "Bulk send failed",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setBulkSending(false);
+    }
+  };
+
   // New: speakers loaded for the currently-viewed event (one-shot fetch per dialog open)
   const [eventSpeakers, setEventSpeakers] = useState<any[]>([]);
   const [loadingSpeakers, setLoadingSpeakers] = useState(false);
@@ -3175,6 +3238,22 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                               Export to Excel
                             </Button>
                             )}
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setBulkResult(null);
+                                setBulkSendOpen(true);
+                              }}
+                              disabled={bulkRecipients.length === 0}
+                              title={
+                                bulkRecipients.length === 0
+                                  ? "No confirmed exhibitors with an email on file yet"
+                                  : "Re-send tickets to every confirmed exhibitor with your own message"
+                              }
+                            >
+                              <Send className="h-4 w-4 mr-1.5" />
+                              Bulk Send ({bulkRecipients.length})
+                            </Button>
                           </div>
                           {filteredStalls.length === 0 ? (
                             <div className="text-center py-8 text-muted-foreground">
@@ -4566,6 +4645,105 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
               </Card>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk ticket send — Exhibitors tab. The server decides who actually
+          qualifies (Paid, with an email); the count here mirrors that rule so
+          the organizer is not surprised by the result. */}
+      <Dialog open={bulkSendOpen} onOpenChange={setBulkSendOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Send tickets to all exhibitors</DialogTitle>
+            <DialogDescription>
+              {bulkRecipients.length} confirmed exhibitor
+              {bulkRecipients.length === 1 ? "" : "s"} will get their ticket
+              again, with a countdown to{" "}
+              {selectedEvent?.title || "the event"}.
+            </DialogDescription>
+          </DialogHeader>
+
+          {bulkResult ? (
+            <div className="space-y-3 text-sm">
+              <p className="font-medium">
+                Sent {bulkResult.sent} of {bulkResult.total}.
+              </p>
+              {bulkResult.skipped?.length > 0 && (
+                <div>
+                  <p className="text-muted-foreground">
+                    Skipped ({bulkResult.skipped.length}) — no email on file:
+                  </p>
+                  <ul className="mt-1 max-h-28 list-disc overflow-y-auto pl-5 text-xs text-muted-foreground">
+                    {bulkResult.skipped.map((r, i) => (
+                      <li key={i}>{r.vendor || "Unnamed vendor"}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {bulkResult.failed?.length > 0 && (
+                <div>
+                  <p className="text-red-600 dark:text-red-400">
+                    Failed ({bulkResult.failed.length}):
+                  </p>
+                  <ul className="mt-1 max-h-28 list-disc overflow-y-auto pl-5 text-xs text-red-600 dark:text-red-400">
+                    {bulkResult.failed.map((r, i) => (
+                      <li key={i}>
+                        {r.vendor || "Unnamed vendor"} — {r.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="bulk-message">
+                Your message <span className="text-muted-foreground">(optional)</span>
+              </label>
+              <Textarea
+                id="bulk-message"
+                value={bulkMessage}
+                onChange={(e) => setBulkMessage(e.target.value)}
+                rows={5}
+                maxLength={2000}
+                placeholder={
+                  "e.g. Doors open at 9am and setup starts the evening before." +
+                  "\n" +
+                  "Bring your ticket on your phone — we'll scan it at the gate."
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Shown above their booking details. The ticket PDF and the
+                "days to go" line are added automatically — leave this blank to
+                send just those.
+              </p>
+            </div>
+          )}
+
+          <DialogFooter>
+            {bulkResult ? (
+              <Button onClick={() => setBulkSendOpen(false)}>Done</Button>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setBulkSendOpen(false)}
+                  disabled={bulkSending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleBulkSend}
+                  disabled={bulkSending || bulkRecipients.length === 0}
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  {bulkSending
+                    ? `Sending to ${bulkRecipients.length}…`
+                    : `Send to ${bulkRecipients.length}`}
+                </Button>
+              </>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
