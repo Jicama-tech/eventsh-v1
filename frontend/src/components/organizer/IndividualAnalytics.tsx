@@ -75,8 +75,11 @@ export default function IndividualAnalytics() {
         const data = await res.json();
         if (cancelled) return;
         setEvents(Array.isArray(data?.events) ? data.events : []);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message || "Could not load your analytics");
+      } catch (e) {
+        if (!cancelled)
+          setError(
+            e instanceof Error ? e.message : "Could not load your analytics",
+          );
       } finally {
         if (!cancelled) setLoading(false);
       }

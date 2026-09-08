@@ -28,7 +28,9 @@ export function accountRoles(): string[] {
   try {
     const token = sessionStorage.getItem("token");
     if (!token) return [];
-    const decoded: any = jwtDecode(token);
+    // Typed narrowly rather than `any`: only `roles` is read, and it is
+    // still checked at runtime because the token is not ours to trust.
+    const decoded = jwtDecode<{ roles?: unknown }>(token);
     return Array.isArray(decoded?.roles) ? (decoded.roles as string[]) : [];
   } catch {
     return [];
