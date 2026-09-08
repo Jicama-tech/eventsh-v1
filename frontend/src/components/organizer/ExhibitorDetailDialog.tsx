@@ -539,6 +539,41 @@ export function ExhibitorDetailDialog({
     );
   })();
   const [waMessage, setWaMessage] = useState("");
+  /**
+   * The ticket PDF, fetched as soon as the dialog opens.
+   *
+   * This has to be ready BEFORE the click: navigator.share and window.open
+   * both require transient user activation, and awaiting a fetch inside the
+   * handler spends it — which is why the share never fired and the popup was
+   * blocked. Prefetching means the click itself does no awaiting at all.
+   */
+  const [waPdf, setWaPdf] = useState<File | null>(null);
+  const [waPdfError, setWaPdfError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!resendOpen || !stallRequest?._id) return;
+    let cancelled = false;
+    setWaPdf(null);
+    setWaPdfError(null);
+    (async () => {
+      try {
+        const res = await fetch(
+          `${apiURL}/stalls/download-stall-ticket/${stallRequest._id}`,
+        );
+        if (!res.ok) throw new Error(`Ticket not available (${res.status})`);
+        const blob = await res.blob();
+        if (cancelled) return;
+        setWaPdf(
+          new File([blob], "stall-ticket.pdf", { type: "application/pdf" }),
+        );
+      } catch (e: any) {
+        if (!cancelled) setWaPdfError(e?.message || "Couldn't load the ticket");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [resendOpen, stallRequest?._id]);
 
   /**
    * Hand the ticket to WhatsApp from the organizer's own number.
@@ -555,7 +590,24 @@ export function ExhibitorDetailDialog({
    *     downloaded alongside for the organizer to attach, and the message
    *     carries a download link so the vendor can get it either way.
    */
-  const openWhatsAppWithTicket = async () => {
+  /**
+   * Hand the ticket to WhatsApp from the organizer's own number.
+   *
+   * SYNCHRONOUS on purpose — no `await` before share/open. Both APIs need
+   * transient user activation, and awaiting inside the handler spends it,
+   * which silently blocked the share and the popup. The PDF is already in
+   * `waPdf` from the prefetch above.
+   *
+   * Two routes, because the platform only allows one of them everywhere:
+   *   1. navigator.share with the file — the only way a file is genuinely
+   *      attached. Works where the OS share sheet exposes WhatsApp (Android,
+   *      iOS, and Chrome on Windows with the WhatsApp app installed).
+   *   2. wa.me — click-to-chat takes prefilled TEXT ONLY. No parameter
+   *      attaches a file and none can be added from our side, so the PDF is
+   *      downloaded for a one-tap attach and a download link goes in the
+   *      message.
+   */
+  const openWhatsAppWithTicket = () => {
     const digits = String(vendorWa || "").replace(/[^0-9]/g, "");
     if (!digits) {
       toast({
@@ -570,34 +622,34 @@ export function ExhibitorDetailDialog({
     const text = `${waMessage || defaultWaMessage}
 
 ${ticketUrl}`;
+    const nav = navigator as any;
 
-    // Try to hand WhatsApp the actual file first.
-    try {
-      const res = await fetch(ticketUrl);
-      if (res.ok) {
-        const blob = await res.blob();
-        const file = new File([blob], "stall-ticket.pdf", {
-          type: "application/pdf",
+    // 1. Real attachment, if this device can do it.
+    if (waPdf && nav.canShare?.({ files: [waPdf] })) {
+      nav
+        .share({ files: [waPdf], text })
+        .catch(() => {
+          // Cancelled or refused — fall back to the chat so the action is
+          // never a dead end.
+          window.open(
+            `https://wa.me/${digits}?text=${encodeURIComponent(text)}`,
+            "_blank",
+            "noopener,noreferrer",
+          );
         });
-        const nav = navigator as any;
-        if (nav.canShare?.({ files: [file] })) {
-          await nav.share({ files: [file], text });
-          return;
-        }
-        // No share support: save the PDF so it is one tap to attach, then
-        // open the chat with the text already written.
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `stall-ticket-${stallRequest._id}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 10000);
-      }
-    } catch {
-      // Ticket fetch failed — still open the chat; the link in the message
-      // is the fallback path for the vendor.
+      return;
+    }
+
+    // 2. Save the PDF, then open the chat. Both still inside the gesture.
+    if (waPdf) {
+      const url = URL.createObjectURL(waPdf);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `stall-ticket-${stallRequest._id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
     }
     window.open(
       `https://wa.me/${digits}?text=${encodeURIComponent(text)}`,
@@ -610,23 +662,27 @@ ${ticketUrl}`;
     if (!stallRequest?._id) return;
     if (!sendEmail && !sendWhatsApp) return;
     setIsResending(true);
-    try {
-      if (!sendEmail) {
-        // WhatsApp only — nothing to send server-side.
-        setResendOpen(false);
-        await openWhatsAppWithTicket();
-        return;
-      }
-      const token = sessionStorage.getItem("token");
-      const res = await fetch(
-        `${apiURL}/stalls/${stallRequest._id}/resend-ticket`,
-        {
+
+    // Start the email but do NOT await it yet. Awaiting here would spend the
+    // click's user activation, and WhatsApp needs it — that is what stopped
+    // the share firing when both channels were ticked. The email result is
+    // still reported below, it just lands a moment later.
+    const token = sessionStorage.getItem("token");
+    const emailReq = sendEmail
+      ? fetch(`${apiURL}/stalls/${stallRequest._id}/resend-ticket`, {
           method: "POST",
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        },
-      );
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        })
+      : null;
+
+    if (sendWhatsApp) {
+      setResendOpen(false);
+      openWhatsAppWithTicket();
+    }
+
+    try {
+      if (!emailReq) return;
+      const res = await emailReq;
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(body?.message || `Resend failed (${res.status})`);
@@ -637,9 +693,6 @@ ${ticketUrl}`;
         description: body?.message || "The stall ticket email was sent.",
       });
       setResendOpen(false);
-      // Only after the email is confirmed, so a mail failure is seen rather
-      // than lost behind a tab switch.
-      if (sendWhatsApp) await openWhatsAppWithTicket();
     } catch (err: any) {
       toast({
         duration: 8000,
@@ -2457,12 +2510,24 @@ ${ticketUrl}`;
                   link carries text only. On a phone the share sheet can take
                   the file itself; on desktop it cannot, so we download it and
                   put a link in the message. */}
-              <p className="rounded-md border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-2 text-xs text-amber-800 dark:text-amber-300">
-                On a phone the ticket is attached for you via the share sheet.
-                On desktop WhatsApp Web only accepts text, so the PDF
-                downloads and you attach it in one tap — the message also
-                carries a download link either way.
-              </p>
+              {waPdfError ? (
+                <p className="rounded-md border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-2.5 py-2 text-xs text-rose-700 dark:text-rose-300">
+                  The ticket PDF couldn't be loaded ({waPdfError}), so nothing
+                  can be attached. The chat will still open with a download
+                  link in the message.
+                </p>
+              ) : !waPdf ? (
+                <p className="px-0.5 text-xs text-muted-foreground">
+                  Preparing the ticket…
+                </p>
+              ) : (
+                <p className="rounded-md border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-2 text-xs text-amber-800 dark:text-amber-300">
+                  Ticket ready. Where your device offers a share sheet with
+                  WhatsApp, it goes across attached. Otherwise WhatsApp Web
+                  takes text only, so the PDF downloads for a one-tap attach
+                  and the message carries a download link.
+                </p>
+              )}
             </div>
           )}
         </div>
