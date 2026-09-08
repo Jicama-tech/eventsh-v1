@@ -229,6 +229,11 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
   // `customers` gates the Visitors directory — the customer side of the CRM,
   // as distinct from the exhibitor/vendor side gated by stalls.exhibitors.
   const canCrmCustomers = isModuleSectionEnabled("crm", "customers");
+  // Supplier directory is its own plan feature.
+  const canSupplierDirectory = isModuleSectionEnabled(
+    "suppliers",
+    "directory",
+  );
   const [visitors, setVisitors] = useState<ProcessedVisitor[]>([]);
   const [exhibitors, setExhibitors] = useState<ProcessedExhibitor[]>([]);
   const [events, setEvents] = useState<EventInfo[]>([]);
@@ -1084,7 +1089,9 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
             )}
             <TabsTrigger value="exhibitors">{t("Exhibitors")}</TabsTrigger>
             <TabsTrigger value="speakers">{t("Speakers")}</TabsTrigger>
-            <TabsTrigger value="suppliers">{t("Suppliers")}</TabsTrigger>
+            {canSupplierDirectory && (
+              <TabsTrigger value="suppliers">{t("Suppliers")}</TabsTrigger>
+            )}
             <TabsTrigger value="sponsors">{t("Sponsors")}</TabsTrigger>
           </TabsList>
 

@@ -199,7 +199,14 @@ const MyEvents: React.FC = () => {
   const [expensesForEvent, setExpensesForEvent] = useState<Event | null>(null);
   const [regFormsForEvent, setRegFormsForEvent] = useState<Event | null>(null);
 
-  const { getModuleLimit } = useSubscription();
+  const { getModuleLimit, isModuleEnabled, isModuleSectionEnabled } =
+    useSubscription();
+  // Both are plan features now, so their entry points disappear when the tier
+  // does not include them rather than opening a screen the plan does not buy.
+  const canExpenses = isModuleEnabled("expenses");
+  const canSuppliers =
+    isModuleEnabled("suppliers") &&
+    isModuleSectionEnabled("suppliers", "requests");
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1434,6 +1441,7 @@ const MyEvents: React.FC = () => {
                         </Button>
                         {/* Requirements + quotations for this event, in place
                             — no need to leave for a separate Suppliers tab. */}
+                        {canSuppliers && (
                         <Button
                           variant="buttonOutline"
                           size="icon"
@@ -1442,15 +1450,18 @@ const MyEvents: React.FC = () => {
                         >
                           <Truck size={16} />
                         </Button>
+                        )}
                         {/* Out-of-pocket spend, with its approval cycle. */}
-                        <Button
-                          variant="buttonOutline"
-                          size="icon"
-                          onClick={() => setExpensesForEvent(event)}
-                          title="Expenses — log expenses and approve what the team has submitted"
-                        >
-                          <Receipt size={16} />
-                        </Button>
+                        {canExpenses && (
+                          <Button
+                            variant="buttonOutline"
+                            size="icon"
+                            onClick={() => setExpensesForEvent(event)}
+                            title="Expenses — log expenses and approve what the team has submitted"
+                          >
+                            <Receipt size={16} />
+                          </Button>
+                        )}
                         {(event.features?.hasStalls ||
                           event.features?.hasSpeakers ||
                           event.features?.hasRoundTables ||

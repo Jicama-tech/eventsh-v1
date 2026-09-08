@@ -159,6 +159,18 @@ const FEEDBACK_SECTIONS = [{ key: "list", label: "Feedback List" }];
 
 // "Scanner Permissions" was removed: an operator's scanner access is the
 // per-operator `accessTabs` the organizer sets on each record, not a plan tier.
+// Both of these gate real screens — see the ModuleGates in MyEvents (expense
+// + supplies buttons) and MyUsers (Suppliers tab).
+const EXPENSE_SECTIONS = [
+  { key: "log", label: "Log Expenses" },
+  { key: "approvals", label: "Approve / Reject" },
+];
+
+const SUPPLIER_SECTIONS = [
+  { key: "directory", label: "Supplier Directory" },
+  { key: "requests", label: "Quotations / Requests" },
+];
+
 const OPERATOR_SECTIONS = [
   { key: "list", label: "Operator List" },
   { key: "create", label: "Create Operator" },
@@ -273,6 +285,18 @@ const ORGANIZER_FEATURE_MODULES: {
   // saw them on every tier regardless of what the plan said.
   { key: "platformFees", label: "Platform Fees", icon: Receipt },
   { key: "support", label: "Support", icon: LifeBuoy },
+  {
+    key: "expenses",
+    label: "Expense Management",
+    icon: Receipt,
+    sections: EXPENSE_SECTIONS,
+  },
+  {
+    key: "suppliers",
+    label: "Supplier Management",
+    icon: Store,
+    sections: SUPPLIER_SECTIONS,
+  },
 ];
 
 interface ModuleConfig {
