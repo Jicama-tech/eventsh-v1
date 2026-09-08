@@ -186,7 +186,7 @@ const ORGANIZER_FEATURE_MODULES: {
 }[] = [
   {
     key: "events",
-    label: "Events",
+    label: "Event Management",
     hasLimit: true,
     icon: Calendar,
     sections: EVENT_TAB_SECTIONS,
@@ -194,17 +194,17 @@ const ORGANIZER_FEATURE_MODULES: {
   // No sub-sections: the tickets module is all-or-nothing today. The old
   // online/walk-in/QR/refunds toggles named features that do not exist in
   // TicketSalesManagement, so they saved into the plan and gated nothing.
-  { key: "tickets", label: "Tickets", icon: DollarSign },
+  { key: "tickets", label: "Ticket Management", icon: DollarSign },
   {
     key: "stalls",
-    label: "Stalls",
+    label: "Stall Management",
     hasLimit: true,
     icon: Store,
     sections: STALLS_SECTIONS,
   },
   {
     key: "participants",
-    label: "Participants",
+    label: "Participant Management",
     icon: Users,
     sections: PARTICIPANTS_SECTIONS,
   },
@@ -216,37 +216,37 @@ const ORGANIZER_FEATURE_MODULES: {
   },
   {
     key: "speakerRequests",
-    label: "Speaker Requests",
+    label: "Speaker Management",
     icon: Users,
     sections: SPEAKER_SECTIONS,
   },
   {
     key: "roundTableBookings",
-    label: "Round Table Bookings",
+    label: "Round Table Management",
     icon: Calendar,
     sections: ROUND_TABLE_SECTIONS,
   },
-  { key: "razorpay", label: "Razorpay", icon: DollarSign },
+  { key: "razorpay", label: "Razorpay Payments", icon: DollarSign },
   {
     key: "coupons",
-    label: "Coupons",
+    label: "Coupon Management",
     icon: Star,
     sections: COUPONS_SECTIONS,
   },
   {
     key: "storefront",
-    label: "Storefront",
+    label: "Storefront Management",
     icon: Store,
     sections: STOREFRONT_SECTIONS,
   },
   { key: "customDomain", label: "Custom Domain", icon: Settings },
   {
     key: "analytics",
-    label: "Analytics",
+    label: "Analytics & Reports",
     icon: BarChart3,
     sections: ANALYTICS_SECTIONS,
   },
-  { key: "crm", label: "CRM", icon: Users, sections: CRM_SECTIONS },
+  { key: "crm", label: "Customer Management (CRM)", icon: Users, sections: CRM_SECTIONS },
   {
     key: "feedback",
     label: "Feedback Management",
@@ -261,12 +261,12 @@ const ORGANIZER_FEATURE_MODULES: {
     // card in Settings and can send all vendor/attendee emails from their
     // own address instead of admin@eventsh.com.
     key: "customEmail",
-    label: "Customize Email (own sender)",
+    label: "Custom Sender Email",
     icon: MailIcon,
   },
   {
     key: "operators",
-    label: "Operators",
+    label: "Operator Management",
     hasLimit: true,
     icon: Users,
     sections: OPERATOR_SECTIONS,
@@ -277,14 +277,14 @@ const ORGANIZER_FEATURE_MODULES: {
     // inbox. `limit` caps how many distinct tiers (Gold/Silver/Bronze)
     // the organizer can author — leave 0 for unlimited.
     key: "membership",
-    label: "Exhibitor Membership",
+    label: "Membership Management",
     hasLimit: true,
     icon: Award,
   },
   // The last two sidebar tabs that had no plan control at all — an organizer
   // saw them on every tier regardless of what the plan said.
   { key: "platformFees", label: "Platform Fees", icon: Receipt },
-  { key: "support", label: "Support", icon: LifeBuoy },
+  { key: "support", label: "Support Desk", icon: LifeBuoy },
   {
     key: "expenses",
     label: "Expense Management",
