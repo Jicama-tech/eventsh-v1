@@ -249,7 +249,7 @@ const ORGANIZER_FEATURE_MODULES: {
   { key: "crm", label: "CRM", icon: Users, sections: CRM_SECTIONS },
   {
     key: "feedback",
-    label: "Feedback",
+    label: "Feedback Management",
     hasAudiences: true,
     icon: MessageSquare,
     sections: FEEDBACK_SECTIONS,
