@@ -510,11 +510,113 @@ export function ExhibitorDetailDialog({
   // email and surfaces the real failure if the mail server rejects it.
   const canManage = !!onConfirmPayment || !!onReturnDeposit;
   const [isResending, setIsResending] = useState(false);
+  const [resendOpen, setResendOpen] = useState(false);
+  const [sendEmail, setSendEmail] = useState(true);
+  const [sendWhatsApp, setSendWhatsApp] = useState(false);
+  const vendorWa =
+    stallRequest?.shopkeeperId?.whatsappNumber ||
+    (stallRequest?.shopkeeperId as any)?.whatsAppNumber ||
+    "";
+
+  /**
+   * Starter text for the WhatsApp chat. Editable — it lands in the compose
+   * box, not in a sent message, so the organizer always gets the last word.
+   */
+  const defaultWaMessage = (() => {
+    const vendor =
+      stallRequest?.shopkeeperId?.name ||
+      (stallRequest?.shopkeeperId as any)?.brandName ||
+      "there";
+    const title = (stallRequest as any)?.eventId?.title || "the event";
+    return (
+      `Hi ${vendor}, here's your stall ticket for ${title}.
+
+` +
+      `Please keep it handy — we'll scan the QR at the entrance.
+
+` +
+      `See you there!`
+    );
+  })();
+  const [waMessage, setWaMessage] = useState("");
+
+  /**
+   * Hand the ticket to WhatsApp from the organizer's own number.
+   *
+   * Two routes, because the web platform only allows one of them everywhere:
+   *
+   *  1. Web Share (mobile): navigator.share can carry the actual PDF, so the
+   *     organizer picks WhatsApp from the share sheet and the file is already
+   *     attached. This is the "attached automatically" case.
+   *  2. wa.me deep link (desktop, and anywhere share is unavailable): the
+   *     click-to-chat API accepts prefilled TEXT ONLY — there is no parameter
+   *     that attaches a file, and none can be added from our side. So the
+   *     chat opens on the vendor's number with the message ready, the PDF is
+   *     downloaded alongside for the organizer to attach, and the message
+   *     carries a download link so the vendor can get it either way.
+   */
+  const openWhatsAppWithTicket = async () => {
+    const digits = String(vendorWa || "").replace(/[^0-9]/g, "");
+    if (!digits) {
+      toast({
+        duration: 6000,
+        title: "No WhatsApp number",
+        description: "This vendor has no WhatsApp number on file.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const ticketUrl = `${apiURL}/stalls/download-stall-ticket/${stallRequest._id}`;
+    const text = `${waMessage || defaultWaMessage}
+
+${ticketUrl}`;
+
+    // Try to hand WhatsApp the actual file first.
+    try {
+      const res = await fetch(ticketUrl);
+      if (res.ok) {
+        const blob = await res.blob();
+        const file = new File([blob], "stall-ticket.pdf", {
+          type: "application/pdf",
+        });
+        const nav = navigator as any;
+        if (nav.canShare?.({ files: [file] })) {
+          await nav.share({ files: [file], text });
+          return;
+        }
+        // No share support: save the PDF so it is one tap to attach, then
+        // open the chat with the text already written.
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `stall-ticket-${stallRequest._id}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      }
+    } catch {
+      // Ticket fetch failed — still open the chat; the link in the message
+      // is the fallback path for the vendor.
+    }
+    window.open(
+      `https://wa.me/${digits}?text=${encodeURIComponent(text)}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  };
 
   const handleResendTicket = async () => {
     if (!stallRequest?._id) return;
+    if (!sendEmail && !sendWhatsApp) return;
     setIsResending(true);
     try {
+      if (!sendEmail) {
+        // WhatsApp only — nothing to send server-side.
+        setResendOpen(false);
+        await openWhatsAppWithTicket();
+        return;
+      }
       const token = sessionStorage.getItem("token");
       const res = await fetch(
         `${apiURL}/stalls/${stallRequest._id}/resend-ticket`,
@@ -534,6 +636,10 @@ export function ExhibitorDetailDialog({
         title: "Ticket re-sent",
         description: body?.message || "The stall ticket email was sent.",
       });
+      setResendOpen(false);
+      // Only after the email is confirmed, so a mail failure is seen rather
+      // than lost behind a tab switch.
+      if (sendWhatsApp) await openWhatsAppWithTicket();
     } catch (err: any) {
       toast({
         duration: 8000,
@@ -930,7 +1036,12 @@ export function ExhibitorDetailDialog({
                         <Button
                           size="sm"
                           variant="buttonOutline"
-                          onClick={handleResendTicket}
+                          onClick={() => {
+                            setWaMessage(defaultWaMessage);
+                            setSendEmail(true);
+                            setSendWhatsApp(!!vendorWa);
+                            setResendOpen(true);
+                          }}
                           disabled={isResending}
                           className="h-8"
                         >
@@ -2277,6 +2388,111 @@ export function ExhibitorDetailDialog({
               </>
             ) : (
               "Extend & notify vendor"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Resend ticket — pick the channel(s). */}
+    <Dialog open={resendOpen} onOpenChange={setResendOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Resend ticket</DialogTitle>
+          <DialogDescription>
+            Choose how this vendor should get their ticket. You can pick both.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <label className="flex items-start gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              checked={sendEmail}
+              onChange={(e) => setSendEmail(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-primary"
+            />
+            <span>
+              <span className="font-medium">Email</span>
+              <span className="block text-xs text-muted-foreground">
+                Sends the ticket PDF from the platform, as before.
+              </span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              checked={sendWhatsApp}
+              disabled={!vendorWa}
+              onChange={(e) => setSendWhatsApp(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-primary disabled:opacity-50"
+            />
+            <span>
+              <span
+                className={`font-medium ${!vendorWa ? "text-muted-foreground" : ""}`}
+              >
+                WhatsApp — from your own number
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                {vendorWa
+                  ? `Opens a chat with ${vendorWa} so you send it yourself.`
+                  : "This vendor has no WhatsApp number on file."}
+              </span>
+            </span>
+          </label>
+
+          {sendWhatsApp && vendorWa && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="wa-message">
+                Message
+              </label>
+              <Textarea
+                id="wa-message"
+                rows={5}
+                value={waMessage}
+                onChange={(e) => setWaMessage(e.target.value)}
+              />
+              {/* Being straight about the attachment: WhatsApp's click-to-chat
+                  link carries text only. On a phone the share sheet can take
+                  the file itself; on desktop it cannot, so we download it and
+                  put a link in the message. */}
+              <p className="rounded-md border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-2 text-xs text-amber-800 dark:text-amber-300">
+                On a phone the ticket is attached for you via the share sheet.
+                On desktop WhatsApp Web only accepts text, so the PDF
+                downloads and you attach it in one tap — the message also
+                carries a download link either way.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => setResendOpen(false)}
+            disabled={isResending}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleResendTicket}
+            disabled={isResending || (!sendEmail && !sendWhatsApp)}
+          >
+            {isResending ? (
+              <>
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                Sending…
+              </>
+            ) : (
+              <>
+                <Send className="mr-1.5 h-4 w-4" />
+                {sendEmail && sendWhatsApp
+                  ? "Email + open WhatsApp"
+                  : sendEmail
+                    ? "Send email"
+                    : "Open WhatsApp"}
+              </>
             )}
           </Button>
         </DialogFooter>
