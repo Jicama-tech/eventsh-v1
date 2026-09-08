@@ -1258,7 +1258,15 @@ export function OrganizerDashboard({
                   button was a pixel wider than the rail — most visible
                   collapsed, where the rail is only 4rem. The nav should
                   never scroll sideways, so say so. */}
-              <nav className="p-3 sm:p-4 space-y-1 sm:space-y-2 flex-1 overflow-y-auto overflow-x-hidden">
+              <nav
+                className={`space-y-1 sm:space-y-2 flex-1 overflow-y-auto overflow-x-hidden ${
+                  // Collapsed the rail is 4rem. sm:p-4 leaves 32px inside
+                  // it, the button's own px takes 16 and its border 2 —
+                  // so a 16px icon did not fit and got shaved. Tighten
+                  // the padding at the width where it actually matters.
+                  sidebarCollapsed ? "p-3 sm:p-4 lg:p-2" : "p-3 sm:p-4"
+                }`}
+              >
                 <TooltipProvider delayDuration={0}>
                   {sidebarItems
                     .filter(
@@ -1278,7 +1286,7 @@ export function OrganizerDashboard({
                           }
                           className={`w-full text-sm ${
                             sidebarCollapsed
-                              ? "lg:justify-center lg:px-2 justify-start"
+                              ? "lg:justify-center lg:px-0 justify-start"
                               : "justify-start"
                           } ${locked ? "opacity-60" : ""}`}
                           onClick={() => {
