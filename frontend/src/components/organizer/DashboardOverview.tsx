@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { statAccent } from "@/lib/accents";
 import { useSubscription } from "@/hooks/useSubscription";
 import { ModuleGate } from "@/components/ui/ModuleGate";
 import { Button } from "@/components/ui/button";
@@ -62,19 +63,10 @@ const STAT_ICONS = {
 };
 
 /**
- * One accent per metric, so a tile is identifiable by colour before you read
- * it. Drawn from the --stat-* tokens rather than raw Tailwind hues, so each
- * one has a dark-mode value and none of this needs a `dark:` variant.
+ * Tile accents come from lib/accents (shared with kioscart-v1). Assigned by
+ * the tile's own index, never by rank, so a card keeps its colour when a
+ * sibling is added or hidden.
  */
-const STAT_ACCENTS: Record<string, { text: string; chip: string }> = {
-  "Total Events": { text: "text-stat-indigo", chip: "bg-stat-indigo/10" },
-  "Total Attendees": { text: "text-stat-violet", chip: "bg-stat-violet/10" },
-  "Total Tickets Sold": { text: "text-stat-sky", chip: "bg-stat-sky/10" },
-  "Total Stalls Booked": { text: "text-stat-teal", chip: "bg-stat-teal/10" },
-  "Tickets Sold Today": { text: "text-stat-amber", chip: "bg-stat-amber/10" },
-  "Total Revenue": { text: "text-stat-emerald", chip: "bg-stat-emerald/10" },
-};
-const DEFAULT_ACCENT = { text: "text-stat-sky", chip: "bg-stat-sky/10" };
 
 /**
  * Calculates metrics (tickets sold, revenue, etc.) for a single event based on ticket and stall data.
@@ -1414,11 +1406,11 @@ export default function DashboardOverview({
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4 sm:gap-6">
         {stats.map((stat, index) => {
           const Icon = STAT_ICONS[stat.title] || CalendarDays;
-          const accent = STAT_ACCENTS[stat.title] || DEFAULT_ACCENT;
+          const accent = statAccent(index);
           return (
             <Card
               key={index}
-              className="transition-all hover:bg-muted dark:hover:bg-gray-800"
+              className={`border-l-4 ${accent.ring} transition-all hover:bg-muted dark:hover:bg-gray-800`}
             >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 {/* stat.title stays English in the array: it doubles as the
@@ -1430,7 +1422,7 @@ export default function DashboardOverview({
                 <span
                   className={`flex h-8 w-8 items-center justify-center rounded-lg ${accent.chip}`}
                 >
-                  <Icon className={`h-4 w-4 ${accent.text}`} />
+                  <Icon className={`h-4 w-4 ${accent.icon}`} />
                 </span>
               </CardHeader>
               <CardContent>

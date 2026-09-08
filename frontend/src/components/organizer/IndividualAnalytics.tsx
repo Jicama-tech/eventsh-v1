@@ -13,6 +13,7 @@
 // events, how many people are coming, and how full each event is.
 
 import { useEffect, useMemo, useState } from "react";
+import { statAccent } from "@/lib/accents";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   BarChart3,
@@ -144,33 +145,23 @@ export default function IndividualAnalytics() {
 
   // One accent per tile, from the shared --stat-* palette, so the row reads
   // as distinct metrics rather than five identical blue chips.
-  const tiles: Array<{
-    label: string;
-    value: string;
-    icon: typeof Users;
-    text: string;
-    chip: string;
-  }> = [
+  // Colours come from lib/accents by tile index — same palette the organizer
+  // dashboard uses, so the two analytics pages read as one product.
+  const tiles: Array<{ label: string; value: string; icon: typeof Users }> = [
     {
       label: t("Events"),
       value: String(stats.total),
       icon: CalendarCheck,
-      text: "text-stat-indigo",
-      chip: "bg-stat-indigo/10",
     },
     {
       label: t("Upcoming"),
       value: String(stats.upcoming),
       icon: CalendarClock,
-      text: "text-stat-amber",
-      chip: "bg-stat-amber/10",
     },
     {
       label: t("People coming"),
       value: String(stats.attendees),
       icon: Users,
-      text: "text-stat-violet",
-      chip: "bg-stat-violet/10",
     },
   ];
   if (stats.fill !== null) {
@@ -178,8 +169,6 @@ export default function IndividualAnalytics() {
       label: t("Capacity filled"),
       value: `${stats.fill}%`,
       icon: BarChart3,
-      text: "text-stat-teal",
-      chip: "bg-stat-teal/10",
     });
   }
   if (stats.revenue > 0) {
@@ -187,8 +176,6 @@ export default function IndividualAnalytics() {
       label: t("Revenue"),
       value: `${stats.currency}${stats.revenue.toLocaleString()}`,
       icon: BarChart3,
-      text: "text-stat-emerald",
-      chip: "bg-stat-emerald/10",
     });
   }
 
@@ -202,13 +189,15 @@ export default function IndividualAnalytics() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        {tiles.map((tile) => (
-          <Card key={tile.label}>
+        {tiles.map((tile, i) => {
+          const accent = statAccent(i);
+          return (
+          <Card key={tile.label} className={`border-l-4 ${accent.ring}`}>
             <CardContent className="flex items-center gap-3 p-4">
               <span
-                className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg ${tile.chip}`}
+                className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg ${accent.chip}`}
               >
-                <tile.icon className={`h-5 w-5 ${tile.text}`} />
+                <tile.icon className={`h-5 w-5 ${accent.icon}`} />
               </span>
               <div className="min-w-0">
                 <p className="text-xl font-bold leading-tight">{tile.value}</p>
@@ -218,7 +207,8 @@ export default function IndividualAnalytics() {
               </div>
             </CardContent>
           </Card>
-        ))}
+          );
+        })}
       </div>
 
       <Card>

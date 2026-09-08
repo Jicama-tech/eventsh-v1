@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { statAccent } from "@/lib/accents";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -384,7 +385,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
     <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
+        <Card className={`border-l-4 ${statAccent(0).ring}`}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">{t("Total Events")}</CardTitle>
           </CardHeader>
@@ -392,7 +393,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
             <div className="text-3xl font-bold text-stat-indigo">{stats.totalEvents}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={`border-l-4 ${statAccent(1).ring}`}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">{t("Total Speaker Requests")}</CardTitle>
           </CardHeader>
@@ -401,7 +402,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
             <p className="text-xs text-muted-foreground mt-1">{stats.pending} pending approval</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={`border-l-4 ${statAccent(2).ring}`}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">{t("Confirmed Speakers")}</CardTitle>
           </CardHeader>
@@ -409,7 +410,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
             <div className="text-3xl font-bold text-stat-emerald">{stats.confirmed}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={`border-l-4 ${statAccent(3).ring}`}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">{t("Pending Review")}</CardTitle>
           </CardHeader>

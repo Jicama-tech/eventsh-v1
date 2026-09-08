@@ -1,6 +1,7 @@
 // File: src/components/DashboardTabs/EventAttendees.tsx
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { statAccent } from "@/lib/accents";
 import { useSubscription } from "@/hooks/useSubscription";
 import { ModuleGate } from "@/components/ui/ModuleGate";
 import EventRsvpPanel from "./EventRsvpPanel";
@@ -2588,7 +2589,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
+        <Card className={`border-l-4 ${statAccent(0).ring}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Total Events")}</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -2601,7 +2602,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={`border-l-4 ${statAccent(1).ring}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Live Events")}</CardTitle>
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
@@ -2614,7 +2615,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={`border-l-4 ${statAccent(2).ring}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Total Participants")}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
@@ -2627,7 +2628,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={`border-l-4 ${statAccent(3).ring}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Today's Attendees")}</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
