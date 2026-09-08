@@ -10845,6 +10845,12 @@ export function CreateEventForm({
     // eight toggle-backed sections are unreachable for them — the click lands
     // and this effect immediately throws them back to Basic Info.
     if (basicOnly) return;
+    // Same for a section the plan excludes. Those are forced into the rail on
+    // purpose (see FORM_SECTIONS) so the organizer can see what upgrading
+    // buys — and their feature toggle is typically off, which is exactly what
+    // this bounce keys on. Without this guard the click lands and is thrown
+    // straight back to Basic Info instead of showing the upgrade panel.
+    if (!isModuleSectionEnabled("events", currentTab)) return;
     const f = formData.features;
     const anyDoors = venueConfigurations.some(
       (v) => v.hasEntrance || v.hasExit || (v.customDoorTypes || []).length > 0,
@@ -10867,6 +10873,7 @@ export function CreateEventForm({
     if (hidden) setCurrentTab("basic");
   }, [
     basicOnly,
+    isModuleSectionEnabled,
     currentTab,
     formData.features.hasStalls,
     formData.features.hasSpeakers,
