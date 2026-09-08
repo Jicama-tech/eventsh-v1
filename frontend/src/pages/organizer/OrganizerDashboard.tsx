@@ -1124,6 +1124,32 @@ export function OrganizerDashboard({
   // shorter list: the tabs that actually have an Individual branch behind
   // them. No moduleKey on any of them — Individuals have no subscription
   // modules, so nothing here can ever render locked.
+  /**
+   * One accent per sidebar entry, so the rail reads as a set of distinct
+   * destinations rather than a column of identical blue-grey glyphs — and so
+   * the collapsed icon rail is navigable by colour alone.
+   *
+   * Only the inactive state is tinted: the active item already has the solid
+   * primary fill behind it, and a coloured glyph on that would fight it.
+   */
+  const NAV_ACCENTS: Record<string, string> = {
+    dashboard: "text-stat-indigo",
+    kiosk: "text-stat-amber",
+    eventAttendees: "text-stat-violet",
+    platformFees: "text-stat-orange",
+    users: "text-stat-teal",
+    events: "text-stat-sky",
+    feedback: "text-stat-rose",
+    membership: "text-stat-amber",
+    support: "text-stat-emerald",
+    storefront: "text-stat-violet",
+    settings: "text-muted-foreground",
+    "guest-list": "text-stat-rose",
+    "email-settings": "text-stat-teal",
+    help: "text-stat-emerald",
+    "become-organizer": "text-stat-orange",
+  };
+
   const individualNavItems = INDIVIDUAL_NAV_ITEMS.map((item) => ({
     id: item.id,
     label: t(item.labelKey),
@@ -1315,6 +1341,10 @@ export function OrganizerDashboard({
                           <item.icon
                             className={`h-4 w-4 flex-shrink-0 ${
                               sidebarCollapsed ? "lg:mr-0 mr-2" : "mr-2"
+                            } ${
+                              activeTab === item.id
+                                ? ""
+                                : NAV_ACCENTS[item.id] || ""
                             }`}
                           />
                           <span

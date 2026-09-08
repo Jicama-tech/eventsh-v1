@@ -40,6 +40,24 @@
     --input: 214 32% 91%;
     --ring: 210 100% 50%;
 
+
+    /* ---- Accent palette -------------------------------------------------
+       Named hues for dashboard tiles, sidebar icons and anything else that
+       benefits from being distinguishable at a glance. Tokens rather than
+       raw Tailwind classes so every one of them flips with the theme — the
+       dashboard is otherwise all white/black/blue.
+
+       Light: mid-tone, ~4.5:1 on --background so the icon reads on its own
+       tint. Dark values are lifted in the dark block below. */
+    --stat-violet: 262 72% 52%;
+    --stat-emerald: 158 72% 34%;
+    --stat-amber: 32 90% 44%;
+    --stat-rose: 344 76% 50%;
+    --stat-sky: 199 89% 42%;
+    --stat-teal: 176 66% 34%;
+    --stat-indigo: 232 62% 54%;
+    --stat-orange: 18 84% 48%;
+
     --radius: 0.75rem;
 
     /* Custom gradients */
@@ -87,6 +105,17 @@
   .dark {
     --background: 222 47% 6%;
     --foreground: 210 40% 98%;
+
+    /* Accent palette, lifted for a dark ground: more lightness and a little
+       less saturation, so the hues stay distinguishable without glowing. */
+    --stat-violet: 262 78% 72%;
+    --stat-emerald: 158 58% 56%;
+    --stat-amber: 38 88% 62%;
+    --stat-rose: 344 80% 68%;
+    --stat-sky: 199 84% 62%;
+    --stat-teal: 176 55% 56%;
+    --stat-indigo: 232 70% 72%;
+    --stat-orange: 22 85% 64%;
 
     --card: 222 47% 11%;
     --card-foreground: 210 40% 98%;

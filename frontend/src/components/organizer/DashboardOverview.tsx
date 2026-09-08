@@ -62,6 +62,21 @@ const STAT_ICONS = {
 };
 
 /**
+ * One accent per metric, so a tile is identifiable by colour before you read
+ * it. Drawn from the --stat-* tokens rather than raw Tailwind hues, so each
+ * one has a dark-mode value and none of this needs a `dark:` variant.
+ */
+const STAT_ACCENTS: Record<string, { text: string; chip: string }> = {
+  "Total Events": { text: "text-stat-indigo", chip: "bg-stat-indigo/10" },
+  "Total Attendees": { text: "text-stat-violet", chip: "bg-stat-violet/10" },
+  "Total Tickets Sold": { text: "text-stat-sky", chip: "bg-stat-sky/10" },
+  "Total Stalls Booked": { text: "text-stat-teal", chip: "bg-stat-teal/10" },
+  "Tickets Sold Today": { text: "text-stat-amber", chip: "bg-stat-amber/10" },
+  "Total Revenue": { text: "text-stat-emerald", chip: "bg-stat-emerald/10" },
+};
+const DEFAULT_ACCENT = { text: "text-stat-sky", chip: "bg-stat-sky/10" };
+
+/**
  * Calculates metrics (tickets sold, revenue, etc.) for a single event based on ticket and stall data.
  * @param {object} event - The event object.
  * @param {Array} tickets - Array of ticket objects belonging to the organizer.
@@ -1399,6 +1414,7 @@ export default function DashboardOverview({
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4 sm:gap-6">
         {stats.map((stat, index) => {
           const Icon = STAT_ICONS[stat.title] || CalendarDays;
+          const accent = STAT_ACCENTS[stat.title] || DEFAULT_ACCENT;
           return (
             <Card
               key={index}
@@ -1411,7 +1427,11 @@ export default function DashboardOverview({
                 <CardTitle className="text-sm font-medium">
                   {t(stat.title)}
                 </CardTitle>
-                <Icon className="h-4 w-4 text-muted-foreground" />
+                <span
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg ${accent.chip}`}
+                >
+                  <Icon className={`h-4 w-4 ${accent.text}`} />
+                </span>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
