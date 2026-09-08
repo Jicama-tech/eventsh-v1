@@ -1,0 +1,317 @@
+/* ============================================================
+   The "simple" landing template.
+   Scoped under .sp so it never repaints the rest of the app.
+   Three boxes, ~130 words, nothing else.
+   ============================================================ */
+
+.sp {
+  --bg: #0d0b12;
+  --card: #16131c;
+  --card2: #1d1926;
+  --line: #2a2533;
+  --ink: #f3f1f7;
+  --dim: #9a93a8;
+  --dim2: #6b6479;
+  --lime: #cdff4f;
+  --pink: #ff5da2;
+  --sky: #5ec8ff;
+
+  --fd: "Familjen Grotesk", system-ui, -apple-system, sans-serif;
+  --fm: "Martian Mono", ui-monospace, Menlo, monospace;
+
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--fd);
+  -webkit-font-smoothing: antialiased;
+}
+
+.sp *,
+.sp *::before,
+.sp *::after { box-sizing: border-box; }
+
+.sp h1, .sp h2, .sp h3 {
+  margin: 0;
+  font-family: var(--fd);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.03;
+  text-wrap: balance;
+}
+.sp p { margin: 0; }
+.sp a { color: inherit; text-decoration: none; }
+.sp :focus-visible { outline: 2px solid var(--lime); outline-offset: 3px; border-radius: 8px; }
+
+.sp .wrap { max-width: 1180px; margin: 0 auto; padding-inline: clamp(20px, 5vw, 48px); }
+
+/* ---------------- nav ---------------- */
+.sp-nav {
+  height: 66px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  background: rgba(13, 11, 18, 0.9);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.sp-nav .in { display: flex; align-items: center; gap: 14px; width: 100%; }
+.sp-logo { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 19px; letter-spacing: -0.03em; }
+.sp-logo i {
+  width: 10px; height: 10px; border-radius: 50%; background: var(--lime);
+  box-shadow: 0 0 12px 2px rgba(205, 255, 79, 0.5); display: block;
+}
+.sp-nav .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+.sp-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  font-family: var(--fd); font-weight: 600; font-size: 14px;
+  padding: 10px 18px; border-radius: 999px; border: 1px solid transparent;
+  cursor: pointer; transition: background 0.16s, border-color 0.16s, transform 0.16s;
+  white-space: nowrap;
+}
+.sp-btn:active { transform: translateY(1px); }
+.sp-btn-p { background: var(--lime); color: #12160a; }
+.sp-btn-p:hover { background: #dcff7a; }
+.sp-btn-g { border-color: var(--line); color: var(--ink); background: transparent; }
+.sp-btn-g:hover { border-color: var(--dim2); background: var(--card); }
+
+/* ---------------- hero ---------------- */
+.sp-hero { padding: clamp(44px, 7vw, 86px) 0 clamp(26px, 4vw, 44px); text-align: center; }
+.sp-hero h1 { font-size: clamp(34px, 5.6vw, 62px); letter-spacing: -0.04em; }
+.sp-hero h1 em { font-style: normal; color: var(--lime); }
+.sp-hero p {
+  margin: 18px auto 0; color: var(--dim);
+  font-size: clamp(15px, 1.6vw, 19px); max-width: 46ch; line-height: 1.5;
+}
+
+/* ---------------- the three boxes ---------------- */
+
+.sp-box {
+  border: 1px solid var(--line); border-radius: 20px; background: var(--card);
+  overflow: hidden; display: flex; flex-direction: column;
+  text-align: left; padding: 0; cursor: pointer; color: inherit;
+  font: inherit; width: 100%;
+  transition: border-color 0.18s, transform 0.18s;
+}
+.sp-box:hover { border-color: var(--dim2); transform: translateY(-3px); }
+.sp-box.start { background: linear-gradient(160deg, rgba(205, 255, 79, 0.1), transparent 60%); }
+
+/* the screen preview — a real demo screenshot, or the blank canvas */
+.sp-screen {
+  position: relative; height: 250px; background: var(--card2);
+  border-bottom: 1px solid var(--line); overflow: hidden;
+}
+.sp-box:hover .sp-screen { background: var(--card2); }
+.sp-screen img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sp-tag {
+  position: absolute; bottom: 12px; right: 12px; z-index: 2;
+  font-family: var(--fm); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  padding: 5px 10px; border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62); backdrop-filter: blur(6px);
+}
+.sp-tag.a { color: var(--lime); border: 1px solid rgba(205, 255, 79, 0.35); }
+.sp-tag.b { color: var(--pink); border: 1px solid rgba(255, 93, 162, 0.35); }
+.sp-tag.c { color: var(--sky); border: 1px solid rgba(94, 200, 255, 0.35); }
+
+.sp-blank {
+  height: 100%; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px;
+}
+.sp-plus {
+  width: 52px; height: 52px; border-radius: 16px;
+  border: 1.5px dashed rgba(205, 255, 79, 0.5);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--lime); font-size: 26px; font-weight: 600; line-height: 1;
+}
+.sp-blank small { font-family: var(--fm); font-size: 9.5px; color: var(--dim2); letter-spacing: 0.1em; }
+
+.sp-body { padding: 20px 20px 22px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.sp-body h3 { font-size: 21px; letter-spacing: -0.025em; }
+.sp-body p { font-size: 13.5px; color: var(--dim); line-height: 1.45; }
+.sp-go {
+  margin-top: 14px; font-weight: 600; font-size: 14px;
+  display: flex; align-items: center; gap: 7px;
+}
+.sp-go.a { color: var(--lime); }
+.sp-go.b { color: var(--pink); }
+.sp-go.c { color: var(--sky); }
+
+/* the secondary link inside a demo box (organizer dashboard) */
+.sp-second {
+  margin-top: 10px; font-family: var(--fm); font-size: 11px; color: var(--dim2);
+  background: none; border: 0; padding: 0; cursor: pointer; text-align: left;
+}
+.sp-second:hover { color: var(--ink); }
+
+/* With nothing curated the page is a single start box — centre it and cap its
+   width so it reads as deliberate rather than as two cards that failed to load. */
+.sp-boxes:has(> :only-child) { justify-content: center; }
+@media (min-width: 900px) {
+  .sp-boxes:has(> :only-child) { grid-template-columns: minmax(0, 400px); }
+}
+
+/* ---------------- footer ---------------- */
+.sp-foot {
+  border-top: 1px solid var(--line); padding: 22px 0 26px;
+  font-family: var(--fm); font-size: 11px; color: var(--dim2);
+}
+.sp-foot .in { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+.sp-foot a:hover { color: var(--lime); }
+.sp-foot .right { margin-left: auto; }
+@media (max-width: 620px) { .sp-foot .right { margin-left: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .sp *, .sp *::before, .sp *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ================= layout v2: three boxes + a flat start bar ================= */
+.sp-section { padding-bottom: clamp(40px, 6vw, 76px); }
+.sp-boxes {
+  display: grid; grid-template-columns: 1fr; gap: 18px; padding-bottom: 0;
+}
+@media (min-width: 900px) { .sp-boxes { grid-template-columns: repeat(3, 1fr); } }
+
+/* ---------------- the flat start bar ---------------- */
+.sp-startbar {
+  margin-top: 18px; width: 100%;
+  display: flex; align-items: center; gap: 18px;
+  padding: 20px 22px; border-radius: 16px; cursor: pointer;
+  border: 1px solid rgba(205, 255, 79, 0.35);
+  background: linear-gradient(120deg, rgba(205, 255, 79, 0.1), transparent 55%), var(--card);
+  color: inherit; font: inherit; text-align: left;
+  transition: border-color 0.18s, transform 0.18s;
+}
+.sp-startbar:hover { border-color: var(--lime); transform: translateY(-2px); }
+.sp-startbar .sp-plus {
+  width: 40px; height: 40px; border-radius: 12px; flex: none;
+  border: 1.5px dashed rgba(205, 255, 79, 0.55);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--lime); font-size: 20px; font-weight: 600; line-height: 1;
+}
+.sp-startcopy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sp-startcopy strong {
+  font-family: var(--fd); font-weight: 700; font-size: 19px; letter-spacing: -0.025em;
+}
+.sp-startcopy span { font-size: 13.5px; color: var(--dim); }
+.sp-startgo {
+  margin-left: auto; flex: none;
+  background: var(--lime); color: #12160a;
+  font-weight: 600; font-size: 14px; padding: 11px 20px; border-radius: 999px;
+}
+@media (max-width: 620px) {
+  .sp-startbar { flex-wrap: wrap; gap: 14px; }
+  .sp-startgo { margin-left: 0; width: 100%; text-align: center; }
+}
+
+/* ---------------- drawn previews ---------------- */
+.sp-draw { display: block; height: 100%; padding: 14px; background: var(--card2); }
+.sp-drawbar { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; }
+.sp-drawbar i {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--line); flex: none; display: block;
+}
+.sp-drawbar em {
+  flex: 1; min-width: 0; font-style: normal;
+  font-family: var(--fm); font-size: 8.5px; color: var(--dim2);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 5px;
+  padding: 4px 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+
+.sp-floor { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
+.sp-floor b {
+  grid-column: 1 / -1; height: 20px; border-radius: 4px;
+  background: rgba(205, 255, 79, 0.12); border: 1px solid rgba(205, 255, 79, 0.3);
+  font-family: var(--fm); font-size: 7.5px; font-weight: 400; letter-spacing: 0.1em;
+  color: var(--lime); display: flex; align-items: center; justify-content: center;
+}
+.sp-floor s {
+  height: 30px; border-radius: 4px; background: #221e2c; border: 1px solid var(--line);
+  text-decoration: none; font-family: var(--fm); font-size: 7px; color: var(--dim2);
+  display: flex; align-items: center; justify-content: center;
+}
+.sp-floor s.on {
+  background: rgba(74, 222, 128, 0.14); border-color: rgba(74, 222, 128, 0.4); color: #4ade80;
+}
+
+.sp-guests { display: flex; flex-direction: column; gap: 7px; }
+.sp-g {
+  display: flex; align-items: center; gap: 9px;
+  background: #221e2c; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px;
+}
+.sp-g u {
+  width: 20px; height: 20px; border-radius: 50%; text-decoration: none; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--fm); font-size: 8px;
+  background: rgba(255, 93, 162, 0.16); color: var(--pink);
+}
+.sp-g p { font-size: 10.5px; color: var(--dim); margin: 0; }
+.sp-g em {
+  margin-left: auto; font-style: normal; font-family: var(--fm); font-size: 8px; color: #4ade80;
+}
+
+/* conference: a QR beside the people it just let in */
+.sp-checkin { display: flex; gap: 14px; align-items: flex-start; }
+.sp-qr {
+  flex: none; width: 96px; height: 96px; padding: 6px; border-radius: 8px; background: #fff;
+  display: grid; grid-template-columns: repeat(10, 1fr); grid-auto-rows: 1fr; gap: 0;
+}
+.sp-qr i { display: block; background: transparent; }
+.sp-qr i.on { background: #0d0b12; }
+.sp-scans { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.sp-scan {
+  display: flex; align-items: center; gap: 8px;
+  background: #221e2c; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px;
+}
+.sp-scan u {
+  width: 17px; height: 17px; border-radius: 50%; text-decoration: none; flex: none;
+  display: flex; align-items: center; justify-content: center; font-size: 9px;
+  border: 1px solid rgba(94, 200, 255, 0.5); color: var(--sky);
+}
+.sp-scan p { font-size: 10px; color: var(--dim); margin: 0; white-space: nowrap; }
+.sp-scan em {
+  margin-left: auto; font-style: normal; font-family: var(--fm); font-size: 7.5px; color: var(--dim2);
+}
+
+/* the screen is a button — strip UA styling */
+.sp-screen {
+  display: block; width: 100%; text-align: left;
+  border: 0; border-bottom: 1px solid var(--line); padding: 0;
+  cursor: pointer; font: inherit; color: inherit;
+}
+.sp-go { background: none; border: 0; padding: 0; cursor: pointer; font-family: var(--fd); }
+
+/* ---------------- more live examples ----------------
+   Every curated demo beyond the three featured boxes. An admin adds a use
+   case by flagging another event as a showcase; nothing here is hardcoded. */
+.sp-more { margin-top: 26px; }
+.sp-more-h {
+  font-family: var(--fm); font-size: 10px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--dim2); margin: 0 0 10px;
+}
+.sp-more-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+@media (min-width: 620px) { .sp-more-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 980px) { .sp-more-grid { grid-template-columns: repeat(4, 1fr); } }
+.sp-chip {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 12px 14px; border-radius: 12px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--card);
+  color: inherit; font: inherit; text-align: left;
+  transition: border-color 0.16s, background 0.16s;
+}
+.sp-chip:hover { border-color: var(--dim2); background: var(--card2); }
+.sp-chip i {
+  width: 7px; height: 7px; border-radius: 50%; flex: none; display: block;
+}
+.sp-chip i.a { background: var(--lime); }
+.sp-chip i.b { background: var(--pink); }
+.sp-chip span {
+  font-size: 13.5px; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.sp-chip em {
+  margin-left: auto; font-style: normal; color: var(--dim2); font-size: 13px; flex: none;
+}
+.sp-chip:hover em { color: var(--ink); }

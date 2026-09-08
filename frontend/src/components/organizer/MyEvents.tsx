@@ -996,6 +996,34 @@ const MyEvents: React.FC = () => {
     );
   }
 
+  // The form replaces the list in place rather than opening over the whole
+  // viewport. A full-screen dialog covered the dashboard's sidebar; rendering
+  // here keeps it — and the header — visible, which is how kioscart-v1's
+  // ProductManagement swaps its list for ProductForm.
+  //
+  // This has to sit AFTER the loading and error guards: tucked in above them
+  // it only rendered while `loading` was true, so once the events arrived,
+  // opening the form did nothing.
+  if (showDialog) {
+    const activeInitial = editingEvent ?? duplicatingFrom ?? newEventDefaults;
+    // Personal → "Marriage Function" events use the dedicated wedding form;
+    // everything else uses the commercial form.
+    const isMarriage =
+      activeInitial?.eventType === "personal" &&
+      ((activeInitial as any)?.category === "Marriage Function" ||
+        (activeInitial as any)?.categories?.includes?.("Marriage Function"));
+    const FormComponent = isMarriage ? MarriageEventForm : CreateEventForm;
+    return (
+      <FormComponent
+        onClose={handleCloseDialog}
+        onSave={handleSaveEvent}
+        editMode={!!editingEvent}
+        duplicateMode={!!duplicatingFrom}
+        initialData={activeInitial}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -1413,44 +1441,6 @@ const MyEvents: React.FC = () => {
         onOpenChange={setShowTypeChooser}
         onConfirm={handleTypeChosen}
       />
-
-      {/* Create/Edit Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        {/* Full-screen: these forms carry far more than a centered card can
-            show. EventFormShell supplies the title bar — which also gives the
-            dialog the DialogTitle Radix wants, and this one had none (the old
-            DialogHeader here was empty, its title commented out). */}
-        <DialogContent fullScreen className="p-0">
-          {(() => {
-            const activeInitial =
-              editingEvent ?? duplicatingFrom ?? newEventDefaults;
-            // Personal → "Marriage Function" events use the dedicated
-            // wedding form; everything else uses the commercial form.
-            const isMarriage =
-              activeInitial?.eventType === "personal" &&
-              ((activeInitial as any)?.category === "Marriage Function" ||
-                (activeInitial as any)?.categories?.includes?.(
-                  "Marriage Function",
-                ));
-            const FormComponent = isMarriage
-              ? MarriageEventForm
-              : CreateEventForm;
-            return (
-              <EventFormShell
-                title={eventFormTitle(!!isMarriage, !!editingEvent)}
-              >
-                <FormComponent
-                  onClose={handleCloseDialog}
-                  onSave={handleSaveEvent}
-                  editMode={!!editingEvent}
-                  duplicateMode={!!duplicatingFrom}
-                  initialData={activeInitial}
-                />
-              </EventFormShell>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
 
       {/* Team expenses for the chosen event, with approvals */}
       <Suspense fallback={null}>

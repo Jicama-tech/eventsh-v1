@@ -38,7 +38,12 @@
   font-size: 17px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
+  /* `clip`, not `hidden`. With overflow-x:hidden the other axis computes to
+     `auto`, which makes this element a scroll container — and `.nav`, which
+     is position:sticky, then sticks to it rather than to the viewport, so it
+     scrolled away instead of staying put. `clip` contains the blurred blobs
+     the same way without creating a scroll container. */
+  overflow-x: clip;
 }
 
 .gz *,

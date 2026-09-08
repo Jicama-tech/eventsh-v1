@@ -440,7 +440,7 @@ export async function buildOrganizerInvoice(opts: InvoiceOptions): Promise<{
   y += 16;
 
   // ── how to pay ─────────────────────────────────────────────────────────
-  const payH = 126;
+  const payH = 138;
   ensure(payH + 10);
   box(left, y, usable, payH, C.zebra, C.line);
 
@@ -458,9 +458,22 @@ export async function buildOrganizerInvoice(opts: InvoiceOptions): Promise<{
   textC(settled ? C.good : C.due);
   pdf.text(pillLabel, pillX + pillW / 2, y + 21, { align: "center" });
 
-  pdf.addImage(qrDataUrl, "PNG", left + 14, y + 28, 88, 88);
+  // The QR is a corporate PayNow proxy — it resolves to the UEN when
+  // scanned. Captioning the UEN directly under it means a payer can confirm
+  // where the money is going without decoding anything.
+  // 88pt is about 31mm printed, comfortably over the ~25mm SGQR guidance —
+  // this is the one element on the page that has to survive a phone camera.
+  const qrSize = 88;
+  pdf.addImage(qrDataUrl, "PNG", left + 14, y + 26, qrSize, qrSize);
+  if (uen) {
+    font("bold", 8);
+    textC(C.muted);
+    pdf.text(`UEN ${uen}`, left + 14 + qrSize / 2, y + 26 + qrSize + 12, {
+      align: "center",
+    });
+  }
 
-  const tx = left + 118;
+  const tx = left + 120;
   let ty = y + 44;
   font("normal", 10);
   textC(C.body);
