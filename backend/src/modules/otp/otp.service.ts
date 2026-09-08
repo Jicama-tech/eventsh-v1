@@ -38,6 +38,13 @@ export class OtpService implements OnModuleInit {
   // WhatsApp socket
   private sock: WASocket | null = null;
   private reconnecting = false;
+  /**
+   * True only once Baileys reports connection "open". `this.sock` is a poor
+   * proxy for this — it stays truthy through a 401 logged-out session, so
+   * anything asking "can we deliver?" got a false yes.
+   */
+  private waAuthed = false;
+
   // Latest QR string from Baileys connection.update — exposed via /otp/whatsapp/qr-image
   private currentQR: string | null = null;
 
@@ -101,12 +108,14 @@ export class OtpService implements OnModuleInit {
         }
 
         if (connection === "open") {
+          this.waAuthed = true;
           this.logger.log("WhatsApp connected.");
           this.currentQR = null;
           this.reconnecting = false;
         }
 
         if (connection === "close") {
+          this.waAuthed = false;
           const err: any = lastDisconnect?.error;
           const code = err?.output?.statusCode || err?.status || err?.code;
           this.logger.warn(
@@ -184,8 +193,17 @@ export class OtpService implements OnModuleInit {
    * for a best-effort mirror but would let a deliberate "send on WhatsApp"
    * report success while delivering nothing.
    */
-  get whatsAppOutboundStatus(): { enabled: boolean; connected: boolean } {
-    return { enabled: this.whatsAppEnabled, connected: !!this.sock };
+  get whatsAppOutboundStatus(): {
+    enabled: boolean;
+    connected: boolean;
+    /** A QR is waiting to be scanned — the device needs re-pairing. */
+    needsPairing: boolean;
+  } {
+    return {
+      enabled: this.whatsAppEnabled,
+      connected: this.waAuthed,
+      needsPairing: !this.waAuthed && !!this.currentQR,
+    };
   }
   private get whatsAppOtpEnabled() {
     return process.env.WHATSAPP_OTP_ENABLED !== "false";
