@@ -7,6 +7,7 @@ import {
   Suspense,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { useSubscription } from "@/hooks/useSubscription";
 import {
   Card,
   CardContent,
@@ -75,6 +76,7 @@ import {
   Receipt,
   Loader2,
   ClipboardList,
+  Lock,
 } from "lucide-react";
 import { format } from "date-fns";
 import { jwtDecode } from "jwt-decode";
@@ -198,6 +200,7 @@ const MyEvents: React.FC = () => {
   const [expensesForEvent, setExpensesForEvent] = useState<Event | null>(null);
   const [regFormsForEvent, setRegFormsForEvent] = useState<Event | null>(null);
 
+  const { getModuleLimit } = useSubscription();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -439,6 +442,37 @@ const MyEvents: React.FC = () => {
   };
 
   // Filtered events with proper safety checks
+  /**
+   * Event capacity from the plan (admin Pricing -> Events -> limit).
+   *
+   * `null` or 0 means unlimited — a plan with no cap should not render a
+   * meter at all, rather than "3 of 0".
+   *
+   * Which events count is decided newest-first: the most recent `limit`
+   * events are the ones inside the plan, and anything older falls outside.
+   * That way creating a new event never silently invalidates the one the
+   * organizer is currently running.
+   */
+  const eventLimit = getModuleLimit("events");
+  const eventQuota = useMemo(() => {
+    if (!eventLimit || eventLimit <= 0) return null;
+    const list = Array.isArray(events) ? events : [];
+    const stamp = (e: any) =>
+      new Date(e?.createdAt || e?.startDate || 0).getTime() || 0;
+    const newestFirst = [...list].sort((a, b) => stamp(b) - stamp(a));
+    const withinIds = new Set(
+      newestFirst.slice(0, eventLimit).map((e: any) => e._id),
+    );
+    return {
+      limit: eventLimit,
+      used: list.length,
+      remaining: Math.max(0, eventLimit - list.length),
+      overBy: Math.max(0, list.length - eventLimit),
+      /** True when this event is one of the newest `limit`. */
+      isWithin: (id: string) => withinIds.has(id),
+    };
+  }, [events, eventLimit]);
+
   const filteredEvents = useMemo(() => {
     if (!Array.isArray(events)) {
       console.warn("Events is not an array, returning empty array:", events);
@@ -1033,6 +1067,31 @@ const MyEvents: React.FC = () => {
           <p className="text-muted-foreground">
             Manage your event portfolio and track performance
           </p>
+          {/* Plan capacity. Only rendered when the plan actually caps events —
+              an uncapped plan showing a meter would invent a limit. */}
+          {eventQuota && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Badge
+                variant="outline"
+                className={
+                  eventQuota.overBy > 0
+                    ? "border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300"
+                    : eventQuota.remaining === 0
+                      ? "border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                      : "border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                }
+              >
+                {eventQuota.used} / {eventQuota.limit} {t("events on your plan")}
+              </Badge>
+              <span className="text-xs text-muted-foreground">
+                {eventQuota.overBy > 0
+                  ? `${eventQuota.overBy} over your plan — only your ${eventQuota.limit} most recent count`
+                  : eventQuota.remaining === 0
+                    ? "You've used your plan's events"
+                    : `${eventQuota.remaining} left`}
+              </span>
+            </div>
+          )}
         </div>
         <Button
           onClick={handleCreateEvent}
@@ -1197,12 +1256,27 @@ const MyEvents: React.FC = () => {
           ) : (
             /* Events List */
             <div className="space-y-4">
-              {filteredEvents.map((event) => (
+              {filteredEvents.map((event) => {
+                // Outside the plan = older than the newest `limit` events.
+                const outsidePlan =
+                  !!eventQuota && !eventQuota.isWithin(event._id);
+                return (
                 <Card
                   key={event._id}
-                  className="hover:shadow-md transition-shadow"
+                  className={`hover:shadow-md transition-shadow ${
+                    outsidePlan
+                      ? "border-rose-200 dark:border-rose-500/30 bg-rose-50/40 dark:bg-rose-500/5"
+                      : ""
+                  }`}
                 >
                   <CardContent className="p-6">
+                    {outsidePlan && (
+                      <p className="mb-3 flex items-center gap-1.5 text-xs font-medium text-rose-700 dark:text-rose-300">
+                        <Lock className="h-3 w-3" />
+                        Outside your plan's {eventQuota?.limit}-event capacity —
+                        upgrade to bring it back in
+                      </p>
+                    )}
                     <div className="flex flex-col lg:flex-row justify-between items-start gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start gap-4">
@@ -1418,7 +1492,8 @@ const MyEvents: React.FC = () => {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
