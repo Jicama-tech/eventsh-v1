@@ -576,71 +576,52 @@ export function ExhibitorDetailDialog({
   }, [resendOpen, stallRequest?._id]);
 
   /**
-   * Hand the ticket to WhatsApp from the organizer's own number.
+   * Vendor's number in the form wa.me needs: digits only, country code
+   * included.
    *
-   * Two routes, because the web platform only allows one of them everywhere:
-   *
-   *  1. Web Share (mobile): navigator.share can carry the actual PDF, so the
-   *     organizer picks WhatsApp from the share sheet and the file is already
-   *     attached. This is the "attached automatically" case.
-   *  2. wa.me deep link (desktop, and anywhere share is unavailable): the
-   *     click-to-chat API accepts prefilled TEXT ONLY — there is no parameter
-   *     that attaches a file, and none can be added from our side. So the
-   *     chat opens on the vendor's number with the message ready, the PDF is
-   *     downloaded alongside for the organizer to attach, and the message
-   *     carries a download link so the vendor can get it either way.
+   * `whatsappNumber` is normally stored with the country code (the four
+   * other wa.me links in this codebase just strip the "+"), but not always —
+   * so when what is left looks like a bare local number, the dial code from
+   * `countryCode` is prefixed and a leading trunk "0" dropped.
    */
+  const waDigits = (() => {
+    const raw = String(vendorWa || "").replace(/[^0-9]/g, "");
+    if (!raw) return "";
+    if (raw.length >= 11) return raw; // already international
+    const cc = String(
+      (stallRequest?.shopkeeperId as any)?.countryCode || "",
+    ).match(/\+?(\d{1,3})/);
+    if (!cc) return raw;
+    return cc[1] + raw.replace(/^0+/, "");
+  })();
+
+  const waText = () =>
+    `${waMessage || defaultWaMessage}
+
+${apiURL}/stalls/download-stall-ticket/${stallRequest?._id}`;
+
   /**
-   * Hand the ticket to WhatsApp from the organizer's own number.
+   * Open the vendor's chat directly, from the organizer's own WhatsApp.
    *
-   * SYNCHRONOUS on purpose — no `await` before share/open. Both APIs need
-   * transient user activation, and awaiting inside the handler spends it,
-   * which silently blocked the share and the popup. The PDF is already in
-   * `waPdf` from the prefetch above.
+   * wa.me is the only route that lands in a specific person's chat — the
+   * share sheet drops you at a contact picker instead, which is not what was
+   * asked for. It carries prefilled TEXT ONLY, so the PDF is downloaded
+   * alongside for a one-tap attach and the message also carries a download
+   * link.
    *
-   * Two routes, because the platform only allows one of them everywhere:
-   *   1. navigator.share with the file — the only way a file is genuinely
-   *      attached. Works where the OS share sheet exposes WhatsApp (Android,
-   *      iOS, and Chrome on Windows with the WhatsApp app installed).
-   *   2. wa.me — click-to-chat takes prefilled TEXT ONLY. No parameter
-   *      attaches a file and none can be added from our side, so the PDF is
-   *      downloaded for a one-tap attach and a download link goes in the
-   *      message.
+   * Synchronous: window.open needs transient user activation, and awaiting
+   * anything here spends it.
    */
   const openWhatsAppWithTicket = () => {
-    const digits = String(vendorWa || "").replace(/[^0-9]/g, "");
-    if (!digits) {
+    if (!waDigits) {
       toast({
         duration: 6000,
         title: "No WhatsApp number",
-        description: "This vendor has no WhatsApp number on file.",
+        description: "This vendor has no usable WhatsApp number on file.",
         variant: "destructive",
       });
       return;
     }
-    const ticketUrl = `${apiURL}/stalls/download-stall-ticket/${stallRequest._id}`;
-    const text = `${waMessage || defaultWaMessage}
-
-${ticketUrl}`;
-    const nav = navigator as any;
-
-    // 1. Real attachment, if this device can do it.
-    if (waPdf && nav.canShare?.({ files: [waPdf] })) {
-      nav
-        .share({ files: [waPdf], text })
-        .catch(() => {
-          // Cancelled or refused — fall back to the chat so the action is
-          // never a dead end.
-          window.open(
-            `https://wa.me/${digits}?text=${encodeURIComponent(text)}`,
-            "_blank",
-            "noopener,noreferrer",
-          );
-        });
-      return;
-    }
-
-    // 2. Save the PDF, then open the chat. Both still inside the gesture.
     if (waPdf) {
       const url = URL.createObjectURL(waPdf);
       const a = document.createElement("a");
@@ -652,10 +633,22 @@ ${ticketUrl}`;
       setTimeout(() => URL.revokeObjectURL(url), 10000);
     }
     window.open(
-      `https://wa.me/${digits}?text=${encodeURIComponent(text)}`,
+      `https://wa.me/${waDigits}?text=${encodeURIComponent(waText())}`,
       "_blank",
       "noopener,noreferrer",
     );
+  };
+
+  /**
+   * The other trade-off, offered separately rather than chosen for them:
+   * the share sheet genuinely attaches the file, but cannot target a chat —
+   * the organizer picks the contact themselves.
+   */
+  const canShareTicket =
+    !!waPdf && !!(navigator as any).canShare?.({ files: [waPdf] });
+  const shareTicketWithFile = () => {
+    if (!waPdf) return;
+    (navigator as any).share({ files: [waPdf], text: waText() }).catch(() => {});
   };
 
   const handleResendTicket = async () => {
@@ -2522,11 +2515,23 @@ ${ticketUrl}`;
                 </p>
               ) : (
                 <p className="rounded-md border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-2 text-xs text-amber-800 dark:text-amber-300">
-                  Ticket ready. Where your device offers a share sheet with
-                  WhatsApp, it goes across attached. Otherwise WhatsApp Web
-                  takes text only, so the PDF downloads for a one-tap attach
-                  and the message carries a download link.
+                  Ticket ready. Opens {vendorWa}'s chat directly with this
+                  message. WhatsApp links carry text only, so the PDF
+                  downloads for a one-tap attach and the message also has a
+                  download link.
                 </p>
+              )}
+              {/* The trade-off, offered rather than chosen for them: the
+                  share sheet does attach the file, but cannot open a
+                  specific chat — the organizer picks the contact. */}
+              {canShareTicket && (
+                <button
+                  type="button"
+                  onClick={shareTicketWithFile}
+                  className="text-xs font-medium text-primary underline underline-offset-2"
+                >
+                  Or share with the ticket attached (you pick the chat)
+                </button>
               )}
             </div>
           )}
