@@ -2659,6 +2659,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${statAccent(2).icon}`}>{stats.totalAttendees}</div>
+            <p className="text-xs text-muted-foreground">
+              Across all your events
+            </p>
           </CardContent>
         </Card>
 
