@@ -210,7 +210,7 @@ const ORGANIZER_FEATURE_MODULES: {
   },
   {
     key: "kiosk",
-    label: "In-Person Booking",
+    label: "Kiosk Management",
     icon: Ticket,
     sections: KIOSK_SECTIONS,
   },
