@@ -14,6 +14,7 @@
   UploadedFile,
   UploadedFiles,
   UseInterceptors,
+  BadRequestException,
 } from "@nestjs/common";
 import { Response } from "express";
 import { StallPaymentSchedulerService } from "./stall-payment-scheduler.service";
@@ -526,6 +527,27 @@ export class StallsController {
   @Post(":id/resend-ticket")
   async resendTicket(@Param("id") id: string) {
     return await this.stallsService.resendStallTicket(id);
+  }
+
+  /**
+   * Re-send tickets to every confirmed (Paid) exhibitor on an event, with an
+   * optional organizer-written note and a countdown to the event.
+   * POST /stalls/bulk-send-tickets  { eventId, message? }
+   *
+   * Safe to sit below the ":id/..." routes: those are all two-segment paths
+   * and there is no bare @Post(":id") to shadow this one.
+   */
+  @Post("bulk-send-tickets")
+  async bulkSendTickets(
+    @Body() body: { eventId?: string; message?: string },
+  ) {
+    if (!body?.eventId) {
+      throw new BadRequestException("eventId is required");
+    }
+    return await this.stallsService.bulkSendStallTickets(
+      body.eventId,
+      body.message,
+    );
   }
 
   /**

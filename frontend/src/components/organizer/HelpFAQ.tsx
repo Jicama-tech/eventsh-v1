@@ -236,7 +236,7 @@ const faqData: FAQSection[] = [
 // Individual (personal / wedding) accounts don't have the professional tooling
 // (venue designer, stalls, speakers, operators). Their Help is scoped to what
 // they actually do: create an event with the Assistant, share the invitation,
-// and manage the guest list.
+// and manage the participant list.
 const individualFaqData: FAQSection[] = [
   {
     title: "Getting Started",
@@ -249,7 +249,7 @@ const individualFaqData: FAQSection[] = [
       },
       {
         q: "What kind of events can I create?",
-        a: "Individual accounts are built for personal functions — weddings and marriage celebrations — with multiple ceremonies (Haldi, Mehndi, Sangeet, Wedding, Reception), an invitation page, and an RSVP guest list. You don't need to register a company.",
+        a: "Individual accounts are built for personal functions — weddings and marriage celebrations — with multiple ceremonies (Haldi, Mehndi, Sangeet, Wedding, Reception), an invitation page, and an RSVP participant list. You don't need to register a company.",
       },
       {
         q: "How do I publish and share my invitation?",
@@ -285,25 +285,25 @@ const individualFaqData: FAQSection[] = [
     ],
   },
   {
-    title: "Guest List & RSVPs",
+    title: "Participants & RSVPs",
     icon: Users,
     color: "text-purple-600",
     items: [
       {
         q: "Where do I see who's coming?",
-        a: "Open the 'Guest List' tab, pick your event, and tap 'View'. You'll see every RSVP — who's attending, headcount, contact details, which ceremonies they picked, and their messages.",
+        a: "Open the 'Participants' tab, pick your event, and tap 'View'. You'll see every RSVP — who's attending, headcount, contact details, which ceremonies they picked, and their messages.",
       },
       {
         q: "How is the total headcount calculated?",
-        a: "Each guest lists everyone in their party (name + age), so the guest list shows the true total number of people attending, with an age-group breakdown, not just the number of responses.",
+        a: "Each guest lists everyone in their party (name + age), so the Participants tab shows the true total number of people attending, with an age-group breakdown, not just the number of responses.",
       },
       {
         q: "Can I allot rooms to guests?",
-        a: "Yes. In the Guest List, open a guest to assign a room — you can also mark a room as shared between guests. It keeps your accommodation planning in one place.",
+        a: "Yes. In Participants, open a guest to assign a room — you can also mark a room as shared between guests. It keeps your accommodation planning in one place.",
       },
       {
-        q: "Can I export my guest list?",
-        a: "Yes — the Guest List has an export option that downloads the full list (names, ages, contacts, ceremonies) so you can share it with your planner or caterer.",
+        q: "Can I export my participant list?",
+        a: "Yes — Participants has an export option that downloads the full list (names, ages, contacts, ceremonies) so you can share it with your planner or caterer.",
       },
     ],
   },
@@ -356,7 +356,7 @@ export function HelpFAQ({ isIndividual = false }: { isIndividual?: boolean }) {
         <h2 className="text-2xl font-bold">{t("Help Center")}</h2>
         <p className="text-muted-foreground">
           {isIndividual
-            ? "Everything you need to plan your event and manage your guest list"
+            ? "Everything you need to plan your event and manage your participants"
             : "Everything you need to know about managing your events"}
         </p>
         <Badge variant="outline">{totalQuestions} articles</Badge>

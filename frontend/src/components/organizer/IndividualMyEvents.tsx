@@ -210,10 +210,10 @@ export default function IndividualMyEvents({
                   <button
                     onClick={() => onOpenGuestList(ev.id, ev.title)}
                     className="flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-700 hover:bg-rose-100"
-                    title="View RSVP guest list"
+                    title="View RSVP participants"
                   >
                     <Users className="h-3 w-3" />
-                    Guest List
+                    Participants
                   </button>
                 )}
                 {ev.publicUrl && (

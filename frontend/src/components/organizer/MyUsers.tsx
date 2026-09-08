@@ -1,6 +1,7 @@
 // File: src/components/DashboardTabs/MyEventUsers.tsx
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useSubscription } from "@/hooks/useSubscription";
 import {
   Card,
   CardContent,
@@ -217,6 +218,17 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
   const { toast } = useToast();
 
   // -- Data State --
+  // Plan sub-toggles: `payments` is the stall payment-status card, `addons`
+  // the selected add-ons card, both inside the exhibitor detail view.
+  const { isModuleSectionEnabled } = useSubscription();
+  const canPayments = isModuleSectionEnabled("stalls", "payments");
+  const canAddons = isModuleSectionEnabled("stalls", "addons");
+  // CRM module: this page is the customer directory, so `customers` guards
+  // the export-capable directory actions and `exports` the CSV itself.
+  const canCrmExports = isModuleSectionEnabled("crm", "exports");
+  // `customers` gates the Visitors directory — the customer side of the CRM,
+  // as distinct from the exhibitor/vendor side gated by stalls.exhibitors.
+  const canCrmCustomers = isModuleSectionEnabled("crm", "customers");
   const [visitors, setVisitors] = useState<ProcessedVisitor[]>([]);
   const [exhibitors, setExhibitors] = useState<ProcessedExhibitor[]>([]);
   const [events, setEvents] = useState<EventInfo[]>([]);
@@ -1067,7 +1079,9 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
       >
         <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
           <TabsList className="grid w-full sm:w-[700px] grid-cols-5">
+            {canCrmCustomers && (
             <TabsTrigger value="visitors">{t("Visitors")}</TabsTrigger>
+            )}
             <TabsTrigger value="exhibitors">{t("Exhibitors")}</TabsTrigger>
             <TabsTrigger value="speakers">{t("Speakers")}</TabsTrigger>
             <TabsTrigger value="suppliers">{t("Suppliers")}</TabsTrigger>
@@ -1141,6 +1155,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   )}
                   Import
                 </Button>
+                {canCrmExports && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -1149,6 +1164,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                 >
                   <Download className="mr-2 h-4 w-4" /> Export
                 </Button>
+                )}
                 {/* Invite Visitors hidden for now — re-enable when invitation
                     flow is ready. */}
                 {/* <Button
@@ -1315,6 +1331,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                   )}
                   Import
                 </Button>
+                {canCrmExports && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -1323,6 +1340,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                 >
                   <Download className="mr-2 h-4 w-4" /> Export
                 </Button>
+                )}
                 {/* Invite Exhibitors hidden for now — re-enable when invitation
                     flow is ready. */}
                 {/* <Button
@@ -1810,6 +1828,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                     {getStatusBadge(stallRequest.status)}
                   </CardContent>
                 </Card>
+                {canPayments && (
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm">{t("Payment Status")}</CardTitle>
@@ -1818,6 +1837,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
                     {getPaymentBadge(stallRequest.paymentStatus)}
                   </CardContent>
                 </Card>
+                )}
               </div>
 
               {/* Transaction Details */}
@@ -2205,7 +2225,7 @@ const MyEventUsers: React.FC<MyEventUsersProps> = ({ setShowAddUser }) => {
               )}
 
               {/* Selected Add-ons */}
-              {stallRequest.selectedAddOns.length > 0 && (
+              {canAddons && stallRequest.selectedAddOns.length > 0 && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">{t("Selected Add-ons")}</CardTitle>

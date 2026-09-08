@@ -35,6 +35,8 @@ import {
   SelectContent,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useSubscription } from "@/hooks/useSubscription";
+import { ModuleGate } from "@/components/ui/ModuleGate";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { jwtDecode } from "jwt-decode";
 
@@ -87,6 +89,16 @@ interface SpeakerRequestsProps {
 }
 
 export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
+  // Plan sub-toggles for this module. Read as booleans rather than wrapped
+  // in <ModuleGate>: these guard individual buttons inside a table row,
+  // where a blur-and-upgrade overlay would wreck the layout.
+  const { isModuleSectionEnabled } = useSubscription();
+  const canApprove = isModuleSectionEnabled("speakerRequests", "approval");
+  // `slots` covers the session/agenda + time columns — the scheduling half
+  // of a speaker request. Dropped as whole columns so the table stays
+  // aligned rather than showing gaps.
+  const canSlots = isModuleSectionEnabled("speakerRequests", "slots");
+
   const { toast } = useToast();
   const apiURL = __API_URL__;
   const { country } = useCountry();
@@ -541,13 +553,14 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
               <p className="text-sm">Add speakers in the event creation form or wait for external applications</p>
             </div>
           ) : (
+            <ModuleGate moduleKey="speakerRequests" sectionKey="applications">
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Speaker</TableHead>
-                    <TableHead>Session / Agenda</TableHead>
-                    <TableHead>Time</TableHead>
+                    {canSlots && <TableHead>Session / Agenda</TableHead>}
+                    {canSlots && <TableHead>Time</TableHead>}
                     <TableHead>Source</TableHead>
                     <TableHead>Fee</TableHead>
                     <TableHead>Status</TableHead>
@@ -572,6 +585,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                           {req.email && <div className="text-xs text-muted-foreground">{req.email}</div>}
                         </div>
                       </TableCell>
+                      {canSlots && (
                       <TableCell>
                         {req.sessions?.length > 0 ? (
                           <div>
@@ -586,6 +600,8 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                           <span className="text-muted-foreground text-sm">—</span>
                         )}
                       </TableCell>
+                      )}
+                      {canSlots && (
                       <TableCell>
                         <div className="text-sm">
                           {(() => {
@@ -597,6 +613,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                           })()}
                         </div>
                       </TableCell>
+                      )}
                       <TableCell>
                         <Badge variant="outline" className="text-[10px]">
                           {req.isFromEvent ? "Added by you" : req.source === "organizer" ? "Added by you" : "Applied"}
@@ -618,8 +635,10 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                             <Eye className="h-4 w-4" />
                           </Button>
 
-                          {/* Pending: Approve / Reject / Set Fee */}
-                          {!req.isFromEvent && req.status === "Pending" && (
+                          {/* Pending: Approve / Reject / Set Fee.
+                              Plan-gated: `approval` off leaves the row
+                              readable but not actionable. */}
+                          {canApprove && !req.isFromEvent && req.status === "Pending" && (
                             <>
                               <Button size="sm" variant="ghost" className="text-green-600" onClick={() => handleUpdateStatus(req._id, "Confirmed")}>
                                 <CheckCircle2 className="h-4 w-4" />
@@ -677,6 +696,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                 </TableBody>
               </Table>
             </div>
+            </ModuleGate>
           )}
         </DialogContent>
       </Dialog>

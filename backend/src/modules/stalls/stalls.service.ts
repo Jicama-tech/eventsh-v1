@@ -4943,7 +4943,67 @@ export class StallsService {
   //   • Email send fails  → SURFACED (SMTP timeout / auth / blocked port / bad
   //     organizer email config). Swallowing this would tell the organizer the
   //     ticket went out when nothing did.
-  async resendStallTicket(stallId: string) {
+  /**
+   * Re-send stall tickets to every confirmed exhibitor on an event, with an
+   * optional organizer-written note and a "N days to go" line.
+   *
+   * Only Paid stalls are eligible — the same precondition the single resend
+   * enforces, since the ticket is a live check-in credential. Vendors with no
+   * email are reported as skipped rather than failing the whole run.
+   *
+   * Sends are sequential on purpose: each one renders a PDF and opens an SMTP
+   * connection, and firing dozens at once is how you get rate-limited by the
+   * mail provider. A slow, complete send beats a fast, half-delivered one.
+   */
+  async bulkSendStallTickets(
+    eventId: string,
+    customMessage?: string,
+  ): Promise<{
+    total: number;
+    sent: number;
+    skipped: { stallId: string; vendor?: string; reason: string }[];
+    failed: { stallId: string; vendor?: string; reason: string }[];
+  }> {
+    if (!Types.ObjectId.isValid(eventId)) {
+      throw new BadRequestException("Invalid event ID format");
+    }
+    const stalls: any[] = await this.stallModel
+      .find({ eventId: new Types.ObjectId(eventId), paymentStatus: "Paid" })
+      .populate("shopkeeperId")
+      .lean();
+
+    const skipped: { stallId: string; vendor?: string; reason: string }[] = [];
+    const failed: { stallId: string; vendor?: string; reason: string }[] = [];
+    let sent = 0;
+
+    for (const stall of stalls) {
+      const vendor = (stall.shopkeeperId as any) || {};
+      const name = vendor?.name || vendor?.brandName;
+      const id = String(stall._id);
+      if (!this.vendorEmailRecipients(vendor)) {
+        skipped.push({ stallId: id, vendor: name, reason: "No email on file" });
+        continue;
+      }
+      try {
+        await this.resendStallTicket(id, customMessage);
+        sent += 1;
+      } catch (err: any) {
+        failed.push({
+          stallId: id,
+          vendor: name,
+          reason: err?.message || "Send failed",
+        });
+      }
+    }
+
+    this.logger.log(
+      `Bulk stall ticket send for event ${eventId}: ${sent} sent, ` +
+        `${skipped.length} skipped, ${failed.length} failed`,
+    );
+    return { total: stalls.length, sent, skipped, failed };
+  }
+
+  async resendStallTicket(stallId: string, customMessage?: string) {
     if (!Types.ObjectId.isValid(stallId)) {
       throw new BadRequestException("Invalid stall ID format");
     }
@@ -5015,6 +5075,39 @@ export class StallsService {
               Show this QR at the entrance. It's also attached as an image.
             </p>
           </div>`;
+    // Organizer's own words, escaped — free text from the dashboard must
+    // never be able to inject markup into the email.
+    const esc = (v: string) =>
+      v
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    const customBlock = customMessage?.trim()
+      ? `<div style="background:#f8fafc;border-left:3px solid #6366f1;padding:12px 16px;margin:0 0 16px;border-radius:0 8px 8px 0;white-space:pre-wrap">${esc(
+          customMessage.trim(),
+        ).replace(/\n/g, "<br/>")}</div>`
+      : "";
+    // "N days to go" — only while the event is still ahead, so a re-send
+    // after the event never claims a countdown.
+    const daysToGo = (() => {
+      const st = eventObj?.startDate ? new Date(eventObj.startDate) : null;
+      if (!st || isNaN(st.getTime())) return null;
+      const midnight = (d: Date) =>
+        new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+      const diff = Math.round((midnight(st) - midnight(new Date())) / 86400000);
+      return diff >= 0 ? diff : null;
+    })();
+    const countdownBlock =
+      daysToGo === null
+        ? ""
+        : `<p style="margin:0 0 16px;font-size:15px;font-weight:bold;color:#4338ca">${
+            daysToGo === 0
+              ? "Today's the day!"
+              : daysToGo === 1
+                ? "1 day to go"
+                : `${daysToGo} days to go`
+          }</p>`;
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
         <div style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:24px;text-align:center">
@@ -5022,6 +5115,8 @@ export class StallsService {
         </div>
         <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
           <p>${message.replace(/\*/g, "").replace(/\n/g, "<br/>")}</p>
+          ${customBlock}
+          ${countdownBlock}
           ${qrBlock}
         </div>
       </div>`;

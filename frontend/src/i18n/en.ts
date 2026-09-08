@@ -25,9 +25,10 @@ export const en: Record<string, string> = {
   // ---- individual (marriage) sidebar ----
   "navi.chatbot": "Assistant",
   "navi.events": "My Events",
-  "navi.guest-list": "Guest List",
+  "navi.guest-list": "Participants",
   "navi.email-settings": "Settings",
   "navi.help": "Help",
+  "navi.become-organizer": "Become an organizer",
 
   // ---- dashboard header ----
   "hdr.help": "Need Help?",

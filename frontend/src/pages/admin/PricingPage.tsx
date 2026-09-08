@@ -39,6 +39,8 @@ import {
   User,
   Award,
   Mail as MailIcon,
+  Receipt,
+  LifeBuoy,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -108,16 +110,13 @@ const STALLS_SECTIONS = [
   { key: "addons", label: "Add-ons" },
 ];
 
-const TICKETS_SECTIONS = [
-  { key: "online", label: "Online Sales" },
-  { key: "walkin", label: "Walk-in / Kiosk" },
-  { key: "qr", label: "QR Check-in" },
-  { key: "refunds", label: "Refunds" },
-];
-
 const PARTICIPANTS_SECTIONS = [
   { key: "list", label: "Attendee List" },
-  { key: "scanner", label: "Scanner" },
+  // NOT ENFORCED YET. The scanner is the standalone /events/:id/scan-tickets
+  // route, opened by volunteers who carry no subscription of their own — so
+  // gating it on the viewer's plan would lock the volunteer out instead of the
+  // organizer. Needs the event's organizer plan resolved server-side first.
+  { key: "scanner", label: "Scanner (not enforced yet)" },
   { key: "exports", label: "Exports" },
 ];
 
@@ -134,11 +133,8 @@ const ANALYTICS_SECTIONS = [
   { key: "exports", label: "Exports" },
 ];
 
-const COUPONS_SECTIONS = [
-  { key: "create", label: "Create Coupons" },
-  { key: "redeem", label: "Redemption" },
-  { key: "exhibitor", label: "Exhibitor Coupons" },
-];
+// "Redemption" and "Exhibitor Coupons" were removed: no such UI exists.
+const COUPONS_SECTIONS = [{ key: "create", label: "Create Coupons" }];
 
 const SPEAKER_SECTIONS = [
   { key: "applications", label: "Applications" },
@@ -151,22 +147,21 @@ const ROUND_TABLE_SECTIONS = [
   { key: "byEvent", label: "View by Event" },
 ];
 
+// "Segments" was removed — there is no segmentation feature to gate.
 const CRM_SECTIONS = [
   { key: "customers", label: "Customer List" },
-  { key: "segments", label: "Segments" },
   { key: "exports", label: "Exports" },
 ];
 
-const FEEDBACK_SECTIONS = [
-  { key: "list", label: "Feedback List" },
-  { key: "featured", label: "Featured Reviews" },
-  { key: "stats", label: "Stats" },
-];
+// "Featured Reviews" and "Stats" were removed: EventFeedbackDialog is a flat
+// comment list with neither.
+const FEEDBACK_SECTIONS = [{ key: "list", label: "Feedback List" }];
 
+// "Scanner Permissions" was removed: an operator's scanner access is the
+// per-operator `accessTabs` the organizer sets on each record, not a plan tier.
 const OPERATOR_SECTIONS = [
   { key: "list", label: "Operator List" },
   { key: "create", label: "Create Operator" },
-  { key: "scanner", label: "Scanner Permissions" },
 ];
 
 const ORGANIZER_FEATURE_MODULES: {
@@ -184,12 +179,10 @@ const ORGANIZER_FEATURE_MODULES: {
     icon: Calendar,
     sections: EVENT_TAB_SECTIONS,
   },
-  {
-    key: "tickets",
-    label: "Tickets",
-    icon: DollarSign,
-    sections: TICKETS_SECTIONS,
-  },
+  // No sub-sections: the tickets module is all-or-nothing today. The old
+  // online/walk-in/QR/refunds toggles named features that do not exist in
+  // TicketSalesManagement, so they saved into the plan and gated nothing.
+  { key: "tickets", label: "Tickets", icon: DollarSign },
   {
     key: "stalls",
     label: "Stalls",
@@ -276,6 +269,10 @@ const ORGANIZER_FEATURE_MODULES: {
     hasLimit: true,
     icon: Award,
   },
+  // The last two sidebar tabs that had no plan control at all — an organizer
+  // saw them on every tier regardless of what the plan said.
+  { key: "platformFees", label: "Platform Fees", icon: Receipt },
+  { key: "support", label: "Support", icon: LifeBuoy },
 ];
 
 interface ModuleConfig {

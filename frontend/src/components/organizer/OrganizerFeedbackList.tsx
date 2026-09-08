@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ModuleGate } from "@/components/ui/ModuleGate";
 import { jwtDecode } from "jwt-decode";
 import {
   Card,
@@ -150,6 +151,7 @@ export function OrganizerFeedbackList() {
           </CardContent>
         </Card>
       ) : (
+        <ModuleGate moduleKey="feedback" sectionKey="list">
         <div className="grid gap-3">
           {sorted.map((event) => {
             const ended = event.endDate
@@ -199,6 +201,7 @@ export function OrganizerFeedbackList() {
             );
           })}
         </div>
+        </ModuleGate>
       )}
 
       <EventFeedbackDialog

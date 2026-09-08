@@ -120,9 +120,9 @@ function DownloadableImage({
 
 const getPaymentBadge = (paymentStatus: string) => {
   const variants: Record<string, { variant: any; color: string }> = {
-    Unpaid: { variant: "destructive", color: "text-red-600" },
-    Partial: { variant: "secondary", color: "text-yellow-600" },
-    Paid: { variant: "default", color: "text-green-600" },
+    Unpaid: { variant: "destructive", color: "text-red-600 dark:text-red-400" },
+    Partial: { variant: "secondary", color: "text-yellow-600 dark:text-yellow-400" },
+    Paid: { variant: "default", color: "text-green-600 dark:text-green-400" },
   };
   const config = variants[paymentStatus] || variants.Unpaid;
   return <Badge variant={config.variant}>{paymentStatus}</Badge>;
@@ -167,7 +167,7 @@ function ConfirmationCountdown({
   const ms = end - now;
   if (ms <= 0) {
     return (
-      <div className="flex items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+      <div className="flex items-center justify-between gap-2 rounded-lg border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-700 dark:text-red-300">
         <span>
           ⏳ Confirmation window elapsed — this space will be auto-released
           shortly.
@@ -186,8 +186,8 @@ function ConfirmationCountdown({
     <div
       className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm font-semibold ${
         urgent
-          ? "border-red-200 bg-red-50 text-red-700"
-          : "border-amber-200 bg-amber-50 text-amber-700"
+          ? "border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300"
+          : "border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300"
       }`}
     >
       <span>
@@ -596,7 +596,7 @@ export function ExhibitorDetailDialog({
                             type="button"
                             size="sm"
                             variant="buttonOutline"
-                            className="h-7 border-amber-300 bg-background px-2 text-xs text-amber-800 hover:bg-amber-100"
+                            className="h-7 border-amber-300 dark:border-amber-500/40 bg-background px-2 text-xs text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-500/20"
                             onClick={() => setExtendDialogOpen(true)}
                           >
                             <Clock className="mr-1 h-3.5 w-3.5" />
@@ -606,7 +606,7 @@ export function ExhibitorDetailDialog({
                             type="button"
                             size="sm"
                             variant="buttonOutline"
-                            className="h-7 border-red-200 bg-background px-2 text-xs text-red-600 hover:bg-red-50"
+                            className="h-7 border-red-200 dark:border-red-500/30 bg-background px-2 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10"
                             disabled={isRemovingHold}
                             onClick={handleRemoveHold}
                             title="Turn the hold timer off"
@@ -626,8 +626,8 @@ export function ExhibitorDetailDialog({
                   )}
                   {!(stallRequest as any).confirmationDeadline &&
                     stallRequest.status === "Processing" && (
-                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
-                        <span className="text-xs text-amber-800">
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50/60 dark:bg-amber-500/10 px-3 py-2">
+                        <span className="text-xs text-amber-800 dark:text-amber-300">
                           Vendor needs more time to pay? Hold this space with a
                           timer — it auto-releases if unpaid by then.
                         </span>
@@ -635,7 +635,7 @@ export function ExhibitorDetailDialog({
                           type="button"
                           size="sm"
                           variant="buttonOutline"
-                          className="h-7 shrink-0 border-amber-300 bg-background px-2 text-xs text-amber-800 hover:bg-amber-100"
+                          className="h-7 shrink-0 border-amber-300 dark:border-amber-500/40 bg-background px-2 text-xs text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-500/20"
                           onClick={() => setStartHoldOpen(true)}
                         >
                           <Clock className="mr-1 h-3.5 w-3.5" />
@@ -643,14 +643,14 @@ export function ExhibitorDetailDialog({
                         </Button>
                       </div>
                     )}
-                  <Card className="border-blue-200 bg-blue-50/50">
+                  <Card className="border-blue-200 dark:border-blue-500/30 bg-blue-50/50 dark:bg-blue-500/10">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-semibold text-sm text-blue-900">
+                        <p className="font-semibold text-sm text-blue-900 dark:text-blue-200">
                           Payment Confirmation Required
                         </p>
-                        <p className="text-xs text-blue-700 mt-0.5">
+                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
                           Grand Total:{" "}
                           <span className="font-bold">
                             {formatPrice(stallRequest.grandTotal)}
@@ -694,23 +694,23 @@ export function ExhibitorDetailDialog({
               (() => {
                 const pa: any = (stallRequest as any).pendingAmendment;
                 return (
-                  <Card className="border-amber-300 bg-amber-50">
+                  <Card className="border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10">
                     <CardContent className="p-4 space-y-3">
                       <div className="flex items-center gap-2">
-                        <AlertCircle className="h-4 w-4 text-amber-700" />
-                        <p className="font-semibold text-sm text-amber-900">
+                        <AlertCircle className="h-4 w-4 text-amber-700 dark:text-amber-300" />
+                        <p className="font-semibold text-sm text-amber-900 dark:text-amber-200">
                           Vendor edited this request
                         </p>
-                        <Badge className="bg-amber-200 text-amber-800">
+                        <Badge className="bg-amber-200 text-amber-800 dark:text-amber-300">
                           Approval needed
                         </Badge>
                       </div>
-                      <div className="rounded-lg border border-amber-200 bg-background p-3 text-sm space-y-2">
+                      <div className="rounded-lg border border-amber-200 dark:border-amber-500/30 bg-background p-3 text-sm space-y-2">
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Operators</span>
                           <span className="font-medium">
                             {(stallRequest as any).noOfOperators || "—"} →{" "}
-                            <span className="text-amber-700 font-bold">
+                            <span className="text-amber-700 dark:text-amber-300 font-bold">
                               {pa.noOfOperators}
                             </span>
                           </span>
@@ -741,7 +741,7 @@ export function ExhibitorDetailDialog({
                           <span className="text-muted-foreground">
                             Difference paid by vendor
                           </span>
-                          <span className="font-bold text-green-700">
+                          <span className="font-bold text-green-700 dark:text-green-300">
                             {formatPrice(pa.amountDue || 0)}
                           </span>
                         </div>
@@ -758,14 +758,14 @@ export function ExhibitorDetailDialog({
                             href={`${apiURL.replace(/\/$/, "")}${pa.transactionScreenshot}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-xs text-blue-600 underline"
+                            className="text-xs text-blue-600 dark:text-blue-400 underline"
                           >
                             View payment screenshot
                           </a>
                         )}
                       </div>
                       <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs text-amber-700">
+                        <p className="text-xs text-amber-700 dark:text-amber-300">
                           Approving applies the changes, re-issues a new QR to the
                           vendor by email, and invalidates the old QR.
                         </p>
@@ -788,18 +788,18 @@ export function ExhibitorDetailDialog({
             {onDecideCancellation &&
               (stallRequest as any).pendingCancellation?.status ===
                 "requested" && (
-                <Card className="border-red-300 bg-red-50">
+                <Card className="border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10">
                   <CardContent className="p-4 space-y-3">
                     <div className="flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4 text-red-700" />
-                      <p className="font-semibold text-sm text-red-900">
+                      <AlertCircle className="h-4 w-4 text-red-700 dark:text-red-300" />
+                      <p className="font-semibold text-sm text-red-900 dark:text-red-200">
                         Vendor requested cancellation
                       </p>
-                      <Badge className="bg-red-200 text-red-800">
+                      <Badge className="bg-red-200 text-red-800 dark:text-red-300">
                         Decision needed
                       </Badge>
                     </div>
-                    <div className="rounded-lg border border-red-200 bg-background p-3 text-sm">
+                    <div className="rounded-lg border border-red-200 dark:border-red-500/30 bg-background p-3 text-sm">
                       <p className="text-xs text-muted-foreground">Reason</p>
                       <p className="text-foreground">
                         {(stallRequest as any).pendingCancellation?.reason ||
@@ -820,7 +820,7 @@ export function ExhibitorDetailDialog({
                       />
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs text-red-700">
+                      <p className="text-xs text-red-700 dark:text-red-300">
                         Approving frees the space and invalidates the QR.
                       </p>
                       <div className="flex gap-2">
@@ -858,36 +858,36 @@ export function ExhibitorDetailDialog({
             {/* Transaction Verification Details */}
             {((stallRequest as any).transactionId ||
               (stallRequest as any).transactionScreenshot) && (
-              <Card className="border-amber-200 bg-amber-50/50">
+              <Card className="border-amber-200 dark:border-amber-500/30 bg-amber-50/50 dark:bg-amber-500/10">
                 <CardContent className="p-4 space-y-3">
-                  <p className="font-semibold text-sm text-amber-900 flex items-center gap-2">
+                  <p className="font-semibold text-sm text-amber-900 dark:text-amber-200 flex items-center gap-2">
                     <CreditCard className="h-4 w-4" />
                     Transaction Details from Vendor
                   </p>
                   {(stallRequest as any).transactionId && (
                     <div>
-                      <p className="text-xs text-amber-700">
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
                         Transaction ID / Reference
                       </p>
-                      <p className="font-mono font-bold text-sm text-foreground bg-background rounded px-3 py-1.5 border border-amber-200 mt-1">
+                      <p className="font-mono font-bold text-sm text-foreground bg-background rounded px-3 py-1.5 border border-amber-200 dark:border-amber-500/30 mt-1">
                         {(stallRequest as any).transactionId}
                       </p>
                     </div>
                   )}
                   {(stallRequest as any).transactionScreenshot && (
                     <div>
-                      <p className="text-xs text-amber-700 mb-1">
+                      <p className="text-xs text-amber-700 dark:text-amber-300 mb-1">
                         Payment Screenshot
                       </p>
                       <DownloadableImage
                         path={(stallRequest as any).transactionScreenshot}
                         alt="Transaction Screenshot"
-                        className="max-w-xs max-h-60 rounded-lg border border-amber-200 shadow-sm"
+                        className="max-w-xs max-h-60 rounded-lg border border-amber-200 dark:border-amber-500/30 shadow-sm"
                       />
                     </div>
                   )}
                   {(stallRequest as any).paymentMethod && (
-                    <p className="text-xs text-amber-700">
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
                       Payment Method:{" "}
                       <span className="font-semibold capitalize">
                         {(stallRequest as any).paymentMethod === "bank"
@@ -901,12 +901,12 @@ export function ExhibitorDetailDialog({
             )}
 
             {stallRequest.paymentStatus === "Paid" && (
-              <Card className="border-green-200 bg-green-50/50">
+              <Card className="border-green-200 dark:border-green-500/30 bg-green-50/50 dark:bg-green-500/10">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                      <p className="font-semibold text-sm text-green-800">
+                      <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      <p className="font-semibold text-sm text-green-800 dark:text-green-300">
                         Payment Confirmed — QR ticket generated and sent to
                         vendor
                       </p>
@@ -992,7 +992,7 @@ export function ExhibitorDetailDialog({
                     {stallRequest.shopkeeperId?.hasDocVerification && (
                       <Badge
                         variant="outline"
-                        className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] h-5"
+                        className="bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-500/30 text-[10px] h-5"
                       >
                         Verified
                       </Badge>
@@ -1019,7 +1019,7 @@ export function ExhibitorDetailDialog({
                     <p className="font-medium">
                       <a
                         href={`mailto:${stallRequest.shopkeeperId?.email}`}
-                        className="text-blue-600 hover:underline block truncate"
+                        className="text-blue-600 dark:text-blue-400 hover:underline block truncate"
                         target="_blank"
                         rel="noopener noreferrer"
                       >
@@ -1034,7 +1034,7 @@ export function ExhibitorDetailDialog({
                     <p className="font-medium">
                       <a
                         href={`mailto:${stallRequest.shopkeeperId?.businessEmail}`}
-                        className="text-blue-600 hover:underline block truncate"
+                        className="text-blue-600 dark:text-blue-400 hover:underline block truncate"
                         target="_blank"
                         rel="noopener noreferrer"
                       >
@@ -1053,7 +1053,7 @@ export function ExhibitorDetailDialog({
                         ).replace(/\+/g, "")}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-green-600 hover:underline"
+                        className="text-green-600 dark:text-green-400 hover:underline"
                       >
                         {stallRequest.shopkeeperId?.whatsappNumber}
                       </a>
@@ -1221,7 +1221,7 @@ export function ExhibitorDetailDialog({
                       ) && (
                         <Badge
                           variant="outline"
-                          className="border-amber-300 bg-amber-50 text-amber-700"
+                          className="border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300"
                         >
                           ⚠ Placeholder — no registration provided, contact
                           vendor
@@ -1261,7 +1261,7 @@ export function ExhibitorDetailDialog({
                                 "In BizFile, open the Entity search, paste the UEN and click Search.",
                             });
                           }}
-                          className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                          className="inline-flex items-center gap-1 rounded-md border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-500/20"
                           title="Copy the UEN and open the official ACRA BizFile registry"
                         >
                           Verify ↗
@@ -1300,7 +1300,7 @@ export function ExhibitorDetailDialog({
                                 "On the GST portal, paste the GSTIN, enter the captcha and click Search.",
                             });
                           }}
-                          className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                          className="inline-flex items-center gap-1 rounded-md border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-500/20"
                           title="Copy the GSTIN and open the official GST portal (Search Taxpayer)"
                         >
                           Verify ↗
@@ -1318,7 +1318,7 @@ export function ExhibitorDetailDialog({
                     <div className="col-span-2 pt-2 border-t">
                       <div className="mb-2 flex items-center gap-2">
                         <Label className="text-muted-foreground">{t("GST Verification")}</Label>
-                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+                        <Badge className="bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-500/20">
                           ✓ Verified
                         </Badge>
                       </div>
@@ -1364,7 +1364,7 @@ export function ExhibitorDetailDialog({
                     <div className="col-span-2 pt-2 border-t">
                       <div className="mb-2 flex items-center gap-2">
                         <Label className="text-muted-foreground">{t("UEN Verification")}</Label>
-                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+                        <Badge className="bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-500/20">
                           ✓ Verified
                         </Badge>
                         <span className="text-[10px] text-muted-foreground">
@@ -1547,7 +1547,7 @@ export function ExhibitorDetailDialog({
                         {stallRequest.eventId?.features?.parking && (
                           <Badge
                             variant="outline"
-                            className="flex gap-1 items-center bg-green-50"
+                            className="flex gap-1 items-center bg-green-50 dark:bg-green-500/10"
                           >
                             <ParkingCircle className="w-3 h-3" /> Parking
                           </Badge>
@@ -1555,7 +1555,7 @@ export function ExhibitorDetailDialog({
                         {stallRequest.eventId?.features?.wifi && (
                           <Badge
                             variant="outline"
-                            className="flex gap-1 items-center bg-yellow-50"
+                            className="flex gap-1 items-center bg-yellow-50 dark:bg-yellow-500/10"
                           >
                             <Wifi className="w-3 h-3" /> WiFi
                           </Badge>
@@ -1563,7 +1563,7 @@ export function ExhibitorDetailDialog({
                         {stallRequest.eventId?.features?.photography && (
                           <Badge
                             variant="outline"
-                            className="flex gap-1 items-center bg-blue-50"
+                            className="flex gap-1 items-center bg-blue-50 dark:bg-blue-500/10"
                           >
                             <Camera className="w-3 h-3" /> Photography
                           </Badge>
@@ -1571,7 +1571,7 @@ export function ExhibitorDetailDialog({
                         {stallRequest.eventId?.features?.security && (
                           <Badge
                             variant="outline"
-                            className="flex gap-1 items-center bg-red-50"
+                            className="flex gap-1 items-center bg-red-50 dark:bg-red-500/10"
                           >
                             <ShieldCheck className="w-3 h-3" /> Security
                           </Badge>
@@ -1746,7 +1746,7 @@ export function ExhibitorDetailDialog({
                 <Separator className="my-2" />
                 <div className="flex justify-between text-lg font-bold">
                   <span>Grand Total</span>
-                  <span className="text-green-600">
+                  <span className="text-green-600 dark:text-green-400">
                     {formatPrice(stallRequest.grandTotal)}
                   </span>
                 </div>
@@ -1760,8 +1760,8 @@ export function ExhibitorDetailDialog({
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-start gap-3">
-                  <div className="bg-blue-100 rounded-full p-2">
-                    <FileText className="h-4 w-4 text-blue-600" />
+                  <div className="bg-blue-100 dark:bg-blue-500/20 rounded-full p-2">
+                    <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                   </div>
                   <div>
                     <p className="font-medium">Request Submitted</p>
@@ -1772,8 +1772,8 @@ export function ExhibitorDetailDialog({
                 </div>
                 {stallRequest.confirmationDate && (
                   <div className="flex items-start gap-3">
-                    <div className="bg-green-100 rounded-full p-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <div className="bg-green-100 dark:bg-green-500/20 rounded-full p-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
                     </div>
                     <div>
                       <p className="font-medium">Request Confirmed</p>
@@ -1785,8 +1785,8 @@ export function ExhibitorDetailDialog({
                 )}
                 {stallRequest.selectionDate && (
                   <div className="flex items-start gap-3">
-                    <div className="bg-purple-100 rounded-full p-2">
-                      <Package className="h-4 w-4 text-purple-600" />
+                    <div className="bg-purple-100 dark:bg-purple-500/20 rounded-full p-2">
+                      <Package className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                     </div>
                     <div>
                       <p className="font-medium">Tables Selected</p>
@@ -1798,8 +1798,8 @@ export function ExhibitorDetailDialog({
                 )}
                 {stallRequest.paymentDate && (
                   <div className="flex items-start gap-3">
-                    <div className="bg-yellow-100 rounded-full p-2">
-                      <CreditCard className="h-4 w-4 text-yellow-600" />
+                    <div className="bg-yellow-100 dark:bg-yellow-500/20 rounded-full p-2">
+                      <CreditCard className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
                     </div>
                     <div>
                       <p className="font-medium">Payment Received</p>
@@ -1811,8 +1811,8 @@ export function ExhibitorDetailDialog({
                 )}
                 {stallRequest.completionDate && (
                   <div className="flex items-start gap-3">
-                    <div className="bg-green-100 rounded-full p-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <div className="bg-green-100 dark:bg-green-500/20 rounded-full p-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
                     </div>
                     <div>
                       <p className="font-medium">Booking Completed</p>
@@ -1824,8 +1824,8 @@ export function ExhibitorDetailDialog({
                 )}
                 {stallRequest.hasCheckedIn && stallRequest.checkInTime && (
                   <div className="flex items-start gap-3">
-                    <div className="bg-green-100 rounded-full p-2">
-                      <Clock1 className="h-4 w-4 text-green-600" />
+                    <div className="bg-green-100 dark:bg-green-500/20 rounded-full p-2">
+                      <Clock1 className="h-4 w-4 text-green-600 dark:text-green-400" />
                     </div>
                     <div>
                       <p className="font-medium">Checked In Time</p>
@@ -1838,8 +1838,8 @@ export function ExhibitorDetailDialog({
                 {stallRequest.hasCheckedOut && stallRequest.checkOutTime && (
                   <div className="flex items-start gap-3 justify-between">
                     <div className="flex items-start gap-3">
-                      <div className="bg-green-100 rounded-full p-2">
-                        <Clock12 className="h-4 w-4 text-green-600" />
+                      <div className="bg-green-100 dark:bg-green-500/20 rounded-full p-2">
+                        <Clock12 className="h-4 w-4 text-green-600 dark:text-green-400" />
                       </div>
                       <div>
                         <p className="font-medium">Checked Out Time</p>
@@ -1971,29 +1971,29 @@ export function ExhibitorDetailDialog({
                             { bg: string; text: string; border: string }
                           > = {
                             Pending: {
-                              bg: "bg-yellow-100",
-                              text: "text-yellow-700",
-                              border: "border-yellow-300",
+                              bg: "bg-yellow-100 dark:bg-yellow-500/20",
+                              text: "text-yellow-700 dark:text-yellow-300",
+                              border: "border-yellow-300 dark:border-yellow-500/40",
                             },
                             Confirmed: {
-                              bg: "bg-green-100",
-                              text: "text-green-700",
-                              border: "border-green-300",
+                              bg: "bg-green-100 dark:bg-green-500/20",
+                              text: "text-green-700 dark:text-green-300",
+                              border: "border-green-300 dark:border-green-500/40",
                             },
                             Processing: {
-                              bg: "bg-blue-100",
-                              text: "text-blue-700",
-                              border: "border-blue-300",
+                              bg: "bg-blue-100 dark:bg-blue-500/20",
+                              text: "text-blue-700 dark:text-blue-300",
+                              border: "border-blue-300 dark:border-blue-500/40",
                             },
                             Partial: {
-                              bg: "bg-orange-100",
-                              text: "text-orange-700",
-                              border: "border-orange-300",
+                              bg: "bg-orange-100 dark:bg-orange-500/20",
+                              text: "text-orange-700 dark:text-orange-300",
+                              border: "border-orange-300 dark:border-orange-500/40",
                             },
                             Paid: {
-                              bg: "bg-green-100",
-                              text: "text-green-700",
-                              border: "border-green-300",
+                              bg: "bg-green-100 dark:bg-green-500/20",
+                              text: "text-green-700 dark:text-green-300",
+                              border: "border-green-300 dark:border-green-500/40",
                             },
                             Completed: {
                               bg: "bg-emerald-100",
@@ -2001,14 +2001,14 @@ export function ExhibitorDetailDialog({
                               border: "border-emerald-300",
                             },
                             Cancelled: {
-                              bg: "bg-red-100",
-                              text: "text-red-700",
-                              border: "border-red-300",
+                              bg: "bg-red-100 dark:bg-red-500/20",
+                              text: "text-red-700 dark:text-red-300",
+                              border: "border-red-300 dark:border-red-500/40",
                             },
                             Returned: {
-                              bg: "bg-purple-100",
-                              text: "text-purple-700",
-                              border: "border-purple-300",
+                              bg: "bg-purple-100 dark:bg-purple-500/20",
+                              text: "text-purple-700 dark:text-purple-300",
+                              border: "border-purple-300 dark:border-purple-500/40",
                             },
                           };
                           const config = statusConfig[entry.status] || {
@@ -2072,9 +2072,9 @@ export function ExhibitorDetailDialog({
 
             {/* Cancellation Reason */}
             {stallRequest.cancellationReason && (
-              <Card className="border-red-200">
+              <Card className="border-red-200 dark:border-red-500/30">
                 <CardHeader>
-                  <CardTitle className="text-lg text-red-600">{t("Cancellation Reason")}</CardTitle>
+                  <CardTitle className="text-lg text-red-600 dark:text-red-400">{t("Cancellation Reason")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm">{stallRequest.cancellationReason}</p>
@@ -2135,7 +2135,7 @@ export function ExhibitorDetailDialog({
                   onClick={() => setHoldHours(h)}
                   className={`rounded border px-2.5 py-1 text-xs font-semibold ${
                     holdHours === h
-                      ? "border-amber-400 bg-amber-100 text-amber-900"
+                      ? "border-amber-400 bg-amber-100 dark:bg-amber-500/20 text-amber-900 dark:text-amber-200"
                       : "border-border bg-background text-muted-foreground hover:bg-muted"
                   }`}
                 >
@@ -2217,7 +2217,7 @@ export function ExhibitorDetailDialog({
                   onClick={() => setExtendHours(h)}
                   className={`rounded border px-2.5 py-1 text-xs font-semibold ${
                     extendHours === h
-                      ? "border-amber-400 bg-amber-100 text-amber-900"
+                      ? "border-amber-400 bg-amber-100 dark:bg-amber-500/20 text-amber-900 dark:text-amber-200"
                       : "border-border bg-background text-muted-foreground hover:bg-muted"
                   }`}
                 >

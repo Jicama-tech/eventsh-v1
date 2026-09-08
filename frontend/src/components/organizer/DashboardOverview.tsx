@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { useSubscription } from "@/hooks/useSubscription";
+import { ModuleGate } from "@/components/ui/ModuleGate";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -93,6 +95,16 @@ export default function DashboardOverview({
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showEventDialog, setShowEventDialog] = useState(false);
+  // Plan sub-toggles for the analytics module:
+  //   overview  — the headline stat tiles
+  //   revenue   — money figures inside each event card
+  //   attendees — the attendee/participant counts
+  //   exports   — the CSV / PDF download menu
+  const { isModuleSectionEnabled } = useSubscription();
+  const canOverview = isModuleSectionEnabled("analytics", "overview");
+  const canRevenue = isModuleSectionEnabled("analytics", "revenue");
+  const canAttendees = isModuleSectionEnabled("analytics", "attendees");
+  const canExports = isModuleSectionEnabled("analytics", "exports");
   const [organizerId, setOrganizerId] = useState("");
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [selectedQrCodeEvent, setSelectedQrCodeEvent] = useState(null);
@@ -565,7 +577,8 @@ export default function DashboardOverview({
 
             {/* Data-Rich Metrics Grid - Enhanced with Stall Data */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4 border-t pt-4">
-              {/* Metric 1: Tickets Sold */}
+              {/* Metric 1: Tickets Sold — the attendee-count metric. */}
+              {canAttendees && (
               <div className="text-center">
                 <div className="text-xl font-bold text-blue-600">
                   {ticketsSold}
@@ -574,6 +587,7 @@ export default function DashboardOverview({
                   Tickets Sold
                 </div>
               </div>
+              )}
 
               {/* Metric 2: Stalls Booked — shown against the total sellable
                   spaces in the venue so it reads as "booked of available". */}
@@ -593,6 +607,7 @@ export default function DashboardOverview({
               </div>
 
               {/* Metric 3: Total Revenue */}
+              {canRevenue && (
               <div className="text-center">
                 <div className="text-xl font-bold text-green-600">
                   {formatPrice(revenue)}
@@ -601,8 +616,10 @@ export default function DashboardOverview({
                   Total Revenue
                 </div>
               </div>
+              )}
 
               {/* Metric 4: Tickets Revenue */}
+              {canRevenue && (
               <div className="text-center">
                 <div className="text-lg font-semibold text-blue-500">
                   {formatPrice(ticketsRevenue)}
@@ -611,8 +628,10 @@ export default function DashboardOverview({
                   Tickets Revenue
                 </div>
               </div>
+              )}
 
               {/* Metric 5: Stalls Revenue */}
+              {canRevenue && (
               <div className="text-center">
                 <div className="text-lg font-semibold text-purple-500">
                   {formatPrice(stallsRevenue)}
@@ -621,6 +640,7 @@ export default function DashboardOverview({
                   Stalls Revenue
                 </div>
               </div>
+              )}
 
               {/* Metric 6: Pending Stalls */}
               <div className="text-center">
@@ -770,6 +790,7 @@ export default function DashboardOverview({
                     <MessageSquare className="h-4 w-4 mr-1" />
                     Feedback
                   </Button>
+                  {canExports && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -798,6 +819,7 @@ export default function DashboardOverview({
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  )}
                 </>
               )}
             </div>
@@ -1373,6 +1395,7 @@ export default function DashboardOverview({
       </div>
 
       {/* Stats Grid */}
+      <ModuleGate moduleKey="analytics" sectionKey="overview" hideWhenLocked>
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4 sm:gap-6">
         {stats.map((stat, index) => {
           const Icon = STAT_ICONS[stat.title] || CalendarDays;
@@ -1404,6 +1427,7 @@ export default function DashboardOverview({
           );
         })}
       </div>
+      </ModuleGate>
 
       <hr />
 

@@ -86,6 +86,69 @@ export const imageFilter = (req: any, file: any, cb: any) => {
   }
 };
 
+/**
+ * Field names that carry money. Matched case-insensitively against a key, so
+ * `price`, `tablePrice`, `memberBookingPrice`, `depositPrice`, `chairPrice`
+ * and anything shaped like them are all covered without listing each one.
+ */
+const MONEY_KEY = /(price|deposit|fee|cost|charge|amount)/i;
+
+/**
+ * Recursively force every money-bearing field to zero.
+ *
+ * Individuals have no payment integration (no Razorpay / Stripe / bank), so
+ * nothing on their events may carry a price. The visitor-type and sponsor-tier
+ * guards below do this explicitly for the two surfaces the UI exposes; this
+ * covers the rest — stalls, round tables, seat rows, scheduled spaces,
+ * workshops and add-ons — which the form locks behind the organizer upgrade
+ * panel but which a hand-crafted request could still set. Structural, so a
+ * price field added later is zeroed without touching this guard again.
+ *
+ * Only numbers and numeric strings are rewritten, and the string-ness is
+ * preserved: these fields reach us from FormData as either shape, and handing
+ * Mongoose a 0 where it expected "0" (or the reverse) is its own bug.
+ */
+function zeroMoneyFields<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(zeroMoneyFields) as unknown as T;
+  if (!value || typeof value !== "object") return value;
+  const out: any = { ...(value as any) };
+  for (const key of Object.keys(out)) {
+    const v = out[key];
+    if (MONEY_KEY.test(key)) {
+      if (typeof v === "number") {
+        out[key] = 0;
+        continue;
+      }
+      // "12.50" -> "0"; a non-numeric string (a label, a currency code) is
+      // left alone rather than being clobbered into a number.
+      if (typeof v === "string" && v.trim() !== "" && !isNaN(Number(v))) {
+        out[key] = "0";
+        continue;
+      }
+    }
+    out[key] = zeroMoneyFields(v);
+  }
+  return out;
+}
+
+/** The arrays on an event body that can carry a price. */
+const PRICED_EVENT_ARRAYS = [
+  "tableTemplates",
+  "roundTableTemplates",
+  "seatRowTemplates",
+  "scheduledSpaceTemplates",
+  "workshopPackages",
+  "workshopSessions",
+  "addOnItems",
+];
+
+/** Zero the priced arrays on an event body, in place. */
+function stripPricesForIndividual(body: any): void {
+  for (const key of PRICED_EVENT_ARRAYS) {
+    if (Array.isArray(body?.[key])) body[key] = zeroMoneyFields(body[key]);
+  }
+}
+
 @Controller("events")
 export class EventsController {
   constructor(
@@ -683,6 +746,13 @@ export class EventsController {
           return mom;
         });
       }
+
+      // Last stop before persisting: no priced anything on an Individual's
+      // event. Runs here rather than beside the visitorTypes guard so every
+      // JSON.parse above has already turned the FormData strings into arrays.
+      // Bare `isIndividual`, matching the visitorTypes/sponsorTypes guards
+      // above — the same request must not get tickets zeroed but stalls not.
+      if (isIndividual) stripPricesForIndividual(body);
 
       const event = await this.eventsService.create(body);
 
@@ -1388,6 +1458,10 @@ export class EventsController {
           return mom;
         });
       }
+
+      // Mirror of the create-path guard — an edit must not be able to add
+      // prices the create path refused.
+      if (updateIsIndividual) stripPricesForIndividual(body);
 
       const event = await this.eventsService.update(id, body);
 

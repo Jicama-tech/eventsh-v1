@@ -1,6 +1,8 @@
 // File: src/components/DashboardTabs/EventAttendees.tsx
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useSubscription } from "@/hooks/useSubscription";
+import { ModuleGate } from "@/components/ui/ModuleGate";
 import EventRsvpPanel from "./EventRsvpPanel";
 import { Button } from "@/components/ui/button";
 import {
@@ -363,6 +365,19 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   // New: single-speaker detail view
   const [selectedSpeaker, setSelectedSpeaker] = useState<any | null>(null);
   // Visitor detail view — replaces the Attendance / Attendance Time columns.
+  // Plan sub-toggles for the participants module. `scanner` is not read
+  // here: the QR scanner is the standalone /events/:id/scan-tickets route
+  // used by volunteers, who hold no subscription of their own — gating it
+  // on this hook would lock the volunteers out rather than the organizer.
+  const { isModuleSectionEnabled } = useSubscription();
+  const canList = isModuleSectionEnabled("participants", "list");
+  const canExports = isModuleSectionEnabled("participants", "exports");
+  // `workshopRequests` is filed under the events module in the admin plan
+  // form even though the UI lives on this page — read it where it is stored.
+  const canWorkshopRequests = isModuleSectionEnabled(
+    "events",
+    "workshopRequests",
+  );
   const [selectedVisitor, setSelectedVisitor] = useState<any | null>(null);
   const [resendingTicket, setResendingTicket] = useState(false);
   // Lets the organizer correct a mistyped address before re-sending.
@@ -2288,10 +2303,12 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       };
     }
     const e: any = event;
+    // `participants.list` — the attendee list itself.
     const visitors =
-      (Array.isArray(e.visitorTypes) && e.visitorTypes.length > 0) ||
-      (typeof e.totalTickets === "number" && e.totalTickets > 0) ||
-      (typeof e.ticketPrice === "number" && e.ticketPrice > 0);
+      canList &&
+      ((Array.isArray(e.visitorTypes) && e.visitorTypes.length > 0) ||
+        (typeof e.totalTickets === "number" && e.totalTickets > 0) ||
+        (typeof e.ticketPrice === "number" && e.ticketPrice > 0));
     const exhibitors =
       !!e.venueTables &&
       (Array.isArray(e.venueTables)
@@ -2305,8 +2322,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     // are open OR the event already has workshop sessions (organizer-added
     // or previously approved from a host application).
     const workshopRequests =
-      !!e.workshopHostingOpen ||
-      (Array.isArray(e.workshopSessions) && e.workshopSessions.length > 0);
+      canWorkshopRequests &&
+      (!!e.workshopHostingOpen ||
+        (Array.isArray(e.workshopSessions) && e.workshopSessions.length > 0));
     // Sponsors show as soon as the organizer has published any tier for the
     // event — applications arrive against those tiers.
     const sponsors =
@@ -3145,6 +3163,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                             <span className="ml-auto text-sm text-muted-foreground">
                               Showing {filteredStalls.length} of {stalls.length}
                             </span>
+                            {canExports && (
                             <Button
                               variant="outline"
                               size="sm"
@@ -3155,6 +3174,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                               <FileSpreadsheet className="h-4 w-4 mr-1.5" />
                               Export to Excel
                             </Button>
+                            )}
                           </div>
                           {filteredStalls.length === 0 ? (
                             <div className="text-center py-8 text-muted-foreground">

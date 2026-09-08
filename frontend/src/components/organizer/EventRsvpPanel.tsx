@@ -228,7 +228,7 @@ export default function EventRsvpPanel({
         <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-lg">
           <span className="flex items-center gap-2">
             <Heart className="h-5 w-5 text-rose-500" />
-            RSVP Guest List
+            RSVP Participants
           </span>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={load} disabled={loading}>
@@ -345,7 +345,7 @@ export default function EventRsvpPanel({
                       className="border-b align-top last:border-0 hover:bg-rose-50/40"
                     >
                       <td className="px-2 py-3">
-                        <div className="font-medium text-stone-800">
+                        <div className="font-medium text-foreground">
                           {r.name}
                         </div>
                         <div className="flex items-center gap-1 break-all text-xs text-muted-foreground">
@@ -354,7 +354,7 @@ export default function EventRsvpPanel({
                       </td>
                       <td className="px-2 py-3">
                         {r.contactNumber ? (
-                          <span className="flex items-center gap-1 text-stone-600">
+                          <span className="flex items-center gap-1 text-muted-foreground">
                             <Phone className="h-3 w-3" /> {r.contactNumber}
                           </span>
                         ) : (
@@ -415,7 +415,7 @@ export default function EventRsvpPanel({
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="max-w-[240px] px-2 py-3 text-stone-600">
+                      <td className="max-w-[240px] px-2 py-3 text-muted-foreground">
                         {r.message || (
                           <span className="text-muted-foreground">—</span>
                         )}
@@ -463,7 +463,7 @@ export default function EventRsvpPanel({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="font-medium text-stone-800">
+                      <div className="font-medium text-foreground">
                         {r.name}
                       </div>
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -482,7 +482,7 @@ export default function EventRsvpPanel({
                     )}
                   </div>
 
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-stone-600">
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
                     {sideLabel(r.side) && (
                       <Badge
                         variant="outline"
@@ -509,7 +509,7 @@ export default function EventRsvpPanel({
                   </div>
 
                   {r.attending && ageSummary(r.ageGroups) && (
-                    <div className="mt-1.5 text-xs text-stone-500">
+                    <div className="mt-1.5 text-xs text-muted-foreground">
                       {ageSummary(r.ageGroups)}
                     </div>
                   )}
@@ -529,7 +529,7 @@ export default function EventRsvpPanel({
                   )}
 
                   {r.message && (
-                    <p className="mt-2 text-sm text-stone-600">{r.message}</p>
+                    <p className="mt-2 text-sm text-muted-foreground">{r.message}</p>
                   )}
 
                   <button
@@ -598,7 +598,7 @@ function ageSummary(a?: RsvpRow["ageGroups"]): string {
 function AgeTile({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg bg-muted/40 px-2 py-2 text-center">
-      <div className="text-lg font-semibold text-stone-800">{value}</div>
+      <div className="text-lg font-semibold text-foreground">{value}</div>
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
@@ -618,7 +618,7 @@ function Stat({
   tone?: "default" | "green" | "rose";
 }) {
   const tones: Record<string, string> = {
-    default: "bg-muted/50 text-stone-700",
+    default: "bg-muted/50 text-foreground",
     green: "bg-green-50 text-green-700",
     rose: "bg-rose-50 text-rose-700",
   };
