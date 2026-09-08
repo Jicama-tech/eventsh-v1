@@ -76,7 +76,6 @@ import {
   Receipt,
   Loader2,
   ClipboardList,
-  Lock,
 } from "lucide-react";
 import { format } from "date-fns";
 import { jwtDecode } from "jwt-decode";
@@ -502,9 +501,14 @@ const MyEvents: React.FC = () => {
       const matchesStatus =
         statusFilter === "all" || event.status === statusFilter;
 
-      return matchesSearch && matchesCategory && matchesStatus;
+      // Events beyond the plan's capacity are not listed at all. `isWithin`
+      // keeps the newest `limit`, so what shows is always the current work
+      // rather than whichever events happen to sort first.
+      const withinPlan = !eventQuota || eventQuota.isWithin(event._id);
+
+      return matchesSearch && matchesCategory && matchesStatus && withinPlan;
     });
-  }, [events, searchQuery, categoryFilter, statusFilter]);
+  }, [events, searchQuery, categoryFilter, statusFilter, eventQuota]);
 
   // Statistics with proper safety checks
   const stats = useMemo(() => {
@@ -1085,7 +1089,7 @@ const MyEvents: React.FC = () => {
               </Badge>
               <span className="text-xs text-muted-foreground">
                 {eventQuota.overBy > 0
-                  ? `${eventQuota.overBy} over your plan — only your ${eventQuota.limit} most recent count`
+                  ? `${eventQuota.overBy} not shown — your plan lists the ${eventQuota.limit} most recent. Upgrade to see the rest.`
                   : eventQuota.remaining === 0
                     ? "You've used your plan's events"
                     : `${eventQuota.remaining} left`}
@@ -1257,26 +1261,12 @@ const MyEvents: React.FC = () => {
             /* Events List */
             <div className="space-y-4">
               {filteredEvents.map((event) => {
-                // Outside the plan = older than the newest `limit` events.
-                const outsidePlan =
-                  !!eventQuota && !eventQuota.isWithin(event._id);
                 return (
                 <Card
                   key={event._id}
-                  className={`hover:shadow-md transition-shadow ${
-                    outsidePlan
-                      ? "border-rose-200 dark:border-rose-500/30 bg-rose-50/40 dark:bg-rose-500/5"
-                      : ""
-                  }`}
+                  className="hover:shadow-md transition-shadow"
                 >
                   <CardContent className="p-6">
-                    {outsidePlan && (
-                      <p className="mb-3 flex items-center gap-1.5 text-xs font-medium text-rose-700 dark:text-rose-300">
-                        <Lock className="h-3 w-3" />
-                        Outside your plan's {eventQuota?.limit}-event capacity —
-                        upgrade to bring it back in
-                      </p>
-                    )}
                     <div className="flex flex-col lg:flex-row justify-between items-start gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start gap-4">
