@@ -361,9 +361,9 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
 
   const getPaymentBadge = (paymentStatus: string) => {
     const map: Record<string, { variant: any; color: string }> = {
-      Unpaid: { variant: "destructive", color: "text-red-600" },
-      Partial: { variant: "secondary", color: "text-yellow-600" },
-      Paid: { variant: "default", color: "text-green-600" },
+      Unpaid: { variant: "destructive", color: "text-red-600 dark:text-red-400" },
+      Partial: { variant: "secondary", color: "text-yellow-600 dark:text-yellow-400" },
+      Paid: { variant: "default", color: "text-green-600 dark:text-green-400" },
       Waived: { variant: "outline", color: "text-muted-foreground" },
     };
     const config = map[paymentStatus] || map.Waived;
@@ -389,7 +389,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
             <CardTitle className="text-sm font-medium text-muted-foreground">{t("Total Events")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.totalEvents}</div>
+            <div className="text-3xl font-bold text-stat-indigo">{stats.totalEvents}</div>
           </CardContent>
         </Card>
         <Card>
@@ -397,7 +397,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
             <CardTitle className="text-sm font-medium text-muted-foreground">{t("Total Speaker Requests")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.totalRequests}</div>
+            <div className="text-3xl font-bold text-stat-sky">{stats.totalRequests}</div>
             <p className="text-xs text-muted-foreground mt-1">{stats.pending} pending approval</p>
           </CardContent>
         </Card>
@@ -406,7 +406,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
             <CardTitle className="text-sm font-medium text-muted-foreground">{t("Confirmed Speakers")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-green-600">{stats.confirmed}</div>
+            <div className="text-3xl font-bold text-stat-emerald">{stats.confirmed}</div>
           </CardContent>
         </Card>
         <Card>
@@ -414,7 +414,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
             <CardTitle className="text-sm font-medium text-muted-foreground">{t("Pending Review")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-yellow-600">{stats.pending}</div>
+            <div className="text-3xl font-bold text-stat-amber">{stats.pending}</div>
           </CardContent>
         </Card>
       </div>
@@ -505,7 +505,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                     </TableCell>
                     <TableCell>
                       {event.status === "published" ? (
-                        <Badge className="bg-green-100 text-green-800">Live</Badge>
+                        <Badge className="bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300">Live</Badge>
                       ) : (
                         <Badge variant="outline">{event.status || "Draft"}</Badge>
                       )}
@@ -576,7 +576,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                           <div className="font-medium flex items-center gap-1.5">
                             {req.name}
                             {req.isKeynote && (
-                              <Badge className="bg-amber-100 text-amber-800 text-[9px] px-1">KEYNOTE</Badge>
+                              <Badge className="bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 text-[9px] px-1">KEYNOTE</Badge>
                             )}
                           </div>
                           <div className="text-sm text-muted-foreground">
@@ -640,10 +640,10 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                               readable but not actionable. */}
                           {canApprove && !req.isFromEvent && req.status === "Pending" && (
                             <>
-                              <Button size="sm" variant="ghost" className="text-green-600" onClick={() => handleUpdateStatus(req._id, "Confirmed")}>
+                              <Button size="sm" variant="ghost" className="text-green-600 dark:text-green-400" onClick={() => handleUpdateStatus(req._id, "Confirmed")}>
                                 <CheckCircle2 className="h-4 w-4" />
                               </Button>
-                              <Button size="sm" variant="ghost" className="text-red-600" onClick={() => handleUpdateStatus(req._id, "Rejected")}>
+                              <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => handleUpdateStatus(req._id, "Rejected")}>
                                 <XCircle className="h-4 w-4" />
                               </Button>
                               <Button size="sm" variant="ghost" onClick={() => { setSelectedSpeaker(req); setFeeCharged(req.isCharged || false); setFeeAmount(req.fee || 0); setShowFeeDialog(true); }}>
@@ -665,7 +665,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                               <Button size="sm" variant="ghost" onClick={() => { setSelectedSpeaker(req); setFeeCharged(req.isCharged || false); setFeeAmount(req.fee || 0); setShowFeeDialog(true); }}>
                                 <DollarSign className="h-4 w-4" />
                               </Button>
-                              <Button size="sm" variant="ghost" className="text-red-600" onClick={() => handleUpdateStatus(req._id, "Cancelled")}>
+                              <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => handleUpdateStatus(req._id, "Cancelled")}>
                                 <XCircle className="h-4 w-4" />
                               </Button>
                             </>
@@ -673,7 +673,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
 
                           {/* Completed: Download Pass */}
                           {req.status === "Completed" && !req.isFromEvent && (
-                            <Button size="sm" variant="ghost" className="text-purple-600" onClick={() => window.open(`${apiURL}/speaker-requests/download-speaker-pass/${req._id}`, "_blank")}>
+                            <Button size="sm" variant="ghost" className="text-purple-600 dark:text-purple-400" onClick={() => window.open(`${apiURL}/speaker-requests/download-speaker-pass/${req._id}`, "_blank")}>
                               <Download className="h-4 w-4" />
                             </Button>
                           )}
@@ -685,7 +685,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                             </Button>
                           )}
                           {req.isFromEvent && req.hasPass && (
-                            <Button size="sm" variant="ghost" className="text-purple-600" onClick={() => window.open(`${apiURL}/speaker-requests/download-speaker-pass/${req._id}`, "_blank")}>
+                            <Button size="sm" variant="ghost" className="text-purple-600 dark:text-purple-400" onClick={() => window.open(`${apiURL}/speaker-requests/download-speaker-pass/${req._id}`, "_blank")}>
                               <Download className="h-4 w-4" />
                             </Button>
                           )}
@@ -733,12 +733,12 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
 
               {selectedSpeaker.socialLinks && (
                 <div className="flex gap-4 flex-wrap">
-                  {selectedSpeaker.socialLinks.linkedin && <a href={selectedSpeaker.socialLinks.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />LinkedIn</a>}
+                  {selectedSpeaker.socialLinks.linkedin && <a href={selectedSpeaker.socialLinks.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />LinkedIn</a>}
                   {selectedSpeaker.socialLinks.twitter && <a href={selectedSpeaker.socialLinks.twitter} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Twitter</a>}
-                  {selectedSpeaker.socialLinks.instagram && <a href={selectedSpeaker.socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="text-pink-600 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Instagram</a>}
-                  {selectedSpeaker.socialLinks.youtube && <a href={selectedSpeaker.socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="text-red-600 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />YouTube</a>}
-                  {selectedSpeaker.socialLinks.facebook && <a href={selectedSpeaker.socialLinks.facebook} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Facebook</a>}
-                  {selectedSpeaker.socialLinks.website && <a href={selectedSpeaker.socialLinks.website} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Website</a>}
+                  {selectedSpeaker.socialLinks.instagram && <a href={selectedSpeaker.socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="text-pink-600 dark:text-pink-400 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Instagram</a>}
+                  {selectedSpeaker.socialLinks.youtube && <a href={selectedSpeaker.socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="text-red-600 dark:text-red-400 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />YouTube</a>}
+                  {selectedSpeaker.socialLinks.facebook && <a href={selectedSpeaker.socialLinks.facebook} target="_blank" rel="noopener noreferrer" className="text-blue-700 dark:text-blue-300 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Facebook</a>}
+                  {selectedSpeaker.socialLinks.website && <a href={selectedSpeaker.socialLinks.website} target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Website</a>}
                 </div>
               )}
 

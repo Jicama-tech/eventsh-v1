@@ -805,27 +805,27 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         Pending: {
           variant: "secondary",
           icon: Clock,
-          color: "text-yellow-600",
+          color: "text-yellow-600 dark:text-yellow-400",
         },
         Confirmed: {
           variant: "default",
           icon: CheckCircle2,
-          color: "text-green-600",
+          color: "text-green-600 dark:text-green-400",
         },
         Cancelled: {
           variant: "destructive",
           icon: XCircle,
-          color: "text-red-600",
+          color: "text-red-600 dark:text-red-400",
         },
         Processing: {
           variant: "default",
           icon: AlertCircle,
-          color: "text-blue-600",
+          color: "text-blue-600 dark:text-blue-400",
         },
         Completed: {
           variant: "default",
           icon: CheckCircle2,
-          color: "text-green-700",
+          color: "text-green-700 dark:text-green-300",
         },
       };
 
@@ -1410,9 +1410,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
   const getPaymentBadge = (paymentStatus: string) => {
     const variants: Record<string, { variant: any; color: string }> = {
-      Unpaid: { variant: "destructive", color: "text-red-600" },
-      Partial: { variant: "secondary", color: "text-yellow-600" },
-      Paid: { variant: "default", color: "text-green-600" },
+      Unpaid: { variant: "destructive", color: "text-red-600 dark:text-red-400" },
+      Partial: { variant: "secondary", color: "text-yellow-600 dark:text-yellow-400" },
+      Paid: { variant: "default", color: "text-green-600 dark:text-green-400" },
     };
 
     const config = variants[paymentStatus] || variants.Unpaid;
@@ -2478,16 +2478,16 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     let base = "";
     let ring = "ring-slate-400";
     if (s?.pendingCancellation?.status === "requested") {
-      base = "bg-rose-50 border-l-4 border-rose-400";
+      base = "bg-rose-50 dark:bg-rose-500/10 border-l-4 border-rose-400";
       ring = "ring-rose-400";
     } else if (s?.pendingAmendment?.status === "paid_pending_confirm") {
-      base = "bg-blue-50 border-l-4 border-blue-400";
+      base = "bg-blue-50 dark:bg-blue-500/10 border-l-4 border-blue-400";
       ring = "ring-blue-400";
     } else if (s?.status === "Processing") {
-      base = "bg-emerald-50 border-l-4 border-emerald-400";
+      base = "bg-emerald-50 dark:bg-emerald-500/10 border-l-4 border-emerald-400";
       ring = "ring-emerald-400";
     } else if (s?.status === "Pending") {
-      base = "bg-amber-50 border-l-4 border-amber-400";
+      base = "bg-amber-50 dark:bg-amber-500/10 border-l-4 border-amber-400";
       ring = "ring-amber-400";
     } else if (s?.status === "Cancelled" || s?.status === "Returned") {
       // Soft-deleted / settled — kept in the list for refund/records but shown
@@ -2594,7 +2594,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalEvents}</div>
+            <div className="text-2xl font-bold text-stat-indigo">{stats.totalEvents}</div>
             <p className="text-xs text-muted-foreground">
               All your organized events
             </p>
@@ -2607,7 +2607,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.liveEvents}</div>
+            <div className="text-2xl font-bold text-stat-rose">{stats.liveEvents}</div>
             <p className="text-xs text-muted-foreground">
               Currently active events
             </p>
@@ -2620,7 +2620,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalAttendees}</div>
+            <div className="text-2xl font-bold text-stat-violet">{stats.totalAttendees}</div>
             <p className="text-xs text-muted-foreground">
               Visitors + exhibitors + speakers + round-table seats
             </p>
@@ -2633,7 +2633,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.todaysAttendees}</div>
+            <div className="text-2xl font-bold text-stat-amber">{stats.todaysAttendees}</div>
             <p className="text-xs text-muted-foreground">
               People attended today
             </p>
@@ -2776,7 +2776,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       </TableCell>
                       <TableCell>
                         {event.isLive ? (
-                          <Badge className="bg-green-100 text-green-800">
+                          <Badge className="bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300">
                             Live
                           </Badge>
                         ) : (
@@ -2892,7 +2892,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Tickets Sold
                       </div>
-                      <div className="text-2xl font-bold text-blue-600">
+                      <div className="text-2xl font-bold text-stat-sky">
                         {totalTicketsSold}
                       </div>
                     </div>
@@ -2900,7 +2900,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Attended
                       </div>
-                      <div className="text-2xl font-bold text-green-600">
+                      <div className="text-2xl font-bold text-stat-emerald">
                         {totalAttended}
                       </div>
                     </div>
@@ -2908,7 +2908,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Revenue
                       </div>
-                      <div className="text-2xl font-bold text-purple-600">
+                      <div className="text-2xl font-bold text-stat-teal">
                         {formatPrice(totalRevenue)}
                       </div>
                     </div>
@@ -2916,7 +2916,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Exhibitors
                       </div>
-                      <div className="text-2xl font-bold text-orange-600">
+                      <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
                         {stalls.length}
                       </div>
                     </div>
@@ -2924,7 +2924,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Speakers
                       </div>
-                      <div className="text-2xl font-bold text-indigo-600">
+                      <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
                         {eventSpeakers.length}
                       </div>
                     </div>
@@ -3318,7 +3318,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                     return (
                                       <>
                                         <div className="text-sm flex items-center gap-1">
-                                          <FaWhatsapp className="h-3 w-3 text-green-600" />
+                                          <FaWhatsapp className="h-3 w-3 text-green-600 dark:text-green-400" />
                                           {phone || "—"}
                                         </div>
                                         {email && (
@@ -3346,8 +3346,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                   <Badge
                                     className={
                                       s.paymentStatus === "Paid"
-                                        ? "bg-green-100 text-green-800"
-                                        : "bg-yellow-100 text-yellow-800"
+                                        ? "bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300"
+                                        : "bg-yellow-100 dark:bg-yellow-500/20 text-yellow-800 dark:text-yellow-300"
                                     }
                                   >
                                     {s.paymentStatus || "Unpaid"}
@@ -3386,7 +3386,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         <Button
                                           variant="outline"
                                           size="icon"
-                                          className="h-7 w-7 text-green-700 border-green-300 hover:bg-green-50"
+                                          className="h-7 w-7 text-green-700 dark:text-green-300 border-green-300 dark:border-green-500/40 hover:bg-green-50 dark:hover:bg-green-500/20"
                                           onClick={() => {
                                             setSelectedRequest(s);
                                             setActionNotes("");
@@ -3399,7 +3399,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         <Button
                                           variant="outline"
                                           size="icon"
-                                          className="h-7 w-7 text-red-700 border-red-300 hover:bg-red-50"
+                                          className="h-7 w-7 text-red-700 dark:text-red-300 border-red-300 dark:border-red-500/40 hover:bg-red-50 dark:hover:bg-red-500/20"
                                           onClick={() => {
                                             setSelectedRequest(s);
                                             setCancellationReason("");
@@ -3428,7 +3428,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         <Button
                                           variant="outline"
                                           size="icon"
-                                          className="h-7 w-7 text-blue-700 border-blue-300 hover:bg-blue-50"
+                                          className="h-7 w-7 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-500/40 hover:bg-blue-50 dark:hover:bg-blue-500/20"
                                           onClick={() => {
                                             setEditStall(s);
                                             setShowEditDialog(true);
@@ -3447,7 +3447,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                       <Button
                                         variant="outline"
                                         size="icon"
-                                        className="h-7 w-7 text-red-700 border-red-300 hover:bg-red-50"
+                                        className="h-7 w-7 text-red-700 dark:text-red-300 border-red-300 dark:border-red-500/40 hover:bg-red-50 dark:hover:bg-red-500/20"
                                         onClick={() => {
                                           setSelectedRequest(s);
                                           setShowDeleteStallDialog(true);
@@ -3461,7 +3461,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                       <Button
                                         variant="outline"
                                         size="icon"
-                                        className="h-7 w-7 text-green-700 border-green-300 hover:bg-green-50"
+                                        className="h-7 w-7 text-green-700 dark:text-green-300 border-green-300 dark:border-green-500/40 hover:bg-green-50 dark:hover:bg-green-500/20"
                                         onClick={() => {
                                           setRestoreTargetStall(s);
                                           setShowRestoreStallDialog(true);
@@ -3556,7 +3556,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                   <div className="font-medium flex items-center gap-2">
                                     {req.name}
                                     {req.isKeynote && (
-                                      <Badge className="bg-purple-100 text-purple-700 text-[10px]">
+                                      <Badge className="bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 text-[10px]">
                                         Keynote
                                       </Badge>
                                     )}
@@ -3586,7 +3586,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         </div>
                                         {phone && (
                                           <div className="text-xs text-muted-foreground flex items-center gap-1">
-                                            <FaWhatsapp className="h-3 w-3 text-green-600" />
+                                            <FaWhatsapp className="h-3 w-3 text-green-600 dark:text-green-400" />
                                             {phone}
                                           </div>
                                         )}
@@ -3611,7 +3611,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                   <Badge
                                     className={
                                       req.paymentStatus === "Paid"
-                                        ? "bg-green-100 text-green-800"
+                                        ? "bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300"
                                         : ""
                                     }
                                     variant={
@@ -3631,7 +3631,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         <Button
                                           variant="outline"
                                           size="icon"
-                                          className="h-7 w-7 text-green-700 border-green-300 hover:bg-green-50"
+                                          className="h-7 w-7 text-green-700 dark:text-green-300 border-green-300 dark:border-green-500/40 hover:bg-green-50 dark:hover:bg-green-500/20"
                                           onClick={() =>
                                             updateSpeakerStatus(
                                               req._id,
@@ -3645,7 +3645,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         <Button
                                           variant="outline"
                                           size="icon"
-                                          className="h-7 w-7 text-red-700 border-red-300 hover:bg-red-50"
+                                          className="h-7 w-7 text-red-700 dark:text-red-300 border-red-300 dark:border-red-500/40 hover:bg-red-50 dark:hover:bg-red-500/20"
                                           onClick={() =>
                                             updateSpeakerStatus(
                                               req._id,
@@ -3742,8 +3742,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   </CardHeader>
                   <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-50 rounded-lg">
-                        <Calendar className="h-5 w-5 text-blue-600" />
+                      <div className="p-2 bg-blue-50 dark:bg-blue-500/10 rounded-lg">
+                        <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">
@@ -3757,8 +3757,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-purple-50 rounded-lg">
-                        <MapPin className="h-5 w-5 text-purple-600" />
+                      <div className="p-2 bg-purple-50 dark:bg-purple-500/10 rounded-lg">
+                        <MapPin className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">
@@ -3770,8 +3770,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-orange-50 rounded-lg">
-                        <LayoutGrid className="h-5 w-5 text-orange-600" />
+                      <div className="p-2 bg-orange-50 dark:bg-orange-500/10 rounded-lg">
+                        <LayoutGrid className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">
@@ -3806,19 +3806,19 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   title="Total Registrations"
                   value={exhibitorsCount}
                   icon={<Users />}
-                  color="text-blue-600"
+                  color="text-blue-600 dark:text-blue-400"
                 />
                 <StatCard
                   title="Confirmed Exhibitors"
                   value={confirmedExhibitors}
                   icon={<CheckCircle />}
-                  color="text-green-600"
+                  color="text-green-600 dark:text-green-400"
                 />
                 <StatCard
                   title="Pending Approvals"
                   value={exhibitorsCount - confirmedExhibitors}
                   icon={<Clock />}
-                  color="text-yellow-600"
+                  color="text-yellow-600 dark:text-yellow-400"
                 />
                 <StatCard
                   title="Total Add-ons Sold"
@@ -3827,7 +3827,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     0,
                   )}
                   icon={<Store />}
-                  color="text-purple-600"
+                  color="text-purple-600 dark:text-purple-400"
                 />
               </div>
 
@@ -3896,8 +3896,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                             <Badge
                               className={
                                 stall.paymentStatus === "Paid"
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-red-100 text-red-700"
+                                  ? "bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300"
+                                  : "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300"
                               }
                             >
                               {stall.paymentStatus}
@@ -3916,13 +3916,13 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                             </div>
                             {(stall as any).pendingAmendment?.status ===
                               "paid_pending_confirm" && (
-                              <Badge className="mt-1 bg-amber-100 text-amber-700">
+                              <Badge className="mt-1 bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300">
                                 Edit pending
                               </Badge>
                             )}
                             {(stall as any).pendingCancellation?.status ===
                               "requested" && (
-                              <Badge className="mt-1 bg-red-100 text-red-700">
+                              <Badge className="mt-1 bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300">
                                 Cancel requested
                               </Badge>
                             )}
@@ -3974,7 +3974,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                 <Button
                                   size="sm"
                                   variant="buttonOutline"
-                                  className="text-green-700 border-green-300 hover:bg-green-50"
+                                  className="text-green-700 dark:text-green-300 border-green-300 dark:border-green-500/40 hover:bg-green-50 dark:hover:bg-green-500/20"
                                   title="Restore stall (reassign to the vendor & re-book its space)"
                                   onClick={() => {
                                     setRestoreTargetStall(stall);
@@ -4031,7 +4031,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                 )}
 
                               {(stall.transactionId || stall.transactionScreenshot) && stall.paymentStatus !== "Paid" && (
-                                <Badge className="bg-amber-100 text-amber-700 text-[10px]">
+                                <Badge className="bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[10px]">
                                   TX Proof
                                 </Badge>
                               )}
@@ -4039,7 +4039,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                               {stall.paymentStatus === "Paid" &&
                                 stall.status === "Completed" &&
                                 !stall.hasCheckedIn && (
-                                  <Badge className="bg-green-100 text-green-700 text-[10px]">
+                                  <Badge className="bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300 text-[10px]">
                                     QR Sent
                                   </Badge>
                                 )}
@@ -4074,7 +4074,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
             <DialogTitle className="flex items-center gap-2">
               {selectedVisitor?.customerName || "Visitor"}
               {selectedVisitor?.attendance ? (
-                <Badge className="bg-green-100 text-green-800">
+                <Badge className="bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300">
                   <CheckCircle className="h-3 w-3 mr-1" />
                   Attended
                 </Badge>
@@ -4340,7 +4340,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     {selectedSpeaker?.name || "Speaker"}
                   </span>
                   {selectedSpeaker?.isKeynote && (
-                    <Badge className="bg-purple-100 text-purple-700">
+                    <Badge className="bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300">
                       Keynote
                     </Badge>
                   )}
@@ -4471,7 +4471,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                 href={String(v)}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-xs text-blue-600 hover:underline capitalize"
+                                className="text-xs text-blue-600 dark:text-blue-400 hover:underline capitalize"
                               >
                                 {k}
                               </a>
@@ -4531,7 +4531,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     <Badge
                       className={
                         selectedSpeaker.paymentStatus === "Paid"
-                          ? "bg-green-100 text-green-800"
+                          ? "bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300"
                           : ""
                       }
                       variant={
@@ -4931,7 +4931,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Trash2 className="h-5 w-5 text-red-600" />
+              <Trash2 className="h-5 w-5 text-red-600 dark:text-red-400" />
               Are you sure you want to delete?
             </DialogTitle>
             <DialogDescription>
@@ -4947,7 +4947,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           </DialogHeader>
 
           {selectedRequest?.selectedTables?.length > 0 && (
-            <div className="rounded-md border bg-amber-50 border-amber-200 p-3 text-sm text-amber-800">
+            <div className="rounded-md border bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30 p-3 text-sm text-amber-800 dark:text-amber-300">
               This stall has{" "}
               <strong>{selectedRequest.selectedTables.length}</strong> space
               {selectedRequest.selectedTables.length === 1 ? "" : "s"} selected —
@@ -4964,7 +4964,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           <div className="space-y-2">
             <Label htmlFor="delete-confirm" className="text-sm">
               To confirm, type{" "}
-              <code className="font-mono font-semibold text-red-600">
+              <code className="font-mono font-semibold text-red-600 dark:text-red-400">
                 {DELETE_CONFIRM_PHRASE}
               </code>{" "}
               below:
@@ -5023,7 +5023,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <RotateCcw className="h-5 w-5 text-green-600" />
+              <RotateCcw className="h-5 w-5 text-green-600 dark:text-green-400" />
               Restore this stall?
             </DialogTitle>
             <DialogDescription>
@@ -5158,7 +5158,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   }
                 />
                 {payScreenshot && (
-                  <p className="text-xs text-green-700 mt-1">
+                  <p className="text-xs text-green-700 dark:text-green-300 mt-1">
                     {payScreenshot.name} attached
                   </p>
                 )}
@@ -5207,7 +5207,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Pencil className="h-5 w-5 text-amber-600" />
+              <Pencil className="h-5 w-5 text-amber-600 dark:text-amber-400" />
               Confirm edit request
             </DialogTitle>
             <DialogDescription>
@@ -5243,7 +5243,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 </div>
                 <div className="flex justify-between border-t pt-2">
                   <span className="text-muted-foreground">Difference paid</span>
-                  <span className="font-bold text-green-700">
+                  <span className="font-bold text-green-700 dark:text-green-300">
                     {formatPrice(pa.amountDue || 0)}
                   </span>
                 </div>

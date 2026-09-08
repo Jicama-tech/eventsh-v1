@@ -164,7 +164,7 @@ export function OrganizerFeedbackList() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-semibold truncate">{event.title}</h3>
                       {ended && (
-                        <Badge variant="outline" className="bg-emerald-50">
+                        <Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-500/10">
                           Ended
                         </Badge>
                       )}
@@ -175,7 +175,7 @@ export function OrganizerFeedbackList() {
                       {event.status === "cancelled" && (
                         <Badge
                           variant="outline"
-                          className="bg-red-50 text-red-700"
+                          className="bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300"
                         >
                           Cancelled
                         </Badge>

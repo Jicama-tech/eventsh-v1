@@ -746,9 +746,9 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
 
   const getPaymentBadge = (paymentStatus: string) => {
     const variants: Record<string, { variant: any; color: string }> = {
-      Unpaid: { variant: "destructive", color: "text-red-600" },
-      Partial: { variant: "secondary", color: "text-yellow-600" },
-      Paid: { variant: "default", color: "text-green-600" },
+      Unpaid: { variant: "destructive", color: "text-red-600 dark:text-red-400" },
+      Partial: { variant: "secondary", color: "text-yellow-600 dark:text-yellow-400" },
+      Paid: { variant: "default", color: "text-green-600 dark:text-green-400" },
     };
 
     const config = variants[paymentStatus] || variants.Unpaid;
@@ -818,7 +818,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               <CardTitle className="text-sm font-medium text-muted-foreground">{t("Confirmed Stalls")}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-green-600">
+              <div className="text-3xl font-bold text-green-600 dark:text-green-400">
                 {stallStats.confirmed +
                   stallStats.processing +
                   stallStats.completed}
@@ -834,7 +834,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               <CardTitle className="text-sm font-medium text-muted-foreground">{t("Total Revenue")}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-blue-600">
+              <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
                 {formatCurrency(stallStats.totalRevenue)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -851,19 +851,19 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
               <div className="space-y-1">
                 <div className="flex justify-between text-sm">
                   <span>Paid:</span>
-                  <span className="font-semibold text-green-600">
+                  <span className="font-semibold text-green-600 dark:text-green-400">
                     {stallStats.paid}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Partial:</span>
-                  <span className="font-semibold text-yellow-600">
+                  <span className="font-semibold text-yellow-600 dark:text-yellow-400">
                     {stallStats.partial}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Unpaid:</span>
-                  <span className="font-semibold text-red-600">
+                  <span className="font-semibold text-red-600 dark:text-red-400">
                     {stallStats.unpaid}
                   </span>
                 </div>
@@ -1027,7 +1027,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="font-semibold text-green-600">
+                            <div className="font-semibold text-green-600 dark:text-green-400">
                               {formatCurrency(request.grandTotal)}
                             </div>
                             {request.selectedAddOns.length > 0 && (
@@ -1313,7 +1313,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                     <p className="font-medium">
                       <a
                         href={`mailto:${selectedRequest.shopkeeperId?.businessEmail}`}
-                        className="text-blue-600 underline"
+                        className="text-blue-600 dark:text-blue-400 underline"
                         target="_blank"
                         rel="noopener noreferrer"
                       >
@@ -1344,7 +1344,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                         )}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-green-600 underline"
+                        className="text-green-600 dark:text-green-400 underline"
                       >
                         {selectedRequest.shopkeeperId?.whatsappNumber}
                       </a>
@@ -1483,7 +1483,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   <Separator className="my-2" />
                   <div className="flex justify-between text-lg font-bold">
                     <span>Grand Total</span>
-                    <span className="text-green-600">
+                    <span className="text-green-600 dark:text-green-400">
                       {formatCurrency(selectedRequest.grandTotal)}
                     </span>
                   </div>
@@ -1497,8 +1497,8 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex items-start gap-3">
-                    <div className="bg-blue-100 rounded-full p-2">
-                      <FileText className="h-4 w-4 text-blue-600" />
+                    <div className="bg-blue-100 dark:bg-blue-500/20 rounded-full p-2">
+                      <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div>
                       <p className="font-medium">Request Submitted</p>
@@ -1509,8 +1509,8 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   </div>
                   {selectedRequest.confirmationDate && (
                     <div className="flex items-start gap-3">
-                      <div className="bg-green-100 rounded-full p-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <div className="bg-green-100 dark:bg-green-500/20 rounded-full p-2">
+                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
                       </div>
                       <div>
                         <p className="font-medium">Request Confirmed</p>
@@ -1522,8 +1522,8 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   )}
                   {selectedRequest.selectionDate && (
                     <div className="flex items-start gap-3">
-                      <div className="bg-purple-100 rounded-full p-2">
-                        <Package className="h-4 w-4 text-purple-600" />
+                      <div className="bg-purple-100 dark:bg-purple-500/20 rounded-full p-2">
+                        <Package className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                       </div>
                       <div>
                         <p className="font-medium">Tables Selected</p>
@@ -1535,8 +1535,8 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   )}
                   {selectedRequest.paymentDate && (
                     <div className="flex items-start gap-3">
-                      <div className="bg-yellow-100 rounded-full p-2">
-                        <CreditCard className="h-4 w-4 text-yellow-600" />
+                      <div className="bg-yellow-100 dark:bg-yellow-500/20 rounded-full p-2">
+                        <CreditCard className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
                       </div>
                       <div>
                         <p className="font-medium">Payment Received</p>
@@ -1548,8 +1548,8 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   )}
                   {selectedRequest.completionDate && (
                     <div className="flex items-start gap-3">
-                      <div className="bg-green-100 rounded-full p-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <div className="bg-green-100 dark:bg-green-500/20 rounded-full p-2">
+                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
                       </div>
                       <div>
                         <p className="font-medium">Booking Completed</p>
@@ -1562,8 +1562,8 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                   {selectedRequest.hasCheckedIn &&
                     selectedRequest.checkInTime && (
                       <div className="flex items-start gap-3">
-                        <div className="bg-green-100 rounded-full p-2">
-                          <Clock1 className="h-4 w-4 text-green-600" />
+                        <div className="bg-green-100 dark:bg-green-500/20 rounded-full p-2">
+                          <Clock1 className="h-4 w-4 text-green-600 dark:text-green-400" />
                         </div>
                         <div>
                           <p className="font-medium">Checked In Time</p>
@@ -1577,8 +1577,8 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                     selectedRequest.checkOutTime && (
                       <div className="flex items-start gap-3 justify-between">
                         <div className="flex items-start gap-3">
-                          <div className="bg-green-100 rounded-full p-2">
-                            <Clock12 className="h-4 w-4 text-green-600" />
+                          <div className="bg-green-100 dark:bg-green-500/20 rounded-full p-2">
+                            <Clock12 className="h-4 w-4 text-green-600 dark:text-green-400" />
                           </div>
                           <div>
                             <p className="font-medium">Checked Out Time</p>
@@ -1618,9 +1618,9 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
 
               {/* Cancellation Reason */}
               {selectedRequest.cancellationReason && (
-                <Card className="border-red-200">
+                <Card className="border-red-200 dark:border-red-500/30">
                   <CardHeader>
-                    <CardTitle className="text-lg text-red-600">{t("Cancellation Reason")}</CardTitle>
+                    <CardTitle className="text-lg text-red-600 dark:text-red-400">{t("Cancellation Reason")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm">
@@ -1903,7 +1903,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                           onChange={() =>
                             handleShopkeeperToggle(shopkeeper._id)
                           }
-                          className="mt-1 w-4 h-4 rounded border-border text-blue-600 cursor-pointer"
+                          className="mt-1 w-4 h-4 rounded border-border text-blue-600 dark:text-blue-400 cursor-pointer"
                         />
 
                         {/* Shopkeeper Info */}
@@ -1943,7 +1943,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                               <Mail className="h-3 w-3" />
                               <a
                                 href={`mailto:${shopkeeper.email}`}
-                                className="text-blue-600 hover:underline"
+                                className="text-blue-600 dark:text-blue-400 hover:underline"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 {shopkeeper.email}
@@ -1960,7 +1960,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                                   )}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-green-600"
+                                  className="text-green-600 dark:text-green-400"
                                 >
                                   {shopkeeper.whatsappNumber}
                                 </a>
@@ -2009,7 +2009,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
 
             {/* Summary */}
             {selectedShopkeepers.length > 0 && (
-              <Card className="bg-blue-50 border-blue-200">
+              <Card className="bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/30">
                 <CardContent className="pt-4">
                   <p className="text-sm">
                     <span className="font-semibold">
@@ -2033,7 +2033,7 @@ const VendorRequests: React.FC<VendorRequestsProps> = ({
                               key={shopkeeperId}
                               className="flex items-center gap-2"
                             >
-                              <CheckCircle2 className="h-3 w-3 text-green-600" />
+                              <CheckCircle2 className="h-3 w-3 text-green-600 dark:text-green-400" />
                               {shop?.name} - {shop?.shopName}
                             </li>
                           );
