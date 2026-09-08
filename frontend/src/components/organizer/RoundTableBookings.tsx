@@ -164,7 +164,7 @@ const RoundTableBookings = ({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">
+            <p className="text-2xl font-bold text-stat-indigo">
               {bookings.length}
             </p>
             <p className="text-xs text-muted-foreground">Total Bookings</p>
@@ -174,12 +174,12 @@ const RoundTableBookings = ({
           <CardContent className="p-4 text-center">
             {submittedCount > 0 ? (
               <>
-                <p className="text-2xl font-bold text-blue-600">{submittedCount}</p>
-                <p className="text-xs text-blue-500 font-medium">Awaiting Confirmation</p>
+                <p className="text-2xl font-bold text-stat-amber">{submittedCount}</p>
+                <p className="text-xs text-muted-foreground font-medium">Awaiting Confirmation</p>
               </>
             ) : (
               <>
-                <p className="text-2xl font-bold text-green-600">{confirmedCount}</p>
+                <p className="text-2xl font-bold text-stat-emerald">{confirmedCount}</p>
                 <p className="text-xs text-muted-foreground">Confirmed</p>
               </>
             )}
@@ -187,13 +187,13 @@ const RoundTableBookings = ({
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-purple-600">{totalSeats}</p>
+            <p className="text-2xl font-bold text-stat-violet">{totalSeats}</p>
             <p className="text-xs text-muted-foreground">Seats Booked</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-blue-600">
+            <p className="text-2xl font-bold text-stat-sky">
               {formatPrice(totalRevenue)}
             </p>
             <p className="text-xs text-muted-foreground">Revenue</p>

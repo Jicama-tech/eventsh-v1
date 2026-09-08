@@ -595,7 +595,7 @@ export default function DashboardOverview({
               {/* Metric 1: Tickets Sold — the attendee-count metric. */}
               {canAttendees && (
               <div className="text-center">
-                <div className="text-xl font-bold text-blue-600">
+                <div className="text-xl font-bold text-stat-sky">
                   {ticketsSold}
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -607,7 +607,7 @@ export default function DashboardOverview({
               {/* Metric 2: Stalls Booked — shown against the total sellable
                   spaces in the venue so it reads as "booked of available". */}
               <div className="text-center">
-                <div className="text-xl font-bold text-purple-600">
+                <div className="text-xl font-bold text-stat-teal">
                   {stallsBooked}
                   {sellableSpaces > 0 && (
                     <span className="text-sm font-semibold text-muted-foreground">
@@ -624,7 +624,7 @@ export default function DashboardOverview({
               {/* Metric 3: Total Revenue */}
               {canRevenue && (
               <div className="text-center">
-                <div className="text-xl font-bold text-green-600">
+                <div className="text-xl font-bold text-stat-emerald">
                   {formatPrice(revenue)}
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -636,7 +636,7 @@ export default function DashboardOverview({
               {/* Metric 4: Tickets Revenue */}
               {canRevenue && (
               <div className="text-center">
-                <div className="text-lg font-semibold text-blue-500">
+                <div className="text-lg font-semibold text-stat-indigo">
                   {formatPrice(ticketsRevenue)}
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -648,7 +648,7 @@ export default function DashboardOverview({
               {/* Metric 5: Stalls Revenue */}
               {canRevenue && (
               <div className="text-center">
-                <div className="text-lg font-semibold text-purple-500">
+                <div className="text-lg font-semibold text-stat-violet">
                   {formatPrice(stallsRevenue)}
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -659,7 +659,7 @@ export default function DashboardOverview({
 
               {/* Metric 6: Pending Stalls */}
               <div className="text-center">
-                <div className="text-lg font-semibold text-orange-500">
+                <div className="text-lg font-semibold text-stat-orange">
                   {stallsPending}
                 </div>
                 <div className="text-xs text-muted-foreground">

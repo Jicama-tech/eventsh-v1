@@ -142,16 +142,44 @@ export default function IndividualAnalytics() {
     );
   }
 
-  const tiles: Array<{ label: string; value: string; icon: typeof Users }> = [
-    { label: t("Events"), value: String(stats.total), icon: CalendarCheck },
-    { label: t("Upcoming"), value: String(stats.upcoming), icon: CalendarClock },
-    { label: t("People coming"), value: String(stats.attendees), icon: Users },
+  // One accent per tile, from the shared --stat-* palette, so the row reads
+  // as distinct metrics rather than five identical blue chips.
+  const tiles: Array<{
+    label: string;
+    value: string;
+    icon: typeof Users;
+    text: string;
+    chip: string;
+  }> = [
+    {
+      label: t("Events"),
+      value: String(stats.total),
+      icon: CalendarCheck,
+      text: "text-stat-indigo",
+      chip: "bg-stat-indigo/10",
+    },
+    {
+      label: t("Upcoming"),
+      value: String(stats.upcoming),
+      icon: CalendarClock,
+      text: "text-stat-amber",
+      chip: "bg-stat-amber/10",
+    },
+    {
+      label: t("People coming"),
+      value: String(stats.attendees),
+      icon: Users,
+      text: "text-stat-violet",
+      chip: "bg-stat-violet/10",
+    },
   ];
   if (stats.fill !== null) {
     tiles.push({
       label: t("Capacity filled"),
       value: `${stats.fill}%`,
       icon: BarChart3,
+      text: "text-stat-teal",
+      chip: "bg-stat-teal/10",
     });
   }
   if (stats.revenue > 0) {
@@ -159,6 +187,8 @@ export default function IndividualAnalytics() {
       label: t("Revenue"),
       value: `${stats.currency}${stats.revenue.toLocaleString()}`,
       icon: BarChart3,
+      text: "text-stat-emerald",
+      chip: "bg-stat-emerald/10",
     });
   }
 
@@ -175,8 +205,10 @@ export default function IndividualAnalytics() {
         {tiles.map((tile) => (
           <Card key={tile.label}>
             <CardContent className="flex items-center gap-3 p-4">
-              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                <tile.icon className="h-5 w-5 text-primary" />
+              <span
+                className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg ${tile.chip}`}
+              >
+                <tile.icon className={`h-5 w-5 ${tile.text}`} />
               </span>
               <div className="min-w-0">
                 <p className="text-xl font-bold leading-tight">{tile.value}</p>
