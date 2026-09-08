@@ -510,172 +510,18 @@ export function ExhibitorDetailDialog({
   // email and surfaces the real failure if the mail server rejects it.
   const canManage = !!onConfirmPayment || !!onReturnDeposit;
   const [isResending, setIsResending] = useState(false);
-  const [resendOpen, setResendOpen] = useState(false);
-  const [sendEmail, setSendEmail] = useState(true);
-  const [sendWhatsApp, setSendWhatsApp] = useState(false);
-  const vendorWa =
-    stallRequest?.shopkeeperId?.whatsappNumber ||
-    (stallRequest?.shopkeeperId as any)?.whatsAppNumber ||
-    "";
-
-  /**
-   * Starter text for the WhatsApp chat. Editable — it lands in the compose
-   * box, not in a sent message, so the organizer always gets the last word.
-   */
-  const defaultWaMessage = (() => {
-    const vendor =
-      stallRequest?.shopkeeperId?.name ||
-      (stallRequest?.shopkeeperId as any)?.brandName ||
-      "there";
-    const title = (stallRequest as any)?.eventId?.title || "the event";
-    return (
-      `Hi ${vendor}, here's your stall ticket for ${title}.
-
-` +
-      `Please keep it handy — we'll scan the QR at the entrance.
-
-` +
-      `See you there!`
-    );
-  })();
-  const [waMessage, setWaMessage] = useState("");
-  /**
-   * The ticket PDF, fetched as soon as the dialog opens.
-   *
-   * This has to be ready BEFORE the click: navigator.share and window.open
-   * both require transient user activation, and awaiting a fetch inside the
-   * handler spends it — which is why the share never fired and the popup was
-   * blocked. Prefetching means the click itself does no awaiting at all.
-   */
-  const [waPdf, setWaPdf] = useState<File | null>(null);
-  const [waPdfError, setWaPdfError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!resendOpen || !stallRequest?._id) return;
-    let cancelled = false;
-    setWaPdf(null);
-    setWaPdfError(null);
-    (async () => {
-      try {
-        const res = await fetch(
-          `${apiURL}/stalls/download-stall-ticket/${stallRequest._id}`,
-        );
-        if (!res.ok) throw new Error(`Ticket not available (${res.status})`);
-        const blob = await res.blob();
-        if (cancelled) return;
-        setWaPdf(
-          new File([blob], "stall-ticket.pdf", { type: "application/pdf" }),
-        );
-      } catch (e: any) {
-        if (!cancelled) setWaPdfError(e?.message || "Couldn't load the ticket");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [resendOpen, stallRequest?._id]);
-
-  /**
-   * Vendor's number in the form wa.me needs: digits only, country code
-   * included.
-   *
-   * `whatsappNumber` is normally stored with the country code (the four
-   * other wa.me links in this codebase just strip the "+"), but not always —
-   * so when what is left looks like a bare local number, the dial code from
-   * `countryCode` is prefixed and a leading trunk "0" dropped.
-   */
-  const waDigits = (() => {
-    const raw = String(vendorWa || "").replace(/[^0-9]/g, "");
-    if (!raw) return "";
-    if (raw.length >= 11) return raw; // already international
-    const cc = String(
-      (stallRequest?.shopkeeperId as any)?.countryCode || "",
-    ).match(/\+?(\d{1,3})/);
-    if (!cc) return raw;
-    return cc[1] + raw.replace(/^0+/, "");
-  })();
-
-  const waText = () =>
-    `${waMessage || defaultWaMessage}
-
-${apiURL}/stalls/download-stall-ticket/${stallRequest?._id}`;
-
-  /**
-   * Open the vendor's chat directly, from the organizer's own WhatsApp.
-   *
-   * wa.me is the only route that lands in a specific person's chat — the
-   * share sheet drops you at a contact picker instead, which is not what was
-   * asked for. It carries prefilled TEXT ONLY, so the PDF is downloaded
-   * alongside for a one-tap attach and the message also carries a download
-   * link.
-   *
-   * Synchronous: window.open needs transient user activation, and awaiting
-   * anything here spends it.
-   */
-  const openWhatsAppWithTicket = () => {
-    if (!waDigits) {
-      toast({
-        duration: 6000,
-        title: "No WhatsApp number",
-        description: "This vendor has no usable WhatsApp number on file.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (waPdf) {
-      const url = URL.createObjectURL(waPdf);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `stall-ticket-${stallRequest._id}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
-    }
-    window.open(
-      `https://wa.me/${waDigits}?text=${encodeURIComponent(waText())}`,
-      "_blank",
-      "noopener,noreferrer",
-    );
-  };
-
-  /**
-   * The other trade-off, offered separately rather than chosen for them:
-   * the share sheet genuinely attaches the file, but cannot target a chat —
-   * the organizer picks the contact themselves.
-   */
-  const canShareTicket =
-    !!waPdf && !!(navigator as any).canShare?.({ files: [waPdf] });
-  const shareTicketWithFile = () => {
-    if (!waPdf) return;
-    (navigator as any).share({ files: [waPdf], text: waText() }).catch(() => {});
-  };
-
   const handleResendTicket = async () => {
     if (!stallRequest?._id) return;
-    if (!sendEmail && !sendWhatsApp) return;
     setIsResending(true);
-
-    // Start the email but do NOT await it yet. Awaiting here would spend the
-    // click's user activation, and WhatsApp needs it — that is what stopped
-    // the share firing when both channels were ticked. The email result is
-    // still reported below, it just lands a moment later.
-    const token = sessionStorage.getItem("token");
-    const emailReq = sendEmail
-      ? fetch(`${apiURL}/stalls/${stallRequest._id}/resend-ticket`, {
+    try {
+      const token = sessionStorage.getItem("token");
+      const res = await fetch(
+        `${apiURL}/stalls/${stallRequest._id}/resend-ticket`,
+        {
           method: "POST",
           headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        })
-      : null;
-
-    if (sendWhatsApp) {
-      setResendOpen(false);
-      openWhatsAppWithTicket();
-    }
-
-    try {
-      if (!emailReq) return;
-      const res = await emailReq;
+        },
+      );
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(body?.message || `Resend failed (${res.status})`);
@@ -685,7 +531,6 @@ ${apiURL}/stalls/download-stall-ticket/${stallRequest?._id}`;
         title: "Ticket re-sent",
         description: body?.message || "The stall ticket email was sent.",
       });
-      setResendOpen(false);
     } catch (err: any) {
       toast({
         duration: 8000,
@@ -1082,12 +927,7 @@ ${apiURL}/stalls/download-stall-ticket/${stallRequest?._id}`;
                         <Button
                           size="sm"
                           variant="buttonOutline"
-                          onClick={() => {
-                            setWaMessage(defaultWaMessage);
-                            setSendEmail(true);
-                            setSendWhatsApp(!!vendorWa);
-                            setResendOpen(true);
-                          }}
+                          onClick={handleResendTicket}
                           disabled={isResending}
                           className="h-8"
                         >
@@ -2440,134 +2280,6 @@ ${apiURL}/stalls/download-stall-ticket/${stallRequest?._id}`;
       </DialogContent>
     </Dialog>
 
-    {/* Resend ticket — pick the channel(s). */}
-    <Dialog open={resendOpen} onOpenChange={setResendOpen}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Resend ticket</DialogTitle>
-          <DialogDescription>
-            Choose how this vendor should get their ticket. You can pick both.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          <label className="flex items-start gap-2.5 text-sm">
-            <input
-              type="checkbox"
-              checked={sendEmail}
-              onChange={(e) => setSendEmail(e.target.checked)}
-              className="mt-0.5 h-4 w-4 accent-primary"
-            />
-            <span>
-              <span className="font-medium">Email</span>
-              <span className="block text-xs text-muted-foreground">
-                Sends the ticket PDF from the platform, as before.
-              </span>
-            </span>
-          </label>
-
-          <label className="flex items-start gap-2.5 text-sm">
-            <input
-              type="checkbox"
-              checked={sendWhatsApp}
-              disabled={!vendorWa}
-              onChange={(e) => setSendWhatsApp(e.target.checked)}
-              className="mt-0.5 h-4 w-4 accent-primary disabled:opacity-50"
-            />
-            <span>
-              <span
-                className={`font-medium ${!vendorWa ? "text-muted-foreground" : ""}`}
-              >
-                WhatsApp — from your own number
-              </span>
-              <span className="block text-xs text-muted-foreground">
-                {vendorWa
-                  ? `Opens a chat with ${vendorWa} so you send it yourself.`
-                  : "This vendor has no WhatsApp number on file."}
-              </span>
-            </span>
-          </label>
-
-          {sendWhatsApp && vendorWa && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="wa-message">
-                Message
-              </label>
-              <Textarea
-                id="wa-message"
-                rows={5}
-                value={waMessage}
-                onChange={(e) => setWaMessage(e.target.value)}
-              />
-              {/* Being straight about the attachment: WhatsApp's click-to-chat
-                  link carries text only. On a phone the share sheet can take
-                  the file itself; on desktop it cannot, so we download it and
-                  put a link in the message. */}
-              {waPdfError ? (
-                <p className="rounded-md border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-2.5 py-2 text-xs text-rose-700 dark:text-rose-300">
-                  The ticket PDF couldn't be loaded ({waPdfError}), so nothing
-                  can be attached. The chat will still open with a download
-                  link in the message.
-                </p>
-              ) : !waPdf ? (
-                <p className="px-0.5 text-xs text-muted-foreground">
-                  Preparing the ticket…
-                </p>
-              ) : (
-                <p className="rounded-md border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-2 text-xs text-amber-800 dark:text-amber-300">
-                  Ticket ready. Opens {vendorWa}'s chat directly with this
-                  message. WhatsApp links carry text only, so the PDF
-                  downloads for a one-tap attach and the message also has a
-                  download link.
-                </p>
-              )}
-              {/* The trade-off, offered rather than chosen for them: the
-                  share sheet does attach the file, but cannot open a
-                  specific chat — the organizer picks the contact. */}
-              {canShareTicket && (
-                <button
-                  type="button"
-                  onClick={shareTicketWithFile}
-                  className="text-xs font-medium text-primary underline underline-offset-2"
-                >
-                  Or share with the ticket attached (you pick the chat)
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => setResendOpen(false)}
-            disabled={isResending}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleResendTicket}
-            disabled={isResending || (!sendEmail && !sendWhatsApp)}
-          >
-            {isResending ? (
-              <>
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                Sending…
-              </>
-            ) : (
-              <>
-                <Send className="mr-1.5 h-4 w-4" />
-                {sendEmail && sendWhatsApp
-                  ? "Email + open WhatsApp"
-                  : sendEmail
-                    ? "Send email"
-                    : "Open WhatsApp"}
-              </>
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
     </>
   );
 }
