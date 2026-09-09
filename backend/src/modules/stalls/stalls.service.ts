@@ -4984,8 +4984,20 @@ export class StallsService {
     if (!Types.ObjectId.isValid(eventId)) {
       throw new BadRequestException("Invalid event ID format");
     }
+    // Confirmed AND paid. Expressed as "paid, and not withdrawn" rather than
+    // status === "Confirmed": the workflow moves Confirmed -> Paid ->
+    // Completed, so a paid booking is never sitting in "Confirmed" and that
+    // filter would match nobody. Cancelled / Returned / Forfeited are the
+    // states where a booking is over — a Returned deposit in particular is a
+    // finished booking, and re-issuing its ticket would hand back a live
+    // check-in credential.
+    const WITHDRAWN = ["Cancelled", "Returned", "Forfeited"];
     const stalls: any[] = await this.stallModel
-      .find({ eventId: new Types.ObjectId(eventId), paymentStatus: "Paid" })
+      .find({
+        eventId: new Types.ObjectId(eventId),
+        paymentStatus: "Paid",
+        status: { $nin: WITHDRAWN },
+      })
       .populate("shopkeeperId")
       .lean();
 
