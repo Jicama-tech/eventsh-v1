@@ -377,9 +377,13 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
   // Who will actually receive one. Mirrors the server's rule (Paid only, and
   // an email on file) so the count in the dialog matches what happens.
+  // Must mirror bulkSendStallTickets exactly, or the count on the button
+  // promises more than the send delivers: paid, not withdrawn, has an email.
+  const BULK_WITHDRAWN = ["Cancelled", "Returned", "Forfeited"];
   const bulkRecipients = stalls.filter(
     (st: any) =>
       st?.paymentStatus === "Paid" &&
+      !BULK_WITHDRAWN.includes(st?.status) &&
       (st?.shopkeeperId?.email ||
         st?.shopkeeperId?.companyEmail ||
         st?.shopkeeperId?.vendorEmail),

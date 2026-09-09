@@ -98,6 +98,7 @@ interface StallData {
   action: string;
   status: string;
   checkInTime?: string;
+  checkOutTime?: string;
   paidAmount?: number;
   remainingAmount?: number;
   Amount?: number;
@@ -144,11 +145,47 @@ type Step =
   | "checkin-checkout-selection"
   | "success";
 
+// Nest returns `message` as a plain string for thrown HttpExceptions but as an
+// ARRAY of constraint strings for ValidationPipe rejections. Rendering the
+// array straight into a toast produced "[object Object]"-grade noise on
+// exactly the failures an operator most needs to read, so flatten both shapes.
+const formatApiError = (body: unknown, fallback: string): string => {
+  const b = (body ?? {}) as { message?: unknown; error?: unknown };
+  const m = b.message ?? b.error;
+  if (Array.isArray(m)) return m.filter(Boolean).join(", ") || fallback;
+  if (typeof m === "string" && m.trim()) return m;
+  return fallback;
+};
+
 export default function QRTicketScanner() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
   const qrCodeRef = useRef<Html5Qrcode | null>(null);
+  // html5-qrcode keeps the onScanSuccess closure it was started with, so a
+  // `isProcessing` state read inside it is frozen at false and never blocks
+  // the next decoded frame (~10/sec). A ref is the only guard that actually
+  // sees the update, so hold both: the ref gates re-entry, the state drives UI.
+  const processingRef = useRef(false);
+  // Tracks the pending "restart the scanner" timer so a later success cannot
+  // be clobbered by a timer queued by an earlier failure.
+  const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearRecoveryTimer = () => {
+    if (recoveryTimerRef.current) {
+      clearTimeout(recoveryTimerRef.current);
+      recoveryTimerRef.current = null;
+    }
+  };
+
+  // Every deferred recovery goes through here so only one can ever be armed.
+  const scheduleRecovery = (fn: () => void, ms = 3000) => {
+    clearRecoveryTimer();
+    recoveryTimerRef.current = setTimeout(() => {
+      recoveryTimerRef.current = null;
+      fn();
+    }, ms);
+  };
 
   // States
   const [step, setStep] = useState<Step>("otp-verification");
@@ -172,6 +209,13 @@ export default function QRTicketScanner() {
     null,
   );
   const [errorMessage, setErrorMessage] = useState("");
+
+  // Single writer for the processing flag: the ref is what the frozen
+  // html5-qrcode callback can actually read, the state is what re-renders.
+  const setProcessing = (v: boolean) => {
+    processingRef.current = v;
+    setIsProcessing(v);
+  };
   const [pendingStallQR, setPendingStallQR] = useState<string | null>(null);
   const [stallAction, setStallAction] = useState<
     "CHECK_IN" | "CHECK_OUT" | null
@@ -303,6 +347,8 @@ export default function QRTicketScanner() {
 
   // Select scan mode and proceed to scanning
   const handleModeSelection = (mode: ScanMode) => {
+    clearRecoveryTimer();
+    setProcessing(false);
     setScanMode(mode);
     setStep("scanning");
   };
@@ -313,6 +359,7 @@ export default function QRTicketScanner() {
       startQRScanner();
     }
     return () => {
+      clearRecoveryTimer();
       if (qrCodeRef.current) {
         qrCodeRef.current.stop();
         qrCodeRef.current = null;
@@ -322,6 +369,19 @@ export default function QRTicketScanner() {
 
   const startQRScanner = async () => {
     try {
+      // Tear down any live instance before attaching a new one. This used to
+      // overwrite qrCodeRef and orphan the previous camera: the abandoned
+      // instance kept decoding into the stale callback, and a shift's worth of
+      // "Cancel & Rescan" taps exhausted the device's camera resources.
+      if (qrCodeRef.current) {
+        try {
+          await qrCodeRef.current.stop();
+        } catch {
+          /* already stopped */
+        }
+        qrCodeRef.current = null;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       stream.getTracks().forEach((track) => track.stop());
 
@@ -347,9 +407,9 @@ export default function QRTicketScanner() {
 
   // Handle successful QR scan
   const onScanSuccess = async (decodedText: string, decodedResult: any) => {
-    if (isProcessing) return;
+    if (processingRef.current) return;
 
-    setIsProcessing(true);
+    setProcessing(true);
 
     try {
       if (qrCodeRef.current) {
@@ -384,11 +444,11 @@ export default function QRTicketScanner() {
         variant: "destructive",
       });
 
-      setTimeout(() => {
+      scheduleRecovery(() => {
         setScanResult(null);
-        setIsProcessing(false);
+        setProcessing(false);
         startQRScanner();
-      }, 3000);
+      });
     }
   };
 
@@ -427,7 +487,7 @@ export default function QRTicketScanner() {
 
     if (!attendanceResponse.ok) {
       const errorData = await attendanceResponse.json();
-      throw new Error(errorData.message || "Failed to mark attendance");
+      throw new Error(formatApiError(errorData, "Failed to mark attendance"));
     }
 
     setScanResult("success");
@@ -454,7 +514,7 @@ export default function QRTicketScanner() {
 
     // Save the raw QR text and go to selection screen
     setPendingStallQR(decodedText);
-    setIsProcessing(false);
+    setProcessing(false);
     setStep("checkin-checkout-selection");
   };
 
@@ -494,35 +554,26 @@ export default function QRTicketScanner() {
   // Core function that calls the API after action is decided
   const processStallAction = async (action: "CHECK_IN" | "CHECK_OUT") => {
     if (!pendingStallQR) return;
-    setIsProcessing(true);
+    clearRecoveryTimer();
+    setProcessing(true);
     setStallAction(action);
 
     try {
-      // For CHECK_OUT — validate that the stall has already checked in
-      // Validate check-in / check-out state before proceeding
       const qrData = JSON.parse(pendingStallQR);
-      const stallCheckResponse = await fetch(
-        `${apiURL}/stalls/${qrData.stallId}`,
-      );
-      const stallCheck = await stallCheckResponse.json();
 
-      if (action === "CHECK_IN") {
-        if (stallCheck.data.hasCheckedIn) {
-          throw new Error("This exhibitor has already checked in.");
-        }
+      // Reject a badge from another event BEFORE the mutating POST. This used
+      // to be checked on the response, by which point the exhibitor had
+      // already been checked in/out on the wrong event.
+      const qrEventId = String(qrData.eventId || "");
+      if (qrEventId && qrEventId !== String(eventId)) {
+        throw new Error("This stall is not for this event");
       }
 
-      if (action === "CHECK_OUT") {
-        if (!stallCheck.data.hasCheckedIn) {
-          throw new Error(
-            "This exhibitor has not checked in yet. Cannot check out before checking in.",
-          );
-        }
-        if (stallCheck.data.hasCheckedOut) {
-          throw new Error("This exhibitor has already checked out.");
-        }
-      }
-
+      // The backend owns the state check: it applies the transition as a
+      // single conditional write and returns the precise reason when the
+      // booking is not in the expected state. Pre-flighting it here with a
+      // separate GET only added a check-then-act gap two operators could race
+      // through.
       const stallResponse = await fetch(`${apiURL}/stalls/scan-qr`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -530,13 +581,18 @@ export default function QRTicketScanner() {
       });
 
       if (!stallResponse.ok) {
-        const errorData = await stallResponse.json();
-        throw new Error(errorData.message || "Failed to process stall QR");
+        const errorData = await stallResponse.json().catch(() => ({}));
+        throw new Error(
+          formatApiError(errorData, "Failed to process stall QR"),
+        );
       }
 
       const stallInfo = await stallResponse.json();
 
-      if (stallInfo.data.eventId._id !== eventId) {
+      const scannedEventId = String(
+        stallInfo.data?.eventId?._id || stallInfo.data?.eventId || "",
+      );
+      if (scannedEventId && scannedEventId !== String(eventId)) {
         throw new Error("This stall is not for this event");
       }
 
@@ -560,13 +616,15 @@ export default function QRTicketScanner() {
       });
 
       // Go back to selection so user can retry
-      setTimeout(() => {
+      // Routed through scheduleRecovery so a retry that succeeds inside the
+      // 3s window is not dragged back to the selection screen by this timer.
+      scheduleRecovery(() => {
         setScanResult(null);
-        setIsProcessing(false);
+        setProcessing(false);
         setStep("checkin-checkout-selection");
-      }, 3000);
+      });
     } finally {
-      setIsProcessing(false);
+      setProcessing(false);
     }
   };
 
@@ -583,7 +641,7 @@ export default function QRTicketScanner() {
     }
 
     setPendingSpeakerQR(decodedText);
-    setIsProcessing(false);
+    setProcessing(false);
     setStep("checkin-checkout-selection");
   };
 
@@ -603,7 +661,8 @@ export default function QRTicketScanner() {
 
   const processSpeakerAction = async (action: "CHECK_IN" | "CHECK_OUT") => {
     if (!pendingSpeakerQR) return;
-    setIsProcessing(true);
+    clearRecoveryTimer();
+    setProcessing(true);
     setSpeakerAction(action);
 
     try {
@@ -632,7 +691,7 @@ export default function QRTicketScanner() {
 
       if (!scanRes.ok) {
         const errorData = await scanRes.json();
-        throw new Error(errorData.message || "Failed to process speaker QR");
+        throw new Error(formatApiError(errorData, "Failed to process speaker QR"));
       }
 
       const scanInfo = await scanRes.json();
@@ -656,13 +715,15 @@ export default function QRTicketScanner() {
         variant: "destructive",
       });
 
-      setTimeout(() => {
+      // Routed through scheduleRecovery so a retry that succeeds inside the
+      // 3s window is not dragged back to the selection screen by this timer.
+      scheduleRecovery(() => {
         setScanResult(null);
-        setIsProcessing(false);
+        setProcessing(false);
         setStep("checkin-checkout-selection");
-      }, 3000);
+      });
     } finally {
-      setIsProcessing(false);
+      setProcessing(false);
     }
   };
 
@@ -679,7 +740,7 @@ export default function QRTicketScanner() {
     }
 
     setPendingRoundTableQR(decodedText);
-    setIsProcessing(false);
+    setProcessing(false);
     setStep("checkin-checkout-selection");
   };
 
@@ -699,7 +760,8 @@ export default function QRTicketScanner() {
 
   const processRoundTableAction = async (action: "CHECK_IN" | "CHECK_OUT") => {
     if (!pendingRoundTableQR) return;
-    setIsProcessing(true);
+    clearRecoveryTimer();
+    setProcessing(true);
     setRoundTableAction(action);
 
     try {
@@ -728,7 +790,9 @@ export default function QRTicketScanner() {
 
       if (!scanRes.ok) {
         const errorData = await scanRes.json();
-        throw new Error(errorData.message || "Failed to process round table QR");
+        throw new Error(
+          formatApiError(errorData, "Failed to process round table QR"),
+        );
       }
 
       const scanInfo = await scanRes.json();
@@ -752,13 +816,15 @@ export default function QRTicketScanner() {
         variant: "destructive",
       });
 
-      setTimeout(() => {
+      // Routed through scheduleRecovery so a retry that succeeds inside the
+      // 3s window is not dragged back to the selection screen by this timer.
+      scheduleRecovery(() => {
         setScanResult(null);
-        setIsProcessing(false);
+        setProcessing(false);
         setStep("checkin-checkout-selection");
-      }, 3000);
+      });
     } finally {
-      setIsProcessing(false);
+      setProcessing(false);
     }
   };
 
@@ -784,7 +850,7 @@ export default function QRTicketScanner() {
 
     if (!res.ok) {
       const errorData = await res.json();
-      throw new Error(errorData.message || "Failed to process workshop QR");
+      throw new Error(formatApiError(errorData, "Failed to process workshop QR"));
     }
 
     const info = await res.json();
@@ -826,7 +892,9 @@ export default function QRTicketScanner() {
 
     if (!res.ok) {
       const errorData = await res.json();
-      throw new Error(errorData.message || "Failed to process scheduled space QR");
+      throw new Error(
+        formatApiError(errorData, "Failed to process scheduled space QR"),
+      );
     }
 
     const info = await res.json();
@@ -846,6 +914,7 @@ export default function QRTicketScanner() {
   };
 
   const resetScanner = () => {
+    clearRecoveryTimer();
     setScanResult(null);
     setTicketData(null);
     setStallData(null);
@@ -858,7 +927,7 @@ export default function QRTicketScanner() {
     setWorkshopData(null);
     setScheduledSpaceData(null);
     setErrorMessage("");
-    setIsProcessing(false);
+    setProcessing(false);
     setPendingStallQR(null);
     setStallAction(null);
     setShowCheckOutConfirmDialog(false);
@@ -868,6 +937,8 @@ export default function QRTicketScanner() {
   };
 
   const handleBackToModeSelection = () => {
+    clearRecoveryTimer();
+    setProcessing(false);
     setScanMode(null);
     setStep("mode-selection");
   };
@@ -1117,6 +1188,17 @@ export default function QRTicketScanner() {
   );
 
   // ─── RENDER: Check-In / Check-Out Selection ──────────────────────────────────
+  // Only these three modes have a two-stage check-in/check-out flow; the
+  // others are single-stage and must never reach this screen's handlers.
+  const confirmActionForMode = (action: "CHECK_IN" | "CHECK_OUT") => {
+    if (scanMode === "speaker-ticket") return handleSpeakerActionConfirm(action);
+    if (scanMode === "round-table") return handleRoundTableActionConfirm(action);
+    if (scanMode === "stall-ticket") return handleStallActionConfirm(action);
+    // Nothing pending for this mode — fall back to a clean rescan rather than
+    // silently doing nothing.
+    return handleBackToModeSelection();
+  };
+
   const renderCheckInOutSelection = () => (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
@@ -1146,7 +1228,7 @@ export default function QRTicketScanner() {
 
         <div className="space-y-3">
           <Button
-            onClick={() => scanMode === "speaker-ticket" ? handleSpeakerActionConfirm("CHECK_IN") : scanMode === "round-table" ? handleRoundTableActionConfirm("CHECK_IN") : handleStallActionConfirm("CHECK_IN")}
+            onClick={() => confirmActionForMode("CHECK_IN")}
             disabled={isProcessing}
             className="w-full bg-green-600 hover:bg-green-700 h-14 text-base"
           >
@@ -1159,7 +1241,7 @@ export default function QRTicketScanner() {
           </Button>
 
           <Button
-            onClick={() => scanMode === "speaker-ticket" ? handleSpeakerActionConfirm("CHECK_OUT") : scanMode === "round-table" ? handleRoundTableActionConfirm("CHECK_OUT") : handleStallActionConfirm("CHECK_OUT")}
+            onClick={() => confirmActionForMode("CHECK_OUT")}
             disabled={isProcessing}
             className="w-full bg-orange-500 hover:bg-orange-600 h-14 text-base"
           >
@@ -1174,8 +1256,16 @@ export default function QRTicketScanner() {
 
         <Button
           onClick={() => {
+            // Clear every pending payload, not just stall/speaker — a
+            // left-behind pendingRoundTableQR made the next Check-In act on
+            // the previously scanned badge.
             setPendingStallQR(null);
             setPendingSpeakerQR(null);
+            setPendingRoundTableQR(null);
+            setStallAction(null);
+            setSpeakerAction(null);
+            setRoundTableAction(null);
+            setErrorMessage("");
             setScanResult(null);
             setStep("scanning");
             startQRScanner();
@@ -1247,12 +1337,18 @@ export default function QRTicketScanner() {
   );
 
   // ─── RENDER: Success — Stall Ticket ─────────────────────────────────────────
-  const renderSuccessStallTicket = () => (
+  // Label the card from the action the SERVER performed, not from the button
+  // the operator pressed. The two can disagree — another gate may have moved
+  // the exhibitor first — and showing the intent would tell the operator the
+  // opposite of what actually happened.
+  const renderSuccessStallTicket = () => {
+    const stallOutcome = stallData?.action || stallAction;
+    return (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
         <CheckCircle className="mx-auto h-16 w-16 text-green-600 mb-4" />
         <CardTitle className="text-green-800">
-          {stallAction === "CHECK_OUT"
+          {stallOutcome === "CHECK_OUT"
             ? "Stall Checked Out!"
             : "Stall Checked In!"}
         </CardTitle>
@@ -1261,27 +1357,34 @@ export default function QRTicketScanner() {
         {stallData && (
           <div className="bg-green-50 p-4 rounded-lg border border-green-200 space-y-2 text-sm">
             <p>
-              <strong>Shopkeeper:</strong> {stallData.shopkeeper.name}
+              <strong>Shopkeeper:</strong> {stallData.shopkeeper?.name || "—"}
             </p>
             <p>
-              <strong>Business:</strong> {stallData.shopkeeper.shopName}
+              <strong>Business:</strong> {stallData.shopkeeper?.shopName || "—"}
             </p>
             <p>
-              <strong>Category:</strong> {stallData.shopkeeper.businessCategory}
+              <strong>Category:</strong>{" "}
+              {stallData.shopkeeper?.businessCategory || "—"}
             </p>
             <p>
-              <strong>Event:</strong> {stallData.eventId.title}
+              <strong>Event:</strong> {stallData.eventId?.title || "—"}
             </p>
+            {stallOutcome === "CHECK_OUT" && stallData.checkOutTime && (
+              <p>
+                <strong>Checked out at:</strong>{" "}
+                {new Date(stallData.checkOutTime).toLocaleString()}
+              </p>
+            )}
             <p>
               <strong>Action:</strong>
               <span
                 className={`ml-1 px-2 py-1 rounded-full text-xs font-medium ${
-                  stallAction === "CHECK_OUT"
+                  stallOutcome === "CHECK_OUT"
                     ? "bg-orange-100 text-orange-800"
                     : "bg-green-100 text-green-800"
                 }`}
               >
-                {stallAction === "CHECK_OUT" ? "Checked Out" : "Checked In"}
+                {stallOutcome === "CHECK_OUT" ? "Checked Out" : "Checked In"}
               </span>
             </p>
 
@@ -1314,7 +1417,8 @@ export default function QRTicketScanner() {
         </Button>
       </CardContent>
     </Card>
-  );
+    );
+  };
 
   // ─── MAIN RENDER ─────────────────────────────────────────────────────────────
   return (
