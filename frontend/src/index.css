@@ -125,6 +125,69 @@
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
+
+  /*
+   * Opt a subtree out of dark mode.
+   *
+   * Some screens commit to a light design with literal palette colours
+   * (bg-green-50, text-green-800 and friends) while still building on shadcn
+   * components that resolve their colours from these custom properties. Under
+   * `.dark` those two halves disagree: the cards go dark, the hardcoded panels
+   * stay light, and you get light text on light blocks.
+   *
+   * Re-declaring the light values here fixes that without touching the user's
+   * global theme choice. Custom properties resolve per element — an element's
+   * own declaration beats the value inherited from `.dark` on <html> — so
+   * everything inside this container renders light, portal-free dialogs
+   * included. `color-scheme` keeps native controls (inputs, scrollbars) light
+   * to match.
+   *
+   * This only governs colours read through these variables. It cannot undo a
+   * literal `dark:` utility, so a subtree using this must not rely on them.
+   */
+  .theme-light-only {
+    color-scheme: light;
+
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 210 100% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 199 89% 48%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 0 90% 70%;
+    --accent-foreground: 0 0% 100%;
+
+    --eShop: 150 80% 45%;
+    --eShop-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 210 100% 50%;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
 }
 
 @layer base {

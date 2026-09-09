@@ -1421,8 +1421,14 @@ export default function QRTicketScanner() {
   };
 
   // ─── MAIN RENDER ─────────────────────────────────────────────────────────────
+  // theme-light-only: this screen is a light-only design — its status panels use
+  // literal palette colours (bg-green-50/text-green-800, bg-red-50, bg-orange-50)
+  // that do not follow the theme, so under dark mode the shadcn Cards around
+  // them went dark while the panels stayed light and the text became unreadable.
+  // Pinning the subtree to the light variables keeps the scanner legible at a
+  // gate without overriding the operator's global theme preference.
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="theme-light-only min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center mb-6">
