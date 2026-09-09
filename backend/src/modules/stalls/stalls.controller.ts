@@ -544,6 +544,8 @@ export class StallsController {
       eventId?: string;
       message?: string;
       channels?: { email?: boolean; whatsapp?: boolean };
+      /** Default true — false sends the message with no ticket or QR. */
+      attachTicket?: boolean;
     },
   ) {
     if (!body?.eventId) {
@@ -557,6 +559,7 @@ export class StallsController {
       body.eventId,
       body.message,
       channels,
+      body.attachTicket !== false,
     );
   }
 

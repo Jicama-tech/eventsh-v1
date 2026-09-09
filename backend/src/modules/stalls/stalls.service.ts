@@ -4964,6 +4964,8 @@ export class StallsService {
     eventId: string,
     customMessage?: string,
     channels: { email?: boolean; whatsapp?: boolean } = { email: true },
+    /** False sends the organizer's message on its own — no PDF, no QR. */
+    attachTicket = true,
   ): Promise<{
     total: number;
     sent: number;
@@ -5013,7 +5015,7 @@ export class StallsService {
           skipped.push({ stallId: id, vendor: name, reason: "No email on file" });
         } else {
           try {
-            await this.resendStallTicket(id, customMessage);
+            await this.resendStallTicket(id, customMessage, attachTicket);
             sent += 1;
           } catch (err: any) {
             failed.push({
@@ -5090,7 +5092,16 @@ export class StallsService {
     };
   }
 
-  async resendStallTicket(stallId: string, customMessage?: string) {
+  /**
+   * `attachTicket: false` sends the organizer's message on its own — no PDF,
+   * no QR, and none of the booking summary. Used by the bulk send when the
+   * organizer wants to write to exhibitors without re-issuing a credential.
+   */
+  async resendStallTicket(
+    stallId: string,
+    customMessage?: string,
+    attachTicket = true,
+  ) {
     if (!Types.ObjectId.isValid(stallId)) {
       throw new BadRequestException("Invalid stall ID format");
     }
@@ -5115,10 +5126,14 @@ export class StallsService {
     // PDF, but treat a render failure as a downgrade, not an error: the
     // vendor still gets the scannable QR inline, and the organizer sees a
     // success instead of a dead end.
-    const { qrCodeImage, created } = await this.ensureStallQrPayload(stall);
+    // Only mint/refresh the QR when the ticket is actually going out — this
+    // creates a live check-in credential, so a plain message must not.
+    const { qrCodeImage, created } = attachTicket
+      ? await this.ensureStallQrPayload(stall)
+      : { qrCodeImage: "", created: false };
     let buffer: Buffer | null = null;
     try {
-      ({ buffer } = await this.downloadStallTicket(stallId));
+      if (attachTicket) ({ buffer } = await this.downloadStallTicket(stallId));
     } catch (pdfErr) {
       this.logger.warn(
         `Resend: ticket PDF unavailable for ${stallId} (${
@@ -5154,7 +5169,9 @@ export class StallsService {
     );
     // No PDF? Put the QR in the email body (and attach it as a PNG) so the
     // vendor can still be scanned in at the gate from their phone.
-    const qrBlock = buffer
+    const qrBlock = !attachTicket
+      ? ""
+      : buffer
       ? ""
       : `<div style="text-align:center;padding:8px 0 16px">
             <img src="cid:stallqr" alt="Stall check-in QR" style="width:200px;height:200px"/>
@@ -5195,20 +5212,30 @@ export class StallsService {
                 ? "1 day to go"
                 : `${daysToGo} days to go`
           }</p>`;
+    // Without the ticket this is the organizer writing to their
+    // exhibitors, so "Your Stall Ticket" and the booking summary would
+    // both be wrong — their message is the whole email.
+    const heading = attachTicket ? "Your Stall Ticket" : eventTitle;
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
         <div style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:24px;text-align:center">
-          <h1 style="margin:0;font-size:20px">Your Stall Ticket</h1>
+          <h1 style="margin:0;font-size:20px">${heading}</h1>
         </div>
         <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-          <p>${message.replace(/\*/g, "").replace(/\n/g, "<br/>")}</p>
+          ${attachTicket
+            ? `<p>${message.replace(/\*/g, "").replace(/\n/g, "<br/>")}</p>`
+            : ""}
           ${customBlock}
           ${countdownBlock}
           ${qrBlock}
         </div>
       </div>`;
 
-    const attachments = buffer
+    // No ticket means no attachment at all — not even the QR fallback,
+    // which is the same credential in another form.
+    const attachments = !attachTicket
+      ? []
+      : buffer
       ? [{ filename: "stall-ticket.pdf", content: buffer }]
       : [
           {
@@ -5221,7 +5248,9 @@ export class StallsService {
     try {
       await this.mailService.sendEmail({
         to: vendorEmail,
-        subject: `Your stall ticket for ${eventTitle}`,
+        subject: attachTicket
+          ? `Your stall ticket for ${eventTitle}`
+          : `Update about ${eventTitle}`,
         html,
         attachments,
         senderConfig,

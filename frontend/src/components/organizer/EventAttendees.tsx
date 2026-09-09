@@ -363,6 +363,10 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   const [bulkSendOpen, setBulkSendOpen] = useState(false);
   const [bulkMessage, setBulkMessage] = useState("");
   const [bulkSending, setBulkSending] = useState(false);
+  // Whether the ticket rides along. Off sends the organizer's message on its
+  // own — no PDF and no QR, since the QR is the same credential in another
+  // form and re-issuing one is not what "just send a note" means.
+  const [bulkAttachTicket, setBulkAttachTicket] = useState(true);
   const [bulkResult, setBulkResult] = useState<{
     total: number;
     sent: number;
@@ -396,6 +400,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         body: JSON.stringify({
           eventId: selectedEvent._id,
           message: bulkMessage.trim() || undefined,
+          attachTicket: bulkAttachTicket,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -4699,8 +4704,28 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
             </div>
           ) : (
             <div className="space-y-2">
+              <label className="flex items-start gap-2.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={bulkAttachTicket}
+                  onChange={(e) => setBulkAttachTicket(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-primary"
+                />
+                <span>
+                  <span className="font-medium">Attach the ticket PDF</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {bulkAttachTicket
+                      ? "Each exhibitor gets their ticket again, with the QR."
+                      : "Sends your message only — no ticket, no QR."}
+                  </span>
+                </span>
+              </label>
+
               <label className="text-sm font-medium" htmlFor="bulk-message">
-                Your message <span className="text-muted-foreground">(optional)</span>
+                Your message{" "}
+                <span className="text-muted-foreground">
+                  {bulkAttachTicket ? "(optional)" : "(required)"}
+                </span>
               </label>
               <Textarea
                 id="bulk-message"
@@ -4715,9 +4740,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 }
               />
               <p className="text-xs text-muted-foreground">
-                Shown above their booking details. The ticket PDF and the
-                "days to go" line are added automatically — leave this blank to
-                send just those.
+                {bulkAttachTicket
+                  ? 'Shown above their booking details. The ticket PDF and the "days to go" line are added automatically — leave this blank to send just those.'
+                  : 'This message is the whole email, plus the "days to go" line. Nothing is attached.'}
               </p>
             </div>
           )}
@@ -4736,7 +4761,11 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 </Button>
                 <Button
                   onClick={handleBulkSend}
-                  disabled={bulkSending || bulkRecipients.length === 0}
+                  disabled={
+                    bulkSending ||
+                    bulkRecipients.length === 0 ||
+                    (!bulkAttachTicket && !bulkMessage.trim())
+                  }
                 >
                   <Send className="mr-2 h-4 w-4" />
                   {bulkSending
