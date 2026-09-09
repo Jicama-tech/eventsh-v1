@@ -147,7 +147,7 @@ export default function IndividualGuestList({
           <Users className="h-5 w-5 text-rose-500" />
         </div>
         <div>
-          <h1 className="text-lg sm:text-xl font-bold leading-tight">{t("Guest List")}</h1>
+          <h1 className="text-lg sm:text-xl font-bold leading-tight">{t("Participants")}</h1>
           <p className="text-xs sm:text-sm text-muted-foreground">
             Pick an event to view its guests
           </p>

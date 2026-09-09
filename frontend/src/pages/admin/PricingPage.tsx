@@ -39,6 +39,8 @@ import {
   User,
   Award,
   Mail as MailIcon,
+  Receipt,
+  LifeBuoy,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -108,16 +110,13 @@ const STALLS_SECTIONS = [
   { key: "addons", label: "Add-ons" },
 ];
 
-const TICKETS_SECTIONS = [
-  { key: "online", label: "Online Sales" },
-  { key: "walkin", label: "Walk-in / Kiosk" },
-  { key: "qr", label: "QR Check-in" },
-  { key: "refunds", label: "Refunds" },
-];
-
 const PARTICIPANTS_SECTIONS = [
   { key: "list", label: "Attendee List" },
-  { key: "scanner", label: "Scanner" },
+  // NOT ENFORCED YET. The scanner is the standalone /events/:id/scan-tickets
+  // route, opened by volunteers who carry no subscription of their own — so
+  // gating it on the viewer's plan would lock the volunteer out instead of the
+  // organizer. Needs the event's organizer plan resolved server-side first.
+  { key: "scanner", label: "Scanner (not enforced yet)" },
   { key: "exports", label: "Exports" },
 ];
 
@@ -134,11 +133,8 @@ const ANALYTICS_SECTIONS = [
   { key: "exports", label: "Exports" },
 ];
 
-const COUPONS_SECTIONS = [
-  { key: "create", label: "Create Coupons" },
-  { key: "redeem", label: "Redemption" },
-  { key: "exhibitor", label: "Exhibitor Coupons" },
-];
+// "Redemption" and "Exhibitor Coupons" were removed: no such UI exists.
+const COUPONS_SECTIONS = [{ key: "create", label: "Create Coupons" }];
 
 const SPEAKER_SECTIONS = [
   { key: "applications", label: "Applications" },
@@ -151,22 +147,33 @@ const ROUND_TABLE_SECTIONS = [
   { key: "byEvent", label: "View by Event" },
 ];
 
+// "Segments" was removed — there is no segmentation feature to gate.
 const CRM_SECTIONS = [
   { key: "customers", label: "Customer List" },
-  { key: "segments", label: "Segments" },
   { key: "exports", label: "Exports" },
 ];
 
-const FEEDBACK_SECTIONS = [
-  { key: "list", label: "Feedback List" },
-  { key: "featured", label: "Featured Reviews" },
-  { key: "stats", label: "Stats" },
+// "Featured Reviews" and "Stats" were removed: EventFeedbackDialog is a flat
+// comment list with neither.
+const FEEDBACK_SECTIONS = [{ key: "list", label: "Feedback List" }];
+
+// "Scanner Permissions" was removed: an operator's scanner access is the
+// per-operator `accessTabs` the organizer sets on each record, not a plan tier.
+// Both of these gate real screens — see the ModuleGates in MyEvents (expense
+// + supplies buttons) and MyUsers (Suppliers tab).
+const EXPENSE_SECTIONS = [
+  { key: "log", label: "Log Expenses" },
+  { key: "approvals", label: "Approve / Reject" },
+];
+
+const SUPPLIER_SECTIONS = [
+  { key: "directory", label: "Supplier Directory" },
+  { key: "requests", label: "Quotations / Requests" },
 ];
 
 const OPERATOR_SECTIONS = [
   { key: "list", label: "Operator List" },
   { key: "create", label: "Create Operator" },
-  { key: "scanner", label: "Scanner Permissions" },
 ];
 
 const ORGANIZER_FEATURE_MODULES: {
@@ -179,72 +186,70 @@ const ORGANIZER_FEATURE_MODULES: {
 }[] = [
   {
     key: "events",
-    label: "Events",
+    label: "Event Management",
     hasLimit: true,
     icon: Calendar,
     sections: EVENT_TAB_SECTIONS,
   },
-  {
-    key: "tickets",
-    label: "Tickets",
-    icon: DollarSign,
-    sections: TICKETS_SECTIONS,
-  },
+  // No sub-sections: the tickets module is all-or-nothing today. The old
+  // online/walk-in/QR/refunds toggles named features that do not exist in
+  // TicketSalesManagement, so they saved into the plan and gated nothing.
+  { key: "tickets", label: "Ticket Management", icon: DollarSign },
   {
     key: "stalls",
-    label: "Stalls",
+    label: "Stall Management",
     hasLimit: true,
     icon: Store,
     sections: STALLS_SECTIONS,
   },
   {
     key: "participants",
-    label: "Participants",
+    label: "Participant Management",
     icon: Users,
     sections: PARTICIPANTS_SECTIONS,
   },
   {
     key: "kiosk",
-    label: "In-Person Booking",
+    label: "Kiosk Management",
     icon: Ticket,
     sections: KIOSK_SECTIONS,
   },
   {
     key: "speakerRequests",
-    label: "Speaker Requests",
+    label: "Speaker Management",
     icon: Users,
     sections: SPEAKER_SECTIONS,
   },
   {
     key: "roundTableBookings",
-    label: "Round Table Bookings",
+    label: "Round Table Management",
     icon: Calendar,
     sections: ROUND_TABLE_SECTIONS,
   },
-  { key: "razorpay", label: "Razorpay", icon: DollarSign },
+  { key: "razorpay", label: "Razorpay Payments", icon: DollarSign },
   {
     key: "coupons",
-    label: "Coupons",
+    label: "Coupon Management",
     icon: Star,
     sections: COUPONS_SECTIONS,
   },
   {
     key: "storefront",
-    label: "Storefront",
+    label: "Storefront Management",
     icon: Store,
     sections: STOREFRONT_SECTIONS,
   },
   { key: "customDomain", label: "Custom Domain", icon: Settings },
   {
     key: "analytics",
-    label: "Analytics",
+    label: "Analytics & Reports",
     icon: BarChart3,
     sections: ANALYTICS_SECTIONS,
   },
-  { key: "crm", label: "CRM", icon: Users, sections: CRM_SECTIONS },
+  { key: "crm", label: "Customer Management (CRM)", icon: Users, sections: CRM_SECTIONS },
   {
     key: "feedback",
-    label: "Feedback",
+    label: "Feedback Management",
     hasAudiences: true,
     icon: MessageSquare,
     sections: FEEDBACK_SECTIONS,
@@ -256,12 +261,12 @@ const ORGANIZER_FEATURE_MODULES: {
     // card in Settings and can send all vendor/attendee emails from their
     // own address instead of admin@eventsh.com.
     key: "customEmail",
-    label: "Customize Email (own sender)",
+    label: "Custom Sender Email",
     icon: MailIcon,
   },
   {
     key: "operators",
-    label: "Operators",
+    label: "Operator Management",
     hasLimit: true,
     icon: Users,
     sections: OPERATOR_SECTIONS,
@@ -272,9 +277,25 @@ const ORGANIZER_FEATURE_MODULES: {
     // inbox. `limit` caps how many distinct tiers (Gold/Silver/Bronze)
     // the organizer can author — leave 0 for unlimited.
     key: "membership",
-    label: "Exhibitor Membership",
+    label: "Membership Management",
     hasLimit: true,
     icon: Award,
+  },
+  // The last two sidebar tabs that had no plan control at all — an organizer
+  // saw them on every tier regardless of what the plan said.
+  { key: "platformFees", label: "Platform Fees", icon: Receipt },
+  { key: "support", label: "Support Desk", icon: LifeBuoy },
+  {
+    key: "expenses",
+    label: "Expense Management",
+    icon: Receipt,
+    sections: EXPENSE_SECTIONS,
+  },
+  {
+    key: "suppliers",
+    label: "Supplier Management",
+    icon: Store,
+    sections: SUPPLIER_SECTIONS,
   },
 ];
 

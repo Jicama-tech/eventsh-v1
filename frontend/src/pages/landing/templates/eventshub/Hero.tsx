@@ -92,8 +92,10 @@ export function Hero({ onShowLogin }: HeroSectionProps) {
             >
               Start free
             </button>
-            <a href="#platform" className="eh-btn eh-btn-g eh-btn-lg">
-              See how it works
+            {/* #platform is no longer rendered — the demos are what "see how
+                it works" means on this page now. */}
+            <a href="#demos" className="eh-btn eh-btn-g eh-btn-lg">
+              See it working
             </a>
           </div>
           <p className="eh-hero-note">

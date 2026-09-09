@@ -444,28 +444,28 @@ export default function GuestRoomDialog({
         {guest && (
           <div className="space-y-4">
             <div className="rounded-lg bg-rose-50/60 p-3">
-              <div className="font-medium text-stone-800">{guest.name}</div>
+              <div className="font-medium text-foreground">{guest.name}</div>
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <Mail className="h-3 w-3" /> {guest.email} · {guest.guestCount}{" "}
                 guest{guest.guestCount === 1 ? "" : "s"}
               </div>
               {ageLineOf(guest.ageGroups) && (
-                <div className="mt-1 text-xs text-stone-500">
+                <div className="mt-1 text-xs text-muted-foreground">
                   {ageLineOf(guest.ageGroups)}
                 </div>
               )}
               {guest.attendees && guest.attendees.length > 0 && (
                 <div className="mt-2 space-y-1">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     Guests
                   </div>
                   {guest.attendees.map((a, i) => (
                     <div
                       key={i}
-                      className="flex items-center justify-between gap-2 rounded bg-background px-2 py-1 text-xs text-stone-700"
+                      className="flex items-center justify-between gap-2 rounded bg-background px-2 py-1 text-xs text-foreground"
                     >
                       <span className="font-medium">{a.name}</span>
-                      <span className="text-stone-500">
+                      <span className="text-muted-foreground">
                         {[a.age ? `${a.age} yrs` : "", a.contactNumber]
                           .filter(Boolean)
                           .join(" · ")}
@@ -479,7 +479,7 @@ export default function GuestRoomDialog({
             {rows.map((r, i) => (
               <div
                 key={i}
-                className="space-y-3 rounded-xl border border-stone-200 p-3"
+                className="space-y-3 rounded-xl border border-border p-3"
               >
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-sm font-semibold text-rose-700">
@@ -493,7 +493,7 @@ export default function GuestRoomDialog({
                   <button
                     type="button"
                     onClick={() => removeRoom(i)}
-                    className="text-stone-400 hover:text-red-600"
+                    className="text-muted-foreground hover:text-red-600"
                     title="Remove this room"
                   >
                     <X className="h-4 w-4" />
@@ -597,7 +597,7 @@ export default function GuestRoomDialog({
                                   className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition ${
                                     on
                                       ? "border-rose-400 bg-rose-500 text-white"
-                                      : "border-stone-200 bg-background text-stone-600 hover:bg-stone-50"
+                                      : "border-border bg-background text-muted-foreground hover:bg-muted/50"
                                   }`}
                                 >
                                   {on && <Check className="h-3 w-3" />}
@@ -628,7 +628,7 @@ export default function GuestRoomDialog({
                           {r.sharedRsvpIds.map((rid) => (
                             <span
                               key={rid}
-                              className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-background px-2 py-0.5 text-xs text-stone-700"
+                              className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-background px-2 py-0.5 text-xs text-foreground"
                             >
                               {guestById.get(rid)?.name || "Another party"}
                               <button
@@ -636,7 +636,7 @@ export default function GuestRoomDialog({
                                 onClick={() =>
                                   r.roomKey && doUnshare(r.roomKey, rid)
                                 }
-                                className="text-stone-400 hover:text-red-600"
+                                className="text-muted-foreground hover:text-red-600"
                                 title="Remove from this room"
                               >
                                 <X className="h-3 w-3" />
@@ -725,7 +725,7 @@ export default function GuestRoomDialog({
                                         className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition ${
                                           on
                                             ? "border-amber-400 bg-amber-500 text-white"
-                                            : "border-stone-200 bg-background text-stone-600 hover:bg-stone-50"
+                                            : "border-border bg-background text-muted-foreground hover:bg-muted/50"
                                         }`}
                                       >
                                         {on && <Check className="h-3 w-3" />}

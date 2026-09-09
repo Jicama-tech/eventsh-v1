@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { statAccent, STATUS_ACCENTS } from "@/lib/accents";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -35,6 +36,8 @@ import {
   SelectContent,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useSubscription } from "@/hooks/useSubscription";
+import { ModuleGate } from "@/components/ui/ModuleGate";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { jwtDecode } from "jwt-decode";
 
@@ -87,6 +90,16 @@ interface SpeakerRequestsProps {
 }
 
 export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
+  // Plan sub-toggles for this module. Read as booleans rather than wrapped
+  // in <ModuleGate>: these guard individual buttons inside a table row,
+  // where a blur-and-upgrade overlay would wreck the layout.
+  const { isModuleSectionEnabled } = useSubscription();
+  const canApprove = isModuleSectionEnabled("speakerRequests", "approval");
+  // `slots` covers the session/agenda + time columns — the scheduling half
+  // of a speaker request. Dropped as whole columns so the table stays
+  // aligned rather than showing gaps.
+  const canSlots = isModuleSectionEnabled("speakerRequests", "slots");
+
   const { toast } = useToast();
   const apiURL = __API_URL__;
   const { country } = useCountry();
@@ -349,9 +362,9 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
 
   const getPaymentBadge = (paymentStatus: string) => {
     const map: Record<string, { variant: any; color: string }> = {
-      Unpaid: { variant: "destructive", color: "text-red-600" },
-      Partial: { variant: "secondary", color: "text-yellow-600" },
-      Paid: { variant: "default", color: "text-green-600" },
+      Unpaid: { variant: "destructive", color: "text-red-600 dark:text-red-400" },
+      Partial: { variant: "secondary", color: "text-yellow-600 dark:text-yellow-400" },
+      Paid: { variant: "default", color: "text-green-600 dark:text-green-400" },
       Waived: { variant: "outline", color: "text-muted-foreground" },
     };
     const config = map[paymentStatus] || map.Waived;
@@ -372,37 +385,37 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
     <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
+        <Card className={`border-l-4 ${statAccent(0).ring}`}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">{t("Total Events")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.totalEvents}</div>
+            <div className={`text-3xl font-bold ${statAccent(0).icon}`}>{stats.totalEvents}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={`border-l-4 ${statAccent(1).ring}`}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">{t("Total Speaker Requests")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.totalRequests}</div>
+            <div className={`text-3xl font-bold ${statAccent(1).icon}`}>{stats.totalRequests}</div>
             <p className="text-xs text-muted-foreground mt-1">{stats.pending} pending approval</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={`border-l-4 ${STATUS_ACCENTS.good.ring}`}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">{t("Confirmed Speakers")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-green-600">{stats.confirmed}</div>
+            <div className={`text-3xl font-bold ${STATUS_ACCENTS.good.icon}`}>{stats.confirmed}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={`border-l-4 ${STATUS_ACCENTS.warning.ring}`}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">{t("Pending Review")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-yellow-600">{stats.pending}</div>
+            <div className={`text-3xl font-bold ${STATUS_ACCENTS.warning.icon}`}>{stats.pending}</div>
           </CardContent>
         </Card>
       </div>
@@ -493,7 +506,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                     </TableCell>
                     <TableCell>
                       {event.status === "published" ? (
-                        <Badge className="bg-green-100 text-green-800">Live</Badge>
+                        <Badge className="bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300">Live</Badge>
                       ) : (
                         <Badge variant="outline">{event.status || "Draft"}</Badge>
                       )}
@@ -541,13 +554,14 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
               <p className="text-sm">Add speakers in the event creation form or wait for external applications</p>
             </div>
           ) : (
+            <ModuleGate moduleKey="speakerRequests" sectionKey="applications">
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Speaker</TableHead>
-                    <TableHead>Session / Agenda</TableHead>
-                    <TableHead>Time</TableHead>
+                    {canSlots && <TableHead>Session / Agenda</TableHead>}
+                    {canSlots && <TableHead>Time</TableHead>}
                     <TableHead>Source</TableHead>
                     <TableHead>Fee</TableHead>
                     <TableHead>Status</TableHead>
@@ -563,7 +577,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                           <div className="font-medium flex items-center gap-1.5">
                             {req.name}
                             {req.isKeynote && (
-                              <Badge className="bg-amber-100 text-amber-800 text-[9px] px-1">KEYNOTE</Badge>
+                              <Badge className="bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 text-[9px] px-1">KEYNOTE</Badge>
                             )}
                           </div>
                           <div className="text-sm text-muted-foreground">
@@ -572,6 +586,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                           {req.email && <div className="text-xs text-muted-foreground">{req.email}</div>}
                         </div>
                       </TableCell>
+                      {canSlots && (
                       <TableCell>
                         {req.sessions?.length > 0 ? (
                           <div>
@@ -586,6 +601,8 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                           <span className="text-muted-foreground text-sm">—</span>
                         )}
                       </TableCell>
+                      )}
+                      {canSlots && (
                       <TableCell>
                         <div className="text-sm">
                           {(() => {
@@ -597,6 +614,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                           })()}
                         </div>
                       </TableCell>
+                      )}
                       <TableCell>
                         <Badge variant="outline" className="text-[10px]">
                           {req.isFromEvent ? "Added by you" : req.source === "organizer" ? "Added by you" : "Applied"}
@@ -618,13 +636,15 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                             <Eye className="h-4 w-4" />
                           </Button>
 
-                          {/* Pending: Approve / Reject / Set Fee */}
-                          {!req.isFromEvent && req.status === "Pending" && (
+                          {/* Pending: Approve / Reject / Set Fee.
+                              Plan-gated: `approval` off leaves the row
+                              readable but not actionable. */}
+                          {canApprove && !req.isFromEvent && req.status === "Pending" && (
                             <>
-                              <Button size="sm" variant="ghost" className="text-green-600" onClick={() => handleUpdateStatus(req._id, "Confirmed")}>
+                              <Button size="sm" variant="ghost" className="text-green-600 dark:text-green-400" onClick={() => handleUpdateStatus(req._id, "Confirmed")}>
                                 <CheckCircle2 className="h-4 w-4" />
                               </Button>
-                              <Button size="sm" variant="ghost" className="text-red-600" onClick={() => handleUpdateStatus(req._id, "Rejected")}>
+                              <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => handleUpdateStatus(req._id, "Rejected")}>
                                 <XCircle className="h-4 w-4" />
                               </Button>
                               <Button size="sm" variant="ghost" onClick={() => { setSelectedSpeaker(req); setFeeCharged(req.isCharged || false); setFeeAmount(req.fee || 0); setShowFeeDialog(true); }}>
@@ -646,7 +666,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                               <Button size="sm" variant="ghost" onClick={() => { setSelectedSpeaker(req); setFeeCharged(req.isCharged || false); setFeeAmount(req.fee || 0); setShowFeeDialog(true); }}>
                                 <DollarSign className="h-4 w-4" />
                               </Button>
-                              <Button size="sm" variant="ghost" className="text-red-600" onClick={() => handleUpdateStatus(req._id, "Cancelled")}>
+                              <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => handleUpdateStatus(req._id, "Cancelled")}>
                                 <XCircle className="h-4 w-4" />
                               </Button>
                             </>
@@ -654,7 +674,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
 
                           {/* Completed: Download Pass */}
                           {req.status === "Completed" && !req.isFromEvent && (
-                            <Button size="sm" variant="ghost" className="text-purple-600" onClick={() => window.open(`${apiURL}/speaker-requests/download-speaker-pass/${req._id}`, "_blank")}>
+                            <Button size="sm" variant="ghost" className="text-purple-600 dark:text-purple-400" onClick={() => window.open(`${apiURL}/speaker-requests/download-speaker-pass/${req._id}`, "_blank")}>
                               <Download className="h-4 w-4" />
                             </Button>
                           )}
@@ -666,7 +686,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                             </Button>
                           )}
                           {req.isFromEvent && req.hasPass && (
-                            <Button size="sm" variant="ghost" className="text-purple-600" onClick={() => window.open(`${apiURL}/speaker-requests/download-speaker-pass/${req._id}`, "_blank")}>
+                            <Button size="sm" variant="ghost" className="text-purple-600 dark:text-purple-400" onClick={() => window.open(`${apiURL}/speaker-requests/download-speaker-pass/${req._id}`, "_blank")}>
                               <Download className="h-4 w-4" />
                             </Button>
                           )}
@@ -677,6 +697,7 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
                 </TableBody>
               </Table>
             </div>
+            </ModuleGate>
           )}
         </DialogContent>
       </Dialog>
@@ -713,12 +734,12 @@ export function SpeakerRequests({ organizerId }: SpeakerRequestsProps) {
 
               {selectedSpeaker.socialLinks && (
                 <div className="flex gap-4 flex-wrap">
-                  {selectedSpeaker.socialLinks.linkedin && <a href={selectedSpeaker.socialLinks.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />LinkedIn</a>}
+                  {selectedSpeaker.socialLinks.linkedin && <a href={selectedSpeaker.socialLinks.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />LinkedIn</a>}
                   {selectedSpeaker.socialLinks.twitter && <a href={selectedSpeaker.socialLinks.twitter} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Twitter</a>}
-                  {selectedSpeaker.socialLinks.instagram && <a href={selectedSpeaker.socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="text-pink-600 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Instagram</a>}
-                  {selectedSpeaker.socialLinks.youtube && <a href={selectedSpeaker.socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="text-red-600 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />YouTube</a>}
-                  {selectedSpeaker.socialLinks.facebook && <a href={selectedSpeaker.socialLinks.facebook} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Facebook</a>}
-                  {selectedSpeaker.socialLinks.website && <a href={selectedSpeaker.socialLinks.website} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Website</a>}
+                  {selectedSpeaker.socialLinks.instagram && <a href={selectedSpeaker.socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="text-pink-600 dark:text-pink-400 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Instagram</a>}
+                  {selectedSpeaker.socialLinks.youtube && <a href={selectedSpeaker.socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="text-red-600 dark:text-red-400 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />YouTube</a>}
+                  {selectedSpeaker.socialLinks.facebook && <a href={selectedSpeaker.socialLinks.facebook} target="_blank" rel="noopener noreferrer" className="text-blue-700 dark:text-blue-300 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Facebook</a>}
+                  {selectedSpeaker.socialLinks.website && <a href={selectedSpeaker.socialLinks.website} target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline text-sm flex items-center gap-1"><ExternalLink className="h-3 w-3" />Website</a>}
                 </div>
               )}
 

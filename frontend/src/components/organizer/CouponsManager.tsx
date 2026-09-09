@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSubscription } from "@/hooks/useSubscription";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +40,11 @@ const apiURL = __API_URL__;
  * the backend coupons API. No props.
  */
 export function CouponsManager() {
+  // Plan sub-toggle: with `create` off the organizer can still see and use
+  // existing coupons, they just cannot author new ones.
+  const { isModuleSectionEnabled } = useSubscription();
+  const canCreate = isModuleSectionEnabled("coupons", "create");
+
   const { country: globalCountry } = useCountry();
   const [selectedCountry] = useState(globalCountry || "IN");
   const { formatPrice } = useCurrency(selectedCountry);
@@ -255,7 +261,9 @@ export function CouponsManager() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold">{t("Coupons")}</h3>
-        <Button onClick={handleAddCoupon}>+ Add Coupon</Button>
+        {canCreate && (
+          <Button onClick={handleAddCoupon}>+ Add Coupon</Button>
+        )}
       </div>
 
       {coupons.length === 0 ? (

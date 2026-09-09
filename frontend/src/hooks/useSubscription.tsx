@@ -7,6 +7,7 @@ import {
   ReactNode,
 } from "react";
 import { jwtDecode } from "jwt-decode";
+import { accountRoles, isIndividualAccount } from "@/lib/individualAccess";
 import { useAuth } from "./useAuth";
 
 type FeedbackAudienceKey = "visitor" | "exhibitor" | "speaker" | "roundTable";
@@ -92,7 +93,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         return;
       }
       const decoded: any = jwtDecode(token);
-      const roles: string[] = Array.isArray(decoded?.roles) ? decoded.roles : [];
+      const roles: string[] = accountRoles();
       // Individuals (Google-signed-in, no Organizer record yet) AND super
       // admins get a permissive synthetic subscription so ModuleGate never
       // locks features behind an Upgrade overlay. For individuals this covers
@@ -100,10 +101,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       // gives full rights everywhere (e.g. building demo/showcase events).
       // Empty `modules` triggers the existing permissive fallback in
       // isModuleEnabled / isModuleSectionEnabled — everything reads as enabled.
-      if (
-        roles.includes("admin") ||
-        (roles.includes("individual") && !roles.includes("organizer"))
-      ) {
+      if (roles.includes("admin") || isIndividualAccount(roles)) {
         setSubscription({
           subscribed: true,
           planId: null,

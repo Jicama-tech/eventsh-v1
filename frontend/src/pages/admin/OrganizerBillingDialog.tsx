@@ -381,8 +381,15 @@ export function OrganizerBillingDialog({
     if (!data) return;
     setInvoiceBusy(true);
     try {
-      const qr = await requestQr({ staticQr: true, billNumber });
-      const { buildOrganizerInvoice } = await import("@/lib/organizerInvoice");
+      const { buildOrganizerInvoice, invoiceNumberFor } =
+        await import("@/lib/organizerInvoice");
+      // The reference travelling inside the QR has to be the invoice number
+      // printed on the page, or a payment made by scanning reconciles against
+      // something the organizer is not looking at. Fixing `issued` here keeps
+      // the number the QR carries and the number the PDF prints identical.
+      const issued = new Date();
+      const invoiceRef = invoiceNumberFor(data.organizer._id, issued);
+      const qr = await requestQr({ staticQr: true, billNumber: invoiceRef });
       const { pdf, invoiceNo, fileName } = await buildOrganizerInvoice({
         billing: data,
         company: {
@@ -390,6 +397,7 @@ export function OrganizerBillingDialog({
           uen: paymentConfig?.companyUEN || "",
         },
         qrDataUrl: qr.qr,
+        issued,
       });
       pdf.save(fileName);
       toast({ title: "Invoice downloaded", description: invoiceNo });

@@ -37,9 +37,10 @@ export const hi: Record<string, string> = {
   // ---- individual (marriage) sidebar ----
   "navi.chatbot": "सहायक",
   "navi.events": "मेरे इवेंट",
-  "navi.guest-list": "अतिथि सूची",
+  "navi.guest-list": "प्रतिभागी",
   "navi.email-settings": "सेटिंग्स",
   "navi.help": "मदद",
+  "navi.become-organizer": "आयोजक बनें",
 
   // ---- dashboard header ----
   "hdr.help": "मदद चाहिए?",
@@ -234,6 +235,16 @@ export const hi: Record<string, string> = {
   "Volunteer Sign-In": "स्वयंसेवक साइन-इन",
   "QR Scanner": "क्यूआर स्कैनर",
   "Guest List": "अतिथि सूची",
+  "RSVP Participants": "आरएसवीपी प्रतिभागी",
+  // ---- individual analytics ----
+  "People coming": "आने वाले लोग",
+  "Capacity filled": "क्षमता भरी",
+  "Per event": "प्रति इवेंट",
+  "How your events are doing.": "आपके इवेंट कैसा प्रदर्शन कर रहे हैं।",
+  Coming: "आने वाले",
+  coming: "आ रहे हैं",
+  Upcoming: "आगामी",
+  Capacity: "क्षमता",
   "My Events": "मेरे इवेंट",
   "My tickets": "मेरे टिकट",
   "Quick Actions": "त्वरित क्रियाएँ",
@@ -755,7 +766,7 @@ export const hi: Record<string, string> = {
   "Pick a palette (or fine-tune below)": "पैलेट चुनें (या नीचे समायोजित करें)",
 
   // ---- wedding / personal ----
-  "Couple &amp; Hosts": "जोड़ा और मेज़बान",
+  "Couple & Hosts": "जोड़ा और मेज़बान",
   "Partner 1 name *": "साथी 1 का नाम *",
   "Partner 2 name *": "साथी 2 का नाम *",
   "Hosted by": "मेज़बान",
@@ -776,7 +787,7 @@ export const hi: Record<string, string> = {
   "Room type": "कमरे का प्रकार",
   "Photo (optional)": "फ़ोटो (वैकल्पिक)",
   "Photo gallery layout": "फ़ोटो गैलरी लेआउट",
-  "Typography &amp; layout": "टाइपोग्राफ़ी और लेआउट",
+  "Typography & layout": "टाइपोग्राफ़ी और लेआउट",
 
   // ---- speakers / sessions ----
   "Speaker Name *": "वक्ता का नाम *",

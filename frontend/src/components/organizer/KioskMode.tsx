@@ -1,4 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from "react";
+import { useSubscription } from "@/hooks/useSubscription";
+import { ModuleGate } from "@/components/ui/ModuleGate";
 import { jwtDecode } from "jwt-decode";
 import QRCode from "react-qr-code";
 import jsQR from "jsqr";
@@ -90,6 +92,16 @@ function shortRand(len = 6) {
 }
 
 export function KioskMode() {
+  // Plan sub-toggles. The kiosk is a step machine, so each section guards
+  // the step it owns and the flow stops there rather than half-rendering:
+  //   walkin  — the booking flow itself (event list -> type -> details)
+  //   qr      — the scan-to-pay step
+  //   payment — taking money at the counter at all
+  const { isModuleSectionEnabled } = useSubscription();
+  const canWalkin = isModuleSectionEnabled("kiosk", "walkin");
+  const canQr = isModuleSectionEnabled("kiosk", "qr");
+  const canPayment = isModuleSectionEnabled("kiosk", "payment");
+
   const { toast } = useToast();
   const { country } = useCountry();
   const { formatPrice, getSymbol } = useCurrency(country);
@@ -484,6 +496,14 @@ export function KioskMode() {
     </div>
   );
 
+  if (!canWalkin) {
+    return (
+      <ModuleGate moduleKey="kiosk" sectionKey="walkin">
+        <div />
+      </ModuleGate>
+    );
+  }
+
   if (step === "events_list") {
     const q = search.trim().toLowerCase();
     const filtered = q
@@ -868,7 +888,7 @@ export function KioskMode() {
     );
   }
 
-  if (step === "qr_payment" && selectedEvent && selectedType) {
+  if (step === "qr_payment" && canQr && canPayment && selectedEvent && selectedType) {
     const totalPrice = Number(selectedType.price) || 0;
     const orgCountry = (organizerInfo?.country || country || "").toUpperCase();
     const methodLabel = orgCountry === "SG" ? "PayNow" : "UPI";

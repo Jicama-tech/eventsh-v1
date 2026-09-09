@@ -1,6 +1,9 @@
 // File: src/components/DashboardTabs/EventAttendees.tsx
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { statAccent } from "@/lib/accents";
+import { useSubscription } from "@/hooks/useSubscription";
+import { ModuleGate } from "@/components/ui/ModuleGate";
 import EventRsvpPanel from "./EventRsvpPanel";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,6 +64,7 @@ import {
   Trash2,
   Pencil,
   RotateCcw,
+  Send,
 } from "lucide-react";
 import {
   FaFacebook,
@@ -352,8 +356,76 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   >("latest");
   const [attendanceTimeSort, setAttendanceTimeSort] = useState<
     "none" | "latest" | "oldest"
-  >("latest");
-  const [stalls, setStalls] = useState<any[]>([]);
+  >("latest");const [stalls, setStalls] = useState<any[]>([]);
+  // --- Bulk ticket send (Exhibitors tab) -------------------------------
+  // Re-sends the stall ticket to every confirmed exhibitor on this event,
+  // with an organizer-written note and a countdown the server adds.
+  const [bulkSendOpen, setBulkSendOpen] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState("");
+  const [bulkSending, setBulkSending] = useState(false);
+  // Whether the ticket rides along. Off sends the organizer's message on its
+  // own — no PDF and no QR, since the QR is the same credential in another
+  // form and re-issuing one is not what "just send a note" means.
+  const [bulkAttachTicket, setBulkAttachTicket] = useState(true);
+  const [bulkResult, setBulkResult] = useState<{
+    total: number;
+    sent: number;
+    skipped: { vendor?: string; reason: string }[];
+    failed: { vendor?: string; reason: string }[];
+  } | null>(null);
+
+
+  // Who will actually receive one. Mirrors the server's rule (Paid only, and
+  // an email on file) so the count in the dialog matches what happens.
+  const bulkRecipients = stalls.filter(
+    (st: any) =>
+      st?.paymentStatus === "Paid" &&
+      (st?.shopkeeperId?.email ||
+        st?.shopkeeperId?.companyEmail ||
+        st?.shopkeeperId?.vendorEmail),
+  );
+
+  const handleBulkSend = async () => {
+    if (!selectedEvent?._id) return;
+    setBulkSending(true);
+    setBulkResult(null);
+    try {
+      const token = sessionStorage.getItem("token");
+      const res = await fetch(`${apiURL}/stalls/bulk-send-tickets`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          eventId: selectedEvent._id,
+          message: bulkMessage.trim() || undefined,
+          attachTicket: bulkAttachTicket,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.message || `Send failed (${res.status})`);
+      }
+      setBulkResult(data);
+      toast({
+        title: `Sent ${data.sent} of ${data.total}`,
+        description:
+          data.failed?.length || data.skipped?.length
+            ? "Some didn't go out — see the breakdown."
+            : "Every confirmed exhibitor has their ticket.",
+      });
+    } catch (e: any) {
+      toast({
+        title: "Bulk send failed",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setBulkSending(false);
+    }
+  };
+
   // New: speakers loaded for the currently-viewed event (one-shot fetch per dialog open)
   const [eventSpeakers, setEventSpeakers] = useState<any[]>([]);
   const [loadingSpeakers, setLoadingSpeakers] = useState(false);
@@ -363,6 +435,19 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   // New: single-speaker detail view
   const [selectedSpeaker, setSelectedSpeaker] = useState<any | null>(null);
   // Visitor detail view — replaces the Attendance / Attendance Time columns.
+  // Plan sub-toggles for the participants module. `scanner` is not read
+  // here: the QR scanner is the standalone /events/:id/scan-tickets route
+  // used by volunteers, who hold no subscription of their own — gating it
+  // on this hook would lock the volunteers out rather than the organizer.
+  const { isModuleSectionEnabled } = useSubscription();
+  const canList = isModuleSectionEnabled("participants", "list");
+  const canExports = isModuleSectionEnabled("participants", "exports");
+  // `workshopRequests` is filed under the events module in the admin plan
+  // form even though the UI lives on this page — read it where it is stored.
+  const canWorkshopRequests = isModuleSectionEnabled(
+    "events",
+    "workshopRequests",
+  );
   const [selectedVisitor, setSelectedVisitor] = useState<any | null>(null);
   const [resendingTicket, setResendingTicket] = useState(false);
   // Lets the organizer correct a mistyped address before re-sending.
@@ -727,27 +812,27 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         Pending: {
           variant: "secondary",
           icon: Clock,
-          color: "text-yellow-600",
+          color: "text-yellow-600 dark:text-yellow-400",
         },
         Confirmed: {
           variant: "default",
           icon: CheckCircle2,
-          color: "text-green-600",
+          color: "text-green-600 dark:text-green-400",
         },
         Cancelled: {
           variant: "destructive",
           icon: XCircle,
-          color: "text-red-600",
+          color: "text-red-600 dark:text-red-400",
         },
         Processing: {
           variant: "default",
           icon: AlertCircle,
-          color: "text-blue-600",
+          color: "text-blue-600 dark:text-blue-400",
         },
         Completed: {
           variant: "default",
           icon: CheckCircle2,
-          color: "text-green-700",
+          color: "text-green-700 dark:text-green-300",
         },
       };
 
@@ -1332,9 +1417,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
   const getPaymentBadge = (paymentStatus: string) => {
     const variants: Record<string, { variant: any; color: string }> = {
-      Unpaid: { variant: "destructive", color: "text-red-600" },
-      Partial: { variant: "secondary", color: "text-yellow-600" },
-      Paid: { variant: "default", color: "text-green-600" },
+      Unpaid: { variant: "destructive", color: "text-red-600 dark:text-red-400" },
+      Partial: { variant: "secondary", color: "text-yellow-600 dark:text-yellow-400" },
+      Paid: { variant: "default", color: "text-green-600 dark:text-green-400" },
     };
 
     const config = variants[paymentStatus] || variants.Unpaid;
@@ -2288,10 +2373,12 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       };
     }
     const e: any = event;
+    // `participants.list` — the attendee list itself.
     const visitors =
-      (Array.isArray(e.visitorTypes) && e.visitorTypes.length > 0) ||
-      (typeof e.totalTickets === "number" && e.totalTickets > 0) ||
-      (typeof e.ticketPrice === "number" && e.ticketPrice > 0);
+      canList &&
+      ((Array.isArray(e.visitorTypes) && e.visitorTypes.length > 0) ||
+        (typeof e.totalTickets === "number" && e.totalTickets > 0) ||
+        (typeof e.ticketPrice === "number" && e.ticketPrice > 0));
     const exhibitors =
       !!e.venueTables &&
       (Array.isArray(e.venueTables)
@@ -2305,8 +2392,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     // are open OR the event already has workshop sessions (organizer-added
     // or previously approved from a host application).
     const workshopRequests =
-      !!e.workshopHostingOpen ||
-      (Array.isArray(e.workshopSessions) && e.workshopSessions.length > 0);
+      canWorkshopRequests &&
+      (!!e.workshopHostingOpen ||
+        (Array.isArray(e.workshopSessions) && e.workshopSessions.length > 0));
     // Sponsors show as soon as the organizer has published any tier for the
     // event — applications arrive against those tiers.
     const sponsors =
@@ -2397,16 +2485,16 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     let base = "";
     let ring = "ring-slate-400";
     if (s?.pendingCancellation?.status === "requested") {
-      base = "bg-rose-50 border-l-4 border-rose-400";
+      base = "bg-rose-50 dark:bg-rose-500/10 border-l-4 border-rose-400";
       ring = "ring-rose-400";
     } else if (s?.pendingAmendment?.status === "paid_pending_confirm") {
-      base = "bg-blue-50 border-l-4 border-blue-400";
+      base = "bg-blue-50 dark:bg-blue-500/10 border-l-4 border-blue-400";
       ring = "ring-blue-400";
     } else if (s?.status === "Processing") {
-      base = "bg-emerald-50 border-l-4 border-emerald-400";
+      base = "bg-emerald-50 dark:bg-emerald-500/10 border-l-4 border-emerald-400";
       ring = "ring-emerald-400";
     } else if (s?.status === "Pending") {
-      base = "bg-amber-50 border-l-4 border-amber-400";
+      base = "bg-amber-50 dark:bg-amber-500/10 border-l-4 border-amber-400";
       ring = "ring-amber-400";
     } else if (s?.status === "Cancelled" || s?.status === "Returned") {
       // Soft-deleted / settled — kept in the list for refund/records but shown
@@ -2507,52 +2595,52 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
+        <Card className={`border-l-4 ${statAccent(0).ring}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Total Events")}</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalEvents}</div>
+            <div className={`text-2xl font-bold ${statAccent(0).icon}`}>{stats.totalEvents}</div>
             <p className="text-xs text-muted-foreground">
               All your organized events
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={`border-l-4 ${statAccent(1).ring}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Live Events")}</CardTitle>
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.liveEvents}</div>
+            <div className={`text-2xl font-bold ${statAccent(1).icon}`}>{stats.liveEvents}</div>
             <p className="text-xs text-muted-foreground">
               Currently active events
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={`border-l-4 ${statAccent(2).ring}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Total Participants")}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalAttendees}</div>
+            <div className={`text-2xl font-bold ${statAccent(2).icon}`}>{stats.totalAttendees}</div>
             <p className="text-xs text-muted-foreground">
-              Visitors + exhibitors + speakers + round-table seats
+              Across all your events
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={`border-l-4 ${statAccent(3).ring}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Today's Attendees")}</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.todaysAttendees}</div>
+            <div className={`text-2xl font-bold ${statAccent(3).icon}`}>{stats.todaysAttendees}</div>
             <p className="text-xs text-muted-foreground">
               People attended today
             </p>
@@ -2695,7 +2783,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       </TableCell>
                       <TableCell>
                         {event.isLive ? (
-                          <Badge className="bg-green-100 text-green-800">
+                          <Badge className="bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300">
                             Live
                           </Badge>
                         ) : (
@@ -2811,7 +2899,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Tickets Sold
                       </div>
-                      <div className="text-2xl font-bold text-blue-600">
+                      <div className={`text-2xl font-bold ${statAccent(0).icon}`}>
                         {totalTicketsSold}
                       </div>
                     </div>
@@ -2819,7 +2907,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Attended
                       </div>
-                      <div className="text-2xl font-bold text-green-600">
+                      <div className={`text-2xl font-bold ${statAccent(1).icon}`}>
                         {totalAttended}
                       </div>
                     </div>
@@ -2827,7 +2915,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Revenue
                       </div>
-                      <div className="text-2xl font-bold text-purple-600">
+                      <div className={`text-2xl font-bold ${statAccent(2).icon}`}>
                         {formatPrice(totalRevenue)}
                       </div>
                     </div>
@@ -2835,7 +2923,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Exhibitors
                       </div>
-                      <div className="text-2xl font-bold text-orange-600">
+                      <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
                         {stalls.length}
                       </div>
                     </div>
@@ -2843,7 +2931,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Speakers
                       </div>
-                      <div className="text-2xl font-bold text-indigo-600">
+                      <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
                         {eventSpeakers.length}
                       </div>
                     </div>
@@ -3145,6 +3233,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                             <span className="ml-auto text-sm text-muted-foreground">
                               Showing {filteredStalls.length} of {stalls.length}
                             </span>
+                            {canExports && (
                             <Button
                               variant="outline"
                               size="sm"
@@ -3154,6 +3243,23 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                             >
                               <FileSpreadsheet className="h-4 w-4 mr-1.5" />
                               Export to Excel
+                            </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setBulkResult(null);
+                                setBulkSendOpen(true);
+                              }}
+                              disabled={bulkRecipients.length === 0}
+                              title={
+                                bulkRecipients.length === 0
+                                  ? "No confirmed exhibitors with an email on file yet"
+                                  : "Re-send tickets to every confirmed exhibitor with your own message"
+                              }
+                            >
+                              <Send className="h-4 w-4 mr-1.5" />
+                              Bulk Send ({bulkRecipients.length})
                             </Button>
                           </div>
                           {filteredStalls.length === 0 ? (
@@ -3219,7 +3325,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                     return (
                                       <>
                                         <div className="text-sm flex items-center gap-1">
-                                          <FaWhatsapp className="h-3 w-3 text-green-600" />
+                                          <FaWhatsapp className="h-3 w-3 text-green-600 dark:text-green-400" />
                                           {phone || "—"}
                                         </div>
                                         {email && (
@@ -3247,8 +3353,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                   <Badge
                                     className={
                                       s.paymentStatus === "Paid"
-                                        ? "bg-green-100 text-green-800"
-                                        : "bg-yellow-100 text-yellow-800"
+                                        ? "bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300"
+                                        : "bg-yellow-100 dark:bg-yellow-500/20 text-yellow-800 dark:text-yellow-300"
                                     }
                                   >
                                     {s.paymentStatus || "Unpaid"}
@@ -3287,7 +3393,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         <Button
                                           variant="outline"
                                           size="icon"
-                                          className="h-7 w-7 text-green-700 border-green-300 hover:bg-green-50"
+                                          className="h-7 w-7 text-green-700 dark:text-green-300 border-green-300 dark:border-green-500/40 hover:bg-green-50 dark:hover:bg-green-500/20"
                                           onClick={() => {
                                             setSelectedRequest(s);
                                             setActionNotes("");
@@ -3300,7 +3406,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         <Button
                                           variant="outline"
                                           size="icon"
-                                          className="h-7 w-7 text-red-700 border-red-300 hover:bg-red-50"
+                                          className="h-7 w-7 text-red-700 dark:text-red-300 border-red-300 dark:border-red-500/40 hover:bg-red-50 dark:hover:bg-red-500/20"
                                           onClick={() => {
                                             setSelectedRequest(s);
                                             setCancellationReason("");
@@ -3329,7 +3435,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         <Button
                                           variant="outline"
                                           size="icon"
-                                          className="h-7 w-7 text-blue-700 border-blue-300 hover:bg-blue-50"
+                                          className="h-7 w-7 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-500/40 hover:bg-blue-50 dark:hover:bg-blue-500/20"
                                           onClick={() => {
                                             setEditStall(s);
                                             setShowEditDialog(true);
@@ -3348,7 +3454,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                       <Button
                                         variant="outline"
                                         size="icon"
-                                        className="h-7 w-7 text-red-700 border-red-300 hover:bg-red-50"
+                                        className="h-7 w-7 text-red-700 dark:text-red-300 border-red-300 dark:border-red-500/40 hover:bg-red-50 dark:hover:bg-red-500/20"
                                         onClick={() => {
                                           setSelectedRequest(s);
                                           setShowDeleteStallDialog(true);
@@ -3362,7 +3468,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                       <Button
                                         variant="outline"
                                         size="icon"
-                                        className="h-7 w-7 text-green-700 border-green-300 hover:bg-green-50"
+                                        className="h-7 w-7 text-green-700 dark:text-green-300 border-green-300 dark:border-green-500/40 hover:bg-green-50 dark:hover:bg-green-500/20"
                                         onClick={() => {
                                           setRestoreTargetStall(s);
                                           setShowRestoreStallDialog(true);
@@ -3457,7 +3563,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                   <div className="font-medium flex items-center gap-2">
                                     {req.name}
                                     {req.isKeynote && (
-                                      <Badge className="bg-purple-100 text-purple-700 text-[10px]">
+                                      <Badge className="bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 text-[10px]">
                                         Keynote
                                       </Badge>
                                     )}
@@ -3487,7 +3593,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         </div>
                                         {phone && (
                                           <div className="text-xs text-muted-foreground flex items-center gap-1">
-                                            <FaWhatsapp className="h-3 w-3 text-green-600" />
+                                            <FaWhatsapp className="h-3 w-3 text-green-600 dark:text-green-400" />
                                             {phone}
                                           </div>
                                         )}
@@ -3512,7 +3618,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                   <Badge
                                     className={
                                       req.paymentStatus === "Paid"
-                                        ? "bg-green-100 text-green-800"
+                                        ? "bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300"
                                         : ""
                                     }
                                     variant={
@@ -3532,7 +3638,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         <Button
                                           variant="outline"
                                           size="icon"
-                                          className="h-7 w-7 text-green-700 border-green-300 hover:bg-green-50"
+                                          className="h-7 w-7 text-green-700 dark:text-green-300 border-green-300 dark:border-green-500/40 hover:bg-green-50 dark:hover:bg-green-500/20"
                                           onClick={() =>
                                             updateSpeakerStatus(
                                               req._id,
@@ -3546,7 +3652,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                         <Button
                                           variant="outline"
                                           size="icon"
-                                          className="h-7 w-7 text-red-700 border-red-300 hover:bg-red-50"
+                                          className="h-7 w-7 text-red-700 dark:text-red-300 border-red-300 dark:border-red-500/40 hover:bg-red-50 dark:hover:bg-red-500/20"
                                           onClick={() =>
                                             updateSpeakerStatus(
                                               req._id,
@@ -3643,8 +3749,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   </CardHeader>
                   <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-50 rounded-lg">
-                        <Calendar className="h-5 w-5 text-blue-600" />
+                      <div className="p-2 bg-blue-50 dark:bg-blue-500/10 rounded-lg">
+                        <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">
@@ -3658,8 +3764,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-purple-50 rounded-lg">
-                        <MapPin className="h-5 w-5 text-purple-600" />
+                      <div className="p-2 bg-purple-50 dark:bg-purple-500/10 rounded-lg">
+                        <MapPin className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">
@@ -3671,8 +3777,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-orange-50 rounded-lg">
-                        <LayoutGrid className="h-5 w-5 text-orange-600" />
+                      <div className="p-2 bg-orange-50 dark:bg-orange-500/10 rounded-lg">
+                        <LayoutGrid className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">
@@ -3707,19 +3813,19 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   title="Total Registrations"
                   value={exhibitorsCount}
                   icon={<Users />}
-                  color="text-blue-600"
+                  color="text-blue-600 dark:text-blue-400"
                 />
                 <StatCard
                   title="Confirmed Exhibitors"
                   value={confirmedExhibitors}
                   icon={<CheckCircle />}
-                  color="text-green-600"
+                  color="text-green-600 dark:text-green-400"
                 />
                 <StatCard
                   title="Pending Approvals"
                   value={exhibitorsCount - confirmedExhibitors}
                   icon={<Clock />}
-                  color="text-yellow-600"
+                  color="text-yellow-600 dark:text-yellow-400"
                 />
                 <StatCard
                   title="Total Add-ons Sold"
@@ -3728,7 +3834,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     0,
                   )}
                   icon={<Store />}
-                  color="text-purple-600"
+                  color="text-purple-600 dark:text-purple-400"
                 />
               </div>
 
@@ -3797,8 +3903,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                             <Badge
                               className={
                                 stall.paymentStatus === "Paid"
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-red-100 text-red-700"
+                                  ? "bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300"
+                                  : "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300"
                               }
                             >
                               {stall.paymentStatus}
@@ -3817,13 +3923,13 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                             </div>
                             {(stall as any).pendingAmendment?.status ===
                               "paid_pending_confirm" && (
-                              <Badge className="mt-1 bg-amber-100 text-amber-700">
+                              <Badge className="mt-1 bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300">
                                 Edit pending
                               </Badge>
                             )}
                             {(stall as any).pendingCancellation?.status ===
                               "requested" && (
-                              <Badge className="mt-1 bg-red-100 text-red-700">
+                              <Badge className="mt-1 bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300">
                                 Cancel requested
                               </Badge>
                             )}
@@ -3875,7 +3981,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                 <Button
                                   size="sm"
                                   variant="buttonOutline"
-                                  className="text-green-700 border-green-300 hover:bg-green-50"
+                                  className="text-green-700 dark:text-green-300 border-green-300 dark:border-green-500/40 hover:bg-green-50 dark:hover:bg-green-500/20"
                                   title="Restore stall (reassign to the vendor & re-book its space)"
                                   onClick={() => {
                                     setRestoreTargetStall(stall);
@@ -3932,7 +4038,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                 )}
 
                               {(stall.transactionId || stall.transactionScreenshot) && stall.paymentStatus !== "Paid" && (
-                                <Badge className="bg-amber-100 text-amber-700 text-[10px]">
+                                <Badge className="bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[10px]">
                                   TX Proof
                                 </Badge>
                               )}
@@ -3940,7 +4046,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                               {stall.paymentStatus === "Paid" &&
                                 stall.status === "Completed" &&
                                 !stall.hasCheckedIn && (
-                                  <Badge className="bg-green-100 text-green-700 text-[10px]">
+                                  <Badge className="bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300 text-[10px]">
                                     QR Sent
                                   </Badge>
                                 )}
@@ -3975,7 +4081,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
             <DialogTitle className="flex items-center gap-2">
               {selectedVisitor?.customerName || "Visitor"}
               {selectedVisitor?.attendance ? (
-                <Badge className="bg-green-100 text-green-800">
+                <Badge className="bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300">
                   <CheckCircle className="h-3 w-3 mr-1" />
                   Attended
                 </Badge>
@@ -4241,7 +4347,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     {selectedSpeaker?.name || "Speaker"}
                   </span>
                   {selectedSpeaker?.isKeynote && (
-                    <Badge className="bg-purple-100 text-purple-700">
+                    <Badge className="bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300">
                       Keynote
                     </Badge>
                   )}
@@ -4372,7 +4478,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                 href={String(v)}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-xs text-blue-600 hover:underline capitalize"
+                                className="text-xs text-blue-600 dark:text-blue-400 hover:underline capitalize"
                               >
                                 {k}
                               </a>
@@ -4432,7 +4538,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     <Badge
                       className={
                         selectedSpeaker.paymentStatus === "Paid"
-                          ? "bg-green-100 text-green-800"
+                          ? "bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300"
                           : ""
                       }
                       variant={
@@ -4546,6 +4652,129 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
               </Card>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk ticket send — Exhibitors tab. The server decides who actually
+          qualifies (Paid, with an email); the count here mirrors that rule so
+          the organizer is not surprised by the result. */}
+      <Dialog open={bulkSendOpen} onOpenChange={setBulkSendOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Send tickets to all exhibitors</DialogTitle>
+            <DialogDescription>
+              {bulkRecipients.length} confirmed exhibitor
+              {bulkRecipients.length === 1 ? "" : "s"} will get their ticket
+              again, with a countdown to{" "}
+              {selectedEvent?.title || "the event"}.
+            </DialogDescription>
+          </DialogHeader>
+
+          {bulkResult ? (
+            <div className="space-y-3 text-sm">
+              <p className="font-medium">
+                Sent {bulkResult.sent} of {bulkResult.total}.
+              </p>
+              {bulkResult.skipped?.length > 0 && (
+                <div>
+                  <p className="text-muted-foreground">
+                    Skipped ({bulkResult.skipped.length}) — no email on file:
+                  </p>
+                  <ul className="mt-1 max-h-28 list-disc overflow-y-auto pl-5 text-xs text-muted-foreground">
+                    {bulkResult.skipped.map((r, i) => (
+                      <li key={i}>{r.vendor || "Unnamed vendor"}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {bulkResult.failed?.length > 0 && (
+                <div>
+                  <p className="text-red-600 dark:text-red-400">
+                    Failed ({bulkResult.failed.length}):
+                  </p>
+                  <ul className="mt-1 max-h-28 list-disc overflow-y-auto pl-5 text-xs text-red-600 dark:text-red-400">
+                    {bulkResult.failed.map((r, i) => (
+                      <li key={i}>
+                        {r.vendor || "Unnamed vendor"} — {r.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <label className="flex items-start gap-2.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={bulkAttachTicket}
+                  onChange={(e) => setBulkAttachTicket(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-primary"
+                />
+                <span>
+                  <span className="font-medium">Attach the ticket PDF</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {bulkAttachTicket
+                      ? "Each exhibitor gets their ticket again, with the QR."
+                      : "Sends your message only — no ticket, no QR."}
+                  </span>
+                </span>
+              </label>
+
+              <label className="text-sm font-medium" htmlFor="bulk-message">
+                Your message{" "}
+                <span className="text-muted-foreground">
+                  {bulkAttachTicket ? "(optional)" : "(required)"}
+                </span>
+              </label>
+              <Textarea
+                id="bulk-message"
+                value={bulkMessage}
+                onChange={(e) => setBulkMessage(e.target.value)}
+                rows={5}
+                maxLength={2000}
+                placeholder={
+                  "e.g. Doors open at 9am and setup starts the evening before." +
+                  "\n" +
+                  "Bring your ticket on your phone — we'll scan it at the gate."
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                {bulkAttachTicket
+                  ? 'Shown above their booking details. The ticket PDF and the "days to go" line are added automatically — leave this blank to send just those.'
+                  : 'This message is the whole email, plus the "days to go" line. Nothing is attached.'}
+              </p>
+            </div>
+          )}
+
+          <DialogFooter>
+            {bulkResult ? (
+              <Button onClick={() => setBulkSendOpen(false)}>Done</Button>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setBulkSendOpen(false)}
+                  disabled={bulkSending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleBulkSend}
+                  disabled={
+                    bulkSending ||
+                    bulkRecipients.length === 0 ||
+                    (!bulkAttachTicket && !bulkMessage.trim())
+                  }
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  {bulkSending
+                    ? `Sending to ${bulkRecipients.length}…`
+                    : `Send to ${bulkRecipients.length}`}
+                </Button>
+              </>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -4733,7 +4962,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Trash2 className="h-5 w-5 text-red-600" />
+              <Trash2 className="h-5 w-5 text-red-600 dark:text-red-400" />
               Are you sure you want to delete?
             </DialogTitle>
             <DialogDescription>
@@ -4749,7 +4978,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           </DialogHeader>
 
           {selectedRequest?.selectedTables?.length > 0 && (
-            <div className="rounded-md border bg-amber-50 border-amber-200 p-3 text-sm text-amber-800">
+            <div className="rounded-md border bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30 p-3 text-sm text-amber-800 dark:text-amber-300">
               This stall has{" "}
               <strong>{selectedRequest.selectedTables.length}</strong> space
               {selectedRequest.selectedTables.length === 1 ? "" : "s"} selected —
@@ -4766,7 +4995,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           <div className="space-y-2">
             <Label htmlFor="delete-confirm" className="text-sm">
               To confirm, type{" "}
-              <code className="font-mono font-semibold text-red-600">
+              <code className="font-mono font-semibold text-red-600 dark:text-red-400">
                 {DELETE_CONFIRM_PHRASE}
               </code>{" "}
               below:
@@ -4825,7 +5054,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <RotateCcw className="h-5 w-5 text-green-600" />
+              <RotateCcw className="h-5 w-5 text-green-600 dark:text-green-400" />
               Restore this stall?
             </DialogTitle>
             <DialogDescription>
@@ -4960,7 +5189,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   }
                 />
                 {payScreenshot && (
-                  <p className="text-xs text-green-700 mt-1">
+                  <p className="text-xs text-green-700 dark:text-green-300 mt-1">
                     {payScreenshot.name} attached
                   </p>
                 )}
@@ -5009,7 +5238,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Pencil className="h-5 w-5 text-amber-600" />
+              <Pencil className="h-5 w-5 text-amber-600 dark:text-amber-400" />
               Confirm edit request
             </DialogTitle>
             <DialogDescription>
@@ -5045,7 +5274,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 </div>
                 <div className="flex justify-between border-t pt-2">
                   <span className="text-muted-foreground">Difference paid</span>
-                  <span className="font-bold text-green-700">
+                  <span className="font-bold text-green-700 dark:text-green-300">
                     {formatPrice(pa.amountDue || 0)}
                   </span>
                 </div>

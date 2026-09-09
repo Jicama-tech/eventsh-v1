@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSubscription } from "@/hooks/useSubscription";
 import {
   Dialog,
   DialogContent,
@@ -101,6 +102,11 @@ export default function EventExpensesDialog({
   // app rather than defaulting.
   const [currency, setCurrency] = useState<string>("IN");
   const [loading, setLoading] = useState(true);
+  // Plan sub-toggles: `log` is entering an expense, `approvals` the
+  // approve/reject decision on one the team submitted.
+  const { isModuleSectionEnabled } = useSubscription();
+  const canLog = isModuleSectionEnabled("expenses", "log");
+  const canApprove = isModuleSectionEnabled("expenses", "approvals");
 
   const [addOpen, setAddOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -267,11 +273,13 @@ export default function EventExpensesDialog({
             </div>
           </div>
 
-          <div className="flex justify-end">
-            <Button size="sm" variant="outline" onClick={() => setAddOpen((o) => !o)}>
-              <Plus className="mr-1 h-4 w-4" /> Add expense
-            </Button>
-          </div>
+          {canLog && (
+            <div className="flex justify-end">
+              <Button size="sm" variant="outline" onClick={() => setAddOpen((o) => !o)}>
+                <Plus className="mr-1 h-4 w-4" /> Add expense
+              </Button>
+            </div>
+          )}
 
           {addOpen && (
             <div className="grid gap-2 rounded-xl border bg-muted/20 p-3 sm:grid-cols-2">
@@ -414,7 +422,7 @@ export default function EventExpensesDialog({
                     </div>
                   </div>
 
-                  {r.status === "Pending" && (
+                  {canApprove && r.status === "Pending" && (
                     <div className="mt-2 flex flex-wrap items-center gap-2 border-t pt-2">
                       <span className="flex items-center gap-1 text-[11px] text-amber-700">
                         <Clock className="h-3 w-3" /> Awaiting approval

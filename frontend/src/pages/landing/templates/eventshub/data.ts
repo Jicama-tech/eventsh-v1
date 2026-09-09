@@ -14,13 +14,11 @@
 export const BRAND = "Eventsh";
 export const SITE = "eventsh.com";
 
-export const sectionLinks = [
-  { href: "#problem", label: "The problem" },
-  { href: "#platform", label: "What it does" },
-  { href: "#compare", label: "Compare" },
-  { href: "#rollout", label: "Get started" },
-  { href: "#faq", label: "FAQ" },
-];
+// Only #demos is on the page now. The problem / platform / compare / rollout
+// / faq sections still exist as components but are not rendered (see the
+// template's slot list), so linking to them would scroll nowhere. Put a slot
+// back and its entry belongs here again.
+export const sectionLinks = [{ href: "#demos", label: "See it working" }];
 
 export const STATS = [
   { n: "1", t: "link that sells, registers, takes payment and checks in" },

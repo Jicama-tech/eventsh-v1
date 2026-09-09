@@ -8,7 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { PhoneField } from "@/components/ui/PhoneField";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -35,6 +41,13 @@ import {
   Users,
   BookOpen,
   Settings,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Users2,
+  CalendarDays,
+  ImageIcon,
+  BookHeart,
+  Settings2,
 } from "lucide-react";
 
 // Wedding form sections — rendered as the collapsible sidebar nav (same look
@@ -973,6 +986,27 @@ export function MarriageEventForm({
 }: MarriageEventFormProps) {
   const { toast } = useToast();
   const [currentTab, setCurrentTab] = useState("couple");
+
+  // Collapse state for the form's section rail, remembered independently of
+  // the dashboard sidebar beside it.
+  const [sectionNavCollapsed, setSectionNavCollapsed] = useState(
+    () => localStorage.getItem("eventFormSectionNavCollapsed") === "true",
+  );
+  useEffect(() => {
+    localStorage.setItem(
+      "eventFormSectionNavCollapsed",
+      String(sectionNavCollapsed),
+    );
+  }, [sectionNavCollapsed]);
+
+  const WEDDING_SECTIONS = [
+    { id: "couple", label: t("Couple & Hosts"), icon: Users2 },
+    { id: "functions", label: t("Functions"), icon: CalendarDays },
+    { id: "media", label: t("Media"), icon: ImageIcon },
+    { id: "story", label: t("Story"), icon: BookHeart },
+    { id: "design", label: t("Design"), icon: Palette },
+    { id: "settings", label: t("Settings"), icon: Settings2 },
+  ];
   // Phone-only section sidebar (drawer). Tablet/desktop use the top tab strip.
   const [navOpen, setNavOpen] = useState(false);
   const selectSection = (id: string) => {
@@ -1515,24 +1549,90 @@ export function MarriageEventForm({
               </Button>
             </div>
           </div>
-          {/* Tablet/desktop top tab strip — the original form layout. Hidden on
-              phones, which use the slide-in sidebar instead. */}
-          <div className="hidden border-t md:block">
-            <Tabs value={currentTab} onValueChange={setCurrentTab}>
-              <TabsList className="grid h-12 w-full grid-cols-6 bg-transparent">
-                <TabsTrigger value="couple" className="text-sm">{t("Couple &amp; Hosts")}</TabsTrigger>
-                <TabsTrigger value="functions" className="text-sm">{t("Functions")}</TabsTrigger>
-                <TabsTrigger value="media" className="text-sm">{t("Media")}</TabsTrigger>
-                <TabsTrigger value="story" className="text-sm">{t("Story")}</TabsTrigger>
-                <TabsTrigger value="design" className="text-sm">{t("Design")}</TabsTrigger>
-                <TabsTrigger value="settings" className="text-sm">{t("Settings")}</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
         </div>
 
+        {/* Sections live in a rail beside the dashboard sidebar rather than a
+            strip across the top, and collapse to icons the same way the main
+            one does. */}
+        <div className="flex items-start">
+          <aside
+            className={`sticky top-[73px] z-30 hidden flex-shrink-0 self-start flex-col border-r bg-muted/30 md:flex
+              ${sectionNavCollapsed ? "w-14" : "w-56"}
+              transition-all duration-300 ease-in-out`}
+            /* max-height, not height: the rail starts below the
+               dashboard header and the form header, so a fixed
+               100vh-based height ran its bottom off the screen and
+               took the collapse toggle with it. */
+            style={{ maxHeight: "calc(100dvh - 120px)" }}
+          >
+            {/* Pinned at the TOP, not the bottom: the rail is only as tall as
+                the space below the two headers, and a bottom-pinned toggle
+                ended up under the fold where it could not be clicked. */}
+            <div className="flex flex-shrink-0 items-center justify-between border-b p-2">
+              {!sectionNavCollapsed && (
+                <span className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("Sections")}
+                </span>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 flex-shrink-0 p-0"
+                onClick={() => setSectionNavCollapsed((v) => !v)}
+                title={
+                  sectionNavCollapsed ? "Expand sections" : "Collapse sections"
+                }
+                aria-label={
+                  sectionNavCollapsed ? "Expand sections" : "Collapse sections"
+                }
+              >
+                {sectionNavCollapsed ? (
+                  <PanelLeftOpen className="h-4 w-4" />
+                ) : (
+                  <PanelLeftClose className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            <nav className="flex-1 space-y-1 overflow-y-auto p-2">
+              <TooltipProvider delayDuration={0}>
+                {WEDDING_SECTIONS.map((sec) => {
+                  const Icon = sec.icon;
+                  const btn = (
+                    <Button
+                      key={sec.id}
+                      type="button"
+                      variant={
+                        currentTab === sec.id ? "default" : "buttonOutline"
+                      }
+                      onClick={() => setCurrentTab(sec.id)}
+                      className={`w-full text-sm ${
+                        sectionNavCollapsed
+                          ? "justify-center px-0"
+                          : "justify-start"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 flex-shrink-0" />
+                      {!sectionNavCollapsed && (
+                        <span className="ml-2 truncate">{sec.label}</span>
+                      )}
+                    </Button>
+                  );
+                  return sectionNavCollapsed ? (
+                    <Tooltip key={sec.id}>
+                      <TooltipTrigger asChild>{btn}</TooltipTrigger>
+                      <TooltipContent side="right">{sec.label}</TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    btn
+                  );
+                })}
+              </TooltipProvider>
+            </nav>
+          </aside>
+
         {/* Content */}
-        <div className="mx-auto w-full max-w-5xl flex-1 p-4 sm:p-6">
+        <div className="w-full min-w-0 flex-1 p-4 sm:p-6">
           <Tabs value={currentTab} onValueChange={setCurrentTab}>
           {/* COUPLE & HOSTS */}
           <TabsContent value="couple" className="space-y-6">
@@ -2428,7 +2528,7 @@ export function MarriageEventForm({
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>{t("Typography &amp; layout")}</CardTitle>
+                    <CardTitle>{t("Typography & layout")}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-5">
                     <div>
@@ -3084,6 +3184,7 @@ export function MarriageEventForm({
             </Card>
           </TabsContent>
           </Tabs>
+        </div>
         </div>
       </div>
     </div>

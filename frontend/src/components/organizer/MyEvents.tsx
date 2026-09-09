@@ -7,6 +7,7 @@ import {
   Suspense,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { useSubscription } from "@/hooks/useSubscription";
 import {
   Card,
   CardContent,
@@ -198,6 +199,14 @@ const MyEvents: React.FC = () => {
   const [expensesForEvent, setExpensesForEvent] = useState<Event | null>(null);
   const [regFormsForEvent, setRegFormsForEvent] = useState<Event | null>(null);
 
+  const { getModuleLimit, isModuleEnabled, isModuleSectionEnabled } =
+    useSubscription();
+  // Both are plan features now, so their entry points disappear when the tier
+  // does not include them rather than opening a screen the plan does not buy.
+  const canExpenses = isModuleEnabled("expenses");
+  const canSuppliers =
+    isModuleEnabled("suppliers") &&
+    isModuleSectionEnabled("suppliers", "requests");
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -439,6 +448,37 @@ const MyEvents: React.FC = () => {
   };
 
   // Filtered events with proper safety checks
+  /**
+   * Event capacity from the plan (admin Pricing -> Events -> limit).
+   *
+   * `null` or 0 means unlimited — a plan with no cap should not render a
+   * meter at all, rather than "3 of 0".
+   *
+   * Which events count is decided newest-first: the most recent `limit`
+   * events are the ones inside the plan, and anything older falls outside.
+   * That way creating a new event never silently invalidates the one the
+   * organizer is currently running.
+   */
+  const eventLimit = getModuleLimit("events");
+  const eventQuota = useMemo(() => {
+    if (!eventLimit || eventLimit <= 0) return null;
+    const list = Array.isArray(events) ? events : [];
+    const stamp = (e: any) =>
+      new Date(e?.createdAt || e?.startDate || 0).getTime() || 0;
+    const newestFirst = [...list].sort((a, b) => stamp(b) - stamp(a));
+    const withinIds = new Set(
+      newestFirst.slice(0, eventLimit).map((e: any) => e._id),
+    );
+    return {
+      limit: eventLimit,
+      used: list.length,
+      remaining: Math.max(0, eventLimit - list.length),
+      overBy: Math.max(0, list.length - eventLimit),
+      /** True when this event is one of the newest `limit`. */
+      isWithin: (id: string) => withinIds.has(id),
+    };
+  }, [events, eventLimit]);
+
   const filteredEvents = useMemo(() => {
     if (!Array.isArray(events)) {
       console.warn("Events is not an array, returning empty array:", events);
@@ -468,9 +508,14 @@ const MyEvents: React.FC = () => {
       const matchesStatus =
         statusFilter === "all" || event.status === statusFilter;
 
-      return matchesSearch && matchesCategory && matchesStatus;
+      // Events beyond the plan's capacity are not listed at all. `isWithin`
+      // keeps the newest `limit`, so what shows is always the current work
+      // rather than whichever events happen to sort first.
+      const withinPlan = !eventQuota || eventQuota.isWithin(event._id);
+
+      return matchesSearch && matchesCategory && matchesStatus && withinPlan;
     });
-  }, [events, searchQuery, categoryFilter, statusFilter]);
+  }, [events, searchQuery, categoryFilter, statusFilter, eventQuota]);
 
   // Statistics with proper safety checks
   const stats = useMemo(() => {
@@ -996,6 +1041,34 @@ const MyEvents: React.FC = () => {
     );
   }
 
+  // The form replaces the list in place rather than opening over the whole
+  // viewport. A full-screen dialog covered the dashboard's sidebar; rendering
+  // here keeps it — and the header — visible, which is how kioscart-v1's
+  // ProductManagement swaps its list for ProductForm.
+  //
+  // This has to sit AFTER the loading and error guards: tucked in above them
+  // it only rendered while `loading` was true, so once the events arrived,
+  // opening the form did nothing.
+  if (showDialog) {
+    const activeInitial = editingEvent ?? duplicatingFrom ?? newEventDefaults;
+    // Personal → "Marriage Function" events use the dedicated wedding form;
+    // everything else uses the commercial form.
+    const isMarriage =
+      activeInitial?.eventType === "personal" &&
+      ((activeInitial as any)?.category === "Marriage Function" ||
+        (activeInitial as any)?.categories?.includes?.("Marriage Function"));
+    const FormComponent = isMarriage ? MarriageEventForm : CreateEventForm;
+    return (
+      <FormComponent
+        onClose={handleCloseDialog}
+        onSave={handleSaveEvent}
+        editMode={!!editingEvent}
+        duplicateMode={!!duplicatingFrom}
+        initialData={activeInitial}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -1005,6 +1078,31 @@ const MyEvents: React.FC = () => {
           <p className="text-muted-foreground">
             Manage your event portfolio and track performance
           </p>
+          {/* Plan capacity. Only rendered when the plan actually caps events —
+              an uncapped plan showing a meter would invent a limit. */}
+          {eventQuota && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Badge
+                variant="outline"
+                className={
+                  eventQuota.overBy > 0
+                    ? "border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300"
+                    : eventQuota.remaining === 0
+                      ? "border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                      : "border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                }
+              >
+                {eventQuota.used} / {eventQuota.limit} {t("events on your plan")}
+              </Badge>
+              <span className="text-xs text-muted-foreground">
+                {eventQuota.overBy > 0
+                  ? `${eventQuota.overBy} not shown — your plan lists the ${eventQuota.limit} most recent. Upgrade to see the rest.`
+                  : eventQuota.remaining === 0
+                    ? "You've used your plan's events"
+                    : `${eventQuota.remaining} left`}
+              </span>
+            </div>
+          )}
         </div>
         <Button
           onClick={handleCreateEvent}
@@ -1169,7 +1267,8 @@ const MyEvents: React.FC = () => {
           ) : (
             /* Events List */
             <div className="space-y-4">
-              {filteredEvents.map((event) => (
+              {filteredEvents.map((event) => {
+                return (
                 <Card
                   key={event._id}
                   className="hover:shadow-md transition-shadow"
@@ -1342,6 +1441,7 @@ const MyEvents: React.FC = () => {
                         </Button>
                         {/* Requirements + quotations for this event, in place
                             — no need to leave for a separate Suppliers tab. */}
+                        {canSuppliers && (
                         <Button
                           variant="buttonOutline"
                           size="icon"
@@ -1350,15 +1450,18 @@ const MyEvents: React.FC = () => {
                         >
                           <Truck size={16} />
                         </Button>
+                        )}
                         {/* Out-of-pocket spend, with its approval cycle. */}
-                        <Button
-                          variant="buttonOutline"
-                          size="icon"
-                          onClick={() => setExpensesForEvent(event)}
-                          title="Expenses — log expenses and approve what the team has submitted"
-                        >
-                          <Receipt size={16} />
-                        </Button>
+                        {canExpenses && (
+                          <Button
+                            variant="buttonOutline"
+                            size="icon"
+                            onClick={() => setExpensesForEvent(event)}
+                            title="Expenses — log expenses and approve what the team has submitted"
+                          >
+                            <Receipt size={16} />
+                          </Button>
+                        )}
                         {(event.features?.hasStalls ||
                           event.features?.hasSpeakers ||
                           event.features?.hasRoundTables ||
@@ -1390,7 +1493,8 @@ const MyEvents: React.FC = () => {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -1413,44 +1517,6 @@ const MyEvents: React.FC = () => {
         onOpenChange={setShowTypeChooser}
         onConfirm={handleTypeChosen}
       />
-
-      {/* Create/Edit Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        {/* Full-screen: these forms carry far more than a centered card can
-            show. EventFormShell supplies the title bar — which also gives the
-            dialog the DialogTitle Radix wants, and this one had none (the old
-            DialogHeader here was empty, its title commented out). */}
-        <DialogContent fullScreen className="p-0">
-          {(() => {
-            const activeInitial =
-              editingEvent ?? duplicatingFrom ?? newEventDefaults;
-            // Personal → "Marriage Function" events use the dedicated
-            // wedding form; everything else uses the commercial form.
-            const isMarriage =
-              activeInitial?.eventType === "personal" &&
-              ((activeInitial as any)?.category === "Marriage Function" ||
-                (activeInitial as any)?.categories?.includes?.(
-                  "Marriage Function",
-                ));
-            const FormComponent = isMarriage
-              ? MarriageEventForm
-              : CreateEventForm;
-            return (
-              <EventFormShell
-                title={eventFormTitle(!!isMarriage, !!editingEvent)}
-              >
-                <FormComponent
-                  onClose={handleCloseDialog}
-                  onSave={handleSaveEvent}
-                  editMode={!!editingEvent}
-                  duplicateMode={!!duplicatingFrom}
-                  initialData={activeInitial}
-                />
-              </EventFormShell>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
 
       {/* Team expenses for the chosen event, with approvals */}
       <Suspense fallback={null}>
