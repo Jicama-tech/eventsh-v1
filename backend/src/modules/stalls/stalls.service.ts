@@ -29,6 +29,7 @@ import {
 } from "./dto/amend-stall.dto";
 import { UpdatePaymentStatusDto } from "./dto/paymentStatus.dto";
 import { UpdateStatusDto } from "./dto/updateStatus.dto";
+import { StallScanAction } from "./dto/scan-qr.dto";
 import { Stall, StallDocument } from "./entities/stall.entity";
 import { StallFormDraft } from "./schemas/stall-form-draft.schema";
 import { OtpService } from "../otp/otp.service";
@@ -2912,150 +2913,329 @@ export class StallsService {
 
   // ============ QR CODE SCANNING & ATTENDANCE ============
 
-  async scanStallQR(qrCodeData: string) {
+  async scanStallQR(qrCodeData: string, action?: StallScanAction) {
+    // A non-JSON payload means the wrong QR was held up to the camera. That's
+    // operator error, not a server fault — answer with something the person
+    // holding the scanner can act on rather than letting SyntaxError escape.
+    let qrData: any;
     try {
-      // Parse QR data
-      const qrData = JSON.parse(qrCodeData);
+      qrData = JSON.parse(qrCodeData);
+    } catch {
+      throw new BadRequestException(
+        "Unreadable QR code. Please scan the stall ticket issued by EventSH.",
+      );
+    }
 
-      if (qrData.type !== "eventsh-stall-checkin") {
-        throw new BadRequestException("Invalid QR code type");
+    if (qrData?.type !== "eventsh-stall-checkin") {
+      throw new BadRequestException("Invalid QR code type");
+    }
+
+    // Guard before the query: a non-ObjectId stallId makes Mongoose throw a
+    // CastError, which surfaces to the operator as an opaque 500.
+    if (!Types.ObjectId.isValid(String(qrData.stallId || ""))) {
+      throw new BadRequestException("Invalid QR code format. Missing stall ID.");
+    }
+
+    const stall = await this.stallModel.findById(qrData.stallId);
+
+    if (!stall) {
+      throw new NotFoundException("Stall not found");
+    }
+
+    // A cancelled booking's QR is dead.
+    if (stall.status === "Cancelled") {
+      throw new BadRequestException(
+        "This booking was cancelled — the QR is no longer valid.",
+      );
+    }
+
+    // Verify QR code matches. issuedAt is part of the match so that when a
+    // ticket is re-issued (e.g. after an approved "Edit Request"), the stall's
+    // stored issuedAt changes and any previously-issued QR stops validating —
+    // only the latest QR works. Resend/download reuse the stored payload, so
+    // they keep the same issuedAt and remain valid.
+    let storedQrData: any = {};
+    try {
+      storedQrData = JSON.parse(stall.qrCodeData || "{}");
+    } catch {
+      storedQrData = {};
+    }
+    // Compare stringified: the scanned payload always carries ids as strings,
+    // while a stored copy may have been written straight from an ObjectId.
+    const sameId = (a: any, b: any) => String(a ?? "") === String(b ?? "");
+    if (
+      !sameId(storedQrData.stallId, qrData.stallId) ||
+      !sameId(storedQrData.shopkeeperId, qrData.shopkeeperId)
+    ) {
+      throw new BadRequestException("Invalid QR code");
+    }
+    if (storedQrData.issuedAt && qrData.issuedAt !== storedQrData.issuedAt) {
+      throw new BadRequestException(
+        "This QR code has been superseded by an updated ticket. Please use the latest QR emailed to the vendor.",
+      );
+    }
+
+    // The exhibitor's badge is scanned for both legs, so the QR alone cannot
+    // say which one the operator means. Their explicit choice on the
+    // Check-In / Check-Out screen decides it; a client that sends no action
+    // keeps the old behaviour of inferring it from state.
+    const resolved: StallScanAction =
+      action ?? (stall.hasCheckedIn ? "CHECK_OUT" : "CHECK_IN");
+
+    const now = new Date();
+
+    // Apply the transition as one conditional write. Guarding on the expected
+    // precondition inside the query — rather than read, decide, then save — is
+    // what makes a double-tap, or two operators scanning the same badge at
+    // once, safe: exactly one update can match, and the loser gets null back
+    // and is told precisely why. `$ne: true` rather than `=== false` so rows
+    // predating these fields (where they are simply absent) still check in.
+    const filter: Record<string, any> =
+      resolved === "CHECK_IN"
+        ? {
+            _id: stall._id,
+            status: { $ne: "Cancelled" },
+            hasCheckedIn: { $ne: true },
+          }
+        : {
+            _id: stall._id,
+            status: { $ne: "Cancelled" },
+            hasCheckedIn: true,
+            hasCheckedOut: { $ne: true },
+          };
+
+    const update =
+      resolved === "CHECK_IN"
+        ? { $set: { hasCheckedIn: true, checkInTime: now } }
+        : { $set: { hasCheckedOut: true, checkOutTime: now } };
+
+    const updated = await this.stallModel
+      .findOneAndUpdate(filter, update, { new: true })
+      .populate("shopkeeperId")
+      .populate("eventId");
+
+    if (!updated) {
+      // Nothing matched, so the booking's current state is the reason. Re-read
+      // it to name the actual precondition that failed instead of the old
+      // catch-all "Stall has already been checked out".
+      throw this.stallAttendanceConflict(
+        resolved,
+        await this.stallModel.findById(stall._id).lean(),
+      );
+    }
+
+    const vendor: any = await this.vendorModel.findById(
+      (updated.shopkeeperId as any)?._id || updated.shopkeeperId,
+    );
+
+    // Notifications are deliberately not awaited into the response. The
+    // attendance write has already committed; letting a mail or WhatsApp
+    // failure bubble out would show the operator an error for a scan that DID
+    // land, and their retry would then flip the exhibitor to the opposite
+    // state. notifyStallAttendance swallows its own errors.
+    void this.notifyStallAttendance(updated, vendor, resolved, now);
+
+    return {
+      success: true,
+      message:
+        resolved === "CHECK_IN"
+          ? "Check-in successful"
+          : "Check-out successful",
+      data: this.buildStallScanPayload(updated, vendor, resolved),
+    };
+  }
+
+  /**
+   * Explain a refused attendance transition. Only called when the conditional
+   * update matched nothing, so the booking's own state is always the cause.
+   */
+  private stallAttendanceConflict(action: StallScanAction, current: any) {
+    if (!current) return new NotFoundException("Stall not found");
+    if (current.status === "Cancelled") {
+      return new BadRequestException(
+        "This booking was cancelled — the QR is no longer valid.",
+      );
+    }
+    if (action === "CHECK_IN") {
+      return new BadRequestException(
+        current.hasCheckedOut
+          ? "This exhibitor has already checked out."
+          : "This exhibitor has already checked in.",
+      );
+    }
+    if (!current.hasCheckedIn) {
+      return new BadRequestException(
+        "This exhibitor has not checked in yet. Cannot check out before checking in.",
+      );
+    }
+    return new BadRequestException("This exhibitor has already checked out.");
+  }
+
+  /** Scan response body, identical in shape for both transitions. */
+  private buildStallScanPayload(
+    stall: any,
+    vendor: any,
+    action: StallScanAction,
+  ) {
+    return {
+      action,
+      stallId: stall._id,
+      checkInTime: stall.checkInTime,
+      checkOutTime: stall.checkOutTime,
+      shopkeeper: stall.shopkeeperId,
+      eventId: stall.eventId,
+      businessType: vendor?.businessCategory ?? null,
+      Tables: stall.selectedTables,
+      AddOns: stall.selectedAddOns,
+      Amount: stall.grandTotal,
+      paidAmount: stall.paidAmount,
+      // Legacy alias — older scanner builds read `checkinTime`.
+      checkinTime: stall.checkInTime,
+      remainingAmount: stall.remainingAmount,
+    };
+  }
+
+  /**
+   * Tell the vendor their stall was checked in or out. Email is the primary
+   * channel now that WhatsApp is being retired (sendWhatsAppMessage no-ops
+   * when the kill-switch is off, which previously meant nobody was told
+   * anything at all). Every leg is best-effort: this runs after the attendance
+   * write has committed, so nothing here may throw into the scan response.
+   */
+  private async notifyStallAttendance(
+    stall: any,
+    vendor: any,
+    action: StallScanAction,
+    at: Date,
+  ) {
+    try {
+      const name = vendor?.name || "there";
+      const event: any = stall.eventId || {};
+      const eventTitle = event?.title || "the event";
+      const when = at.toLocaleString();
+      const isCheckIn = action === "CHECK_IN";
+      const eventIdStr = String(event?._id || stall.eventId || "");
+
+      // checkInTime is absent on rows checked in before it was recorded, so
+      // guard the subtraction instead of trusting it — the old code called
+      // .getTime() on it unconditionally and 500'd on those bookings.
+      const checkedInAt = stall.checkInTime
+        ? new Date(stall.checkInTime).getTime()
+        : null;
+      const durationMins =
+        !isCheckIn && checkedInAt
+          ? Math.max(0, Math.floor((at.getTime() - checkedInAt) / 60000))
+          : null;
+
+      // depositTotal is the Stall's field — `depositAmount` only exists on the
+      // table subdocuments, so the old `!!stall.depositAmount` was always
+      // false and the `remainingAmount === 0` fallback then fired for EVERY
+      // fully-paid booking, promising a deposit refund that was never taken.
+      const hasDeposit = ((stall.depositTotal as number) || 0) > 0;
+
+      // Check-out gates the security-deposit refund on feedback, so the link
+      // has to ride the email too — notifyAfterCheckout only sends it over
+      // WhatsApp, which is off.
+      let feedbackLink: string | null = null;
+      if (!isCheckIn) {
+        try {
+          const token = this.feedbackService.mintToken(
+            "exhibitor",
+            String(stall._id),
+            eventIdStr,
+          );
+          const base = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
+          feedbackLink = `${base}/events/${eventIdStr}?feedback=exhibitor&token=${encodeURIComponent(
+            token,
+          )}`;
+        } catch {
+          feedbackLink = null;
+        }
       }
 
-      const stall = await this.stallModel
-        .findById(qrData.stallId)
-        .populate("shopkeeperId")
-        .populate("eventId");
+      const message = isCheckIn
+        ? `✅ Check-in Successful\n\nWelcome ${name}!\nCheck-in time: ${when}\n\nYour stall is now open. Enjoy the event! 🎉`
+        : `👋 Check-out Successful\n\nGoodbye ${name}!\nCheck-out time: ${when}` +
+          (durationMins !== null ? `\nDuration: ${durationMins} minutes` : "") +
+          `\n\nThank you for participating! 🙏`;
 
-      if (!stall) {
-        throw new NotFoundException("Stall not found");
-      }
+      const to = this.vendorEmailRecipients(vendor);
+      if (to) {
+        const senderConfig = await this.getOrganizerSenderConfig(
+          stall.organizerId,
+        );
+        const rows = isCheckIn
+          ? `<p style="margin:0"><strong>Check-in time:</strong> ${when}</p>`
+          : `<p style="margin:0"><strong>Check-out time:</strong> ${when}</p>` +
+            (durationMins !== null
+              ? `<p style="margin:6px 0 0"><strong>Duration:</strong> ${durationMins} minutes</p>`
+              : "");
+        const cta = feedbackLink
+          ? `<div style="text-align:center;margin:18px 0">
+               <a href="${feedbackLink}" style="display:inline-block;background:#16a34a;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600">Share your feedback</a>
+               <p style="color:#64748b;font-size:12px;margin:10px 0 0">${
+                 hasDeposit
+                   ? "Submit your feedback to release the security deposit refund."
+                   : "We would love to hear how it went."
+               }</p>
+             </div>`
+          : "";
+        const html = `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+            <div style="background:linear-gradient(135deg,${
+              isCheckIn ? "#22c55e,#16a34a" : "#f97316,#ea580c"
+            });color:#fff;padding:24px;text-align:center">
+              <h1 style="margin:0;font-size:20px">${
+                isCheckIn ? "Checked in ✅" : "Checked out 👋"
+              }</h1>
+              <p style="margin:6px 0 0;opacity:.9">${eventTitle}</p>
+            </div>
+            <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+              <p>Hi ${name},</p>
+              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin:14px 0">
+                ${rows}
+              </div>
+              ${cta}
+              <p style="color:#64748b;font-size:12px;margin-top:16px">${
+                isCheckIn
+                  ? "Your stall is now open — enjoy the event!"
+                  : "Thank you for participating!"
+              }</p>
+            </div>
+          </div>`;
 
-      // A cancelled booking's QR is dead.
-      if (stall.status === "Cancelled") {
-        throw new BadRequestException(
-          "This booking was cancelled — the QR is no longer valid.",
+        await this.mailService.sendEmail({
+          to,
+          subject: `${isCheckIn ? "Checked in" : "Checked out"} — ${eventTitle}`,
+          html,
+          senderConfig,
+        });
+      } else {
+        this.logger.warn(
+          `[stalls] no vendor email on file for stall ${stall._id} — skipped ${action} notification email`,
         );
       }
 
-      // Verify QR code matches. issuedAt is part of the match so that when a
-      // ticket is re-issued (e.g. after an approved "Edit Request"), the stall's
-      // stored issuedAt changes and any previously-issued QR stops validating —
-      // only the latest QR works. Resend/download reuse the stored payload, so
-      // they keep the same issuedAt and remain valid.
-      const storedQrData = JSON.parse(stall.qrCodeData || "{}");
-      if (
-        storedQrData.stallId !== qrData.stallId ||
-        storedQrData.shopkeeperId !== qrData.shopkeeperId
-      ) {
-        throw new BadRequestException("Invalid QR code");
-      }
-      if (storedQrData.issuedAt && qrData.issuedAt !== storedQrData.issuedAt) {
-        throw new BadRequestException(
-          "This QR code has been superseded by an updated ticket. Please use the latest QR emailed to the vendor.",
-        );
-      }
+      // Kept for deployments that still have WhatsApp switched on; it no-ops
+      // when the kill-switch is off.
+      const wa = vendor?.whatsAppNumber || vendor?.whatsappNumber;
+      if (wa) await this.otpService.sendWhatsAppMessage(wa, message);
 
-      const vendor = await this.vendorModel.findById(stall.shopkeeperId);
-
-      const now = new Date();
-
-      // First scan - Check-in
-      if (stall.hasCheckedIn === false && stall.hasCheckedOut === false) {
-        stall.checkInTime = now;
-        stall.hasCheckedIn = true;
-        await stall.save();
-
-        const vendor = await this.vendorModel.findById(stall.shopkeeperId);
-        const message =
-          `✅ *Check-in Successful*\n\n` +
-          `Welcome ${vendor.name}!\n` +
-          `Check-in time: ${now.toLocaleString()}\n\n` +
-          `Your stall is now open. Enjoy the event! 🎉`;
-
-        await this.otpService.sendWhatsAppMessage(
-          vendor.whatsAppNumber || vendor.whatsappNumber,
-          message,
-        );
-
-        return {
-          success: true,
-          message: "Check-in successful",
-          data: {
-            action: "CHECK_IN",
-            stallId: stall._id,
-            checkInTime: stall.checkInTime,
-            shopkeeper: stall.shopkeeperId,
-            eventId: stall.eventId,
-            businessType: vendor.businessCategory,
-            Tables: stall.selectedTables,
-            AddOns: stall.selectedAddOns,
-            Amount: stall.grandTotal,
-            paidAmount: stall.paidAmount,
-            checkinTime: stall.checkInTime,
-            remainingAmount: stall.remainingAmount,
-          },
-        };
-      }
-
-      // Second scan - Check-out
-      if (stall.hasCheckedIn === true && stall.hasCheckedOut === false) {
-        stall.checkOutTime = now;
-        stall.hasCheckedOut = true;
-        await stall.save();
-
-        const vendor = await this.vendorModel.findById(stall.shopkeeperId);
-        const duration = Math.floor(
-          (now.getTime() - stall.checkInTime.getTime()) / (1000 * 60),
-        );
-
-        const message =
-          `👋 *Check-out Successful*\n\n` +
-          `Goodbye ${vendor.name}!\n` +
-          `Check-out time: ${now.toLocaleString()}\n` +
-          `Duration: ${duration} minutes\n\n` +
-          `Thank you for participating! 🙏`;
-
-        await this.otpService.sendWhatsAppMessage(
-          vendor.whatsAppNumber || vendor.whatsappNumber,
-          message,
-        );
-
-        // Fire the feedback link as a follow-up WhatsApp message. Hosts the
-        // refund: vendor must submit feedback before the deposit is released.
+      if (!isCheckIn) {
         await this.feedbackService.notifyAfterCheckout({
           audience: "exhibitor",
           subjectId: String(stall._id),
-          eventId: String(stall.eventId),
-          whatsAppNumber: vendor.whatsAppNumber || vendor.whatsappNumber,
-          hasDeposit:
-            !!(stall as any).depositAmount ||
-            (stall as any).remainingAmount === 0,
+          eventId: eventIdStr,
+          whatsAppNumber: wa,
+          hasDeposit,
         });
-
-        return {
-          success: true,
-          message: "Check-out successful",
-          data: {
-            action: "CHECK_OUT",
-            stallId: stall._id,
-            checkInTime: stall.checkInTime,
-            shopkeeper: stall.shopkeeperId,
-            eventId: stall.eventId,
-            businessType: vendor.businessCategory,
-            Tables: stall.selectedTables,
-            AddOns: stall.selectedAddOns,
-            Amount: stall.grandTotal,
-            paidAmount: stall.paidAmount,
-            checkinTime: stall.checkInTime,
-            remainingAmount: stall.remainingAmount,
-          },
-        };
       }
-
-      throw new BadRequestException("Stall has already been checked out");
-    } catch (error) {
-      this.logger.error("Error scanning QR:", error);
-      throw error;
+    } catch (e: any) {
+      this.logger.warn(
+        `[stalls] attendance notification failed for stall ${stall?._id}: ${
+          e?.message || e
+        }`,
+      );
     }
   }
 

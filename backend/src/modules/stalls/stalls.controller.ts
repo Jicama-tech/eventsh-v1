@@ -349,7 +349,10 @@ export class StallsController {
   @Post("scan-qr")
   @HttpCode(HttpStatus.OK)
   async scanQR(@Body() scanQRDto: ScanQRDto) {
-    return await this.stallsService.scanStallQR(scanQRDto.qrCodeData);
+    return await this.stallsService.scanStallQR(
+      scanQRDto.qrCodeData,
+      scanQRDto.action,
+    );
   }
 
   /**
