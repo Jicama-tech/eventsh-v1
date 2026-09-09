@@ -167,6 +167,13 @@ export default function QRTicketScanner() {
   // the next decoded frame (~10/sec). A ref is the only guard that actually
   // sees the update, so hold both: the ref gates re-entry, the state drives UI.
   const processingRef = useRef(false);
+  // Guards against two concurrent startQRScanner() runs (see below).
+  const startingRef = useRef(false);
+  // Bumped whenever the operator abandons the current scan (Change Scan Type,
+  // a new mode, Scan Another). An in-flight onScanSuccess captures the value
+  // it started with and drops its result if it no longer matches, so a slow
+  // request cannot land its UI updates onto a screen the operator has left.
+  const scanGenerationRef = useRef(0);
   // Tracks the pending "restart the scanner" timer so a later success cannot
   // be clobbered by a timer queued by an earlier failure.
   const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -348,6 +355,7 @@ export default function QRTicketScanner() {
   // Select scan mode and proceed to scanning
   const handleModeSelection = (mode: ScanMode) => {
     clearRecoveryTimer();
+    scanGenerationRef.current++;
     setProcessing(false);
     setScanMode(mode);
     setStep("scanning");
@@ -360,14 +368,29 @@ export default function QRTicketScanner() {
     }
     return () => {
       clearRecoveryTimer();
-      if (qrCodeRef.current) {
-        qrCodeRef.current.stop();
-        qrCodeRef.current = null;
+      // html5-qrcode throws a raw string synchronously when the scanner was
+      // never started, and rejects when it is still mid-start — both escape
+      // React's commit phase and blank the page. Null the ref first so a
+      // concurrent start cannot adopt a dying instance.
+      const inst = qrCodeRef.current;
+      qrCodeRef.current = null;
+      if (inst) {
+        try {
+          void inst.stop()?.catch(() => {});
+        } catch {
+          /* never started */
+        }
       }
     };
   }, [step]);
 
   const startQRScanner = async () => {
+    // Set synchronously, before any await: two callers can otherwise both pass
+    // the teardown below while the first is suspended on getUserMedia, start
+    // two Html5Qrcode instances on the same element, and orphan one with a
+    // live camera stream the teardown can no longer see.
+    if (startingRef.current) return;
+    startingRef.current = true;
     try {
       // Tear down any live instance before attaching a new one. This used to
       // overwrite qrCodeRef and orphan the previous camera: the abandoned
@@ -402,12 +425,17 @@ export default function QRTicketScanner() {
       );
     } catch (error) {
       console.error("Error starting QR scanner:", error);
+    } finally {
+      startingRef.current = false;
     }
   };
 
   // Handle successful QR scan
   const onScanSuccess = async (decodedText: string, decodedResult: any) => {
     if (processingRef.current) return;
+
+    const gen = scanGenerationRef.current;
+    const abandoned = () => gen !== scanGenerationRef.current;
 
     setProcessing(true);
 
@@ -432,6 +460,9 @@ export default function QRTicketScanner() {
       }
     } catch (error) {
       console.error("Error processing QR code:", error);
+      // The operator has already moved on — do not drag them back to an error
+      // screen for a scan they abandoned.
+      if (abandoned()) return;
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to process QR code",
       );
@@ -486,7 +517,7 @@ export default function QRTicketScanner() {
     );
 
     if (!attendanceResponse.ok) {
-      const errorData = await attendanceResponse.json();
+      const errorData = await attendanceResponse.json().catch(() => ({}));
       throw new Error(formatApiError(errorData, "Failed to mark attendance"));
     }
 
@@ -690,7 +721,7 @@ export default function QRTicketScanner() {
       });
 
       if (!scanRes.ok) {
-        const errorData = await scanRes.json();
+        const errorData = await scanRes.json().catch(() => ({}));
         throw new Error(formatApiError(errorData, "Failed to process speaker QR"));
       }
 
@@ -789,7 +820,7 @@ export default function QRTicketScanner() {
       });
 
       if (!scanRes.ok) {
-        const errorData = await scanRes.json();
+        const errorData = await scanRes.json().catch(() => ({}));
         throw new Error(
           formatApiError(errorData, "Failed to process round table QR"),
         );
@@ -849,7 +880,7 @@ export default function QRTicketScanner() {
     });
 
     if (!res.ok) {
-      const errorData = await res.json();
+      const errorData = await res.json().catch(() => ({}));
       throw new Error(formatApiError(errorData, "Failed to process workshop QR"));
     }
 
@@ -891,7 +922,7 @@ export default function QRTicketScanner() {
     });
 
     if (!res.ok) {
-      const errorData = await res.json();
+      const errorData = await res.json().catch(() => ({}));
       throw new Error(
         formatApiError(errorData, "Failed to process scheduled space QR"),
       );
@@ -915,6 +946,7 @@ export default function QRTicketScanner() {
 
   const resetScanner = () => {
     clearRecoveryTimer();
+    scanGenerationRef.current++;
     setScanResult(null);
     setTicketData(null);
     setStallData(null);
@@ -938,6 +970,7 @@ export default function QRTicketScanner() {
 
   const handleBackToModeSelection = () => {
     clearRecoveryTimer();
+    scanGenerationRef.current++;
     setProcessing(false);
     setScanMode(null);
     setStep("mode-selection");
@@ -1267,8 +1300,10 @@ export default function QRTicketScanner() {
             setRoundTableAction(null);
             setErrorMessage("");
             setScanResult(null);
+            // No startQRScanner() here: the [step] effect owns startup and
+            // fires on the transition into "scanning". Calling it inline as
+            // well started a second camera on the same element.
             setStep("scanning");
-            startQRScanner();
           }}
           variant="buttonOutline"
           className="w-full"
@@ -1420,6 +1455,16 @@ export default function QRTicketScanner() {
     );
   };
 
+  // True when one of the success branches below will actually render. Mirrors
+  // their conditions exactly — keep in step if a branch changes.
+  const hasSuccessView =
+    scanMode === "event-ticket" ||
+    scanMode === "stall-ticket" ||
+    (scanMode === "speaker-ticket" && !!speakerData) ||
+    (scanMode === "round-table" && !!roundTableData) ||
+    (scanMode === "workshop" && !!workshopData) ||
+    (scanMode === "scheduled-space" && !!scheduledSpaceData);
+
   // ─── MAIN RENDER ─────────────────────────────────────────────────────────────
   // theme-light-only: this screen is a light-only design — its status panels use
   // literal palette colours (bg-green-50/text-green-800, bg-red-50, bg-orange-50)
@@ -1488,6 +1533,22 @@ export default function QRTicketScanner() {
         {step === "mode-selection" && renderModeSelection()}
         {step === "scanning" && renderScanner()}
         {step === "checkin-checkout-selection" && renderCheckInOutSelection()}
+        {step === "success" && !hasSuccessView && (
+          <Card className="w-full max-w-md mx-auto">
+            <CardHeader className="text-center">
+              <CheckCircle className="mx-auto h-16 w-16 text-green-600 mb-4" />
+              <CardTitle className="text-green-800">Scan recorded</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                The scan went through, but its details are no longer on screen.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={handleBackToModeSelection} className="w-full">
+                Back to Scan Types
+              </Button>
+            </CardContent>
+          </Card>
+        )}
         {step === "success" &&
           scanMode === "event-ticket" &&
           renderSuccessEventTicket()}

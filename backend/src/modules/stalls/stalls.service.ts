@@ -3024,9 +3024,16 @@ export class StallsService {
       );
     }
 
-    const vendor: any = await this.vendorModel.findById(
-      (updated.shopkeeperId as any)?._id || updated.shopkeeperId,
-    );
+    // Already populated by the findOneAndUpdate above; only fall back to a
+    // fetch if the populate missed (a shopkeeperId pointing at a deleted vendor
+    // comes back as a bare ObjectId, or null).
+    const populatedVendor: any = updated.shopkeeperId;
+    const vendor: any =
+      populatedVendor && typeof populatedVendor === "object" && populatedVendor.name
+        ? populatedVendor
+        : await this.vendorModel.findById(
+            populatedVendor?._id || populatedVendor,
+          );
 
     // Notifications are deliberately not awaited into the response. The
     // attendance write has already committed; letting a mail or WhatsApp
@@ -3068,7 +3075,15 @@ export class StallsService {
         "This exhibitor has not checked in yet. Cannot check out before checking in.",
       );
     }
-    return new BadRequestException("This exhibitor has already checked out.");
+    if (current.hasCheckedOut) {
+      return new BadRequestException("This exhibitor has already checked out.");
+    }
+    // Checked in, not checked out, yet the guarded update still missed: another
+    // scan moved this booking between the write and this re-read. Don't assert
+    // a state we just disproved — say what actually happened.
+    return new ConflictException(
+      "This booking was updated by another scan. Please scan again.",
+    );
   }
 
   /** Scan response body, identical in shape for both transitions. */
@@ -3099,8 +3114,9 @@ export class StallsService {
    * Tell the vendor their stall was checked in or out. Email is the primary
    * channel now that WhatsApp is being retired (sendWhatsAppMessage no-ops
    * when the kill-switch is off, which previously meant nobody was told
-   * anything at all). Every leg is best-effort: this runs after the attendance
-   * write has committed, so nothing here may throw into the scan response.
+   * anything at all). This runs after the attendance write has committed, so
+   * nothing here may throw into the scan response — and each channel is
+   * isolated, so one failing (sendEmail rethrows) cannot suppress the others.
    */
   private async notifyStallAttendance(
     stall: any,
@@ -3112,6 +3128,11 @@ export class StallsService {
       const name = vendor?.name || "there";
       const event: any = stall.eventId || {};
       const eventTitle = event?.title || "the event";
+      // Vendor and event names are operator/vendor-supplied free text and go
+      // straight into an HTML body — escape them. Even without a script
+      // payload, a bare "&" or "<" in a business name corrupts the markup.
+      const nameHtml = this.escapeHtml(name);
+      const eventTitleHtml = this.escapeHtml(eventTitle);
       const when = at.toLocaleString();
       const isCheckIn = action === "CHECK_IN";
       const eventIdStr = String(event?._id || stall.eventId || "");
@@ -3137,7 +3158,7 @@ export class StallsService {
       // has to ride the email too — notifyAfterCheckout only sends it over
       // WhatsApp, which is off.
       let feedbackLink: string | null = null;
-      if (!isCheckIn) {
+      if (!isCheckIn && eventIdStr) {
         try {
           const token = this.feedbackService.mintToken(
             "exhibitor",
@@ -3188,10 +3209,10 @@ export class StallsService {
               <h1 style="margin:0;font-size:20px">${
                 isCheckIn ? "Checked in ✅" : "Checked out 👋"
               }</h1>
-              <p style="margin:6px 0 0;opacity:.9">${eventTitle}</p>
+              <p style="margin:6px 0 0;opacity:.9">${eventTitleHtml}</p>
             </div>
             <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-              <p>Hi ${name},</p>
+              <p>Hi ${nameHtml},</p>
               <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin:14px 0">
                 ${rows}
               </div>
@@ -3204,12 +3225,24 @@ export class StallsService {
             </div>
           </div>`;
 
-        await this.mailService.sendEmail({
-          to,
-          subject: `${isCheckIn ? "Checked in" : "Checked out"} — ${eventTitle}`,
-          html,
-          senderConfig,
-        });
+        try {
+          await this.mailService.sendEmail({
+            to,
+            subject: `${
+              isCheckIn ? "Checked in" : "Checked out"
+            } — ${eventTitle}`,
+            html,
+            senderConfig,
+          });
+        } catch (mailErr: any) {
+          // sendEmail rethrows on failure; isolate it so a bad per-organizer
+          // SMTP config cannot also suppress the channels after it.
+          this.logger.warn(
+            `[stalls] attendance email failed for stall ${stall._id}: ${
+              mailErr?.message || mailErr
+            }`,
+          );
+        }
       } else {
         this.logger.warn(
           `[stalls] no vendor email on file for stall ${stall._id} — skipped ${action} notification email`,
@@ -3220,16 +3253,6 @@ export class StallsService {
       // when the kill-switch is off.
       const wa = vendor?.whatsAppNumber || vendor?.whatsappNumber;
       if (wa) await this.otpService.sendWhatsAppMessage(wa, message);
-
-      if (!isCheckIn) {
-        await this.feedbackService.notifyAfterCheckout({
-          audience: "exhibitor",
-          subjectId: String(stall._id),
-          eventId: eventIdStr,
-          whatsAppNumber: wa,
-          hasDeposit,
-        });
-      }
     } catch (e: any) {
       this.logger.warn(
         `[stalls] attendance notification failed for stall ${stall?._id}: ${
@@ -3237,6 +3260,37 @@ export class StallsService {
         }`,
       );
     }
+
+    // Outside the block above on purpose: a check-out must always get its
+    // feedback prompt, whatever the other channels did. It is self-guarding
+    // (no-ops without a WhatsApp number) and swallows its own errors.
+    if (action === "CHECK_OUT") {
+      try {
+        await this.feedbackService.notifyAfterCheckout({
+          audience: "exhibitor",
+          subjectId: String(stall._id),
+          eventId: String(stall.eventId?._id || stall.eventId || ""),
+          whatsAppNumber: vendor?.whatsAppNumber || vendor?.whatsappNumber,
+          hasDeposit: ((stall.depositTotal as number) || 0) > 0,
+        });
+      } catch (e: any) {
+        this.logger.warn(
+          `[stalls] checkout feedback notification failed for stall ${
+            stall?._id
+          }: ${e?.message || e}`,
+        );
+      }
+    }
+  }
+
+  /** Escape user-supplied text before interpolating it into an email body. */
+  private escapeHtml(s: string): string {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   // ============ OTHER UTILITY METHODS ============
