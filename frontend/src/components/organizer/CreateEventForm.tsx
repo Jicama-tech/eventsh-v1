@@ -26,7 +26,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import AnnouncementBar from "@/components/ui/AnnouncementBar";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Upload,
@@ -50,6 +50,8 @@ import {
   Crop,
   Circle,
   Sparkles,
+  Bot,
+  Lock,
   Maximize2,
   Minimize2,
   GripVertical,
@@ -69,6 +71,17 @@ import {
   GraduationCap,
   Package,
   LayoutGrid,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Info,
+  Clapperboard,
+  UserCheck,
+  HeartHandshake,
+  MapPin,
+  Armchair,
+  Store,
+  CircleDot,
+  CalendarClock,
 } from "lucide-react";
 import {
   HoverCard,
@@ -83,6 +96,16 @@ import {
 import { jwtDecode } from "jwt-decode";
 import BlurOverlay from "../ui/blurOverlay";
 import { ModuleGate } from "../ui/ModuleGate";
+import {
+  isIndividualAccount as isIndividualAcct,
+  INDIVIDUAL_EVENT_SECTIONS,
+} from "@/lib/individualAccess";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { AIVenueDesignerDialog } from "./AIVenueDesignerDialog";
 import { EventUrlImporter, type ImportedEventFields } from "./EventUrlImporter";
 import { useCurrency } from "@/hooks/useCurrencyhook";
@@ -246,6 +269,14 @@ const ADDON_COLORS = [
   "#6b7280",
 ];
 
+/**
+ * Where the event form's section switcher lives.
+ *   "top"  — a horizontal, scrollable row above the form, at every width.
+ *   "rail" — the collapsible left sidebar, with the row as a phone fallback.
+ * Both layouts are wired; this is the only thing that chooses between them.
+ */
+const SECTION_NAV: "top" | "rail" = "top";
+
 interface CreateEventFormProps {
   onClose: () => void;
   onSave: (data: FormData) => Promise<void>;
@@ -259,6 +290,15 @@ interface CreateEventFormProps {
   initialData?: any;
   /** Save under this organizer id instead of the token subject (admin demo). */
   organizerIdOverride?: string;
+  /**
+   * Individual accounts can create commercial events, but only Basic Info,
+   * Media and Visitors are theirs to fill in. Every other section still
+   * appears in the rail — seeing what a full organizer account unlocks is
+   * the point — and opens the upgrade panel instead of its own fields.
+   */
+  basicOnly?: boolean;
+  /** Called from the upgrade panel a locked section shows. */
+  onOpenOrganizerRegister?: () => void;
 }
 
 interface TableTemplate {
@@ -9066,6 +9106,8 @@ const hydrateSpeakerSlotTemplates = (templates: any[], speakers: any[]) => {
 export function CreateEventForm({
   onClose,
   onSave,
+  basicOnly = false,
+  onOpenOrganizerRegister,
   editMode = false,
   duplicateMode = false,
   initialData,
@@ -9078,22 +9120,27 @@ export function CreateEventForm({
   // Stripe / bank). Force every visitor-type price to 0 in the UI so
   // they can't even type a non-zero price. The backend mirrors this
   // guard in events.controller.createEvent / updateEvent.
-  const isIndividualAccount = (() => {
-    try {
-      const token = sessionStorage.getItem("token");
-      if (!token) return false;
-      const decoded: any = jwtDecode(token);
-      const roles: string[] = Array.isArray(decoded?.roles)
-        ? decoded.roles
-        : [];
-      return roles.includes("individual") && !roles.includes("organizer");
-    } catch {
-      return false;
-    }
-  })();
+  const isIndividualAccount = isIndividualAcct();
 
   const [loading, setLoading] = useState(false);
+  const { isModuleSectionEnabled } = useSubscription();
   const [currentTab, setCurrentTab] = useState("basic");
+
+
+  // Collapse state for the form's own section rail. Persisted under its own
+  // key so it is independent of the dashboard sidebar next to it.
+  const [sectionNavCollapsed, setSectionNavCollapsed] = useState(
+    () => localStorage.getItem("eventFormSectionNavCollapsed") === "true",
+  );
+  useEffect(() => {
+    localStorage.setItem(
+      "eventFormSectionNavCollapsed",
+      String(sectionNavCollapsed),
+    );
+  }, [sectionNavCollapsed]);
+
+
+
   const [currentTag, setCurrentTag] = useState("");
   const [blurActive, setblurActive] = useState(false);
   const [termsForStalls, setTermsForStalls] = useState("");
@@ -10792,6 +10839,18 @@ export function CreateEventForm({
   // If the user toggles off the section they're currently viewing, bounce them
   // back to Basic Info so they don't end up looking at an empty pane.
   useEffect(() => {
+    // Individuals are exempt: every section is offered to them regardless of
+    // the feature toggles, and a locked one renders the upgrade panel rather
+    // than the empty pane this bounce exists to avoid. Without this guard the
+    // eight toggle-backed sections are unreachable for them — the click lands
+    // and this effect immediately throws them back to Basic Info.
+    if (basicOnly) return;
+    // Same for a section the plan excludes. Those are forced into the rail on
+    // purpose (see FORM_SECTIONS) so the organizer can see what upgrading
+    // buys — and their feature toggle is typically off, which is exactly what
+    // this bounce keys on. Without this guard the click lands and is thrown
+    // straight back to Basic Info instead of showing the upgrade panel.
+    if (!isModuleSectionEnabled("events", currentTab)) return;
     const f = formData.features;
     const anyDoors = venueConfigurations.some(
       (v) => v.hasEntrance || v.hasExit || (v.customDoorTypes || []).length > 0,
@@ -10813,6 +10872,8 @@ export function CreateEventForm({
         !anyDoors);
     if (hidden) setCurrentTab("basic");
   }, [
+    basicOnly,
+    isModuleSectionEnabled,
     currentTab,
     formData.features.hasStalls,
     formData.features.hasSpeakers,
@@ -11924,8 +11985,164 @@ export function CreateEventForm({
     }
   };
 
+  // The form's sections, derived from the Event Sections toggles. Hoisted
+  // out of the JSX so the desktop rail and the phone row render the same
+  // list instead of each keeping its own copy.
+  const FORM_SECTIONS = (() => {
+        const showStalls = !!formData.features.hasStalls;
+        const showRoundTables = !!formData.features.hasRoundTables;
+        const showSpeakers = !!formData.features.hasSpeakers;
+        const showWorkshops = !!formData.features.hasWorkshops;
+        const showSponsors = !!formData.features.hasSponsors;
+        // Cinema/concert-style assigned seating — a normal Event Sections
+        // toggle now, available for any commercial event, not tied to a
+        // specific category.
+        const showSeating = !!formData.features.hasSeating;
+        // Spaces bookable in specific time slots — own "Schedule" tab for
+        // defining templates; placement still happens on the shared Space
+        // Layout canvas, same as Stalls/Round Tables.
+        const showScheduledSpaces = !!formData.features.hasScheduledSpaces;
+        // Layout tab is also useful when any door type is defined (per venue),
+        // since the user needs the canvas to place those door markers.
+        const anyDoorsEnabled = venueConfigurations.some(
+          (v) =>
+            v.hasEntrance || v.hasExit || (v.customDoorTypes || []).length > 0,
+        );
+        const showLayout =
+          showStalls ||
+          showRoundTables ||
+          showSpeakers ||
+          showSeating ||
+          showScheduledSpaces ||
+          anyDoorsEnabled;
+    const SECTIONS: {
+          id: string;
+          label: string;
+          icon: typeof Info;
+          show: boolean;
+        }[] = [
+          { id: "basic", label: t("Basic Info"), icon: Info, show: true },
+          { id: "media", label: t("Media"), icon: Clapperboard, show: true },
+          { id: "visitors", label: t("Visitors"), icon: UserCheck, show: true },
+          {
+            id: "volunteers",
+            label: t("Volunteers"),
+            icon: HeartHandshake,
+            show: true,
+          },
+          { id: "venue", label: t("Venue"), icon: MapPin, show: true },
+          {
+            id: "seating",
+            label: t("Seating"),
+            icon: Armchair,
+            show: showSeating,
+          },
+          { id: "tables", label: t("Spaces"), icon: Store, show: showStalls },
+          { id: "speakers", label: t("Speakers"), icon: Mic, show: showSpeakers },
+          {
+            id: "workshops",
+            label: t("Workshops"),
+            icon: GraduationCap,
+            show: showWorkshops,
+          },
+          {
+            id: "roundtables",
+            label: t("Round Tables"),
+            icon: CircleDot,
+            show: showRoundTables,
+          },
+          {
+            id: "sponsors",
+            label: t("Sponsors"),
+            icon: Handshake,
+            show: showSponsors,
+          },
+          {
+            id: "schedule",
+            label: t("Schedule"),
+            icon: CalendarClock,
+            show: showScheduledSpaces,
+          },
+          {
+            id: "layout",
+            label: t("Space Layout"),
+            icon: LayoutGrid,
+            show: showLayout,
+          },
+        ];
+    // Individuals see the whole rail — the sections they cannot fill in are
+    // the pitch for upgrading, so they are forced visible even when the
+    // feature toggle behind them is off, and open the upgrade panel instead
+    // of their fields. See `basicOnly` and `INDIVIDUAL_SECTIONS`.
+    if (basicOnly) return SECTIONS.map((sec) => ({ ...sec, show: true }));
+    // Same rule for plan-gated sections: a section the subscription excludes
+    // stays in the rail and explains itself when opened. Hiding it would read
+    // as "this product cannot do that" rather than "your plan cannot".
+    return SECTIONS.map((sec) =>
+      isModuleSectionEnabled("events", sec.id) ? sec : { ...sec, show: true },
+    );
+  })();
+
+  // Which sections an Individual can fill in is defined once, in
+  // lib/individualAccess — everything else renders the upgrade panel.
+  /**
+   * Why a section is unavailable, or null when it is fine.
+   *
+   *   "individual" — no organizer account behind it yet.
+   *   "plan"       — the organizer's subscription excludes this section
+   *                  (admin Pricing -> Events -> sub-toggles).
+   *
+   * Either way the tab STAYS in the rail. Hiding it would leave the organizer
+   * wondering whether the feature exists at all; showing it and explaining on
+   * click is what tells them there is something to upgrade to.
+   */
+  const sectionLockReason = (id: string): "individual" | "plan" | null => {
+    if (basicOnly) {
+      return INDIVIDUAL_EVENT_SECTIONS.includes(id) ? null : "individual";
+    }
+    return isModuleSectionEnabled("events", id) ? null : "plan";
+  };
+  const lockReason = sectionLockReason(currentTab);
+  const lockedTab = lockReason !== null;
+  const lockedSection = FORM_SECTIONS.find((sec) => sec.id === currentTab);
+
+  // Switching section resets the scroll. The section row is sticky, so it
+  // follows the reader down a long section — clicking a short section from
+  // there (the upgrade panel is one screenful at most) would otherwise leave
+  // them parked below its bottom, looking at blank space and reading it as a
+  // tab that renders nothing. The form is mounted inside the dashboard's own
+  // overflow-y-auto pane rather than scrolling the window, so find whatever
+  // actually scrolls instead of assuming.
+  const formRootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let el = formRootRef.current?.parentElement ?? null;
+    while (el) {
+      const oy = getComputedStyle(el).overflowY;
+      if (
+        (oy === "auto" || oy === "scroll") &&
+        el.scrollHeight > el.clientHeight
+      ) {
+        el.scrollTop = 0;
+        return;
+      }
+      el = el.parentElement;
+    }
+    window.scrollTo({ top: 0 });
+  }, [currentTab]);
+
+  // A tab that is no longer offered would render an empty body, so snap back
+  // to the first section that is. Matters when basicOnly hides the section the
+  // form was last left on.
+  useEffect(() => {
+    if (!FORM_SECTIONS.some((sec) => sec.show && sec.id === currentTab)) {
+      const first = FORM_SECTIONS.find((sec) => sec.show);
+      if (first) setCurrentTab(first.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [basicOnly, currentTab, FORM_SECTIONS.length]);
+
   return (
-    <div className="min-h-screen bg-muted ">
+    <div className="min-h-screen bg-muted " ref={formRootRef}>
       {/* Sticky Header */}
       <div className="sticky top-0 z-50 bg-background border-b shadow-sm">
         <div className="flex items-center justify-between gap-2 p-3 sm:p-4">
@@ -11962,105 +12179,172 @@ export function CreateEventForm({
         </div>
       </div>
 
-      {/* Sticky Tabs — only show sections enabled in Basic Info > Event Sections */}
-      {(() => {
-        const showStalls = !!formData.features.hasStalls;
-        const showRoundTables = !!formData.features.hasRoundTables;
-        const showSpeakers = !!formData.features.hasSpeakers;
-        const showWorkshops = !!formData.features.hasWorkshops;
-        const showSponsors = !!formData.features.hasSponsors;
-        // Cinema/concert-style assigned seating — a normal Event Sections
-        // toggle now, available for any commercial event, not tied to a
-        // specific category.
-        const showSeating = !!formData.features.hasSeating;
-        // Spaces bookable in specific time slots — own "Schedule" tab for
-        // defining templates; placement still happens on the shared Space
-        // Layout canvas, same as Stalls/Round Tables.
-        const showScheduledSpaces = !!formData.features.hasScheduledSpaces;
-        // Layout tab is also useful when any door type is defined (per venue),
-        // since the user needs the canvas to place those door markers.
-        const anyDoorsEnabled = venueConfigurations.some(
-          (v) =>
-            v.hasEntrance || v.hasExit || (v.customDoorTypes || []).length > 0,
-        );
-        const showLayout =
-          showStalls ||
-          showRoundTables ||
-          showSpeakers ||
-          showSeating ||
-          showScheduledSpaces ||
-          anyDoorsEnabled;
-        // Always-on tabs: basic, media, venue, visitors, volunteers (5)
-        const visibleCount =
-          5 +
-          (showStalls ? 1 : 0) +
-          (showSpeakers ? 1 : 0) +
-          (showRoundTables ? 1 : 0) +
-          (showWorkshops ? 1 : 0) +
-          (showSponsors ? 1 : 0) +
-          (showSeating ? 1 : 0) +
-          (showScheduledSpaces ? 1 : 0) +
-          (showLayout ? 1 : 0);
-        const colsClass =
-          (
-            {
-              5: "grid-cols-5",
-              6: "grid-cols-6",
-              7: "grid-cols-7",
-              8: "grid-cols-8",
-              9: "grid-cols-9",
-              10: "grid-cols-10",
-              11: "grid-cols-11",
-              12: "grid-cols-12",
-            } as Record<number, string>
-          )[visibleCount] || "grid-cols-10";
-        return (
-          <div className="sticky top-[73px] z-40 bg-background border-b">
-            <Tabs value={currentTab} onValueChange={setCurrentTab}>
-              {/* Mobile: a horizontally-scrollable tab row (each tab keeps its
-                  natural width — swipe to reach them) so labels aren't squashed
-                  or wrapped. Desktop (md+): the original even grid, unchanged. */}
-              <TabsList
-                className={`flex w-full justify-start overflow-x-auto md:grid ${colsClass} h-12 [&>button]:shrink-0 [&>button]:whitespace-nowrap [&>button]:px-3 md:[&>button]:px-3`}
+      {/* Where the section switcher sits. "top" is a horizontal, scrollable
+          row above the form at every width; "rail" is the collapsible left
+          sidebar that used to sit beside the dashboard's own. Flip this one
+          constant to put the rail back — the markup for both is kept. */}
+      <div className={SECTION_NAV === "rail" ? "flex items-start" : ""}>
+        {SECTION_NAV === "rail" && (
+        <aside
+            className={`sticky top-[73px] z-30 flex-shrink-0 self-start border-r bg-muted/30
+              ${sectionNavCollapsed ? "w-14" : "w-56"}
+              hidden md:flex flex-col transition-all duration-300 ease-in-out`}
+            /* max-height, not height: the rail starts below the
+               dashboard header and the form header, so a fixed
+               100vh-based height ran its bottom off the screen and
+               took the collapse toggle with it. */
+            style={{ maxHeight: "calc(100dvh - 120px)" }}
+          >
+            {/* Pinned at the TOP, not the bottom: the rail is only as tall as
+                the space below the two headers, and a bottom-pinned toggle
+                ended up under the fold where it could not be clicked. */}
+            <div className="flex flex-shrink-0 items-center justify-between border-b p-2">
+              {!sectionNavCollapsed && (
+                <span className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("Sections")}
+                </span>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 flex-shrink-0 p-0"
+                onClick={() => setSectionNavCollapsed((v) => !v)}
+                title={
+                  sectionNavCollapsed ? "Expand sections" : "Collapse sections"
+                }
+                aria-label={
+                  sectionNavCollapsed ? "Expand sections" : "Collapse sections"
+                }
               >
-                <TabsTrigger value="basic" className="text-sm">{t("Basic Info")}</TabsTrigger>
-                <TabsTrigger value="media" className="text-sm">{t("Media")}</TabsTrigger>
-                <TabsTrigger value="visitors" className="text-sm">{t("Visitors")}</TabsTrigger>
-                <TabsTrigger value="volunteers" className="text-sm">{t("Volunteers")}</TabsTrigger>
-                <TabsTrigger value="venue" className="text-sm">{t("Venue")}</TabsTrigger>
-                {showSeating && (
-                  <TabsTrigger value="seating" className="text-sm">{t("Seating")}</TabsTrigger>
+                {sectionNavCollapsed ? (
+                  <PanelLeftOpen className="h-4 w-4" />
+                ) : (
+                  <PanelLeftClose className="h-4 w-4" />
                 )}
-                {showStalls && (
-                  <TabsTrigger value="tables" className="text-sm">{t("Spaces")}</TabsTrigger>
-                )}
+              </Button>
+            </div>
+            <nav className="flex-1 overflow-y-auto p-2 space-y-1">
+              <TooltipProvider delayDuration={0}>
+                {FORM_SECTIONS.filter((sec) => sec.show).map((sec) => {
+                  const Icon = sec.icon;
+                  const btn = (
+                    <Button
+                      key={sec.id}
+                      type="button"
+                      variant={
+                        currentTab === sec.id ? "default" : "buttonOutline"
+                      }
+                      onClick={() => setCurrentTab(sec.id)}
+                      className={`w-full text-sm ${
+                        sectionNavCollapsed
+                          ? "justify-center px-0"
+                          : "justify-start"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 flex-shrink-0" />
+                      {!sectionNavCollapsed && (
+                        <span className="ml-2 truncate">{sec.label}</span>
+                      )}
+                    </Button>
+                  );
+                  // Collapsed to the icon rail, the label only exists in the
+                  // tooltip — same as the dashboard sidebar.
+                  return sectionNavCollapsed ? (
+                    <Tooltip key={sec.id}>
+                      <TooltipTrigger asChild>{btn}</TooltipTrigger>
+                      <TooltipContent side="right">{sec.label}</TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    btn
+                  );
+                })}
+              </TooltipProvider>
+            </nav>
+          </aside>
+        )}
 
-                {showSpeakers && (
-                  <TabsTrigger value="speakers" className="text-sm">{t("Speakers")}</TabsTrigger>
-                )}
-                {showWorkshops && (
-                  <TabsTrigger value="workshops" className="text-sm">{t("Workshops")}</TabsTrigger>
-                )}
-                {showRoundTables && (
-                  <TabsTrigger value="roundtables" className="text-sm">{t("Round Tables")}</TabsTrigger>
-                )}
-                {showSponsors && (
-                  <TabsTrigger value="sponsors" className="text-sm">{t("Sponsors")}</TabsTrigger>
-                )}
-                {showScheduledSpaces && (
-                  <TabsTrigger value="schedule" className="text-sm">{t("Schedule")}</TabsTrigger>
-                )}
-                {showLayout && (
-                  <TabsTrigger value="layout" className="text-sm">{t("Space Layout")}</TabsTrigger>
-                )}
-              </TabsList>
-            </Tabs>
+      <div className="flex-1 min-w-0 p-4 sm:p-6">
+        {/* The section switcher. In "top" mode this is the only one and shows
+            at every width; in "rail" mode it stays the phone fallback, since
+            there is no room for a second sidebar next to the dashboard's. It
+            sticks under the form header so the sections stay reachable while
+            a long section scrolls. */}
+        <div
+          className={`${
+            SECTION_NAV === "rail" ? "md:hidden" : ""
+          } -mx-4 sm:-mx-6 mb-4 px-4 sm:px-6 overflow-x-auto sticky top-[73px] z-30 bg-background border-b`}
+        >
+          <div className="flex gap-2 py-2 w-max">
+            {FORM_SECTIONS.filter((sec) => sec.show).map((sec) => (
+              <Button
+                key={sec.id}
+                type="button"
+                size="sm"
+                variant={currentTab === sec.id ? "default" : "buttonOutline"}
+                className="whitespace-nowrap"
+                onClick={() => setCurrentTab(sec.id)}
+              >
+                <sec.icon className="h-4 w-4 mr-1.5" />
+                {sec.label}
+              </Button>
+            ))}
           </div>
-        );
-      })()}
-
-      <div className="p-6 max-w-7xl mx-auto">
-        <Tabs value={currentTab} onValueChange={setCurrentTab}>
+        </div>
+        {/* Locked section (Individuals): the upgrade pitch stands in for the
+            fields. The Tabs below is handed a value no TabsContent matches, so
+            the real section body stays unmounted rather than being hidden —
+            no organizer-only inputs end up in the form state. */}
+        {lockedTab && (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center gap-4 px-6 py-12 text-center">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                <Lock className="h-6 w-6 text-primary" />
+              </span>
+              <div className="space-y-1.5">
+                <h3 className="text-lg font-semibold">
+                  {lockReason === "plan"
+                    ? `${lockedSection?.label} isn't included in your plan`
+                    : `${lockedSection?.label} needs an organizer account`}
+                </h3>
+                <p className="mx-auto max-w-md text-sm text-muted-foreground">
+                  {lockReason === "plan"
+                    ? "Your current subscription doesn't cover this section. Upgrading unlocks it — the rest of the form keeps working in the meantime."
+                    : "Your account can create an event with Basic Info, Media and Visitors. Stalls, speakers, venue layouts, sponsors and the rest come with a full organizer account."}
+                </p>
+              </div>
+              {/* Only the Individual path gets a button: it has somewhere
+                  definite to send them. A plan upgrade happens in Settings ->
+                  Subscription, and leaving the form mid-edit to get there
+                  would cost them their work, so this stays informational. */}
+              {lockReason === "individual" && (
+                <>
+                  <Button
+                    type="button"
+                    onClick={() => onOpenOrganizerRegister?.()}
+                    disabled={!onOpenOrganizerRegister}
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Become an organizer
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Anything you have already filled in is kept — this only
+                    opens registration.
+                  </p>
+                </>
+              )}
+              {lockReason === "plan" && (
+                <p className="text-xs text-muted-foreground">
+                  Settings → Subscription has the plan options.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+        <Tabs
+          value={lockedTab ? "__locked__" : currentTab}
+          onValueChange={setCurrentTab}
+        >
           {/* BASIC INFO TAB */}
           <TabsContent value="basic" className="space-y-6">
             <ModuleGate moduleKey="events" sectionKey="basic">
@@ -12936,86 +13220,96 @@ export function CreateEventForm({
               </Card>
             </ModuleGate>
 
-            {/* ── Eventfront AI assistant ── */}
-            <div className="rounded-lg border bg-muted p-4 space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <Label className="text-sm font-medium">{t("Event assistant chatbot")}</Label>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {chatbot.enabled
-                      ? "A floating AI chat appears on your public event page — it answers visitor, vendor, speaker and round-table questions using this event's details."
-                      : "Turn on a floating AI chat on your public event page that answers questions about this event."}
-                  </p>
-                </div>
-                <Switch
-                  id="event-chatbot-enabled"
-                  checked={chatbot.enabled}
-                  onCheckedChange={(checked) =>
-                    setChatbot((p) => ({ ...p, enabled: !!checked }))
-                  }
-                />
-              </div>
-
-              {chatbot.enabled && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="event-chatbot-name" className="text-sm">{t("Chatbot name")}</Label>
-                  <Input
-                    id="event-chatbot-name"
-                    value={chatbot.name}
-                    maxLength={40}
-                    placeholder={t("Event Assistant")}
-                    onChange={(e) =>
-                      setChatbot((p) => ({ ...p, name: e.target.value }))
-                    }
-                    className="bg-background"
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    Shown as the chat's title and in its greeting (e.g. "Ravi's
-                    Wedding Helper"). Defaults to "Event Assistant".
-                  </p>
-
-                  <div className="pt-1 space-y-1.5">
-                    <Label htmlFor="event-chatbot-color" className="text-sm">{t("Theme colour")}</Label>
-                    <div className="flex items-center gap-3">
-                      <input
-                        id="event-chatbot-color"
-                        type="color"
-                        value={chatbot.accentColor}
-                        onChange={(e) =>
-                          setChatbot((p) => ({
-                            ...p,
-                            accentColor: e.target.value,
-                          }))
-                        }
-                        className="h-9 w-14 cursor-pointer rounded border bg-background p-0.5"
-                      />
-                      <Input
-                        value={chatbot.accentColor}
-                        onChange={(e) =>
-                          setChatbot((p) => ({
-                            ...p,
-                            accentColor: e.target.value,
-                          }))
-                        }
-                        placeholder="#2563eb"
-                        className="w-32 bg-background font-mono text-sm"
-                      />
-                      {/* Live preview chip */}
-                      <span
-                        className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-white"
-                        style={{ backgroundColor: chatbot.accentColor }}
-                      >
-                        Preview
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Colours the chat header, launcher button and visitor
-                      messages on your public event page.
+            {/* -- Eventfront AI assistant -- */}
+            {/* A Card like every other Basic Info section. It used to be a
+                bare bordered div, which read as a stray grey panel tacked on
+                under the cards rather than a section of the form. */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Bot size={20} />
+                  {t("Event assistant chatbot")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      {chatbot.enabled
+                        ? "A floating AI chat appears on your public event page — it answers visitor, vendor, speaker and round-table questions using this event's details."
+                        : "Turn on a floating AI chat on your public event page that answers questions about this event."}
                     </p>
                   </div>
+                  <Switch
+                    id="event-chatbot-enabled"
+                    checked={chatbot.enabled}
+                    onCheckedChange={(checked) =>
+                      setChatbot((p) => ({ ...p, enabled: !!checked }))
+                    }
+                  />
                 </div>
-              )}
-            </div>
+
+                {chatbot.enabled && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="event-chatbot-name" className="text-sm">{t("Chatbot name")}</Label>
+                    <Input
+                      id="event-chatbot-name"
+                      value={chatbot.name}
+                      maxLength={40}
+                      placeholder={t("Event Assistant")}
+                      onChange={(e) =>
+                        setChatbot((p) => ({ ...p, name: e.target.value }))
+                      }
+                      className="bg-background"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Shown as the chat's title and in its greeting (e.g. "Ravi's
+                      Wedding Helper"). Defaults to "Event Assistant".
+                    </p>
+
+                    <div className="pt-1 space-y-1.5">
+                      <Label htmlFor="event-chatbot-color" className="text-sm">{t("Theme colour")}</Label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          id="event-chatbot-color"
+                          type="color"
+                          value={chatbot.accentColor}
+                          onChange={(e) =>
+                            setChatbot((p) => ({
+                              ...p,
+                              accentColor: e.target.value,
+                            }))
+                          }
+                          className="h-9 w-14 cursor-pointer rounded border bg-background p-0.5"
+                        />
+                        <Input
+                          value={chatbot.accentColor}
+                          onChange={(e) =>
+                            setChatbot((p) => ({
+                              ...p,
+                              accentColor: e.target.value,
+                            }))
+                          }
+                          placeholder="#2563eb"
+                          className="w-32 bg-background font-mono text-sm"
+                        />
+                        {/* Live preview chip */}
+                        <span
+                          className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-white"
+                          style={{ backgroundColor: chatbot.accentColor }}
+                        >
+                          Preview
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Colours the chat header, launcher button and visitor
+                        messages on your public event page.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* VOLUNTEERS TAB — allow-listed Google accounts that can sign in to
@@ -13516,7 +13810,7 @@ export function CreateEventForm({
                           placeholder="0 = Free"
                         />
                         {isIndividualAccount && (
-                          <p className="text-[11px] text-amber-600 mt-1">
+                          <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
                             Individual accounts can only publish free events (no
                             payment processor configured). Upgrade to an
                             Organizer account to charge for tickets.
@@ -16218,6 +16512,7 @@ export function CreateEventForm({
             </ModuleGate>
           </TabsContent>
         </Tabs>
+      </div>
       </div>
 
       {/* Speaker photo cropper. Square by default because the eventfront

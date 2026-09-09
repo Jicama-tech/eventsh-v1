@@ -1,43 +1,24 @@
 import { useState } from "react";
 
-import { ScrollReveal } from "../shared/ScrollReveal";
 import { SeeItInActionSectionProps, ShowcaseEvent } from "../types";
-
-/**
- * Three event boxes, a start bar, then a strip of every other curated demo —
- * the layout from the "simple" template, wearing this one's paint.
- *
- * Each box prefers a real curated showcase event (an admin sets isShowcase;
- * LandingPage does the fetch) and falls back to a drawn CSS preview when
- * there isn't one, or when the curated screenshot 404s. So the row never
- * collapses to one card, and the page never links to a demo that isn't
- * there — the previous version simply rendered nothing at all when the fetch
- * came back empty.
- *
- * Adding a use case is an admin action: flag another event as a showcase and
- * it appears. No code change, no new endpoint.
- */
 
 type Kind = "professional" | "personal" | "conference";
 
-const COPY: Record<
-  Kind,
-  { title: string; blurb: string; tone: "lime" | "pink" | "cyan" }
-> = {
+const COPY: Record<Kind, { title: string; blurb: string; tone: "a" | "b" | "c" }> = {
   professional: {
     title: "A trade show",
     blurb: "Stalls on a map. People pick one and pay.",
-    tone: "lime",
+    tone: "a",
   },
   personal: {
     title: "A wedding",
     blurb: "Guests reply, rooms and tables sort themselves.",
-    tone: "pink",
+    tone: "b",
   },
   conference: {
     title: "A conference",
     blurb: "Passes sold, then scanned at the door.",
-    tone: "cyan",
+    tone: "c",
   },
 };
 
@@ -46,7 +27,14 @@ function imageFor(image: string): string {
   return `${__API_URL__}${image.startsWith("/") ? "" : "/"}${image}`;
 }
 
-/* ---------------- drawn previews: pure CSS, no data, no network ---------- */
+/* ------------------------------------------------------------------
+   Drawn previews — pure CSS, no data, no network.
+
+   A box uses a curated showcase event's screenshot when there is one. If
+   there isn't, or the image fails to load, it falls back to one of these
+   and is tagged "Preview" rather than "Live demo", so the layout never
+   collapses and the page never promises a demo that isn't there.
+   ------------------------------------------------------------------ */
 
 const SOLD = new Set(["A-01", "A-03", "A-05", "B-02", "B-04", "C-02", "C-05"]);
 const STALLS = [
@@ -57,8 +45,8 @@ const STALLS = [
 
 function Chrome({ url, children }: { url: string; children: React.ReactNode }) {
   return (
-    <span className="eh-draw" aria-hidden="true">
-      <span className="eh-drawbar">
+    <span className="sp-draw" aria-hidden="true">
+      <span className="sp-drawbar">
         <i />
         <i />
         <i />
@@ -72,7 +60,7 @@ function Chrome({ url, children }: { url: string; children: React.ReactNode }) {
 function FloorPreview() {
   return (
     <Chrome url="events.yourbrand.com/expo-2027">
-      <span className="eh-floorprev">
+      <span className="sp-floor">
         <b>MAIN STAGE</b>
         {STALLS.map((id) => (
           <s key={id} className={SOLD.has(id) ? "on" : undefined}>
@@ -93,9 +81,9 @@ function GuestPreview() {
   ];
   return (
     <Chrome url="events.yourname.com/wedding">
-      <span className="eh-guests">
+      <span className="sp-guests">
         {guests.map(([initials, name, count]) => (
-          <span className="eh-g" key={name}>
+          <span className="sp-g" key={name}>
             <u>{initials}</u>
             <p>{name}</p>
             <em>{count}</em>
@@ -106,8 +94,8 @@ function GuestPreview() {
   );
 }
 
-// A deterministic block pattern that reads as a QR code without pretending to
-// be a scannable one.
+// A deterministic block pattern that reads as a QR code without pretending
+// to be a scannable one.
 const QR = (() => {
   let s = 4242;
   const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
@@ -122,15 +110,15 @@ function CheckinPreview() {
   ];
   return (
     <Chrome url="events.yourbrand.com/summit/check-in">
-      <span className="eh-checkin">
-        <span className="eh-qr">
+      <span className="sp-checkin">
+        <span className="sp-qr">
           {QR.map((on, i) => (
             <i key={i} className={on ? "on" : undefined} />
           ))}
         </span>
-        <span className="eh-scans">
+        <span className="sp-scans">
           {scans.map(([name, role]) => (
-            <span className="eh-scan" key={name}>
+            <span className="sp-scan" key={name}>
               <u>✓</u>
               <p>{name}</p>
               <em>{role}</em>
@@ -148,10 +136,14 @@ const PREVIEW: Record<Kind, () => JSX.Element> = {
   conference: CheckinPreview,
 };
 
-function startFree() {
-  window.location.assign("/organizer/login");
-}
-
+/**
+ * Three event boxes in a row, then a flat "start your own" bar beneath them.
+ *
+ * Each box prefers a real curated showcase event (admin sets isShowcase;
+ * LandingPage does the fetch) and falls back to a drawn preview otherwise.
+ * The start bar is deliberately shorter than the boxes above it: it is the
+ * destination, not a fourth option to compare.
+ */
 export function SeeItInAction({
   showcaseEvents,
   onOpenDemo,
@@ -166,72 +158,70 @@ export function SeeItInAction({
     { kind: "conference", event: pros[1] },
   ];
 
-  // Every curated event beyond the three featured slots rides in the same
-  // carousel rather than a separate strip — one moving row is easier to take
-  // in than a row plus a list.
+  // Anything curated beyond the three featured boxes becomes the "more
+  // examples" strip. An admin adds a use case simply by flagging another
+  // event as a showcase — no code change, no new endpoint.
   const featured = new Set(slots.map((s) => s.event?._id).filter(Boolean));
-  const extras = showcaseEvents.filter((e) => !featured.has(e._id));
-  const cards: { key: string; kind: Kind; event?: ShowcaseEvent }[] = [
-    ...slots.map((s) => ({ key: s.kind, kind: s.kind, event: s.event })),
-    ...extras.map((e) => ({
-      key: e._id,
-      kind: (e.showcaseKind === "personal" ? "personal" : "professional") as Kind,
-      event: e,
-    })),
-  ];
-
-  // The track is rendered twice back to back so the -50% translation meets
-  // itself and the loop is seamless. The duplicate is aria-hidden so screen
-  // readers and the tab order see each demo once.
-  const track = (dup: boolean) =>
-    cards.map((c) => (
-      <EventBox
-        key={(dup ? "dup-" : "") + c.key}
-        kind={c.kind}
-        event={c.event}
-        onOpenDemo={onOpenDemo}
-        onOpenDemoDashboard={onOpenDemoDashboard}
-      />
-    ));
+  const more = showcaseEvents.filter((e) => !featured.has(e._id));
 
   return (
-    <section className="eh-sec tight" id="demos">
-      <div className="eh-wrap">
-        <ScrollReveal>
-          <div className="eh-head">
-            <span className="eh-kick pink">Not a mock-up</span>
-            <h2>
-              Poke at a <span className="eh-swoon eh-pinkt">real one</span>.
-            </h2>
-            <p className="eh-lede">
-              Live events running on Eventsh right now. Open one the way a
-              guest would.
-            </p>
-          </div>
-        </ScrollReveal>
+    <section className="wrap sp-section" id="demos">
+      <div className="sp-boxes">
+        {slots.map(({ kind, event }) => (
+          <EventBox
+            key={kind}
+            kind={kind}
+            event={event}
+            onOpenDemo={onOpenDemo}
+            onOpenDemoDashboard={onOpenDemoDashboard}
+          />
+        ))}
       </div>
-
-      {/* Full-bleed: the carousel runs past the wrap so cards enter and leave
-          at the window edge instead of popping at a container boundary. */}
-      <div
-        className="eh-marquee"
-        style={{ ["--eh-track" as string]: `${cards.length * 26}s` }}
-      >
-        <div className="eh-track">
-          <div className="eh-track-half">{track(false)}</div>
-          <div className="eh-track-half" aria-hidden="true">
-            {track(true)}
-          </div>
-        </div>
-      </div>
-
-      <div className="eh-wrap">
-        <ScrollReveal>
-          <StartBar />
-        </ScrollReveal>
-      </div>
+      <StartBar />
+      <MoreExamples events={more} onOpenDemo={onOpenDemo} />
     </section>
   );
+}
+
+/**
+ * A compact strip of every other curated demo, one tile per use case.
+ * Renders nothing when nothing else is curated — a heading promising more
+ * examples over an empty row costs more trust than no strip at all.
+ */
+function MoreExamples({
+  events,
+  onOpenDemo,
+}: {
+  events: ShowcaseEvent[];
+  onOpenDemo: (id: string) => void;
+}) {
+  if (events.length === 0) return null;
+  return (
+    <div className="sp-more">
+      <p className="sp-more-h">More live examples</p>
+      <div className="sp-more-grid">
+        {events.map((ev) => (
+          <button
+            type="button"
+            className="sp-chip"
+            key={ev._id}
+            onClick={() => onOpenDemo(ev._id)}
+          >
+            <i
+              className={ev.showcaseKind === "personal" ? "b" : "a"}
+              aria-hidden="true"
+            />
+            <span>{ev.title || "Live event"}</span>
+            <em aria-hidden="true">→</em>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function startFree() {
+  window.location.assign("/organizer/login");
 }
 
 function EventBox({
@@ -262,10 +252,10 @@ function EventBox({
   };
 
   return (
-    <div className="eh-box">
+    <div className="sp-box">
       <button
         type="button"
-        className="eh-screen"
+        className="sp-screen"
         onClick={open}
         aria-label={
           isLive
@@ -284,25 +274,21 @@ function EventBox({
         ) : (
           <Preview />
         )}
-        <span className={`eh-tag ${copy.tone}`}>
+        <span className={`sp-tag ${copy.tone}`}>
           {isLive ? "Live demo" : "Preview"}
         </span>
       </button>
 
-      <div className="eh-box-body">
+      <div className="sp-body">
         <h3>{event?.title || copy.title}</h3>
         <p>{event?.showcaseBlurb || copy.blurb}</p>
-        <button
-          type="button"
-          className={`eh-go ${copy.tone}`}
-          onClick={open}
-        >
+        <button type="button" className={`sp-go ${copy.tone}`} onClick={open}>
           {isLive ? "Open this event →" : "Make one like this →"}
         </button>
         {isLive && hasDashboard && (
           <button
             type="button"
-            className="eh-second"
+            className="sp-second"
             onClick={() => event && onOpenDemoDashboard(event._id)}
           >
             or see the organizer's side →
@@ -313,19 +299,18 @@ function EventBox({
   );
 }
 
-/** Flat and full width, shorter than the boxes above: the destination, not a
- *  fourth option to compare. */
+/** Flat, full-width, half the height of a box. The end of the page. */
 function StartBar() {
   return (
-    <button type="button" className="eh-startbar" onClick={startFree}>
-      <span className="eh-plus" aria-hidden="true">
+    <button type="button" className="sp-startbar" onClick={startFree}>
+      <span className="sp-plus" aria-hidden="true">
         +
       </span>
-      <span className="eh-startcopy">
+      <span className="sp-startcopy">
         <strong>Your event</strong>
         <span>Pick a type, share the link, take bookings. About an hour.</span>
       </span>
-      <span className="eh-startgo">Start free →</span>
+      <span className="sp-startgo">Start free →</span>
     </button>
   );
 }

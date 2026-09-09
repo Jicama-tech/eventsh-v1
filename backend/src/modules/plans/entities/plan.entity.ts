@@ -100,6 +100,31 @@ export class Plan {
     customEmail?: { enabled: boolean };
     // Operators
     operators?: { enabled: boolean; limit: number };
+    // Platform Fees — the organizer's own view of what EventSH charges them
+    // per booking, and the settle-up flow. A sidebar tab in its own right, so
+    // it needs a gate like every other one.
+    platformFees?: { enabled: boolean };
+    // Support — the in-dashboard ticket/enquiry panel. Gateable so a free
+    // tier can be pointed at self-serve help instead.
+    support?: { enabled: boolean };
+    /**
+     * Expense management — logging what an event cost and approving what the
+     * team submitted. `sections.log` is the entry form, `sections.approvals`
+     * the approve/reject decision on a submitted expense.
+     */
+    expenses?: {
+      enabled: boolean;
+      sections?: { log?: boolean; approvals?: boolean };
+    };
+    /**
+     * Supplier management. `sections.directory` is the supplier CRM list,
+     * `sections.requests` the per-event quotation/requests flow — two
+     * separate screens, so a tier can carry one without the other.
+     */
+    suppliers?: {
+      enabled: boolean;
+      sections?: { directory?: boolean; requests?: boolean };
+    };
     // Exhibitor membership programs. When enabled, the organizer can
     // create membership tiers in Settings, list them on the storefront,
     // verify purchases in the dashboard inbox, and offer Member pricing

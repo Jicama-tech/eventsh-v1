@@ -612,11 +612,11 @@ export function StallEditDialog({
                         <Label className="text-xs text-muted-foreground">{t("Registration No.")}</Label>
                         {form.registrationNumber ? (
                           regVerified ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-600">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-600 dark:text-green-400">
                               <CheckCircle2 className="h-3 w-3" /> Verified
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
                               <AlertCircle className="h-3 w-3" /> Not verified
                             </span>
                           )
@@ -692,8 +692,8 @@ export function StallEditDialog({
                           disabled
                             ? "border-border bg-muted opacity-60 cursor-not-allowed"
                             : checked
-                              ? "border-blue-500 bg-blue-50"
-                              : "border-border hover:border-blue-300"
+                              ? "border-blue-500 bg-blue-50 dark:bg-blue-500/10"
+                              : "border-border hover:border-blue-300 dark:border-blue-500/40"
                         }`}
                       >
                         <div className="min-w-0">
@@ -790,7 +790,7 @@ export function StallEditDialog({
               <div className="flex justify-between border-t pt-1">
                 <span className="font-semibold">Amount to collect</span>
                 <span
-                  className={`font-bold ${extra > 0 ? "text-orange-600" : "text-green-600"}`}
+                  className={`font-bold ${extra > 0 ? "text-orange-600 dark:text-orange-400" : "text-green-600 dark:text-green-400"}`}
                 >
                   {formatPrice(extra)}
                 </span>
@@ -802,7 +802,7 @@ export function StallEditDialog({
         ) : (
           // Pay step
           <div className="space-y-3">
-            <div className="rounded-lg bg-orange-50 border border-orange-200 p-3 text-sm">
+            <div className="rounded-lg bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 p-3 text-sm">
               Amount to collect:{" "}
               <span className="font-bold">{formatPrice(amountDue)}</span>
             </div>

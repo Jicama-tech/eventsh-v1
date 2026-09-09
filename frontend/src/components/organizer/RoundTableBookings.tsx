@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { statAccent, STATUS_ACCENTS } from "@/lib/accents";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -73,13 +74,13 @@ const RoundTableBookings = ({
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Paid":
-        return "bg-green-100 text-green-700";
+        return "bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300";
       case "Pending":
-        return "bg-yellow-100 text-yellow-700";
+        return "bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-300";
       case "Submitted":
-        return "bg-blue-100 text-blue-700";
+        return "bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300";
       case "Failed":
-        return "bg-red-100 text-red-700";
+        return "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300";
       case "Refunded":
         return "bg-muted text-muted-foreground";
       default:
@@ -164,7 +165,7 @@ const RoundTableBookings = ({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">
+            <p className={`text-2xl font-bold ${statAccent(0).icon}`}>
               {bookings.length}
             </p>
             <p className="text-xs text-muted-foreground">Total Bookings</p>
@@ -174,12 +175,12 @@ const RoundTableBookings = ({
           <CardContent className="p-4 text-center">
             {submittedCount > 0 ? (
               <>
-                <p className="text-2xl font-bold text-blue-600">{submittedCount}</p>
-                <p className="text-xs text-blue-500 font-medium">Awaiting Confirmation</p>
+                <p className={`text-2xl font-bold ${STATUS_ACCENTS.warning.icon}`}>{submittedCount}</p>
+                <p className="text-xs text-muted-foreground font-medium">Awaiting Confirmation</p>
               </>
             ) : (
               <>
-                <p className="text-2xl font-bold text-green-600">{confirmedCount}</p>
+                <p className={`text-2xl font-bold ${STATUS_ACCENTS.good.icon}`}>{confirmedCount}</p>
                 <p className="text-xs text-muted-foreground">Confirmed</p>
               </>
             )}
@@ -187,13 +188,13 @@ const RoundTableBookings = ({
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-purple-600">{totalSeats}</p>
+            <p className={`text-2xl font-bold ${statAccent(2).icon}`}>{totalSeats}</p>
             <p className="text-xs text-muted-foreground">Seats Booked</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-blue-600">
+            <p className={`text-2xl font-bold ${statAccent(5).icon}`}>
               {formatPrice(totalRevenue)}
             </p>
             <p className="text-xs text-muted-foreground">Revenue</p>
@@ -294,7 +295,7 @@ const RoundTableBookings = ({
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 px-2 mt-1 text-xs text-purple-600 hover:text-purple-800 hover:bg-purple-50"
+                        className="h-6 px-2 mt-1 text-xs text-purple-600 dark:text-purple-400 hover:text-purple-800 hover:bg-purple-50 dark:hover:bg-purple-500/20"
                         onClick={() => setSelectedBooking(booking)}
                       >
                         <Eye size={12} className="mr-1" /> See Details
@@ -312,7 +313,7 @@ const RoundTableBookings = ({
                     </td>
                     <td className="py-3 pr-4">
                       {booking.hasCheckedIn ? (
-                        <Badge className="bg-green-100 text-green-700 text-xs">
+                        <Badge className="bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300 text-xs">
                           {booking.hasCheckedOut ? "Checked Out" : "Checked In"}
                         </Badge>
                       ) : (
@@ -338,7 +339,7 @@ const RoundTableBookings = ({
                         <span className="text-xs text-muted-foreground">Awaiting payment</span>
                       )}
                       {booking.paymentStatus === "Paid" && (
-                        <span className="text-xs text-green-600 font-medium">Confirmed</span>
+                        <span className="text-xs text-green-600 dark:text-green-400 font-medium">Confirmed</span>
                       )}
                     </td>
                     <td className="py-3">
@@ -429,7 +430,7 @@ const RoundTableBookings = ({
                       const guest = selectedBooking.seatGuests?.find((g: any) => g.chairIndex === chairIdx);
                       return (
                         <div key={chairIdx} className="flex items-start gap-2 bg-muted rounded-lg px-3 py-2">
-                          <div className="w-7 h-7 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
+                          <div className="w-7 h-7 rounded-full bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
                             {chairIdx + 1}
                           </div>
                           {guest?.name ? (

@@ -2327,10 +2327,10 @@ export function ChatbotWidget({
                               }
                               disabled={loading}
                               className="text-[11px] px-2 py-1 rounded border border-rose-200 dark:border-rose-500/30 hover:bg-rose-100 dark:bg-rose-500/15 dark:hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/10 font-medium disabled:opacity-50 flex items-center gap-1"
-                              title="View RSVP guest list, total headcount and export"
+                              title="View RSVP participants, total headcount and export"
                             >
                               <Users className="h-3 w-3" />
-                              Guest List
+                              Participants
                             </button>
                           )}
                           {ev.publicUrl && (
@@ -2715,8 +2715,8 @@ export function ChatbotWidget({
           <DialogHeader>
             <DialogTitle className="text-base">
               {rsvpEvent?.title
-                ? `Guest list — ${rsvpEvent.title}`
-                : "Guest list"}
+                ? `Participants — ${rsvpEvent.title}`
+                : "Participants"}
             </DialogTitle>
           </DialogHeader>
           {rsvpEvent && (

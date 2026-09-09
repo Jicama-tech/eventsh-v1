@@ -1,4 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { statAccent, STATUS_ACCENTS } from "@/lib/accents";
+import { useSubscription } from "@/hooks/useSubscription";
+import { ModuleGate } from "@/components/ui/ModuleGate";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +63,12 @@ const STAT_ICONS = {
 };
 
 /**
+ * Tile accents come from lib/accents (shared with kioscart-v1). Assigned by
+ * the tile's own index, never by rank, so a card keeps its colour when a
+ * sibling is added or hidden.
+ */
+
+/**
  * Calculates metrics (tickets sold, revenue, etc.) for a single event based on ticket and stall data.
  * @param {object} event - The event object.
  * @param {Array} tickets - Array of ticket objects belonging to the organizer.
@@ -93,6 +102,16 @@ export default function DashboardOverview({
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showEventDialog, setShowEventDialog] = useState(false);
+  // Plan sub-toggles for the analytics module:
+  //   overview  — the headline stat tiles
+  //   revenue   — money figures inside each event card
+  //   attendees — the attendee/participant counts
+  //   exports   — the CSV / PDF download menu
+  const { isModuleSectionEnabled } = useSubscription();
+  const canOverview = isModuleSectionEnabled("analytics", "overview");
+  const canRevenue = isModuleSectionEnabled("analytics", "revenue");
+  const canAttendees = isModuleSectionEnabled("analytics", "attendees");
+  const canExports = isModuleSectionEnabled("analytics", "exports");
   const [organizerId, setOrganizerId] = useState("");
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [selectedQrCodeEvent, setSelectedQrCodeEvent] = useState(null);
@@ -565,20 +584,22 @@ export default function DashboardOverview({
 
             {/* Data-Rich Metrics Grid - Enhanced with Stall Data */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4 border-t pt-4">
-              {/* Metric 1: Tickets Sold */}
+              {/* Metric 1: Tickets Sold — the attendee-count metric. */}
+              {canAttendees && (
               <div className="text-center">
-                <div className="text-xl font-bold text-blue-600">
+                <div className={`text-xl font-bold ${statAccent(0).icon}`}>
                   {ticketsSold}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Tickets Sold
                 </div>
               </div>
+              )}
 
               {/* Metric 2: Stalls Booked — shown against the total sellable
                   spaces in the venue so it reads as "booked of available". */}
               <div className="text-center">
-                <div className="text-xl font-bold text-purple-600">
+                <div className={`text-xl font-bold ${statAccent(4).icon}`}>
                   {stallsBooked}
                   {sellableSpaces > 0 && (
                     <span className="text-sm font-semibold text-muted-foreground">
@@ -593,38 +614,44 @@ export default function DashboardOverview({
               </div>
 
               {/* Metric 3: Total Revenue */}
+              {canRevenue && (
               <div className="text-center">
-                <div className="text-xl font-bold text-green-600">
+                <div className={`text-xl font-bold ${statAccent(1).icon}`}>
                   {formatPrice(revenue)}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Total Revenue
                 </div>
               </div>
+              )}
 
               {/* Metric 4: Tickets Revenue */}
+              {canRevenue && (
               <div className="text-center">
-                <div className="text-lg font-semibold text-blue-500">
+                <div className={`text-lg font-semibold ${statAccent(5).icon}`}>
                   {formatPrice(ticketsRevenue)}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Tickets Revenue
                 </div>
               </div>
+              )}
 
               {/* Metric 5: Stalls Revenue */}
+              {canRevenue && (
               <div className="text-center">
-                <div className="text-lg font-semibold text-purple-500">
+                <div className={`text-lg font-semibold ${statAccent(2).icon}`}>
                   {formatPrice(stallsRevenue)}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Stalls Revenue
                 </div>
               </div>
+              )}
 
               {/* Metric 6: Pending Stalls */}
               <div className="text-center">
-                <div className="text-lg font-semibold text-orange-500">
+                <div className={`text-lg font-semibold ${STATUS_ACCENTS.warning.icon}`}>
                   {stallsPending}
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -770,6 +797,7 @@ export default function DashboardOverview({
                     <MessageSquare className="h-4 w-4 mr-1" />
                     Feedback
                   </Button>
+                  {canExports && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -798,6 +826,7 @@ export default function DashboardOverview({
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  )}
                 </>
               )}
             </div>
@@ -1373,13 +1402,15 @@ export default function DashboardOverview({
       </div>
 
       {/* Stats Grid */}
+      <ModuleGate moduleKey="analytics" sectionKey="overview" hideWhenLocked>
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4 sm:gap-6">
         {stats.map((stat, index) => {
           const Icon = STAT_ICONS[stat.title] || CalendarDays;
+          const accent = statAccent(index);
           return (
             <Card
               key={index}
-              className="transition-all hover:bg-muted dark:hover:bg-gray-800"
+              className={`border-l-4 ${accent.ring} transition-all hover:bg-muted dark:hover:bg-gray-800`}
             >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 {/* stat.title stays English in the array: it doubles as the
@@ -1388,10 +1419,14 @@ export default function DashboardOverview({
                 <CardTitle className="text-sm font-medium">
                   {t(stat.title)}
                 </CardTitle>
-                <Icon className="h-4 w-4 text-muted-foreground" />
+                <span
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg ${accent.chip}`}
+                >
+                  <Icon className={`h-4 w-4 ${accent.icon}`} />
+                </span>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
+                <div className={`text-2xl font-bold ${accent.icon}`}>
                   {stat.title === "Total Revenue"
                     ? formatPrice(stat.value)
                     : stat.value}
@@ -1404,6 +1439,7 @@ export default function DashboardOverview({
           );
         })}
       </div>
+      </ModuleGate>
 
       <hr />
 

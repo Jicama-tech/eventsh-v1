@@ -62,19 +62,19 @@ export function Footer() {
           <h5>Platform</h5>
           <ul>
             <li>
-              <a href="#platform">Floor plan designer</a>
+              Floor plan designer
             </li>
             <li>
-              <a href="#platform">Registration</a>
+              Registration
             </li>
             <li>
-              <a href="#money">Payments</a>
+              Payments
             </li>
             <li>
-              <a href="#platform">Suppliers</a>
+              Suppliers
             </li>
             <li>
-              <a href="#money">Ledger &amp; invoicing</a>
+              Ledger &amp; invoicing
             </li>
           </ul>
         </div>
@@ -83,19 +83,19 @@ export function Footer() {
           <h5>Events</h5>
           <ul>
             <li>
-              <a href="#worlds">Expos &amp; trade shows</a>
+              Expos &amp; trade shows
             </li>
             <li>
-              <a href="#worlds">Conferences</a>
+              Conferences
             </li>
             <li>
-              <a href="#worlds">Weddings</a>
+              Weddings
             </li>
             <li>
-              <a href="#worlds">Award nights</a>
+              Award nights
             </li>
             <li>
-              <a href="#worlds">Workshops</a>
+              Workshops
             </li>
           </ul>
         </div>

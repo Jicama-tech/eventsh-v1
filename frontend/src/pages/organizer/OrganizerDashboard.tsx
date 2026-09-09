@@ -19,12 +19,15 @@ import {
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import {
   CalendarDays,
   Users,
@@ -39,7 +42,6 @@ import {
   Mic2,
   HelpCircle,
   Circle,
-  Bot,
   PanelLeftClose,
   PanelLeftOpen,
   MessageSquare,
@@ -67,6 +69,15 @@ import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useNavigate } from "react-router-dom";
 import { t } from "@/i18n/t";
+import { EventTypeChooser } from "@/components/organizer/EventTypeChooser";
+import { STAT_ACCENTS } from "@/lib/accents";
+import {
+  accountRoles,
+  isIndividualAccount,
+  INDIVIDUAL_NAV_ITEMS,
+  INDIVIDUAL_HOME_TAB,
+  BECOME_ORGANIZER_TAB,
+} from "@/lib/individualAccess";
 
 // Lazy-load heavy tab components (only loaded when their tab is active)
 const CreateEventForm = lazy(() =>
@@ -133,6 +144,9 @@ const IndividualMyEvents = lazy(
 );
 const IndividualGuestList = lazy(
   () => import("@/components/organizer/IndividualGuestList"),
+);
+const IndividualAnalytics = lazy(
+  () => import("@/components/organizer/IndividualAnalytics"),
 );
 const OrganizerFeedbackList = lazy(
   () => import("@/components/organizer/OrganizerFeedbackList"),
@@ -232,19 +246,25 @@ function RoundTableBookingsTab({ apiURL }: { apiURL: string }) {
 
       {rtEvents.length > 0 ? (
         <div className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {rtEvents.map((event: any) => (
-              <Button
-                key={event._id}
-                size="sm"
-                variant={selectedId === event._id ? "default" : "outline"}
-                onClick={() => setSelectedId(event._id)}
-                className="text-xs"
-              >
-                {event.title}
-              </Button>
-            ))}
-          </div>
+          <ModuleGate
+            moduleKey="roundTableBookings"
+            sectionKey="byEvent"
+            hideWhenLocked
+          >
+            <div className="flex flex-wrap gap-2">
+              {rtEvents.map((event: any) => (
+                <Button
+                  key={event._id}
+                  size="sm"
+                  variant={selectedId === event._id ? "default" : "outline"}
+                  onClick={() => setSelectedId(event._id)}
+                  className="text-xs"
+                >
+                  {event.title}
+                </Button>
+              ))}
+            </div>
+          </ModuleGate>
 
           {selectedId ? (
             <Suspense
@@ -254,7 +274,9 @@ function RoundTableBookingsTab({ apiURL }: { apiURL: string }) {
                 </div>
               }
             >
-              <RoundTableBookings eventId={selectedId} />
+              <ModuleGate moduleKey="roundTableBookings" sectionKey="list">
+                <RoundTableBookings eventId={selectedId} />
+              </ModuleGate>
             </Suspense>
           ) : (
             <Card>
@@ -325,21 +347,11 @@ export function OrganizerDashboard({
     !isOperator || operatorAccessTabs.includes(tabId);
 
   // Individual onboarding mode — user signed in via Google but hasn't
-  // completed organizer registration. Sidebar is fully hidden; they can
-  // only interact via the chatbot which is restricted to two actions:
-  // open Create Event or open the organizer registration form.
-  const userRoles: string[] = (() => {
-    try {
-      const token = sessionStorage.getItem("token");
-      if (!token) return [];
-      const decoded: any = jwtDecode(token);
-      return Array.isArray(decoded.roles) ? (decoded.roles as string[]) : [];
-    } catch {
-      return [];
-    }
-  })();
-  const isIndividual =
-    userRoles.includes("individual") && !userRoles.includes("organizer");
+  // completed organizer registration. They get the same sidebar chrome as
+  // organizers but a much shorter tab list (see `individualNavItems`), and
+  // the assistant is their landing tab rather than analytics.
+  const userRoles: string[] = accountRoles();
+  const isIndividual = isIndividualAccount(userRoles);
   // Read-only demo session (prospect exploring the demo org from the landing).
   // Writes are blocked in the UI (and by the backend DemoReadonlyGuard).
   const demoMode = (() => {
@@ -386,15 +398,21 @@ export function OrganizerDashboard({
 
   // UI State
   const [organizerId, setOrganizerId] = useState("");
-  // Analytics is the landing tab for organizers; the assistant is the
-  // bottom-right bubble instead of a tab (see the ChatbotWidget mount at the
-  // end of this file). Individuals keep the chatbot as their landing tab —
-  // they have no sidebar, so that page is their whole dashboard.
+  // The assistant is the bottom-right bubble for both account types now, not
+  // a tab (see the single ChatbotWidget mount at the end of this file), so
+  // both land on analytics. The two values stay separate rather than being
+  // collapsed: INDIVIDUAL_HOME_TAB is owned by lib/individualAccess and can
+  // move without dragging the organizer landing tab with it.
   const [activeTab, setActiveTab] = useState(
-    isIndividual ? "chatbot" : "dashboard",
+    isIndividual ? INDIVIDUAL_HOME_TAB : "dashboard",
   );
-  // Individual "Guest List" tab: event pre-selected when jumping from a My
-  // Events card's Guest List button.
+  // Individual "Participants" tab: event pre-selected when jumping from a My
+  // Events card's Participants button. The tab id stays `guest-list`.
+  const [showIndividualTypeChooser, setShowIndividualTypeChooser] =
+    useState(false);
+  // Tab the user asked for while the event form was open; the confirm dialog
+  // below either completes or discards the move.
+  const [pendingNavTab, setPendingNavTab] = useState<string | null>(null);
   const [guestListEventId, setGuestListEventId] = useState<string>("");
   const [selectedRTEventId, setSelectedRTEventId] = useState<string | null>(
     null,
@@ -887,14 +905,13 @@ export function OrganizerDashboard({
             }
           : null,
       );
-      // Individuals have no events-module access — switching to the Events
-      // tab would surface the ModuleGate's "Upgrade Plan" lock card behind
-      // the modal, and they'd be stranded there after closing (no sidebar
-      // to navigate back). Keep them on the chatbot tab; the Dialog renders
-      // into a portal so it appears on top regardless of the active tab.
-      if (!isIndividual) {
-        handleTabChange("events");
-      }
+      // Everyone lands on Events behind the form, so closing it leaves you
+      // looking at the event you just made. This used to be organizer-only,
+      // on the grounds that ModuleGate would show Individuals an "Upgrade
+      // Plan" card — no longer true: useSubscription hands them a permissive
+      // subscription, and the Events tab renders IndividualMyEvents for them
+      // with no gate at all.
+      handleTabChange("events");
       setShowCreateEvent(true);
       return;
     }
@@ -905,9 +922,7 @@ export function OrganizerDashboard({
         const json = await res.json();
         const ev = json?.data || json;
         setEditingEvent(ev);
-        if (!isIndividual) {
-          handleTabChange("events");
-        }
+        handleTabChange("events");
         setShowCreateEvent(true);
       } catch (e: any) {
         toast({
@@ -990,6 +1005,52 @@ export function OrganizerDashboard({
     setSidebarOpen(false);
   };
 
+  /**
+   * Perform a tab switch, applying the per-account-type rules: the storefront
+   * entry is an action rather than a tab, and Individuals bypass the demo gate
+   * (their demo is deliberately browsable).
+   */
+  const goToTab = (tab: string) => {
+    if (tab === "storefront") {
+      handleViewStorefront();
+      return;
+    }
+    // Action entries leave the dashboard rather than switching tab.
+    if (tab === BECOME_ORGANIZER_TAB) {
+      handleOpenOrganizerRegister();
+      return;
+    }
+    if (isIndividual) {
+      setActiveTab(tab);
+      setSidebarOpen(false);
+      return;
+    }
+    handleTabChange(tab);
+  };
+
+  /**
+   * Every sidebar / bottom-bar / assistant navigation goes through here.
+   *
+   * The event form is an `absolute inset-0` overlay over <main>, so it covers
+   * the tab content but NOT the sidebar. Clicking a tab behind it therefore
+   * changed activeTab while the form stayed mounted on top — the switch
+   * happened, it was just invisible, which reads as "the sidebar is dead".
+   * Ask before leaving, since closing the form drops whatever is typed in it.
+   */
+  const requestTabChange = (tab: string) => {
+    if (showCreateEvent) {
+      setPendingNavTab(tab);
+      return;
+    }
+    goToTab(tab);
+  };
+
+  const closeEventForm = () => {
+    setShowCreateEvent(false);
+    setEditingEvent(null);
+    setCreateDefaults(null);
+  };
+
   // --- Configuration ---
 
   const navigationItems = [
@@ -1015,7 +1076,7 @@ export function OrganizerDashboard({
       id: "platformFees",
       label: t("nav.platformFees"),
       icon: Receipt,
-      moduleKey: null,
+      moduleKey: "platformFees",
     },
     {
       id: "users",
@@ -1048,7 +1109,7 @@ export function OrganizerDashboard({
       id: "support",
       label: t("nav.support"),
       icon: LifeBuoy,
-      moduleKey: null,
+      moduleKey: "support",
     },
     {
       id: "storefront",
@@ -1059,6 +1120,45 @@ export function OrganizerDashboard({
     },
     { id: "settings", label: t("nav.settings"), icon: Settings, moduleKey: null },
   ];
+
+  // Individuals get the same sidebar chrome as organizers, just a much
+  // shorter list: the tabs that actually have an Individual branch behind
+  // them. No moduleKey on any of them — Individuals have no subscription
+  // modules, so nothing here can ever render locked.
+  /**
+   * One accent per sidebar entry, so the rail reads as a set of distinct
+   * destinations rather than a column of identical blue-grey glyphs — and so
+   * the collapsed icon rail is navigable by colour alone.
+   *
+   * Only the inactive state is tinted: the active item already has the solid
+   * primary fill behind it, and a coloured glyph on that would fight it.
+   */
+  const NAV_ACCENTS: Record<string, string> = {
+    dashboard: STAT_ACCENTS[0].icon,
+    kiosk: STAT_ACCENTS[2].icon,
+    eventAttendees: STAT_ACCENTS[4].icon,
+    platformFees: STAT_ACCENTS[3].icon,
+    users: STAT_ACCENTS[5].icon,
+    events: STAT_ACCENTS[0].icon,
+    feedback: STAT_ACCENTS[3].icon,
+    membership: STAT_ACCENTS[2].icon,
+    support: STAT_ACCENTS[1].icon,
+    storefront: STAT_ACCENTS[4].icon,
+    settings: "text-muted-foreground",
+    "guest-list": STAT_ACCENTS[3].icon,
+    "email-settings": STAT_ACCENTS[5].icon,
+    help: STAT_ACCENTS[1].icon,
+    "become-organizer": STAT_ACCENTS[3].icon,
+  };
+
+  const individualNavItems = INDIVIDUAL_NAV_ITEMS.map((item) => ({
+    id: item.id,
+    label: t(item.labelKey),
+    icon: item.icon,
+    moduleKey: null,
+  }));
+
+  const sidebarItems = isIndividual ? individualNavItems : navigationItems;
 
   if (showPreview) {
     return (
@@ -1101,21 +1201,19 @@ export function OrganizerDashboard({
       <header className="safe-t border-b bg-card sticky top-0 z-50 flex-shrink-0">
         <div className="flex h-14 sm:h-16 items-center justify-between px-4 sm:px-6">
           <div className="flex items-center space-x-2">
-            {/* Mobile menu button — hidden for Individuals (no sidebar) */}
-            {!isIndividual && (
-              <Button
-                variant="buttonOutline"
-                size="sm"
-                className="lg:hidden"
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-              >
-                {sidebarOpen ? (
-                  <X className="h-5 w-5" />
-                ) : (
-                  <Menu className="h-5 w-5" />
-                )}
-              </Button>
-            )}
+            {/* Mobile menu button — Individuals have a sidebar too now */}
+            <Button
+              variant="buttonOutline"
+              size="sm"
+              className="lg:hidden"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+            >
+              {sidebarOpen ? (
+                <X className="h-5 w-5" />
+              ) : (
+                <Menu className="h-5 w-5" />
+              )}
+            </Button>
 
             <CalendarDays className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
             <h1 className="text-lg sm:text-xl font-bold hidden sm:block">
@@ -1132,68 +1230,22 @@ export function OrganizerDashboard({
                 header actions differ below. */}
             <LanguageToggle />
             <ThemeToggle />
-            {!isIndividual && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs sm:text-sm text-muted-foreground hidden sm:flex items-center gap-1 hover:text-primary"
-                onClick={() => setActiveTab("help")}
-              >
-                <HelpCircle className="h-4 w-4" />
-                {t("hdr.help")}
-              </Button>
-            )}
-            {isIndividual ? (
-              // Individuals: on phones (no sidebar) Settings/Help/Logout live
-              // in this dropdown; on desktop/tablet the sidebar carries
-              // Settings & Help, so the header shows a plain Logout instead.
-              <>
-                <div className="md:hidden">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="buttonOutline" size="sm">
-                        <Menu className="h-4 w-4 sm:mr-2" />
-                        <span className="hidden sm:inline">Menu</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-44">
-                      <DropdownMenuItem
-                        onClick={() => setActiveTab("email-settings")}
-                      >
-                        <Settings className="mr-2 h-4 w-4" />
-                        Settings
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setActiveTab("help")}>
-                        <HelpCircle className="mr-2 h-4 w-4" />
-                        Help
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={logout}
-                        className="text-red-600 focus:text-red-600"
-                      >
-                        <LogOut className="mr-2 h-4 w-4" />
-                        Logout
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-                <Button
-                  variant="buttonOutline"
-                  size="sm"
-                  onClick={logout}
-                  className="hidden md:flex"
-                >
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Logout
-                </Button>
-              </>
-            ) : (
-              <Button variant="buttonOutline" size="sm" onClick={logout}>
-                <LogOut className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Logout</span>
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs sm:text-sm text-muted-foreground hidden sm:flex items-center gap-1 hover:text-primary"
+              onClick={() => requestTabChange("help")}
+            >
+              <HelpCircle className="h-4 w-4" />
+              {t("hdr.help")}
+            </Button>
+            {/* Settings and Help are sidebar entries for Individuals now, so
+                the header carries the same lone Logout button organizers get
+                rather than a second menu duplicating that navigation. */}
+            <Button variant="buttonOutline" size="sm" onClick={logout}>
+              <LogOut className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Logout</span>
+            </Button>
           </div>
         </div>
       </header>
@@ -1204,16 +1256,15 @@ export function OrganizerDashboard({
           blocked by the backend DemoReadonlyGuard. */}
       <div className="flex flex-1 overflow-hidden z-40">
         {/* Mobile Sidebar Overlay */}
-        {sidebarOpen && !isIndividual && (
+        {sidebarOpen && (
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300"
             onClick={() => setSidebarOpen(false)}
           />
         )}
 
-        {/* Sidebar — fully hidden for Individuals (chatbot-only onboarding) */}
-        {!isIndividual && (
-          <aside
+        {/* Sidebar — same chrome for both; `sidebarItems` decides the list. */}
+        <aside
             className={`
             fixed lg:static lg:translate-x-0
             w-64 ${sidebarCollapsed ? "lg:w-16" : "lg:w-64"}
@@ -1228,9 +1279,23 @@ export function OrganizerDashboard({
           `}
           >
             <div className="h-full flex flex-col">
-              <nav className="p-3 sm:p-4 space-y-1 sm:space-y-2 flex-1 overflow-y-auto">
+              {/* overflow-x-hidden is not redundant: CSS computes an
+                  unset overflow-x to `auto` as soon as overflow-y is set,
+                  so this container grew a horizontal scrollbar whenever a
+                  button was a pixel wider than the rail — most visible
+                  collapsed, where the rail is only 4rem. The nav should
+                  never scroll sideways, so say so. */}
+              <nav
+                className={`space-y-1 sm:space-y-2 flex-1 overflow-y-auto overflow-x-hidden ${
+                  // Collapsed the rail is 4rem. sm:p-4 leaves 32px inside
+                  // it, the button's own px takes 16 and its border 2 —
+                  // so a 16px icon did not fit and got shaved. Tighten
+                  // the padding at the width where it actually matters.
+                  sidebarCollapsed ? "p-3 sm:p-4 lg:p-2" : "p-3 sm:p-4"
+                }`}
+              >
                 <TooltipProvider delayDuration={0}>
-                  {navigationItems
+                  {sidebarItems
                     .filter(
                       (item) =>
                         isTabAllowedForOperator(item.id) &&
@@ -1248,21 +1313,26 @@ export function OrganizerDashboard({
                           }
                           className={`w-full text-sm ${
                             sidebarCollapsed
-                              ? "lg:justify-center lg:px-2 justify-start"
+                              ? "lg:justify-center lg:px-0 justify-start"
                               : "justify-start"
                           } ${locked ? "opacity-60" : ""}`}
                           onClick={() => {
                             // Demo: only the allowed tabs open; the rest (incl.
                             // the storefront action) prompt to register/contact.
-                            if (demoMode && !DEMO_VIEW_TABS.includes(item.id)) {
+                            // Individuals are exempt — their demo (the wedding)
+                            // is meant to stay browsable, and DEMO_VIEW_TABS
+                            // lists none of their tabs, so gating here would
+                            // put the register prompt behind every click.
+                            // Writes are still blocked by DemoReadonlyGuard.
+                            if (
+                              !isIndividual &&
+                              demoMode &&
+                              !DEMO_VIEW_TABS.includes(item.id)
+                            ) {
                               setShowDemoPrompt(true);
                               return;
                             }
-                            if (item.id === "storefront") {
-                              handleViewStorefront();
-                            } else {
-                              handleTabChange(item.id);
-                            }
+                            requestTabChange(item.id);
                           }}
                           disabled={item.id === "storefront" && loading}
                           title={
@@ -1272,6 +1342,10 @@ export function OrganizerDashboard({
                           <item.icon
                             className={`h-4 w-4 flex-shrink-0 ${
                               sidebarCollapsed ? "lg:mr-0 mr-2" : "mr-2"
+                            } ${
+                              activeTab === item.id
+                                ? ""
+                                : NAV_ACCENTS[item.id] || ""
                             }`}
                           />
                           <span
@@ -1328,42 +1402,12 @@ export function OrganizerDashboard({
                 </Button>
               </div>
             </div>
-          </aside>
-        )}
+        </aside>
 
-        {/* Individual sidebar — desktop/tablet only (md+). Phones use the
-            bottom tab bar instead. Mirrors the bottom-bar nav plus Settings
-            & Help (which move here off the mobile Menu dropdown). */}
-        {isIndividual && (
-          <aside className="hidden md:flex w-56 flex-shrink-0 border-r bg-muted/30">
-            <nav className="flex-1 space-y-1 overflow-y-auto p-4">
-              {[
-                { id: "chatbot", label: t("navi.chatbot"), icon: Bot },
-                { id: "events", label: t("navi.events"), icon: CalendarDays },
-                { id: "guest-list", label: t("navi.guest-list"), icon: Users },
-                { id: "email-settings", label: t("navi.email-settings"), icon: Settings },
-                { id: "help", label: t("navi.help"), icon: HelpCircle },
-              ].map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Button
-                    key={item.id}
-                    variant={activeTab === item.id ? "default" : "buttonOutline"}
-                    className="w-full justify-start text-sm"
-                    onClick={() => setActiveTab(item.id)}
-                  >
-                    <Icon className="mr-2 h-4 w-4 flex-shrink-0" />
-                    {item.label}
-                  </Button>
-                );
-              })}
-            </nav>
-          </aside>
-        )}
 
         {/* Main Content - Scrollable */}
         <main
-          className="flex-1 overflow-hidden flex flex-col"
+          className="relative flex-1 overflow-hidden flex flex-col"
           // Demo: in the organizer (professional) view the 4 allowed tabs render
           // their content, but any control click opens the register/contact
           // prompt. The Individual (wedding) view is left interactive so the
@@ -1383,61 +1427,25 @@ export function OrganizerDashboard({
               : undefined
           }
         >
-          <div
-            className={
-              activeTab === "chatbot"
-                ? "flex-1 overflow-hidden"
-                : "flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6"
-            }
-          >
+          {/* Every tab scrolls now. The assistant used to need an
+              overflow-hidden full-height variant here because it was mounted
+              as a tab; it is the floating bubble for everyone instead. */}
+          <div className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6">
             <Tabs
               value={activeTab}
               onValueChange={setActiveTab}
-              className={activeTab === "chatbot" ? "h-full" : "w-full"}
+              className="w-full"
             >
-              {/* AI Assistant as a full page — Individuals only. They have
-                  no sidebar, so this is their dashboard. Organizers reach the
-                  same assistant from the floating bubble instead, and must not
-                  mount it here as well: two live instances would each hold
-                  their own transcript. */}
-              {isIndividual && (
-              <TabsContent
-                value="chatbot"
-                className="mt-0 h-full data-[state=inactive]:hidden"
-              >
-                <ChatbotWidget
-                  mode="page"
-                  isIndividual={isIndividual}
-                  onOpenOrganizerRegister={handleOpenOrganizerRegister}
-                  navItems={
-                    isIndividual
-                      ? []
-                      : navigationItems
-                          .filter((n) => n.id !== "chatbot")
-                          .filter(
-                            (n) =>
-                              isTabAllowedForOperator(n.id) &&
-                              isTabVisible(n.id),
-                          )
-                          .map((n) => ({
-                            id: n.id,
-                            label: n.label,
-                            icon: n.icon,
-                          }))
-                  }
-                  onNavigate={(tab) => {
-                    if (isIndividual) return; // locked to chatbot
-                    if (tab === "storefront") handleViewStorefront();
-                    else handleTabChange(tab);
-                  }}
-                  onOpenEventForm={handleOpenEventForm}
-                  onOpenAddVisitor={handleOpenAddVisitor}
-                  onOpenAddExhibitor={handleOpenAddExhibitor}
-                />
-              </TabsContent>
-              )}
-
               <TabsContent value="dashboard" className="mt-0">
+                {isIndividual ? (
+                  // Individuals get their own analytics: DashboardOverview
+                  // builds its requests from the JWT `sub` (a User id for
+                  // them, not their email-keyed Organizer id) and leads on
+                  // stalls and revenue splits they do not have.
+                  <Suspense fallback={<TabLoader />}>
+                    <IndividualAnalytics />
+                  </Suspense>
+                ) : (
                 <ModuleGate moduleKey="analytics" hideWhenLocked>
                   <div className="space-y-4 sm:space-y-6">
 
@@ -1516,6 +1524,7 @@ export function OrganizerDashboard({
                     {/* <OrganizerAnalyticsCharts /> */}
                   </div>
                 </ModuleGate>
+                )}
               </TabsContent>
 
               <TabsContent value="events" className="mt-0">
@@ -1525,12 +1534,10 @@ export function OrganizerDashboard({
                   <Suspense fallback={<TabLoader />}>
                     <IndividualMyEvents
                       onCreateEvent={() =>
-                        // Individuals only create Marriage events — seed the
-                        // type so the Marriage form opens (not the commercial one).
-                        handleOpenEventForm("create", {
-                          eventType: "personal",
-                          category: "Marriage Function",
-                        })
+                        // Individuals can create commercial events as well as
+                        // personal ones now, so ask which — the same pre-step
+                        // organizers get. The pick decides which form opens.
+                        setShowIndividualTypeChooser(true)
                       }
                       onEditEvent={(eventId, eventTitle) =>
                         handleOpenEventForm("edit", { eventId, eventTitle })
@@ -1552,7 +1559,7 @@ export function OrganizerDashboard({
                 )}
               </TabsContent>
 
-              {/* Individual-only: Guest List (RSVPs) for a chosen event. */}
+              {/* Individual-only: Participants (RSVPs) for a chosen event. */}
               {isIndividual && (
                 <TabsContent value="guest-list" className="mt-0">
                   <Suspense fallback={<TabLoader />}>
@@ -1578,7 +1585,11 @@ export function OrganizerDashboard({
               </TabsContent>
 
               <TabsContent value="users" className="mt-0">
-                <ModuleGate moduleKey="stalls" hideWhenLocked>
+                <ModuleGate
+                  moduleKey="stalls"
+                  sectionKey="exhibitors"
+                  hideWhenLocked
+                >
                   <Suspense fallback={<TabLoader />}>
                     <div className="space-y-4">
                       <MyEventUsers setShowAddUser={setShowAddUser} />
@@ -1598,9 +1609,11 @@ export function OrganizerDashboard({
               </TabsContent>
 
               <TabsContent value="platformFees" className="mt-0">
+                <ModuleGate moduleKey="platformFees" hideWhenLocked>
                 <Suspense fallback={<TabLoader />}>
                   <PlatformFeesPanel />
                 </Suspense>
+                </ModuleGate>
               </TabsContent>
 
               <TabsContent value="speakerRequests" className="mt-0">
@@ -1621,7 +1634,11 @@ export function OrganizerDashboard({
               </TabsContent>
 
               <TabsContent value="shopkeepers" className="mt-0">
-                <ModuleGate moduleKey="stalls" hideWhenLocked>
+                <ModuleGate
+                  moduleKey="stalls"
+                  sectionKey="vendorRequests"
+                  hideWhenLocked
+                >
                   <Suspense fallback={<TabLoader />}>
                     <div className="space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -1688,9 +1705,11 @@ export function OrganizerDashboard({
               </TabsContent>
 
               <TabsContent value="support" className="mt-0">
+                <ModuleGate moduleKey="support" hideWhenLocked>
                 <Suspense fallback={<TabLoader />}>
                   <SupportPanel />
                 </Suspense>
+                </ModuleGate>
               </TabsContent>
 
               <TabsContent value="storefront" className="mt-0 outline-none">
@@ -1726,29 +1745,89 @@ export function OrganizerDashboard({
               </TabsContent>
             </Tabs>
           </div>
+
+          {/* The event form fills the content area rather than the viewport.
+              As a full-screen dialog it covered the sidebar and the header;
+              overlaying <main> keeps both usable while the form is open, and
+              leaves this huge Tabs block untouched.
+
+              It stays mounted for as long as showCreateEvent is true — see
+              handleUpdateEvent, which deliberately leaves it open after a save
+              so the local edits survive. */}
+          {/* Individuals pick commercial vs personal here; organizers get the
+              same pre-step inside MyEvents. */}
+          <Suspense fallback={null}>
+            <EventTypeChooser
+              open={showIndividualTypeChooser}
+              onOpenChange={setShowIndividualTypeChooser}
+              onConfirm={({ eventType, subtype }) => {
+                setShowIndividualTypeChooser(false);
+                handleOpenEventForm("create", {
+                  eventType,
+                  category: subtype,
+                });
+              }}
+            />
+          </Suspense>
+
+          {showCreateEvent && (
+            <div className="absolute inset-0 z-30 overflow-y-auto bg-background">
+              <Suspense fallback={null}>
+                {(() => {
+                  const activeInitial = editingEvent ?? createDefaults;
+                  // Personal → "Marriage Function" events use the dedicated
+                  // wedding form; everything else uses the commercial form.
+                  // Mirrors the switch in MyEvents.tsx so the Individual
+                  // (chatbot) flow gets the same marriage experience.
+                  const isMarriage =
+                    activeInitial?.eventType === "personal" &&
+                    (activeInitial?.category === "Marriage Function" ||
+                      activeInitial?.categories?.includes?.(
+                        "Marriage Function",
+                      ));
+                  const FormComponent = isMarriage
+                    ? MarriageEventForm
+                    : CreateEventForm;
+                  const close = closeEventForm;
+                  return (
+                    <FormComponent
+                      onClose={close}
+                      onSave={
+                        editingEvent ? handleUpdateEvent : handleCreateEvent
+                      }
+                      editMode={!!editingEvent}
+                      initialData={activeInitial}
+                      // Individuals creating a commercial event can fill in
+                      // Basic Info, Media and Visitors; the other sections
+                      // still show, but open the upgrade panel below.
+                      // Ignored by MarriageEventForm.
+                      basicOnly={isIndividual}
+                      onOpenOrganizerRegister={handleOpenOrganizerRegister}
+                    />
+                  );
+                })()}
+              </Suspense>
+            </div>
+          )}
         </main>
       </div>
 
-      {/* Individual dashboard — mobile-app style bottom tab bar. Phones only
-          (md:hidden — tablets and up get the desktop layout); on those the
-          assistant fills the screen and email settings are in the header. */}
+      {/* Individual dashboard — mobile-app style bottom tab bar. */}
+      {/* Phones only: the sidebar is a drawer behind the hamburger at that
+          width, so the same entries stay as one-tap shortcuts. Driven off the
+          shared list, so adding a tab adds it here too. Tablets and up have
+          the sidebar on screen and don't need this. */}
       {isIndividual && (
-        <nav className="safe-b z-40 flex-shrink-0 border-t bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 md:hidden">
+        <nav className="safe-b z-40 flex-shrink-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
           <div className="mx-auto flex max-w-md items-stretch">
-            {[
-              // Settings & Help moved to the header menu (near Logout).
-              // Assistant stays as the "home" tab so users can get back.
-              { id: "chatbot", label: t("navi.chatbot"), icon: Bot },
-              { id: "events", label: t("navi.events"), icon: CalendarDays },
-              { id: "guest-list", label: t("navi.guest-list"), icon: Users },
-            ].map((it) => {
+            {individualNavItems.map((it) => {
               const Icon = it.icon;
               const active = activeTab === it.id;
               return (
                 <button
                   key={it.id}
                   type="button"
-                  onClick={() => setActiveTab(it.id)}
+                  onClick={() => requestTabChange(it.id)}
                   className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium transition ${
                     active
                       ? "text-primary"
@@ -1766,60 +1845,6 @@ export function OrganizerDashboard({
 
       {/* --- Modals and Forms (lazy-loaded on demand) --- */}
       <Suspense fallback={null}>
-        {/* The big forms run full-screen (matches the MyEvents flow, and
-            kioscart-v1's ProductForm): far more content than a centered card
-            can show. Still a Dialog rather than an inline swap, because the
-            form must not unmount while it is open — see handleUpdateEvent,
-            which deliberately leaves it mounted after a save so the local
-            edits survive. EventFormShell supplies the title bar. */}
-        <Dialog
-          open={showCreateEvent}
-          onOpenChange={(open) => {
-            if (!open) {
-              setShowCreateEvent(false);
-              setEditingEvent(null);
-            }
-          }}
-        >
-          <DialogContent fullScreen className="p-0">
-            {showCreateEvent &&
-              (() => {
-                  const activeInitial = editingEvent ?? createDefaults;
-                  // Personal → "Marriage Function" events use the dedicated
-                  // wedding form; everything else uses the commercial form.
-                  // Mirrors the switch in MyEvents.tsx so the Individual
-                  // (chatbot) flow gets the same marriage experience.
-                  const isMarriage =
-                    activeInitial?.eventType === "personal" &&
-                    (activeInitial?.category === "Marriage Function" ||
-                      activeInitial?.categories?.includes?.(
-                        "Marriage Function",
-                      ));
-                  const FormComponent = isMarriage
-                    ? MarriageEventForm
-                    : CreateEventForm;
-                  const close = () => {
-                    setShowCreateEvent(false);
-                    setEditingEvent(null);
-                    setCreateDefaults(null);
-                  };
-                  return (
-                    <EventFormShell
-                      title={eventFormTitle(!!isMarriage, !!editingEvent)}
-                    >
-                      <FormComponent
-                        onClose={close}
-                        onSave={
-                          editingEvent ? handleUpdateEvent : handleCreateEvent
-                        }
-                        editMode={!!editingEvent}
-                        initialData={activeInitial}
-                      />
-                    </EventFormShell>
-                  );
-                })()}
-          </DialogContent>
-        </Dialog>
 
         {showShopkeeperForm && (
           <ShopkeeperRequestForm
@@ -1883,25 +1908,54 @@ export function OrganizerDashboard({
         )}
       </Suspense>
 
-      {/* Floating EventSH AI bubble — the organizer's only way into the
-          assistant now that it is not a sidebar tab. It sits outside <Tabs>
-          and is not keyed on activeTab, so it stays mounted across tab
-          switches and the conversation survives navigation.
+      {/* Leaving the event form loses whatever has been typed into it, so a
+          tab click while it is open asks first rather than silently discarding
+          (or silently doing nothing, which is what it used to do). */}
+      <AlertDialog
+        open={pendingNavTab !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingNavTab(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave the event form?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Anything you have filled in and not saved will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Stay on the form</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const tab = pendingNavTab;
+                setPendingNavTab(null);
+                closeEventForm();
+                if (tab) goToTab(tab);
+              }}
+            >
+              Leave
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-          Hidden for individuals, who get the full-page assistant above and
-          reach it from the bottom tab bar — the bubble would overlap it. */}
-      {!isIndividual && (
-        <ChatbotWidget
-          navItems={navigationItems
-            .filter((n) => isTabAllowedForOperator(n.id) && isTabVisible(n.id))
-            .map((n) => ({ id: n.id, label: n.label, icon: n.icon }))}
-          onNavigate={(tab) => {
-            if (tab === "storefront") handleViewStorefront();
-            else handleTabChange(tab);
-          }}
-          onOpenEventForm={handleOpenEventForm}
-        />
-      )}
+      {/* Floating EventSH AI bubble — the only way into the assistant for
+          organizers and Individuals alike. It sits outside <Tabs> and is not
+          keyed on activeTab, so it stays mounted across tab switches and the
+          conversation survives navigation. Mount it exactly once: a second
+          live instance would keep its own separate transcript. */}
+      <ChatbotWidget
+        isIndividual={isIndividual}
+        onOpenOrganizerRegister={handleOpenOrganizerRegister}
+        navItems={sidebarItems
+          .filter((n) => isTabAllowedForOperator(n.id) && isTabVisible(n.id))
+          .map((n) => ({ id: n.id, label: n.label, icon: n.icon }))}
+        onNavigate={requestTabChange}
+        onOpenEventForm={handleOpenEventForm}
+        onOpenAddVisitor={handleOpenAddVisitor}
+        onOpenAddExhibitor={handleOpenAddExhibitor}
+      />
     </div>
   );
 }

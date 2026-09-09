@@ -159,14 +159,14 @@ export default function EmailSenderSettings() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3 rounded-xl border border-rose-100 bg-rose-50/50 p-4">
+      <div className="flex items-start justify-between gap-3 rounded-xl border border-rose-100 dark:border-rose-500/30 bg-rose-50/50 dark:bg-rose-500/10 p-4">
         <div className="flex items-start gap-3">
           <Mail className="mt-0.5 h-5 w-5 flex-shrink-0 text-rose-500" />
           <div>
-            <p className="text-sm font-semibold text-stone-800">
+            <p className="text-sm font-semibold text-foreground">
               Send from your own email
             </p>
-            <p className="mt-1 text-xs text-stone-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               When on, RSVP confirmations and other guest emails are sent from
               your address using your own mail server (SMTP), so they land in the
               inbox — not spam. When off, they come from EventSH.
@@ -237,7 +237,7 @@ export default function EmailSenderSettings() {
           <Label className="text-xs">
             SMTP password{" "}
             {hasPassword && (
-              <span className="text-emerald-600">(saved)</span>
+              <span className="text-emerald-600 dark:text-emerald-400">(saved)</span>
             )}
           </Label>
           <div className="relative">
@@ -251,7 +251,7 @@ export default function EmailSenderSettings() {
             <button
               type="button"
               onClick={() => setShowPass((v) => !v)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               tabIndex={-1}
             >
               {showPass ? (
@@ -264,7 +264,7 @@ export default function EmailSenderSettings() {
         </div>
       </div>
 
-      <p className="text-xs text-stone-400">
+      <p className="text-xs text-muted-foreground">
         Tip: with Gmail, use an{" "}
         <a
           href="https://support.google.com/accounts/answer/185833"

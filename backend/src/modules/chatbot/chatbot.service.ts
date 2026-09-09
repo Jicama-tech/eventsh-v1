@@ -29,6 +29,34 @@ const PERSONAL_EVENT_TYPES: Array<{ category: string; keywords: string[] }> = [
   },
 ];
 
+/**
+ * Commercial sub-types an Individual can create without registering an
+ * organization. Mirrors EVENT_TYPE_GROUPS.commercial.subtypes on the
+ * frontend — keep the category strings identical, they are what the Create
+ * Event form opens pre-filled with.
+ *
+ * Individuals get Basic Info, Media and Visitors on these (see `basicOnly`
+ * in CreateEventForm); stalls, speakers and venue layouts stay organizer-only.
+ * events.controller lazy-creates the backing Organizer row on first publish,
+ * so none of this needs registration up front.
+ */
+const COMMERCIAL_EVENT_TYPES: Array<{ category: string; keywords: string[] }> =
+  [
+    { category: "Conference", keywords: ["conference", "summit"] },
+    { category: "Exhibition", keywords: ["exhibition", "expo"] },
+    { category: "Bazaar", keywords: ["bazaar", "bazar", "flea market"] },
+    { category: "Trade Show", keywords: ["trade show", "tradeshow"] },
+    { category: "Seminar", keywords: ["seminar"] },
+    { category: "Workshop", keywords: ["workshop", "training session"] },
+    { category: "Product Launch", keywords: ["product launch"] },
+    { category: "Networking Event", keywords: ["networking", "mixer"] },
+    { category: "Job Fair", keywords: ["job fair", "career fair"] },
+    {
+      category: "Movie / Concert",
+      keywords: ["movie", "concert", "screening"],
+    },
+  ];
+
 type ConvEntry = {
   role: "user" | "assistant" | "tool" | "system";
   content: string;
@@ -2761,6 +2789,15 @@ ${context}
     const chosenPersonalType = PERSONAL_EVENT_TYPES.find((t) =>
       t.keywords.some((k) => m.includes(k)),
     );
+    // Same, for the commercial sub-types. Individuals can publish these
+    // without registering an organization, so a named one opens the form
+    // rather than the registration pitch it used to trigger.
+    const chosenCommercialType =
+      wantsMyEvents || wantsParticipants
+        ? undefined
+        : COMMERCIAL_EVENT_TYPES.find((t) =>
+            t.keywords.some((k) => m.includes(k)),
+          );
 
     // Resolve the backing Organizer record (lazy-created on first event
     // publish — see events.controller.ensureIndividualOrganizer). If
@@ -3107,26 +3144,46 @@ ${context}
           { label: "Pick a different type", action: "I want to create an event" },
           {
             label: "Professional event instead",
-            action: "Register my organization for professional events",
+            action: "Create a Conference event",
           },
         ],
       };
     }
-    // Generic "create an event" → show the Personal Event List to pick from.
-    // Each pill re-enters this handler with a specific type (handled above).
+    // A commercial sub-type was named → open the Create Event form pre-filled
+    // with it. No registration step: events.controller lazy-creates the
+    // backing Organizer row when they publish.
+    if (chosenCommercialType) {
+      return {
+        text: `Opening the Create Event form for your **${chosenCommercialType.category}**. You can fill in the details, media and visitor types — stalls, speakers and venue layouts need a full organizer account, and the form will show you what those unlock.`,
+        botAction: {
+          type: "openCreateEvent",
+          eventType: "commercial",
+          category: chosenCommercialType.category,
+        },
+        quickActions: [
+          {
+            label: "Pick a different type",
+            action: "I want to create an event",
+          },
+          { label: "Become an organizer", action: "I want to register as an organizer" },
+        ],
+      };
+    }
+    // Generic "create an event" → show both lists to pick from. Each pill
+    // re-enters this handler with a specific type (handled above).
     if (wantsCreateEvent) {
       return {
         text:
-          "Let's set up your wedding — tap below and I'll open the invitation form ready for it. Planning something professional with ticketing, stalls or exhibitors instead? Register an organization.",
+          "What are you putting together? Pick a type and I'll open the form ready for it — personal celebrations and professional events both work on your account, no registration needed.",
         quickActions: [
           ...PERSONAL_EVENT_TYPES.map((t) => ({
             label: t.category,
             action: `Create a ${t.category} event`,
           })),
-          {
-            label: "Professional event (register org)",
-            action: "Register my organization for professional events",
-          },
+          ...COMMERCIAL_EVENT_TYPES.map((t) => ({
+            label: t.category,
+            action: `Create a ${t.category} event`,
+          })),
         ],
       };
     }

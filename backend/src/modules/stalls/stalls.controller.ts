@@ -14,6 +14,7 @@
   UploadedFile,
   UploadedFiles,
   UseInterceptors,
+  BadRequestException,
 } from "@nestjs/common";
 import { Response } from "express";
 import { StallPaymentSchedulerService } from "./stall-payment-scheduler.service";
@@ -526,6 +527,50 @@ export class StallsController {
   @Post(":id/resend-ticket")
   async resendTicket(@Param("id") id: string) {
     return await this.stallsService.resendStallTicket(id);
+  }
+
+  /**
+   * Re-send tickets to every confirmed (Paid) exhibitor on an event, with an
+   * optional organizer-written note and a countdown to the event.
+   * POST /stalls/bulk-send-tickets  { eventId, message? }
+   *
+   * Safe to sit below the ":id/..." routes: those are all two-segment paths
+   * and there is no bare @Post(":id") to shadow this one.
+   */
+  @Post("bulk-send-tickets")
+  async bulkSendTickets(
+    @Body()
+    body: {
+      eventId?: string;
+      message?: string;
+      channels?: { email?: boolean; whatsapp?: boolean };
+      /** Default true — false sends the message with no ticket or QR. */
+      attachTicket?: boolean;
+    },
+  ) {
+    if (!body?.eventId) {
+      throw new BadRequestException("eventId is required");
+    }
+    const channels = body.channels ?? { email: true };
+    if (!channels.email && !channels.whatsapp) {
+      throw new BadRequestException("Pick at least one channel");
+    }
+    return await this.stallsService.bulkSendStallTickets(
+      body.eventId,
+      body.message,
+      channels,
+      body.attachTicket !== false,
+    );
+  }
+
+  /**
+   * Whether WhatsApp can actually deliver right now, so the dashboard can
+   * offer it honestly instead of showing a channel that silently drops.
+   * GET /stalls/whatsapp-status
+   */
+  @Get("whatsapp-status")
+  whatsappStatus() {
+    return this.stallsService.whatsAppStatus();
   }
 
   /**

@@ -36,16 +36,28 @@ import { Styles } from "./Styles";
  * lives in hub.css, injected for this route only by Styles and scoped under
  * `.eh` (rootClassName).
  */
+/**
+ * The page is deliberately short: a headline, the live demos, and a way in.
+ *
+ * The long argument — the problem cards, the twelve capabilities, the ledger,
+ * the two worlds, the comparison table, the rollout steps and the FAQ — is
+ * not deleted. Those section components still live in this folder and are
+ * still wired to the template's optional slots; they are simply not passed
+ * below. Someone arriving on the homepage has already clicked: they want to
+ * see the thing working, not read a spec sheet. Put a slot back and its
+ * section returns exactly as it was:
+ *
+ *   Replaces: Problem,      // stat strip + "eleven jobs at once"
+ *   Modules: Platform,      // before/after + the twelve capabilities
+ *   Screens: Money,         // the ledger, two worlds, the comparison table
+ *   HowItWorks: Rollout,    // the five steps and the FAQ
+ */
 export const eventshubTemplate: LandingTemplate = {
   rootClassName: "eh min-h-screen",
   Styles,
   Nav,
   Hero,
-  Replaces: Problem,
-  Modules: Platform,
-  Screens: Money,
   SeeItInAction,
-  HowItWorks: Rollout,
   CTA,
   Footer,
 };

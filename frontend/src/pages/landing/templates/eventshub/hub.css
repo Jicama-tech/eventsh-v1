@@ -53,7 +53,12 @@
   font-size: 16px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
+  /* `clip`, not `hidden`. With overflow-x:hidden the other axis computes to
+     `auto`, which makes this element a scroll container — and a sticky
+     descendant then sticks to it rather than to the viewport, so the nav
+     scrolled away instead of staying put. `clip` contains the hero blobs the
+     same way without creating a scroll container. */
+  overflow-x: clip;
 }
 
 .eh *,
@@ -293,7 +298,7 @@
   max-width: var(--maxw);
   margin: 0 auto;
   padding-inline: var(--pad);
-  height: 68px;
+  height: 84px;
   display: flex;
   align-items: center;
   gap: 24px;
@@ -308,11 +313,48 @@
   letter-spacing: -0.04em;
   color: var(--text);
   text-decoration: none;
+  /* The brand shares a flex row with the section links and the CTA. Without
+     this it is allowed to shrink, and the logo squashes on narrow screens
+     instead of the links wrapping away. */
+  flex: none;
 }
 .eh-brand img {
-  height: 30px;
+  /* The asset is 1696x608, so height drives the size and width follows the
+     2.8:1 ratio. Never set both, or it distorts. */
+  height: 34px;
   width: auto;
   display: block;
+}
+/* The nav bar is sized around its logo; the footer's sits above the blurb
+   and can be generous without pushing anything. Both scale down together
+   in the media queries below. */
+.eh-nav .eh-brand img {
+  height: 56px;
+}
+.eh-foot .eh-brand img {
+  height: 50px;
+}
+@media (max-width: 900px) {
+  .eh-nav-in {
+    height: 72px;
+  }
+  .eh-nav .eh-brand img {
+    height: 44px;
+  }
+  .eh-foot .eh-brand img {
+    height: 44px;
+  }
+}
+@media (max-width: 600px) {
+  .eh-nav-in {
+    height: 64px;
+  }
+  .eh-nav .eh-brand img {
+    height: 38px;
+  }
+  .eh-foot .eh-brand img {
+    height: 40px;
+  }
 }
 .eh-nav-links {
   display: flex;
@@ -1226,97 +1268,453 @@
   max-width: 70ch;
 }
 
-/* ---------------- live demos ---------------- */
-.eh-demos {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 18px;
-}
-@media (min-width: 700px) {
-  .eh-demos {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-@media (min-width: 1040px) {
-  .eh-demos {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-.eh-demo-card {
+/* ---------------- live demos: three boxes + start bar ---------------- */
+.eh-box {
+  display: flex;
+  flex-direction: column;
   border: 2px solid var(--line);
   border-radius: var(--r);
   background: var(--surface);
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
   transition:
     transform 0.16s ease,
-    box-shadow 0.16s ease;
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
 }
-.eh-demo-card:hover {
+.eh-box:hover {
   transform: translate(-3px, -3px);
   box-shadow: 8px 8px 0 rgba(169, 123, 255, 0.55);
 }
-.eh-shot {
+/* the screen is a button — strip the UA styling */
+.eh-screen {
+  position: relative;
   display: block;
   width: 100%;
   padding: 0;
   border: 0;
+  border-bottom: 1px solid var(--line);
   background: var(--raised);
+  text-align: left;
   cursor: pointer;
-  aspect-ratio: 16 / 10;
+  aspect-ratio: 16 / 11;
   overflow: hidden;
 }
-.eh-shot img {
+.eh-screen img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
-.eh-demo-body {
+.eh-tag {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  box-shadow: 3px 3px 0 rgba(10, 7, 16, 0.55);
+}
+.eh-tag.lime {
+  background: var(--lime);
+  color: var(--ink);
+}
+.eh-tag.pink {
+  background: var(--pink);
+  color: #fff;
+}
+.eh-tag.cyan {
+  background: var(--cyan);
+  color: var(--ink);
+}
+.eh-box-body {
   padding: 20px 22px 24px;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 8px;
   flex: 1;
 }
-.eh-demo-body .kind {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-.eh-demo-body h4 {
+.eh-box-body h3 {
   font-size: 20px;
   line-height: 1.15;
 }
-.eh-demo-body p {
+.eh-box-body p {
   font-size: 13.5px;
   color: var(--muted);
 }
-.eh-open {
+.eh-go {
   margin-top: auto;
-  padding-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: flex-start;
-}
-.eh-open button {
-  background: none;
-  border: 0;
   padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
   font: inherit;
   font-size: 13.5px;
   font-weight: 700;
-  color: var(--muted);
   cursor: pointer;
+  transition: color 0.16s;
 }
-.eh-open button.hi {
+.eh-go.lime {
   color: var(--lime);
 }
-.eh-open button:hover {
+.eh-go.pink {
   color: var(--pink);
+}
+.eh-go.cyan {
+  color: var(--cyan);
+}
+.eh-go:hover {
+  color: var(--text);
+}
+.eh-second {
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--dim);
+  cursor: pointer;
+  transition: color 0.16s;
+}
+.eh-second:hover {
+  color: var(--muted);
+}
+
+/* the start bar — flat, full width, shorter than a box */
+.eh-startbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  margin-top: 18px;
+  padding: 18px 22px;
+  border: 2px solid var(--ink);
+  border-radius: 18px;
+  background: var(--lime);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 6px 6px 0 rgba(169, 123, 255, 0.9);
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    background 0.16s ease;
+}
+.eh-startbar:hover {
+  background: var(--lime2);
+  transform: translate(-2px, -2px);
+  box-shadow: 9px 9px 0 rgba(169, 123, 255, 0.9);
+}
+.eh-plus {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  border: 2px dashed rgba(10, 7, 16, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 700;
+}
+.eh-startcopy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.eh-startcopy strong {
+  font-family: var(--display);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.eh-startcopy span {
+  font-size: 13px;
+  color: rgba(10, 7, 16, 0.72);
+}
+.eh-startgo {
+  margin-left: auto;
+  flex: none;
+  font-family: var(--body);
+  font-size: 14.5px;
+  font-weight: 700;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  padding: 10px 20px;
+  background: var(--ink);
+  color: var(--lime);
+}
+@media (max-width: 620px) {
+  .eh-startbar {
+    flex-wrap: wrap;
+  }
+  .eh-startgo {
+    margin-left: 0;
+    width: 100%;
+    text-align: center;
+  }
+}
+
+/* ---------------- demo carousel ----------------
+   A single continuously-moving row. The track holds the cards twice, so
+   translating it -50% lands exactly where it started and the loop has no
+   seam. Duration scales with the number of cards (--eh-track, set inline)
+   so adding a curated event keeps the same speed rather than making the row
+   travel faster. */
+.eh-marquee {
+  position: relative;
+  overflow: hidden;
+  padding: 6px 0 10px;
+  /* fade the two ends so cards arrive and leave instead of being cut */
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 6%,
+    #000 94%,
+    transparent
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 6%,
+    #000 94%,
+    transparent
+  );
+}
+.eh-track {
+  display: flex;
+  width: max-content;
+  animation: eh-marquee var(--eh-track, 78s) linear infinite;
+}
+/* Hovering pauses it, so a card can actually be read and clicked. */
+.eh-marquee:hover .eh-track,
+.eh-marquee:focus-within .eh-track {
+  animation-play-state: paused;
+}
+.eh-track-half {
+  display: flex;
+  gap: 18px;
+  padding-right: 18px;
+}
+.eh-track .eh-box {
+  width: 340px;
+  flex: none;
+}
+@keyframes eh-marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+@media (max-width: 600px) {
+  .eh-track .eh-box {
+    width: 280px;
+  }
+}
+/* Motion off: fall back to a normal horizontal scroller the reader drives. */
+@media (prefers-reduced-motion: reduce) {
+  .eh-marquee {
+    overflow-x: auto;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  .eh-track {
+    animation: none;
+  }
+  .eh-track-half + .eh-track-half {
+    display: none;
+  }
+}
+
+/* ---------------- drawn previews ----------------
+   A box with no curated event draws one of these instead, so the row never
+   collapses and the page never links to a demo that is not there. */
+.eh-draw {
+  display: block;
+  height: 100%;
+  padding: 14px;
+  background: var(--raised);
+}
+.eh-drawbar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+.eh-drawbar i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line);
+  flex: none;
+  display: block;
+}
+.eh-drawbar em {
+  flex: 1;
+  min-width: 0;
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  color: var(--dim);
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 9px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.eh-floorprev {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 5px;
+}
+.eh-floorprev b {
+  grid-column: 1 / -1;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--lime-wash);
+  border: 1px solid rgba(201, 255, 61, 0.32);
+  font-family: var(--mono);
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--lime);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.eh-floorprev s {
+  height: 30px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  text-decoration: none;
+  font-family: var(--mono);
+  font-size: 7px;
+  color: var(--dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.eh-floorprev s.on {
+  background: rgba(53, 224, 138, 0.14);
+  border-color: rgba(53, 224, 138, 0.42);
+  color: var(--mint);
+}
+
+.eh-guests {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.eh-g {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 7px 9px;
+}
+.eh-g u {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  text-decoration: none;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 8px;
+  background: var(--pink-wash);
+  color: var(--pink);
+}
+.eh-g p {
+  font-size: 10.5px;
+  color: var(--muted);
+  margin: 0;
+}
+.eh-g em {
+  margin-left: auto;
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 8px;
+  color: var(--mint);
+}
+
+.eh-checkin {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.eh-qr {
+  flex: none;
+  width: 96px;
+  height: 96px;
+  padding: 6px;
+  border-radius: 10px;
+  background: #fff;
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  grid-auto-rows: 1fr;
+}
+.eh-qr i {
+  display: block;
+  background: transparent;
+}
+.eh-qr i.on {
+  background: var(--ink);
+}
+.eh-scans {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.eh-scan {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 7px 9px;
+}
+.eh-scan u {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  text-decoration: none;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  border: 1px solid rgba(61, 224, 255, 0.5);
+  color: var(--cyan);
+}
+.eh-scan p {
+  font-size: 10px;
+  color: var(--muted);
+  margin: 0;
+  white-space: nowrap;
+}
+.eh-scan em {
+  margin-left: auto;
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 7.5px;
+  color: var(--dim);
 }
 
 /* ---------------- cta ---------------- */

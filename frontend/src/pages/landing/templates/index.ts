@@ -2,6 +2,7 @@ import { LandingTemplate } from "./types";
 import { defaultTemplate } from "./default";
 import { eventshubTemplate } from "./eventshub";
 import { genzTemplate } from "./genz";
+import { simpleTemplate } from "./simple";
 
 // Registry of swappable landing-page templates. A white-label deployment
 // adds its own directory here (e.g. templates/acme/index.ts, same
@@ -9,6 +10,7 @@ import { genzTemplate } from "./genz";
 // time — the page itself (LandingPage.tsx) owns all the data/state and is
 // unaffected by which template renders it.
 const TEMPLATES: Record<string, LandingTemplate> = {
+  simple: simpleTemplate,
   eventshub: eventshubTemplate,
   genz: genzTemplate,
   default: defaultTemplate,
