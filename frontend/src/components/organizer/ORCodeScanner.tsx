@@ -259,6 +259,12 @@ export default function QRTicketScanner() {
   const [manualLoading, setManualLoading] = useState(false);
   const [manualBusyId, setManualBusyId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("scanner");
+  // The row awaiting a typed CHECK_OUT confirmation. Manual check-out is the
+  // one manual action that cannot be undone, so it gets the same gate the
+  // scanner puts in front of a scanned check-out.
+  const [pendingManualRow, setPendingManualRow] = useState<ManualRow | null>(
+    null,
+  );
 
   // Hold the "Verified" beat long enough to register before the next screen
   // replaces it. Short enough that a queue does not build behind it.
@@ -603,6 +609,22 @@ export default function QRTicketScanner() {
     action: "CHECK_IN" | "CHECK_OUT",
   ) => {
     if (!requireLiveSession()) return;
+    // Check-out ends the exhibitor's day and releases them; there is no undo,
+    // so make the volunteer type it out — same bar as a scanned check-out.
+    if (action === "CHECK_OUT") {
+      setPendingManualRow(row);
+      setCheckOutConfirmInput("");
+      setCheckOutConfirmError("");
+      setShowCheckOutConfirmDialog(true);
+      return;
+    }
+    await performManualAttendance(row, action);
+  };
+
+  const performManualAttendance = async (
+    row: ManualRow,
+    action: "CHECK_IN" | "CHECK_OUT",
+  ) => {
     setManualBusyId(row.stallId);
     try {
       const res = await fetch(
@@ -789,6 +811,14 @@ export default function QRTicketScanner() {
       return;
     }
     setShowCheckOutConfirmDialog(false);
+    // The Manual tab shares this dialog; a pending row means it opened it, and
+    // it has no scanMode of its own to dispatch on.
+    if (pendingManualRow) {
+      const row = pendingManualRow;
+      setPendingManualRow(null);
+      await performManualAttendance(row, "CHECK_OUT");
+      return;
+    }
     if (scanMode === "speaker-ticket") {
       await processSpeakerAction("CHECK_OUT");
     } else if (scanMode === "round-table") {
@@ -2129,6 +2159,32 @@ export default function QRTicketScanner() {
             </Card>
           )}
 
+            </TabsContent>
+            {eventData?.features?.hasStalls && (
+              <TabsContent value="manual" className="mt-4">
+                {renderManualSearch()}
+              </TabsContent>
+            )}
+            {(eventData?.features?.hasStalls ||
+              eventData?.features?.hasRoundTables ||
+              eventData?.features?.hasSpeakers) && (
+            <TabsContent value="venue" className="mt-4">
+              {eventId ? (
+                <OperatorVenueView eventId={eventId} />
+              ) : (
+                <div className="text-sm text-muted-foreground italic text-center py-8">
+                  No event id in URL.
+                </div>
+              )}
+            </TabsContent>
+            )}
+          </Tabs>
+        )}
+
+        {/* Rendered OUTSIDE <Tabs>: Radix unmounts the inactive tab, so
+            while this lived inside the Scanner tab a check-out started from
+            the Manual tab opened a dialog that could never appear — the
+            action simply did nothing. */}
         {/* ─── CHECK_OUT Confirmation Dialog ─────────────────────────────────── */}
         {showCheckOutConfirmDialog && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -2139,8 +2195,21 @@ export default function QRTicketScanner() {
                   <CardTitle className="text-base">{t("Confirm Check Out")}</CardTitle>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Are you sure you want to <strong>Check Out</strong> this
-                  {scanMode === "speaker-ticket" ? " speaker" : scanMode === "round-table" ? " visitor" : " exhibitor"}? This action cannot be undone.
+                  Are you sure you want to <strong>Check Out</strong>{" "}
+                  {pendingManualRow ? (
+                    <strong>
+                      {pendingManualRow.shopName ||
+                        pendingManualRow.businessName ||
+                        pendingManualRow.name}
+                    </strong>
+                  ) : scanMode === "speaker-ticket" ? (
+                    "this speaker"
+                  ) : scanMode === "round-table" ? (
+                    "this visitor"
+                  ) : (
+                    "this exhibitor"
+                  )}
+                  ? This action cannot be undone.
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -2179,6 +2248,7 @@ export default function QRTicketScanner() {
                       setCheckOutConfirmInput("");
                       setCheckOutConfirmError("");
                       setStallAction(null);
+                      setPendingManualRow(null);
                     }}
                   >
                     Cancel
@@ -2200,27 +2270,6 @@ export default function QRTicketScanner() {
               </CardContent>
             </Card>
           </div>
-        )}
-            </TabsContent>
-            {eventData?.features?.hasStalls && (
-              <TabsContent value="manual" className="mt-4">
-                {renderManualSearch()}
-              </TabsContent>
-            )}
-            {(eventData?.features?.hasStalls ||
-              eventData?.features?.hasRoundTables ||
-              eventData?.features?.hasSpeakers) && (
-            <TabsContent value="venue" className="mt-4">
-              {eventId ? (
-                <OperatorVenueView eventId={eventId} />
-              ) : (
-                <div className="text-sm text-muted-foreground italic text-center py-8">
-                  No event id in URL.
-                </div>
-              )}
-            </TabsContent>
-            )}
-          </Tabs>
         )}
       </div>
     </div>
