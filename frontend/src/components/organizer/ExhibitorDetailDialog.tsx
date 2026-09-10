@@ -54,13 +54,6 @@ import { toast } from "@/hooks/use-toast";
 import { jwtDecode } from "jwt-decode";
 import { t } from "@/i18n/t";
 
-export interface StallFeedback {
-  rating: number;
-  comment?: string;
-  submittedAt?: string;
-  refundStatus?: string;
-}
-
 interface StatusHistoryEntry {
   status: string;
   note?: string;

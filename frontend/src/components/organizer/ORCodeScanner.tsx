@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Shield,
   AlertCircle,
+  Search,
 } from "lucide-react";
 import { Html5QrcodeScanner, Html5Qrcode } from "html5-qrcode";
 import { jwtDecode } from "jwt-decode";
@@ -93,6 +94,22 @@ interface Event {
   location?: string;
 }
 
+// One searchable exhibitor on the manual check-in list.
+interface ManualRow {
+  stallId: string;
+  name: string;
+  shopName: string;
+  businessName: string;
+  category: string;
+  tables: string[];
+  status: string;
+  paymentStatus: string;
+  hasCheckedIn: boolean;
+  hasCheckedOut: boolean;
+  checkInTime?: string | null;
+  checkOutTime?: string | null;
+}
+
 interface StallData {
   _id: string;
   action: string;
@@ -111,9 +128,12 @@ interface StallData {
 interface EventData {
   _id: string;
   title: string;
-  organizer: {
-    whatsAppNumber: string;
-    organizationName: string;
+  // Optional in practice: an event whose organizer was not populated by the
+  // API arrives without it, and reading through it blank-screened the whole
+  // scanner at a gate with no way back.
+  organizer?: {
+    whatsAppNumber?: string;
+    organizationName?: string;
   };
   // Which modules this event actually has turned on — gates which scan
   // buttons show up below (no point offering to scan Speaker Passes on an
@@ -138,6 +158,20 @@ type ScanMode =
   | "workshop"
   | "scheduled-space"
   | null;
+// What the volunteer is told while a scan is in flight. Without this the
+// camera simply froze on the last frame during the round trip, which reads as
+// "nothing happened" — so people re-present the badge and scan twice.
+type ScanPhase = null | "reading" | "verifying" | "verified";
+
+const SCAN_PHASE_COPY: Record<
+  Exclude<ScanPhase, null>,
+  { title: string; subtitle: string }
+> = {
+  reading: { title: "QR detected", subtitle: "Reading the code…" },
+  verifying: { title: "Verifying…", subtitle: "Checking with the server" },
+  verified: { title: "Verified", subtitle: "" },
+};
+
 type Step =
   | "otp-verification"
   | "mode-selection"
@@ -216,6 +250,28 @@ export default function QRTicketScanner() {
     null,
   );
   const [errorMessage, setErrorMessage] = useState("");
+  const [scanPhase, setScanPhase] = useState<ScanPhase>(null);
+
+  // Manual check-in: the exhibitor list a volunteer searches when someone
+  // arrives without a ticket.
+  const [manualQuery, setManualQuery] = useState("");
+  const [manualRows, setManualRows] = useState<ManualRow[]>([]);
+  const [manualLoading, setManualLoading] = useState(false);
+  const [manualBusyId, setManualBusyId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("scanner");
+  // The row awaiting a typed CHECK_OUT confirmation. Manual check-out is the
+  // one manual action that cannot be undone, so it gets the same gate the
+  // scanner puts in front of a scanned check-out.
+  const [pendingManualRow, setPendingManualRow] = useState<ManualRow | null>(
+    null,
+  );
+
+  // Hold the "Verified" beat long enough to register before the next screen
+  // replaces it. Short enough that a queue does not build behind it.
+  const showVerified = async () => {
+    setScanPhase("verified");
+    await new Promise((r) => setTimeout(r, 700));
+  };
 
   // Single writer for the processing flag: the ref is what the frozen
   // html5-qrcode callback can actually read, the state is what re-renders.
@@ -359,6 +415,7 @@ export default function QRTicketScanner() {
   // signed-in user and the landing page otherwise.
   const handleExitScanner = () => {
     clearRecoveryTimer();
+    setScanPhase(null);
     setProcessing(false);
     if (qrCodeRef.current) {
       const inst = qrCodeRef.current;
@@ -444,6 +501,7 @@ export default function QRTicketScanner() {
   const handleModeSelection = (mode: ScanMode) => {
     clearRecoveryTimer();
     scanGenerationRef.current++;
+    setScanPhase(null);
     setProcessing(false);
     setScanMode(mode);
     setStep("scanning");
@@ -518,6 +576,95 @@ export default function QRTicketScanner() {
     }
   };
 
+  const loadManualRows = async (q: string) => {
+    if (!eventId) return;
+    setManualLoading(true);
+    try {
+      const res = await fetch(
+        `${apiURL}/stalls/event/${eventId}/manual-attendance${
+          q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""
+        }`,
+        { headers: authHeaders() },
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(formatApiError(body, "Could not load exhibitors"));
+      }
+      setManualRows(body.data || []);
+    } catch (e: unknown) {
+      toast({
+        duration: 5000,
+        title: "Could not load exhibitors",
+        description: e instanceof Error ? e.message : "Try again.",
+        variant: "destructive",
+      });
+      setManualRows([]);
+    } finally {
+      setManualLoading(false);
+    }
+  };
+
+  const manualAttendance = async (
+    row: ManualRow,
+    action: "CHECK_IN" | "CHECK_OUT",
+  ) => {
+    if (!requireLiveSession()) return;
+    // Check-out ends the exhibitor's day and releases them; there is no undo,
+    // so make the volunteer type it out — same bar as a scanned check-out.
+    if (action === "CHECK_OUT") {
+      setPendingManualRow(row);
+      setCheckOutConfirmInput("");
+      setCheckOutConfirmError("");
+      setShowCheckOutConfirmDialog(true);
+      return;
+    }
+    await performManualAttendance(row, action);
+  };
+
+  const performManualAttendance = async (
+    row: ManualRow,
+    action: "CHECK_IN" | "CHECK_OUT",
+  ) => {
+    setManualBusyId(row.stallId);
+    try {
+      const res = await fetch(
+        `${apiURL}/stalls/${row.stallId}/manual-attendance`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ action }),
+        },
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(formatApiError(body, "Could not update attendance"));
+      }
+      toast({
+        duration: 5000,
+        title: action === "CHECK_IN" ? "Checked in" : "Checked out",
+        description: `${row.shopName || row.businessName || row.name} — recorded without a QR.`,
+      });
+      // Re-read rather than patching locally: the server is the authority on
+      // whether the transition actually applied, and another volunteer may
+      // have moved this booking in the meantime.
+      await loadManualRows(manualQuery);
+    } catch (e: unknown) {
+      toast({
+        duration: 6000,
+        title: "Could not update",
+        description: e instanceof Error ? e.message : "Try again.",
+        variant: "destructive",
+      });
+      // The usual reason a manual action is refused is that the booking moved
+      // since this list was drawn — someone scanned them at another door. Re-
+      // read so the row stops claiming a state the server has already left,
+      // and the volunteer sees the real one instead of pressing again.
+      await loadManualRows(manualQuery);
+    } finally {
+      setManualBusyId(null);
+    }
+  };
+
   // Handle successful QR scan
   const onScanSuccess = async (decodedText: string, decodedResult: any) => {
     if (processingRef.current) return;
@@ -525,6 +672,7 @@ export default function QRTicketScanner() {
     const gen = scanGenerationRef.current;
     const abandoned = () => gen !== scanGenerationRef.current;
 
+    setScanPhase("reading");
     setProcessing(true);
 
     try {
@@ -551,6 +699,7 @@ export default function QRTicketScanner() {
       // The operator has already moved on — do not drag them back to an error
       // screen for a scan they abandoned.
       if (abandoned()) return;
+      setScanPhase(null);
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to process QR code",
       );
@@ -583,6 +732,7 @@ export default function QRTicketScanner() {
       throw new Error("Invalid QR code format. Missing ticket ID.");
     }
 
+    setScanPhase("verifying");
     const ticketResponse = await fetch(
       `${apiURL}/tickets/by-ticket-id/${qrData.ticketId}`,
     );
@@ -609,6 +759,7 @@ export default function QRTicketScanner() {
       throw new Error(formatApiError(errorData, "Failed to mark attendance"));
     }
 
+    await showVerified();
     setScanResult("success");
     setStep("success");
 
@@ -631,9 +782,13 @@ export default function QRTicketScanner() {
       throw new Error("Invalid QR code format. Missing stall ID.");
     }
 
-    // Save the raw QR text and go to selection screen
+    // Save the raw QR text and go to selection screen. No server round trip
+    // here — the payload is checked locally — so confirm it read cleanly
+    // before handing over to the action choice.
+    await showVerified();
     setPendingStallQR(decodedText);
     setProcessing(false);
+    setScanPhase(null);
     setStep("checkin-checkout-selection");
   };
 
@@ -661,6 +816,14 @@ export default function QRTicketScanner() {
       return;
     }
     setShowCheckOutConfirmDialog(false);
+    // The Manual tab shares this dialog; a pending row means it opened it, and
+    // it has no scanMode of its own to dispatch on.
+    if (pendingManualRow) {
+      const row = pendingManualRow;
+      setPendingManualRow(null);
+      await performManualAttendance(row, "CHECK_OUT");
+      return;
+    }
     if (scanMode === "speaker-ticket") {
       await processSpeakerAction("CHECK_OUT");
     } else if (scanMode === "round-table") {
@@ -675,6 +838,7 @@ export default function QRTicketScanner() {
     if (!pendingStallQR) return;
     if (!requireLiveSession()) return;
     clearRecoveryTimer();
+    setScanPhase("verifying");
     setProcessing(true);
     setStallAction(action);
 
@@ -718,6 +882,7 @@ export default function QRTicketScanner() {
         throw new Error("This stall is not for this event");
       }
 
+      await showVerified();
       setStallData(stallInfo.data);
       setScanResult("success");
       setStep("success");
@@ -728,6 +893,9 @@ export default function QRTicketScanner() {
         description: `${action === "CHECK_IN" ? "Checked In" : "Checked Out"} successfully for ${stallInfo.data.shopkeeper?.name}`,
       });
     } catch (error: any) {
+      // Clear the phase first — otherwise the screen sits on
+      // "Verifying…" forever behind the error toast.
+      setScanPhase(null);
       setErrorMessage(error.message || "Failed to process stall QR");
       setScanResult("error");
       toast({
@@ -762,8 +930,10 @@ export default function QRTicketScanner() {
       throw new Error("Invalid QR code format. Missing speaker ID.");
     }
 
+    await showVerified();
     setPendingSpeakerQR(decodedText);
     setProcessing(false);
+    setScanPhase(null);
     setStep("checkin-checkout-selection");
   };
 
@@ -784,6 +954,7 @@ export default function QRTicketScanner() {
   const processSpeakerAction = async (action: "CHECK_IN" | "CHECK_OUT") => {
     if (!pendingSpeakerQR) return;
     clearRecoveryTimer();
+    setScanPhase("verifying");
     setProcessing(true);
     setSpeakerAction(action);
 
@@ -818,6 +989,7 @@ export default function QRTicketScanner() {
 
       const scanInfo = await scanRes.json();
 
+      await showVerified();
       setSpeakerData(scanInfo.data);
       setScanResult("success");
       setStep("success");
@@ -828,6 +1000,9 @@ export default function QRTicketScanner() {
         description: `${action === "CHECK_IN" ? "Checked In" : "Checked Out"} successfully for ${scanInfo.data.speakerName}`,
       });
     } catch (error: any) {
+      // Clear the phase first — otherwise the screen sits on
+      // "Verifying…" forever behind the error toast.
+      setScanPhase(null);
       setErrorMessage(error.message || "Failed to process speaker QR");
       setScanResult("error");
       toast({
@@ -861,8 +1036,10 @@ export default function QRTicketScanner() {
       throw new Error("Invalid QR code format. Missing booking ID.");
     }
 
+    await showVerified();
     setPendingRoundTableQR(decodedText);
     setProcessing(false);
+    setScanPhase(null);
     setStep("checkin-checkout-selection");
   };
 
@@ -883,6 +1060,7 @@ export default function QRTicketScanner() {
   const processRoundTableAction = async (action: "CHECK_IN" | "CHECK_OUT") => {
     if (!pendingRoundTableQR) return;
     clearRecoveryTimer();
+    setScanPhase("verifying");
     setProcessing(true);
     setRoundTableAction(action);
 
@@ -919,6 +1097,7 @@ export default function QRTicketScanner() {
 
       const scanInfo = await scanRes.json();
 
+      await showVerified();
       setRoundTableData(scanInfo.data);
       setScanResult("success");
       setStep("success");
@@ -929,6 +1108,9 @@ export default function QRTicketScanner() {
         description: `${action === "CHECK_IN" ? "Checked In" : "Checked Out"} successfully for ${scanInfo.data.visitorName}`,
       });
     } catch (error: any) {
+      // Clear the phase first — otherwise the screen sits on
+      // "Verifying…" forever behind the error toast.
+      setScanPhase(null);
       setErrorMessage(error.message || "Failed to process round table QR");
       setScanResult("error");
       toast({
@@ -964,6 +1146,7 @@ export default function QRTicketScanner() {
       throw new Error("Invalid QR code format. Missing booking ID.");
     }
 
+    setScanPhase("verifying");
     const res = await fetch(`${apiURL}/workshop-bookings/scan-qr`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -976,6 +1159,7 @@ export default function QRTicketScanner() {
     }
 
     const info = await res.json();
+    await showVerified();
     setWorkshopData(info.data);
     setScanResult("success");
     setStep("success");
@@ -1006,6 +1190,7 @@ export default function QRTicketScanner() {
       throw new Error("Invalid QR code format. Missing request ID.");
     }
 
+    setScanPhase("verifying");
     const res = await fetch(`${apiURL}/scheduled-spaces/scan-qr`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1020,6 +1205,7 @@ export default function QRTicketScanner() {
     }
 
     const info = await res.json();
+    await showVerified();
     setScheduledSpaceData(info.data);
     setScanResult("success");
     setStep("success");
@@ -1038,6 +1224,7 @@ export default function QRTicketScanner() {
   const resetScanner = () => {
     clearRecoveryTimer();
     scanGenerationRef.current++;
+    setScanPhase(null);
     setScanResult(null);
     setTicketData(null);
     setStallData(null);
@@ -1083,7 +1270,7 @@ export default function QRTicketScanner() {
           <div className="bg-muted p-4 rounded-lg">
             <p className="font-medium">{eventData.title}</p>
             <p className="text-sm text-muted-foreground">
-              {eventData.organizer.organizationName}
+              {eventData.organizer?.organizationName || ""}
             </p>
           </div>
         )}
@@ -1139,7 +1326,7 @@ export default function QRTicketScanner() {
           <div className="bg-muted p-4 rounded-lg">
             <p className="font-medium">{eventData.title}</p>
             <p className="text-sm text-muted-foreground">
-              {eventData.organizer.organizationName}
+              {eventData.organizer?.organizationName || ""}
             </p>
           </div>
         )}
@@ -1258,6 +1445,139 @@ export default function QRTicketScanner() {
       subtitle: "Point your camera at the booking's QR code",
     },
   };
+  // ─── RENDER: Manual Check-In / Out ──────────────────────────────────────────
+  // For the vendor who left their ticket at the hotel. Search what they can
+  // actually tell you at a gate — the brand over the stand, the registered
+  // business, their own name, or the table number — then act on the row.
+  const renderManualSearch = () => (
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader className="text-center">
+        <Search className="mx-auto h-12 w-12 text-green-600 mb-4" />
+        <CardTitle>{t("Manual Check-In / Out")}</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          No ticket? Find the exhibitor by name and check them in.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void loadManualRows(manualQuery);
+          }}
+          className="flex gap-2"
+        >
+          <Input
+            value={manualQuery}
+            onChange={(e) => setManualQuery(e.target.value)}
+            placeholder="Brand, business, name or table"
+            autoFocus
+          />
+          <Button type="submit" disabled={manualLoading}>
+            {manualLoading ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            type="button"
+            variant="buttonOutline"
+            disabled={manualLoading}
+            onClick={() => void loadManualRows(manualQuery)}
+            title="Refresh — someone may have been scanned at another door"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${manualLoading ? "animate-spin" : ""}`}
+            />
+          </Button>
+        </form>
+
+        {manualLoading ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-blue-600" />
+            Loading exhibitors…
+          </div>
+        ) : manualRows.length === 0 ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            {manualQuery.trim()
+              ? "No exhibitor matches that."
+              : "No exhibitors on this event yet."}
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-[420px] overflow-y-auto">
+            {manualRows.map((r) => {
+              const busy = manualBusyId === r.stallId;
+              const title = r.shopName || r.businessName || r.name || "Exhibitor";
+              return (
+                <div
+                  key={r.stallId}
+                  className="rounded-lg border p-3 space-y-2"
+                >
+                  <div>
+                    <p className="font-medium text-sm">{title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {[r.name, r.businessName !== title ? r.businessName : "", r.tables.join(", ")]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span
+                      className={`text-[11px] px-2 py-0.5 rounded-full ${
+                        r.hasCheckedOut
+                          ? "bg-orange-100 text-orange-800"
+                          : r.hasCheckedIn
+                            ? "bg-green-100 text-green-800"
+                            : "bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      {r.hasCheckedOut
+                        ? "Checked out"
+                        : r.hasCheckedIn
+                          ? "Checked in"
+                          : "Not arrived"}
+                    </span>
+                    <div className="flex gap-2">
+                      {!r.hasCheckedIn && (
+                        <Button
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700"
+                          disabled={busy}
+                          onClick={() => manualAttendance(r, "CHECK_IN")}
+                        >
+                          {busy ? (
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            "Check In"
+                          )}
+                        </Button>
+                      )}
+                      {r.hasCheckedIn && !r.hasCheckedOut && (
+                        <Button
+                          size="sm"
+                          className="bg-orange-500 hover:bg-orange-600"
+                          disabled={busy}
+                          onClick={() => manualAttendance(r, "CHECK_OUT")}
+                        >
+                          {busy ? (
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            "Check Out"
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+      </CardContent>
+    </Card>
+  );
+
   const renderScanner = () => (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
@@ -1279,11 +1599,35 @@ export default function QRTicketScanner() {
             style={{ minHeight: "300px" }}
           />
 
-          {isProcessing && (
-            <div className="absolute inset-0 bg-background bg-opacity-80 flex items-center justify-center rounded-lg">
-              <div className="text-center">
-                <RefreshCw className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
-                <p className="text-sm font-medium">Processing...</p>
+          {(isProcessing || scanPhase) && scanResult !== "error" && (
+            <div
+              className={`absolute inset-0 flex items-center justify-center rounded-lg ${
+                scanPhase === "verified"
+                  ? "bg-green-50 bg-opacity-95"
+                  : "bg-background bg-opacity-90"
+              }`}
+            >
+              <div className="text-center px-4">
+                {scanPhase === "verified" ? (
+                  <>
+                    <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-2" />
+                    <p className="text-base font-semibold text-green-800">
+                      {SCAN_PHASE_COPY.verified.title}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
+                    <p className="text-sm font-medium">
+                      {scanPhase
+                        ? SCAN_PHASE_COPY[scanPhase].title
+                        : "Processing…"}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {scanPhase ? SCAN_PHASE_COPY[scanPhase].subtitle : ""}
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -1333,14 +1677,41 @@ export default function QRTicketScanner() {
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-          <p className="text-sm text-green-700 font-medium">
-            ✅ QR Code Verified
-          </p>
-          <p className="text-xs text-green-600 mt-1">
-            Please select the action below
-          </p>
-        </div>
+        {scanPhase === "verifying" || scanPhase === "verified" ? (
+          <div
+            className={`rounded-lg p-3 text-center border ${
+              scanPhase === "verified"
+                ? "bg-green-50 border-green-200"
+                : "bg-blue-50 border-blue-200"
+            }`}
+          >
+            {scanPhase === "verified" ? (
+              <p className="text-sm text-green-700 font-medium flex items-center justify-center gap-2">
+                <CheckCircle className="h-4 w-4" />
+                {SCAN_PHASE_COPY.verified.title}
+              </p>
+            ) : (
+              <>
+                <p className="text-sm text-blue-700 font-medium flex items-center justify-center gap-2">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  {SCAN_PHASE_COPY.verifying.title}
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  {SCAN_PHASE_COPY.verifying.subtitle}
+                </p>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+            <p className="text-sm text-green-700 font-medium">
+              ✅ QR Code Verified
+            </p>
+            <p className="text-xs text-green-600 mt-1">
+              Please select the action below
+            </p>
+          </div>
+        )}
 
         {/* Error message if check-out validation fails */}
         {scanResult === "error" && (
@@ -1612,9 +1983,22 @@ export default function QRTicketScanner() {
             this. */}
         {step === "otp-verification" && renderOTPVerification()}
         {step !== "otp-verification" && (
-          <Tabs defaultValue="scanner" className="mt-2">
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => {
+              setActiveTab(v);
+              // Load on entry rather than on mount — the list is only needed
+              // if the volunteer actually opens it, and it should be fresh
+              // each time since another volunteer may have moved people.
+              if (v === "manual") void loadManualRows(manualQuery);
+            }}
+            className="mt-2"
+          >
             <TabsList>
               <TabsTrigger value="scanner">{t("Scanner")}</TabsTrigger>
+              {eventData?.features?.hasStalls && (
+                <TabsTrigger value="manual">{t("Manual")}</TabsTrigger>
+              )}
               {(eventData?.features?.hasStalls ||
                 eventData?.features?.hasRoundTables ||
                 eventData?.features?.hasSpeakers) && (
@@ -1791,6 +2175,32 @@ export default function QRTicketScanner() {
             </Card>
           )}
 
+            </TabsContent>
+            {eventData?.features?.hasStalls && (
+              <TabsContent value="manual" className="mt-4">
+                {renderManualSearch()}
+              </TabsContent>
+            )}
+            {(eventData?.features?.hasStalls ||
+              eventData?.features?.hasRoundTables ||
+              eventData?.features?.hasSpeakers) && (
+            <TabsContent value="venue" className="mt-4">
+              {eventId ? (
+                <OperatorVenueView eventId={eventId} />
+              ) : (
+                <div className="text-sm text-muted-foreground italic text-center py-8">
+                  No event id in URL.
+                </div>
+              )}
+            </TabsContent>
+            )}
+          </Tabs>
+        )}
+
+        {/* Rendered OUTSIDE <Tabs>: Radix unmounts the inactive tab, so
+            while this lived inside the Scanner tab a check-out started from
+            the Manual tab opened a dialog that could never appear — the
+            action simply did nothing. */}
         {/* ─── CHECK_OUT Confirmation Dialog ─────────────────────────────────── */}
         {showCheckOutConfirmDialog && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1801,8 +2211,21 @@ export default function QRTicketScanner() {
                   <CardTitle className="text-base">{t("Confirm Check Out")}</CardTitle>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Are you sure you want to <strong>Check Out</strong> this
-                  {scanMode === "speaker-ticket" ? " speaker" : scanMode === "round-table" ? " visitor" : " exhibitor"}? This action cannot be undone.
+                  Are you sure you want to <strong>Check Out</strong>{" "}
+                  {pendingManualRow ? (
+                    <strong>
+                      {pendingManualRow.shopName ||
+                        pendingManualRow.businessName ||
+                        pendingManualRow.name}
+                    </strong>
+                  ) : scanMode === "speaker-ticket" ? (
+                    "this speaker"
+                  ) : scanMode === "round-table" ? (
+                    "this visitor"
+                  ) : (
+                    "this exhibitor"
+                  )}
+                  ? This action cannot be undone.
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1841,6 +2264,7 @@ export default function QRTicketScanner() {
                       setCheckOutConfirmInput("");
                       setCheckOutConfirmError("");
                       setStallAction(null);
+                      setPendingManualRow(null);
                     }}
                   >
                     Cancel
@@ -1862,22 +2286,6 @@ export default function QRTicketScanner() {
               </CardContent>
             </Card>
           </div>
-        )}
-            </TabsContent>
-            {(eventData?.features?.hasStalls ||
-              eventData?.features?.hasRoundTables ||
-              eventData?.features?.hasSpeakers) && (
-            <TabsContent value="venue" className="mt-4">
-              {eventId ? (
-                <OperatorVenueView eventId={eventId} />
-              ) : (
-                <div className="text-sm text-muted-foreground italic text-center py-8">
-                  No event id in URL.
-                </div>
-              )}
-            </TabsContent>
-            )}
-          </Tabs>
         )}
       </div>
     </div>

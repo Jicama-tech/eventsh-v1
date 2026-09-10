@@ -2993,6 +2993,113 @@ export class StallsService {
       );
     }
 
+    return this.applyStallAttendance(stall, action, authHeader, "scan");
+  }
+
+  /**
+   * The exhibitor list a volunteer searches when someone turns up without
+   * their ticket. Deliberately lean — just enough to identify a stand and see
+   * its current state — because it is served to a gate device over venue wifi
+   * and must not carry payloads, QR credentials or payment details.
+   *
+   * Only paid/confirmed bookings appear: a stall that never completed payment
+   * has no more right to walk in manually than it does by QR.
+   */
+  async listForManualAttendance(eventId: string, q?: string) {
+    if (!Types.ObjectId.isValid(eventId)) {
+      throw new BadRequestException("Invalid event ID format");
+    }
+    const rows = await this.stallModel
+      .find({
+        eventId: new Types.ObjectId(eventId),
+        status: { $nin: ["Cancelled"] },
+      })
+      .select(
+        "shopkeeperId status paymentStatus hasCheckedIn hasCheckedOut checkInTime checkOutTime selectedTables",
+      )
+      .populate("shopkeeperId", "name shopName businessName businessCategory")
+      .lean();
+
+    const term = (q || "").trim().toLowerCase();
+    const mapped = rows.map((r: any) => {
+      const v = r.shopkeeperId || {};
+      return {
+        stallId: String(r._id),
+        name: v.name || "",
+        shopName: v.shopName || "",
+        businessName: v.businessName || "",
+        category: v.businessCategory || "",
+        tables: (r.selectedTables || [])
+          .map((t: any) => t.tableName)
+          .filter(Boolean),
+        status: r.status,
+        paymentStatus: r.paymentStatus,
+        hasCheckedIn: !!r.hasCheckedIn,
+        hasCheckedOut: !!r.hasCheckedOut,
+        checkInTime: r.checkInTime || null,
+        checkOutTime: r.checkOutTime || null,
+      };
+    });
+
+    // Match on any of the things a vendor might say at the gate — their own
+    // name, the brand over the stand, the registered business, or the table
+    // number they were given.
+    const filtered = term
+      ? mapped.filter((m) =>
+          [m.name, m.shopName, m.businessName, m.category, ...m.tables]
+            .join(" ")
+            .toLowerCase()
+            .includes(term),
+        )
+      : mapped;
+
+    filtered.sort((a: any, b: any) =>
+      (a.shopName || a.businessName || a.name).localeCompare(
+        b.shopName || b.businessName || b.name,
+      ),
+    );
+
+    return { success: true, count: filtered.length, data: filtered };
+  }
+
+  /**
+   * Check a stall in or out without its QR — the vendor left the ticket at the
+   * hotel, or their phone is flat. Runs the identical transition as a scan, so
+   * the double-tap and concurrent-operator guards still hold; the timeline
+   * entry records that no QR was presented.
+   */
+  async manualStallAttendance(
+    stallId: string,
+    action: StallScanAction,
+    authHeader?: string,
+  ) {
+    if (!Types.ObjectId.isValid(stallId)) {
+      throw new BadRequestException("Invalid stall ID format");
+    }
+    const stall = await this.stallModel.findById(stallId);
+    if (!stall) throw new NotFoundException("Stall not found");
+    if (stall.status === "Cancelled") {
+      throw new BadRequestException(
+        "This booking was cancelled and cannot be checked in.",
+      );
+    }
+    return this.applyStallAttendance(stall, action, authHeader, "manual");
+  }
+
+  /**
+   * Apply a check-in / check-out to a stall.
+   *
+   * Shared by the QR scan and the manual (searched-by-name) path, so a vendor
+   * who turned up without their ticket is written exactly the same way as one
+   * who was scanned — same conditional update, same conflict messages, same
+   * timeline entry and vendor email. Only the note records which route it took.
+   */
+  private async applyStallAttendance(
+    stall: any,
+    action: StallScanAction | undefined,
+    authHeader: string | undefined,
+    via: "scan" | "manual",
+  ) {
     // The exhibitor's badge is scanned for both legs, so the QR alone cannot
     // say which one the operator means. Their explicit choice on the
     // Check-In / Check-Out screen decides it; a client that sends no action
@@ -3047,8 +3154,12 @@ export class StallsService {
       status: stall.status,
       note:
         resolved === "CHECK_IN"
-          ? `Checked in at the gate${actor ? ` by ${actor.name}` : ""}.`
-          : `Checked out at the gate${actor ? ` by ${actor.name}` : ""}.` +
+          ? `Checked in at the gate${
+            via === "manual" ? " (manual, no QR)" : ""
+          }${actor ? ` by ${actor.name}` : ""}.`
+          : `Checked out at the gate${
+            via === "manual" ? " (manual, no QR)" : ""
+          }${actor ? ` by ${actor.name}` : ""}.` +
             (minutesOnSite !== null
               ? ` On site for ${minutesOnSite} minute${
                   minutesOnSite === 1 ? "" : "s"
@@ -3111,6 +3222,7 @@ export class StallsService {
       data: this.buildStallScanPayload(updated, vendor, resolved),
     };
   }
+
 
   /**
    * Explain a refused attendance transition. Only called when the conditional
