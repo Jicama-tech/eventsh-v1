@@ -3225,10 +3225,21 @@ export class StallsService {
             String(stall._id),
             eventIdStr,
           );
-          const base = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
-          feedbackLink = `${base}/events/${eventIdStr}?feedback=exhibitor&token=${encodeURIComponent(
-            token,
-          )}`;
+          // buildEventFrontUrl, not a bare /events/:id — that path is only
+          // routed in embed mode, so on the public site it fell through to the
+          // catch-all and redirected to "/", dropping the query string with it.
+          // This resolves the organizer's storefront slug, which is routed.
+          const base = await this.buildEventFrontUrl(
+            (stall as any).organizerId,
+            eventIdStr,
+          );
+          // `ftoken`, not `token`: the frontend AuthProvider adopts any
+          // `?token=` in the URL as a session JWT. A feedback token has no
+          // `roles`, so it replaced the visitor's session with a broken user
+          // and crashed the app on render.
+          feedbackLink = `${base}${
+            base.includes("?") ? "&" : "?"
+          }feedback=exhibitor&ftoken=${encodeURIComponent(token)}`;
         } catch {
           feedbackLink = null;
         }

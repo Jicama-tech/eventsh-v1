@@ -86,7 +86,7 @@ function LoadingScreen() {
 function RequireUserRole({ children }: { children: JSX.Element }) {
   const { user } = useAuth();
   if (!user) return <Navigate to="/" replace />;
-  if (user.roles[0] !== "user") return <Navigate to="/" replace />;
+  if (user.roles?.[0] !== "user") return <Navigate to="/" replace />;
   return children;
 }
 
@@ -238,7 +238,9 @@ function AppContent() {
     <Suspense fallback={<LoadingScreen />}>
       <CleanStorefrontUrl />
 
-      {!user ? (
+      {/* A token with no roles is not a usable session — render the public
+          app rather than the role-switch below, which indexes into roles. */}
+      {!user || !user.roles?.length ? (
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route
@@ -332,7 +334,11 @@ function AppContent() {
         </Routes>
       ) : (
         (() => {
-          switch (user.roles[0]) {
+          // A session without roles is not a usable session. Indexing straight
+          // into roles here threw "Cannot read properties of undefined
+          // (reading '0')" and took down the entire app with no way out.
+          const primaryRole = user.roles?.[0];
+          switch (primaryRole) {
             case "admin":
               return (
                 <Routes>
@@ -553,7 +559,7 @@ function AppContent() {
                       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-pink-50">
                         <div className="text-center bg-white p-8 rounded-2xl shadow-xl max-w-md">
                           <h1 className="text-2xl font-bold mb-4 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                            Welcome, {user.roles[0]}!
+                            Welcome, {primaryRole}!
                           </h1>
                           <p className="text-gray-600 mb-6">
                             Your dashboard is coming soon...
