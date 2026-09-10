@@ -140,7 +140,18 @@ interface StatusHistoryEntry {
   changedBy?: string;
 }
 
+// Feedback the exhibitor submitted from the link in their check-out email.
+// Attached by GET /stalls/:id so the stall dialog can show it beside the
+// Return Deposit action. Absent until they actually respond.
+export interface StallFeedback {
+  rating: number;
+  comment?: string;
+  submittedAt?: string;
+  refundStatus?: string;
+}
+
 export interface StallRequest {
+  feedback?: StallFeedback | null;
   couponCodeAssigned: string;
   _id: string;
   shopkeeperId: Shopkeeper;

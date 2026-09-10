@@ -151,10 +151,6 @@ interface EventData {
 }
 
 type ScanMode =
-  // Search-by-name check-in for a vendor who turned up without their ticket.
-  // Not a camera mode — it shares this union so it slots into the same
-  // mode-selection screen the volunteer already knows.
-  | "manual-exhibitor"
   | "event-ticket"
   | "stall-ticket"
   | "speaker-ticket"
@@ -181,7 +177,6 @@ type Step =
   | "mode-selection"
   | "scanning"
   | "checkin-checkout-selection"
-  | "manual-search"
   | "success";
 
 // Nest returns `message` as a plain string for thrown HttpExceptions but as an
@@ -263,6 +258,7 @@ export default function QRTicketScanner() {
   const [manualRows, setManualRows] = useState<ManualRow[]>([]);
   const [manualLoading, setManualLoading] = useState(false);
   const [manualBusyId, setManualBusyId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("scanner");
 
   // Hold the "Verified" beat long enough to register before the next screen
   // replaces it. Short enough that a queue does not build behind it.
@@ -502,13 +498,6 @@ export default function QRTicketScanner() {
     setScanPhase(null);
     setProcessing(false);
     setScanMode(mode);
-    if (mode === "manual-exhibitor") {
-      setManualQuery("");
-      setManualRows([]);
-      setStep("manual-search");
-      void loadManualRows("");
-      return;
-    }
     setStep("scanning");
   };
 
@@ -1350,16 +1339,6 @@ export default function QRTicketScanner() {
               Exhibitor Ticket
             </Button>
           )}
-          {eventData?.features?.hasStalls && (
-            <Button
-              onClick={() => handleModeSelection("manual-exhibitor")}
-              variant="buttonOutline"
-              className="w-full"
-            >
-              <Search className="mr-2 h-4 w-4" />
-              Exhibitor — No Ticket (search by name)
-            </Button>
-          )}
           {eventData?.features?.hasSpeakers && (
             <Button
               onClick={() => handleModeSelection("speaker-ticket")}
@@ -1429,10 +1408,6 @@ export default function QRTicketScanner() {
     "scheduled-space": {
       title: "Scan Scheduled Space Ticket",
       subtitle: "Point your camera at the booking's QR code",
-    },
-    "manual-exhibitor": {
-      title: "Manual Check-In / Out",
-      subtitle: "Find an exhibitor by brand, business or name",
     },
   };
   // ─── RENDER: Manual Check-In / Out ──────────────────────────────────────────
@@ -1553,13 +1528,6 @@ export default function QRTicketScanner() {
           </div>
         )}
 
-        <Button
-          onClick={handleBackToModeSelection}
-          variant="buttonOutline"
-          className="w-full"
-        >
-          Change Scan Type
-        </Button>
       </CardContent>
     </Card>
   );
@@ -1969,9 +1937,22 @@ export default function QRTicketScanner() {
             this. */}
         {step === "otp-verification" && renderOTPVerification()}
         {step !== "otp-verification" && (
-          <Tabs defaultValue="scanner" className="mt-2">
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => {
+              setActiveTab(v);
+              // Load on entry rather than on mount — the list is only needed
+              // if the volunteer actually opens it, and it should be fresh
+              // each time since another volunteer may have moved people.
+              if (v === "manual") void loadManualRows(manualQuery);
+            }}
+            className="mt-2"
+          >
             <TabsList>
               <TabsTrigger value="scanner">{t("Scanner")}</TabsTrigger>
+              {eventData?.features?.hasStalls && (
+                <TabsTrigger value="manual">{t("Manual")}</TabsTrigger>
+              )}
               {(eventData?.features?.hasStalls ||
                 eventData?.features?.hasRoundTables ||
                 eventData?.features?.hasSpeakers) && (
@@ -1981,7 +1962,6 @@ export default function QRTicketScanner() {
             <TabsContent value="scanner" className="mt-4 space-y-4">
         {step === "mode-selection" && renderModeSelection()}
         {step === "scanning" && renderScanner()}
-        {step === "manual-search" && renderManualSearch()}
         {step === "checkin-checkout-selection" && renderCheckInOutSelection()}
         {step === "success" && !hasSuccessView && (
           <Card className="w-full max-w-md mx-auto">
@@ -2222,6 +2202,11 @@ export default function QRTicketScanner() {
           </div>
         )}
             </TabsContent>
+            {eventData?.features?.hasStalls && (
+              <TabsContent value="manual" className="mt-4">
+                {renderManualSearch()}
+              </TabsContent>
+            )}
             {(eventData?.features?.hasStalls ||
               eventData?.features?.hasRoundTables ||
               eventData?.features?.hasSpeakers) && (
