@@ -53,6 +53,21 @@ export class TicketsController {
     }
   }
 
+  // Who may mark a ticket as attended at the door. The owning organizer can,
+  // as before — and so can a volunteer signed in for THIS event, which is who
+  // actually works a gate. events.service.ts mints their token with
+  // sub=<eventId> and roles:["volunteer"], so the permission is scoped to the
+  // ticket's own event: a volunteer for one event cannot scan another's.
+  private assertMayScanTicket(req: any, ticket: { organizerId: any; eventId?: any }) {
+    const roles = req.user?.roles;
+    if (Array.isArray(roles) && roles.includes("volunteer")) {
+      const ticketEventId = ticket.eventId?._id ?? ticket.eventId;
+      if (String(ticketEventId) === String(req.user?.userId)) return;
+      throw new ForbiddenException("This ticket is not for your event");
+    }
+    this.assertOwnsTicket(req, ticket);
+  }
+
   @Post("create-ticket")
   create(@Body() createTicketDto: CreateTicketDto) {
     return this.ticketsService.create(createTicketDto);
@@ -124,7 +139,14 @@ export class TicketsController {
   @UseGuards(OrganizerOrApiKeyGuard, ThrottlerGuard)
   async markAttendance(@Param("ticketId") ticketId: string, @Req() req: any) {
     try {
-      this.assertOwnsTicket(req, await this.ticketsService.findByTicketId(ticketId));
+      // assertMayScan, not assertOwnsTicket: door scanning is done by
+      // volunteers, who are not the organizer and never satisfy an ownership
+      // check. Guarding this route on ownership alone made every visitor-ticket
+      // scan fail — 401 with no credentials, 403 with the volunteer's own.
+      this.assertMayScanTicket(
+        req,
+        await this.ticketsService.findByTicketId(ticketId),
+      );
       return await this.ticketsService.markAttendance(ticketId);
     } catch (error) {
       throw error;

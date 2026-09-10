@@ -37,6 +37,7 @@ import { CouponService } from "../coupon/coupon.service";
 import { CreateCouponDto } from "../coupon/dto/create-coupon.dto";
 import { FeedbackService } from "../feedback/feedback.service";
 import { MailService } from "../roles/mail.service";
+import { JwtService } from "@nestjs/jwt";
 import { formatMoney } from "../../common/currency.util";
 
 // Parse a JSON-encoded string[] (multipart sends arrays as a string). Falls
@@ -85,6 +86,7 @@ export class StallsService {
     private couponService: CouponService,
     private feedbackService: FeedbackService,
     private mailService: MailService,
+    private jwtService: JwtService,
   ) {
     // Ensure upload directory exists
     const qrDir = path.join(process.cwd(), "uploads", "stallQRs");
@@ -2913,7 +2915,11 @@ export class StallsService {
 
   // ============ QR CODE SCANNING & ATTENDANCE ============
 
-  async scanStallQR(qrCodeData: string, action?: StallScanAction) {
+  async scanStallQR(
+    qrCodeData: string,
+    action?: StallScanAction,
+    authHeader?: string,
+  ) {
     // A non-JSON payload means the wrong QR was held up to the camera. That's
     // operator error, not a server fault — answer with something the person
     // holding the scanner can act on rather than letting SyntaxError escape.
@@ -3004,10 +3010,52 @@ export class StallsService {
             hasCheckedOut: { $ne: true },
           };
 
+    // Who is holding the scanner, per the verified volunteer token.
+    const actor = this.resolveScanActor(authHeader);
+    const changedBy = actor ? `${actor.name} (${actor.role})` : "Gate scanner";
+
+    // Minutes on site, for the check-out note. checkInTime can be absent on
+    // rows checked in before it was recorded, so this stays optional.
+    const minutesOnSite =
+      resolved === "CHECK_OUT" && stall.checkInTime
+        ? Math.max(
+            0,
+            Math.floor(
+              (now.getTime() - new Date(stall.checkInTime).getTime()) / 60000,
+            ),
+          )
+        : null;
+
+    // Recorded on the stall timeline so the organizer can see the gate
+    // movements — and who scanned them — alongside every other status change.
+    // Pushed inside the same conditional update as the attendance flags: a
+    // separate write could leave a timeline entry for a transition that was
+    // rejected, or lose one to a concurrent scan.
+    const historyEntry = {
+      status: stall.status,
+      note:
+        resolved === "CHECK_IN"
+          ? `Checked in at the gate${actor ? ` by ${actor.name}` : ""}.`
+          : `Checked out at the gate${actor ? ` by ${actor.name}` : ""}.` +
+            (minutesOnSite !== null
+              ? ` On site for ${minutesOnSite} minute${
+                  minutesOnSite === 1 ? "" : "s"
+                }.`
+              : ""),
+      changedAt: now,
+      changedBy,
+    };
+
     const update =
       resolved === "CHECK_IN"
-        ? { $set: { hasCheckedIn: true, checkInTime: now } }
-        : { $set: { hasCheckedOut: true, checkOutTime: now } };
+        ? {
+            $set: { hasCheckedIn: true, checkInTime: now, updatedAt: now },
+            $push: { statusHistory: historyEntry },
+          }
+        : {
+            $set: { hasCheckedOut: true, checkOutTime: now, updatedAt: now },
+            $push: { statusHistory: historyEntry },
+          };
 
     const updated = await this.stallModel
       .findOneAndUpdate(filter, update, { new: true })
@@ -3024,9 +3072,16 @@ export class StallsService {
       );
     }
 
-    const vendor: any = await this.vendorModel.findById(
-      (updated.shopkeeperId as any)?._id || updated.shopkeeperId,
-    );
+    // Already populated by the findOneAndUpdate above; only fall back to a
+    // fetch if the populate missed (a shopkeeperId pointing at a deleted vendor
+    // comes back as a bare ObjectId, or null).
+    const populatedVendor: any = updated.shopkeeperId;
+    const vendor: any =
+      populatedVendor && typeof populatedVendor === "object" && populatedVendor.name
+        ? populatedVendor
+        : await this.vendorModel.findById(
+            populatedVendor?._id || populatedVendor,
+          );
 
     // Notifications are deliberately not awaited into the response. The
     // attendance write has already committed; letting a mail or WhatsApp
@@ -3068,7 +3123,15 @@ export class StallsService {
         "This exhibitor has not checked in yet. Cannot check out before checking in.",
       );
     }
-    return new BadRequestException("This exhibitor has already checked out.");
+    if (current.hasCheckedOut) {
+      return new BadRequestException("This exhibitor has already checked out.");
+    }
+    // Checked in, not checked out, yet the guarded update still missed: another
+    // scan moved this booking between the write and this re-read. Don't assert
+    // a state we just disproved — say what actually happened.
+    return new ConflictException(
+      "This booking was updated by another scan. Please scan again.",
+    );
   }
 
   /** Scan response body, identical in shape for both transitions. */
@@ -3099,8 +3162,9 @@ export class StallsService {
    * Tell the vendor their stall was checked in or out. Email is the primary
    * channel now that WhatsApp is being retired (sendWhatsAppMessage no-ops
    * when the kill-switch is off, which previously meant nobody was told
-   * anything at all). Every leg is best-effort: this runs after the attendance
-   * write has committed, so nothing here may throw into the scan response.
+   * anything at all). This runs after the attendance write has committed, so
+   * nothing here may throw into the scan response — and each channel is
+   * isolated, so one failing (sendEmail rethrows) cannot suppress the others.
    */
   private async notifyStallAttendance(
     stall: any,
@@ -3112,6 +3176,11 @@ export class StallsService {
       const name = vendor?.name || "there";
       const event: any = stall.eventId || {};
       const eventTitle = event?.title || "the event";
+      // Vendor and event names are operator/vendor-supplied free text and go
+      // straight into an HTML body — escape them. Even without a script
+      // payload, a bare "&" or "<" in a business name corrupts the markup.
+      const nameHtml = this.escapeHtml(name);
+      const eventTitleHtml = this.escapeHtml(eventTitle);
       const when = at.toLocaleString();
       const isCheckIn = action === "CHECK_IN";
       const eventIdStr = String(event?._id || stall.eventId || "");
@@ -3137,7 +3206,7 @@ export class StallsService {
       // has to ride the email too — notifyAfterCheckout only sends it over
       // WhatsApp, which is off.
       let feedbackLink: string | null = null;
-      if (!isCheckIn) {
+      if (!isCheckIn && eventIdStr) {
         try {
           const token = this.feedbackService.mintToken(
             "exhibitor",
@@ -3188,10 +3257,10 @@ export class StallsService {
               <h1 style="margin:0;font-size:20px">${
                 isCheckIn ? "Checked in ✅" : "Checked out 👋"
               }</h1>
-              <p style="margin:6px 0 0;opacity:.9">${eventTitle}</p>
+              <p style="margin:6px 0 0;opacity:.9">${eventTitleHtml}</p>
             </div>
             <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-              <p>Hi ${name},</p>
+              <p>Hi ${nameHtml},</p>
               <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin:14px 0">
                 ${rows}
               </div>
@@ -3204,12 +3273,24 @@ export class StallsService {
             </div>
           </div>`;
 
-        await this.mailService.sendEmail({
-          to,
-          subject: `${isCheckIn ? "Checked in" : "Checked out"} — ${eventTitle}`,
-          html,
-          senderConfig,
-        });
+        try {
+          await this.mailService.sendEmail({
+            to,
+            subject: `${
+              isCheckIn ? "Checked in" : "Checked out"
+            } — ${eventTitle}`,
+            html,
+            senderConfig,
+          });
+        } catch (mailErr: any) {
+          // sendEmail rethrows on failure; isolate it so a bad per-organizer
+          // SMTP config cannot also suppress the channels after it.
+          this.logger.warn(
+            `[stalls] attendance email failed for stall ${stall._id}: ${
+              mailErr?.message || mailErr
+            }`,
+          );
+        }
       } else {
         this.logger.warn(
           `[stalls] no vendor email on file for stall ${stall._id} — skipped ${action} notification email`,
@@ -3220,16 +3301,6 @@ export class StallsService {
       // when the kill-switch is off.
       const wa = vendor?.whatsAppNumber || vendor?.whatsappNumber;
       if (wa) await this.otpService.sendWhatsAppMessage(wa, message);
-
-      if (!isCheckIn) {
-        await this.feedbackService.notifyAfterCheckout({
-          audience: "exhibitor",
-          subjectId: String(stall._id),
-          eventId: eventIdStr,
-          whatsAppNumber: wa,
-          hasDeposit,
-        });
-      }
     } catch (e: any) {
       this.logger.warn(
         `[stalls] attendance notification failed for stall ${stall?._id}: ${
@@ -3237,6 +3308,75 @@ export class StallsService {
         }`,
       );
     }
+
+    // Outside the block above on purpose: a check-out must always get its
+    // feedback prompt, whatever the other channels did. It is self-guarding
+    // (no-ops without a WhatsApp number) and swallows its own errors.
+    if (action === "CHECK_OUT") {
+      try {
+        await this.feedbackService.notifyAfterCheckout({
+          audience: "exhibitor",
+          subjectId: String(stall._id),
+          eventId: String(stall.eventId?._id || stall.eventId || ""),
+          whatsAppNumber: vendor?.whatsAppNumber || vendor?.whatsappNumber,
+          hasDeposit: ((stall.depositTotal as number) || 0) > 0,
+        });
+      } catch (e: any) {
+        this.logger.warn(
+          `[stalls] checkout feedback notification failed for stall ${
+            stall?._id
+          }: ${e?.message || e}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Work out who is operating the scanner, from the volunteer JWT the scanner
+   * holds (events.service.ts mints it with name/email/roles after Google
+   * sign-in). Verified rather than trusted from a body field, so the name that
+   * lands on the timeline is one the server established.
+   *
+   * Returns null when there is no usable token — an organizer scanning from
+   * their own dashboard, or a request made without signing in.
+   */
+  private resolveScanActor(
+    authHeader?: string,
+  ): { name: string; email?: string; eventId?: string; role: string } | null {
+    const raw = (authHeader || "").trim();
+    if (!raw.toLowerCase().startsWith("bearer ")) return null;
+    const token = raw.slice(7).trim();
+    if (!token) return null;
+    try {
+      const p: any = this.jwtService.verify(token, {
+        secret: process.env.JWT_ACCESS_SECRET,
+      });
+      const name = String(p?.name || p?.email || "").trim();
+      if (!name) return null;
+      // The scanner falls back to an organizer session when no volunteer is
+      // signed in, so read the role off the token rather than assuming.
+      const roles: string[] = Array.isArray(p?.roles) ? p.roles : [];
+      const role = roles.includes("volunteer")
+        ? "volunteer"
+        : roles.includes("organizer")
+          ? "organizer"
+          : roles[0] || "scanner";
+      return { name, email: p?.email, eventId: p?.eventId, role };
+    } catch {
+      // Expired or forged — fall back to an unattributed entry rather than
+      // failing a scan the operator is standing at the gate waiting on.
+      return null;
+    }
+  }
+
+  /** Escape user-supplied text before interpolating it into an email body. */
+  private escapeHtml(s: string): string {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   // ============ OTHER UTILITY METHODS ============

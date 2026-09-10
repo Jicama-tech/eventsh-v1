@@ -3,6 +3,7 @@
   Get,
   Post,
   Body,
+  Headers,
   Patch,
   Param,
   Query,
@@ -348,10 +349,18 @@ export class StallsController {
    */
   @Post("scan-qr")
   @HttpCode(HttpStatus.OK)
-  async scanQR(@Body() scanQRDto: ScanQRDto) {
+  async scanQR(
+    @Body() scanQRDto: ScanQRDto,
+    // Read raw rather than behind a guard: this endpoint stays open (the QR
+    // payload is the credential), but when the scanner does carry a volunteer
+    // token we verify it so the gate movement can be attributed on the
+    // stall's timeline.
+    @Headers("authorization") authHeader?: string,
+  ) {
     return await this.stallsService.scanStallQR(
       scanQRDto.qrCodeData,
       scanQRDto.action,
+      authHeader,
     );
   }
 
