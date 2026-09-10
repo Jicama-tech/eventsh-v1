@@ -241,13 +241,21 @@ export class EventsService {
     }
 
     const name = volunteer.name || googleName;
-    const token = this.jwtService.sign({
-      sub: eventId,
-      eventId,
-      email: volunteer.email,
-      name,
-      roles: ["volunteer"],
-    });
+    // 7 days, not the module's 12h default. A volunteer signs in once and
+    // works the gate for the run of the event; at 12h their token expired
+    // mid-shift and every scan after that was attributed to "Gate scanner"
+    // instead of them, silently, because the scan endpoint falls back rather
+    // than failing. Still bounded — it is a shared device.
+    const token = this.jwtService.sign(
+      {
+        sub: eventId,
+        eventId,
+        email: volunteer.email,
+        name,
+        roles: ["volunteer"],
+      },
+      { expiresIn: "7d" },
+    );
 
     return { token, eventId, name, email: volunteer.email };
   }

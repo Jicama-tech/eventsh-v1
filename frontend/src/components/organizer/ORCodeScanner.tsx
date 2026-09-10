@@ -278,6 +278,19 @@ export default function QRTicketScanner() {
   // The volunteer JWT, for requests that record WHO performed an action.
   // Read at call time rather than from state so a token restored on this same
   // render is still picked up.
+  // True when a JWT is past its exp. An expired token is worse than none
+  // here: the scan still succeeds, but the server cannot read a name from it,
+  // so the check-in is filed under "Gate scanner" and the volunteer never
+  // finds out their attribution stopped working.
+  const isExpired = (tok: string): boolean => {
+    try {
+      const { exp } = jwtDecode<{ exp?: number }>(tok);
+      return !!exp && exp * 1000 <= Date.now();
+    } catch {
+      return true;
+    }
+  };
+
   const authHeaders = (): Record<string, string> => {
     try {
       // Volunteer token first (this screen's own sign-in); fall back to an
@@ -286,10 +299,35 @@ export default function QRTicketScanner() {
       const tok =
         localStorage.getItem(volunteerTokenKey) ||
         sessionStorage.getItem("token");
-      return tok ? { Authorization: `Bearer ${tok}` } : {};
+      if (!tok || isExpired(tok)) return {};
+      return { Authorization: `Bearer ${tok}` };
     } catch {
       return {};
     }
+  };
+
+  // Called before any scan that records who performed it. Rather than let the
+  // scan through unattributed, stop and send the volunteer back to sign-in.
+  const requireLiveSession = (): boolean => {
+    let tok: string | null = null;
+    try {
+      tok = localStorage.getItem(volunteerTokenKey);
+    } catch {
+      tok = null;
+    }
+    // No volunteer token at all is fine — an organizer may be scanning from
+    // their own session, which authHeaders() falls back to.
+    if (!tok) return true;
+    if (!isExpired(tok)) return true;
+    toast({
+      duration: 6000,
+      title: "Session expired",
+      description:
+        "Your volunteer sign-in has expired. Sign in again so check-ins are recorded under your name.",
+      variant: "destructive",
+    });
+    signOutVolunteer();
+    return false;
   };
 
   const startVolunteerGoogleLogin = () => {
@@ -635,6 +673,7 @@ export default function QRTicketScanner() {
   // Core function that calls the API after action is decided
   const processStallAction = async (action: "CHECK_IN" | "CHECK_OUT") => {
     if (!pendingStallQR) return;
+    if (!requireLiveSession()) return;
     clearRecoveryTimer();
     setProcessing(true);
     setStallAction(action);
