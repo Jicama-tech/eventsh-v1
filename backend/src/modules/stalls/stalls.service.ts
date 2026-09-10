@@ -4715,10 +4715,18 @@ export class StallsService {
         throw new NotFoundException("Stall not found");
       }
 
+      // Attach the exhibitor's own feedback, if they have submitted it, so the
+      // stall dialog can show it next to the check-out — the organizer decides
+      // whether to release the deposit off the back of it, and was otherwise
+      // sending them to a different screen to look it up.
+      const feedback = await this.feedbackService
+        .getForSubject("exhibitor", String(stall._id))
+        .catch(() => null);
+
       return {
         success: true,
         message: "Stall fetched successfully",
-        data: stall,
+        data: { ...stall.toObject(), feedback },
       };
     } catch (error) {
       return {

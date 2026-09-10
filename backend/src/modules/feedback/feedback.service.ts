@@ -348,6 +348,27 @@ export class FeedbackService {
    * there is no booking here, so a fresh id per submission is what keeps the
    * index from rejecting the second person to use the link.
    */
+  /**
+   * The feedback attached to one booking, if it has been submitted. Lets the
+   * stall dialog show an exhibitor's rating next to their check-out without
+   * pulling the whole event's feedback (which is organizer-only and heavy).
+   * Returns null rather than throwing — "not submitted yet" is the norm.
+   */
+  async getForSubject(audience: FeedbackAudience, subjectId: string) {
+    if (!subjectId) return null;
+    const row: any = await this.feedbackModel
+      .findOne({ audience, subjectId: String(subjectId) })
+      .select("rating comment createdAt refundStatus")
+      .lean();
+    if (!row) return null;
+    return {
+      rating: row.rating,
+      comment: row.comment || "",
+      submittedAt: row.createdAt,
+      refundStatus: row.refundStatus,
+    };
+  }
+
   async publicFeedbackMeta(eventId: string) {
     if (!Types.ObjectId.isValid(eventId)) {
       throw new BadRequestException("Invalid event id");
