@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Shield,
   AlertCircle,
+  Search,
 } from "lucide-react";
 import { Html5QrcodeScanner, Html5Qrcode } from "html5-qrcode";
 import { jwtDecode } from "jwt-decode";
@@ -93,6 +94,22 @@ interface Event {
   location?: string;
 }
 
+// One searchable exhibitor on the manual check-in list.
+interface ManualRow {
+  stallId: string;
+  name: string;
+  shopName: string;
+  businessName: string;
+  category: string;
+  tables: string[];
+  status: string;
+  paymentStatus: string;
+  hasCheckedIn: boolean;
+  hasCheckedOut: boolean;
+  checkInTime?: string | null;
+  checkOutTime?: string | null;
+}
+
 interface StallData {
   _id: string;
   action: string;
@@ -131,6 +148,10 @@ interface EventData {
 }
 
 type ScanMode =
+  // Search-by-name check-in for a vendor who turned up without their ticket.
+  // Not a camera mode — it shares this union so it slots into the same
+  // mode-selection screen the volunteer already knows.
+  | "manual-exhibitor"
   | "event-ticket"
   | "stall-ticket"
   | "speaker-ticket"
@@ -157,6 +178,7 @@ type Step =
   | "mode-selection"
   | "scanning"
   | "checkin-checkout-selection"
+  | "manual-search"
   | "success";
 
 // Nest returns `message` as a plain string for thrown HttpExceptions but as an
@@ -231,6 +253,13 @@ export default function QRTicketScanner() {
   );
   const [errorMessage, setErrorMessage] = useState("");
   const [scanPhase, setScanPhase] = useState<ScanPhase>(null);
+
+  // Manual check-in: the exhibitor list a volunteer searches when someone
+  // arrives without a ticket.
+  const [manualQuery, setManualQuery] = useState("");
+  const [manualRows, setManualRows] = useState<ManualRow[]>([]);
+  const [manualLoading, setManualLoading] = useState(false);
+  const [manualBusyId, setManualBusyId] = useState<string | null>(null);
 
   // Hold the "Verified" beat long enough to register before the next screen
   // replaces it. Short enough that a queue does not build behind it.
@@ -470,6 +499,13 @@ export default function QRTicketScanner() {
     setScanPhase(null);
     setProcessing(false);
     setScanMode(mode);
+    if (mode === "manual-exhibitor") {
+      setManualQuery("");
+      setManualRows([]);
+      setStep("manual-search");
+      void loadManualRows("");
+      return;
+    }
     setStep("scanning");
   };
 
@@ -539,6 +575,74 @@ export default function QRTicketScanner() {
       console.error("Error starting QR scanner:", error);
     } finally {
       startingRef.current = false;
+    }
+  };
+
+  const loadManualRows = async (q: string) => {
+    if (!eventId) return;
+    setManualLoading(true);
+    try {
+      const res = await fetch(
+        `${apiURL}/stalls/event/${eventId}/manual-attendance${
+          q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""
+        }`,
+        { headers: authHeaders() },
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(formatApiError(body, "Could not load exhibitors"));
+      }
+      setManualRows(body.data || []);
+    } catch (e: unknown) {
+      toast({
+        duration: 5000,
+        title: "Could not load exhibitors",
+        description: e instanceof Error ? e.message : "Try again.",
+        variant: "destructive",
+      });
+      setManualRows([]);
+    } finally {
+      setManualLoading(false);
+    }
+  };
+
+  const manualAttendance = async (
+    row: ManualRow,
+    action: "CHECK_IN" | "CHECK_OUT",
+  ) => {
+    if (!requireLiveSession()) return;
+    setManualBusyId(row.stallId);
+    try {
+      const res = await fetch(
+        `${apiURL}/stalls/${row.stallId}/manual-attendance`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ action }),
+        },
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(formatApiError(body, "Could not update attendance"));
+      }
+      toast({
+        duration: 5000,
+        title: action === "CHECK_IN" ? "Checked in" : "Checked out",
+        description: `${row.shopName || row.businessName || row.name} — recorded without a QR.`,
+      });
+      // Re-read rather than patching locally: the server is the authority on
+      // whether the transition actually applied, and another volunteer may
+      // have moved this booking in the meantime.
+      await loadManualRows(manualQuery);
+    } catch (e: unknown) {
+      toast({
+        duration: 6000,
+        title: "Could not update",
+        description: e instanceof Error ? e.message : "Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setManualBusyId(null);
     }
   };
 
@@ -1243,6 +1347,16 @@ export default function QRTicketScanner() {
               Exhibitor Ticket
             </Button>
           )}
+          {eventData?.features?.hasStalls && (
+            <Button
+              onClick={() => handleModeSelection("manual-exhibitor")}
+              variant="buttonOutline"
+              className="w-full"
+            >
+              <Search className="mr-2 h-4 w-4" />
+              Exhibitor — No Ticket (search by name)
+            </Button>
+          )}
           {eventData?.features?.hasSpeakers && (
             <Button
               onClick={() => handleModeSelection("speaker-ticket")}
@@ -1313,7 +1427,140 @@ export default function QRTicketScanner() {
       title: "Scan Scheduled Space Ticket",
       subtitle: "Point your camera at the booking's QR code",
     },
+    "manual-exhibitor": {
+      title: "Manual Check-In / Out",
+      subtitle: "Find an exhibitor by brand, business or name",
+    },
   };
+  // ─── RENDER: Manual Check-In / Out ──────────────────────────────────────────
+  // For the vendor who left their ticket at the hotel. Search what they can
+  // actually tell you at a gate — the brand over the stand, the registered
+  // business, their own name, or the table number — then act on the row.
+  const renderManualSearch = () => (
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader className="text-center">
+        <Search className="mx-auto h-12 w-12 text-green-600 mb-4" />
+        <CardTitle>{t("Manual Check-In / Out")}</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          No ticket? Find the exhibitor by name and check them in.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void loadManualRows(manualQuery);
+          }}
+          className="flex gap-2"
+        >
+          <Input
+            value={manualQuery}
+            onChange={(e) => setManualQuery(e.target.value)}
+            placeholder="Brand, business, name or table"
+            autoFocus
+          />
+          <Button type="submit" disabled={manualLoading}>
+            {manualLoading ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+          </Button>
+        </form>
+
+        {manualLoading ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-blue-600" />
+            Loading exhibitors…
+          </div>
+        ) : manualRows.length === 0 ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            {manualQuery.trim()
+              ? "No exhibitor matches that."
+              : "No exhibitors on this event yet."}
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-[420px] overflow-y-auto">
+            {manualRows.map((r) => {
+              const busy = manualBusyId === r.stallId;
+              const title = r.shopName || r.businessName || r.name || "Exhibitor";
+              return (
+                <div
+                  key={r.stallId}
+                  className="rounded-lg border p-3 space-y-2"
+                >
+                  <div>
+                    <p className="font-medium text-sm">{title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {[r.name, r.businessName !== title ? r.businessName : "", r.tables.join(", ")]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span
+                      className={`text-[11px] px-2 py-0.5 rounded-full ${
+                        r.hasCheckedOut
+                          ? "bg-orange-100 text-orange-800"
+                          : r.hasCheckedIn
+                            ? "bg-green-100 text-green-800"
+                            : "bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      {r.hasCheckedOut
+                        ? "Checked out"
+                        : r.hasCheckedIn
+                          ? "Checked in"
+                          : "Not arrived"}
+                    </span>
+                    <div className="flex gap-2">
+                      {!r.hasCheckedIn && (
+                        <Button
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700"
+                          disabled={busy}
+                          onClick={() => manualAttendance(r, "CHECK_IN")}
+                        >
+                          {busy ? (
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            "Check In"
+                          )}
+                        </Button>
+                      )}
+                      {r.hasCheckedIn && !r.hasCheckedOut && (
+                        <Button
+                          size="sm"
+                          className="bg-orange-500 hover:bg-orange-600"
+                          disabled={busy}
+                          onClick={() => manualAttendance(r, "CHECK_OUT")}
+                        >
+                          {busy ? (
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            "Check Out"
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <Button
+          onClick={handleBackToModeSelection}
+          variant="buttonOutline"
+          className="w-full"
+        >
+          Change Scan Type
+        </Button>
+      </CardContent>
+    </Card>
+  );
+
   const renderScanner = () => (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
@@ -1731,6 +1978,7 @@ export default function QRTicketScanner() {
             <TabsContent value="scanner" className="mt-4 space-y-4">
         {step === "mode-selection" && renderModeSelection()}
         {step === "scanning" && renderScanner()}
+        {step === "manual-search" && renderManualSearch()}
         {step === "checkin-checkout-selection" && renderCheckInOutSelection()}
         {step === "success" && !hasSuccessView && (
           <Card className="w-full max-w-md mx-auto">

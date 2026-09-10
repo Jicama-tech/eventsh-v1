@@ -36,6 +36,7 @@ import { UpdateStatusDto } from "./dto/updateStatus.dto";
 import { ConfirmPaymentDto } from "./dto/confirm-Payment.dto";
 import { AddStallNoteDto } from "./dto/add-stall-note.dto";
 import { ScanQRDto } from "./dto/scan-qr.dto";
+import { ManualAttendanceDto } from "./dto/manual-attendance.dto";
 import { SendBulkInvitationDto } from "./dto/sendBulkInvitation.dto";
 import { UpsertFormDraftDto } from "./dto/upsert-form-draft.dto";
 import { diskStorage } from "multer";
@@ -520,6 +521,39 @@ export class StallsController {
   @Get("event/:eventId")
   async findByEvent(@Param("eventId") eventId: string) {
     return await this.stallsService.findByEventId(eventId);
+  }
+
+  /**
+   * Exhibitors a volunteer can search when someone arrives without a ticket.
+   * Same open posture as the scan endpoints — the gate device has no session
+   * beyond the volunteer's own token — but returns only identifying fields
+   * and attendance state, never QR payloads or payment detail.
+   * GET /stalls/event/:eventId/manual-attendance?q=
+   */
+  @Get("event/:eventId/manual-attendance")
+  async manualAttendanceList(
+    @Param("eventId") eventId: string,
+    @Query("q") q?: string,
+  ) {
+    return await this.stallsService.listForManualAttendance(eventId, q);
+  }
+
+  /**
+   * Check an exhibitor in / out without their QR.
+   * POST /stalls/:id/manual-attendance
+   */
+  @Post(":id/manual-attendance")
+  @HttpCode(HttpStatus.OK)
+  async manualAttendance(
+    @Param("id") id: string,
+    @Body() dto: ManualAttendanceDto,
+    @Headers("authorization") authHeader?: string,
+  ) {
+    return await this.stallsService.manualStallAttendance(
+      id,
+      dto.action,
+      authHeader,
+    );
   }
 
   @Get("download-stall-ticket/:id")
