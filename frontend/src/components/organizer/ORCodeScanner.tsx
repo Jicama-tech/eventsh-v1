@@ -138,6 +138,20 @@ type ScanMode =
   | "workshop"
   | "scheduled-space"
   | null;
+// What the volunteer is told while a scan is in flight. Without this the
+// camera simply froze on the last frame during the round trip, which reads as
+// "nothing happened" — so people re-present the badge and scan twice.
+type ScanPhase = null | "reading" | "verifying" | "verified";
+
+const SCAN_PHASE_COPY: Record<
+  Exclude<ScanPhase, null>,
+  { title: string; subtitle: string }
+> = {
+  reading: { title: "QR detected", subtitle: "Reading the code…" },
+  verifying: { title: "Verifying…", subtitle: "Checking with the server" },
+  verified: { title: "Verified", subtitle: "" },
+};
+
 type Step =
   | "otp-verification"
   | "mode-selection"
@@ -216,6 +230,14 @@ export default function QRTicketScanner() {
     null,
   );
   const [errorMessage, setErrorMessage] = useState("");
+  const [scanPhase, setScanPhase] = useState<ScanPhase>(null);
+
+  // Hold the "Verified" beat long enough to register before the next screen
+  // replaces it. Short enough that a queue does not build behind it.
+  const showVerified = async () => {
+    setScanPhase("verified");
+    await new Promise((r) => setTimeout(r, 700));
+  };
 
   // Single writer for the processing flag: the ref is what the frozen
   // html5-qrcode callback can actually read, the state is what re-renders.
@@ -359,6 +381,7 @@ export default function QRTicketScanner() {
   // signed-in user and the landing page otherwise.
   const handleExitScanner = () => {
     clearRecoveryTimer();
+    setScanPhase(null);
     setProcessing(false);
     if (qrCodeRef.current) {
       const inst = qrCodeRef.current;
@@ -444,6 +467,7 @@ export default function QRTicketScanner() {
   const handleModeSelection = (mode: ScanMode) => {
     clearRecoveryTimer();
     scanGenerationRef.current++;
+    setScanPhase(null);
     setProcessing(false);
     setScanMode(mode);
     setStep("scanning");
@@ -525,6 +549,7 @@ export default function QRTicketScanner() {
     const gen = scanGenerationRef.current;
     const abandoned = () => gen !== scanGenerationRef.current;
 
+    setScanPhase("reading");
     setProcessing(true);
 
     try {
@@ -551,6 +576,7 @@ export default function QRTicketScanner() {
       // The operator has already moved on — do not drag them back to an error
       // screen for a scan they abandoned.
       if (abandoned()) return;
+      setScanPhase(null);
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to process QR code",
       );
@@ -583,6 +609,7 @@ export default function QRTicketScanner() {
       throw new Error("Invalid QR code format. Missing ticket ID.");
     }
 
+    setScanPhase("verifying");
     const ticketResponse = await fetch(
       `${apiURL}/tickets/by-ticket-id/${qrData.ticketId}`,
     );
@@ -609,6 +636,7 @@ export default function QRTicketScanner() {
       throw new Error(formatApiError(errorData, "Failed to mark attendance"));
     }
 
+    await showVerified();
     setScanResult("success");
     setStep("success");
 
@@ -631,9 +659,13 @@ export default function QRTicketScanner() {
       throw new Error("Invalid QR code format. Missing stall ID.");
     }
 
-    // Save the raw QR text and go to selection screen
+    // Save the raw QR text and go to selection screen. No server round trip
+    // here — the payload is checked locally — so confirm it read cleanly
+    // before handing over to the action choice.
+    await showVerified();
     setPendingStallQR(decodedText);
     setProcessing(false);
+    setScanPhase(null);
     setStep("checkin-checkout-selection");
   };
 
@@ -675,6 +707,7 @@ export default function QRTicketScanner() {
     if (!pendingStallQR) return;
     if (!requireLiveSession()) return;
     clearRecoveryTimer();
+    setScanPhase("verifying");
     setProcessing(true);
     setStallAction(action);
 
@@ -718,6 +751,7 @@ export default function QRTicketScanner() {
         throw new Error("This stall is not for this event");
       }
 
+      await showVerified();
       setStallData(stallInfo.data);
       setScanResult("success");
       setStep("success");
@@ -728,6 +762,9 @@ export default function QRTicketScanner() {
         description: `${action === "CHECK_IN" ? "Checked In" : "Checked Out"} successfully for ${stallInfo.data.shopkeeper?.name}`,
       });
     } catch (error: any) {
+      // Clear the phase first — otherwise the screen sits on
+      // "Verifying…" forever behind the error toast.
+      setScanPhase(null);
       setErrorMessage(error.message || "Failed to process stall QR");
       setScanResult("error");
       toast({
@@ -762,8 +799,10 @@ export default function QRTicketScanner() {
       throw new Error("Invalid QR code format. Missing speaker ID.");
     }
 
+    await showVerified();
     setPendingSpeakerQR(decodedText);
     setProcessing(false);
+    setScanPhase(null);
     setStep("checkin-checkout-selection");
   };
 
@@ -784,6 +823,7 @@ export default function QRTicketScanner() {
   const processSpeakerAction = async (action: "CHECK_IN" | "CHECK_OUT") => {
     if (!pendingSpeakerQR) return;
     clearRecoveryTimer();
+    setScanPhase("verifying");
     setProcessing(true);
     setSpeakerAction(action);
 
@@ -818,6 +858,7 @@ export default function QRTicketScanner() {
 
       const scanInfo = await scanRes.json();
 
+      await showVerified();
       setSpeakerData(scanInfo.data);
       setScanResult("success");
       setStep("success");
@@ -828,6 +869,9 @@ export default function QRTicketScanner() {
         description: `${action === "CHECK_IN" ? "Checked In" : "Checked Out"} successfully for ${scanInfo.data.speakerName}`,
       });
     } catch (error: any) {
+      // Clear the phase first — otherwise the screen sits on
+      // "Verifying…" forever behind the error toast.
+      setScanPhase(null);
       setErrorMessage(error.message || "Failed to process speaker QR");
       setScanResult("error");
       toast({
@@ -861,8 +905,10 @@ export default function QRTicketScanner() {
       throw new Error("Invalid QR code format. Missing booking ID.");
     }
 
+    await showVerified();
     setPendingRoundTableQR(decodedText);
     setProcessing(false);
+    setScanPhase(null);
     setStep("checkin-checkout-selection");
   };
 
@@ -883,6 +929,7 @@ export default function QRTicketScanner() {
   const processRoundTableAction = async (action: "CHECK_IN" | "CHECK_OUT") => {
     if (!pendingRoundTableQR) return;
     clearRecoveryTimer();
+    setScanPhase("verifying");
     setProcessing(true);
     setRoundTableAction(action);
 
@@ -919,6 +966,7 @@ export default function QRTicketScanner() {
 
       const scanInfo = await scanRes.json();
 
+      await showVerified();
       setRoundTableData(scanInfo.data);
       setScanResult("success");
       setStep("success");
@@ -929,6 +977,9 @@ export default function QRTicketScanner() {
         description: `${action === "CHECK_IN" ? "Checked In" : "Checked Out"} successfully for ${scanInfo.data.visitorName}`,
       });
     } catch (error: any) {
+      // Clear the phase first — otherwise the screen sits on
+      // "Verifying…" forever behind the error toast.
+      setScanPhase(null);
       setErrorMessage(error.message || "Failed to process round table QR");
       setScanResult("error");
       toast({
@@ -964,6 +1015,7 @@ export default function QRTicketScanner() {
       throw new Error("Invalid QR code format. Missing booking ID.");
     }
 
+    setScanPhase("verifying");
     const res = await fetch(`${apiURL}/workshop-bookings/scan-qr`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -976,6 +1028,7 @@ export default function QRTicketScanner() {
     }
 
     const info = await res.json();
+    await showVerified();
     setWorkshopData(info.data);
     setScanResult("success");
     setStep("success");
@@ -1006,6 +1059,7 @@ export default function QRTicketScanner() {
       throw new Error("Invalid QR code format. Missing request ID.");
     }
 
+    setScanPhase("verifying");
     const res = await fetch(`${apiURL}/scheduled-spaces/scan-qr`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1020,6 +1074,7 @@ export default function QRTicketScanner() {
     }
 
     const info = await res.json();
+    await showVerified();
     setScheduledSpaceData(info.data);
     setScanResult("success");
     setStep("success");
@@ -1038,6 +1093,7 @@ export default function QRTicketScanner() {
   const resetScanner = () => {
     clearRecoveryTimer();
     scanGenerationRef.current++;
+    setScanPhase(null);
     setScanResult(null);
     setTicketData(null);
     setStallData(null);
@@ -1279,11 +1335,35 @@ export default function QRTicketScanner() {
             style={{ minHeight: "300px" }}
           />
 
-          {isProcessing && (
-            <div className="absolute inset-0 bg-background bg-opacity-80 flex items-center justify-center rounded-lg">
-              <div className="text-center">
-                <RefreshCw className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
-                <p className="text-sm font-medium">Processing...</p>
+          {(isProcessing || scanPhase) && scanResult !== "error" && (
+            <div
+              className={`absolute inset-0 flex items-center justify-center rounded-lg ${
+                scanPhase === "verified"
+                  ? "bg-green-50 bg-opacity-95"
+                  : "bg-background bg-opacity-90"
+              }`}
+            >
+              <div className="text-center px-4">
+                {scanPhase === "verified" ? (
+                  <>
+                    <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-2" />
+                    <p className="text-base font-semibold text-green-800">
+                      {SCAN_PHASE_COPY.verified.title}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
+                    <p className="text-sm font-medium">
+                      {scanPhase
+                        ? SCAN_PHASE_COPY[scanPhase].title
+                        : "Processing…"}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {scanPhase ? SCAN_PHASE_COPY[scanPhase].subtitle : ""}
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -1333,14 +1413,41 @@ export default function QRTicketScanner() {
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-          <p className="text-sm text-green-700 font-medium">
-            ✅ QR Code Verified
-          </p>
-          <p className="text-xs text-green-600 mt-1">
-            Please select the action below
-          </p>
-        </div>
+        {scanPhase === "verifying" || scanPhase === "verified" ? (
+          <div
+            className={`rounded-lg p-3 text-center border ${
+              scanPhase === "verified"
+                ? "bg-green-50 border-green-200"
+                : "bg-blue-50 border-blue-200"
+            }`}
+          >
+            {scanPhase === "verified" ? (
+              <p className="text-sm text-green-700 font-medium flex items-center justify-center gap-2">
+                <CheckCircle className="h-4 w-4" />
+                {SCAN_PHASE_COPY.verified.title}
+              </p>
+            ) : (
+              <>
+                <p className="text-sm text-blue-700 font-medium flex items-center justify-center gap-2">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  {SCAN_PHASE_COPY.verifying.title}
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  {SCAN_PHASE_COPY.verifying.subtitle}
+                </p>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+            <p className="text-sm text-green-700 font-medium">
+              ✅ QR Code Verified
+            </p>
+            <p className="text-xs text-green-600 mt-1">
+              Please select the action below
+            </p>
+          </div>
+        )}
 
         {/* Error message if check-out validation fails */}
         {scanResult === "error" && (
