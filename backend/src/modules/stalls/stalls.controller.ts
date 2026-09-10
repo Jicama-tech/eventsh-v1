@@ -492,8 +492,16 @@ export class StallsController {
   async addNote(
     @Param("id") id: string,
     @Body() dto: AddStallNoteDto,
+    // Verified when present, so the timeline author is established rather
+    // than taken on trust from the body.
+    @Headers("authorization") authHeader?: string,
   ) {
-    return await this.stallsService.addNote(id, dto.note, dto.addedBy);
+    return await this.stallsService.addNote(
+      id,
+      dto.note,
+      dto.addedBy,
+      authHeader,
+    );
   }
 
   /**

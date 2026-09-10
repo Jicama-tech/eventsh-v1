@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 import { JwtModule } from "@nestjs/jwt";
+import { OrganizerSchema } from "../organizers/schemas/organizer.schema";
+import { OrganizerStoreSchema } from "../organizer-stores/entities/organizer-store.entity";
 import { FeedbackController } from "./feedback.controller";
 import { FeedbackService } from "./feedback.service";
 import { Feedback, FeedbackSchema } from "./schemas/feedback.schema";
@@ -26,6 +28,10 @@ import { OtpModule } from "../otp/otp.module";
       { name: Stall.name, schema: StallSchema },
       { name: SpeakerRequest.name, schema: SpeakerRequestSchema },
       { name: RoundTableBooking.name, schema: RoundTableBookingSchema },
+      // Needed to resolve the organizer's storefront slug for feedback deep
+      // links — the bare /events/:id path is not routed on the public site.
+      { name: "Organizer", schema: OrganizerSchema },
+      { name: "OrganizerStore", schema: OrganizerStoreSchema },
     ]),
     JwtModule.register({
       secret: process.env.JWT_ACCESS_SECRET || "secretKey",

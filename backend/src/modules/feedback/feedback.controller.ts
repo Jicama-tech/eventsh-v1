@@ -10,7 +10,9 @@ import {
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { FeedbackService } from "./feedback.service";
+import { ThrottlerGuard } from "@nestjs/throttler";
 import {
+  SubmitPublicFeedbackDto,
   SubmitTokenFeedbackDto,
   SubmitVisitorFeedbackDto,
 } from "./dto/submit-feedback.dto";
@@ -60,6 +62,24 @@ export class FeedbackController {
     @Body() dto: SubmitVisitorFeedbackDto,
   ) {
     return this.feedbackService.submitVisitorFeedback(eventId, dto);
+  }
+
+  // Open feedback from the organizer's shared link. Deliberately unguarded —
+  // the whole point is that anyone handed the link can respond — but rate
+  // limited, since an open write endpoint is otherwise a spam funnel.
+  @Post("events/:eventId/feedback/public")
+  @UseGuards(ThrottlerGuard)
+  async submitPublic(
+    @Param("eventId") eventId: string,
+    @Body() dto: SubmitPublicFeedbackDto,
+  ) {
+    return this.feedbackService.submitPublicFeedback(eventId, dto);
+  }
+
+  // Minimal event details for rendering the public feedback form (title only).
+  @Get("events/:eventId/feedback/public/meta")
+  async publicMeta(@Param("eventId") eventId: string) {
+    return this.feedbackService.publicFeedbackMeta(eventId);
   }
 
   // Public per-event stats for the "By the numbers" section on EventFront.

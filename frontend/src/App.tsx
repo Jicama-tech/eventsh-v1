@@ -69,6 +69,7 @@ const OrganizerDashboard = lazy(() => import("./pages/organizer/OrganizerDashboa
 const UserDashboard = lazy(() => import("./pages/user/UserDashboard").then(m => ({ default: m.UserDashboard })));
 const QRTicketScanner = lazy(() => import("./components/organizer/ORCodeScanner"));
 const WeddingRoomTicket = lazy(() => import("./pages/WeddingRoomTicket"));
+const PublicEventFeedback = lazy(() => import("./pages/PublicEventFeedback"));
 
 // Loading screen while validating token
 function LoadingScreen() {
@@ -86,7 +87,7 @@ function LoadingScreen() {
 function RequireUserRole({ children }: { children: JSX.Element }) {
   const { user } = useAuth();
   if (!user) return <Navigate to="/" replace />;
-  if (user.roles[0] !== "user") return <Navigate to="/" replace />;
+  if (user.roles?.[0] !== "user") return <Navigate to="/" replace />;
   return children;
 }
 
@@ -224,6 +225,23 @@ function AppContent() {
     );
   }
 
+  // The public feedback link is handed to people with no account, but the
+  // organizer testing their own link IS signed in — routed through the role
+  // branches below it would hit their catch-all and redirect away.
+  // Short-circuited like the OAuth callback above so it renders for everyone.
+  if (
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/feedback/")
+  ) {
+    return (
+      <Suspense fallback={<LoadingScreen />}>
+        <Routes>
+          <Route path="/feedback/:eventId" element={<PublicEventFeedback />} />
+        </Routes>
+      </Suspense>
+    );
+  }
+
   if (loading) {
     return <LoadingScreen />;
   }
@@ -238,7 +256,9 @@ function AppContent() {
     <Suspense fallback={<LoadingScreen />}>
       <CleanStorefrontUrl />
 
-      {!user ? (
+      {/* A token with no roles is not a usable session — render the public
+          app rather than the role-switch below, which indexes into roles. */}
+      {!user || !user.roles?.length ? (
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route
@@ -332,7 +352,11 @@ function AppContent() {
         </Routes>
       ) : (
         (() => {
-          switch (user.roles[0]) {
+          // A session without roles is not a usable session. Indexing straight
+          // into roles here threw "Cannot read properties of undefined
+          // (reading '0')" and took down the entire app with no way out.
+          const primaryRole = user.roles?.[0];
+          switch (primaryRole) {
             case "admin":
               return (
                 <Routes>
@@ -553,7 +577,7 @@ function AppContent() {
                       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-pink-50">
                         <div className="text-center bg-white p-8 rounded-2xl shadow-xl max-w-md">
                           <h1 className="text-2xl font-bold mb-4 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                            Welcome, {user.roles[0]}!
+                            Welcome, {primaryRole}!
                           </h1>
                           <p className="text-gray-600 mb-6">
                             Your dashboard is coming soon...

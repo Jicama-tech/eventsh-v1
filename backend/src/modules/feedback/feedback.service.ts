@@ -11,9 +11,11 @@ import { Model, Types } from "mongoose";
 import { JwtService } from "@nestjs/jwt";
 import { Feedback, FeedbackDocument, FeedbackAudience } from "./schemas/feedback.schema";
 import {
+  SubmitPublicFeedbackDto,
   SubmitTokenFeedbackDto,
   SubmitVisitorFeedbackDto,
 } from "./dto/submit-feedback.dto";
+import { randomUUID } from "crypto";
 import { OtpService } from "../otp/otp.service";
 
 const FEEDBACK_TOKEN_TTL = "30d";
@@ -39,6 +41,9 @@ export class FeedbackService {
     private readonly speakerRequestModel: Model<any>,
     @InjectModel("RoundTableBooking")
     private readonly roundTableBookingModel: Model<any>,
+    @InjectModel("Organizer") private readonly organizerModel: Model<any>,
+    @InjectModel("OrganizerStore")
+    private readonly organizerStoreModel: Model<any>,
     private readonly jwtService: JwtService,
     private readonly otpService: OtpService,
   ) {}
@@ -103,8 +108,11 @@ export class FeedbackService {
       .lean();
     const eventTitle = event?.title || "the event";
     const token = this.mintToken(args.audience, args.subjectId, args.eventId);
-    const base = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
-    const link = `${base}/events/${args.eventId}?feedback=${args.audience}&token=${encodeURIComponent(token)}`;
+    const link = await this.buildFeedbackLink(
+      args.eventId,
+      args.audience,
+      token,
+    );
     const reason = args.hasDeposit
       ? "Submit your feedback to release the security deposit refund"
       : "Share your experience";
@@ -117,6 +125,62 @@ export class FeedbackService {
         `WhatsApp feedback notification failed (${args.audience}/${args.subjectId}): ${err?.message}`,
       );
     }
+  }
+
+  /**
+   * Public URL for a feedback deep link.
+   *
+   * Two things this must get right, both of which the previous one-liner got
+   * wrong: the path has to be the slug-scoped `/:organizationName/events/:id`
+   * (a bare `/events/:id` is only routed in embed mode, so on the public site
+   * it hit the catch-all and redirected to "/", losing the query string), and
+   * the token param must NOT be called `token` — the frontend AuthProvider
+   * adopts any `?token=` as a session JWT, and a feedback token carries no
+   * roles, which replaced the visitor's session and crashed the app.
+   */
+  private async buildFeedbackLink(
+    eventId: string,
+    audience: FeedbackAudience,
+    token: string,
+  ): Promise<string> {
+    const base = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
+    const query = `feedback=${audience}&ftoken=${encodeURIComponent(token)}`;
+    try {
+      const event: any = await this.eventModel
+        .findById(eventId)
+        .select("organizerId")
+        .lean();
+      const orgId = (event as any)?.organizerId;
+      if (orgId) {
+        const store: any = await this.organizerStoreModel
+          .findOne({ organizerId: orgId })
+          .select("slug")
+          .lean();
+        let slug: string | undefined = store?.slug || undefined;
+        if (!slug) {
+          const org: any = await this.organizerModel
+            .findById(orgId)
+            .select("slug organizationName")
+            .lean();
+          slug =
+            org?.slug ||
+            (org?.organizationName
+              ? String(org.organizationName)
+                  .trim()
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, "-")
+                  .replace(/^-+|-+$/g, "")
+              : undefined);
+        }
+        if (slug) {
+          return `${base}/${slug}/events/${eventId}?${query}`;
+        }
+      }
+    } catch {
+      /* fall through to the un-slugged form */
+    }
+    // No slug resolvable — still better than nothing on an embed deployment.
+    return `${base}/events/${eventId}?${query}`;
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -273,6 +337,90 @@ export class FeedbackService {
   // the submitter's email matches a sold ticket for the event. Feedback is
   // keyed by ticketId so one email with two tickets can submit twice.
   // ─────────────────────────────────────────────────────────────────────
+  /**
+   * Feedback from the organizer's shared public link. No token, no ticket —
+   * whoever holds the link can submit, and nothing they send is treated as
+   * identity, so this is stored under its own audience and never mixed with
+   * ticket-verified visitor feedback.
+   *
+   * Each submission gets a generated subjectId: the (event, audience,
+   * subject) unique index exists to stop one booking being rated twice, and
+   * there is no booking here, so a fresh id per submission is what keeps the
+   * index from rejecting the second person to use the link.
+   */
+  /**
+   * The feedback attached to one booking, if it has been submitted. Lets the
+   * stall dialog show an exhibitor's rating next to their check-out without
+   * pulling the whole event's feedback (which is organizer-only and heavy).
+   * Returns null rather than throwing — "not submitted yet" is the norm.
+   */
+  async getForSubject(audience: FeedbackAudience, subjectId: string) {
+    if (!subjectId) return null;
+    const row: any = await this.feedbackModel
+      .findOne({ audience, subjectId: String(subjectId) })
+      .select("rating comment createdAt refundStatus")
+      .lean();
+    if (!row) return null;
+    return {
+      rating: row.rating,
+      comment: row.comment || "",
+      submittedAt: row.createdAt,
+      refundStatus: row.refundStatus,
+    };
+  }
+
+  async publicFeedbackMeta(eventId: string) {
+    if (!Types.ObjectId.isValid(eventId)) {
+      throw new BadRequestException("Invalid event id");
+    }
+    const event: any = await this.eventModel
+      .findById(eventId)
+      .select("title startDate endDate location bannerImage")
+      .lean();
+    if (!event) throw new NotFoundException("Event not found");
+    return {
+      success: true,
+      data: {
+        eventId: String(event._id),
+        title: event.title || "",
+        startDate: event.startDate || null,
+        endDate: event.endDate || null,
+        location: event.location || "",
+      },
+    };
+  }
+
+  async submitPublicFeedback(eventId: string, dto: SubmitPublicFeedbackDto) {
+    if (!Types.ObjectId.isValid(eventId)) {
+      throw new BadRequestException("Invalid event id");
+    }
+    const event: any = await this.eventModel
+      .findById(eventId)
+      .select("title")
+      .lean();
+    if (!event) throw new NotFoundException("Event not found");
+
+    const name = (dto.name || "").trim();
+    if (!name) throw new BadRequestException("Please enter your name");
+
+    const doc = await this.feedbackModel.create({
+      eventId: new Types.ObjectId(eventId),
+      audience: "public",
+      subjectId: `public:${randomUUID()}`,
+      email: "",
+      name,
+      rating: dto.rating,
+      comment: (dto.comment || "").trim(),
+      refundStatus: "not_applicable",
+    });
+
+    return {
+      success: true,
+      message: "Thanks for your feedback!",
+      data: { id: String(doc._id) },
+    };
+  }
+
   async submitVisitorFeedback(
     eventId: string,
     dto: SubmitVisitorFeedbackDto,
@@ -369,6 +517,9 @@ export class FeedbackService {
         count: 0,
         available: roundTableCount,
       },
+      // Open link — there is no fixed pool of people who could respond, so
+      // "available" tracks how many actually did.
+      public: { items: [], avg: 0, count: 0, available: 0 },
     };
 
     for (const f of feedback) {
@@ -417,6 +568,7 @@ export class FeedbackService {
     const event: any = eventDoc;
 
     const audiences: FeedbackAudience[] = [
+      "public",
       "visitor",
       "exhibitor",
       "speaker",
@@ -434,6 +586,8 @@ export class FeedbackService {
         ratingCount: 0,
         ratingAvg: 0,
       },
+      // No fixed pool of potential responders behind an open link.
+      public: { available: 0, ratingCount: 0, ratingAvg: 0 },
     };
     for (const f of feedback) {
       const a = f.audience as FeedbackAudience;

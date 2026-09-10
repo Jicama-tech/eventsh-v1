@@ -18,7 +18,12 @@ import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
 
-type Audience = "visitor" | "exhibitor" | "speaker" | "round_table";
+type Audience =
+  | "visitor"
+  | "exhibitor"
+  | "speaker"
+  | "round_table"
+  | "public";
 
 // The Feedback collection uses snake_case audience values to match the
 // FeedbackAudience enum on the backend; the subscription module flags use
@@ -31,6 +36,9 @@ const AUDIENCE_TO_PLAN_KEY: Record<
   exhibitor: "exhibitor",
   speaker: "speaker",
   round_table: "roundTable",
+  // Open-link feedback rides the visitor entitlement — it is the same
+  // "hear from attendees" capability, just without a ticket behind it.
+  public: "visitor",
 };
 
 interface FeedbackItem {
@@ -38,6 +46,8 @@ interface FeedbackItem {
   audience: Audience;
   subjectId: string;
   email: string;
+  // Only set for the "public" audience — self-declared, not verified.
+  name?: string;
   rating: number;
   comment: string;
   refundStatus: "pending" | "refunded" | "not_applicable";
@@ -61,6 +71,7 @@ const AUDIENCE_LABEL: Record<Audience, string> = {
   exhibitor: "Exhibitors",
   speaker: "Speakers",
   round_table: "Round Tables",
+  public: "Public Link",
 };
 
 function Stars({ value }: { value: number }) {
@@ -259,9 +270,13 @@ export function EventFeedbackDialog({
                     <Card>
                       <CardContent className="py-8 text-center text-sm text-muted-foreground">
                         No feedback received yet
-                        {b.available === 0
-                          ? " — and no bookings exist for this audience."
-                          : ` (out of ${b.available} ${AUDIENCE_LABEL[a].toLowerCase()})`}
+                        {a === "public"
+                          ? " — share the feedback link from My Events to collect some."
+                          : b.available === 0
+                            ? " — and no bookings exist for this audience."
+                            : ` (out of ${b.available} ${AUDIENCE_LABEL[
+                                a
+                              ].toLowerCase()})`}
                         .
                       </CardContent>
                     </Card>
@@ -272,7 +287,11 @@ export function EventFeedbackDialog({
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <div className="text-sm font-medium">
-                                {item.email}
+                                {/* Public responses have no account behind
+                                    them — show the name they gave. */}
+                                {item.audience === "public"
+                                  ? item.name || "Anonymous"
+                                  : item.email}
                               </div>
                               <div className="text-[11px] text-muted-foreground">
                                 {new Date(item.createdAt).toLocaleString()}
@@ -285,7 +304,7 @@ export function EventFeedbackDialog({
                               "{item.comment}"
                             </p>
                           )}
-                          {a !== "visitor" && (
+                          {a !== "visitor" && a !== "public" && (
                             <div className="flex items-center justify-between pt-1 border-t">
                               <Badge
                                 variant={

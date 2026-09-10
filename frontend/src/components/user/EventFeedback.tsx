@@ -417,11 +417,15 @@ export function EventFeedbackTokenHandler({
 }) {
   const [params, setParams] = useSearchParams();
   const audienceParam = params.get("feedback") as Audience | null;
-  const token = params.get("token");
+  // `ftoken`, not `token`: AuthProvider treats any `?token=` as a session JWT,
+  // so the old param name made a feedback link clobber the visitor's session
+  // and crash the app. `token` is still read so links already emailed work.
+  const token = params.get("ftoken") || params.get("token");
 
   const clearTokenParams = () => {
     const next = new URLSearchParams(params);
     next.delete("feedback");
+    next.delete("ftoken");
     next.delete("token");
     setParams(next, { replace: true });
   };

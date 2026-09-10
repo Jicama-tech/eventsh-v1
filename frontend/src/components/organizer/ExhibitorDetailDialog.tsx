@@ -6,7 +6,7 @@
 // their corresponding callback prop is supplied — that's how the volunteer
 // view stays read-only without forking the markup.
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +33,7 @@ import {
   Clock,
   Clock1,
   Clock12,
+  Star,
   CreditCard,
   FileText,
   Loader2,
@@ -52,6 +53,13 @@ import { useCurrency } from "@/hooks/useCurrencyhook";
 import { toast } from "@/hooks/use-toast";
 import { jwtDecode } from "jwt-decode";
 import { t } from "@/i18n/t";
+
+export interface StallFeedback {
+  rating: number;
+  comment?: string;
+  submittedAt?: string;
+  refundStatus?: string;
+}
 
 interface StatusHistoryEntry {
   status: string;
@@ -275,21 +283,63 @@ export function ExhibitorDetailDialog({
 
   // Fallback "addedBy" derived from JWT (email + first role). Callers can
   // override via `currentUserDisplay` when they have richer info.
+  // Organizer/admin session first, then the volunteer token this event's
+  // scanner stores. Reading only sessionStorage meant a volunteer — who never
+  // has one — posted notes with no author at all, and every note they added
+  // landed on the timeline as "Unknown user".
+  const readAuthToken = useCallback((): string => {
+      try {
+        const org = sessionStorage.getItem("token");
+        if (org) return org;
+      } catch {
+        /* storage unavailable */
+      }
+      try {
+        // Prefer the token for the stall's own event; fall back to any
+        // volunteer token present, since the dialog opens from screens that
+        // do not always know the event id.
+        const ev = (
+          stallRequest as { eventId?: { _id?: string } | string } | null
+        )?.eventId;
+        const evId = String(
+          (typeof ev === "object" ? ev?._id : ev) || "",
+        );
+        const exact = evId
+          ? localStorage.getItem(`eventsh_volunteer_token_${evId}`)
+          : null;
+        if (exact) return exact;
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith("eventsh_volunteer_token_")) {
+            const v = localStorage.getItem(k);
+            if (v) return v;
+          }
+        }
+      } catch {
+        /* storage unavailable */
+      }
+      return "";
+  }, [stallRequest]);
+
   const derivedUserDisplay = useMemo(() => {
     if (currentUserDisplay) return currentUserDisplay;
     try {
-      const token = sessionStorage.getItem("token");
+      const token = readAuthToken();
       if (!token) return "";
       const decoded: any = jwtDecode(token);
+      const name: string = decoded?.name || "";
       const email: string = decoded?.email || "";
       const roles: string[] = Array.isArray(decoded?.roles) ? decoded.roles : [];
       const role = roles[0] || "user";
-      if (!email) return role;
-      return `${email} (${role})`;
+      // Name first so the timeline reads the same as a gate check-in entry
+      // ("Priya Sharma (volunteer)"), falling back to email then role alone.
+      const who = name || email;
+      if (!who) return role;
+      return `${who} (${role})`;
     } catch {
       return "";
     }
-  }, [currentUserDisplay, open]);
+  }, [currentUserDisplay, open, readAuthToken]);
 
   const resetNoteForm = () => {
     setNoteFormOpen(false);
@@ -301,7 +351,7 @@ export function ExhibitorDetailDialog({
     if (!trimmed || !stallRequest?._id) return;
     setIsAddingNote(true);
     try {
-      const token = sessionStorage.getItem("token");
+      const token = readAuthToken();
       const res = await fetch(`${apiURL}/stalls/${stallRequest._id}/notes`, {
         method: "POST",
         headers: {
@@ -1833,7 +1883,7 @@ export function ExhibitorDetailDialog({
                   </div>
                 )}
                 {stallRequest.hasCheckedOut && stallRequest.checkOutTime && (
-                  <div className="flex items-start gap-3 justify-between">
+                  <div className="space-y-3">
                     <div className="flex items-start gap-3">
                       <div className="bg-green-100 dark:bg-green-500/20 rounded-full p-2">
                         <Clock12 className="h-4 w-4 text-green-600 dark:text-green-400" />
@@ -1844,6 +1894,60 @@ export function ExhibitorDetailDialog({
                           {formatDateTime(stallRequest.checkOutTime)}
                         </p>
                       </div>
+                    </div>
+                    {/* The exhibitor's own feedback, submitted from the link in
+                        their check-out email. Shown here because releasing the
+                        deposit is the decision it feeds — the organizer used to
+                        have to go to a different screen to read it. */}
+                    <div>
+                      {stallRequest.feedback ? (
+                        <div className="rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-3 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <p className="text-sm font-medium">
+                              Exhibitor feedback
+                            </p>
+                            <div className="flex items-center gap-1">
+                              {[1, 2, 3, 4, 5].map((n) => (
+                                <Star
+                                  key={n}
+                                  className={`h-4 w-4 ${
+                                    n <= (stallRequest.feedback?.rating || 0)
+                                      ? "fill-amber-400 text-amber-400"
+                                      : "text-muted-foreground/40"
+                                  }`}
+                                />
+                              ))}
+                              <span className="ml-1 text-xs text-muted-foreground">
+                                {stallRequest.feedback.rating}/5
+                              </span>
+                            </div>
+                          </div>
+                          {stallRequest.feedback.comment ? (
+                            <p className="text-sm italic text-muted-foreground whitespace-pre-wrap">
+                              "{stallRequest.feedback.comment}"
+                            </p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              Rated without a message.
+                            </p>
+                          )}
+                          {stallRequest.feedback.submittedAt && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Submitted{" "}
+                              {formatDateTime(
+                                stallRequest.feedback.submittedAt,
+                              )}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border border-dashed p-3">
+                          <p className="text-xs text-muted-foreground">
+                            No feedback submitted yet — the exhibitor was
+                            emailed a link when they checked out.
+                          </p>
+                        </div>
+                      )}
                     </div>
                     {onReturnDeposit && !stallRequest.depositReturned && (
                       <div className="flex justify-between gap-3">

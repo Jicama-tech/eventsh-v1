@@ -7,7 +7,12 @@ export type FeedbackAudience =
   | "visitor"
   | "exhibitor"
   | "speaker"
-  | "round_table";
+  | "round_table"
+  // Open feedback from a link the organizer shares publicly. Unlike
+  // "visitor" — which is gated on owning a ticket — anyone with the link can
+  // submit, so it is deliberately kept as its own audience rather than mixed
+  // in with verified attendees.
+  | "public";
 
 @Schema({ timestamps: true })
 export class Feedback {
@@ -16,18 +21,28 @@ export class Feedback {
 
   @Prop({
     required: true,
-    enum: ["visitor", "exhibitor", "speaker", "round_table"],
+    enum: ["visitor", "exhibitor", "speaker", "round_table", "public"],
     index: true,
   })
   audience: FeedbackAudience;
 
   // ticketId for visitor; stall/speakerRequest/roundTableBooking _id otherwise.
   // Unique with eventId+audience to enforce one feedback per booked thing.
+  // Public submissions have no booking to key on, so they get a generated id
+  // per submission — the uniqueness constraint then never blocks them.
   @Prop({ required: true, index: true })
   subjectId: string;
 
-  @Prop({ required: true, lowercase: true, trim: true })
+  // Required for every booking-backed audience, which is how the submitter is
+  // identified. Public submissions have no account behind them, so they carry
+  // a self-declared `name` instead and leave this empty.
+  @Prop({ required: false, lowercase: true, trim: true, default: "" })
   email: string;
+
+  // Self-declared display name. Only used by the "public" audience — the
+  // others are resolved from the booking they are attached to.
+  @Prop({ default: "", trim: true })
+  name: string;
 
   @Prop({ required: true, min: 1, max: 5 })
   rating: number;

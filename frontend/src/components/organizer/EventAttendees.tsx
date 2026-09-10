@@ -871,9 +871,11 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
       if (result.success) {
         toast({
-          duration: 5000,
+          duration: 6000,
           title: "Success",
-          description: "Deposit returned successfully",
+          // The server says whether the vendor's confirmation email actually
+          // went out — don't claim it did when there was no address on file.
+          description: result.message || "Deposit returned successfully",
         });
         setShowReturnDepositDialog(false);
         setReturnDepositNotes("");

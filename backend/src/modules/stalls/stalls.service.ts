@@ -1237,7 +1237,12 @@ export class StallsService {
    * status. Used by exhibitor / organizer / operator / volunteer to leave
    * timeline entries at any time from the Stall Dialog.
    */
-  async addNote(stallId: string, note: string, addedBy?: string) {
+  async addNote(
+    stallId: string,
+    note: string,
+    addedBy?: string,
+    authHeader?: string,
+  ) {
     if (!Types.ObjectId.isValid(stallId)) {
       throw new BadRequestException("Invalid stall ID format");
     }
@@ -1249,11 +1254,18 @@ export class StallsService {
     const stall = await this.stallModel.findById(stallId);
     if (!stall) throw new NotFoundException("Stall not found");
 
+    // Prefer an identity the server established over the one the client sent:
+    // this route is unauthenticated, so `addedBy` alone is just a claim. Falls
+    // back to the supplied label when there is no usable token, which keeps
+    // existing callers working.
+    const actor = this.resolveScanActor(authHeader);
     stall.statusHistory.push({
       status: stall.status as any,
       note: trimmed,
       changedAt: new Date(),
-      changedBy: (addedBy || "").trim() || "Unknown user",
+      changedBy: actor
+        ? `${actor.name} (${actor.role})`
+        : (addedBy || "").trim() || "Unknown user",
     });
     stall.updatedAt = new Date();
     await stall.save();
@@ -3213,10 +3225,21 @@ export class StallsService {
             String(stall._id),
             eventIdStr,
           );
-          const base = process.env.FRONTEND_BASE_URL || "https://eventsh.com";
-          feedbackLink = `${base}/events/${eventIdStr}?feedback=exhibitor&token=${encodeURIComponent(
-            token,
-          )}`;
+          // buildEventFrontUrl, not a bare /events/:id — that path is only
+          // routed in embed mode, so on the public site it fell through to the
+          // catch-all and redirected to "/", dropping the query string with it.
+          // This resolves the organizer's storefront slug, which is routed.
+          const base = await this.buildEventFrontUrl(
+            (stall as any).organizerId,
+            eventIdStr,
+          );
+          // `ftoken`, not `token`: the frontend AuthProvider adopts any
+          // `?token=` in the URL as a session JWT. A feedback token has no
+          // `roles`, so it replaced the visitor's session with a broken user
+          // and crashed the app on render.
+          feedbackLink = `${base}${
+            base.includes("?") ? "&" : "?"
+          }feedback=exhibitor&ftoken=${encodeURIComponent(token)}`;
         } catch {
           feedbackLink = null;
         }
@@ -4692,10 +4715,18 @@ export class StallsService {
         throw new NotFoundException("Stall not found");
       }
 
+      // Attach the exhibitor's own feedback, if they have submitted it, so the
+      // stall dialog can show it next to the check-out — the organizer decides
+      // whether to release the deposit off the back of it, and was otherwise
+      // sending them to a different screen to look it up.
+      const feedback = await this.feedbackService
+        .getForSubject("exhibitor", String(stall._id))
+        .catch(() => null);
+
       return {
         success: true,
         message: "Stall fetched successfully",
-        data: stall,
+        data: { ...stall.toObject(), feedback },
       };
     } catch (error) {
       return {
@@ -5098,61 +5129,189 @@ export class StallsService {
     }
   }
 
-  private async sendDepositReturnedNotification(stall: any) {
-    try {
-      const vendor = await this.vendorModel.findById(stall.shopkeeperId);
-      const event = await this.eventModel.findById(stall.eventId);
-      const organizer = await this.organizerModel.findById(stall.organizerId);
-      const country = organizer?.country || "IN";
+  /**
+   * Tell the vendor their security deposit has been returned, and pass on the
+   * note the organizer wrote when returning it (bank reference, method, timing
+   * — the part the vendor actually needs to reconcile the money).
+   *
+   * Email is the primary channel: this used to be WhatsApp-only, which no-ops
+   * while the kill-switch is off, so vendors were told nothing at all. Each
+   * channel is isolated — sendEmail rethrows, and one failing must not suppress
+   * the other — and nothing here throws into the caller.
+   */
+  private async sendDepositReturnedNotification(
+    stall: any,
+    notes?: string,
+  ): Promise<{ emailed: boolean }> {
+    let emailed = false;
+    const vendor: any = await this.vendorModel
+      .findById(stall.shopkeeperId)
+      .catch(() => null);
+    const event: any = await this.eventModel
+      .findById(stall.eventId)
+      .catch(() => null);
+    const organizer: any = await this.organizerModel
+      .findById(stall.organizerId)
+      .catch(() => null);
 
-      const returnedAmount = stall.depositTotal;
+    const country = organizer?.country || "IN";
+    const returnedAmount = (stall.depositTotal as number) || 0;
+    const amountStr = formatCurrency(returnedAmount, country);
+    const name = vendor?.name || "there";
+    const eventTitle = event?.title || "the event";
+    const orgName = organizer?.organizationName || "The organizer";
+    const noteText = (notes || "").trim();
+    const returnedOn = new Date(
+      stall.depositReturnedDate || Date.now(),
+    ).toLocaleString();
 
-      let message =
-        `🔄 *Deposit Returned*\n\n` +
-        `Dear ${vendor.name},\n\n` +
-        `Your deposit for *${event.title}* has been successfully returned to your account.\n\n` +
-        `• Amount Returned: ${formatCurrency(returnedAmount, country)}\n\n` +
-        `Thank you for your participation!\n\n` +
-        `We'd love to hear about your experience. Please reply with any feedback or use our feedback:\n\n` +
-        `Best regards, ${organizer.organizationName}`;
+    const message =
+      `🔄 *Deposit Returned*\n\n` +
+      `Dear ${name},\n\n` +
+      `Your deposit for *${eventTitle}* has been returned.\n\n` +
+      `• Amount Returned: ${amountStr}\n` +
+      `• Returned On: ${returnedOn}\n` +
+      (noteText ? `• Note from the organizer: ${noteText}\n` : "") +
+      `\nThank you for your participation!\n\n` +
+      `Best regards, ${orgName}`;
 
-      // Mark the deposit returned (optional business logic)
-      stall.depositReturned = true;
-      await stall.save();
+    const to = this.vendorEmailRecipients(vendor);
+    if (to) {
+      try {
+        const senderConfig = await this.getOrganizerSenderConfig(
+          stall.organizerId,
+        );
+        const noteBlock = noteText
+          ? `<div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:14px;margin:14px 0">
+               <p style="margin:0 0 6px;font-weight:600;color:#3730a3">Note from ${this.escapeHtml(
+                 orgName,
+               )}</p>
+               <p style="margin:0;white-space:pre-wrap">${this.escapeHtml(
+                 noteText,
+               )}</p>
+             </div>`
+          : "";
+        const html = `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+            <div style="background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;padding:24px;text-align:center">
+              <h1 style="margin:0;font-size:20px">Deposit returned 🔄</h1>
+              <p style="margin:6px 0 0;opacity:.9">${this.escapeHtml(
+                eventTitle,
+              )}</p>
+            </div>
+            <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
+              <p>Hi ${this.escapeHtml(name)},</p>
+              <p>Your security deposit for <strong>${this.escapeHtml(
+                eventTitle,
+              )}</strong> has been returned.</p>
+              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin:14px 0">
+                <p style="margin:0"><strong>Amount returned:</strong> ${this.escapeHtml(
+                  amountStr,
+                )}</p>
+                <p style="margin:6px 0 0"><strong>Returned on:</strong> ${this.escapeHtml(
+                  returnedOn,
+                )}</p>
+              </div>
+              ${noteBlock}
+              <p style="color:#64748b;font-size:12px;margin-top:16px">
+                Thank you for participating. If the amount has not reached your
+                account, reply to this email and we will look into it.
+              </p>
+              <p style="margin-top:12px">— ${this.escapeHtml(orgName)}</p>
+            </div>
+          </div>`;
 
-      await this.otpService.sendWhatsAppMessage(
-        vendor.whatsAppNumber || vendor.whatsappNumber,
-        message,
+        await this.mailService.sendEmail({
+          to,
+          subject: `Your deposit has been returned — ${eventTitle}`,
+          html,
+          senderConfig,
+        });
+        emailed = true;
+        this.logger.log(`Deposit-returned email sent for stall ${stall._id}`);
+      } catch (e: any) {
+        this.logger.warn(
+          `[stalls] deposit-returned email failed for stall ${stall._id}: ${
+            e?.message || e
+          }`,
+        );
+      }
+    } else {
+      this.logger.warn(
+        `[stalls] no vendor email on file for stall ${stall._id} — deposit-returned email skipped`,
       );
-    } catch (error) {
-      this.logger.error("Error sending deposit returned notification:", error);
     }
+
+    // Retained for deployments still running WhatsApp; no-ops when the
+    // kill-switch is off. Isolated so a gateway error cannot mask the email.
+    try {
+      const wa = vendor?.whatsAppNumber || vendor?.whatsappNumber;
+      if (wa) await this.otpService.sendWhatsAppMessage(wa, message);
+    } catch (e: any) {
+      this.logger.warn(
+        `[stalls] deposit-returned WhatsApp failed for stall ${stall._id}: ${
+          e?.message || e
+        }`,
+      );
+    }
+
+    return { emailed };
   }
 
   async returnedDeposit(stallId: string, notes: string, changedBy?: string) {
     try {
-      const stall = await this.stallModel.findById(stallId);
-
-      if (stall.hasCheckedOut && stall.checkOutTime) {
-        const now = new Date();
-        stall.depositReturned = true;
-        stall.status = "Returned";
-        stall.depositReturnedDate = now;
-        stall.statusHistory.push({
-          status: "Returned" as any,
-          note: notes,
-          changedAt: now,
-          changedBy: changedBy || "Organizer",
-        });
-
-        await stall.save();
-
-        await this.sendDepositReturnedNotification(stall);
+      if (!Types.ObjectId.isValid(stallId)) {
+        throw new BadRequestException("Invalid stall ID format");
       }
+
+      const stall = await this.stallModel.findById(stallId);
+      if (!stall) throw new NotFoundException("Stall not found");
+
+      // Previously this fell through and still answered "Deposit returned
+      // successfully" when the booking wasn't checked out — nothing was
+      // written and no vendor was told, but the organizer saw success.
+      if (!stall.hasCheckedOut || !stall.checkOutTime) {
+        return {
+          success: false,
+          message:
+            "This exhibitor has not been checked out yet, so the deposit cannot be returned.",
+          data: null,
+        };
+      }
+
+      if (stall.depositReturned) {
+        return {
+          success: false,
+          message: "This deposit has already been returned.",
+          data: stall,
+        };
+      }
+
+      const now = new Date();
+      stall.depositReturned = true;
+      stall.status = "Returned";
+      stall.depositReturnedDate = now;
+      stall.statusHistory.push({
+        status: "Returned" as any,
+        note: (notes || "").trim() || "Deposit returned.",
+        changedAt: now,
+        changedBy: changedBy || "Organizer",
+      });
+
+      await stall.save();
+
+      // The note the organizer just wrote rides along to the vendor — it is
+      // the bank reference / method / timing they need to reconcile.
+      const { emailed } = await this.sendDepositReturnedNotification(
+        stall,
+        notes,
+      );
 
       return {
         success: true,
-        message: "Deposit returned successfully",
+        message: emailed
+          ? "Deposit returned. The vendor has been emailed a confirmation with your note."
+          : "Deposit returned, but no confirmation email could be sent (no vendor email on file).",
         data: stall,
       };
     } catch (error) {

@@ -56,8 +56,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser(null);
             return;
           }
+          let decodedUser: User;
+          try {
+            decodedUser = jwtDecode<User>(token);
+          } catch {
+            setUser(null);
+            return;
+          }
+          // Only a real session token may start a session. `?token=` is a
+          // generic param — feedback deep links carry one too — and adopting
+          // any JWT found there both clobbered a signed-in user's session and
+          // produced a `user` with no `roles`, which crashed the whole app on
+          // the next render. A session token always carries roles.
+          if (
+            !Array.isArray(decodedUser?.roles) ||
+            decodedUser.roles.length === 0
+          ) {
+            return;
+          }
           sessionStorage.setItem("token", token);
-          const decodedUser = jwtDecode<User>(token);
           setUser(decodedUser);
           // Clean URL of token param
           if (tokenFromUrl) {
