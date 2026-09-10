@@ -43,6 +43,9 @@ export default function PublicEventFeedback() {
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  // Counts down the auto-reset so the person handing the device over can see
+  // the thank-you land rather than having it vanish instantly.
+  const [resetIn, setResetIn] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +84,23 @@ export default function PublicEventFeedback() {
       cancelled = true;
     };
   }, [eventId]);
+
+  // The link is meant to be handed round — a tablet at the exit, a QR on a
+  // banner — so one submission must not park the page on the thank-you screen
+  // forever. Clear the form and go back to it, ready for the next person.
+  useEffect(() => {
+    if (!done) return;
+    if (resetIn <= 0) {
+      setName("");
+      setRating(0);
+      setHoverRating(0);
+      setComment("");
+      setDone(false);
+      return;
+    }
+    const t = setTimeout(() => setResetIn((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [done, resetIn]);
 
   const handleSubmit = async () => {
     if (!name.trim()) {
@@ -122,6 +142,7 @@ export default function PublicEventFeedback() {
         );
       }
       setDone(true);
+      setResetIn(3);
     } catch (e: unknown) {
       toast({
         title: "Could not submit",
@@ -178,6 +199,16 @@ export default function PublicEventFeedback() {
             Your feedback for <strong>{meta?.title}</strong> has been sent to
             the organizer.
           </p>
+          <p className="text-xs text-muted-foreground text-center mt-3">
+            Ready for the next person in {resetIn}s…
+          </p>
+          <Button
+            variant="buttonOutline"
+            className="w-full mt-3"
+            onClick={() => setResetIn(0)}
+          >
+            Leave another response now
+          </Button>
         </CardContent>
       </Card>,
     );

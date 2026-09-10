@@ -3385,9 +3385,16 @@ export class StallsService {
           ? "organizer"
           : roles[0] || "scanner";
       return { name, email: p?.email, eventId: p?.eventId, role };
-    } catch {
+    } catch (e: any) {
       // Expired or forged — fall back to an unattributed entry rather than
-      // failing a scan the operator is standing at the gate waiting on.
+      // failing a scan the operator is standing at the gate waiting on. Logged
+      // because the visible symptom ("Gate scanner" instead of a name) is
+      // otherwise indistinguishable from the client not sending a token.
+      this.logger.warn(
+        `[stalls] scan actor token present but not usable (${
+          e?.name || "error"
+        }: ${e?.message || e}) — attributing to Gate scanner`,
+      );
       return null;
     }
   }
