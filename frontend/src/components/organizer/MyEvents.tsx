@@ -72,6 +72,7 @@ import {
   Copy,
   Share2,
   QrCode,
+  MessageSquare,
   Truck,
   Receipt,
   Loader2,
@@ -874,6 +875,35 @@ const MyEvents: React.FC = () => {
     }
   };
 
+  // Open feedback URL. Unlike the scanner link there is no gate at all — that
+  // is the point: it goes to attendees, passers-by, anyone the organizer wants
+  // an opinion from, none of whom have an account or a ticket to prove.
+  const handleShareFeedbackLink = async (event: Event) => {
+    const url = `${window.location.origin}/feedback/${event._id}`;
+    const shareData = {
+      title: `Feedback – ${event.title}`,
+      text: `Share your feedback on "${event.title}"`,
+      url,
+    };
+    try {
+      if (typeof navigator !== "undefined" && (navigator as any).share) {
+        await (navigator as any).share(shareData);
+        return;
+      }
+    } catch (e: any) {
+      if (e?.name === "AbortError") return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({
+        title: "Feedback link copied",
+        description: url,
+      });
+    } catch {
+      window.prompt("Copy the feedback link to share:", url);
+    }
+  };
+
   const handleSaveEvent = async (eventData: FormData) => {
     try {
       const token = sessionStorage.getItem("token");
@@ -1438,6 +1468,14 @@ const MyEvents: React.FC = () => {
                           title="Copy the operator scanner link to share — operator opens it and signs in with OTP"
                         >
                           <QrCode size={16} />
+                        </Button>
+                        <Button
+                          variant="buttonOutline"
+                          size="icon"
+                          onClick={() => handleShareFeedbackLink(event)}
+                          title="Copy the public feedback link — anyone can open it and leave a name, rating and message"
+                        >
+                          <MessageSquare size={16} />
                         </Button>
                         {/* Requirements + quotations for this event, in place
                             — no need to leave for a separate Suppliers tab. */}

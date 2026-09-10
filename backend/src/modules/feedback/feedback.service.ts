@@ -11,9 +11,11 @@ import { Model, Types } from "mongoose";
 import { JwtService } from "@nestjs/jwt";
 import { Feedback, FeedbackDocument, FeedbackAudience } from "./schemas/feedback.schema";
 import {
+  SubmitPublicFeedbackDto,
   SubmitTokenFeedbackDto,
   SubmitVisitorFeedbackDto,
 } from "./dto/submit-feedback.dto";
+import { randomUUID } from "crypto";
 import { OtpService } from "../otp/otp.service";
 
 const FEEDBACK_TOKEN_TTL = "30d";
@@ -335,6 +337,69 @@ export class FeedbackService {
   // the submitter's email matches a sold ticket for the event. Feedback is
   // keyed by ticketId so one email with two tickets can submit twice.
   // ─────────────────────────────────────────────────────────────────────
+  /**
+   * Feedback from the organizer's shared public link. No token, no ticket —
+   * whoever holds the link can submit, and nothing they send is treated as
+   * identity, so this is stored under its own audience and never mixed with
+   * ticket-verified visitor feedback.
+   *
+   * Each submission gets a generated subjectId: the (event, audience,
+   * subject) unique index exists to stop one booking being rated twice, and
+   * there is no booking here, so a fresh id per submission is what keeps the
+   * index from rejecting the second person to use the link.
+   */
+  async publicFeedbackMeta(eventId: string) {
+    if (!Types.ObjectId.isValid(eventId)) {
+      throw new BadRequestException("Invalid event id");
+    }
+    const event: any = await this.eventModel
+      .findById(eventId)
+      .select("title startDate endDate location bannerImage")
+      .lean();
+    if (!event) throw new NotFoundException("Event not found");
+    return {
+      success: true,
+      data: {
+        eventId: String(event._id),
+        title: event.title || "",
+        startDate: event.startDate || null,
+        endDate: event.endDate || null,
+        location: event.location || "",
+      },
+    };
+  }
+
+  async submitPublicFeedback(eventId: string, dto: SubmitPublicFeedbackDto) {
+    if (!Types.ObjectId.isValid(eventId)) {
+      throw new BadRequestException("Invalid event id");
+    }
+    const event: any = await this.eventModel
+      .findById(eventId)
+      .select("title")
+      .lean();
+    if (!event) throw new NotFoundException("Event not found");
+
+    const name = (dto.name || "").trim();
+    if (!name) throw new BadRequestException("Please enter your name");
+
+    const doc = await this.feedbackModel.create({
+      eventId: new Types.ObjectId(eventId),
+      audience: "public",
+      subjectId: `public:${randomUUID()}`,
+      email: "",
+      name,
+      rating: dto.rating,
+      comment: (dto.comment || "").trim(),
+      refundStatus: "not_applicable",
+    });
+
+    return {
+      success: true,
+      message: "Thanks for your feedback!",
+      data: { id: String(doc._id) },
+    };
+  }
+
   async submitVisitorFeedback(
     eventId: string,
     dto: SubmitVisitorFeedbackDto,
@@ -431,6 +496,9 @@ export class FeedbackService {
         count: 0,
         available: roundTableCount,
       },
+      // Open link — there is no fixed pool of people who could respond, so
+      // "available" tracks how many actually did.
+      public: { items: [], avg: 0, count: 0, available: 0 },
     };
 
     for (const f of feedback) {
@@ -479,6 +547,7 @@ export class FeedbackService {
     const event: any = eventDoc;
 
     const audiences: FeedbackAudience[] = [
+      "public",
       "visitor",
       "exhibitor",
       "speaker",
@@ -496,6 +565,8 @@ export class FeedbackService {
         ratingCount: 0,
         ratingAvg: 0,
       },
+      // No fixed pool of potential responders behind an open link.
+      public: { available: 0, ratingCount: 0, ratingAvg: 0 },
     };
     for (const f of feedback) {
       const a = f.audience as FeedbackAudience;

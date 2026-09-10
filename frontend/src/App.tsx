@@ -69,6 +69,7 @@ const OrganizerDashboard = lazy(() => import("./pages/organizer/OrganizerDashboa
 const UserDashboard = lazy(() => import("./pages/user/UserDashboard").then(m => ({ default: m.UserDashboard })));
 const QRTicketScanner = lazy(() => import("./components/organizer/ORCodeScanner"));
 const WeddingRoomTicket = lazy(() => import("./pages/WeddingRoomTicket"));
+const PublicEventFeedback = lazy(() => import("./pages/PublicEventFeedback"));
 
 // Loading screen while validating token
 function LoadingScreen() {
@@ -220,6 +221,23 @@ function AppContent() {
     return (
       <Suspense fallback={<LoadingScreen />}>
         <EventfrontGoogleMemberCallback />
+      </Suspense>
+    );
+  }
+
+  // The public feedback link is handed to people with no account, but the
+  // organizer testing their own link IS signed in — routed through the role
+  // branches below it would hit their catch-all and redirect away.
+  // Short-circuited like the OAuth callback above so it renders for everyone.
+  if (
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/feedback/")
+  ) {
+    return (
+      <Suspense fallback={<LoadingScreen />}>
+        <Routes>
+          <Route path="/feedback/:eventId" element={<PublicEventFeedback />} />
+        </Routes>
       </Suspense>
     );
   }
