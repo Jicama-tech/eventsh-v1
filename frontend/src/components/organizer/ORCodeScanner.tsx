@@ -655,6 +655,11 @@ export default function QRTicketScanner() {
         description: e instanceof Error ? e.message : "Try again.",
         variant: "destructive",
       });
+      // The usual reason a manual action is refused is that the booking moved
+      // since this list was drawn — someone scanned them at another door. Re-
+      // read so the row stops claiming a state the server has already left,
+      // and the volunteer sees the real one instead of pressing again.
+      await loadManualRows(manualQuery);
     } finally {
       setManualBusyId(null);
     }
@@ -1473,6 +1478,17 @@ export default function QRTicketScanner() {
             ) : (
               <Search className="h-4 w-4" />
             )}
+          </Button>
+          <Button
+            type="button"
+            variant="buttonOutline"
+            disabled={manualLoading}
+            onClick={() => void loadManualRows(manualQuery)}
+            title="Refresh — someone may have been scanned at another door"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${manualLoading ? "animate-spin" : ""}`}
+            />
           </Button>
         </form>
 
