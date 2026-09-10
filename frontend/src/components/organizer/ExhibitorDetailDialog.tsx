@@ -6,7 +6,7 @@
 // their corresponding callback prop is supplied — that's how the volunteer
 // view stays read-only without forking the markup.
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -275,21 +275,63 @@ export function ExhibitorDetailDialog({
 
   // Fallback "addedBy" derived from JWT (email + first role). Callers can
   // override via `currentUserDisplay` when they have richer info.
+  // Organizer/admin session first, then the volunteer token this event's
+  // scanner stores. Reading only sessionStorage meant a volunteer — who never
+  // has one — posted notes with no author at all, and every note they added
+  // landed on the timeline as "Unknown user".
+  const readAuthToken = useCallback((): string => {
+      try {
+        const org = sessionStorage.getItem("token");
+        if (org) return org;
+      } catch {
+        /* storage unavailable */
+      }
+      try {
+        // Prefer the token for the stall's own event; fall back to any
+        // volunteer token present, since the dialog opens from screens that
+        // do not always know the event id.
+        const ev = (
+          stallRequest as { eventId?: { _id?: string } | string } | null
+        )?.eventId;
+        const evId = String(
+          (typeof ev === "object" ? ev?._id : ev) || "",
+        );
+        const exact = evId
+          ? localStorage.getItem(`eventsh_volunteer_token_${evId}`)
+          : null;
+        if (exact) return exact;
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith("eventsh_volunteer_token_")) {
+            const v = localStorage.getItem(k);
+            if (v) return v;
+          }
+        }
+      } catch {
+        /* storage unavailable */
+      }
+      return "";
+  }, [stallRequest]);
+
   const derivedUserDisplay = useMemo(() => {
     if (currentUserDisplay) return currentUserDisplay;
     try {
-      const token = sessionStorage.getItem("token");
+      const token = readAuthToken();
       if (!token) return "";
       const decoded: any = jwtDecode(token);
+      const name: string = decoded?.name || "";
       const email: string = decoded?.email || "";
       const roles: string[] = Array.isArray(decoded?.roles) ? decoded.roles : [];
       const role = roles[0] || "user";
-      if (!email) return role;
-      return `${email} (${role})`;
+      // Name first so the timeline reads the same as a gate check-in entry
+      // ("Priya Sharma (volunteer)"), falling back to email then role alone.
+      const who = name || email;
+      if (!who) return role;
+      return `${who} (${role})`;
     } catch {
       return "";
     }
-  }, [currentUserDisplay, open]);
+  }, [currentUserDisplay, open, readAuthToken]);
 
   const resetNoteForm = () => {
     setNoteFormOpen(false);
@@ -301,7 +343,7 @@ export function ExhibitorDetailDialog({
     if (!trimmed || !stallRequest?._id) return;
     setIsAddingNote(true);
     try {
-      const token = sessionStorage.getItem("token");
+      const token = readAuthToken();
       const res = await fetch(`${apiURL}/stalls/${stallRequest._id}/notes`, {
         method: "POST",
         headers: {

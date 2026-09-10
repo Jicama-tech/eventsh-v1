@@ -1237,7 +1237,12 @@ export class StallsService {
    * status. Used by exhibitor / organizer / operator / volunteer to leave
    * timeline entries at any time from the Stall Dialog.
    */
-  async addNote(stallId: string, note: string, addedBy?: string) {
+  async addNote(
+    stallId: string,
+    note: string,
+    addedBy?: string,
+    authHeader?: string,
+  ) {
     if (!Types.ObjectId.isValid(stallId)) {
       throw new BadRequestException("Invalid stall ID format");
     }
@@ -1249,11 +1254,18 @@ export class StallsService {
     const stall = await this.stallModel.findById(stallId);
     if (!stall) throw new NotFoundException("Stall not found");
 
+    // Prefer an identity the server established over the one the client sent:
+    // this route is unauthenticated, so `addedBy` alone is just a claim. Falls
+    // back to the supplied label when there is no usable token, which keeps
+    // existing callers working.
+    const actor = this.resolveScanActor(authHeader);
     stall.statusHistory.push({
       status: stall.status as any,
       note: trimmed,
       changedAt: new Date(),
-      changedBy: (addedBy || "").trim() || "Unknown user",
+      changedBy: actor
+        ? `${actor.name} (${actor.role})`
+        : (addedBy || "").trim() || "Unknown user",
     });
     stall.updatedAt = new Date();
     await stall.save();
