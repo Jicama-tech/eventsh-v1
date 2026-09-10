@@ -309,6 +309,39 @@ export default function QRTicketScanner() {
     setStep("otp-verification");
   };
 
+  // Leaving the scanner ends the volunteer session rather than just navigating
+  // away. The token is per-device and outlives the visit, so keeping it would
+  // let whoever picks the phone up next scan as the previous volunteer — and
+  // that name is what lands on the exhibitor's attendance timeline.
+  //
+  // Two steps back, not one: the Google sign-in redirects out to the provider
+  // and back, so its return leaves an extra entry and a single step lands on
+  // the scanner again. When the history is too shallow for that (the link was
+  // opened directly), fall back to "/" — which resolves to the dashboard for a
+  // signed-in user and the landing page otherwise.
+  const handleExitScanner = () => {
+    clearRecoveryTimer();
+    setProcessing(false);
+    if (qrCodeRef.current) {
+      const inst = qrCodeRef.current;
+      qrCodeRef.current = null;
+      try {
+        void inst.stop()?.catch(() => {});
+      } catch {
+        /* never started */
+      }
+    }
+    signOutVolunteer();
+
+    const canGoBackTwice =
+      typeof window !== "undefined" && window.history.length > 2;
+    if (canGoBackTwice) {
+      navigate(-2);
+    } else {
+      navigate("/", { replace: true });
+    }
+  };
+
   // On load: pick up the JWT the OAuth callback left in the URL (?vtoken), or
   // restore a still-valid one saved from a previous visit, so a refresh keeps
   // the volunteer signed in instead of bouncing them back to the login screen.
@@ -1499,8 +1532,9 @@ export default function QRTicketScanner() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate(-1)}
+            onClick={handleExitScanner}
             className="mr-3"
+            title="Sign out of the scanner and go back"
           >
             <ArrowLeft className="h-4 w-4" />
             Back
