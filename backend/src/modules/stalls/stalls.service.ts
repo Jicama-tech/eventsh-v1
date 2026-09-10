@@ -37,6 +37,7 @@ import { CouponService } from "../coupon/coupon.service";
 import { CreateCouponDto } from "../coupon/dto/create-coupon.dto";
 import { FeedbackService } from "../feedback/feedback.service";
 import { MailService } from "../roles/mail.service";
+import { JwtService } from "@nestjs/jwt";
 import { formatMoney } from "../../common/currency.util";
 
 // Parse a JSON-encoded string[] (multipart sends arrays as a string). Falls
@@ -85,6 +86,7 @@ export class StallsService {
     private couponService: CouponService,
     private feedbackService: FeedbackService,
     private mailService: MailService,
+    private jwtService: JwtService,
   ) {
     // Ensure upload directory exists
     const qrDir = path.join(process.cwd(), "uploads", "stallQRs");
@@ -2913,7 +2915,11 @@ export class StallsService {
 
   // ============ QR CODE SCANNING & ATTENDANCE ============
 
-  async scanStallQR(qrCodeData: string, action?: StallScanAction) {
+  async scanStallQR(
+    qrCodeData: string,
+    action?: StallScanAction,
+    authHeader?: string,
+  ) {
     // A non-JSON payload means the wrong QR was held up to the camera. That's
     // operator error, not a server fault — answer with something the person
     // holding the scanner can act on rather than letting SyntaxError escape.
@@ -3004,10 +3010,52 @@ export class StallsService {
             hasCheckedOut: { $ne: true },
           };
 
+    // Who is holding the scanner, per the verified volunteer token.
+    const actor = this.resolveScanActor(authHeader);
+    const changedBy = actor ? `${actor.name} (volunteer)` : "Gate scanner";
+
+    // Minutes on site, for the check-out note. checkInTime can be absent on
+    // rows checked in before it was recorded, so this stays optional.
+    const minutesOnSite =
+      resolved === "CHECK_OUT" && stall.checkInTime
+        ? Math.max(
+            0,
+            Math.floor(
+              (now.getTime() - new Date(stall.checkInTime).getTime()) / 60000,
+            ),
+          )
+        : null;
+
+    // Recorded on the stall timeline so the organizer can see the gate
+    // movements — and who scanned them — alongside every other status change.
+    // Pushed inside the same conditional update as the attendance flags: a
+    // separate write could leave a timeline entry for a transition that was
+    // rejected, or lose one to a concurrent scan.
+    const historyEntry = {
+      status: stall.status,
+      note:
+        resolved === "CHECK_IN"
+          ? `Checked in at the gate${actor ? ` by ${actor.name}` : ""}.`
+          : `Checked out at the gate${actor ? ` by ${actor.name}` : ""}.` +
+            (minutesOnSite !== null
+              ? ` On site for ${minutesOnSite} minute${
+                  minutesOnSite === 1 ? "" : "s"
+                }.`
+              : ""),
+      changedAt: now,
+      changedBy,
+    };
+
     const update =
       resolved === "CHECK_IN"
-        ? { $set: { hasCheckedIn: true, checkInTime: now } }
-        : { $set: { hasCheckedOut: true, checkOutTime: now } };
+        ? {
+            $set: { hasCheckedIn: true, checkInTime: now, updatedAt: now },
+            $push: { statusHistory: historyEntry },
+          }
+        : {
+            $set: { hasCheckedOut: true, checkOutTime: now, updatedAt: now },
+            $push: { statusHistory: historyEntry },
+          };
 
     const updated = await this.stallModel
       .findOneAndUpdate(filter, update, { new: true })
@@ -3280,6 +3328,36 @@ export class StallsService {
           }: ${e?.message || e}`,
         );
       }
+    }
+  }
+
+  /**
+   * Work out who is operating the scanner, from the volunteer JWT the scanner
+   * holds (events.service.ts mints it with name/email/roles after Google
+   * sign-in). Verified rather than trusted from a body field, so the name that
+   * lands on the timeline is one the server established.
+   *
+   * Returns null when there is no usable token — an organizer scanning from
+   * their own dashboard, or a request made without signing in.
+   */
+  private resolveScanActor(
+    authHeader?: string,
+  ): { name: string; email?: string; eventId?: string } | null {
+    const raw = (authHeader || "").trim();
+    if (!raw.toLowerCase().startsWith("bearer ")) return null;
+    const token = raw.slice(7).trim();
+    if (!token) return null;
+    try {
+      const p: any = this.jwtService.verify(token, {
+        secret: process.env.JWT_ACCESS_SECRET,
+      });
+      const name = String(p?.name || p?.email || "").trim();
+      if (!name) return null;
+      return { name, email: p?.email, eventId: p?.eventId };
+    } catch {
+      // Expired or forged — fall back to an unattributed entry rather than
+      // failing a scan the operator is standing at the gate waiting on.
+      return null;
     }
   }
 

@@ -1,5 +1,6 @@
 ﻿import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
+import { JwtModule } from "@nestjs/jwt";
 import { StallsService } from "./stalls.service";
 import { StallsController } from "./stalls.controller";
 import { Stall, StallSchema } from "./entities/stall.entity";
@@ -37,6 +38,12 @@ import {
       // build the event-front link in vendor status emails.
       { name: OrganizerStore.name, schema: OrganizerStoreSchema },
     ]),
+    // Lets the scan endpoint verify the volunteer JWT the scanner holds, so a
+    // gate check-in can be attributed to a real person rather than a
+    // client-supplied name. Same secret events.module.ts signs it with.
+    JwtModule.register({
+      secret: process.env.JWT_ACCESS_SECRET || "secret",
+    }),
     OtpModule,
     CouponModule,
     FeedbackModule,

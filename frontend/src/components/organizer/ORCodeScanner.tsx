@@ -275,6 +275,18 @@ export default function QRTicketScanner() {
 
   const volunteerTokenKey = `eventsh_volunteer_token_${eventId || ""}`;
 
+  // The volunteer JWT, for requests that record WHO performed an action.
+  // Read at call time rather than from state so a token restored on this same
+  // render is still picked up.
+  const authHeaders = (): Record<string, string> => {
+    try {
+      const tok = localStorage.getItem(volunteerTokenKey);
+      return tok ? { Authorization: `Bearer ${tok}` } : {};
+    } catch {
+      return {};
+    }
+  };
+
   const startVolunteerGoogleLogin = () => {
     window.location.href = `${apiURL}/events/volunteer-google?eventId=${encodeURIComponent(
       eventId || "",
@@ -607,7 +619,9 @@ export default function QRTicketScanner() {
       // through.
       const stallResponse = await fetch(`${apiURL}/stalls/scan-qr`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // The volunteer token rides along so the backend can record who ran
+        // this check-in/check-out on the exhibitor's Status History timeline.
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ qrCodeData: pendingStallQR, action }),
       });
 
