@@ -280,7 +280,12 @@ export default function QRTicketScanner() {
   // render is still picked up.
   const authHeaders = (): Record<string, string> => {
     try {
-      const tok = localStorage.getItem(volunteerTokenKey);
+      // Volunteer token first (this screen's own sign-in); fall back to an
+      // organizer session, matching how OperatorVenueView authenticates, so
+      // the scanner works for either kind of user.
+      const tok =
+        localStorage.getItem(volunteerTokenKey) ||
+        sessionStorage.getItem("token");
       return tok ? { Authorization: `Bearer ${tok}` } : {};
     } catch {
       return {};
@@ -525,7 +530,7 @@ export default function QRTicketScanner() {
 
     const attendanceResponse = await fetch(
       `${apiURL}/tickets/mark-attendance/${qrData.ticketId}`,
-      { method: "PATCH" },
+      { method: "PATCH", headers: authHeaders() },
     );
 
     if (!attendanceResponse.ok) {

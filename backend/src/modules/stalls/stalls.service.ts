@@ -3012,7 +3012,7 @@ export class StallsService {
 
     // Who is holding the scanner, per the verified volunteer token.
     const actor = this.resolveScanActor(authHeader);
-    const changedBy = actor ? `${actor.name} (volunteer)` : "Gate scanner";
+    const changedBy = actor ? `${actor.name} (${actor.role})` : "Gate scanner";
 
     // Minutes on site, for the check-out note. checkInTime can be absent on
     // rows checked in before it was recorded, so this stays optional.
@@ -3342,7 +3342,7 @@ export class StallsService {
    */
   private resolveScanActor(
     authHeader?: string,
-  ): { name: string; email?: string; eventId?: string } | null {
+  ): { name: string; email?: string; eventId?: string; role: string } | null {
     const raw = (authHeader || "").trim();
     if (!raw.toLowerCase().startsWith("bearer ")) return null;
     const token = raw.slice(7).trim();
@@ -3353,7 +3353,15 @@ export class StallsService {
       });
       const name = String(p?.name || p?.email || "").trim();
       if (!name) return null;
-      return { name, email: p?.email, eventId: p?.eventId };
+      // The scanner falls back to an organizer session when no volunteer is
+      // signed in, so read the role off the token rather than assuming.
+      const roles: string[] = Array.isArray(p?.roles) ? p.roles : [];
+      const role = roles.includes("volunteer")
+        ? "volunteer"
+        : roles.includes("organizer")
+          ? "organizer"
+          : roles[0] || "scanner";
+      return { name, email: p?.email, eventId: p?.eventId, role };
     } catch {
       // Expired or forged — fall back to an unattributed entry rather than
       // failing a scan the operator is standing at the gate waiting on.
