@@ -7,13 +7,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Star, RefreshCcw, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscription } from "@/hooks/useSubscription";
-import PaymentFeedbackPanel from "./PaymentFeedbackPanel";
 import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
@@ -40,6 +38,36 @@ const AUDIENCE_TO_PLAN_KEY: Record<
   // "hear from attendees" capability, just without a ticket behind it.
   public: "visitor",
 };
+
+// Audiences that can have a security deposit riding on their feedback.
+const DEPOSIT_AUDIENCES = new Set<Audience>([
+  "exhibitor",
+  "speaker",
+  "round_table",
+]);
+
+// One flat row, whichever source it came from.
+interface MergedRow {
+  key: string;
+  who: string;
+  typeLabel: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+  audience?: Audience;
+  item?: FeedbackItem;
+}
+
+interface PaymentRow {
+  _id: string;
+  rating: number;
+  comment?: string;
+  payerName?: string;
+  payerEmail?: string;
+  eventId?: string;
+  eventTitle?: string;
+  createdAt: string;
+}
 
 interface FeedbackItem {
   _id: string;
@@ -109,7 +137,10 @@ export function EventFeedbackDialog({
   const { isFeedbackAudienceEnabled } = useSubscription();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ListResponse | null>(null);
-  const [tab, setTab] = useState<Audience>("visitor");
+  // Post-payment ratings live in their own collection, but the organizer just
+  // wants "how did this event score" — so they are merged into the same list
+  // rather than sitting in a separate panel underneath.
+  const [payments, setPayments] = useState<PaymentRow[]>([]);
 
   // Audiences the active plan actually allows. If the plan has Feedback
   // enabled with no audiences ticked, this is empty — we render an
@@ -145,17 +176,34 @@ export function EventFeedbackDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, eventId]);
 
-  // Pick the first plan-allowed audience that has feedback for default tab.
-  // Falls back to the first allowed audience (even if empty) so the active
-  // tab is always a tab the plan permits.
   useEffect(() => {
-    if (!data || allowedAudiences.length === 0) return;
-    const firstWithItems = allowedAudiences.find(
-      (a) => data.byAudience[a]?.items?.length > 0,
-    );
-    setTab(firstWithItems || allowedAudiences[0]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, allowedAudiences.join("|")]);
+    if (!open || !organizerId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `${apiURL}/payment-feedback/organizer/${organizerId}`,
+        );
+        const json = await res.json();
+        if (cancelled) return;
+        const rows: PaymentRow[] = json?.items || [];
+        // Narrow to this event — by id, or by title for the flows that only
+        // carry a title (speaker / round-table checkout).
+        setPayments(
+          rows.filter(
+            (i) =>
+              (eventId && String(i.eventId) === String(eventId)) ||
+              (eventTitle && i.eventTitle === eventTitle),
+          ),
+        );
+      } catch {
+        if (!cancelled) setPayments([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, organizerId, eventId, eventTitle]);
 
   const toggleRefund = async (item: FeedbackItem) => {
     const next: FeedbackItem["refundStatus"] =
@@ -202,6 +250,62 @@ export function EventFeedbackDialog({
     }
   };
 
+  // Every source, flattened and newest first.
+  const allRows: MergedRow[] = [
+    ...allowedAudiences.flatMap((a) =>
+      (data?.byAudience?.[a]?.items || []).map((item) => ({
+        key: `f:${item._id}`,
+        who:
+          (item.audience === "public" ? item.name : item.email) ||
+          item.email ||
+          "Anonymous",
+        typeLabel: AUDIENCE_LABEL[a],
+        rating: item.rating,
+        comment: item.comment || "",
+        createdAt: item.createdAt,
+        audience: a,
+        item,
+      })),
+    ),
+    ...payments.map((p) => ({
+      key: `p:${p._id}`,
+      who: p.payerName || p.payerEmail || "Payer",
+      typeLabel: "Payment",
+      rating: p.rating,
+      comment: p.comment || "",
+      createdAt: p.createdAt,
+    })),
+  ].sort(
+    (x, y) => new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime(),
+  );
+
+  const overallCount = allRows.length;
+  const overallAvg = overallCount
+    ? Math.round(
+        (allRows.reduce((sum, r) => sum + (r.rating || 0), 0) / overallCount) *
+          10,
+      ) / 10
+    : 0;
+
+  // Per-source chips, so the single number above stays explainable.
+  const typeBreakdown = Object.entries(
+    allRows.reduce<Record<string, { count: number; total: number }>>(
+      (acc, r) => {
+        const k = r.typeLabel;
+        acc[k] = acc[k] || { count: 0, total: 0 };
+        acc[k].count += 1;
+        acc[k].total += r.rating || 0;
+        return acc;
+      },
+      {},
+    ),
+  ).map(([label, v]) => ({
+    key: label,
+    label,
+    count: v.count,
+    avg: Math.round((v.total / v.count) * 10) / 10,
+  }));
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -235,121 +339,103 @@ export function EventFeedbackDialog({
             </div>
           </div>
         ) : (
-          <Tabs value={tab} onValueChange={(v) => setTab(v as Audience)}>
-            <TabsList
-              className="grid w-full"
-              style={{
-                gridTemplateColumns: `repeat(${allowedAudiences.length}, minmax(0, 1fr))`,
-              }}
-            >
-              {allowedAudiences.map((a) => {
-                const b = data.byAudience[a];
-                const enabled = b.available > 0;
-                return (
-                  <TabsTrigger
-                    key={a}
-                    value={a}
-                    disabled={!enabled}
-                    className="text-xs flex flex-col gap-0.5 py-2"
-                  >
-                    <span>{AUDIENCE_LABEL[a]}</span>
-                    <span className="text-[10px] text-muted-foreground">
-                      {b.count}/{b.available}
-                      {b.count > 0 ? ` · ${b.avg}★` : ""}
+          <div className="space-y-4">
+            {/* One headline number. Splitting feedback across tabs meant the
+                overall rating for the event was never shown anywhere — you
+                had to read five averages and weight them yourself. */}
+            <Card>
+              <CardContent className="py-4 flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-3xl font-semibold">
+                      {overallAvg || "—"}
                     </span>
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
+                    <Stars value={Math.round(overallAvg)} />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {overallCount === 0
+                      ? "No feedback yet"
+                      : `${overallCount} response${
+                          overallCount === 1 ? "" : "s"
+                        } across all sources`}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1.5 justify-end">
+                  {typeBreakdown.map((b) => (
+                    <Badge
+                      key={b.key}
+                      variant="outline"
+                      className="text-[11px] font-normal"
+                    >
+                      {b.label} {b.count} · {b.avg}★
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
 
-            {allowedAudiences.map((a) => {
-              const b = data.byAudience[a];
-              return (
-                <TabsContent key={a} value={a} className="space-y-3 mt-4">
-                  {b.items.length === 0 ? (
-                    <Card>
-                      <CardContent className="py-8 text-center text-sm text-muted-foreground">
-                        No feedback received yet
-                        {a === "public"
-                          ? " — share the feedback link from My Events to collect some."
-                          : b.available === 0
-                            ? " — and no bookings exist for this audience."
-                            : ` (out of ${b.available} ${AUDIENCE_LABEL[
-                                a
-                              ].toLowerCase()})`}
-                        .
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    b.items.map((item) => (
-                      <Card key={item._id}>
-                        <CardContent className="py-3 space-y-2">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <div className="text-sm font-medium">
-                                {/* Public responses have no account behind
-                                    them — show the name they gave. */}
-                                {item.audience === "public"
-                                  ? item.name || "Anonymous"
-                                  : item.email}
-                              </div>
-                              <div className="text-[11px] text-muted-foreground">
-                                {new Date(item.createdAt).toLocaleString()}
-                              </div>
-                            </div>
-                            <Stars value={item.rating} />
-                          </div>
-                          {item.comment && (
-                            <p className="text-sm text-muted-foreground italic">
-                              "{item.comment}"
-                            </p>
-                          )}
-                          {a !== "visitor" && a !== "public" && (
-                            <div className="flex items-center justify-between pt-1 border-t">
-                              <Badge
-                                variant={
-                                  item.refundStatus === "refunded"
-                                    ? "default"
-                                    : "outline"
-                                }
-                              >
-                                Deposit:{" "}
-                                {item.refundStatus === "refunded"
-                                  ? "Refunded"
-                                  : "Pending"}
-                              </Badge>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => toggleRefund(item)}
-                              >
-                                <RefreshCcw className="h-3.5 w-3.5 mr-1" />
-                                {item.refundStatus === "refunded"
-                                  ? "Mark pending"
-                                  : "Mark refunded"}
-                              </Button>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))
-                  )}
-                </TabsContent>
-              );
-            })}
-          </Tabs>
-        )}
-
-        {/* Post-payment feedback for THIS event (rated by payers at checkout).
-            Independent of the event-feedback plan gating above. */}
-        {organizerId && (eventId || eventTitle) && (
-          <div className="mt-4">
-            <PaymentFeedbackPanel
-              organizerId={organizerId}
-              eventId={eventId || undefined}
-              eventTitle={eventTitle}
-            />
+            {allRows.length === 0 ? (
+              <Card>
+                <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                  No feedback received yet for this event.
+                </CardContent>
+              </Card>
+            ) : (
+              allRows.map((row) => (
+                <Card key={row.key}>
+                  <CardContent className="py-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium flex items-center gap-1.5 flex-wrap">
+                          <span className="truncate">{row.who}</span>
+                          <span className="text-xs font-normal text-muted-foreground">
+                            ({row.typeLabel})
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">
+                          {new Date(row.createdAt).toLocaleString()}
+                        </div>
+                      </div>
+                      <Stars value={row.rating} />
+                    </div>
+                    {row.comment && (
+                      <p className="text-sm text-muted-foreground italic">
+                        "{row.comment}"
+                      </p>
+                    )}
+                    {/* Deposit tracking only means something for the audiences
+                        that put one down. */}
+                    {row.item && row.audience && DEPOSIT_AUDIENCES.has(row.audience) && (
+                      <div className="flex items-center justify-between pt-1 border-t">
+                        <Badge
+                          variant={
+                            row.item.refundStatus === "refunded"
+                              ? "default"
+                              : "outline"
+                          }
+                        >
+                          Deposit:{" "}
+                          {row.item.refundStatus === "refunded"
+                            ? "Refunded"
+                            : "Pending"}
+                        </Badge>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toggleRefund(row.item!)}
+                        >
+                          <RefreshCcw className="h-3.5 w-3.5 mr-1" />
+                          {row.item.refundStatus === "refunded"
+                            ? "Mark pending"
+                            : "Mark refunded"}
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         )}
       </DialogContent>
