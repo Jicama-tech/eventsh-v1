@@ -128,9 +128,12 @@ interface StallData {
 interface EventData {
   _id: string;
   title: string;
-  organizer: {
-    whatsAppNumber: string;
-    organizationName: string;
+  // Optional in practice: an event whose organizer was not populated by the
+  // API arrives without it, and reading through it blank-screened the whole
+  // scanner at a gate with no way back.
+  organizer?: {
+    whatsAppNumber?: string;
+    organizationName?: string;
   };
   // Which modules this event actually has turned on — gates which scan
   // buttons show up below (no point offering to scan Speaker Passes on an
@@ -1243,7 +1246,7 @@ export default function QRTicketScanner() {
           <div className="bg-muted p-4 rounded-lg">
             <p className="font-medium">{eventData.title}</p>
             <p className="text-sm text-muted-foreground">
-              {eventData.organizer.organizationName}
+              {eventData.organizer?.organizationName || ""}
             </p>
           </div>
         )}
@@ -1299,7 +1302,7 @@ export default function QRTicketScanner() {
           <div className="bg-muted p-4 rounded-lg">
             <p className="font-medium">{eventData.title}</p>
             <p className="text-sm text-muted-foreground">
-              {eventData.organizer.organizationName}
+              {eventData.organizer?.organizationName || ""}
             </p>
           </div>
         )}
