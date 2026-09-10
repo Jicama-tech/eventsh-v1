@@ -7,9 +7,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Star, RefreshCcw, Lock } from "lucide-react";
+import { Loader2, Star, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscription } from "@/hooks/useSubscription";
 import { t } from "@/i18n/t";
@@ -205,50 +204,6 @@ export function EventFeedbackDialog({
     };
   }, [open, organizerId, eventId, eventTitle]);
 
-  const toggleRefund = async (item: FeedbackItem) => {
-    const next: FeedbackItem["refundStatus"] =
-      item.refundStatus === "refunded" ? "pending" : "refunded";
-    try {
-      const token = sessionStorage.getItem("token");
-      const res = await fetch(
-        `${apiURL}/feedback/${item._id}/refund-status`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ status: next }),
-        },
-      );
-      if (!res.ok) throw new Error("Failed to update");
-      setData((prev) =>
-        prev
-          ? {
-              ...prev,
-              byAudience: {
-                ...prev.byAudience,
-                [item.audience]: {
-                  ...prev.byAudience[item.audience],
-                  items: prev.byAudience[item.audience].items.map((f) =>
-                    f._id === item._id ? { ...f, refundStatus: next } : f,
-                  ),
-                },
-              },
-            }
-          : prev,
-      );
-      toast({
-        title: next === "refunded" ? "Marked as refunded" : "Marked pending",
-      });
-    } catch (err: any) {
-      toast({
-        title: "Update failed",
-        description: err?.message,
-        variant: "destructive",
-      });
-    }
-  };
 
   // Every source, flattened and newest first.
   const allRows: MergedRow[] = [
@@ -403,35 +358,22 @@ export function EventFeedbackDialog({
                         "{row.comment}"
                       </p>
                     )}
-                    {/* Deposit tracking only means something for the audiences
-                        that put one down. */}
-                    {row.item && row.audience && DEPOSIT_AUDIENCES.has(row.audience) && (
-                      <div className="flex items-center justify-between pt-1 border-t">
-                        <Badge
-                          variant={
-                            row.item.refundStatus === "refunded"
-                              ? "default"
-                              : "outline"
-                          }
-                        >
-                          Deposit:{" "}
-                          {row.item.refundStatus === "refunded"
-                            ? "Refunded"
-                            : "Pending"}
-                        </Badge>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => toggleRefund(row.item!)}
-                        >
-                          <RefreshCcw className="h-3.5 w-3.5 mr-1" />
-                          {row.item.refundStatus === "refunded"
-                            ? "Mark pending"
-                            : "Mark refunded"}
-                        </Button>
-                      </div>
-                    )}
+                    {/* Read-only flag, and only while the deposit is still
+                        owed. Returning it happens in the stall dialog, off the
+                        back of the actual refund — a second toggle here was a
+                        rival source of truth that could disagree with the
+                        booking's own depositReturned. Nothing to action once
+                        it is back, so nothing is shown. */}
+                    {row.item &&
+                      row.audience &&
+                      DEPOSIT_AUDIENCES.has(row.audience) &&
+                      row.item.refundStatus !== "refunded" && (
+                        <div className="pt-1 border-t">
+                          <Badge variant="outline">
+                            Return Deposit Pending
+                          </Badge>
+                        </div>
+                      )}
                   </CardContent>
                 </Card>
               ))
