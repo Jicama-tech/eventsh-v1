@@ -255,6 +255,12 @@ export default function QRTicketScanner() {
   // Manual check-in: the exhibitor list a volunteer searches when someone
   // arrives without a ticket.
   const [manualQuery, setManualQuery] = useState("");
+  // Which job the volunteer is doing right now. At a gate you are either
+  // letting people in or seeing them out, and the other half of the list is
+  // just noise to scroll past.
+  const [manualFilter, setManualFilter] = useState<
+    "all" | "to-check-in" | "to-check-out"
+  >("all");
   const [manualRows, setManualRows] = useState<ManualRow[]>([]);
   const [manualLoading, setManualLoading] = useState(false);
   const [manualBusyId, setManualBusyId] = useState<string | null>(null);
@@ -1449,6 +1455,41 @@ export default function QRTicketScanner() {
   // For the vendor who left their ticket at the hotel. Search what they can
   // actually tell you at a gate — the brand over the stand, the registered
   // business, their own name, or the table number — then act on the row.
+  // "Still to check in" is anyone who has not arrived. "On site" is anyone who
+  // has arrived and not yet left — the only people a check-out can apply to.
+  // Checked-out exhibitors fall out of both, because there is nothing left to
+  // do for them.
+  const manualCounts = {
+    all: manualRows.length,
+    toCheckIn: manualRows.filter((r) => !r.hasCheckedIn).length,
+    toCheckOut: manualRows.filter((r) => r.hasCheckedIn && !r.hasCheckedOut)
+      .length,
+  };
+
+  const visibleManualRows = manualRows.filter((r) => {
+    if (manualFilter === "to-check-in") return !r.hasCheckedIn;
+    if (manualFilter === "to-check-out") return r.hasCheckedIn && !r.hasCheckedOut;
+    return true;
+  });
+
+  const MANUAL_FILTERS: {
+    key: typeof manualFilter;
+    label: string;
+    count: number;
+  }[] = [
+    { key: "all", label: "All", count: manualCounts.all },
+    {
+      key: "to-check-in",
+      label: "To check in",
+      count: manualCounts.toCheckIn,
+    },
+    {
+      key: "to-check-out",
+      label: "To check out",
+      count: manualCounts.toCheckOut,
+    },
+  ];
+
   const renderManualSearch = () => (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
@@ -1492,20 +1533,39 @@ export default function QRTicketScanner() {
           </Button>
         </form>
 
+        <div className="grid grid-cols-3 gap-1.5">
+          {MANUAL_FILTERS.map((f) => (
+            <Button
+              key={f.key}
+              type="button"
+              size="sm"
+              variant={manualFilter === f.key ? "default" : "buttonOutline"}
+              onClick={() => setManualFilter(f.key)}
+              className="text-xs"
+            >
+              {f.label} ({f.count})
+            </Button>
+          ))}
+        </div>
+
         {manualLoading ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
             <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-blue-600" />
             Loading exhibitors…
           </div>
-        ) : manualRows.length === 0 ? (
+        ) : visibleManualRows.length === 0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
             {manualQuery.trim()
               ? "No exhibitor matches that."
-              : "No exhibitors on this event yet."}
+              : manualFilter === "to-check-in"
+                ? "Everyone has checked in."
+                : manualFilter === "to-check-out"
+                  ? "Nobody is on site to check out."
+                  : "No exhibitors on this event yet."}
           </div>
         ) : (
           <div className="space-y-2 max-h-[420px] overflow-y-auto">
-            {manualRows.map((r) => {
+            {visibleManualRows.map((r) => {
               const busy = manualBusyId === r.stallId;
               const title = r.shopName || r.businessName || r.name || "Exhibitor";
               return (
