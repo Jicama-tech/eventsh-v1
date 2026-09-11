@@ -648,7 +648,7 @@ export default function QRTicketScanner() {
       toast({
         duration: 5000,
         title: action === "CHECK_IN" ? "Checked in" : "Checked out",
-        description: `${row.shopName || row.businessName || row.name} — recorded without a QR.`,
+        description: `${manualRowLabel(row)} — recorded without a QR.`,
       });
       // Re-read rather than patching locally: the server is the authority on
       // whether the transition actually applied, and another volunteer may
@@ -1459,6 +1459,15 @@ export default function QRTicketScanner() {
   // has arrived and not yet left — the only people a check-out can apply to.
   // Checked-out exhibitors fall out of both, because there is nothing left to
   // do for them.
+  // Live data has stalls whose vendor document is gone, so every name field
+  // comes back empty and the row renders blank — unusable at a gate. Fall back
+  // to the stand number, which is what a volunteer reads off the floor anyway.
+  const manualRowLabel = (r: ManualRow) =>
+    r.shopName ||
+    r.businessName ||
+    r.name ||
+    (r.tables.length ? `Stand ${r.tables.join(", ")}` : "Unnamed exhibitor");
+
   const manualCounts = {
     all: manualRows.length,
     toCheckIn: manualRows.filter((r) => !r.hasCheckedIn).length,
@@ -1567,7 +1576,7 @@ export default function QRTicketScanner() {
           <div className="space-y-2 max-h-[420px] overflow-y-auto">
             {visibleManualRows.map((r) => {
               const busy = manualBusyId === r.stallId;
-              const title = r.shopName || r.businessName || r.name || "Exhibitor";
+              const title = manualRowLabel(r);
               return (
                 <div
                   key={r.stallId}
@@ -2273,11 +2282,7 @@ export default function QRTicketScanner() {
                 <p className="text-sm text-muted-foreground mt-1">
                   Are you sure you want to <strong>Check Out</strong>{" "}
                   {pendingManualRow ? (
-                    <strong>
-                      {pendingManualRow.shopName ||
-                        pendingManualRow.businessName ||
-                        pendingManualRow.name}
-                    </strong>
+                    <strong>{manualRowLabel(pendingManualRow)}</strong>
                   ) : scanMode === "speaker-ticket" ? (
                     "this speaker"
                   ) : scanMode === "round-table" ? (

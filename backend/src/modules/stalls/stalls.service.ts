@@ -3009,10 +3009,25 @@ export class StallsService {
     if (!Types.ObjectId.isValid(eventId)) {
       throw new BadRequestException("Invalid event ID format");
     }
+    // Only bookings that are actually due on the floor: paid, not withdrawn,
+    // and holding a space.
+    //
+    // "Paid and not withdrawn" rather than status === "Confirmed" for the same
+    // reason the bulk-send query uses it (5259d62): the workflow runs
+    // Confirmed -> Paid -> Completed, so a paid booking is never sitting in
+    // "Confirmed" and that filter would match nobody.
+    //
+    // The selectedTables check is the space allotment — each entry carries a
+    // positionId on the venue layout, so an empty list means the vendor has
+    // paid but has not been given a stand yet, and there is nothing at the
+    // gate for a volunteer to check them into.
+    const WITHDRAWN = ["Cancelled", "Returned", "Forfeited"];
     const rows = await this.stallModel
       .find({
         eventId: new Types.ObjectId(eventId),
-        status: { $nin: ["Cancelled"] },
+        paymentStatus: "Paid",
+        status: { $nin: WITHDRAWN },
+        "selectedTables.0": { $exists: true },
       })
       .select(
         "shopkeeperId status paymentStatus hasCheckedIn hasCheckedOut checkInTime checkOutTime selectedTables",
@@ -3030,7 +3045,7 @@ export class StallsService {
         businessName: v.businessName || "",
         category: v.businessCategory || "",
         tables: (r.selectedTables || [])
-          .map((t: any) => t.tableName)
+          .map((t: any) => t.name || t.tableName)
           .filter(Boolean),
         status: r.status,
         paymentStatus: r.paymentStatus,
