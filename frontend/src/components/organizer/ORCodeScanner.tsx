@@ -2026,21 +2026,27 @@ export default function QRTicketScanner() {
           </div>
         </div>
 
-        {/* Security Notice */}
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-          <div className="flex items-start">
-            <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" />
-            <div className="text-sm">
-              <p className="font-medium text-yellow-800 mb-1">
-                Security Notice
-              </p>
-              <p className="text-yellow-700">
-                Only official EventSH QR codes can be scanned. Regular QR
-                scanners will not work with our secure tickets.
-              </p>
+        {/* Security Notice — only while the volunteer is still signed out. It
+            explains why a phone's own QR app won't open our tickets, which is
+            what someone looking at the sign-in screen needs to know. Once the
+            Google sign-in is done they're working the gate, and the banner is
+            just a permanent yellow bar sitting above every scan. */}
+        {step === "otp-verification" && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+            <div className="flex items-start">
+              <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" />
+              <div className="text-sm">
+                <p className="font-medium text-yellow-800 mb-1">
+                  Security Notice
+                </p>
+                <p className="text-yellow-700">
+                  Only official EventSH QR codes can be scanned. Regular QR
+                  scanners will not work with our secure tickets.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Main Content. OTP verification happens before the tabs — once the
             operator has authenticated, we expose Scanner | Venue so they can
