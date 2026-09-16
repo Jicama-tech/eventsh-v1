@@ -617,24 +617,27 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const App = () => (
   <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
     <HelmetProvider>
-      {/* Light/dark for the dashboard. `enableSystem` is off on purpose: most
-          of the app still paints with literal light colours (bg-white,
-          bg-slate-50 and friends) rather than theme tokens, so following the
-          OS would drop a visitor whose machine is dark into a half-converted
-          screen they never asked for. Dark stays opt-in via ThemeToggle until
-          that repaint is finished, then this can become `enableSystem`. */}
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="light"
-        enableSystem={false}
-        disableTransitionOnChange
-      >
-        <I18nProvider>
-          <QueryClientProvider client={queryClient}>
-            <TooltipProvider>
-              <Toaster />
-              <Sonner />
-              <BrowserRouter>
+      {/* The router sits above ThemeProvider so the theme can follow the
+          route: the organizer's light/dark choice only applies on the
+          dashboard, every public page stays light (see theme-provider.tsx). */}
+      <BrowserRouter>
+        {/* Light/dark for the dashboard. `enableSystem` is off on purpose: most
+            of the app still paints with literal light colours (bg-white,
+            bg-slate-50 and friends) rather than theme tokens, so following the
+            OS would drop a visitor whose machine is dark into a half-converted
+            screen they never asked for. Dark stays opt-in via ThemeToggle until
+            that repaint is finished, then this can become `enableSystem`. */}
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem={false}
+          disableTransitionOnChange
+        >
+          <I18nProvider>
+            <QueryClientProvider client={queryClient}>
+              <TooltipProvider>
+                <Toaster />
+                <Sonner />
                 <AuthProvider>
                   <CountryProvider>
                     <SubscriptionProvider>
@@ -642,11 +645,11 @@ const App = () => (
                     </SubscriptionProvider>
                   </CountryProvider>
                 </AuthProvider>
-              </BrowserRouter>
-            </TooltipProvider>
-          </QueryClientProvider>
-        </I18nProvider>
-      </ThemeProvider>
+              </TooltipProvider>
+            </QueryClientProvider>
+          </I18nProvider>
+        </ThemeProvider>
+      </BrowserRouter>
     </HelmetProvider>
   </GoogleOAuthProvider>
 );

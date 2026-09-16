@@ -35,6 +35,7 @@ export const en: Record<string, string> = {
   "hdr.logout": "Logout",
   "hdr.theme.toLight": "Switch to light theme",
   "hdr.theme.toDark": "Switch to dark theme",
+  "hdr.theme.locked": "This screen stays light for customers",
   "hdr.lang": "Language",
 
   // ---- full-screen event forms ----

@@ -9,7 +9,7 @@ const HOVER =
   "hover:bg-primary/10 hover:text-primary focus-visible:text-primary";
 
 export function ThemeToggle({ className }: { className?: string }) {
-  const { resolvedTheme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme, forcedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
@@ -25,6 +25,25 @@ export function ThemeToggle({ className }: { className?: string }) {
         disabled
         aria-hidden
       />
+    );
+  }
+
+  // A customer-facing screen (e.g. kiosk) is holding the page light. next-themes
+  // reports the stored choice in resolvedTheme, not the forced one, so without
+  // this the icon would be wrong and a click would change nothing visible.
+  if (forcedTheme) {
+    const lockedLabel = t("hdr.theme.locked");
+    return (
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn(HOVER, className)}
+        disabled
+        aria-label={lockedLabel}
+        title={lockedLabel}
+      >
+        <Sun className="w-5 h-5" />
+      </Button>
     );
   }
 

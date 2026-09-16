@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from "react";
+import { useForceLightTheme } from "@/components/theme-provider";
 import { useSubscription } from "@/hooks/useSubscription";
 import { ModuleGate } from "@/components/ui/ModuleGate";
 import { jwtDecode } from "jwt-decode";
@@ -92,6 +93,11 @@ function shortRand(len = 6) {
 }
 
 export function KioskMode() {
+  // A counter screen the customer looks at (scan-to-pay QR, "Ticket booked"),
+  // built with literal light panels — keep it light even when the organizer's
+  // dashboard is dark. Released as soon as the tab unmounts.
+  useForceLightTheme();
+
   // Plan sub-toggles. The kiosk is a step machine, so each section guards
   // the step it owns and the flow stops there rather than half-rendering:
   //   walkin  — the booking flow itself (event list -> type -> details)
