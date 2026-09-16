@@ -55,6 +55,19 @@ export class RoundTableBooking {
   @Prop({ required: true })
   amount: number;
 
+  // Operator attribution from the shared event link (?ref=). Set only by
+  // the server once the code resolves to a referral-enabled operator of
+  // this event's organizer — shown in the organizer's Participants area,
+  // never on the visitor's ticket.
+  @Prop()
+  referralCode?: string;
+
+  @Prop()
+  referralOperatorId?: string;
+
+  @Prop()
+  referralOperatorName?: string;
+
   @Prop({
     enum: RoundTablePaymentStatus,
     default: RoundTablePaymentStatus.Pending,

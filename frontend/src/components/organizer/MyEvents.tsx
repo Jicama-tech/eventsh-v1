@@ -80,6 +80,11 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { jwtDecode } from "jwt-decode";
+import {
+  getOperatorReferralCode,
+  useOperatorReferralCode,
+  withOperatorRef,
+} from "@/lib/eventLinks";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";
 import { t } from "@/i18n/t";
@@ -194,6 +199,9 @@ export interface Event {
 const MyEvents: React.FC = () => {
   const apiURL = __API_URL__;
   const { toast } = useToast();
+  // Logged-in operator's referral code (null for owners / when off) —
+  // appended as ?ref= to the event links they share.
+  const operatorRefCode = useOperatorReferralCode();
   // Supplier requirements + quotations for one event, shown in a dialog.
   const [suppliesForEvent, setSuppliesForEvent] = useState<Event | null>(null);
   // Expenses + approvals for one event.
@@ -742,7 +750,11 @@ const MyEvents: React.FC = () => {
    * two different organizers — pass whatever name we can find on the JWT
    * and fall back to a placeholder when nothing's there.
    */
-  const buildEventShareUrl = (eventId: string, eventSlug?: string) => {
+  const buildEventShareUrl = (
+    eventId: string,
+    eventSlug?: string,
+    refCode: string | null | undefined = operatorRefCode,
+  ) => {
     // Prefer the organizer's real, current slug so the link always matches the
     // latest storefront slug. Fall back to a token-derived slug only until the
     // profile (and its slug) has loaded.
@@ -768,7 +780,10 @@ const MyEvents: React.FC = () => {
         // Non-fatal — placeholder slug still produces a working URL.
       }
     }
-    return `${window.location.origin}/${encodeURIComponent(org || "event")}/events/${encodeURIComponent(eventSlug || eventId)}`;
+    return withOperatorRef(
+      `${window.location.origin}/${encodeURIComponent(org || "event")}/events/${encodeURIComponent(eventSlug || eventId)}`,
+      refCode,
+    );
   };
 
   // Publish toggle — ON makes the public eventfront link live; OFF blocks the
@@ -820,7 +835,13 @@ const MyEvents: React.FC = () => {
    * Toast either way so the user gets confirmation.
    */
   const handleShareEvent = async (event: Event) => {
-    const url = buildEventShareUrl(event._id, event.slug);
+    // A share clicked before the operator's referral lookup landed waits for
+    // it, so the link still carries ?ref.
+    const refCode =
+      operatorRefCode === undefined
+        ? await getOperatorReferralCode()
+        : operatorRefCode;
+    const url = buildEventShareUrl(event._id, event.slug, refCode);
     const shareData = {
       title: event.title,
       text: `Check out "${event.title}"`,

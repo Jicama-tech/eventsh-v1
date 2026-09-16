@@ -220,12 +220,12 @@ export class OperatorsService {
   }
 
   // Look up an operator by referral code, scoped to an organizer — used to
-  // gate Scheduled Space visibility for visitors on the public event page.
-  // Scoping to organizerId means codes only need to be globally unique, not
-  // separately re-validated per event. Only matches operators with
-  // referralEnabled on — an organizer switching it off for an operator
-  // stops that code from working for visitors immediately, not just
-  // hiding it from the operator list.
+  // attribute bookings made through an operator's shared event link (?ref=)
+  // to that operator. Scoping to organizerId means codes only need to be
+  // globally unique, not separately re-validated per event. Only matches
+  // operators with referralEnabled on — an organizer switching it off for an
+  // operator stops that code from attributing new bookings immediately, not
+  // just hiding it from the operator list.
   async findByReferralCode(organizerId: string, code: string) {
     const normalized = (code || "").trim().toUpperCase();
     if (!normalized) return null;
@@ -234,6 +234,35 @@ export class OperatorsService {
       referralCode: normalized,
       referralEnabled: true,
     });
+  }
+
+  // Resolve a visitor-submitted referral code into the attribution fields a
+  // booking stores. organizerId must come from the Event document, never the
+  // request body, so a code can only credit an operator of that event's own
+  // organizer. Anything malformed, unknown, disabled or failing to look up
+  // returns null — callers save no referral fields and the booking proceeds.
+  async resolveReferral(
+    organizerId: string,
+    code?: string | null,
+  ): Promise<{
+    referralCode: string;
+    referralOperatorId: string;
+    referralOperatorName: string;
+  } | null> {
+    try {
+      const normalized = String(code ?? "").trim().toUpperCase();
+      if (!/^[A-Z0-9]{4,12}$/.test(normalized)) return null;
+      if (!organizerId) return null;
+      const operator = await this.findByReferralCode(organizerId, normalized);
+      if (!operator) return null;
+      return {
+        referralCode: normalized,
+        referralOperatorId: String(operator._id),
+        referralOperatorName: operator.name || "",
+      };
+    } catch {
+      return null;
+    }
   }
 
   // Issue a fresh code for an operator (e.g. after a leak) — old code stops

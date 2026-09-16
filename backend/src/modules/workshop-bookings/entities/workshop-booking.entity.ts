@@ -72,6 +72,18 @@ export class WorkshopBooking {
   @Prop({ default: false })
   hasCheckedIn: boolean;
 
+  // Operator referral (shared event link ?ref=). Set server-side only, when
+  // the code resolves to an enabled operator of the event's organizer.
+  // Copied onto the mirrored Ticket so Participants can show it.
+  @Prop()
+  referralCode?: string;
+
+  @Prop()
+  referralOperatorId?: string;
+
+  @Prop()
+  referralOperatorName?: string;
+
   @Prop()
   createdAt: Date;
 

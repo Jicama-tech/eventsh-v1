@@ -244,6 +244,9 @@ export interface ExhibitorDetailDialogProps {
    * fields the organizer toggled off don't render here either, even if the
    * stall document happens to carry stale data for them. */
   registrationFormFields?: { stall?: Record<string, boolean> } | null;
+  /** Shows the operator referral (from a shared ?ref= link) in Shopkeeper
+   * Information. Only the Participants mount passes it. */
+  showReferral?: boolean;
 }
 
 export function ExhibitorDetailDialog({
@@ -261,9 +264,13 @@ export function ExhibitorDetailDialog({
   onNoteAdded,
   currentUserDisplay,
   registrationFormFields,
+  showReferral,
 }: ExhibitorDetailDialogProps) {
   const stallFieldOn = (key: string) =>
     isFieldEnabled(registrationFormFields, "stall", key);
+  const stallWithReferral = stallRequest as
+    | (StallRequest & { referralCode?: string; referralOperatorName?: string })
+    | null;
   const { country } = useCountry();
   const { formatPrice } = useCurrency(country);
 
@@ -1248,6 +1255,20 @@ export function ExhibitorDetailDialog({
                       : stallRequest.couponCodeAssigned || "None Assigned"}
                   </p>
                 </div>
+
+                {showReferral && stallWithReferral?.referralCode && (
+                  <div>
+                    <Label className="text-muted-foreground">{t("Referral")}</Label>
+                    <p className="text-sm">
+                      {[
+                        stallWithReferral.referralCode,
+                        stallWithReferral.referralOperatorName,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  </div>
+                )}
 
                 {stallRequest.registrationNumber && (
                   <div className="pt-2 border-t">

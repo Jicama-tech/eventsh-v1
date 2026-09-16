@@ -327,6 +327,18 @@ export class Stall {
   @Prop()
   displayName: string;
 
+  // Operator referral attribution (organizer dashboard only). Set by the
+  // server at creation when the ?ref= code resolves to an operator of this
+  // event's organizer — never client-writable, never shown to the vendor.
+  @Prop()
+  referralCode?: string;
+
+  @Prop()
+  referralOperatorId?: string;
+
+  @Prop()
+  referralOperatorName?: string;
+
   @Prop()
   nameOfApplicant: string;
 

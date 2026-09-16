@@ -124,4 +124,10 @@ export class CreateTicketDto {
 
   @IsOptional()
   notes?: any;
+
+  // Operator referral code from a shared event link (?ref=). Only saved when
+  // it resolves to an enabled operator of this event's organizer.
+  @IsOptional()
+  @IsString()
+  referralCode?: string;
 }

@@ -187,4 +187,10 @@ export class CreateStallDto {
   @IsOptional()
   @IsString()
   uenDetails?: string;
+
+  // Operator referral code from a shared event link (?ref=). Resolved
+  // server-side against the event's organizer; unknown codes are ignored.
+  @IsOptional()
+  @IsString()
+  referralCode?: string;
 }
