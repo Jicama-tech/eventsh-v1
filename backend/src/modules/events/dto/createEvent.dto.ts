@@ -579,8 +579,8 @@ export class ScheduledSpaceTemplateDto {
   @ValidateNested({ each: true })
   @Type(() => ScheduleSlotDto)
   slots?: ScheduleSlotDto[];
-  // Operator this space is assigned to. A referral code filters, it
-  // doesn't gate — see ScheduledSpacesService.getAvailableSpaces.
+  // Legacy operator assignment — accepted for old templates, no longer read.
+  // Referral codes only attribute bookings; they never filter spaces.
   @IsString() @IsOptional() operatorId?: string;
 }
 

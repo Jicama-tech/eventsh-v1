@@ -465,6 +465,18 @@ const RoundTableBookings = ({
                     {selectedBooking.paymentStatus}
                   </Badge>
                 </div>
+                {selectedBooking.referralCode && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">
+                      {t("Referral")}
+                    </span>
+                    <span className="text-sm">
+                      {[selectedBooking.referralCode, selectedBooking.referralOperatorName]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Check-In</span>
                   <span className="text-sm">

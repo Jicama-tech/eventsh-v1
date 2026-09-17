@@ -366,12 +366,9 @@ class ScheduledSpaceTemplate {
   @Prop({ default: 0 }) price: number;
   @Prop() color?: string;
   @Prop({ type: [Object], default: [] }) slots: ScheduleSlot[];
-  // Operator (organizer staff account) this space belongs to. A referral
-  // code is a *filter*, not an access gate: unassigned spaces and every
-  // operator's spaces are visible by default (no code, or a code that
-  // doesn't match anyone); entering a code that resolves to an operator
-  // narrows the list down to that operator's spaces plus the unassigned
-  // ones (see ScheduledSpacesService.getAvailableSpaces).
+  // Legacy: operator this space was once assigned to. No longer read —
+  // every space is shown to every visitor, and operator referral codes only
+  // attribute bookings (see OperatorsService.resolveReferral).
   @Prop() operatorId?: string;
 }
 

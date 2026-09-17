@@ -135,6 +135,18 @@ export class SpeakerRequest {
   @Prop({ enum: ["organizer", "external"], default: "external" })
   source: string; // who added: organizer manually or external application
 
+  // Operator referral attribution (organizer dashboard only). Set by the
+  // server at creation when the ?ref= code resolves to an operator of this
+  // event's organizer — never client-writable, never shown to the speaker.
+  @Prop()
+  referralCode?: string;
+
+  @Prop()
+  referralOperatorId?: string;
+
+  @Prop()
+  referralOperatorName?: string;
+
   @Prop({ default: false })
   isKeynote: boolean;
 

@@ -22,6 +22,7 @@ import { UpdateTicketDto } from "./dto/update-ticket.dto";
 import { OrganizerOrApiKeyGuard } from "../organizers/guards/organizer-or-api-key.guard";
 import { Response } from "express";
 import * as fs from "fs";
+import { omitReferralFields } from "../../common/referral.util";
 
 @Controller("tickets")
 export class TicketsController {
@@ -69,8 +70,9 @@ export class TicketsController {
   }
 
   @Post("create-ticket")
-  create(@Body() createTicketDto: CreateTicketDto) {
-    return this.ticketsService.create(createTicketDto);
+  async create(@Body() createTicketDto: CreateTicketDto) {
+    // The buyer gets their ticket back — minus the dashboard-only referral.
+    return omitReferralFields(await this.ticketsService.create(createTicketDto));
   }
 
   @Get()
@@ -78,9 +80,14 @@ export class TicketsController {
     return this.ticketsService.findAll();
   }
 
+  // The three reads below are unguarded and serve the buyer (their ticket, the
+  // payment page's lookup), so the dashboard-only referral attribution is
+  // stripped from what goes back. Participants reads event/:eventId and
+  // organizer/:organizerId instead, which keep it.
   @Get("customer/:email")
-  getCustomerTickets(@Param("email") email: string) {
-    return this.ticketsService.getCustomerTickets(email);
+  async getCustomerTickets(@Param("email") email: string) {
+    const tickets = await this.ticketsService.getCustomerTickets(email);
+    return (tickets || []).map(omitReferralFields);
   }
 
   @Get("organizer/:organizerId")
@@ -101,13 +108,15 @@ export class TicketsController {
   }
 
   @Get(":id")
-  findOne(@Param("id") id: string) {
-    return this.ticketsService.findOne(id);
+  async findOne(@Param("id") id: string) {
+    return omitReferralFields(await this.ticketsService.findOne(id));
   }
 
   @Get("by-ticket-id/:ticketId")
-  findByTicketId(@Param("ticketId") ticketId: string) {
-    return this.ticketsService.findByTicketId(ticketId);
+  async findByTicketId(@Param("ticketId") ticketId: string) {
+    return omitReferralFields(
+      await this.ticketsService.findByTicketId(ticketId),
+    );
   }
 
   @Patch(":id")

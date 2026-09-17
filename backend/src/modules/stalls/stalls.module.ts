@@ -17,6 +17,7 @@ import { StallPaymentSchedulerService } from "./stall-payment-scheduler.service"
 import { FeedbackModule } from "../feedback/feedback.module";
 import { MailModule } from "../roles/mail.module";
 import { Operator, OperatorSchema } from "../operators/entities/operator.entity";
+import { OperatorsModule } from "../operators/operators.module";
 import {
   OrganizerStore,
   OrganizerStoreSchema,
@@ -48,6 +49,8 @@ import {
     CouponModule,
     FeedbackModule,
     MailModule,
+    // Resolves a shared event link's ?ref= code to the referring operator.
+    OperatorsModule,
   ],
   controllers: [StallsController],
   providers: [StallsService, StallPaymentSchedulerService],

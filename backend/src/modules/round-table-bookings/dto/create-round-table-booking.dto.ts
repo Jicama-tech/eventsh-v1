@@ -55,4 +55,11 @@ export class CreateRoundTableBookingDto {
   @ValidateNested({ each: true })
   @Type(() => SeatGuestDto)
   seatGuests?: SeatGuestDto[];
+
+  // Operator referral code from the shared event link (?ref=) — optional.
+  // Only used to attribute the booking to that operator; the service
+  // resolves it against the event's organizer and ignores unknown codes.
+  @IsOptional()
+  @IsString()
+  referralCode?: string;
 }

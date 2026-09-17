@@ -368,7 +368,7 @@ const ScheduledSpaceRequests = ({
               <thead>
                 <tr className="border-b text-left text-muted-foreground">
                   <th className="pb-3 pr-4 font-medium">Registrant</th>
-                  <th className="pb-3 pr-4 font-medium">Referral Code</th>
+                  <th className="pb-3 pr-4 font-medium">{t("Referral")}</th>
                   <th className="pb-3 pr-4 font-medium">Selected Slots</th>
                   <th className="pb-3 pr-4 font-medium">Total</th>
                   <th className="pb-3 pr-4 font-medium">Payment</th>
@@ -395,8 +395,11 @@ const ScheduledSpaceRequests = ({
                     </td>
                     <td className="py-3 pr-4">
                       {req.referralCode ? (
-                        <span className="font-mono text-xs text-muted-foreground">
-                          {req.referralCode}
+                        <span className="text-xs text-muted-foreground">
+                          <span className="font-mono">{req.referralCode}</span>
+                          {req.referralOperatorName
+                            ? ` · ${req.referralOperatorName}`
+                            : ""}
                         </span>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
@@ -495,7 +498,11 @@ const ScheduledSpaceRequests = ({
                   )}
                 {selected.referralCode && (
                   <p className="text-xs text-muted-foreground">
-                    Referral code: <span className="font-mono">{selected.referralCode}</span>
+                    {t("Referral")}:{" "}
+                    <span className="font-mono">{selected.referralCode}</span>
+                    {selected.referralOperatorName
+                      ? ` · ${selected.referralOperatorName}`
+                      : ""}
                   </p>
                 )}
                 {scheduledSpaceFieldOn("purpose") && selected.purpose && (

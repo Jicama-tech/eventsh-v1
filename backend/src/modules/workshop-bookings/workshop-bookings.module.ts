@@ -10,6 +10,7 @@ import { EventSchema } from "../events/schemas/event.schema";
 import { OrganizerSchema } from "../organizers/schemas/organizer.schema";
 import { TicketSchema } from "../tickets/entities/ticket.entity";
 import { OtpModule } from "../otp/otp.module";
+import { OperatorsModule } from "../operators/operators.module";
 
 @Module({
   imports: [
@@ -20,6 +21,9 @@ import { OtpModule } from "../otp/otp.module";
       { name: "Ticket", schema: TicketSchema },
     ]),
     OtpModule,
+    // OperatorsService.resolveReferral — attributes bookings made through an
+    // operator's shared event link (?ref=).
+    OperatorsModule,
   ],
   controllers: [WorkshopBookingsController],
   providers: [WorkshopBookingsService],

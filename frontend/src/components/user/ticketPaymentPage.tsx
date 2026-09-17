@@ -33,6 +33,7 @@ import { useCurrency } from "@/hooks/useCurrencyhook";
 import jsQR from "jsqr";
 import QRCode from "react-qr-code";
 import { buildPayNowQrUrl } from "@/lib/paynowQr";
+import { getEventReferral } from "@/lib/eventReferral";
 
 interface TicketDetails {
   ticketId: string;
@@ -440,6 +441,10 @@ export default function TicketPaymentPage() {
         paymentConfirmed: true,
         purchaseDate: new Date().toISOString(),
         notes: state.notes || "",
+        // Operator share link (?ref) captured on the event page — only the
+        // stored, unexpired (30-day) copy. The server decides whether it counts.
+        referralCode:
+          getEventReferral(state.eventId || state.eventInfo.id) || undefined,
       };
 
       const res = await fetch(`${apiURL}/tickets/create-ticket`, {

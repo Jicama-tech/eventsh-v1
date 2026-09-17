@@ -4,6 +4,8 @@ import {
   InternalServerErrorException,
   BadRequestException,
   HttpException,
+  Inject,
+  forwardRef,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
@@ -24,6 +26,7 @@ import { OtpService } from "../otp/otp.service";
 import * as puppeteer from "puppeteer";
 import { User } from "../users/schemas/user.schema";
 import { UsersService } from "../users/users.service";
+import { OperatorsService } from "../operators/operators.service";
 
 function formatCurrency(amount: number, country?: string): string {
   if (country === "IN") {
@@ -43,7 +46,9 @@ export class TicketsService {
     @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly usersService: UsersService,
     private mailService: MailService,
-    private otpService: OtpService
+    private otpService: OtpService,
+    @Inject(forwardRef(() => OperatorsService))
+    private readonly operatorsService: OperatorsService
   ) {
     const qrDir = path.join(process.cwd(), "uploads", "generatedQRs");
     if (!fs.existsSync(qrDir)) fs.mkdirSync(qrDir, { recursive: true });
@@ -52,14 +57,18 @@ export class TicketsService {
   async create(createTicketDto: CreateTicketDto): Promise<Ticket> {
     try {
       // 0. Refuse ticket purchases once the event is over.
+      // The event's own organizer (never the client-supplied organizerId)
+      // scopes the operator referral lookup below.
+      let eventOrganizerId = "";
       if (createTicketDto.eventId) {
         const ev = await this.eventModel
           .findById(createTicketDto.eventId)
-          .select("startDate endDate")
+          .select("startDate endDate organizer")
           .lean();
         if (eventHasEnded(ev)) {
           throw new BadRequestException(EVENT_ENDED_MESSAGE);
         }
+        eventOrganizerId = ev?.organizer ? String(ev.organizer) : "";
       }
 
       // 0.5 Assigned-seating events: atomically reserve any selected seats
@@ -155,6 +164,13 @@ export class TicketsService {
         (organizer as any)?.name ||
         "EventSH";
 
+      // 3.6 Operator referral (shared event link ?ref=). Unknown/disabled
+      // codes resolve to null and are silently dropped — never saved raw.
+      const referral = await this.operatorsService.resolveReferral(
+        eventOrganizerId,
+        createTicketDto.referralCode
+      );
+
       // 4. Create the ticket document
       const ticket = new this.ticketModel({
         ticketId: createTicketDto.ticketId,
@@ -184,6 +200,7 @@ export class TicketsService {
         isUsed: false,
         // Optional: may want to store a userId/reference here as well
         userId: user._id,
+        ...(referral || {}),
       });
 
       const savedTicket = await ticket.save();
@@ -699,8 +716,12 @@ Thank you for choosing Eventsh! 🎊`;
     if (!Types.ObjectId.isValid(id))
       throw new BadRequestException("Invalid ticket ID");
 
+    // Referral attribution is resolved once, at purchase — an update (organizer
+    // or API key) never rewrites who brought the booking.
+    const { referralCode, ...updatable } = updateTicketDto as any;
+
     const updatedTicket = await this.ticketModel
-      .findByIdAndUpdate(id, updateTicketDto, { new: true })
+      .findByIdAndUpdate(id, updatable, { new: true })
       .populate("eventId organizerId")
       .exec();
 

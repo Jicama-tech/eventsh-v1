@@ -58,10 +58,12 @@ export class Operator {
   @Prop({ default: false })
   canApproveExpenses: boolean;
 
-  // Short alphanumeric code visitors can enter on a Scheduled Space
-  // registration form to unlock the spaces assigned to this operator.
-  // Auto-generated on create (and lazily backfilled for pre-existing
-  // operators) — sparse+unique since it's assigned after the fact for old
+  // Short alphanumeric code carried as ?ref= on event links this operator
+  // shares from the dashboard; bookings made through such a link (tickets,
+  // stalls, speakers, round tables, workshops, scheduled spaces) record this
+  // operator for the organizer's Participants view. Auto-generated on create
+  // (and lazily backfilled for pre-existing operators) — sparse+unique since
+  // it's assigned after the fact for old
   // docs one at a time, not in a single migration. Generated regardless of
   // referralEnabled below — it just isn't shown or matched against until
   // switched on, so turning it on later doesn't change the code itself.
@@ -69,10 +71,10 @@ export class Operator {
   referralCode?: string;
 
   // Opt-in gate for referralCode: most operators (chatbot/kiosk/dashboard
-  // staff) have nothing to do with Scheduled Spaces, so the code stays
-  // hidden in the organizer's operator list and non-functional for
-  // visitors until explicitly switched on for the operators actually
-  // handing one out. Off by default.
+  // staff) don't promote events, so the code stays hidden in the
+  // organizer's operator list, isn't added to their shared links and
+  // attributes no bookings until explicitly switched on for the operators
+  // actually bringing in visitors. Off by default.
   @Prop({ default: false })
   referralEnabled: boolean;
 }
