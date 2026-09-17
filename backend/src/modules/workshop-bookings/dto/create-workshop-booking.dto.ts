@@ -31,4 +31,10 @@ export class CreateWorkshopBookingDto {
 
   @IsString()
   visitorPhone: string;
+
+  // Operator referral code from a shared event link (?ref=). Only saved when
+  // it resolves to an enabled operator of this event's organizer.
+  @IsString()
+  @IsOptional()
+  referralCode?: string;
 }

@@ -22,6 +22,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountryCodes } from "@/hooks/useCountryCodes";
+import { getEventReferral } from "@/lib/eventReferral";
 
 interface WorkshopSelection {
   eventId: string;
@@ -338,6 +339,8 @@ const WorkshopCheckoutPage = () => {
           visitorName: `${firstName} ${lastName}`.trim(),
           visitorEmail: email,
           visitorPhone: `${countryCode}${whatsapp}`,
+          // item.eventId may be the id or the slug — both keys are stored.
+          referralCode: getEventReferral(item.eventId) || undefined,
         }),
       });
       const result = await res.json();

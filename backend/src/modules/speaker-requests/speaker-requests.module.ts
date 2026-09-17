@@ -12,6 +12,7 @@ import { OrganizerSchema } from "../organizers/schemas/organizer.schema";
 import { OtpModule } from "../otp/otp.module";
 import { FeedbackModule } from "../feedback/feedback.module";
 import { MailModule } from "../roles/mail.module";
+import { OperatorsModule } from "../operators/operators.module";
 
 @Module({
   imports: [
@@ -25,6 +26,8 @@ import { MailModule } from "../roles/mail.module";
     OtpModule,
     FeedbackModule,
     MailModule,
+    // Resolves a shared event link's ?ref= code to the referring operator.
+    OperatorsModule,
   ],
   controllers: [SpeakerRequestsController],
   providers: [SpeakerRequestsService],

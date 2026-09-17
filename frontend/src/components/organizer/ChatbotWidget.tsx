@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { jwtDecode } from "jwt-decode";
+import {
+  getOperatorReferralCode,
+  useOperatorReferralCode,
+  withOperatorRef,
+} from "@/lib/eventLinks";
 import { useCountry } from "@/hooks/useCountry";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1068,6 +1073,9 @@ export function ChatbotWidget({
 }: ChatbotWidgetProps) {
   const isPage = mode === "page";
   const { toast } = useToast();
+  // Logged-in operator's referral code (null for owners / when off) —
+  // appended as ?ref= to the event card's Open / Copy link.
+  const operatorRefCode = useOperatorReferralCode();
   const [open, setOpen] = useState(isPage);
   // Individual (Marriage) flow — the event whose RSVP guest-list dialog is
   // open. Only marriage / personal (RSVP-based) event cards open this; ticketed
@@ -2336,7 +2344,10 @@ export function ChatbotWidget({
                           {ev.publicUrl && (
                             <>
                               <a
-                                href={ev.publicUrl}
+                                href={withOperatorRef(
+                                  ev.publicUrl,
+                                  operatorRefCode,
+                                )}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="text-[11px] px-2 py-1 rounded border border-blue-200 dark:border-blue-500/30 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:bg-blue-500/15 dark:hover:bg-blue-500/20 font-medium flex items-center gap-1"
@@ -2361,7 +2372,14 @@ export function ChatbotWidget({
                                 onClick={async () => {
                                   // Absolute URL so the link works when
                                   // pasted into WhatsApp / email / etc.
-                                  const url = `${window.location.origin}${ev.publicUrl}`;
+                                  // Waits for the referral lookup if it
+                                  // hasn't landed yet, so ?ref isn't lost.
+                                  const url = withOperatorRef(
+                                    `${window.location.origin}${ev.publicUrl}`,
+                                    operatorRefCode === undefined
+                                      ? await getOperatorReferralCode()
+                                      : operatorRefCode,
+                                  );
                                   try {
                                     await navigator.clipboard.writeText(url);
                                     toast({

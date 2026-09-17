@@ -1,8 +1,11 @@
-import { PartialType } from "@nestjs/mapped-types";
+import { OmitType, PartialType } from "@nestjs/mapped-types";
 import { CreateStallDto } from "./create-stall.dto";
 import { IsOptional, IsString, IsDateString } from "class-validator";
 
-export class UpdateStallDto extends PartialType(CreateStallDto) {
+// Referral attribution is set once at creation, never through updates.
+export class UpdateStallDto extends PartialType(
+  OmitType(CreateStallDto, ["referralCode"] as const),
+) {
   @IsOptional()
   @IsString()
   qrCodePath?: string;

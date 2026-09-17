@@ -18,6 +18,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       name: payload.name,
       email: payload.email,
       roles: payload.roles,
+      // Present only on operator dashboard tokens (sub is then the parent
+      // organizer) — lets operator-scoped endpoints like GET /operators/me
+      // tell an operator from the organizer owner.
+      operatorId: payload.operatorId,
     };
   }
 }

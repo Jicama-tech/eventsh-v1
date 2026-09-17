@@ -47,6 +47,7 @@ export const hi: Record<string, string> = {
   "hdr.logout": "लॉग आउट",
   "hdr.theme.toLight": "लाइट थीम पर जाएँ",
   "hdr.theme.toDark": "डार्क थीम पर जाएँ",
+  "hdr.theme.locked": "यह स्क्रीन ग्राहकों के लिए लाइट ही रहती है",
   "hdr.lang": "भाषा",
 
   // ---- full-screen event forms ----
@@ -904,8 +905,9 @@ export const hi: Record<string, string> = {
   "Shop Name*": "दुकान का नाम*",
   "Enter shop name": "दुकान का नाम दर्ज करें",
   "Applicant Name": "आवेदक का नाम",
+  "Referral": "रेफ़रल",
   "Referral Code": "रेफ़रल कोड",
-  "Scheduled Space Referral Code": "निर्धारित स्थान रेफ़रल कोड",
+  "Operator Referral Code": "ऑपरेटर रेफ़रल कोड",
   "Reference (optional)": "संदर्भ (वैकल्पिक)",
   "Where (optional)": "कहाँ (वैकल्पिक)",
   "Website (optional)": "वेबसाइट (वैकल्पिक)",

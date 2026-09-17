@@ -29,6 +29,8 @@ import { Speaker, SpeakerDocument } from "./schemas/speaker.schema";
 import { OtpService } from "../otp/otp.service";
 import { FeedbackService } from "../feedback/feedback.service";
 import { MailService } from "../roles/mail.service";
+import { OperatorsService } from "../operators/operators.service";
+import { omitReferralFields } from "../../common/referral.util";
 
 @Injectable()
 export class SpeakerRequestsService {
@@ -44,6 +46,7 @@ export class SpeakerRequestsService {
     private otpService: OtpService,
     private feedbackService: FeedbackService,
     private mailService: MailService,
+    private operatorsService: OperatorsService,
   ) {
     const ticketsDir = path.join(process.cwd(), "uploads", "speakerTickets");
     if (!fs.existsSync(ticketsDir))
@@ -601,8 +604,22 @@ export class SpeakerRequestsService {
       // Price the chosen speaker space now and freeze it on the request.
       const pricing = this.resolveSlotFee(event, (dto as any).selectedSlotId);
 
+      // Operator referral from a shared event link. The body is unvalidated
+      // (multipart/any), so pull every referral field out of the spread — only
+      // a code that resolves against the event's own organizer is recorded.
+      const {
+        referralCode: rawReferralCode,
+        ...fields
+      } = dto as CreateSpeakerRequestDto & Record<string, any>;
+      delete fields.referralOperatorId;
+      delete fields.referralOperatorName;
+      const referral = await this.operatorsService.resolveReferral(
+        String(event.organizer),
+        rawReferralCode,
+      );
+
       const request = await this.speakerRequestModel.create({
-        ...dto,
+        ...fields,
         email: String(dto.email || "")
           .trim()
           .toLowerCase(),
@@ -626,6 +643,8 @@ export class SpeakerRequestsService {
             changedBy: dto.source === "organizer" ? "organizer" : "applicant",
           },
         ],
+        // Server-resolved only; set after the spread so nothing client-sent wins.
+        ...(referral ?? {}),
       });
 
       // Grow the organizer's speaker roster. Best-effort — a profile hiccup
@@ -711,7 +730,7 @@ export class SpeakerRequestsService {
       return {
         success: true,
         message: "Speaker application submitted successfully",
-        data: populated,
+        data: omitReferralFields(populated),
       };
     } catch (error) {
       if (

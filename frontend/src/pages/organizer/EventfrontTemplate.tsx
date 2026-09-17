@@ -55,6 +55,7 @@ import { Helmet } from "react-helmet-async";
 import AnnouncementBar from "@/components/ui/adBar";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { t } from "@/i18n/t";
+import { useForceLightTheme } from "@/components/theme-provider";
 
 export interface organizerToken {
   sub: string;
@@ -186,6 +187,9 @@ interface FetchedEvent {
 }
 
 export function EventfrontTemplate({ onBack }: { onBack: () => void }) {
+  // Shows the organizer the storefront their visitors get — and visitors
+  // always get it light, so the dashboard's dark theme mustn't leak in here.
+  useForceLightTheme();
   const apiURL = __API_URL__;
   const navigate = useNavigate();
 

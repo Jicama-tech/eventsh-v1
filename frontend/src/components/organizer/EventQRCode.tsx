@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import QRCodeLib from "qrcode";
 import { jwtDecode } from "jwt-decode";
+import { useOperatorReferralCode, withOperatorRef } from "@/lib/eventLinks";
+import { useForceLightTheme } from "@/components/theme-provider";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";
 import { t } from "@/i18n/t";
@@ -45,12 +47,16 @@ interface EventQRCodeProps {
 }
 
 export function EventQRCode({ event, apiURL, onClose }: EventQRCodeProps) {
+  // Held up for visitors to scan, so it stays light even in a dark dashboard.
+  useForceLightTheme();
   const [qrCodeDataURL, setQrCodeDataURL] = useState<string>("");
   const [qrSize, setQrSize] = useState(256);
   const [copied, setCopied] = useState(false);
   const [slug, setSlug] = useState("");
   const { country } = useCountry();
   const { formatPrice } = useCurrency(country);
+  // Logged-in operator's referral code (null for owners / when off).
+  const operatorRefCode = useOperatorReferralCode();
 
   useEffect(() => {
     async function fetchData() {
@@ -110,8 +116,15 @@ export function EventQRCode({ event, apiURL, onClose }: EventQRCodeProps) {
   // `/:organizationName/events/:id` (the storefront). The first path segment
   // is the organizer's slug — NOT an `/organizers/` API prefix, which is what
   // made the old link 404 and the QR open nothing useful.
-  const linkReady = !!slug;
-  const eventURL = `https://eventsh.com/${slug}/events/${event.slug || event.id}`;
+  // Also waits for the operator referral lookup (undefined while in flight),
+  // so a QR downloaded / printed straight away still carries ?ref.
+  const linkReady = !!slug && operatorRefCode !== undefined;
+  // An operator with their referral code on gets ?ref=CODE appended, so the
+  // QR, copy, share, print and preview all credit bookings to them.
+  const eventURL = withOperatorRef(
+    `https://eventsh.com/${slug}/events/${event.slug || event.id}`,
+    operatorRefCode,
+  );
 
   // Encode the plain URL so any phone camera or QR app opens the event page
   // directly. Previously this encoded a JSON blob, which scanners surfaced as

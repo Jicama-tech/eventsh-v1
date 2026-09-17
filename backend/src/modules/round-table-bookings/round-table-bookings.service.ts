@@ -24,6 +24,8 @@ import { CreateRoundTableBookingDto } from "./dto/create-round-table-booking.dto
 import { OtpService } from "../otp/otp.service";
 import { FeedbackService } from "../feedback/feedback.service";
 import { MembershipsService } from "../memberships/memberships.service";
+import { OperatorsService } from "../operators/operators.service";
+import { omitReferralFields } from "../../common/referral.util";
 
 function escapeHtml(str: string): string {
   return String(str)
@@ -63,6 +65,7 @@ export class RoundTableBookingsService {
     private readonly otpService: OtpService,
     private readonly feedbackService: FeedbackService,
     private readonly membershipsService: MembershipsService,
+    private readonly operatorsService: OperatorsService,
   ) {}
 
   /**
@@ -160,6 +163,14 @@ export class RoundTableBookingsService {
         ? effectiveTablePrice
         : effectiveChairPrice * dto.selectedChairIndices.length;
 
+    // Operator attribution from the shared event link (?ref=). Resolved
+    // against the event's own organizer (never the client's organizerId);
+    // an unknown/disabled code just leaves the booking unattributed.
+    const referral = await this.operatorsService.resolveReferral(
+      String(event.organizer),
+      dto.referralCode,
+    );
+
     const booking = await this.bookingModel.create({
       eventId: new Types.ObjectId(dto.eventId),
       organizerId: new Types.ObjectId(dto.organizerId),
@@ -176,12 +187,13 @@ export class RoundTableBookingsService {
       seatGuests: dto.seatGuests || [],
       amount,
       paymentStatus: RoundTablePaymentStatus.Pending,
+      ...(referral || {}),
     });
 
     return {
       success: true,
       message: "Round table booking created. Please complete payment.",
-      data: booking,
+      data: omitReferralFields(booking),
     };
   }
 

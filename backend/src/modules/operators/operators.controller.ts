@@ -42,20 +42,55 @@ export class OperatorsController {
     return this.operatorsService.findByOrganizerId(organizerId);
   }
 
+  // The logged-in operator's own referral details, so the dashboard can tag
+  // the event links it copies/shares with ?ref=CODE. Identity comes only
+  // from the token (operatorId + parent organizer as userId) — organizer
+  // owners and anyone whose token doesn't match a live operator of that
+  // organizer get data: null. The code is withheld unless referralEnabled.
+  @Get("me")
+  @UseGuards(AuthGuard("jwt"))
+  async me(@Request() req: any) {
+    const operatorId = req.user?.operatorId;
+    if (!operatorId) return { data: null };
+    let operator: any;
+    try {
+      operator = (await this.operatorsService.findOne(String(operatorId)))
+        .data;
+    } catch {
+      return { data: null };
+    }
+    if (
+      !operator ||
+      String(operator.organizerId) !== String(req.user?.userId || "")
+    ) {
+      return { data: null };
+    }
+    const referralEnabled = !!operator.referralEnabled;
+    return {
+      data: {
+        operatorId: String(operator._id),
+        name: operator.name,
+        referralEnabled,
+        referralCode: referralEnabled ? operator.referralCode || null : null,
+      },
+    };
+  }
+
   // Get one operator by ID. Guarded — this now also returns the operator's
-  // Scheduled Space referral code, which shouldn't be readable by an
-  // unauthenticated caller who merely knows/enumerates an operator ID.
+  // referral code, which shouldn't be readable by an unauthenticated caller
+  // who merely knows/enumerates an operator ID.
   @Get("fetch/:id")
   @UseGuards(AuthGuard("jwt"))
   findOne(@Param("id") id: string) {
     return this.operatorsService.findOne(id);
   }
 
-  // Regenerate an operator's Scheduled Space referral code (invalidates the
-  // old one immediately). Guarded and ownership-checked in the service (only
-  // that operator's own organizer, or an admin) — otherwise any
-  // authenticated caller who merely knows/enumerates an operator ID could
-  // invalidate that operator's poster-printed code at will.
+  // Regenerate an operator's referral code (invalidates the old one
+  // immediately — links already shared with the old ?ref= stop attributing).
+  // Guarded and ownership-checked in the service (only that operator's own
+  // organizer, or an admin) — otherwise any authenticated caller who merely
+  // knows/enumerates an operator ID could kill the attribution on every link
+  // that operator has already shared.
   @Patch("regenerate-referral-code/:id")
   @UseGuards(AuthGuard("jwt"))
   regenerateReferralCode(@Param("id") id: string, @Request() req: any) {

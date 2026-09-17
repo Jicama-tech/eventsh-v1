@@ -22,6 +22,8 @@ import {
 } from "./entities/workshop-booking.entity";
 import { CreateWorkshopBookingDto } from "./dto/create-workshop-booking.dto";
 import { OtpService } from "../otp/otp.service";
+import { OperatorsService } from "../operators/operators.service";
+import { omitReferralFields } from "../../common/referral.util";
 
 function escapeHtml(str: string): string {
   return String(str)
@@ -60,6 +62,7 @@ export class WorkshopBookingsService {
     @InjectModel("Organizer") private readonly organizerModel: Model<any>,
     @InjectModel("Ticket") private readonly ticketModel: Model<any>,
     private readonly otpService: OtpService,
+    private readonly operatorsService: OperatorsService,
   ) {}
 
   /**
@@ -115,6 +118,13 @@ export class WorkshopBookingsService {
 
     const amount = unitPrice * dto.quantity;
 
+    // Operator referral (shared event link ?ref=), scoped to the event's own
+    // organizer. Unknown/disabled codes resolve to null and are dropped.
+    const referral = await this.operatorsService.resolveReferral(
+      event.organizer ? String(event.organizer) : "",
+      dto.referralCode,
+    );
+
     const booking = await this.bookingModel.create({
       eventId: new Types.ObjectId(dto.eventId),
       organizerId: new Types.ObjectId(dto.organizerId),
@@ -129,12 +139,13 @@ export class WorkshopBookingsService {
       visitorPhone: dto.visitorPhone,
       amount,
       paymentStatus: WorkshopPaymentStatus.Pending,
+      ...(referral || {}),
     });
 
     return {
       success: true,
       message: "Workshop booking created. Please complete payment.",
-      data: booking,
+      data: omitReferralFields(booking),
     };
   }
 
@@ -382,6 +393,15 @@ export class WorkshopBookingsService {
         purchaseDate: new Date(),
         qrCode: booking.qrCodeData,
         pdfPath: booking.qrCodePath,
+        // Participants shows workshop buyers via this ticket — carry the
+        // operator referral across so it's visible there.
+        ...(booking.referralCode
+          ? {
+              referralCode: booking.referralCode,
+              referralOperatorId: booking.referralOperatorId,
+              referralOperatorName: booking.referralOperatorName,
+            }
+          : {}),
       });
     } catch (mirrorErr) {
       this.logger.warn(

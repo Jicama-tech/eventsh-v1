@@ -112,6 +112,12 @@ export class CreateSpeakerRequestDto {
   @IsString()
   @IsOptional()
   source?: string;
+
+  // Operator referral code from a shared event link (?ref=). Resolved
+  // server-side against the event's organizer; unknown codes are ignored.
+  @IsString()
+  @IsOptional()
+  referralCode?: string;
 }
 
 export class UpdateSpeakerRequestStatusDto {

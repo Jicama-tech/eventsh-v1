@@ -20,6 +20,7 @@ import {
 } from "./entities/scheduled-space-request.entity";
 import { MailService } from "../roles/mail.service";
 import { OperatorsService } from "../operators/operators.service";
+import { omitReferralFields } from "../../common/referral.util";
 
 // A visitor may have any number of Scheduled Space requests for the same
 // event over time (mirrors stalls.service.ts's vendor-request model), but
@@ -72,6 +73,14 @@ export class ScheduledSpacesService {
       );
     }
 
+    // Operator attribution from the shared event link (?ref=). Resolved
+    // against the event's own organizer (never the client's organizerId);
+    // an unknown/disabled code just leaves the request unattributed.
+    const referral = await this.operatorsService.resolveReferral(
+      String(event.organizer),
+      dto.referralCode,
+    );
+
     const request = new this.requestModel({
       eventId: new Types.ObjectId(String(dto.eventId)),
       organizerId: new Types.ObjectId(String(dto.organizerId)),
@@ -82,15 +91,13 @@ export class ScheduledSpacesService {
       facilityTypeRequested: dto.facilityTypeRequested,
       purpose: dto.purpose,
       organization: dto.organization,
-      referralCode: dto.referralCode?.trim()
-        ? dto.referralCode.trim().toUpperCase()
-        : undefined,
+      ...(referral || {}),
       companions: (dto.companions || []).filter((c) => c && c.trim()),
       status: ScheduledSpaceStatusEnum.Confirmed,
       statusHistory: [{ status: ScheduledSpaceStatusEnum.Confirmed }],
     });
     await request.save();
-    return { success: true, data: request };
+    return { success: true, data: omitReferralFields(request) };
   }
 
   // The visitor-side "have I already registered" check, keyed by email
@@ -104,48 +111,31 @@ export class ScheduledSpacesService {
     if (!Types.ObjectId.isValid(eventId)) {
       throw new BadRequestException("Invalid event id");
     }
-    const requests = await this.requestModel
-      .find({ eventId: new Types.ObjectId(eventId), email })
-      .sort({ createdAt: -1 });
+    const requests = (
+      await this.requestModel
+        .find({ eventId: new Types.ObjectId(eventId), email })
+        .sort({ createdAt: -1 })
+    ).map(omitReferralFields);
     return { success: true, data: requests[0] || null, requests };
   }
 
   // Placed instances with their template-defined slots, annotated with
   // which (positionId, slotId) tokens are already reserved. Mirrors
   // stalls.service.ts's getAvailableTables, but per-slot rather than
-  // per-whole-space.
-  async getAvailableSpaces(eventId: string, referralCode?: string) {
+  // per-whole-space. Every placed space is available to every visitor —
+  // referral codes only attribute a request to an operator (see register),
+  // they never filter.
+  async getAvailableSpaces(eventId: string) {
     if (!Types.ObjectId.isValid(eventId)) {
       throw new BadRequestException("Invalid event id");
     }
     const event = await this.eventModel.findById(eventId);
     if (!event) throw new NotFoundException("Event not found");
 
-    // Resolve the referral code (if any) to an operator scoped to this
-    // event's organizer. A referral code is a *filter*, not an access
-    // gate: with no code (or one that doesn't match anything), every
-    // space shows — public and every operator's alike. Only once a code
-    // resolves to a specific operator does the list narrow to that
-    // operator's spaces plus the unassigned/public ones.
-    let matchedOperator: { id: string; name: string } | null = null;
-    if (referralCode?.trim()) {
-      const operator = await this.operatorsService.findByReferralCode(
-        String(event.organizer),
-        referralCode,
-      );
-      if (operator) {
-        matchedOperator = { id: String(operator._id), name: operator.name };
-      }
-    }
-
     const bookedTokens = new Set<string>(event.scheduledSpaceBookedSlots || []);
 
     const spaces = (event.venueScheduledSpaces || [])
       .map((space: any) => (space?.toObject ? space.toObject() : space))
-      .filter(
-        (s: any) =>
-          !matchedOperator || !s.operatorId || s.operatorId === matchedOperator.id,
-      )
       .map((s: any) => {
         const slots = (s.slots || []).map((slot: any) => ({
           ...slot,
@@ -159,8 +149,6 @@ export class ScheduledSpacesService {
       data: {
         spaces,
         venueConfig: event.venueConfig,
-        matchedOperator,
-        referralCodeInvalid: !!referralCode?.trim() && !matchedOperator,
       },
     };
   }
@@ -408,11 +396,6 @@ export class ScheduledSpacesService {
             ? `<p style="margin:4px 0"><span style="color:#64748b">WhatsApp:</span> <strong>${request.whatsappNumber}</strong></p>`
             : ""
         }
-        ${
-          request.referralCode
-            ? `<p style="margin:4px 0"><span style="color:#64748b">Referral Code:</span> <strong>${request.referralCode}</strong></p>`
-            : ""
-        }
         <table style="border-collapse:collapse;width:100%;margin:16px 0;border:1px solid #e2e8f0;border-radius:8px">
           <thead>
             <tr style="background:#f8fafc">
@@ -518,11 +501,6 @@ export class ScheduledSpacesService {
             ${
               request.whatsappNumber
                 ? `<div class="row"><span>WhatsApp</span><strong>${request.whatsappNumber}</strong></div>`
-                : ""
-            }
-            ${
-              request.referralCode
-                ? `<div class="row"><span>Referral Code</span><strong>${request.referralCode}</strong></div>`
                 : ""
             }
             <table>

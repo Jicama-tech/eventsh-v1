@@ -178,6 +178,10 @@ interface TicketCustomer {
   notes?: string;
   qrCode?: string;
   pdfPath?: string;
+  // Operator referral captured from a shared ?ref= link (server-resolved).
+  referralCode?: string;
+  referralOperatorId?: string;
+  referralOperatorName?: string;
   updatedAt: string;
   createdAt: string;
 }
@@ -2255,6 +2259,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       "Residency",
       "No. of Operators",
       "Coupon Assigned",
+      "Referral",
       "Refund Payment Description",
       "Product Description",
       "Selected Spaces",
@@ -2314,6 +2319,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         s.residency || v.residency || "", // Residency
         s.noOfOperators || v.noOfOperators || "", // No. of Operators
         s.couponCodeAssigned || "", // Coupon Assigned
+        s.referralCode
+          ? [s.referralCode, s.referralOperatorName].filter(Boolean).join(" · ")
+          : "", // Referral
         s.refundPaymentDescription || v.refundPaymentDescription || "", // Refund Payment Description
         s.productDescription || v.productDescription || "", // Product Description
         spaces,
@@ -4177,6 +4185,19 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                           "—"}
                       </div>
                     </div>
+                    {selectedVisitor.referralCode && (
+                      <div>
+                        <div className="font-medium">Referral</div>
+                        <div className="text-muted-foreground">
+                          {[
+                            selectedVisitor.referralCode,
+                            selectedVisitor.referralOperatorName,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </div>
+                      </div>
+                    )}
                     <div>
                       <div className="font-medium">Status</div>
                       <Badge variant="secondary">
@@ -4423,6 +4444,19 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       {selectedSpeaker.source || "—"}
                     </div>
                   </div>
+                  {selectedSpeaker.referralCode && (
+                  <div>
+                    <div className="font-medium">Referral</div>
+                    <div className="text-muted-foreground">
+                      {[
+                        selectedSpeaker.referralCode,
+                        selectedSpeaker.referralOperatorName,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </div>
+                  </div>
+                  )}
                   {speakerFieldOn("expertise") && (
                   <div>
                     <div className="font-medium">Area of expertise</div>
@@ -4789,6 +4823,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         onOpenChange={(open) => (open ? setShowStallDetailDialog(true) : closeStallDialog())}
         stallRequest={stallRequest}
         registrationFormFields={(selectedEvent as any)?.registrationFormFields}
+        showReferral
         detailRef={stallDetailRef}
         isGeneratingPDF={isGeneratingPDF}
         onSharePDF={handleSharePDF}

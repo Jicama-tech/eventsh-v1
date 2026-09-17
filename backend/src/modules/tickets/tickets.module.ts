@@ -14,6 +14,7 @@ import { OtpModule } from "../otp/otp.module";
 import { OtpService } from "../otp/otp.service";
 import { UsersModule } from "../users/users.module";
 import { OrganizersModule } from "../organizers/organizers.module";
+import { OperatorsModule } from "../operators/operators.module";
 
 @Module({
   imports: [
@@ -28,6 +29,9 @@ import { OrganizersModule } from "../organizers/organizers.module";
     // Exports OrganizerOrApiKeyGuard — used on the organizer-admin ticket
     // routes below (Phase 4, Tickets cutover).
     forwardRef(() => OrganizersModule),
+    // OperatorsService.resolveReferral — attributes tickets bought through an
+    // operator's shared event link (?ref=).
+    forwardRef(() => OperatorsModule),
   ],
   controllers: [TicketsController],
   providers: [TicketsService],

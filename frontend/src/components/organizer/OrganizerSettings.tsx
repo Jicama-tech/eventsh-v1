@@ -114,12 +114,12 @@ interface Operator {
   // When false, this operator does not receive notification emails.
   allowEmails?: boolean;
   canApproveExpenses?: boolean;
-  // Auto-generated, unique per operator — a visitor enters this on a
-  // Scheduled Space registration form to unlock/narrow to this operator's
-  // spaces. Send it to the operator to hand out to their visitors.
+  // Auto-generated, unique per operator — appended as ?ref= to every event
+  // link this operator copies / shares from the dashboard, so bookings made
+  // through it are credited to them in Participants.
   referralCode?: string;
-  // Opt-in gate: the code above is only shown here (and only matches for
-  // visitors) while this is true.
+  // Opt-in gate: the code above is only shown here (and only added to links
+  // / credited on bookings) while this is true.
   referralEnabled?: boolean;
 }
 
@@ -1106,8 +1106,8 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     // When off, this operator does not receive notification emails.
     allowEmails: boolean;
     canApproveExpenses: boolean;
-    // When off, this operator's Scheduled Space referral code stays hidden
-    // in the operator list and doesn't match for visitors either.
+    // When off, this operator's referral code stays hidden in the operator
+    // list, isn't added to their event links and doesn't credit bookings.
     referralEnabled: boolean;
   }>({
     name: "",
@@ -1312,11 +1312,9 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     }
   };
 
-  // Issues a fresh Scheduled Space referral code for this operator — the
-  // old one stops working immediately. Kept here (not just inside
-  // CreateEventForm's per-space assignment picker) since this is the
-  // natural place an organizer would come to grab/reissue an operator's
-  // code to hand out.
+  // Issues a fresh referral code for this operator — links carrying the old
+  // one stop crediting bookings immediately. This is the natural place an
+  // organizer would come to grab/reissue an operator's code.
   const handleRegenerateReferralCode = async (operatorId: string) => {
     setRegeneratingOperatorId(operatorId);
     try {
@@ -3405,11 +3403,11 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                         </div>
                       </div>
 
-                      {/* Scheduled Space referral code — only shown when the
-                          toggle above is on for this operator; send it to
-                          them to hand out to their visitors. Entering it on
-                          a booking narrows the space list to this
-                          operator's spaces (plus any unassigned ones). */}
+                      {/* Operator referral code — only shown when the toggle
+                          is on for this operator. Every event link they
+                          copy / share from the dashboard carries it, and
+                          bookings made through it are credited to them in
+                          Participants. */}
                       {op.referralEnabled && (
                         <div className="flex items-center justify-between rounded-lg border bg-muted px-3 py-2">
                           <div>
@@ -3630,12 +3628,12 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                 </div>
                 <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
                   <div>
-                    <Label>{t("Scheduled Space Referral Code")}</Label>
+                    <Label>{t("Operator Referral Code")}</Label>
                     <p className="text-xs text-muted-foreground">
-                      When on, this operator gets a referral code visitors
-                      can enter to narrow a Scheduled Space booking to their
-                      spaces — visible here and usable by visitors only while
-                      on. Off by default.
+                      When on, every event link this operator copies or
+                      shares from the dashboard includes their referral code,
+                      and bookings made through that link are credited to
+                      them in Participants. Off by default.
                     </p>
                   </div>
                   <Switch

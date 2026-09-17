@@ -323,9 +323,12 @@ export function InlineWalkinForm({
     </div>
   );
 
+  // The "done" and "qr_payment" cards are turned to face the customer, so they
+  // stay light (theme-light-only) even in a dark dashboard. Scoped to the card
+  // rather than the page: this bubble lingers in the chat history.
   if (step === "done" && confirmation) {
     return wrap(
-      <div className="bg-background border border-emerald-200 rounded-md p-3 text-center">
+      <div className="theme-light-only bg-background border border-emerald-200 rounded-md p-3 text-center">
         <div className="mx-auto w-9 h-9 rounded-full bg-emerald-50 flex items-center justify-center mb-1.5">
           <CheckCircle2 className="h-5 w-5 text-emerald-600" />
         </div>
@@ -358,7 +361,7 @@ export function InlineWalkinForm({
 
   if (step === "qr_payment") {
     return wrap(
-      <div className="bg-background border rounded-md p-3 text-center">
+      <div className="theme-light-only bg-background border rounded-md p-3 text-center">
         <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[9px] font-bold uppercase mb-1.5">
           <QrCode className="h-3 w-3" />
           {country === "SG" ? "PayNow" : "UPI"}

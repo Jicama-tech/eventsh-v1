@@ -37,8 +37,10 @@ import { CouponService } from "../coupon/coupon.service";
 import { CreateCouponDto } from "../coupon/dto/create-coupon.dto";
 import { FeedbackService } from "../feedback/feedback.service";
 import { MailService } from "../roles/mail.service";
+import { OperatorsService } from "../operators/operators.service";
 import { JwtService } from "@nestjs/jwt";
 import { formatMoney } from "../../common/currency.util";
+import { omitReferralFields } from "../../common/referral.util";
 
 // Parse a JSON-encoded string[] (multipart sends arrays as a string). Falls
 // back to a single legacy value when the array form isn't present, so older
@@ -86,6 +88,7 @@ export class StallsService {
     private couponService: CouponService,
     private feedbackService: FeedbackService,
     private mailService: MailService,
+    private operatorsService: OperatorsService,
     private jwtService: JwtService,
   ) {
     // Ensure upload directory exists
@@ -460,6 +463,14 @@ export class StallsService {
         .select("registrationImage companyLogo productImage")
         .lean();
 
+      // Operator referral from a shared event link. Resolved against the
+      // event's own organizer (never the client's organizerId); an unknown or
+      // disabled code is ignored and nothing is recorded.
+      const referral = await this.operatorsService.resolveReferral(
+        String(event.organizer),
+        createStallDto.referralCode,
+      );
+
       const newStall = await this.stallModel.create({
         shopkeeperId,
         eventId: new Types.ObjectId(createStallDto.eventId),
@@ -515,6 +526,7 @@ export class StallsService {
             return [];
           }
         })(),
+        ...(referral ?? {}),
       });
 
       const populatedStall = await newStall.populate([
@@ -532,7 +544,7 @@ export class StallsService {
         success: true,
         message:
           "Stall request submitted successfully. Waiting for organizer approval.",
-        data: populatedStall,
+        data: omitReferralFields(populatedStall),
       };
     } catch (error) {
       if (

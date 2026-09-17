@@ -106,6 +106,18 @@ export class Ticket {
 
   @Prop()
   pdfPath?: string;
+
+  // Operator referral (shared event link ?ref=). Set server-side only, when
+  // the code resolves to an enabled operator of the event's organizer.
+  // Shown only in the organizer dashboard's Participants area.
+  @Prop()
+  referralCode?: string;
+
+  @Prop()
+  referralOperatorId?: string;
+
+  @Prop()
+  referralOperatorName?: string;
 }
 
 export const TicketSchema = SchemaFactory.createForClass(Ticket);

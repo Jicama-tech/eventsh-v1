@@ -8,7 +8,6 @@ import {
   Param,
   Patch,
   Post,
-  Query,
   Res,
   UploadedFile,
   UseInterceptors,
@@ -95,21 +94,8 @@ export class ScheduledSpacesController {
   }
 
   @Get("available/:eventId")
-  async getAvailableSpaces(
-    @Param("eventId") eventId: string,
-    @Query("referralCode") referralCode?: unknown,
-  ) {
-    // Express's query parser turns a repeated (?referralCode=a&referralCode=b)
-    // or bracketed (?referralCode[]=a) param into an array/object, not a
-    // string — there's no DTO/ValidationPipe on this query param to coerce
-    // it, so guard here rather than let a bad request 500 on `.trim()`.
-    const code =
-      typeof referralCode === "string"
-        ? referralCode
-        : Array.isArray(referralCode) && typeof referralCode[0] === "string"
-          ? referralCode[0]
-          : undefined;
-    return await this.scheduledSpacesService.getAvailableSpaces(eventId, code);
+  async getAvailableSpaces(@Param("eventId") eventId: string) {
+    return await this.scheduledSpacesService.getAvailableSpaces(eventId);
   }
 
   @Patch(":id/select-slots")
