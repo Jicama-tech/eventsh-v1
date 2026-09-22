@@ -11,6 +11,14 @@ import { Model } from "mongoose";
 import { CreateOtpDto } from "./dto/create-otp.dto";
 import { Otp } from "./entities/otp.entity";
 import { MailService } from "../roles/mail.service";
+import { emailBrand } from "../../common/email/email-brand";
+import {
+  brandedEmail,
+  escapeEmailHtml,
+  heading,
+  p,
+  small,
+} from "../../common/email/email-layout";
 import { JwtService } from "@nestjs/jwt";
 
 // WhatsApp (Baileys)
@@ -625,6 +633,9 @@ export class OtpService implements OnModuleInit {
       // Organizer's custom-sender config — when present the mirror email is
       // sent from their address instead of the global EventSH sender.
       senderConfig?: any;
+      // Name of the organizer the document is sent on behalf of — it heads
+      // and signs the mirror email (see brandedEmail's `organizer`).
+      organizer?: string;
     },
   ) {
     // Mirror to email FIRST (independent of WhatsApp connectivity) so the
@@ -669,35 +680,38 @@ export class OtpService implements OnModuleInit {
       heading?: string;
       message?: string;
       senderConfig?: any;
+      organizer?: string;
     },
   ): Promise<void> {
     if (!email?.to) return;
     try {
       const buffer = await fs.promises.readFile(filePath);
-      const heading = email.heading || "Your Eventsh document";
-      // Strip WhatsApp's *bold* markers and turn newlines into <br/>.
-      const body = (
+      const title = email.heading || `Your ${emailBrand().name} document`;
+      // Strip WhatsApp's *bold* markers and turn newlines into <br/>. The text
+      // is plain (names, event titles), so it is escaped before the <br/>s go in.
+      const body = escapeEmailHtml(
         email.message ||
         caption ||
         "Please find your document attached."
       )
         .replace(/\*/g, "")
         .replace(/\n/g, "<br/>");
-      const html = `
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-          <div style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:24px;text-align:center">
-            <h1 style="margin:0;font-size:20px">${heading}</h1>
-          </div>
-          <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-            <p>${body}</p>
-            <p style="color:#64748b;font-size:12px;margin-top:20px">Your document is attached to this email as a PDF.</p>
-          </div>
-        </div>`;
+      const html = brandedEmail({
+        preheading: "Document attached",
+        preview: title,
+        body:
+          heading(title) +
+          p(body) +
+          small("Your document is attached to this email as a PDF."),
+        organizer: email.organizer,
+      });
       await this.mailService.sendEmail({
         to: email.to,
         subject:
           email.subject ||
-          (caption ? caption.replace(/\*/g, "") : "Your Eventsh document"),
+          (caption
+            ? caption.replace(/\*/g, "")
+            : `Your ${emailBrand().name} document`),
         html,
         attachments: [{ filename: fileName || "document.pdf", content: buffer }],
         senderConfig: email.senderConfig,

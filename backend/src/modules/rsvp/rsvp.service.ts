@@ -12,6 +12,14 @@ import { Event, EventDocument } from "../events/schemas/event.schema";
 import { Organizer } from "../organizers/schemas/organizer.schema";
 import { CreateRsvpDto } from "./dto/create-rsvp.dto";
 import { MailService, OrgEmailConfig } from "../roles/mail.service";
+import { emailBrand } from "../../common/email/email-brand";
+import {
+  brandedEmail,
+  heading,
+  p,
+  small,
+  strong,
+} from "../../common/email/email-layout";
 
 @Injectable()
 export class RsvpService {
@@ -621,8 +629,8 @@ export class RsvpService {
     const cards = rooms
       .map(
         (r) => `
-      <div style="border:1px solid #f1e4e0;border-radius:16px;overflow:hidden;margin:0 0 18px;">
-        <div style="background:linear-gradient(135deg,#e11d48,#be123c);padding:12px 18px;color:#fff;">
+      <div style="border:1px solid #f1e4e0;border-radius:16px;overflow:hidden;margin:0 0 18px;font-family:Georgia,'Times New Roman',serif;">
+        <div style="background-color:#be123c;background-image:linear-gradient(135deg,#e11d48,#be123c);padding:12px 18px;color:#fff;">
           <div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:.9;">Room Pass · ${this.esc(r.functionName || "Stay")}</div>
         </div>
         <div style="padding:18px;text-align:center;">
@@ -646,23 +654,19 @@ export class RsvpService {
       )
       .join("");
     const subject = `🏨 Your room pass — ${coupleNames}`;
-    const html = `
-      <div style="margin:0;padding:24px 12px;background:#fdf6f3;">
-        <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:20px;overflow:hidden;border:1px solid #f1e4e0;font-family:Georgia,'Times New Roman',serif;">
-          <div style="padding:24px;text-align:center;border-bottom:1px solid #f1e4e0;">
-            <div style="font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#be123c;">Accommodation Pass</div>
-            <div style="font-size:24px;color:#9f1239;font-weight:700;margin-top:6px;">${this.esc(coupleNames)}</div>
-          </div>
-          <div style="padding:22px;">
-            <p style="font-size:15px;color:#44403c;margin:0 0 16px;">Dear ${this.esc(rsvp.name) || "guest"}, here ${rooms.length === 1 ? "is your room" : "are your rooms"} for the celebration:</p>
-            ${cards}
-            <p style="font-size:13px;color:#78716c;margin:4px 0 0;text-align:center;">A separate printable <strong>PDF pass for each room</strong> is attached — download and forward whichever is needed to whoever is checking in.</p>
-          </div>
-          <div style="padding:14px;text-align:center;background:#fffaf8;border-top:1px solid #f1e4e0;">
-            <p style="font-size:11px;color:#a8a29e;margin:0;">Sent via EventSH</p>
-          </div>
-        </div>
-      </div>`;
+    // The room cards are the pass itself, so they keep their wedding styling
+    // inside the instance's brand frame; the hosts sign it.
+    const html = brandedEmail({
+      preheading: "Accommodation pass",
+      preview: `Your room pass for ${coupleNames}.`,
+      body: `
+        ${heading(coupleNames)}
+        ${p(`Dear ${this.esc(rsvp.name) || "guest"}, here ${rooms.length === 1 ? "is your room" : "are your rooms"} for the celebration:`)}
+        ${cards}
+        ${small(`A separate printable ${strong("PDF pass for each room")} is attached — download and forward whichever is needed to whoever is checking in.`)}`,
+      organizer: coupleNames,
+      contact: this.hostContact(marriage),
+    });
     return { subject, html };
   }
 
@@ -779,7 +783,7 @@ export class RsvpService {
           .font("Helvetica")
           .fontSize(9)
           .fillColor("#9ca3af")
-          .text("Sent via EventSH", left, pdf.page.height - 50, {
+          .text(`Sent via ${emailBrand().name}`, left, pdf.page.height - 50, {
             width: right - left,
             align: "center",
           });
@@ -984,33 +988,38 @@ export class RsvpService {
       : `${fn?.name || "The ceremony"} has begun!`;
 
     const subject = `🎉 ${fn?.name || "A ceremony"} has started — ${coupleNames}`;
-    const html = `
-      <div style="margin:0;padding:24px 12px;background:#fdf6f3;">
-        <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #f1e4e0;font-family:Georgia,'Times New Roman',serif;">
-          <div style="background:linear-gradient(135deg,#e11d48,#be123c);padding:30px 24px;text-align:center;">
-            <div style="font-size:13px;letter-spacing:3px;text-transform:uppercase;color:#ffe4e6;">${this.esc(coupleNames)}</div>
-            <div style="font-size:26px;color:#ffffff;font-weight:700;margin-top:8px;">${this.esc(headline)}</div>
+    // The wedding card keeps its own design inside the instance's brand frame;
+    // the hosts sign it.
+    const html = brandedEmail({
+      preheading: "Happening now",
+      preview: "The celebration is starting — we'd love for you to join us!",
+      body: `
+        <div style="font-family:Georgia,'Times New Roman',serif;text-align:center;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px;">
+            <tr>
+              <td align="center" bgcolor="#be123c" style="background-color:#be123c;background-image:linear-gradient(135deg,#e11d48,#be123c);padding:30px 24px;border-radius:16px;text-align:center;">
+                <div style="font-size:13px;letter-spacing:3px;text-transform:uppercase;color:#ffe4e6;">${this.esc(coupleNames)}</div>
+                <div style="font-size:26px;color:#ffffff;font-weight:700;margin-top:8px;">${this.esc(headline)}</div>
+              </td>
+            </tr>
+          </table>
+          <p style="font-size:16px;color:#44403c;margin:0 0 14px;">The celebration is starting — we'd love for you to join us! 💛</p>
+          <div style="display:inline-block;text-align:left;border:1px solid #f1e4e0;background:#fffaf8;border-radius:14px;padding:16px 20px;">
+            <div style="font-size:18px;font-weight:700;color:#9f1239;">${this.esc(fn?.name)}</div>
+            ${when ? `<div style="font-size:13px;color:#78716c;margin-top:4px;">${this.esc(when)}</div>` : ""}
+            ${fn?.venueName ? `<div style="font-size:15px;color:#44403c;margin-top:8px;font-weight:600;">${this.esc(fn.venueName)}</div>` : ""}
+            ${fn?.address ? `<div style="font-size:13px;color:#78716c;">${this.esc(fn.address)}</div>` : ""}
+            ${fn?.dressCode ? `<div style="font-size:12px;color:#b45309;margin-top:6px;font-style:italic;">Dress code — ${this.esc(fn.dressCode)}</div>` : ""}
           </div>
-          <div style="padding:26px;text-align:center;">
-            <p style="font-size:16px;color:#44403c;margin:0 0 14px;">The celebration is starting — we'd love for you to join us! 💛</p>
-            <div style="display:inline-block;text-align:left;border:1px solid #f1e4e0;background:#fffaf8;border-radius:14px;padding:16px 20px;">
-              <div style="font-size:18px;font-weight:700;color:#9f1239;">${this.esc(fn?.name)}</div>
-              ${when ? `<div style="font-size:13px;color:#78716c;margin-top:4px;">${this.esc(when)}</div>` : ""}
-              ${fn?.venueName ? `<div style="font-size:15px;color:#44403c;margin-top:8px;font-weight:600;">${this.esc(fn.venueName)}</div>` : ""}
-              ${fn?.address ? `<div style="font-size:13px;color:#78716c;">${this.esc(fn.address)}</div>` : ""}
-              ${fn?.dressCode ? `<div style="font-size:12px;color:#b45309;margin-top:6px;font-style:italic;">Dress code — ${this.esc(fn.dressCode)}</div>` : ""}
-            </div>
-            ${
-              maps
-                ? `<div style="margin-top:18px;"><a href="${maps}" target="_blank" style="display:inline-block;background:#e11d48;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:11px 22px;border-radius:999px;">📍 Get Directions</a></div>`
-                : ""
-            }
-          </div>
-          <div style="padding:14px;text-align:center;background:#fffaf8;border-top:1px solid #f1e4e0;">
-            <p style="font-size:11px;color:#a8a29e;margin:0;">Sent via EventSH</p>
-          </div>
-        </div>
-      </div>`;
+          ${
+            maps
+              ? `<div style="margin-top:18px;"><a href="${maps}" target="_blank" style="display:inline-block;background:#e11d48;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:11px 22px;border-radius:999px;">📍 Get Directions</a></div>`
+              : ""
+          }
+        </div>`,
+      organizer: coupleNames,
+      contact: this.hostContact(marriage),
+    });
     return { subject, html };
   }
 
@@ -1027,6 +1036,18 @@ export class RsvpService {
   // Escape + turn newlines into <br/> for free-text blocks in the email.
   private escMultiline(s?: string): string {
     return this.esc(s).replace(/\r?\n/g, "<br/>");
+  }
+
+  // The footer's "contact" link for wedding emails: a guest's question belongs
+  // to the hosts, so point at their contact email when one is set (the email
+  // itself is no-reply). Without one the footer keeps the platform's page.
+  private hostContact(
+    marriage: any,
+  ): { label: string; href: string } | undefined {
+    const email = String(marriage?.contactEmail || "").trim();
+    if (!email) return undefined;
+    const name = String(marriage?.contactName || "").trim() || "the hosts";
+    return { label: `email ${name} at ${email}`, href: `mailto:${email}` };
   }
 
   private sideLabel(side?: string): string {
@@ -1175,27 +1196,35 @@ export class RsvpService {
       ? `💛 Your RSVP is confirmed — ${coupleNames}`
       : `RSVP received — ${coupleNames}`;
 
-    const html = `
-      <div style="margin:0;padding:24px 12px;background:#fdf6f3;">
-        <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #f1e4e0;font-family:Georgia,'Times New Roman',serif;">
-          <div style="background:linear-gradient(135deg,#e11d48,#be123c);padding:34px 24px;text-align:center;">
-            <div style="font-size:13px;letter-spacing:3px;text-transform:uppercase;color:#ffe4e6;">The Wedding of</div>
-            <div style="font-size:30px;color:#ffffff;font-weight:700;margin-top:6px;">${this.esc(coupleNames)}</div>
-          </div>
-          <div style="padding:28px 26px;">
-            <p style="font-size:16px;color:#44403c;margin:0 0 16px;">Dear ${guestName},</p>
-            ${statusBlock}
-            ${ceremoniesBlock}
-            ${accommodationsBlock}
-            ${additionalBlock}
-            ${contactBlock}
-            <p style="font-size:14px;color:#78716c;margin:28px 0 0;">With love,<br/>${this.esc(coupleNames)}</p>
-          </div>
-          <div style="padding:16px;text-align:center;background:#fffaf8;border-top:1px solid #f1e4e0;">
-            <p style="font-size:11px;color:#a8a29e;margin:0;">You can update your RSVP anytime from the wedding page. · Sent via EventSH</p>
-          </div>
-        </div>
-      </div>`;
+    // The invitation card keeps its own design inside the instance's brand
+    // frame. The couple sign it through the layout (organizer), which replaces
+    // the card's old "With love" line so it is not signed twice.
+    const html = brandedEmail({
+      preheading: rsvp.attending ? "RSVP confirmed" : "RSVP received",
+      preview: rsvp.attending
+        ? `You're on the guest list for ${coupleNames}.`
+        : `Your response for ${coupleNames} has been noted.`,
+      body: `
+        <div style="font-family:Georgia,'Times New Roman',serif;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;">
+            <tr>
+              <td align="center" bgcolor="#be123c" style="background-color:#be123c;background-image:linear-gradient(135deg,#e11d48,#be123c);padding:34px 24px;border-radius:16px;text-align:center;">
+                <div style="font-size:13px;letter-spacing:3px;text-transform:uppercase;color:#ffe4e6;">The Wedding of</div>
+                <div style="font-size:30px;color:#ffffff;font-weight:700;margin-top:6px;">${this.esc(coupleNames)}</div>
+              </td>
+            </tr>
+          </table>
+          <p style="font-size:16px;color:#44403c;margin:0 0 16px;">Dear ${guestName},</p>
+          ${statusBlock}
+          ${ceremoniesBlock}
+          ${accommodationsBlock}
+          ${additionalBlock}
+          ${contactBlock}
+          <p style="font-size:12px;color:#a8a29e;margin:28px 0 0;">You can update your RSVP anytime from the wedding page.</p>
+        </div>`,
+      organizer: coupleNames,
+      contact: this.hostContact(marriage),
+    });
 
     await this.mailService.sendEmail({
       to: rsvp.email,

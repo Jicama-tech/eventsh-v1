@@ -21,6 +21,26 @@ import {
 import { MailService } from "../roles/mail.service";
 import { OperatorsService } from "../operators/operators.service";
 import { omitReferralFields } from "../../common/referral.util";
+import { emailBrand } from "../../common/email/email-brand";
+import {
+  brandedEmail,
+  escapeEmailHtml,
+  heading,
+  image,
+  p,
+  strong,
+} from "../../common/email/email-layout";
+
+// Footer line of the printed ticket. The platform brand signs an organizer's
+// ticket "Powered by EventSH"; a white-label brand is the organizer on its own
+// instance, so it just names itself and its site.
+function ticketFooter(): string {
+  const brand = emailBrand();
+  const name = escapeEmailHtml(brand.name);
+  return brand.poweredBy
+    ? `Powered by ${name}`
+    : `${name} &middot; ${escapeEmailHtml(brand.siteUrl.replace(/^https?:\/\//, ""))}`;
+}
 
 // A visitor may have any number of Scheduled Space requests for the same
 // event over time (mirrors stalls.service.ts's vendor-request model), but
@@ -357,20 +377,34 @@ export class ScheduledSpacesService {
     // sponsors.service.ts): SG → SG$, everything else → ₹.
     const currency = organizer?.country === "SG" ? "SG$" : "₹";
 
+    // Three columns don't fit the layout's label/value details(), so the slot
+    // table is drawn here — in the brand's palette, styled inline like the
+    // layout's own helpers.
+    const c = emailBrand().palette;
+    const th = `padding:10px 14px;font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:1.4;font-weight:700;color:${c.muted};`;
+    const td = `padding:10px 14px;border-top:1px solid ${c.hairline};font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;`;
     const rows = (request.selectedSlots || [])
       .map(
         (s: any) => `
         <tr>
-          <td style="padding:6px 14px;color:#334155">${s.spaceName}${
-            s.facilityType ? ` (${s.facilityType})` : ""
+          <td valign="top" style="${td}color:${c.body};">${escapeEmailHtml(s.spaceName)}${
+            s.facilityType ? ` (${escapeEmailHtml(s.facilityType)})` : ""
           }</td>
-          <td style="padding:6px 14px;color:#334155">${s.date} ${s.startTime}-${s.endTime}</td>
-          <td style="padding:6px 14px;font-weight:600;text-align:right">${currency}${s.price}</td>
+          <td valign="top" style="${td}color:${c.body};">${escapeEmailHtml(`${s.date} ${s.startTime}-${s.endTime}`)}</td>
+          <td valign="top" align="right" style="${td}font-weight:600;color:${c.ink};text-align:right;">${escapeEmailHtml(`${currency}${s.price}`)}</td>
         </tr>`,
       )
       .join("");
+    const slotTable = `
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${c.canvas}" style="margin:0 0 18px 0;background-color:${c.canvas};border:1px solid ${c.hairline};border-radius:8px;">
+        <tr>
+          <th align="left" style="${th}text-align:left;">Space</th>
+          <th align="left" style="${th}text-align:left;">Time Slot</th>
+          <th align="right" style="${th}text-align:right;">Price</th>
+        </tr>${rows}
+      </table>`;
 
-    const heading = isReissue
+    const title = isReissue
       ? "Here's your ticket again 🎟️"
       : "Booking confirmed 🎟️";
 
@@ -382,36 +416,26 @@ export class ScheduledSpacesService {
     const qrCid = `qr-${request._id}`;
     const qrBase64 = qrCodeImage.replace(/^data:image\/\w+;base64,/, "");
 
-    const html = `
-      <div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#0f172a">
-        <h2 style="margin-bottom:4px">${heading}</h2>
-        <p>Hi ${request.name},</p>
-        <p>
-          Your payment for <strong>${event?.title || "the event"}</strong> has
-          been confirmed. Here is your check-in QR ticket — please show this
-          at the venue. A PDF copy is attached.
-        </p>
-        ${
-          request.whatsappNumber
-            ? `<p style="margin:4px 0"><span style="color:#64748b">WhatsApp:</span> <strong>${request.whatsappNumber}</strong></p>`
-            : ""
-        }
-        <table style="border-collapse:collapse;width:100%;margin:16px 0;border:1px solid #e2e8f0;border-radius:8px">
-          <thead>
-            <tr style="background:#f8fafc">
-              <th style="padding:6px 14px;text-align:left">Space</th>
-              <th style="padding:6px 14px;text-align:left">Time Slot</th>
-              <th style="padding:6px 14px;text-align:right">Price</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-        <p style="text-align:center;margin:24px 0">
-          <img src="cid:${qrCid}" alt="Check-in QR" style="width:180px;height:180px;border:1px solid #e2e8f0;border-radius:8px;padding:8px" />
-        </p>
-        <p style="color:#64748b;font-size:12px;margin-bottom:2px">— ${organizer?.organizationName || "EventSH"}</p>
-        <p style="color:#94a3b8;font-size:11px;margin-top:0">Powered by EventSH</p>
-      </div>`;
+    // Signed by the organizer when it has a name (the layout adds the brand's
+    // "Powered by" line where the brand wants one), else by the brand's team.
+    const html = brandedEmail({
+      preheading: "Scheduled space ticket",
+      preview: `Your check-in QR ticket for ${event?.title || "the event"} — show it at the venue.`,
+      organizer: organizer?.organizationName,
+      body: [
+        heading(title),
+        p(`Hi ${escapeEmailHtml(request.name)},`),
+        p(
+          `Your payment for ${strong(event?.title || "the event")} has been confirmed. ` +
+            `Here is your check-in QR ticket — please show this at the venue. A PDF copy is attached.`,
+        ),
+        request.whatsappNumber
+          ? p(`<span style="color:${c.muted};">WhatsApp:</span> ${strong(request.whatsappNumber)}`)
+          : "",
+        slotTable,
+        image(`cid:${qrCid}`, "Check-in QR", 180),
+      ].join(""),
+    });
 
     let pdfBuffer: Buffer | null = null;
     try {
@@ -459,14 +483,19 @@ export class ScheduledSpacesService {
       .map(
         (s: any) => `
         <tr>
-          <td style="padding:8px 14px;color:#334155">${s.spaceName}${
-            s.facilityType ? ` (${s.facilityType})` : ""
+          <td style="padding:8px 14px;color:#334155">${escapeEmailHtml(s.spaceName)}${
+            s.facilityType ? ` (${escapeEmailHtml(s.facilityType)})` : ""
           }</td>
-          <td style="padding:8px 14px;color:#334155">${s.date} ${s.startTime}-${s.endTime}</td>
-          <td style="padding:8px 14px;font-weight:600;text-align:right">${currency}${s.price}</td>
+          <td style="padding:8px 14px;color:#334155">${escapeEmailHtml(`${s.date} ${s.startTime}-${s.endTime}`)}</td>
+          <td style="padding:8px 14px;font-weight:600;text-align:right">${escapeEmailHtml(`${currency}${s.price}`)}</td>
         </tr>`,
       )
       .join("");
+
+    // The organizer heads and signs the ticket; the instance's brand stands in
+    // when it has no name. Every value is escaped: the registrant's name and
+    // the rest are typed by visitors, and Chromium renders this page.
+    const orgName = escapeEmailHtml(organizer?.organizationName || emailBrand().name);
 
     const html = `
       <!DOCTYPE html>
@@ -492,15 +521,15 @@ export class ScheduledSpacesService {
       <body>
         <div class="ticket">
           <div class="header">
-            <h1>${organizer?.organizationName || "EventSH"}</h1>
-            <p>${event?.title || "Event"} — Scheduled Space Ticket</p>
+            <h1>${orgName}</h1>
+            <p>${escapeEmailHtml(event?.title || "Event")} — Scheduled Space Ticket</p>
           </div>
           <div class="body">
-            <div class="row"><span>Registrant</span><strong>${request.name}</strong></div>
-            <div class="row"><span>Email</span><strong>${request.email}</strong></div>
+            <div class="row"><span>Registrant</span><strong>${escapeEmailHtml(request.name)}</strong></div>
+            <div class="row"><span>Email</span><strong>${escapeEmailHtml(request.email)}</strong></div>
             ${
               request.whatsappNumber
-                ? `<div class="row"><span>WhatsApp</span><strong>${request.whatsappNumber}</strong></div>`
+                ? `<div class="row"><span>WhatsApp</span><strong>${escapeEmailHtml(request.whatsappNumber)}</strong></div>`
                 : ""
             }
             <table>
@@ -512,8 +541,8 @@ export class ScheduledSpacesService {
             <p style="text-align:center;font-size:12px;color:#64748b">Show this QR at check-in.</p>
           </div>
           <div class="footer">
-            <div>— ${organizer?.organizationName || "EventSH"}</div>
-            <div style="margin-top:4px;opacity:0.7">Powered by EventSH</div>
+            <div>— ${orgName}</div>
+            <div style="margin-top:4px;opacity:0.7">${ticketFooter()}</div>
           </div>
         </div>
       </body>

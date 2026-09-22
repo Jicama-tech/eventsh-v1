@@ -1,6 +1,22 @@
 import { Injectable } from "@nestjs/common";
 import * as nodemailer from "nodemailer";
 import { decryptSecret } from "../../common/secret-crypto.util";
+import { emailBrand } from "../../common/email/email-brand";
+import {
+  BRANDED_EMAIL_MARKER,
+  brandedEmail,
+  button,
+  code,
+  details,
+  escapeEmailHtml,
+  heading,
+  link,
+  note,
+  p,
+  small,
+  strong,
+  subheading,
+} from "../../common/email/email-layout";
 
 // Per-organizer custom sender. When `enabled` and the SMTP fields are filled,
 // emails for that organizer are sent FROM their address via their own server.
@@ -47,7 +63,8 @@ export class MailService {
   }
 
   // Pick the transporter + From header for a given organizer config, falling
-  // back to the global EventSH sender when no custom config is active.
+  // back to the platform sender (in this instance's brand) when no custom
+  // config is active.
   private resolveSender(c?: OrgEmailConfig): {
     transporter: nodemailer.Transporter;
     from: string;
@@ -71,10 +88,63 @@ export class MailService {
       const fromName = (c!.fromName || fromEmail).replace(/"/g, "");
       return { transporter: t, from: `"${fromName}" <${fromEmail}>` };
     }
-    return {
-      transporter: this.transporter,
-      from: `"EventSH" <${process.env.SMTP_USER}>`,
-    };
+    return { transporter: this.transporter, from: this.platformFrom() };
+  }
+
+  /**
+   * The platform sender's From line, named for this instance's brand
+   * (EMAIL_BRAND, see common/email/email-brand.ts) — "EventSH" on eventsh.com,
+   * "SingAdvisor" on SingAdvisor's instance. `role` qualifies it for the odd
+   * message that has always carried one, e.g. "Security".
+   */
+  private platformFrom(role?: string): string {
+    const name = `${emailBrand().senderName}${role ? ` ${role}` : ""}`.replace(/"/g, "");
+    // Same fallback as the transporter's auth user in the constructor: the
+    // address must be the account actually sending, or it is "<undefined>".
+    const address = process.env.SMTP_USER || "attendancemanagement2025@gmail.com";
+    return `"${name}" <${address}>`;
+  }
+
+  /**
+   * Every send in this service goes through here, for two guarantees no single
+   * template can forget:
+   *
+   * - The brand frame and its "do not reply" footer. A template built with
+   *   brandedEmail() passes straight through; anything else (a new template
+   *   written the old way, a caller's raw fragment) is framed here and logged,
+   *   so it still reaches the reader in the instance's brand rather than bare
+   *   — or, on a white-label instance, in nobody's brand at all.
+   * - Headers saying the message is automated: RFC 3834's Auto-Submitted, so
+   *   well-behaved vacation responders and ticketing systems do not answer it,
+   *   and Exchange's equivalent for out-of-office and auto-replies. Bounces
+   *   are deliberately NOT suppressed — they are how a dead address surfaces.
+   */
+  private deliver(
+    transporter: nodemailer.Transporter,
+    mail: nodemailer.SendMailOptions,
+  ) {
+    return transporter.sendMail({
+      ...mail,
+      html: typeof mail.html === "string" ? this.frame(mail.html, mail.subject) : mail.html,
+      headers: {
+        "Auto-Submitted": "auto-generated",
+        "X-Auto-Response-Suppress": "OOF, AutoReply",
+        ...(mail.headers as Record<string, string> | undefined),
+      },
+    });
+  }
+
+  /** The safety net described on deliver(). Public so a caller that builds a
+   * message for another channel can reuse the exact same framing. */
+  frame(html: string, subject?: string): string {
+    if (html.includes(BRANDED_EMAIL_MARKER)) return html;
+    console.warn(
+      `Email "${subject ?? ""}" was not built with brandedEmail() — framing it in the ${emailBrand().name} template.`,
+    );
+    // A full document keeps only what is inside its <body>; its own <head>
+    // styles would be stripped by most clients anyway.
+    const inner = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1] ?? html;
+    return brandedEmail({ body: inner });
   }
 
   // Verify a custom config and send a one-off test email. Forces `enabled` so
@@ -86,17 +156,18 @@ export class MailService {
       enabled: true,
     });
     await transporter.verify();
-    await transporter.sendMail({
+    await this.deliver(transporter, {
       from,
       to,
-      subject: "EventSH — test email from your address",
-      html: `
-        <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
-          <h2 style="color:#0f172a">It works! ✅</h2>
-          <p>This is a test email sent from <strong>${from}</strong> using your own mail server.</p>
-          <p>All emails for your events will now be sent from this address.</p>
-          <p style="color:#64748b;font-size:12px">— EventSH</p>
-        </div>`,
+      subject: `${emailBrand().name} — test email from your address`,
+      html: brandedEmail({
+        preheading: "Test email",
+        preview: "Your mail server is set up correctly.",
+        body:
+          heading("It works! ✅") +
+          p(`This is a test email sent from ${strong(from)} using your own mail server.`) +
+          p("All emails for your events will now be sent from this address."),
+      }),
     });
   }
 
@@ -106,15 +177,20 @@ export class MailService {
     email: string;
     role: string;
   }) {
-    await this.transporter.sendMail({
-      from: `"EventSH" <${process.env.SMTP_USER}>`,
+    await this.deliver(this.transporter, {
+      from: this.platformFrom(),
       to: process.env.ADMIN_EMAIL || "admin@eventsh.com",
       subject: `Approval Request for New ${data.role}`,
-      html: `
-        <h1>Approval Needed</h1>
-        <p>User <strong>${data.name}</strong> (${data.email}) has applied for the role of <strong>${data.role}</strong>.</p>
-        <p>Please log in to the admin dashboard to approve or reject this request.</p>
-      `,
+      html: brandedEmail({
+        preheading: "Approval request",
+        preview: `${data.name} has applied for the role of ${data.role}.`,
+        body:
+          heading("Approval Needed") +
+          p(
+            `User ${strong(data.name)} (${escapeEmailHtml(data.email)}) has applied for the role of ${strong(data.role)}.`,
+          ) +
+          p("Please log in to the admin dashboard to approve or reject this request."),
+      }),
     });
   }
 
@@ -124,16 +200,20 @@ export class MailService {
     email: string;
     role: string;
   }) {
-    await this.transporter.sendMail({
-      from: `"EventSH" <${process.env.SMTP_USER}>`,
+    await this.deliver(this.transporter, {
+      from: this.platformFrom(),
       to: data.email,
       subject: `Your ${data.role} Registration is Pending`,
-      html: `
-        <h1>Hello ${data.name},</h1>
-        <p>Thank you for applying to become a ${data.role} on our platform.</p>
-        <p>Your request has been sent to the admin team for approval. You will receive an email once it's approved.</p>
-        <p>Regards,<br/>EventSH Team</p>
-      `,
+      html: brandedEmail({
+        preheading: "Registration pending",
+        preview: "Your request has been sent to the admin team for approval.",
+        body:
+          heading(`Hello ${data.name},`) +
+          p(`Thank you for applying to become a ${escapeEmailHtml(data.role)} on our platform.`) +
+          p(
+            "Your request has been sent to the admin team for approval. You will receive an email once it's approved.",
+          ),
+      }),
     });
   }
 
@@ -147,33 +227,29 @@ export class MailService {
       events: "Events Management",
     };
 
-    const enquiryLabel = enquiryLabelMap[data.enquiryFor] ?? "EventSH Services";
+    const brand = emailBrand();
+    const enquiryLabel = enquiryLabelMap[data.enquiryFor] ?? `${brand.name} Services`;
 
-    await this.transporter.sendMail({
-      from: `"EventSH" <${process.env.SMTP_USER}>`,
+    await this.deliver(this.transporter, {
+      from: this.platformFrom(),
       to: data.emailId,
       subject: `We’ve received your enquiry for ${enquiryLabel}`,
-      html: `
-      <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #111827; line-height: 1.6;">
-        <h1 style="font-size: 20px; margin-bottom: 12px;">Hi ${data.firstName},</h1>
-        <p style="margin: 0 0 8px;">
-          Thank you for reaching out to <strong>EventSH</strong> from <strong>${data.organizationName}</strong>.
-        </p>
-        <p style="margin: 0 0 8px;">
-          Your enquiry for <strong>${enquiryLabel}</strong> has been received successfully.
-        </p>
-        <p style="margin: 0 0 8px;">
-          Our team will review your requirements and get back to you as soon as possible with the next steps.
-        </p>
-        <p style="margin: 0 0 8px;">
-          If you need to share any additional details, you can simply reply to this email.
-        </p>
-        <p style="margin-top: 16px;">
-          Regards,<br/>
-          <strong>EventSH Team</strong>
-        </p>
-      </div>
-    `,
+      html: brandedEmail({
+        preheading: "Enquiry received",
+        preview: `Your enquiry for ${enquiryLabel} has been received.`,
+        body:
+          heading(`Hi ${data.firstName},`) +
+          p(
+            `Thank you for reaching out to ${strong(brand.name)} from ${strong(data.organizationName)}.`,
+          ) +
+          p(`Your enquiry for ${strong(enquiryLabel)} has been received successfully.`) +
+          p(
+            "Our team will review your requirements and get back to you as soon as possible with the next steps.",
+          ) +
+          p(
+            `If you need to share any additional details, you can send them through our ${link("contact page", brand.contactUrl)}.`,
+          ),
+      }),
     });
   }
 
@@ -190,31 +266,36 @@ export class MailService {
     if (data.status === "Approved") {
       if (data.role === "Organizer") {
         subject = `Your ${data.role} Registration is Approved`;
-        body = `
-          <div style="font-family: sans-serif; max-width: 600px; color: #333;">
-        <h1>Congratulations ${data.name}!</h1>
-        <p>We are pleased to inform you that your application for the role of <strong>${data.role}</strong> has been 
-        <span style="color: #008080; font-weight: bold;">Approved</span>.</p>
-        
-
-        <p>Thank You,<br/><strong>The EventSH Team</strong></p>
-      </div>`;
+        body = brandedEmail({
+          preheading: "Registration approved",
+          preview: `Your application for the role of ${data.role} has been approved.`,
+          body:
+            heading(`Congratulations ${data.name}!`) +
+            p(
+              `We are pleased to inform you that your application for the role of ${strong(data.role)} has been <span style="color:#047857;font-weight:bold;">Approved</span>.`,
+            ),
+        });
       }
     } else if (data.status === "Rejected") {
       if (data.role === "Organizer") {
         subject = `Your ${data.role} Registration is Rejected`;
-        body = `
-          <h1>Hello ${data.name},</h1>
-          <p>We regret to inform you that your application for the role of <strong>${data.role}</strong> has been 
-          <span style="color: red; font-weight: bold;">Rejected</span>.</p>
-          <p>If you believe this is a mistake or would like to appeal, please contact our support team.</p>
-          <p>Regards,<br/>EventSH Team</p>
-        `;
+        body = brandedEmail({
+          preheading: "Registration update",
+          preview: `An update on your application for the role of ${data.role}.`,
+          body:
+            heading(`Hello ${data.name},`) +
+            p(
+              `We regret to inform you that your application for the role of ${strong(data.role)} has been <span style="color:#b91c1c;font-weight:bold;">Rejected</span>.`,
+            ) +
+            p(
+              `If you believe this is a mistake or would like to appeal, please ${link("contact our support team", emailBrand().contactUrl)}.`,
+            ),
+        });
       }
     }
 
-    await this.transporter.sendMail({
-      from: `"EventSH" <${process.env.SMTP_USER}>`,
+    await this.deliver(this.transporter, {
+      from: this.platformFrom(),
       to: data.email,
       subject,
       html: body,
@@ -228,24 +309,34 @@ export class MailService {
     password: string;
     createdBy: string;
   }) {
-    const subject = "Welcome to EventSH - Your Admin Account";
+    const brand = emailBrand();
+    const subject = `Welcome to ${brand.name} - Your Admin Account`;
+    // The admin console's sign-in page (frontend route /admin-login).
+    const adminLoginUrl = `${process.env.FRONTEND_BASE_URL || brand.siteUrl}/admin-login`;
 
-    const body = `
-    <h1>Welcome, ${data.name}!</h1>
-    <p>You have been added as an <strong>Admin</strong> on the <strong>EventSH</strong> platform by <strong>${data.createdBy}</strong>.</p>
-    <h2>Your Login Credentials:</h2>
-    <ul>
-      <li><strong>Email:</strong> ${data.email}</li>
-      <li><strong>Temporary Password:</strong> ${data.password}</li>
-    </ul>
-    <p><strong>Note:</strong> Please log in immediately and change your password from your profile settings.</p>
-    <p>Access the Admin Dashboard here: <a href="http://your-admin-dashboard-url.com">Login Now</a></p>
-    <br/>
-    <p>Best regards,<br/>EventSH Team</p>
-  `;
+    const body = brandedEmail({
+      preheading: "Admin account",
+      preview: `You have been added as an Admin on ${brand.name}.`,
+      body:
+        heading(`Welcome, ${data.name}!`) +
+        p(
+          `You have been added as an ${strong("Admin")} on the ${strong(brand.name)} platform by ${strong(data.createdBy)}.`,
+        ) +
+        subheading("Your Login Credentials:") +
+        details([
+          ["Email", escapeEmailHtml(data.email)],
+          ["Temporary Password", escapeEmailHtml(data.password)],
+        ]) +
+        note(
+          `<strong>Note:</strong> Please log in immediately and change your password from your profile settings.`,
+          "warning",
+        ) +
+        p("Access the Admin Dashboard here:") +
+        button("Login Now", adminLoginUrl),
+    });
 
-    await this.transporter.sendMail({
-      from: `"EventSH" <${process.env.SMTP_USER}>`,
+    await this.deliver(this.transporter, {
+      from: this.platformFrom(),
       to: data.email,
       subject,
       html: body,
@@ -260,18 +351,20 @@ export class MailService {
     senderConfig?: OrgEmailConfig,
   ) {
     const { transporter, from } = this.resolveSender(senderConfig);
-    await transporter.sendMail({
+    await this.deliver(transporter, {
       from,
       to: businessEmail,
       subject: "Your OTP Code for Business Email Verification",
-      html: `
-      <h1>Your OTP Code</h1>
-      <p>Use the following OTP to verify your business email address:</p>
-      <h2 style="letter-spacing: 4px;">${otp}</h2>
-      <p>This code will expire in 10 minutes.</p>
-      <br/>
-      <p>Regards,<br/>EventSH Team</p>
-    `,
+      html: brandedEmail({
+        preheading: "Email verification",
+        preview: "Use this code to verify your business email address.",
+        signOff: false,
+        body:
+          heading("Your OTP Code") +
+          p("Use the following OTP to verify your business email address:") +
+          code(otp) +
+          p("This code will expire in 10 minutes."),
+      }),
     });
   }
 
@@ -281,112 +374,57 @@ export class MailService {
     otp: string;
     businessName: string;
   }) {
-    await this.transporter.sendMail({
-      from: `"EventSH Security" <${process.env.SMTP_USER}>`,
+    const brand = emailBrand();
+    // A configured support inbox answers the footer's "if you need help"; with
+    // none set, the footer's default (the brand's contact page) stands.
+    const supportEmail = process.env.SUPPORT_EMAIL || process.env.ADMIN_EMAIL;
+    await this.deliver(this.transporter, {
+      from: this.platformFrom("Security"),
       to: data.email,
-      subject: `Your EventSH Login Verification Code - ${data.otp}`,
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>EventSH - Login Verification</title>
-          <style>
-            .container { max-width: 600px; margin: 0 auto; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-            .header { background: linear-gradient(135deg, #1e293b 0%, #374151 100%); color: white; padding: 40px 20px; text-align: center; border-radius: 10px 10px 0 0; }
-            .content { background: white; padding: 40px 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
-            .otp-box { background: #f8fafc; border: 2px solid #e5e7eb; border-radius: 12px; padding: 30px; text-align: center; margin: 30px 0; }
-            .otp-code { font-size: 36px; font-weight: bold; color: #1e293b; letter-spacing: 8px; margin: 20px 0; font-family: 'Courier New', monospace; }
-            .warning-box { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 20px; margin: 25px 0; border-radius: 8px; }
-            .footer { text-align: center; padding: 30px; color: #6b7280; font-size: 14px; background: #f9fafb; border-radius: 0 0 10px 10px; }
-            .security-info { background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 20px; margin: 25px 0; }
-            .btn { display: inline-block; padding: 15px 30px; background: #1e293b; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 10px 0; }
-            .logo { width: 60px; height: 60px; background: white; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px; font-size: 24px; font-weight: bold; color: #1e293b; }
-            .business-info { background: #f1f5f9; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: left; }
-            .expiry-info { color: #dc2626; font-weight: bold; margin: 15px 0; }
-            .steps { text-align: left; margin: 25px 0; }
-            .step { margin: 10px 0; padding: 10px; background: #f8fafc; border-radius: 6px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <div class="logo">ES</div>
-              <h1 style="margin: 0; font-size: 28px;">EventSH</h1>
-              <p style="margin: 10px 0 0 0; opacity: 0.9;">Secure Login Verification</p>
-            </div>
-            
-            <div class="content">
-              <h2 style="color: #1e293b; margin-bottom: 20px;">Hello ${data.name},</h2>
-              
-              <div class="business-info">
-                <strong>🏪 Business:</strong> ${data.businessName}<br>
-                <strong>📧 Account:</strong> ${data.email}<br>
-                <strong>🕒 Requested:</strong> ${new Date().toLocaleString()}
-              </div>
-              
-              <p style="font-size: 16px; line-height: 1.6; color: #374151;">
-                We received a request to access your EventSH Dashboard. Please use the verification code below to complete your login:
-              </p>
-              
-              <div class="otp-box">
-                <p style="margin: 0; font-size: 14px; color: #6b7280; text-transform: uppercase; letter-spacing: 2px;">Your Verification Code</p>
-                <div class="otp-code">${data.otp}</div>
-                <div class="expiry-info">⏰ Expires in 10 minutes</div>
-              </div>
-              
-              <div class="steps">
-                <h3 style="color: #1e293b; margin-bottom: 15px;">How to use this code:</h3>
-                <div class="step">
-                  <strong>Step 1:</strong> Return to the EventSH login page
-                </div>
-                <div class="step">
-                  <strong>Step 2:</strong> Enter the 6-digit code above
-                </div>
-                <div class="step">
-                  <strong>Step 3:</strong> Click "Verify & Login" to access your dashboard
-                </div>
-              </div>
-              
-              <div class="security-info">
-                <h4 style="margin-top: 0; color: #065f46;">🔒 Security Information</h4>
-                <ul style="margin: 10px 0; padding-left: 20px; color: #374151;">
-                  <li>This code is valid for <strong>10 minutes only</strong></li>
-                  <li>Maximum <strong>3 attempts</strong> allowed</li>
-                  <li>Never share this code with anyone</li>
-                  <li>EventSH will never ask for your OTP via phone or chat</li>
-                </ul>
-              </div>
-              
-              <div class="warning-box">
-                <h4 style="margin-top: 0; color: #92400e;">⚠️ Didn't request this?</h4>
-                <p style="margin-bottom: 0; color: #92400e;">
-                  If you didn't request this login code, someone may be trying to access your account. Please change your password immediately and contact our support team.
-                </p>
-              </div>
-              
-              <p style="font-size: 16px; line-height: 1.6; color: #374151; margin-top: 30px;">
-                If you're having trouble logging in, you can request a new verification code or contact our support team for assistance.
-              </p>
-              
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="${process.env.FRONTEND_BASE_URL || "https://eventsh.com"}/support" class="btn">Contact Support</a>
-              </div>
-            </div>
-
-            <div class="footer">
-              <p style="margin: 0 0 10px 0;"><strong>EventSH - Events Management Platform</strong></p>
-              <p style="margin: 0 0 15px 0;">This is an automated security email. Please do not reply to this message.</p>
-              <p style="margin: 0; font-size: 12px; opacity: 0.8;">
-                © ${new Date().getFullYear()} EventSH. All rights reserved.<br>
-                If you have questions, contact us at <a href="mailto:${process.env.SUPPORT_EMAIL || process.env.ADMIN_EMAIL || "support@eventsh.com"}" style="color: #4f46e5;">${process.env.SUPPORT_EMAIL || process.env.ADMIN_EMAIL || "support@eventsh.com"}</a>
-              </p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `,
+      subject: `Your ${brand.name} Login Verification Code - ${data.otp}`,
+      html: brandedEmail({
+        preheading: "Secure login verification",
+        preview: "Your login verification code expires in 10 minutes.",
+        signOff: false,
+        contact: supportEmail
+          ? { label: `contact us at ${supportEmail}`, href: `mailto:${supportEmail}` }
+          : undefined,
+        body:
+          heading(`Hello ${data.name},`) +
+          details([
+            ["Business", escapeEmailHtml(data.businessName)],
+            ["Account", escapeEmailHtml(data.email)],
+            ["Requested", escapeEmailHtml(new Date().toLocaleString())],
+          ]) +
+          p(
+            `We received a request to access your ${escapeEmailHtml(brand.name)} Dashboard. Please use the verification code below to complete your login:`,
+          ) +
+          small("Your verification code") +
+          code(data.otp) +
+          p(`<strong style="color:#dc2626;">⏰ Expires in 10 minutes</strong>`) +
+          subheading("How to use this code:") +
+          p(`${strong("Step 1:")} Return to the ${escapeEmailHtml(brand.name)} login page`) +
+          p(`${strong("Step 2:")} Enter the 6-digit code above`) +
+          p(`${strong("Step 3:")} Click "Verify &amp; Login" to access your dashboard`) +
+          note(
+            `<strong>🔒 Security Information</strong>` +
+              `<ul style="margin:8px 0 0 22px;padding:0;">` +
+              `<li>This code is valid for <strong>10 minutes only</strong></li>` +
+              `<li>Maximum <strong>3 attempts</strong> allowed</li>` +
+              `<li>Never share this code with anyone</li>` +
+              `<li>${escapeEmailHtml(brand.name)} will never ask for your OTP via phone or chat</li>` +
+              `</ul>`,
+            "success",
+          ) +
+          note(
+            `<strong>⚠️ Didn't request this?</strong><br />If you didn't request this login code, someone may be trying to access your account. Please change your password immediately and contact our support team.`,
+            "warning",
+          ) +
+          p(
+            "If you're having trouble logging in, you can request a new verification code or contact our support team for assistance.",
+          ) +
+          button("Contact Support", brand.contactUrl),
+      }),
     });
   }
 
@@ -398,22 +436,26 @@ export class MailService {
     planName?: string | null;
     validityInDays?: number | null;
   }) {
-    const subject = `Welcome to EventSH, ${data.organizationName}!`;
+    const brand = emailBrand();
+    const subject = `Welcome to ${brand.name}, ${data.organizationName}!`;
     const planLine =
       data.planName && data.validityInDays
-        ? `<p>You've been auto-assigned the <strong>${data.planName}</strong> plan (valid for ${data.validityInDays} days). You can upgrade anytime from <em>Settings → Subscription</em>.</p>`
-        : `<p>You can browse plans anytime from <em>Settings → Subscription</em>.</p>`;
-    const loginUrl = `${process.env.FRONTEND_BASE_URL || "https://eventsh.com"}/login`;
-    const body = `
-      <div style="font-family: sans-serif; max-width: 600px; color: #1f2937; line-height: 1.6;">
-        <h2>Welcome aboard, ${data.name}! 🎉</h2>
-        <p>Your organizer account for <strong>${data.organizationName}</strong> is live and active.</p>
-        ${planLine}
-        <p>Log in via WhatsApp OTP at <a href="${loginUrl}">${loginUrl}</a> to start creating events.</p>
-        <p>Cheers,<br/>The EventSH Team</p>
-      </div>`;
-    await this.transporter.sendMail({
-      from: `"EventSH" <${process.env.SMTP_USER}>`,
+        ? p(
+            `You've been auto-assigned the ${strong(data.planName)} plan (valid for ${data.validityInDays} days). You can upgrade anytime from <em>Settings → Subscription</em>.`,
+          )
+        : p("You can browse plans anytime from <em>Settings → Subscription</em>.");
+    const loginUrl = `${process.env.FRONTEND_BASE_URL || brand.siteUrl}/login`;
+    const body = brandedEmail({
+      preheading: "Welcome aboard",
+      preview: `Your organizer account for ${data.organizationName} is live.`,
+      body:
+        heading(`Welcome aboard, ${data.name}! 🎉`) +
+        p(`Your organizer account for ${strong(data.organizationName)} is live and active.`) +
+        planLine +
+        p(`Log in via WhatsApp OTP at ${link(loginUrl, loginUrl)} to start creating events.`),
+    });
+    await this.deliver(this.transporter, {
+      from: this.platformFrom(),
       to: data.email,
       subject,
       html: body,
@@ -426,7 +468,7 @@ export class MailService {
    *
    * `senderConfig` is the organizer's email config — when they've set up their
    * own SMTP the invoice comes from their address, otherwise it falls back to
-   * the shared EventSH sender.
+   * the shared platform sender.
    */
   async sendSponsorshipInvoice(
     data: {
@@ -451,35 +493,40 @@ export class MailService {
     const { transporter, from } = this.resolveSender(senderConfig);
     const money = `${data.currencySymbol}${Number(data.amount || 0).toLocaleString()}`;
     const issuer = data.organizationName || "the organizer";
-    const row = (label: string, value: string) =>
-      `<tr><td style="padding:6px 14px;color:#6b7280;">${label}</td><td style="padding:6px 14px;font-weight:600;">${value}</td></tr>`;
+    const esc = escapeEmailHtml;
 
     const subject = `Sponsorship invoice ${data.invoiceNumber} — ${data.eventTitle}`;
-    const body = `
-      <div style="font-family: sans-serif; max-width: 600px; color: #1f2937; line-height: 1.6;">
-        <h2 style="margin-bottom:4px;">Sponsorship confirmed 🤝</h2>
-        <p style="color:#6b7280;margin-top:0;">Invoice ${data.invoiceNumber}</p>
-        <p>Hi ${data.contactName || data.companyName},</p>
-        <p>
-          Thank you for sponsoring <strong>${data.eventTitle}</strong>.
-          ${issuer} has verified your payment and your sponsorship is now confirmed.
-        </p>
-        <table style="border-collapse:collapse;margin:16px 0;border:1px solid #e5e7eb;border-radius:8px;">
-          ${row("Sponsor", data.companyName)}
-          ${row("Package", data.tierName)}
-          ${row("Amount paid", money)}
-          ${data.transactionId ? row("Transaction ref", data.transactionId) : ""}
-          ${data.paidOn ? row("Paid on", new Date(data.paidOn).toLocaleDateString()) : ""}
-          ${data.eventDate ? row("Event date", new Date(data.eventDate).toLocaleDateString()) : ""}
-          ${row("Invoice no.", data.invoiceNumber)}
-        </table>
-        <p>Keep this email as your receipt.${
-          data.organizerEmail
-            ? ` Any questions, reply here or write to <a href="mailto:${data.organizerEmail}">${data.organizerEmail}</a>.`
-            : ""
-        }</p>
-        <p style="color:#6b7280;font-size:13px;">— ${data.organizationName || "EventSH"}</p>
-      </div>`;
+    const body = brandedEmail({
+      preheading: "Sponsorship invoice",
+      preview: `Invoice ${data.invoiceNumber} for your sponsorship of ${data.eventTitle}.`,
+      organizer: data.organizationName,
+      contact: data.organizerEmail
+        ? { label: `write to ${data.organizerEmail}`, href: `mailto:${data.organizerEmail}` }
+        : undefined,
+      body:
+        heading("Sponsorship confirmed 🤝") +
+        small(`Invoice ${esc(data.invoiceNumber)}`) +
+        p(`Hi ${esc(data.contactName || data.companyName)},`) +
+        p(
+          `Thank you for sponsoring ${strong(data.eventTitle)}. ${esc(issuer)} has verified your payment and your sponsorship is now confirmed.`,
+        ) +
+        details([
+          ["Sponsor", esc(data.companyName)],
+          ["Package", esc(data.tierName)],
+          ["Amount paid", esc(money)],
+          ["Transaction ref", data.transactionId ? esc(data.transactionId) : ""],
+          ["Paid on", data.paidOn ? esc(new Date(data.paidOn).toLocaleDateString()) : ""],
+          ["Event date", data.eventDate ? esc(new Date(data.eventDate).toLocaleDateString()) : ""],
+          ["Invoice no.", esc(data.invoiceNumber)],
+        ]) +
+        p(
+          `Keep this email as your receipt.${
+            data.organizerEmail
+              ? ` Any questions, write to ${link(data.organizerEmail, `mailto:${data.organizerEmail}`)}.`
+              : ""
+          }`,
+        ),
+    });
 
     // Both addresses on one send — the sponsor's sign-in Gmail and their
     // company/accounts address — so finance and the contact both get it.
@@ -488,7 +535,7 @@ export class MailService {
       .filter(Boolean);
     const to = [...new Set(recipients)].join(", ");
 
-    await transporter.sendMail({
+    await this.deliver(transporter, {
       from,
       to,
       subject,
@@ -512,7 +559,7 @@ export class MailService {
    *
    * Negotiations can run for many rounds, so each message leads with what
    * just changed and carries the current figures underneath. Sent from the
-   * organizer's own SMTP when configured, otherwise the shared EventSH sender.
+   * organizer's own SMTP when configured, otherwise the shared platform sender.
    */
   async sendSupplierUpdate(
     data: {
@@ -541,34 +588,31 @@ export class MailService {
     if (recipients.length === 0) return;
 
     const { transporter, from } = this.resolveSender(senderConfig);
-    const row = ([label, value]: [string, string]) =>
-      `<tr><td style="padding:5px 14px 5px 0;color:#64748b">${label}</td><td style="padding:5px 0;font-weight:600;color:#0f172a">${value || "—"}</td></tr>`;
+    // Values arrive as plain text; an empty one still shows its row, as "—".
+    const row = ([label, value]: [string, string]): [string, string] => [
+      label,
+      escapeEmailHtml(value || "—"),
+    ];
 
     const subject = `${data.heading} — ${data.eventTitle}`;
-    const html = `
-      <div style="font-family: sans-serif; max-width: 620px; color: #1f2937; line-height: 1.6;">
-        <h2 style="margin-bottom:4px;">${data.heading}</h2>
-        <p style="margin-top:0;color:#6b7280;">${data.summary}</p>
-        <table style="border-collapse:collapse;margin:14px 0;">
-          ${row(["Supplier", data.supplierName])}
-          ${row(["Event", data.eventTitle])}
-          ${row(["Status", data.status])}
-          ${(data.rows || []).map(row).join("")}
-        </table>
-        ${
-          data.note
-            ? `<p style="background:#f1f5f9;border-radius:8px;padding:10px 12px;margin:12px 0;"><strong>Note:</strong> ${data.note}</p>`
-            : ""
-        }
-        ${
-          data.ctaUrl
-            ? `<p style="margin:18px 0;"><a href="${data.ctaUrl}" style="background:#6366f1;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;">${data.ctaLabel || "Open"}</a></p>`
-            : ""
-        }
-        <p style="color:#6b7280;font-size:13px;">— ${data.organizationName || "EventSH"}</p>
-      </div>`;
+    const html = brandedEmail({
+      preheading: "Supplier update",
+      preview: data.summary,
+      organizer: data.organizationName,
+      body:
+        heading(data.heading) +
+        p(escapeEmailHtml(data.summary)) +
+        details([
+          row(["Supplier", data.supplierName]),
+          row(["Event", data.eventTitle]),
+          row(["Status", data.status]),
+          ...(data.rows || []).map(row),
+        ]) +
+        (data.note ? note(`<strong>Note:</strong> ${escapeEmailHtml(data.note)}`) : "") +
+        (data.ctaUrl ? button(data.ctaLabel || "Open", data.ctaUrl) : ""),
+    });
 
-    await transporter.sendMail({
+    await this.deliver(transporter, {
       from,
       to: recipients.join(", "),
       subject,
@@ -586,21 +630,24 @@ export class MailService {
     expiryDate: Date;
   }) {
     const subject = `Plan activated: ${data.planName}`;
-    const body = `
-      <div style="font-family: sans-serif; max-width: 600px; color: #1f2937; line-height: 1.6;">
-        <h2>Plan activated 🎟️</h2>
-        <p>Hi ${data.name},</p>
-        <p>Your <strong>${data.planName}</strong> plan for <strong>${data.organizationName}</strong> is now active.</p>
-        <table style="border-collapse: collapse; margin: 12px 0;">
-          <tr><td style="padding: 4px 12px; color: #6b7280;">Price</td><td style="padding: 4px 12px; font-weight: 600;">$${data.pricePaid}</td></tr>
-          <tr><td style="padding: 4px 12px; color: #6b7280;">Validity</td><td style="padding: 4px 12px; font-weight: 600;">${data.validityInDays} days</td></tr>
-          <tr><td style="padding: 4px 12px; color: #6b7280;">Expires on</td><td style="padding: 4px 12px; font-weight: 600;">${new Date(data.expiryDate).toLocaleDateString()}</td></tr>
-        </table>
-        <p>You can review or change your plan from <em>Settings → Subscription</em>.</p>
-        <p>— The EventSH Team</p>
-      </div>`;
-    await this.transporter.sendMail({
-      from: `"EventSH" <${process.env.SMTP_USER}>`,
+    const body = brandedEmail({
+      preheading: "Plan activated",
+      preview: `Your ${data.planName} plan for ${data.organizationName} is now active.`,
+      body:
+        heading("Plan activated 🎟️") +
+        p(`Hi ${escapeEmailHtml(data.name)},`) +
+        p(
+          `Your ${strong(data.planName)} plan for ${strong(data.organizationName)} is now active.`,
+        ) +
+        details([
+          ["Price", escapeEmailHtml(`$${data.pricePaid}`)],
+          ["Validity", `${escapeEmailHtml(data.validityInDays)} days`],
+          ["Expires on", escapeEmailHtml(new Date(data.expiryDate).toLocaleDateString())],
+        ]) +
+        p("You can review or change your plan from <em>Settings → Subscription</em>."),
+    });
+    await this.deliver(this.transporter, {
+      from: this.platformFrom(),
       to: data.email,
       subject,
       html: body,
@@ -617,18 +664,23 @@ export class MailService {
     expiryDate: Date;
   }) {
     const subject = `Your ${data.planName} plan expires in ${data.daysLeft} day${data.daysLeft === 1 ? "" : "s"}`;
-    const body = `
-      <div style="font-family: sans-serif; max-width: 600px; color: #1f2937; line-height: 1.6;">
-        <h2>Heads up — your plan is ending soon</h2>
-        <p>Hi ${data.name},</p>
-        <p>Your <strong>${data.planName}</strong> plan for <strong>${data.organizationName}</strong> will expire on
-          <strong>${new Date(data.expiryDate).toLocaleDateString()}</strong> — that's
-          <strong>${data.daysLeft} day${data.daysLeft === 1 ? "" : "s"}</strong> away.</p>
-        <p>After expiry, you'll get a 7-day grace window before premium features are locked. Renew or switch your plan from <em>Settings → Subscription</em> to avoid interruption.</p>
-        <p>— The EventSH Team</p>
-      </div>`;
-    await this.transporter.sendMail({
-      from: `"EventSH" <${process.env.SMTP_USER}>`,
+    const body = brandedEmail({
+      preheading: "Plan expiring soon",
+      preview: `Your ${data.planName} plan expires on ${new Date(data.expiryDate).toLocaleDateString()}.`,
+      body:
+        heading("Heads up — your plan is ending soon") +
+        p(`Hi ${escapeEmailHtml(data.name)},`) +
+        p(
+          `Your ${strong(data.planName)} plan for ${strong(data.organizationName)} will expire on ${strong(
+            new Date(data.expiryDate).toLocaleDateString(),
+          )} — that's ${strong(`${data.daysLeft} day${data.daysLeft === 1 ? "" : "s"}`)} away.`,
+        ) +
+        p(
+          "After expiry, you'll get a 7-day grace window before premium features are locked. Renew or switch your plan from <em>Settings → Subscription</em> to avoid interruption.",
+        ),
+    });
+    await this.deliver(this.transporter, {
+      from: this.platformFrom(),
       to: data.email,
       subject,
       html: body,
@@ -643,16 +695,21 @@ export class MailService {
     planName?: string | null;
   }) {
     const subject = `Your subscription has been cancelled`;
-    const body = `
-      <div style="font-family: sans-serif; max-width: 600px; color: #1f2937; line-height: 1.6;">
-        <h2>Subscription cancelled</h2>
-        <p>Hi ${data.name},</p>
-        <p>The <strong>${data.planName || "current"}</strong> plan for <strong>${data.organizationName}</strong> has been cancelled.</p>
-        <p>You can re-subscribe to a plan anytime from <em>Settings → Subscription</em>. Premium features will remain available until the end of any active billing period.</p>
-        <p>— The EventSH Team</p>
-      </div>`;
-    await this.transporter.sendMail({
-      from: `"EventSH" <${process.env.SMTP_USER}>`,
+    const body = brandedEmail({
+      preheading: "Subscription cancelled",
+      preview: `The subscription for ${data.organizationName} has been cancelled.`,
+      body:
+        heading("Subscription cancelled") +
+        p(`Hi ${escapeEmailHtml(data.name)},`) +
+        p(
+          `The ${strong(data.planName || "current")} plan for ${strong(data.organizationName)} has been cancelled.`,
+        ) +
+        p(
+          "You can re-subscribe to a plan anytime from <em>Settings → Subscription</em>. Premium features will remain available until the end of any active billing period.",
+        ),
+    });
+    await this.deliver(this.transporter, {
+      from: this.platformFrom(),
       to: data.email,
       subject,
       html: body,
@@ -678,8 +735,8 @@ export class MailService {
 
   async sendMail(options: { to: string; subject: string; html: string }) {
     try {
-      await this.transporter.sendMail({
-        from: `"EventSH" <${process.env.SMTP_USER}>`,
+      await this.deliver(this.transporter, {
+        from: this.platformFrom(),
         to: options.to,
         subject: options.subject,
         html: options.html,
@@ -701,12 +758,12 @@ export class MailService {
       cid?: string;
     }[];
     // When passed (an organizer's emailConfig), the message is sent from their
-    // custom address/SMTP; otherwise it goes from the global EventSH sender.
+    // custom address/SMTP; otherwise it goes from the global platform sender.
     senderConfig?: OrgEmailConfig;
   }) {
     try {
       const { transporter, from } = this.resolveSender(options.senderConfig);
-      await transporter.sendMail({
+      await this.deliver(transporter, {
         from,
         to: options.to,
         subject: options.subject,
@@ -758,54 +815,37 @@ export class MailService {
     Thank you for your order!
 
     Regards,
-    EventSH Team
+    ${emailBrand().name} Team
     `;
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Order ${accepted ? "Confirmed" : "Rejected"}</title>
-      </head>
-      <body style="font-family: Arial, sans-serif; line-height: 1.6; margin: 0; padding: 20px; background-color: #f4f4f4;">
-        <div style="max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
-          <div style="text-align: center; margin-bottom: 30px;">
-            <h1 style="color: ${statusColor}; margin: 0;">Order ${accepted ? "Confirmed" : "Rejected"}</h1>
-            <p style="color: #666; margin: 10px 0;">Your order status has been updated.</p>
-          </div>
-          <h2 style="color: #333;">Hello ${name},</h2>
-          <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid ${statusColor}; margin: 20px 0;">
-            <h3 style="margin-top: 0; color: #333;">📋 Order Information</h3>
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr><td style="padding: 8px 0; font-weight: bold;">Order ID:</td><td style="padding: 8px 0;">${orderId}</td></tr>
-              <tr><td style="padding: 8px 0; font-weight: bold;">Status:</td><td style="padding: 8px 0; color: ${statusColor}; font-weight: bold;">${status}</td></tr>
-              <tr><td style="padding: 8px 0; font-weight: bold;">Amount:</td><td style="padding: 8px 0;">₹${amount}</td></tr>
-              <tr><td style="padding: 8px 0; font-weight: bold;">Merchant:</td><td style="padding: 8px 0;">${shopkeeperName}</td></tr>
-            </table>
-          </div>
-          <div style="margin: 30px 0;">
-            ${
-              accepted
-                ? `<p style="color: #22c55e; font-size: 16px;"><strong>Great news!</strong> Your payment has been confirmed by the merchant. Your order is now being processed.</p>
-                   <p>We'll keep you updated on the progress. Thank you for your order!</p>`
-                : `<p style="color: #ef4444; font-size: 16px;"><strong>Order Rejected</strong> Your payment was not accepted by the merchant.</p>
-                   <p>Please contact the merchant for more details or try placing a new order.</p>`
-            }
-          </div>
-          <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin: 20px 0;">
-            <h4 style="margin-top: 0; color: #1976d2;">Need Help?</h4>
-            <p style="margin: 0;">Contact the merchant directly for any questions about your order.</p>
-            <p style="margin: 5px 0 0 0;"><strong>Merchant:</strong> ${shopkeeperName}</p>
-          </div>
-          <div style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd;">
-            <p style="color: #666; font-size: 14px;">Thank you for using our platform!</p>
-            <p style="color: #888; font-size: 12px;">This is an automated message, please do not reply to this email.</p>
-          </div>
-        </div>
-      </body>
-      </html>`;
+    const html = brandedEmail({
+      preheading: "Order update",
+      preview: "Your order status has been updated.",
+      body:
+        heading(`Order ${accepted ? "Confirmed" : "Rejected"}`) +
+        p("Your order status has been updated.") +
+        p(`Hello ${escapeEmailHtml(name)},`) +
+        subheading("📋 Order Information") +
+        details([
+          ["Order ID", escapeEmailHtml(orderId)],
+          ["Status", `<span style="color:${statusColor};font-weight:bold;">${escapeEmailHtml(status)}</span>`],
+          ["Amount", escapeEmailHtml(`₹${amount}`)],
+          ["Merchant", escapeEmailHtml(shopkeeperName)],
+        ]) +
+        (accepted
+          ? note(
+              `<strong>Great news!</strong> Your payment has been confirmed by the merchant. Your order is now being processed.`,
+              "success",
+            ) + p("We'll keep you updated on the progress. Thank you for your order!")
+          : note(`<strong>Order Rejected</strong> Your payment was not accepted by the merchant.`, "danger") +
+            p("Please contact the merchant for more details or try placing a new order.")) +
+        note(
+          `<strong>Need Help?</strong><br />Contact the merchant directly for any questions about your order.<br /><strong>Merchant:</strong> ${escapeEmailHtml(
+            shopkeeperName,
+          )}`,
+        ) +
+        p("Thank you for using our platform!"),
+    });
 
     await this.sendMail({
       to: email,

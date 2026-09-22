@@ -26,6 +26,7 @@ import { FeedbackService } from "../feedback/feedback.service";
 import { MembershipsService } from "../memberships/memberships.service";
 import { OperatorsService } from "../operators/operators.service";
 import { omitReferralFields } from "../../common/referral.util";
+import { emailBrand } from "../../common/email/email-brand";
 
 function escapeHtml(str: string): string {
   return String(str)
@@ -33,6 +34,17 @@ function escapeHtml(str: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+// Footer line of a printed ticket. The platform brand signs an organizer's
+// ticket "Powered by EventSH"; a white-label brand is the organizer on its own
+// instance, so it just names itself and its site.
+function ticketFooter(): string {
+  const brand = emailBrand();
+  const name = escapeHtml(brand.name);
+  return brand.poweredBy
+    ? `Powered by ${name}`
+    : `${name} &middot; ${escapeHtml(brand.siteUrl.replace(/^https?:\/\//, ""))}`;
 }
 
 function formatCurrency(amount: number, country?: string): string {
@@ -317,7 +329,7 @@ export class RoundTableBookingsService {
 
     // Generate QR code
     const qrPayload = {
-      warning: "Please use the Eventsh app to scan this QR code.",
+      warning: "Please use the event's check-in app to scan this QR code.",
       type: "eventsh-roundtable-checkin",
       bookingId: bookingId,
       eventId: booking.eventId.toString(),
@@ -389,6 +401,8 @@ export class RoundTableBookingsService {
                 `Amount: ${formatCurrency(booking.amount, country)}\n\n` +
                 `Your table ticket with QR code is attached. Individual seat QRs have been sent to each guest.`,
               senderConfig: (organizerDoc as any)?.emailConfig,
+              organizer:
+                (organizerDoc as any)?.organizationName || (organizerDoc as any)?.name,
             },
           );
         } catch (err) {
@@ -403,7 +417,7 @@ export class RoundTableBookingsService {
 
         try {
           const seatQrPayload = {
-            warning: "Please use the Eventsh app to scan this QR code.",
+            warning: "Please use the event's check-in app to scan this QR code.",
             type: "eventsh-roundtable-checkin",
             bookingId: bookingId,
             seatChairIndex: guest.chairIndex,
@@ -455,6 +469,8 @@ export class RoundTableBookingsService {
                 `Seat: Chair ${guest.chairIndex + 1}\n\n` +
                 `Your personal QR ticket is attached. Please show it at the entrance.`,
               senderConfig: (organizerDoc as any)?.emailConfig,
+              organizer:
+                (organizerDoc as any)?.organizationName || (organizerDoc as any)?.name,
             },
           );
 
@@ -757,7 +773,7 @@ export class RoundTableBookingsService {
       <body>
         <div class="container">
           <div class="header">
-            <h1>${orgName || "EventSH"}</h1>
+            <h1>${escapeHtml(orgName || emailBrand().name)}</h1>
             <p>Booking Confirmation</p>
           </div>
 
@@ -795,11 +811,11 @@ export class RoundTableBookingsService {
 
           <div class="qr-section">
             <img src="${qrBase64}" alt="QR Code" />
-            <p>Scan at Event Entrance - Use Eventsh App Only</p>
+            <p>Scan at Event Entrance - Only the event team's check-in scanner can read this QR code — a normal phone camera will not open it.</p>
           </div>
 
           <div class="footer">
-            <p>Powered by EventSH</p>
+            <p>${ticketFooter()}</p>
           </div>
         </div>
       </body>
@@ -818,7 +834,7 @@ export class RoundTableBookingsService {
   ): Promise<Buffer> {
     const org = await this.organizerModel.findById(booking.organizerId);
     const orgName =
-      (org as any)?.organizationName || (org as any)?.name || "EventSH";
+      (org as any)?.organizationName || (org as any)?.name || emailBrand().name;
     const html = this.generateTicketHTML(booking, event, qrBase64, country, orgName);
 
     const browser = await puppeteer.launch({
@@ -870,7 +886,7 @@ export class RoundTableBookingsService {
     </style></head><body>
     <div class="container">
       <div class="header">
-        <h1>${escapeHtml(orgName || "EventSH")}</h1>
+        <h1>${escapeHtml(orgName || emailBrand().name)}</h1>
         <p>${escapeHtml(event.title)}</p>
       </div>
       <div class="seat-badge">
@@ -888,7 +904,7 @@ export class RoundTableBookingsService {
         <img src="${qrBase64}" alt="QR Code" />
         <p>Show this QR at the event entrance</p>
       </div>
-      <div class="footer">Powered by EventSH</div>
+      <div class="footer">${ticketFooter()}</div>
     </div>
     </body></html>`;
   }
@@ -902,7 +918,7 @@ export class RoundTableBookingsService {
   ): Promise<Buffer> {
     const org = await this.organizerModel.findById(booking.organizerId);
     const orgName =
-      (org as any)?.organizationName || (org as any)?.name || "EventSH";
+      (org as any)?.organizationName || (org as any)?.name || emailBrand().name;
     const html = this.generateSeatTicketHTML(booking, event, guest, qrBase64, country, orgName);
     const browser = await puppeteer.launch({
       headless: true,

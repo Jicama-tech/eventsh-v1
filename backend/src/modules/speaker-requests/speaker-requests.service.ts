@@ -29,6 +29,20 @@ import { Speaker, SpeakerDocument } from "./schemas/speaker.schema";
 import { OtpService } from "../otp/otp.service";
 import { FeedbackService } from "../feedback/feedback.service";
 import { MailService } from "../roles/mail.service";
+import { emailBrand } from "../../common/email/email-brand";
+import {
+  brandedEmail,
+  bullets,
+  detail,
+  details,
+  escapeEmailHtml,
+  heading,
+  image,
+  note,
+  p,
+  small,
+  strong,
+} from "../../common/email/email-layout";
 import { OperatorsService } from "../operators/operators.service";
 import { omitReferralFields } from "../../common/referral.util";
 
@@ -489,49 +503,76 @@ export class SpeakerRequestsService {
 
   // ============ EMAIL ============
 
-  /** Organizer's custom sender config, when they've set one up. */
-  private async senderConfigFor(organizerId: any) {
+  /**
+   * Organizer's custom sender config, when they've set one up, plus the name
+   * and address a speaker-facing email is signed with and points questions to.
+   */
+  private async senderFor(organizerId: any): Promise<{
+    senderConfig?: any;
+    name?: string;
+    email?: string;
+  }> {
     try {
-      const org = await this.organizerModel
+      const org: any = await this.organizerModel
         .findById(organizerId)
-        .select("emailConfig")
+        .select("emailConfig organizationName name email")
         .lean();
-      return (org as any)?.emailConfig;
+      return {
+        senderConfig: org?.emailConfig,
+        name: org?.organizationName || org?.name,
+        email: org?.email,
+      };
     } catch {
-      return undefined;
+      return {};
     }
   }
 
   /**
-   * Branded speaker email. Best-effort by design: a bounced notification must
-   * never roll back an approval or a payment confirmation.
+   * Speaker email in the instance's brand template. Best-effort by design: a
+   * bounced notification must never roll back an approval or a payment
+   * confirmation.
+   *
+   * A speaker-facing email goes out on the organizer's behalf: signed by them,
+   * with the footer's help link pointing at their address, because questions
+   * about an application are theirs to answer. The organizer's own
+   * notifications come from the platform.
    */
   private async sendSpeakerEmail(opts: {
     to?: string;
     organizerId: any;
+    /** Who reads it: the speaker (on the organizer's behalf) or the organizer. */
+    audience: "speaker" | "organizer";
     subject: string;
+    /** Small caps line above the heading — what this email is. */
+    preheading?: string;
+    /** Inbox preview line beside the subject. */
+    preview?: string;
     heading: string;
     bodyHtml: string;
-    accent?: string;
     attachments?: any[];
   }) {
     if (!opts.to) return false;
     try {
-      const senderConfig = await this.senderConfigFor(opts.organizerId);
+      const sender = await this.senderFor(opts.organizerId);
+      const onBehalf = opts.audience === "speaker";
       await this.mailService.sendEmail({
         to: opts.to,
         subject: opts.subject,
-        html: `
-      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-        <div style="background:${opts.accent || "linear-gradient(135deg,#6366f1,#4f46e5)"};color:#fff;padding:24px;text-align:center">
-          <h1 style="margin:0;font-size:20px">${opts.heading}</h1>
-        </div>
-        <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.7">
-          ${opts.bodyHtml}
-        </div>
-      </div>`,
+        html: brandedEmail({
+          preheading: opts.preheading,
+          preview: opts.preview,
+          body: heading(opts.heading) + opts.bodyHtml,
+          organizer: onBehalf ? sender.name : undefined,
+          contact:
+            onBehalf && sender.email
+              ? {
+                  label: `contact ${sender.name || "the organizer"}`,
+                  href: `mailto:${sender.email}`,
+                }
+              : undefined,
+        }),
         attachments: opts.attachments,
-        senderConfig,
+        senderConfig: sender.senderConfig,
       });
       return true;
     } catch (err) {
@@ -549,33 +590,43 @@ export class SpeakerRequestsService {
     const when = event?.startDate
       ? new Date(event.startDate).toLocaleDateString()
       : "TBA";
-    const sessions = (request.sessions || [])
-      .map(
-        (s: any) =>
-          `<li><strong>${s.topic || "Session"}</strong>${
-            s.confirmedStartTime || s.preferredStartTime
-              ? ` — ${s.confirmedStartTime || s.preferredStartTime} to ${
-                  s.confirmedEndTime || s.preferredEndTime || ""
-                }`
-              : ""
-          }</li>`,
-      )
-      .join("");
-    return `
-      <p style="margin:0 0 12px"><strong>Event:</strong> ${event?.title || "Event"}<br/>
-      <strong>Date:</strong> ${when}<br/>
-      <strong>Venue:</strong> ${event?.location || "TBA"}${
-        request.selectedSlotName
-          ? `<br/><strong>Speaker space:</strong> ${request.selectedSlotName}`
-          : ""
-      }${
-        fee && fee > 0
-          ? `<br/><strong>Slot fee:</strong> ${fee}`
-          : request.isCharged === false || !request.fee
-            ? `<br/><strong>Slot fee:</strong> Free`
+    const sessions: string[] = (request.sessions || []).map(
+      (s: any) =>
+        `${strong(s.topic || "Session")}${
+          s.confirmedStartTime || s.preferredStartTime
+            ? ` — ${escapeEmailHtml(
+                s.confirmedStartTime || s.preferredStartTime,
+              )} to ${escapeEmailHtml(
+                s.confirmedEndTime || s.preferredEndTime || "",
+              )}`
             : ""
-      }</p>
-      ${sessions ? `<p style="margin:0 0 8px"><strong>Your session${(request.sessions || []).length > 1 ? "s" : ""}:</strong></p><ul style="margin:0 0 12px;padding-left:18px">${sessions}</ul>` : ""}`;
+        }`,
+    );
+    return (
+      details([
+        ["Event", escapeEmailHtml(event?.title || "Event")],
+        ["Date", escapeEmailHtml(when)],
+        ["Venue", escapeEmailHtml(event?.location || "TBA")],
+        [
+          "Speaker space",
+          request.selectedSlotName
+            ? escapeEmailHtml(request.selectedSlotName)
+            : "",
+        ],
+        [
+          "Slot fee",
+          fee && fee > 0
+            ? escapeEmailHtml(fee)
+            : request.isCharged === false || !request.fee
+              ? "Free"
+              : "",
+        ],
+      ]) +
+      (sessions.length
+        ? p(strong(`Your session${sessions.length > 1 ? "s" : ""}:`)) +
+          bullets(sessions)
+        : "")
+    );
   }
 
   // ============ PHASE 1: APPLY AS SPEAKER ============
@@ -696,20 +747,22 @@ export class SpeakerRequestsService {
       await this.sendSpeakerEmail({
         to: request.email,
         organizerId: dto.organizerId,
+        audience: "speaker",
         subject: `Speaker application received — ${event.title}`,
+        preheading: "Speaker application received",
+        preview: `Your application to speak at ${event.title} is with the organizer for review.`,
         heading: "Your application is pending approval",
-        accent: "linear-gradient(135deg,#f59e0b,#d97706)",
-        bodyHtml: `
-          <p style="margin:0 0 12px">Hi ${request.name},</p>
-          <p style="margin:0 0 12px">Thanks for applying to speak. Your application is now with the organizer for review.</p>
-          ${this.speakerSummaryHtml(request, event, pricing.fee)}
-          <p style="margin:12px 0 0;color:#475569">
-            ${
-              pricing.isCharged
-                ? `Once approved, sign back in on the event page with this same email to pay the ${pricing.fee} slot fee. Your speaker pass with QR code is issued after the organizer confirms your payment.`
-                : `This slot is free — once the organizer approves you, your speaker pass with QR code arrives by email automatically.`
-            }
-          </p>`,
+        bodyHtml:
+          p(`Hi ${escapeEmailHtml(request.name)},`) +
+          p(
+            "Thanks for applying to speak. Your application is now with the organizer for review.",
+          ) +
+          this.speakerSummaryHtml(request, event, pricing.fee) +
+          note(
+            pricing.isCharged
+              ? `Once approved, sign back in on the event page with this same email to pay the ${pricing.fee} slot fee. Your speaker pass with QR code is issued after the organizer confirms your payment.`
+              : `This slot is free — once the organizer approves you, your speaker pass with QR code arrives by email automatically.`,
+          ),
       });
 
       // Let the organizer know something is waiting for them.
@@ -717,14 +770,21 @@ export class SpeakerRequestsService {
       await this.sendSpeakerEmail({
         to: organizerDoc?.email,
         organizerId: dto.organizerId,
+        audience: "organizer",
         subject: `New speaker application — ${event.title}`,
+        preheading: "Speaker application",
+        preview: `${request.name} applied to speak at ${event.title}.`,
         heading: "New speaker application",
-        bodyHtml: `
-          <p style="margin:0 0 12px"><strong>${request.name}</strong>${
-            request.organization ? ` (${request.organization})` : ""
-          } applied to speak at <strong>${event.title}</strong>.</p>
-          ${this.speakerSummaryHtml(request, event, pricing.fee)}
-          <p style="margin:12px 0 0;color:#475569">Review it from the Speakers tab in your dashboard.</p>`,
+        bodyHtml:
+          p(
+            `${strong(request.name)}${
+              request.organization
+                ? ` (${escapeEmailHtml(request.organization)})`
+                : ""
+            } applied to speak at ${strong(event.title)}.`,
+          ) +
+          this.speakerSummaryHtml(request, event, pricing.fee) +
+          p("Review it from the Speakers tab in your dashboard."),
       });
 
       return {
@@ -817,16 +877,26 @@ export class SpeakerRequestsService {
           await this.sendSpeakerEmail({
             to: updated.email,
             organizerId: updated.organizerId,
+            audience: "speaker",
             subject: `Approved — payment required for ${event?.title}`,
+            preheading: "Speaker application approved",
+            preview: `Pay the slot fee of ${fee} to confirm your speaker slot at ${event?.title}.`,
             heading: "You're approved! One step left",
-            accent: "linear-gradient(135deg,#3b82f6,#6366f1)",
-            bodyHtml: `
-              <p style="margin:0 0 12px">Hi ${updated.name},</p>
-              <p style="margin:0 0 12px">Great news — the organizer approved your speaker application.</p>
-              ${this.speakerSummaryHtml(updated, event, fee)}
-              <p style="margin:12px 0 12px"><strong>To confirm your slot, pay the fee of ${fee}.</strong></p>
-              <p style="margin:0 0 12px;color:#475569">Open the event page, choose <em>Apply as Speaker</em> and sign in with <strong>${updated.email}</strong> — the same address you applied with. Your application will be waiting with a payment option.</p>
-              <p style="margin:0;color:#475569">Your speaker pass with QR code is issued as soon as the organizer confirms your payment.</p>`,
+            bodyHtml:
+              p(`Hi ${escapeEmailHtml(updated.name)},`) +
+              p(
+                "Great news — the organizer approved your speaker application.",
+              ) +
+              this.speakerSummaryHtml(updated, event, fee) +
+              p(strong(`To confirm your slot, pay the fee of ${fee}.`)) +
+              p(
+                `Open the event page, choose <em>Apply as Speaker</em> and sign in with ${strong(
+                  updated.email,
+                )} — the same address you applied with. Your application will be waiting with a payment option.`,
+              ) +
+              p(
+                "Your speaker pass with QR code is issued as soon as the organizer confirms your payment.",
+              ),
           });
         } else {
           // Free slot: issue the pass right now. Reuses the same generator the
@@ -859,14 +929,24 @@ export class SpeakerRequestsService {
         await this.sendSpeakerEmail({
           to: updated.email,
           organizerId: updated.organizerId,
+          audience: "speaker",
           subject: `Update on your speaker application — ${event?.title}`,
+          preheading: "Speaker application update",
+          preview: `An update on your application to speak at ${event?.title}.`,
           heading: "Application update",
-          accent: "linear-gradient(135deg,#64748b,#475569)",
-          bodyHtml: `
-            <p style="margin:0 0 12px">Hi ${updated.name},</p>
-            <p style="margin:0 0 12px">Thank you for your interest in speaking at <strong>${event?.title}</strong>. On this occasion your application wasn't selected.</p>
-            ${dto.rejectionReason ? `<p style="margin:0 0 12px"><strong>Reason:</strong> ${dto.rejectionReason}</p>` : ""}
-            <p style="margin:0;color:#475569">You're welcome to apply to future events — your speaker profile is saved, so it'll only take a moment.</p>`,
+          bodyHtml:
+            p(`Hi ${escapeEmailHtml(updated.name)},`) +
+            p(
+              `Thank you for your interest in speaking at ${strong(
+                event?.title,
+              )}. On this occasion your application wasn't selected.`,
+            ) +
+            (dto.rejectionReason
+              ? detail("Reason:", escapeEmailHtml(dto.rejectionReason))
+              : "") +
+            p(
+              "You're welcome to apply to future events — your speaker profile is saved, so it'll only take a moment.",
+            ),
         });
       } else if (dto.status === "Cancelled") {
         await this.sendWhatsAppNotification(
@@ -1038,7 +1118,7 @@ export class SpeakerRequestsService {
     const event: any = request.eventId;
 
     const qrPayload = {
-      warning: "❌ Normal scanners not allowed. Please use the EventSH app.",
+      warning: "❌ Normal scanners not allowed. Please use the event's check-in app.",
       type: "eventsh-speaker-checkin",
       speakerRequestId: id,
       eventId: (event as any)._id.toString(),
@@ -1121,22 +1201,26 @@ export class SpeakerRequestsService {
     await this.sendSpeakerEmail({
       to: request.email,
       organizerId: request.organizerId,
+      audience: "speaker",
       subject: `Your speaker pass for ${event?.title}`,
+      preheading: "Speaker pass",
+      preview: `You're all set — your speaker slot at ${event?.title} is confirmed.`,
       heading: "Your speaker pass is ready 🎤",
-      accent: "linear-gradient(135deg,#22c55e,#16a34a)",
-      bodyHtml: `
-          <p style="margin:0 0 12px">Hi ${request.name},</p>
-          <p style="margin:0 0 12px">You're all set — your slot is confirmed.</p>
-          ${this.speakerSummaryHtml(request, event)}
-          ${
-            pdfPath
-              ? `<p style="margin:12px 0 0">Your speaker pass is attached as a PDF. Present the QR code at the entrance.</p>`
-              : `<div style="text-align:center;padding:8px 0">
-                   <img src="cid:speakerqr" alt="Speaker check-in QR" style="width:200px;height:200px"/>
-                   <p style="color:#64748b;font-size:12px;margin:8px 0 0">Show this QR at the entrance. It's also attached as an image.</p>
-                 </div>`
-          }
-          <p style="margin:12px 0 0;color:#64748b;font-size:12px">The QR code can only be scanned by the official EventSH app.</p>`,
+      bodyHtml:
+        p(`Hi ${escapeEmailHtml(request.name)},`) +
+        p("You're all set — your slot is confirmed.") +
+        this.speakerSummaryHtml(request, event) +
+        (pdfPath
+          ? p(
+              "Your speaker pass is attached as a PDF. Present the QR code at the entrance.",
+            )
+          : image("cid:speakerqr", "Speaker check-in QR", 200) +
+            small(
+              "Show this QR at the entrance. It's also attached as an image.",
+            )) +
+        small(
+          "Only the event team's check-in scanner can read this QR code — a normal phone camera will not open it.",
+        ),
       attachments: pdfPath
         ? [{ filename: "speaker-pass.pdf", content: fs.readFileSync(pdfPath) }]
         : [
@@ -1459,7 +1543,7 @@ export class SpeakerRequestsService {
 
       // Generate QR
       const qrPayload = {
-        warning: "Use EventSH app to scan.",
+        warning: "Use the event's check-in app to scan.",
         type: "eventsh-speaker-checkin",
         speakerRequestId: request._id.toString(),
         eventId,
@@ -1540,12 +1624,12 @@ export class SpeakerRequestsService {
           .findById(id)
           .select("organizationName name")
           .lean();
-        if (doc) return doc.organizationName || doc.name || "EventSH";
+        if (doc) return doc.organizationName || doc.name || emailBrand().name;
       } catch {
-        // fall through to the platform default
+        // fall through to the instance's brand
       }
     }
-    return "EventSH";
+    return emailBrand().name;
   }
 
   private async generateSpeakerTicketPDF(
@@ -1554,8 +1638,16 @@ export class SpeakerRequestsService {
   ): Promise<Buffer> {
     const event: any = request.eventId;
     const eventDate = new Date(event?.startDate).toLocaleDateString();
-    // Organizer brands the pass; "Powered by EventSH" stays in the footer.
+    // Organizer brands the pass. The platform brand adds its "Powered by" line
+    // in the footer; a white-label brand is the organizer on its own instance,
+    // so it names only the organizer.
     const orgName = await this.resolveOrgName(request);
+    const brand = emailBrand();
+    const poweredBy = brand.poweredBy ? ` · Powered by ${brand.name}` : "";
+    // Every value below is typed by an applicant or an organizer, and this
+    // HTML is rendered by a real Chromium on the server — so it is escaped
+    // like the ticket and booking passes, not trusted as markup.
+    const e = escapeEmailHtml;
 
     const html = `<!DOCTYPE html>
 <html><head><style>
@@ -1575,18 +1667,18 @@ export class SpeakerRequestsService {
 </style></head>
 <body><div class="container">
   <div class="header">
-    <h1>${String(orgName).toUpperCase()} SPEAKER PASS</h1>
+    <h1>${e(String(orgName).toUpperCase())} SPEAKER PASS</h1>
     <p>Your speaking session has been confirmed</p>
   </div>
-  <div class="event-title">${event?.title || "Event"}</div>
+  <div class="event-title">${e(event?.title || "Event")}</div>
   <div class="section-title">Speaker Details</div>
-  <div class="detail-row"><span>Name:</span><span>${request.name}</span></div>
-  ${request.title ? `<div class="detail-row"><span>Role:</span><span>${request.title}</span></div>` : ""}
-  ${request.organization ? `<div class="detail-row"><span>Organization:</span><span>${request.organization}</span></div>` : ""}
-  ${request.email ? `<div class="detail-row"><span>Email:</span><span>${request.email}</span></div>` : ""}
+  <div class="detail-row"><span>Name:</span><span>${e(request.name)}</span></div>
+  ${request.title ? `<div class="detail-row"><span>Role:</span><span>${e(request.title)}</span></div>` : ""}
+  ${request.organization ? `<div class="detail-row"><span>Organization:</span><span>${e(request.organization)}</span></div>` : ""}
+  ${request.email ? `<div class="detail-row"><span>Email:</span><span>${e(request.email)}</span></div>` : ""}
   <div class="section-title">Event Information</div>
   <div class="detail-row"><span>📅 Date:</span><span>${eventDate}</span></div>
-  <div class="detail-row"><span>📍 Venue:</span><span>${event?.location || "TBD"}</span></div>
+  <div class="detail-row"><span>📍 Venue:</span><span>${e(event?.location || "TBD")}</span></div>
   ${
     (request.sessions || []).length > 0
       ? `
@@ -1595,9 +1687,9 @@ export class SpeakerRequestsService {
       .map(
         (s: any) => `
       <div class="session-item">
-        <strong>${s.topic}</strong><br>
-        ${s.confirmedStartTime || s.preferredStartTime ? `Time: ${s.confirmedStartTime || s.preferredStartTime} - ${s.confirmedEndTime || s.preferredEndTime}` : ""}
-        ${s.description ? `<br><small>${s.description}</small>` : ""}
+        <strong>${e(s.topic)}</strong><br>
+        ${s.confirmedStartTime || s.preferredStartTime ? `Time: ${e(s.confirmedStartTime || s.preferredStartTime)} - ${e(s.confirmedEndTime || s.preferredEndTime)}` : ""}
+        ${s.description ? `<br><small>${e(s.description)}</small>` : ""}
       </div>
     `,
       )
@@ -1610,8 +1702,8 @@ export class SpeakerRequestsService {
     <p style="font-size:10px; color:#666;">Scan at Event Entrance</p>
     <img src="${qrBase64}" alt="Speaker QR Code">
   </div>
-  <div class="warning">⚠️ <strong>Important:</strong> Use the official EventSH App to scan QR code for Check-In and Check-Out.</div>
-  <div class="footer">© ${new Date().getFullYear()} ${orgName} · Powered by EventSH</div>
+  <div class="warning">⚠️ <strong>Important:</strong> This QR code is scanned for Check-In and Check-Out. Only the event team's check-in scanner can read it — a normal phone camera will not open it.</div>
+  <div class="footer">© ${new Date().getFullYear()} ${e(orgName)}${e(poweredBy)}</div>
 </div></body></html>`;
 
     const browser = await puppeteer.launch({

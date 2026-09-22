@@ -24,6 +24,15 @@ import {
 } from "./dto/create-workshop-request.dto";
 import { OtpService } from "../otp/otp.service";
 import { MailService } from "../roles/mail.service";
+import {
+  brandedEmail,
+  detail,
+  escapeEmailHtml,
+  heading,
+  note,
+  p,
+  strong,
+} from "../../common/email/email-layout";
 
 @Injectable()
 export class WorkshopRequestsService {
@@ -100,23 +109,36 @@ export class WorkshopRequestsService {
     await this.sendWorkshopEmail({
       to: email,
       organizerId: dto.organizerId,
+      audience: "host",
       subject: `Workshop host application received — ${event.title}`,
+      preheading: "Workshop host application received",
+      preview: `Your application to host ${dto.workshopName} at ${event.title} is with the organizer for review.`,
       heading: "Your application is pending approval",
-      accent: "linear-gradient(135deg,#f59e0b,#d97706)",
-      bodyHtml: `
-        <p style="margin:0 0 12px">Hi ${dto.hostName},</p>
-        <p style="margin:0 0 12px">Thanks for applying to host <strong>${dto.workshopName}</strong> at <strong>${event.title}</strong>. Your application is now with the organizer for review.</p>
-        <p style="margin:0;color:#475569">You'll get an email as soon as it's reviewed.</p>`,
+      bodyHtml:
+        p(`Hi ${escapeEmailHtml(dto.hostName)},`) +
+        p(
+          `Thanks for applying to host ${strong(dto.workshopName)} at ${strong(
+            event.title,
+          )}. Your application is now with the organizer for review.`,
+        ) +
+        p("You'll get an email as soon as it's reviewed."),
     });
 
     await this.sendWorkshopEmail({
       to: organizerDoc?.email,
       organizerId: dto.organizerId,
+      audience: "organizer",
       subject: `New workshop host application — ${event.title}`,
+      preheading: "Workshop host application",
+      preview: `${dto.hostName} applied to host ${dto.workshopName} at ${event.title}.`,
       heading: "New workshop host application",
-      bodyHtml: `
-        <p style="margin:0 0 12px"><strong>${dto.hostName}</strong> applied to host <strong>${dto.workshopName}</strong> at <strong>${event.title}</strong>.</p>
-        <p style="margin:0;color:#475569">Review it from the Workshop Requests tab in your dashboard.</p>`,
+      bodyHtml:
+        p(
+          `${strong(dto.hostName)} applied to host ${strong(
+            dto.workshopName,
+          )} at ${strong(event.title)}.`,
+        ) +
+        p("Review it from the Workshop Requests tab in your dashboard."),
     });
 
     return {
@@ -234,14 +256,24 @@ export class WorkshopRequestsService {
         await this.sendWorkshopEmail({
           to: request.hostEmail,
           organizerId: request.organizerId,
+          audience: "host",
           subject: `Approved — hosting fee required for ${event?.title}`,
+          preheading: "Workshop approved",
+          preview: `Pay the hosting fee of ${fee} to confirm ${request.workshopName} at ${event?.title}.`,
           heading: "You're approved! One step left",
-          accent: "linear-gradient(135deg,#3b82f6,#6366f1)",
-          bodyHtml: `
-            <p style="margin:0 0 12px">Hi ${request.hostName},</p>
-            <p style="margin:0 0 12px">Great news — the organizer approved your workshop, <strong>${request.workshopName}</strong>.</p>
-            <p style="margin:0 0 12px"><strong>To confirm your slot, pay the hosting fee of ${fee}.</strong></p>
-            <p style="margin:0;color:#475569">Sign back in on the event page with <strong>${request.hostEmail}</strong> to pay — your workshop goes live as soon as the organizer confirms your payment.</p>`,
+          bodyHtml:
+            p(`Hi ${escapeEmailHtml(request.hostName)},`) +
+            p(
+              `Great news — the organizer approved your workshop, ${strong(
+                request.workshopName,
+              )}.`,
+            ) +
+            p(strong(`To confirm your slot, pay the hosting fee of ${fee}.`)) +
+            p(
+              `Sign back in on the event page with ${strong(
+                request.hostEmail,
+              )} to pay — your workshop goes live as soon as the organizer confirms your payment.`,
+            ),
         });
       } else {
         try {
@@ -259,13 +291,21 @@ export class WorkshopRequestsService {
       await this.sendWorkshopEmail({
         to: request.hostEmail,
         organizerId: request.organizerId,
+        audience: "host",
         subject: `Update on your workshop application — ${event?.title}`,
+        preheading: "Workshop application update",
+        preview: `An update on your application to host at ${event?.title}.`,
         heading: "Application update",
-        accent: "linear-gradient(135deg,#64748b,#475569)",
-        bodyHtml: `
-          <p style="margin:0 0 12px">Hi ${request.hostName},</p>
-          <p style="margin:0 0 12px">Thank you for your interest in hosting at <strong>${event?.title}</strong>. On this occasion your application wasn't selected.</p>
-          ${dto.rejectionReason ? `<p style="margin:0 0 12px"><strong>Reason:</strong> ${dto.rejectionReason}</p>` : ""}`,
+        bodyHtml:
+          p(`Hi ${escapeEmailHtml(request.hostName)},`) +
+          p(
+            `Thank you for your interest in hosting at ${strong(
+              event?.title,
+            )}. On this occasion your application wasn't selected.`,
+          ) +
+          (dto.rejectionReason
+            ? detail("Reason:", escapeEmailHtml(dto.rejectionReason))
+            : ""),
       });
     }
 
@@ -347,11 +387,20 @@ export class WorkshopRequestsService {
     await this.sendWorkshopEmail({
       to: organizerDoc?.email,
       organizerId: request.organizerId,
+      audience: "organizer",
       subject: `Hosting fee payment submitted — ${request.workshopName}`,
+      preheading: "Workshop hosting fee",
+      preview: `${request.hostName} says they've paid the hosting fee for ${request.workshopName}.`,
       heading: "Hosting fee payment submitted",
-      bodyHtml: `
-        <p style="margin:0 0 12px"><strong>${request.hostName}</strong> says they've paid the hosting fee for <strong>${request.workshopName}</strong>.</p>
-        <p style="margin:0;color:#475569">Verify and confirm from the Workshop Requests tab to publish their workshop.</p>`,
+      bodyHtml:
+        p(
+          `${strong(request.hostName)} says they've paid the hosting fee for ${strong(
+            request.workshopName,
+          )}.`,
+        ) +
+        note(
+          "Verify and confirm from the Workshop Requests tab to publish their workshop.",
+        ),
     });
 
     return {
@@ -436,12 +485,18 @@ export class WorkshopRequestsService {
     await this.sendWorkshopEmail({
       to: request.hostEmail,
       organizerId: request.organizerId,
+      audience: "host",
       subject: `Your workshop is live — ${event.title}`,
+      preheading: "Workshop published",
+      preview: `${request.workshopName} is now published on ${event.title} and visitors can book it.`,
       heading: "Your workshop is live",
-      accent: "linear-gradient(135deg,#22c55e,#16a34a)",
-      bodyHtml: `
-        <p style="margin:0 0 12px">Hi ${request.hostName},</p>
-        <p style="margin:0 0 12px"><strong>${request.workshopName}</strong> is now published on <strong>${event.title}</strong> and visitors can book it.</p>`,
+      bodyHtml:
+        p(`Hi ${escapeEmailHtml(request.hostName)},`) +
+        p(
+          `${strong(request.workshopName)} is now published on ${strong(
+            event.title,
+          )} and visitors can book it.`,
+        ),
     });
 
     this.logger.log(`Workshop request ${request._id} finalized and published`);
@@ -455,42 +510,62 @@ export class WorkshopRequestsService {
 
   // ============ EMAIL / WHATSAPP HELPERS ============
 
-  private async senderConfigFor(organizerId: any) {
+  // The organizer's custom sender config, plus the name and address a
+  // host-facing email is signed with and points questions to.
+  private async senderFor(organizerId: any): Promise<{
+    senderConfig?: any;
+    name?: string;
+    email?: string;
+  }> {
     try {
-      const org = await this.organizerModel
+      const org: any = await this.organizerModel
         .findById(organizerId)
-        .select("emailConfig")
+        .select("emailConfig organizationName name email")
         .lean();
-      return (org as any)?.emailConfig;
+      return {
+        senderConfig: org?.emailConfig,
+        name: org?.organizationName || org?.name,
+        email: org?.email,
+      };
     } catch {
-      return undefined;
+      return {};
     }
   }
 
+  // Host-facing emails go out on the organizer's behalf — signed by them, with
+  // the footer's help link pointing at their address. The organizer's own
+  // notifications come from the platform.
   private async sendWorkshopEmail(opts: {
     to?: string;
     organizerId: any;
+    audience: "host" | "organizer";
     subject: string;
+    preheading?: string;
+    preview?: string;
     heading: string;
     bodyHtml: string;
-    accent?: string;
   }) {
     if (!opts.to) return false;
     try {
-      const senderConfig = await this.senderConfigFor(opts.organizerId);
+      const sender = await this.senderFor(opts.organizerId);
+      const onBehalf = opts.audience === "host";
       await this.mailService.sendEmail({
         to: opts.to,
         subject: opts.subject,
-        html: `
-      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-        <div style="background:${opts.accent || "linear-gradient(135deg,#6366f1,#4f46e5)"};color:#fff;padding:24px;text-align:center">
-          <h1 style="margin:0;font-size:20px">${opts.heading}</h1>
-        </div>
-        <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.7">
-          ${opts.bodyHtml}
-        </div>
-      </div>`,
-        senderConfig,
+        html: brandedEmail({
+          preheading: opts.preheading,
+          preview: opts.preview,
+          body: heading(opts.heading) + opts.bodyHtml,
+          organizer: onBehalf ? sender.name : undefined,
+          contact:
+            onBehalf && sender.email
+              ? {
+                  label: `contact ${sender.name || "the organizer"}`,
+                  href: `mailto:${sender.email}`,
+                }
+              : undefined,
+        }),
+        senderConfig: sender.senderConfig,
       });
       return true;
     } catch (err) {
