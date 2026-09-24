@@ -2,12 +2,15 @@ import { forwardRef } from "react";
 import VenueAnnotationLayer, {
   type VenueAnnotation,
 } from "./VenueAnnotationLayer";
+import { FacilityCourtMarkings } from "@/lib/facilityCourtLines";
 
 /**
  * Read-only, eventfront-style render of a single venue layout. Used by the
  * designer's "Preview" dialog (and its PDF export) so the organizer sees the
  * venue the way visitors will — cropped to the visible area, spaces in their
- * solid colours with bold labels, round tables / doors / annotations included.
+ * solid colours with bold labels, round tables / doors / annotations included,
+ * plus scheduled (bookable-by-slot) spaces and speaker zones so nothing the
+ * organizer placed on the layout is silently missing from the preview.
  *
  * Coordinates are logical units; `scale` converts to display px (same basis
  * as the eventfront map, which renders at 1px per logical unit before its own
@@ -23,6 +26,11 @@ interface Props {
   seats?: any[];
   /** Row declarations (label/tier/color) the seats above reference. */
   seatRowTemplates?: any[];
+  /** Scheduled spaces (courts/rooms booked by time slot) placed on this
+   *  layout — optional, older callers omit these. */
+  scheduledSpaces?: any[];
+  /** Speaker zones placed on this layout — optional, older callers omit these. */
+  speakerZones?: any[];
   /** Display px per logical unit. */
   scale?: number;
 }
@@ -36,6 +44,8 @@ const VenuePreview = forwardRef<HTMLDivElement, Props>(function VenuePreview(
     annotations,
     seats = [],
     seatRowTemplates = [],
+    scheduledSpaces = [],
+    speakerZones = [],
     scale = 1,
   },
   ref,
@@ -228,6 +238,144 @@ const VenuePreview = forwardRef<HTMLDivElement, Props>(function VenuePreview(
             </div>
           );
         })}
+
+      {/* Scheduled spaces — mirrors the eventfront look (solid colour, court
+          markings, white name + facility type). Footprint comes from the
+          shape: circles use their diameter, rectangles width × height. */}
+      {scheduledSpaces
+        .filter((space) => inCrop(space.x, space.y))
+        .map((space) => {
+          const isCircle = space.shape === "Circle";
+          const w = (isCircle ? space.diameter : space.width) || 100;
+          const h = (isCircle ? space.diameter : space.height) || 100;
+          return (
+            <div
+              key={`ss-${space.positionId}`}
+              style={{
+                position: "absolute",
+                left: (space.x || 0) * s,
+                top: (space.y || 0) * s,
+                width: w * s,
+                height: h * s,
+                transform: `rotate(${space.rotation || 0}deg)`,
+                transformOrigin: "center center",
+                backgroundColor: space.color || "#3b82f6",
+                border: `2px solid ${space.color ? space.color + "88" : "#1d4ed8"}`,
+                borderRadius: isCircle ? "50%" : 6,
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+                zIndex: 5,
+              }}
+            >
+              {/* Court/field lines so the box reads as the chosen facility.
+                  The idSeed becomes an SVG clipPath id, and this preview can
+                  be mounted alongside the designer canvas (which seeds with
+                  the bare positionId), so prefix it to keep the ids unique. */}
+              <FacilityCourtMarkings
+                facilityType={space.facilityType}
+                isCircle={isCircle}
+                idSeed={`pv-${space.positionId}`}
+              />
+              <div
+                style={{
+                  position: "relative",
+                  zIndex: 1,
+                  textAlign: "center",
+                  padding: 1,
+                  overflow: "hidden",
+                  maxWidth: "100%",
+                }}
+              >
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: Math.max(6, 9 * s),
+                    lineHeight: 1.1,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {space.name}
+                </div>
+                <div
+                  style={{
+                    fontSize: Math.max(5, 7 * s),
+                    opacity: 0.9,
+                    lineHeight: 1.1,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {space.facilityType}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+      {/* Speaker zones — same purple gradient block as the designer canvas,
+          labelled with the zone name and its time range when one is set. */}
+      {speakerZones
+        .filter((zone) => inCrop(zone.x, zone.y))
+        .map((zone) => (
+          <div
+            key={`sz-${zone.positionId}`}
+            style={{
+              position: "absolute",
+              left: (zone.x || 0) * s,
+              top: (zone.y || 0) * s,
+              width: (zone.width || 0) * s,
+              height: (zone.height || 0) * s,
+              background: "linear-gradient(135deg, #a855f7, #8b5cf6)",
+              border: "2px solid #7c3aed",
+              borderRadius: 10,
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: Math.max(6, 9 * s),
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              overflow: "hidden",
+              zIndex: 5,
+            }}
+          >
+            <div
+              style={{
+                textAlign: "center",
+                padding: 1,
+                overflow: "hidden",
+                maxWidth: "100%",
+              }}
+            >
+              <div
+                style={{
+                  lineHeight: 1.1,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {zone.name}
+              </div>
+              <div
+                style={{
+                  fontSize: Math.max(5, 7 * s),
+                  opacity: 0.85,
+                  lineHeight: 1.1,
+                }}
+              >
+                {zone.startTime
+                  ? `${zone.startTime} - ${zone.endTime}`
+                  : "SPEAKER ZONE"}
+              </div>
+            </div>
+          </div>
+        ))}
 
       {/* Doors */}
       {doors

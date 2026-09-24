@@ -306,9 +306,28 @@ export class OperatorsService {
         update.companyEmail = update.companyEmail.trim().toLowerCase();
       }
 
+      // The dashboard sends whatsAppNumber: "" when the operator has no
+      // number (so a bare country code like "+91" is never persisted).
+      // createByOrganizer omits the field entirely in that case, so mirror
+      // it here with $unset instead of storing an empty string — keeps the
+      // stored shape consistent and the de-dupe-by-number checks meaningful.
+      const unset: Record<string, 1> = {};
+      if (typeof update.whatsAppNumber === "string") {
+        const whatsApp = update.whatsAppNumber.trim();
+        if (whatsApp) {
+          update.whatsAppNumber = whatsApp;
+        } else {
+          delete update.whatsAppNumber;
+          unset.whatsAppNumber = 1;
+        }
+      }
+
       const operator = await this.operatorModel.findByIdAndUpdate(
         id,
-        { $set: update },
+        {
+          $set: update,
+          ...(Object.keys(unset).length ? { $unset: unset } : {}),
+        },
         { new: true, runValidators: true },
       );
 

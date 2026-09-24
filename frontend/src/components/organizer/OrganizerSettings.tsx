@@ -108,7 +108,9 @@ interface Operator {
   email: string;
   // Optional company/private email — progress emails go here too.
   companyEmail?: string;
-  whatsAppNumber: string;
+  // Optional — an operator saved with only a name + Gmail has no number at
+  // all (the backend omits the field rather than storing "").
+  whatsAppNumber?: string;
   organizerId?: string;
   accessTabs?: string[];
   // When false, this operator does not receive notification emails.
@@ -3348,26 +3350,34 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-semibold">{op.name}</p>
-                          <p className="text-sm text-muted-foreground flex items-center gap-1">
-                            <Phone className="w-3 h-3" />
-                            {op.whatsAppNumber}
-                          </p>
+                          {/* No number → no bare phone icon on the card. */}
+                          {!!op.whatsAppNumber?.trim() && (
+                            <p className="text-sm text-muted-foreground flex items-center gap-1">
+                              <Phone className="w-3 h-3" />
+                              {op.whatsAppNumber}
+                            </p>
+                          )}
                         </div>
                         <div className="flex items-center gap-2">
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              // Split stored number back into country code + local
+                              // Split stored number back into country code + local.
+                              // Operators saved with just name + Gmail have no
+                              // number at all; reading .startsWith off undefined
+                              // used to throw here, so the Edit dialog never
+                              // opened for them. Null-safe now.
+                              const stored = (op.whatsAppNumber ?? "").trim();
                               let splitCode = "+91";
-                              let splitLocal = op.whatsAppNumber;
-                              for (const c of countries) {
-                                if (op.whatsAppNumber.startsWith(c.dialCode)) {
-                                  splitCode = c.dialCode;
-                                  splitLocal = op.whatsAppNumber.slice(
-                                    c.dialCode.length,
-                                  );
-                                  break;
+                              let splitLocal = stored;
+                              if (stored) {
+                                for (const c of countries) {
+                                  if (stored.startsWith(c.dialCode)) {
+                                    splitCode = c.dialCode;
+                                    splitLocal = stored.slice(c.dialCode.length);
+                                    break;
+                                  }
                                 }
                               }
                               setOperatorForm({
