@@ -22,6 +22,17 @@ import * as QRCode from "qrcode";
 import * as fs from "fs";
 import * as path from "path";
 import { MailService } from "../roles/mail.service";
+import { emailBrand } from "../../common/email/email-brand";
+import {
+  brandedEmail,
+  details,
+  escapeEmailHtml,
+  heading,
+  image,
+  note,
+  p,
+  subheading,
+} from "../../common/email/email-layout";
 import { OtpService } from "../otp/otp.service";
 import * as puppeteer from "puppeteer";
 import { User } from "../users/schemas/user.schema";
@@ -139,7 +150,7 @@ export class TicketsService {
       // 3. Generate secure QR payload
       const qrPayload = {
         warning:
-          "❌ Normal scanners not allowed. Please use the Eventsh app to scan this ticket.",
+          "❌ Normal scanners not allowed. Please use the event's check-in app to scan this ticket.",
         type: "eventsh-ticket",
         ticketId: createTicketDto.ticketId,
         eventId: createTicketDto.eventId,
@@ -158,11 +169,11 @@ export class TicketsService {
       const organizer = await this.organizerModel.findById(createTicketDto.organizerId);
       const country = organizer?.country || "IN";
       // Organization name brands the ticket/receipt (top of the PDF/email);
-      // "Powered by EventSH" sits at the bottom.
+      // the instance's brand footer sits at the bottom.
       const orgName =
         (organizer as any)?.organizationName ||
         (organizer as any)?.name ||
-        "EventSH";
+        emailBrand().name;
 
       // 3.6 Operator referral (shared event link ?ref=). Unknown/disabled
       // codes resolve to null and are silently dropped — never saved raw.
@@ -251,9 +262,10 @@ export class TicketsService {
     }
   }
 
-  // Ticket type strings (organizer tier names, seat row/seat names) flow
-  // straight into the PDF's HTML — escape them so an odd name can't break
-  // the markup or inject anything into a document handed to a third party.
+  // Ticket type strings (organizer tier names, seat row/seat names) — and the
+  // buyer/organizer-supplied names, title and venue — flow straight into the
+  // PDF's HTML: escape them so an odd name can't break the markup or inject
+  // anything into a document handed to a third party.
   private escapeHtml(value: unknown): string {
     return String(value ?? "").replace(/[&<>"']/g, (c) => {
       switch (c) {
@@ -269,11 +281,19 @@ export class TicketsService {
   // --- Puppeteer PDF Generation ---
   private generateTicketHTML(ticket: Ticket, qrBase64: string, country?: string, orgName?: string): string {
     const eventDate = new Date(ticket.eventDate).toLocaleDateString();
+    const brand = emailBrand();
+    const brandName = this.escapeHtml(brand.name);
+    // The platform brand signs its organizers' tickets "Powered by EventSH"; a
+    // white-label brand is the organizer on its own instance, so it just names
+    // itself and its site.
+    const footer = brand.poweredBy
+      ? `Powered by ${brandName}`
+      : `${brandName} &middot; ${this.escapeHtml(brand.siteUrl.replace(/^https?:\/\//, ""))}`;
     return `<!DOCTYPE html>
     <html lang="en">
     <head>
       <meta charset="UTF-8">
-      <title>Eventsh Ticket</title>
+      <title>${brandName} Ticket</title>
       <style>
         /* No external @import: fetching Google Fonts made page.setContent hang
            on networkidle0 in production (blocked/slow outbound), so ticket PDFs
@@ -299,17 +319,17 @@ export class TicketsService {
     <body>
       <div class="container">
         <div class="header">
-          <h1>${orgName || "EventSH"}</h1>
-          <div class="subtitle">${ticket.eventTitle}</div>
+          <h1>${orgName ? this.escapeHtml(orgName) : brandName}</h1>
+          <div class="subtitle">${this.escapeHtml(ticket.eventTitle)}</div>
         </div>
         <div class="details">
           <div class="detailsTitle">Ticket Details</div>
           <div class="info">
-            <p><span class="emoji"></span><span class="bold">Ticket ID:</span> ${ticket.ticketId}</p>
-            <p><span class="emoji"></span><span class="bold">Attendee:</span> ${ticket.customerName}</p>
+            <p><span class="emoji"></span><span class="bold">Ticket ID:</span> ${this.escapeHtml(ticket.ticketId)}</p>
+            <p><span class="emoji"></span><span class="bold">Attendee:</span> ${this.escapeHtml(ticket.customerName)}</p>
             <p><span class="emoji"></span><span class="bold">Date:</span> ${eventDate}</p>
-            <p><span class="emoji"></span><span class="bold">Time:</span> ${ticket.eventTime || "N/A"}</p>
-            <p><span class="emoji"></span><span class="bold">Venue:</span> ${ticket.eventVenue || "N/A"}</p>
+            <p><span class="emoji"></span><span class="bold">Time:</span> ${this.escapeHtml(ticket.eventTime || "N/A")}</p>
+            <p><span class="emoji"></span><span class="bold">Venue:</span> ${this.escapeHtml(ticket.eventVenue || "N/A")}</p>
             <p><span class="emoji"></span><span class="bold">Total:</span> ${formatCurrency(ticket.totalAmount || 0, country)}</p>
           </div>
           <div class="ticket-breakdown">
@@ -329,10 +349,10 @@ export class TicketsService {
           </div>
           <div class="info-warning">
             <span class="emoji">⚠️</span>
-            <span>This QR code can ONLY be scanned using the official Eventsh app. Normal camera scanners will not work.</span>
+            <span>Only the event team's check-in scanner can read this QR code — a normal phone camera will not open it.</span>
           </div>
         </div>
-        <div class="footer">Powered by EventSH</div>
+        <div class="footer">${footer}</div>
       </div>
     </body>
     </html>`;
@@ -413,44 +433,45 @@ Thank you for choosing Eventsh! 🎊`;
   ): Promise<void> {
     try {
       const eventDate = new Date(ticket.eventDate).toLocaleDateString();
-      const html = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
-          <div style="background: linear-gradient(135deg, #3b82f6, #6366f1); color: white; padding: 30px; text-align: center;">
-            <h1 style="margin: 0; font-size: 24px;">${orgName || "EventSH"}</h1>
-            <p style="margin: 8px 0 0 0; opacity: 0.9;">${ticket.eventTitle}</p>
-          </div>
-          <div style="padding: 25px;">
-            <h2 style="color: #1e293b; font-size: 18px; margin-bottom: 20px;">Ticket Details</h2>
-            <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-              <p><strong>🎫 Ticket ID:</strong> ${ticket.ticketId}</p>
-              <p><strong>👤 Attendee:</strong> ${ticket.customerName}</p>
-              <p><strong>📅 Date:</strong> ${eventDate}</p>
-              <p><strong>🕒 Time:</strong> ${ticket.eventTime || "N/A"}</p>
-              <p><strong>📍 Venue:</strong> ${ticket.eventVenue || "N/A"}</p>
-              <p><strong>💰 Total Amount:</strong> ${formatCurrency(ticket.totalAmount || 0, country)}</p>
-            </div>
-            <div style="text-align: center; margin: 25px 0;">
-              <p style="margin-bottom: 15px; font-weight: 600; color: #1e293b;">Scan at Event Entrance</p>
-              <img src="cid:qrcodeeventsh" alt="Ticket QR Code" style="width: 200px; height: 200px; border: 2px solid #e2e8f0; border-radius: 8px;" />
-            </div>
-            <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 15px; margin-top: 20px;">
-              <p style="margin: 0; color: #dc2626; font-size: 14px;">
-                ⚠️ <strong>Important:</strong> This QR code can ONLY be scanned using the official Eventsh app.<br>
-                Normal camera scanners will not work.
-              </p>
-            </div>
-          </div>
-          <div style="background: #f1f5f9; padding: 15px; text-align: center; font-size: 12px; color: #64748b;">
-            <p style="margin: 0;">Powered by EventSH</p>
-          </div>
-        </div>`;
+      const brand = emailBrand();
+      // orgName falls back to the brand's own name when the organizer has
+      // none; the brand frame then speaks for itself rather than "on behalf
+      // of" itself.
+      const organizer = orgName && orgName !== brand.name ? orgName : undefined;
+      const html = brandedEmail({
+        preheading: "Your ticket",
+        preview: `Your ticket for ${ticket.eventTitle} — show the QR code at the event entrance.`,
+        organizer,
+        body: [
+          heading(ticket.eventTitle),
+          p(
+            `Hi ${escapeEmailHtml(ticket.customerName)}, here is your ticket. Show the QR code below at the ` +
+              `event entrance — the full ticket is also attached as a PDF.`,
+          ),
+          subheading("Ticket Details"),
+          details([
+            ["Ticket ID", escapeEmailHtml(ticket.ticketId)],
+            ["Attendee", escapeEmailHtml(ticket.customerName)],
+            ["Date", escapeEmailHtml(eventDate)],
+            ["Time", escapeEmailHtml(ticket.eventTime || "N/A")],
+            ["Venue", escapeEmailHtml(ticket.eventVenue || "N/A")],
+            ["Total Amount", escapeEmailHtml(formatCurrency(ticket.totalAmount || 0, country))],
+          ]),
+          subheading("Scan at Event Entrance"),
+          image("cid:qrcodeeventsh", "Ticket QR Code", 200),
+          note(
+            `⚠️ <strong>Important:</strong> Only the event team's check-in scanner can read this QR code — a normal phone camera will not open it.`,
+            "danger",
+          ),
+        ].join(""),
+      });
       // Attach the full ticket PDF (same one sent over WhatsApp) so the
       // recipient can download / forward it. The inline PNG stays for the
       // QR preview inside the email body.
       const pdfBuffer = await this.generateTicketPDF(ticket, qrBase64, country, orgName);
       await this.mailService.sendEmail({
         to: ticket.customerEmail,
-        subject: `🎟️ Your Eventsh Ticket - ${ticket.eventTitle}`,
+        subject: `🎟️ Your ${brand.name} Ticket - ${ticket.eventTitle}`,
         html,
         senderConfig,
         attachments: [
@@ -461,7 +482,7 @@ Thank you for choosing Eventsh! 🎊`;
             cid: "qrcodeeventsh",
           },
           {
-            filename: `eventsh-ticket-${ticket.ticketId}.pdf`,
+            filename: `${brand.id}-ticket-${ticket.ticketId}.pdf`,
             content: pdfBuffer,
           },
         ],
@@ -817,7 +838,7 @@ Thank you for choosing Eventsh! 🎊`;
     const orgName =
       (organizer as any)?.organizationName ||
       (organizer as any)?.name ||
-      "EventSH";
+      emailBrand().name;
 
     // Reuse the stored QR so the re-sent ticket matches the original exactly.
     // Only regenerate when the ticket predates QR storage.

@@ -60,6 +60,13 @@ Fill in every value — see the comments in that file and in
   shares.
 - `ADMIN_EMAIL` / `SUPPORT_EMAIL` — where this tenant's internal
   notifications and support links go.
+- `EMAIL_BRAND` — which email template this instance uses (`eventsh`, the
+  default, or a customer brand such as `singadvisor`). It sets the sender
+  name, header, colours and footer of every email, and the brand name in
+  attached ticket/receipt PDFs. Leave it unset and the tenant's buyers get
+  EventSH-branded mail. `EMAIL_BRAND_SITE_URL` optionally overrides where the
+  email's wordmark and "contact us" link point. A new customer brand is one
+  entry in `backend/src/common/email/email-brand.ts`.
 - `GOOGLE_*` / `INSTAGRAM_*` / `RAZORPAY_*` — this tenant's own credentials
   (see above).
 - `WHATSAPP_ENABLED` / `WHATSAPP_OTP_ENABLED` — leave `false` unless this
@@ -120,9 +127,10 @@ docker compose -f docker-compose.whitelabel.yml --env-file .env.whitelabel up -d
 
 ## What's NOT covered by this deployment mode
 
-- **Cosmetic branding** — footer/legal-page/PDF-watermark/chatbot-persona
-  text still says "EventSH" today. Tracked as a separate follow-up pass, not
-  part of this Docker packaging work.
+- **Cosmetic branding outside email** — emails and the PDFs attached to them
+  follow `EMAIL_BRAND` (see step 2), but the web footer, legal pages,
+  WhatsApp message text and the chatbot persona still say "EventSH" today.
+  Tracked as a separate follow-up pass.
 - **Custom functionality beyond core eventsh** — handled case by case in the
   customer's own fork, not a built-in extensibility system.
 - **Fully custom frontend redesign for the event page (eventFront.tsx)** —

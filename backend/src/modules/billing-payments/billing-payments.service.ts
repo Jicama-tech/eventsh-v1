@@ -9,6 +9,14 @@ import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import { OtpService } from "../otp/otp.service";
 import { MailService } from "../roles/mail.service";
+import { emailBrand } from "../../common/email/email-brand";
+import {
+  brandedEmail,
+  details,
+  heading,
+  p,
+  strong,
+} from "../../common/email/email-layout";
 import * as fs from "fs";
 import * as path from "path";
 const PDFDocument = require("pdfkit");
@@ -578,7 +586,7 @@ export class BillingPaymentsService {
         .fillColor(C.accentInk)
         .font("Helvetica-Bold")
         .fontSize(22)
-        .text("EVENTSH", pageLeft + 18, 55);
+        .text(emailBrand().name.toUpperCase(), pageLeft + 18, 55);
       pdf
         .font("Helvetica")
         .fontSize(9)
@@ -864,30 +872,38 @@ export class BillingPaymentsService {
     if (!to) return { sent: false, error: "no_email" };
     try {
       const symbol = this.currencySymbol(doc.currency);
-      const html = `
-        <div style="font-family: sans-serif; max-width: 600px; color: #1f2937; line-height: 1.6;">
-          <h2>Event fee paid</h2>
-          <p>Hi ${this.escapeHtml(organizer.name || "there")},</p>
-          <p>Your event-fee payment for <strong>${this.escapeHtml(
-            event.title || "Event",
-          )}</strong> has been confirmed. PDF receipt attached.</p>
-          <table style="border-collapse: collapse; margin: 12px 0;">
-            <tr><td style="padding: 4px 12px; color: #6b7280;">Amount</td><td style="padding: 4px 12px; font-weight: 600;">${symbol}${doc.amount} ${doc.currency}</td></tr>
-            <tr><td style="padding: 4px 12px; color: #6b7280;">Booked stalls</td><td style="padding: 4px 12px; font-weight: 600;">${doc.stallsSold || 0}</td></tr>
-            <tr><td style="padding: 4px 12px; color: #6b7280;">Booked tables</td><td style="padding: 4px 12px; font-weight: 600;">${doc.tablesBooked || 0}</td></tr>
-            <tr><td style="padding: 4px 12px; color: #6b7280;">Booked chairs</td><td style="padding: 4px 12px; font-weight: 600;">${doc.chairsBooked || 0}</td></tr>
-            <tr><td style="padding: 4px 12px; color: #6b7280;">Speakers</td><td style="padding: 4px 12px; font-weight: 600;">${doc.speakersBooked || 0}</td></tr>
-            <tr><td style="padding: 4px 12px; color: #6b7280;">Reference</td><td style="padding: 4px 12px; font-family: monospace;">${this.escapeHtml(doc.ref)}</td></tr>
-          </table>
-          <p>— The Eventsh Team</p>
-        </div>`;
+      const brand = emailBrand();
+      const html = brandedEmail({
+        preheading: "Payment receipt",
+        preview: `Your event-fee payment for ${event.title || "Event"} has been confirmed.`,
+        body: [
+          heading("Event fee paid"),
+          p(`Hi ${this.escapeHtml(organizer.name || "there")},`),
+          p(
+            `Your event-fee payment for ${strong(
+              event.title || "Event",
+            )} has been confirmed. PDF receipt attached.`,
+          ),
+          details([
+            ["Amount", `${symbol}${doc.amount} ${doc.currency}`],
+            ["Booked stalls", String(doc.stallsSold || 0)],
+            ["Booked tables", String(doc.tablesBooked || 0)],
+            ["Booked chairs", String(doc.chairsBooked || 0)],
+            ["Speakers", String(doc.speakersBooked || 0)],
+            [
+              "Reference",
+              `<span style="font-family:'Courier New',Courier,monospace;">${this.escapeHtml(doc.ref)}</span>`,
+            ],
+          ]),
+        ].join(""),
+      });
       await this.mailService.sendEmail({
         to,
-        subject: `Eventsh — Event fee paid (${doc.ref})`,
+        subject: `${brand.name} — Event fee paid (${doc.ref})`,
         html,
         attachments: [
           {
-            filename: `eventsh-event-receipt-${doc.ref}.pdf`,
+            filename: `${brand.id}-event-receipt-${doc.ref}.pdf`,
             content: fs.readFileSync(pdfPath),
           },
         ],

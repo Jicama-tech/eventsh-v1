@@ -14,6 +14,15 @@ import {
 } from "./entities/sponsor-request.entity";
 import { Sponsor, SponsorDocument } from "./schemas/sponsor.schema";
 import { MailService } from "../roles/mail.service";
+import {
+  brandedEmail,
+  button,
+  escapeEmailHtml,
+  heading,
+  note as callout,
+  p,
+  strong,
+} from "../../common/email/email-layout";
 
 // pdfkit ships CommonJS only — same require style as memberships/billing.
 const PDFDocument = require("pdfkit");
@@ -740,19 +749,16 @@ export class SponsorsService {
     const dashboardUrl = `${fe}/organizer/login?redirect=${encodeURIComponent(
       "/organizer-dashboard",
     )}`;
-    const html = `
-      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-        <div style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;padding:24px;text-align:center">
-          <h1 style="margin:0;font-size:20px">${decision.heading}</h1>
-          <p style="margin:6px 0 0;opacity:.9">${(event as any)?.title || "Your event"}</p>
-        </div>
-        <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-          <p>${decision.summary}</p>
-          <div style="text-align:center;margin:22px 0 6px">
-            <a href="${dashboardUrl}" style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px">Open Sponsors dashboard</a>
-          </div>
-        </div>
-      </div>`;
+    // The summary carries the applicant's company name as typed, so escape it.
+    const html = brandedEmail({
+      preheading: "Sponsorship",
+      preview: decision.summary,
+      body: `
+        ${heading(decision.heading)}
+        ${p(strong((event as any)?.title || "Your event"))}
+        ${p(escapeEmailHtml(decision.summary))}
+        ${button("Open Sponsors dashboard", dashboardUrl)}`,
+    });
 
     await Promise.all(
       recipients.map((to) =>
@@ -813,23 +819,31 @@ export class SponsorsService {
     };
     const decision = DECISIONS[req.status] || DECISIONS.Cancelled;
 
-    const html = `
-      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-        <div style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;padding:24px;text-align:center">
-          <h1 style="margin:0;font-size:20px">${decision.heading}</h1>
-          <p style="margin:6px 0 0;opacity:.9">${(event as any)?.title || "the event"}</p>
-        </div>
-        <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-          <p>${decision.summary}</p>
-          ${
-            note
-              ? `<div style="margin-top:12px;padding:12px;background:#f8fafc;border-left:4px solid #6366f1;border-radius:4px"><b>Note from the organizer:</b><br/>${note
-                  .replace(/</g, "&lt;")
-                  .replace(/\n/g, "<br/>")}</div>`
-              : ""
-          }
-        </div>
-      </div>`;
+    // Sent on the organizer's behalf: they sign it, and a question about the
+    // decision goes to them rather than to a no-reply inbox.
+    const orgEmail = String((organizer as any)?.email || "").trim();
+    const html = brandedEmail({
+      preheading: "Sponsorship",
+      preview: decision.summary,
+      body: `
+        ${heading(decision.heading)}
+        ${p(strong((event as any)?.title || "the event"))}
+        ${p(escapeEmailHtml(decision.summary))}
+        ${
+          note
+            ? callout(
+                `<strong>Note from the organizer:</strong><br/>${escapeEmailHtml(
+                  note,
+                ).replace(/\n/g, "<br/>")}`,
+              )
+            : ""
+        }`,
+      organizer:
+        (organizer as any)?.organizationName || (organizer as any)?.name,
+      contact: orgEmail
+        ? { label: "email the organizer", href: `mailto:${orgEmail}` }
+        : undefined,
+    });
 
     await Promise.all(
       to.map((email) =>

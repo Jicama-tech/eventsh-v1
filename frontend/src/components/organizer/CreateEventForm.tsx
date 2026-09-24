@@ -8538,9 +8538,19 @@ const VenueDesigner = ({
                   className="mx-auto w-full max-w-5xl flex-1 min-h-0 overflow-auto rounded-xl bg-background p-4"
                   onClick={(e) => e.stopPropagation()}
                 >
+                  {/* Honest caption: spaces, tables, seats, doors, annotations
+                      and scheduled spaces render on the public event page,
+                      but speaker zones are an organizer-side planning aid the
+                      event page doesn't draw — say so instead of implying 1:1
+                      parity (the preview still shows them so nothing placed
+                      on the layout goes missing here or in the PDF). */}
                   <p className="mb-3 text-xs text-muted-foreground">
                     This is how the venue layout will appear on the event page
-                    {venueConfig.cropped ? " (cropped area)" : ""}.
+                    {venueConfig.cropped ? " (cropped area)" : ""}
+                    {currentSpeakerZones.length > 0
+                      ? ". Speaker zones are shown here for your reference only — visitors don't see them on the event page"
+                      : ""}
+                    .
                   </p>
                   <VenuePreview
                     ref={previewRef}
@@ -8551,6 +8561,8 @@ const VenueDesigner = ({
                     annotations={currentAnnotations}
                     seats={currentSeats}
                     seatRowTemplates={seatRowTemplates}
+                    scheduledSpaces={currentScheduledSpaces}
+                    speakerZones={currentSpeakerZones}
                     scale={previewScale}
                   />
                 </div>

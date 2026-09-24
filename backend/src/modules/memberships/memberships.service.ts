@@ -37,6 +37,17 @@ import {
   RejectMembershipDto,
 } from "./dto/exhibitor-membership.dto";
 import { MailService } from "../roles/mail.service";
+import { emailBrand } from "../../common/email/email-brand";
+import {
+  brandedEmail,
+  bullets,
+  details,
+  heading,
+  link,
+  p,
+  small,
+  subheading,
+} from "../../common/email/email-layout";
 
 const COUNTRY_CURRENCY: Record<string, string> = {
   IN: "INR",
@@ -724,7 +735,7 @@ export class MembershipsService {
 
     // Build the PDF first so it's reusable across channels. Use the
     // membership id in the filename so the recipient can correlate.
-    const fileName = `eventsh-membership-${String(membership._id).slice(-8)}.pdf`;
+    const fileName = `${emailBrand().id}-membership-${String(membership._id).slice(-8)}.pdf`;
     const filePath = await this.writeMembershipReceiptPdf(
       org as any,
       plan,
@@ -765,26 +776,48 @@ export class MembershipsService {
 
     // ── Email channel ───────────────────────────────────────────────
     if (emailRecipients) {
-      const html = `
-        <div style="font-family:Inter,Arial,sans-serif;color:#111">
-          <h2 style="margin:0 0 8px">Welcome to ${escapeHtml(plan.name)} membership at ${escapeHtml(orgName)}</h2>
-          <p>Your membership is now active. The receipt is attached as a PDF.</p>
-          <table style="border-collapse:collapse;margin:12px 0">
-            <tr><td style="padding:4px 12px 4px 0;color:#666">Plan</td><td><b>${escapeHtml(plan.name)}</b></td></tr>
-            <tr><td style="padding:4px 12px 4px 0;color:#666">Valid till</td><td>${escapeHtml(validTill)}</td></tr>
-            <tr><td style="padding:4px 12px 4px 0;color:#666">Amount paid</td><td>${escapeHtml(String(membership.amountPaid))} ${escapeHtml(membership.currency)}</td></tr>
-            <tr><td style="padding:4px 12px 4px 0;color:#666">Transaction</td><td>${escapeHtml(membership.paymentRef || "—")}</td></tr>
-          </table>
-          ${
-            perks.length
-              ? `<h3 style="margin:16px 0 6px">Member perks</h3><ul style="padding-left:20px">${perks
-                  .map((p: string) => `<li>${escapeHtml(p)}</li>`)
-                  .join("")}</ul>`
-              : ""
-          }
-          <p style="color:#666;font-size:12px;margin-top:20px">If you have any questions, reply to this email and we'll help you out.</p>
-        </div>
-      `;
+      // The organizer sends this one (their senderConfig), so they sign it,
+      // and questions go to their business email — the footer says not to
+      // reply, so the old "reply to this email" line points there instead.
+      // Same name the PDF's "Issued by" line uses.
+      const organizerName: string | undefined =
+        (org as any)?.organizationName || (org as any)?.name || undefined;
+      const organizerEmail = String((org as any)?.businessEmail || "").trim();
+      const html = brandedEmail({
+        preheading: "Membership confirmed",
+        preview: `Your ${plan.name} membership at ${orgName} is now active.`,
+        organizer: organizerName,
+        contact: organizerEmail
+          ? {
+              label: `contact ${organizerName || "the organizer"}`,
+              href: `mailto:${organizerEmail}`,
+            }
+          : undefined,
+        body: [
+          heading(`Welcome to ${plan.name} membership at ${orgName}`),
+          p("Your membership is now active. The receipt is attached as a PDF."),
+          details([
+            ["Plan", escapeHtml(plan.name)],
+            ["Valid till", escapeHtml(validTill)],
+            [
+              "Amount paid",
+              `${escapeHtml(String(membership.amountPaid))} ${escapeHtml(membership.currency)}`,
+            ],
+            ["Transaction", escapeHtml(membership.paymentRef || "—")],
+          ]),
+          perks.length
+            ? subheading("Member perks") +
+              bullets(perks.map((perk: string) => escapeHtml(perk)))
+            : "",
+          organizerEmail
+            ? small(
+                `If you have any questions, email ${escapeHtml(
+                  organizerName || "the organizer",
+                )} at ${link(organizerEmail, `mailto:${organizerEmail}`)} and they'll help you out.`,
+              )
+            : "",
+        ].join(""),
+      });
       try {
         const buffer = await fs.promises.readFile(filePath);
         await this.mailService.sendEmail({
@@ -871,7 +904,7 @@ export class MembershipsService {
         .fillColor(C.accentInk)
         .font("Helvetica-Bold")
         .fontSize(22)
-        .text("EVENTSH", pageLeft + 18, 55);
+        .text(emailBrand().name.toUpperCase(), pageLeft + 18, 55);
       pdf
         .font("Helvetica")
         .fontSize(9)

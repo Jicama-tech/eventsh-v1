@@ -6052,7 +6052,56 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // The link lives next to "Become a member" inside the stall card. When the
   // event has no stalls that card never renders, so fall back to a card of
   // its own rather than leaving sponsors with no way in.
-  const showStallCard = !!venueTables && Object.keys(venueTables).length > 0;
+  //
+  // "Has stalls" means at least one PLACED space is actually bookable. A
+  // space with forSale === false is a layout-only reference (stage, buffet,
+  // an already-taken anchor tenant) — there is nothing to book, so an event
+  // whose layout holds only such spaces must not invite exhibitors.
+  //
+  // Sellability is read from BOTH the placed row and its source template
+  // (matched by the template `id` every placed row carries). The organizer
+  // form snapshots forSale onto the row at placement time and never syncs
+  // it back when the template is later flipped to "Not for sale", so the
+  // row alone can be stale — while the stall form's "Preferred Space Type"
+  // list and the backend chatbot both go by the template. Consulting both
+  // keeps the card from inviting exhibitors to book a type they can't pick.
+  const notForSaleTemplateIds = new Set<string>(
+    (tableTemplates || [])
+      .filter((t: any) => t?.forSale === false && t?.id != null)
+      .map((t: any) => String(t.id)),
+  );
+  const isBookableSpace = (t: any) =>
+    t?.forSale !== false && !notForSaleTemplateIds.has(String(t?.id));
+
+  // Only layouts the visitor can actually reach count. The venue switcher
+  // and the booking dialog key off venueConfig ids (see layoutIds /
+  // currentLayoutId below), so a venueTables key with no venueConfig entry
+  // is an orphan from a deleted hall — the organizer form prunes the config
+  // but not the placed rows — and its spaces are unreachable. Unpublished
+  // halls are hidden from the switcher too (publishedVenueCount below).
+  // Only when venueConfig carries no ids at all (true legacy single-hall
+  // data, where the page falls back to the "default" key) does every key
+  // count.
+  const visibleLayoutIds = new Set<string>(
+    (venueConfig || [])
+      .filter((v: any) => v?.published !== false && v?.id != null)
+      .map((v: any) => String(v.id)),
+  );
+  const hasLayoutIds = (venueConfig || []).some((v: any) => v?.id != null);
+  // Legacy events store venueTables as a flat array rather than a
+  // Record<layoutId, Table[]> (the backend still tolerates both; see the
+  // flat() helper in buildEventChatbotGreeting). A flat array has no
+  // per-layout keying to gate on, so it is treated as one reachable layout.
+  const venueTablesIsFlat = Array.isArray(venueTables);
+  const layoutEntries: [string, any][] = venueTablesIsFlat
+    ? [["default", venueTables]]
+    : Object.entries(venueTables || {});
+  const showStallCard = layoutEntries.some(
+    ([layoutId, arr]) =>
+      (venueTablesIsFlat || !hasLayoutIds || visibleLayoutIds.has(layoutId)) &&
+      Array.isArray(arr) &&
+      arr.some(isBookableSpace),
+  );
 
   // Jump to a bottom tab section from an info card. Optionally expands the
   // venue map. Scroll is deferred so the (lazily-mounted) tab content exists.
@@ -9224,8 +9273,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               )}
               </div>
 
-              {/* ── Exhibitor Card — only if event has stall spaces ── */}
-              {venueTables && Object.keys(venueTables).length > 0 && (
+              {/* ── Exhibitor Card — only if the event has spaces for sale
+                     (see showStallCard: not-for-sale / unpublished spaces
+                     are layout references, nothing to book). ── */}
+              {showStallCard && (
                 <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                   <p className="text-gray-700 font-semibold text-sm mb-1">
                     Book a Stall

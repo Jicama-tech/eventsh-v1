@@ -41,6 +41,24 @@ import { OperatorsService } from "../operators/operators.service";
 import { JwtService } from "@nestjs/jwt";
 import { formatMoney } from "../../common/currency.util";
 import { omitReferralFields } from "../../common/referral.util";
+import { emailBrand } from "../../common/email/email-brand";
+import {
+  brandedEmail,
+  button,
+  detail,
+  details,
+  escapeEmailHtml,
+  heading,
+  image,
+  link,
+  p,
+  small,
+  steps,
+  strong,
+  // Aliased: several methods here already have a local `note` (the
+  // organizer's note), which would shadow the helper.
+  note as callout,
+} from "../../common/email/email-layout";
 
 // Parse a JSON-encoded string[] (multipart sends arrays as a string). Falls
 // back to a single legacy value when the array form isn't present, so older
@@ -788,31 +806,38 @@ export class StallsService {
           const tableNames = selectDto.selectedTables
             .map((t) => t.tableName)
             .join(", ");
-          const html = `
-            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-              <div style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:24px;text-align:center">
-                <h1 style="margin:0;font-size:20px">Booking Received ✅</h1>
-                <p style="margin:6px 0 0;opacity:.9">${event.title}</p>
-              </div>
-              <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-                <p>Hi ${vendor?.name || "there"},</p>
-                <p>Your booking for <strong>${event.title}</strong> has been
-                  <strong>received</strong> and your payment details have been
-                  submitted.</p>
-                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin:14px 0">
-                  <p style="margin:0 0 6px"><strong>Spaces:</strong> ${tableNames || "—"}</p>
-                  <p style="margin:0 0 6px"><strong>Grand Total:</strong> ${formatMoney(updatedStall.grandTotal, orgCountry)}</p>
-                  <p style="margin:0"><strong>Status:</strong> Awaiting organizer payment approval</p>
-                </div>
-                <p><strong>What happens next?</strong> Please wait for the
-                  organizer to verify and approve your payment. Once approved,
-                  your <strong>stall ticket with the QR code</strong> will be
-                  emailed to you.</p>
-                <p style="color:#64748b;font-size:12px;margin-top:16px">You'll
-                  receive another email with your QR code as soon as the
-                  organizer releases it. Thank you!</p>
-              </div>
-            </div>`;
+          const html = brandedEmail({
+            preheading: "Booking received",
+            preview: `Your booking for ${event.title} is awaiting the organizer's payment approval.`,
+            body:
+              heading("Booking Received ✅") +
+              p(`Hi ${escapeEmailHtml(vendor?.name || "there")},`) +
+              p(
+                `Your booking for ${strong(event.title)} has been ${strong(
+                  "received",
+                )} and your payment details have been submitted.`,
+              ) +
+              details([
+                ["Spaces", escapeEmailHtml(tableNames || "—")],
+                [
+                  "Grand Total",
+                  escapeEmailHtml(
+                    formatMoney(updatedStall.grandTotal, orgCountry),
+                  ),
+                ],
+                ["Status", "Awaiting organizer payment approval"],
+              ]) +
+              p(
+                `${strong("What happens next?")} Please wait for the organizer to verify and approve your payment. Once approved, your ${strong(
+                  "stall ticket with the QR code",
+                )} will be emailed to you.`,
+              ) +
+              small(
+                "You'll receive another email with your QR code as soon as the organizer releases it. Thank you!",
+              ),
+            // Populated with name/email/organizationName just above.
+            ...this.vendorEmailFrame((updatedStall as any)?.organizerId),
+          });
           await this.mailService.sendEmail({
             to: vendorEmail,
             subject: `Booking received — awaiting payment approval for ${event.title}`,
@@ -1309,7 +1334,7 @@ export class StallsService {
       // ===== GENERATE SECURE QR PAYLOAD (Same as tickets.service.ts) =====
       const qrPayload = {
         warning:
-          "❌ Normal scanners not allowed. Please use the Eventsh app to scan this stall QR.",
+          "❌ Normal scanners not allowed. Please use the event's check-in app to scan this stall QR.",
         type: "eventsh-stall-checkin",
         stallId: stallId,
         shopkeeperId: (stall.shopkeeperId as any)._id.toString(),
@@ -1586,35 +1611,40 @@ export class StallsService {
         vendor?.name ||
         "there";
 
-      const html = `
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-          <div style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:24px;text-align:center">
-            <h1 style="margin:0;font-size:20px">⏳ More time to confirm your payment</h1>
-            <p style="margin:6px 0 0;opacity:.9">${event?.title || "Your event"}</p>
-          </div>
-          <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-            <p>Hi ${businessName},</p>
-            <p>Good news — the organizer has <strong>extended your payment
-              confirmation window by ${hoursAdded} hour${
+      const html = brandedEmail({
+        preheading: "Payment window extended",
+        preview: `You now have until ${deadlineStr} to confirm your payment.`,
+        body:
+          heading("⏳ More time to confirm your payment") +
+          p(`Hi ${escapeEmailHtml(businessName)},`) +
+          p(
+            `Good news — the organizer has ${strong(
+              `extended your payment confirmation window by ${hoursAdded} hour${
                 hoursAdded === 1 ? "" : "s"
-              }</strong>.</p>
-            <div style="border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;padding:16px;margin:16px 0;text-align:center">
-              <div style="font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#15803d">New confirmation deadline</div>
-              <div style="font-size:20px;font-weight:800;color:#16a34a;margin:6px 0">${deadlineStr}</div>
-              <div style="font-size:13px;color:#166534">You now have about <strong>${totalHoursLeft} hour${
-                totalHoursLeft === 1 ? "" : "s"
-              }</strong> remaining to confirm your payment.</div>
-            </div>
-            ${
-              note
-                ? `<div style="border-left:3px solid #16a34a;background:#f8fafc;padding:10px 14px;margin:14px 0">
-                     <p style="margin:0;color:#334155"><strong>Message from the organizer:</strong><br/>${note}</p>
-                   </div>`
-                : ""
-            }
-            <p style="color:#64748b;font-size:12px;margin-top:16px">Please make sure to connect with Organizer and Complete Payment (IF NOT DONE) before the new deadline so your space is secured.</p>
-          </div>
-        </div>`;
+              }`,
+            )} for ${strong(event?.title || "your event")}.`,
+          ) +
+          callout(
+            `${strong("New confirmation deadline")}<br />${escapeEmailHtml(
+              deadlineStr,
+            )}<br />You now have about ${strong(
+              `${totalHoursLeft} hour${totalHoursLeft === 1 ? "" : "s"}`,
+            )} remaining to confirm your payment.`,
+            "success",
+          ) +
+          (note
+            ? callout(
+                `${strong("Message from the organizer:")}<br />${escapeEmailHtml(
+                  note,
+                )}`,
+              )
+            : "") +
+          small(
+            "Please make sure to connect with Organizer and Complete Payment (IF NOT DONE) before the new deadline so your space is secured.",
+          ),
+        // startConfirmationTimer / extendConfirmationDeadline both populate it.
+        ...this.vendorEmailFrame(stall.organizerId),
+      });
 
       await this.mailService.sendEmail({
         to,
@@ -1842,6 +1872,8 @@ export class StallsService {
             heading: headingText,
             message,
             senderConfig: (organizerDoc as any)?.emailConfig,
+            // Heads and signs the ticket email (brandedEmail's organizer).
+            organizer: this.vendorEmailFrame(organizerDoc).organizer,
           },
         );
       } else if (vendorEmail) {
@@ -1850,15 +1882,21 @@ export class StallsService {
           subject: isReissue
             ? `Your stall ticket was updated for ${eventObj?.title || "Event"}`
             : `Your stall is confirmed for ${eventObj?.title || "Event"}`,
-          html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-              <div style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;padding:24px;text-align:center">
-                <h1 style="margin:0;font-size:20px">${headingText}</h1>
-              </div>
-              <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-                <p>${message.replace(/\*/g, "").replace(/\n/g, "<br/>")}</p>
-                <p style="color:#64748b;font-size:12px;margin-top:16px">Your ticket PDF will follow shortly.</p>
-              </div>
-            </div>`,
+          html: brandedEmail({
+            preheading: isReissue ? "Stall ticket updated" : "Stall confirmed",
+            body:
+              heading(headingText) +
+              // The WhatsApp-style summary carries vendor/event names as
+              // plain text — escape it before turning newlines into breaks.
+              p(
+                escapeEmailHtml(message.replace(/\*/g, "")).replace(
+                  /\n/g,
+                  "<br />",
+                ),
+              ) +
+              small("Your ticket PDF will follow shortly."),
+            ...this.vendorEmailFrame(organizerDoc),
+          }),
           senderConfig: (organizerDoc as any)?.emailConfig,
         });
       }
@@ -2135,7 +2173,7 @@ export class StallsService {
     // Re-issue the QR (ids unchanged; re-stamp issuedAt).
     const qrPayload = {
       warning:
-        "❌ Normal scanners not allowed. Please use the Eventsh app to scan this stall QR.",
+        "❌ Normal scanners not allowed. Please use the event's check-in app to scan this stall QR.",
       type: "eventsh-stall-checkin",
       stallId: String(stall._id),
       shopkeeperId: String(
@@ -2233,14 +2271,23 @@ export class StallsService {
         await this.mailService.sendEmail({
           to: orgEmail,
           subject: `Stall cancellation requested — ${eventObj?.title || "your event"}`,
-          html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-              <h2 style="color:#b45309">Cancellation requested</h2>
-              <p>A vendor has requested to cancel their stall for
-              <b>${eventObj?.title || "your event"}</b>.</p>
-              <p><b>Reason:</b> ${(reason || "—").replace(/</g, "&lt;")}</p>
-              <p>Open your dashboard to approve (frees the space, re-issues nothing,
-              and lets you add a refund note) or reject it.</p>
-            </div>`,
+          html: brandedEmail({
+            preheading: "Cancellation requested",
+            preview: `A vendor has requested to cancel their stall for ${
+              eventObj?.title || "your event"
+            }.`,
+            body:
+              heading("Cancellation requested") +
+              p(
+                `A vendor has requested to cancel their stall for ${strong(
+                  eventObj?.title || "your event",
+                )}.`,
+              ) +
+              detail("Reason:", escapeEmailHtml(reason || "—")) +
+              p(
+                "Open your dashboard to approve (frees the space, re-issues nothing, and lets you add a refund note) or reject it.",
+              ),
+          }),
         });
       }
     } catch (e) {
@@ -2313,16 +2360,28 @@ export class StallsService {
           await this.mailService.sendEmail({
             to: vendorEmail,
             subject: `Your stall booking was cancelled — ${eventObj?.title || "Event"}`,
-            html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-                <div style="background:#dc2626;color:#fff;padding:20px;text-align:center">
-                  <h1 style="margin:0;font-size:20px">Booking Cancelled</h1>
-                </div>
-                <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-                  <p>Your stall booking for <b>${eventObj?.title || "the event"}</b> has been cancelled and your space released.</p>
-                  <p>Your previous QR code is <b>no longer valid</b>.</p>
-                  ${note ? `<div style="margin-top:12px;padding:12px;background:#f8fafc;border-left:4px solid #dc2626;border-radius:4px"><b>Note from the organizer:</b><br/>${note.replace(/</g, "&lt;").replace(/\n/g, "<br/>")}</div>` : ""}
-                </div>
-              </div>`,
+            html: brandedEmail({
+              preheading: "Booking cancelled",
+              preview: `Your stall booking for ${
+                eventObj?.title || "the event"
+              } has been cancelled.`,
+              body:
+                heading("Booking Cancelled") +
+                p(
+                  `Your stall booking for ${strong(
+                    eventObj?.title || "the event",
+                  )} has been cancelled and your space released.`,
+                ) +
+                p(`Your previous QR code is ${strong("no longer valid")}.`) +
+                (note
+                  ? callout(
+                      `${strong("Note from the organizer:")}<br />${escapeEmailHtml(
+                        note,
+                      ).replace(/\n/g, "<br />")}`,
+                    )
+                  : ""),
+              ...this.vendorEmailFrame(organizerDoc),
+            }),
             senderConfig: (organizerDoc as any)?.emailConfig,
           });
         } catch (e) {
@@ -2377,15 +2436,27 @@ export class StallsService {
         await this.mailService.sendEmail({
           to: vendorEmail,
           subject: `Update on your stall cancellation request — ${eventObj?.title || "Event"}`,
-          html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-              <div style="background:#334155;color:#fff;padding:20px;text-align:center">
-                <h1 style="margin:0;font-size:20px">Cancellation Not Approved</h1>
-              </div>
-              <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-                <p>Your request to cancel your stall for <b>${eventObj?.title || "the event"}</b> was not approved. Your booking remains active.</p>
-                ${note ? `<div style="margin-top:12px;padding:12px;background:#f8fafc;border-left:4px solid #334155;border-radius:4px"><b>Note from the organizer:</b><br/>${note.replace(/</g, "&lt;").replace(/\n/g, "<br/>")}</div>` : ""}
-              </div>
-            </div>`,
+          html: brandedEmail({
+            preheading: "Cancellation request update",
+            preview: `Your request to cancel your stall for ${
+              eventObj?.title || "the event"
+            } was not approved.`,
+            body:
+              heading("Cancellation Not Approved") +
+              p(
+                `Your request to cancel your stall for ${strong(
+                  eventObj?.title || "the event",
+                )} was not approved. Your booking remains active.`,
+              ) +
+              (note
+                ? callout(
+                    `${strong("Note from the organizer:")}<br />${escapeEmailHtml(
+                      note,
+                    ).replace(/\n/g, "<br />")}`,
+                  )
+                : ""),
+            ...this.vendorEmailFrame(organizerDoc),
+          }),
           senderConfig: (organizerDoc as any)?.emailConfig,
         });
       } catch {
@@ -2455,6 +2526,10 @@ export class StallsService {
             organizer.whatsAppNumber
           }</span></div>`
         : "";
+
+    // The instance's brand (EMAIL_BRAND) — the ticket rides an email, so it
+    // must not name the platform on a white-label instance.
+    const brand = emailBrand();
 
     // Row helper — skips empty values so the PDF never shows "N/A" filler.
     const row = (label: string, value: any) =>
@@ -2583,7 +2658,7 @@ export class StallsService {
       <body>
         <div class="container">
           <div class="header">
-            <h1>${organizer.organizationName || organizer.name || "EventSH"} Stall Confirmation</h1>
+            <h1>${organizer.organizationName || organizer.name || brand.name} Stall Confirmation</h1>
             <p>Your stall has been successfully booked</p>
           </div>
 
@@ -2684,7 +2759,7 @@ export class StallsService {
             <img src="${qrBase64}" alt="Stall Entry QR Code">
           </div>
           <div class="warning">
-            ⚠️ <strong>Important:</strong> Use Official EventSH App to scan QR code, to Check-In and Check-Out.
+            ⚠️ <strong>Important:</strong> Only the event team's check-in scanner can read this QR code for Check-In and Check-Out — a normal phone camera will not open it.
           </div>
           `
               : `
@@ -2724,7 +2799,11 @@ export class StallsService {
           }
 
           <div class="footer">
-            Powered by EventSH
+            ${
+              brand.poweredBy
+                ? `Powered by ${escapeEmailHtml(brand.name)}`
+                : escapeEmailHtml(brand.name)
+            }
           </div>
         </div>
       </body>
@@ -2833,6 +2912,9 @@ export class StallsService {
           heading: "Your Stall Confirmation is Ready!",
           message,
           senderConfig: orgEmailCfg,
+          // Named only when the caller populated organizerId.
+          organizer: this.vendorEmailFrame((stall as any).organizerId)
+            .organizer,
         },
       );
     } catch (error) {
@@ -2872,7 +2954,7 @@ export class StallsService {
     }
 
     const qrPayload = {
-      warning: "❌ Normal scanners not allowed. Please use the Eventsh app.",
+      warning: "❌ Normal scanners not allowed. Please use the event's check-in app.",
       type: "eventsh-stall-checkin",
       stallId: String(stall._id),
       shopkeeperId: String(
@@ -3395,45 +3477,48 @@ export class StallsService {
         const senderConfig = await this.getOrganizerSenderConfig(
           stall.organizerId,
         );
-        const rows = isCheckIn
-          ? `<p style="margin:0"><strong>Check-in time:</strong> ${when}</p>`
-          : `<p style="margin:0"><strong>Check-out time:</strong> ${when}</p>` +
-            (durationMins !== null
-              ? `<p style="margin:6px 0 0"><strong>Duration:</strong> ${durationMins} minutes</p>`
-              : "");
+        // details() drops the Duration row when it is null, as the old
+        // template did by hand.
+        const rows = details(
+          isCheckIn
+            ? [
+                ["Event", eventTitleHtml],
+                ["Check-in time", escapeEmailHtml(when)],
+              ]
+            : [
+                ["Event", eventTitleHtml],
+                ["Check-out time", escapeEmailHtml(when)],
+                [
+                  "Duration",
+                  durationMins !== null ? `${durationMins} minutes` : null,
+                ],
+              ],
+        );
         const cta = feedbackLink
-          ? `<div style="text-align:center;margin:18px 0">
-               <a href="${feedbackLink}" style="display:inline-block;background:#16a34a;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600">Share your feedback</a>
-               <p style="color:#64748b;font-size:12px;margin:10px 0 0">${
-                 hasDeposit
-                   ? "Submit your feedback to release the security deposit refund."
-                   : "We would love to hear how it went."
-               }</p>
-             </div>`
+          ? button("Share your feedback", feedbackLink) +
+            small(
+              hasDeposit
+                ? "Submit your feedback to release the security deposit refund."
+                : "We would love to hear how it went.",
+            )
           : "";
-        const html = `
-          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-            <div style="background:linear-gradient(135deg,${
-              isCheckIn ? "#22c55e,#16a34a" : "#f97316,#ea580c"
-            });color:#fff;padding:24px;text-align:center">
-              <h1 style="margin:0;font-size:20px">${
-                isCheckIn ? "Checked in ✅" : "Checked out 👋"
-              }</h1>
-              <p style="margin:6px 0 0;opacity:.9">${eventTitleHtml}</p>
-            </div>
-            <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-              <p>Hi ${nameHtml},</p>
-              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin:14px 0">
-                ${rows}
-              </div>
-              ${cta}
-              <p style="color:#64748b;font-size:12px;margin-top:16px">${
-                isCheckIn
-                  ? "Your stall is now open — enjoy the event!"
-                  : "Thank you for participating!"
-              }</p>
-            </div>
-          </div>`;
+        const html = brandedEmail({
+          preheading: isCheckIn ? "Check-in confirmed" : "Check-out confirmed",
+          preview: `${isCheckIn ? "Checked in" : "Checked out"} — ${eventTitle}`,
+          body:
+            heading(isCheckIn ? "Checked in ✅" : "Checked out 👋") +
+            p(`Hi ${nameHtml},`) +
+            rows +
+            cta +
+            small(
+              isCheckIn
+                ? "Your stall is now open — enjoy the event!"
+                : "Thank you for participating!",
+            ),
+          // The scan path does not populate organizerId, so this usually signs
+          // as the platform team — no extra lookup just for a signature.
+          ...this.vendorEmailFrame(stall.organizerId),
+        });
 
         try {
           await this.mailService.sendEmail({
@@ -3643,6 +3728,25 @@ export class StallsService {
     }
   }
 
+  // Who a vendor-facing email is sent on behalf of, for brandedEmail(): the
+  // organizer's name signs it, and the footer's "need help?" link goes to the
+  // organizer's inbox — the vendor's question is theirs, not the platform's.
+  // Accepts a populated organizer or a bare id (which yields neither).
+  private vendorEmailFrame(org: any): {
+    organizer?: string;
+    contact?: { label: string; href: string };
+  } {
+    const name =
+      String(org?.organizationName || org?.name || "").trim() || undefined;
+    const email = String(org?.businessEmail || org?.email || "").trim();
+    return {
+      organizer: name,
+      contact: email
+        ? { label: `contact ${name || "the organizer"}`, href: `mailto:${email}` }
+        : undefined,
+    };
+  }
+
   // Build the recipient list for vendor/exhibitor-facing emails. Previously
   // these went to the personal `email` only (with `businessEmail` as a mere
   // fallback); now BOTH the personal and the business email receive every
@@ -3746,30 +3850,40 @@ export class StallsService {
             })
             .join(", ");
 
-          const html = `
-            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-              <div style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:24px;text-align:center">
-                <h1 style="margin:0;font-size:20px">Stall Request Submitted</h1>
-                <p style="margin:6px 0 0;opacity:.9">${event?.title || "Event"}</p>
-              </div>
-              <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-                <p>Dear ${vendor.name || "Vendor"},</p>
-                <p>Your stall request for <strong>${event?.title || "the event"}</strong> has been submitted successfully and is now <strong>pending organizer approval</strong>.</p>
-                <table style="border-collapse:collapse;margin:12px 0">
-                  <tr><td style="padding:4px 14px 4px 0;color:#64748b">Event</td><td style="padding:4px 0;font-weight:600">${event?.title || "—"}</td></tr>
-                  <tr><td style="padding:4px 14px 4px 0;color:#64748b">Location</td><td style="padding:4px 0;font-weight:600">${event?.location || "—"}</td></tr>
-                  <tr><td style="padding:4px 14px 4px 0;color:#64748b">Date</td><td style="padding:4px 0;font-weight:600">${eventDate}</td></tr>
-                  <tr><td style="padding:4px 14px 4px 0;color:#64748b">Status</td><td style="padding:4px 0;font-weight:600">Pending approval</td></tr>
-                </table>
-                ${
-                  prefInline
-                    ? `<p style="margin:14px 0"><strong>Preferred space types selected:</strong> ${prefInline}</p>`
-                    : ""
-                }
-                <p>We'll email you as soon as the organizer approves or rejects your request.</p>
-                <p style="color:#64748b;font-size:12px;margin-top:16px">Thank you for registering!</p>
-              </div>
-            </div>`;
+          const html = brandedEmail({
+            preheading: "Stall request submitted",
+            preview: `Your stall request for ${
+              event?.title || "the event"
+            } is pending organizer approval.`,
+            body:
+              heading("Stall Request Submitted") +
+              p(`Dear ${escapeEmailHtml(vendor.name || "Vendor")},`) +
+              p(
+                `Your stall request for ${strong(
+                  event?.title || "the event",
+                )} has been submitted successfully and is now ${strong(
+                  "pending organizer approval",
+                )}.`,
+              ) +
+              details([
+                ["Event", escapeEmailHtml(event?.title || "—")],
+                ["Location", escapeEmailHtml(event?.location || "—")],
+                ["Date", escapeEmailHtml(eventDate)],
+                ["Status", "Pending approval"],
+              ]) +
+              (prefInline
+                ? p(
+                    `${strong(
+                      "Preferred space types selected:",
+                    )} ${escapeEmailHtml(prefInline)}`,
+                  )
+                : "") +
+              p(
+                "We'll email you as soon as the organizer approves or rejects your request.",
+              ) +
+              small("Thank you for registering!"),
+            ...this.vendorEmailFrame(organizerForCur || stall.organizerId),
+          });
           await this.mailService.sendEmail({
             to: vendorEmail,
             subject: `Stall request submitted — ${event?.title || "Event"}`,
@@ -3842,37 +3956,36 @@ export class StallsService {
       const businessName =
         vendor?.businessName || vendor?.shopName || vendor?.brandName || "—";
 
-      const row = (label: string, value: any) =>
-        `<tr><td style="padding:4px 14px 4px 0;color:#64748b">${label}</td><td style="padding:4px 0;font-weight:600;color:#0f172a">${
-          value || "—"
-        }</td></tr>`;
+      // A details() row that shows "—" rather than dropping an empty value,
+      // as this table always has. Values are vendor-supplied — escaped.
+      const row = (label: string, value: any): [string, string] => [
+        label,
+        escapeEmailHtml(value || "—"),
+      ];
 
-      const html = `
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-          <div style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:24px;text-align:center">
-            <h1 style="margin:0;font-size:20px">New Stall Registration</h1>
-            <p style="margin:6px 0 0;opacity:.9">${event?.title || "Your event"}</p>
-          </div>
-          <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-            <p>A new exhibitor has requested a stall and is awaiting your review.</p>
-            <table style="border-collapse:collapse;margin:12px 0">
-              ${row("Applicant", vendor?.nameOfApplicant || vendor?.name)}
-              ${row("Business", businessName)}
-              ${row("Category", vendor?.businessCategory || vendor?.businessType)}
-              ${row("Email", vendor?.email)}
-              ${row("WhatsApp", vendor?.whatsAppNumber || vendor?.whatsappNumber)}
-              ${row("Event", event?.title)}
-              ${row("Date", eventDate)}
-              ${row("Status", "Pending approval")}
-            </table>
-            <div style="text-align:center;margin:22px 0 6px">
-              <a href="${dashboardUrl}" style="display:inline-block;background:#3b82f6;color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px">
-                Review &amp; Approve / Reject
-              </a>
-            </div>
-            <p style="color:#64748b;font-size:12px;margin-top:16px">Open your dashboard → CRM to approve or reject this request.</p>
-          </div>
-        </div>`;
+      const html = brandedEmail({
+        preheading: "New stall registration",
+        preview: `${businessName} has requested a stall for ${
+          event?.title || "your event"
+        }.`,
+        body:
+          heading("New Stall Registration") +
+          p(
+            "A new exhibitor has requested a stall and is awaiting your review.",
+          ) +
+          details([
+            row("Applicant", vendor?.nameOfApplicant || vendor?.name),
+            row("Business", businessName),
+            row("Category", vendor?.businessCategory || vendor?.businessType),
+            row("Email", vendor?.email),
+            row("WhatsApp", vendor?.whatsAppNumber || vendor?.whatsappNumber),
+            row("Event", event?.title),
+            row("Date", eventDate),
+            row("Status", "Pending approval"),
+          ]) +
+          button("Review & Approve / Reject", dashboardUrl) +
+          small("Open your dashboard → CRM to approve or reject this request."),
+      });
 
       // Send individually so operators don't see each other's addresses.
       await Promise.all(
@@ -3971,42 +4084,52 @@ export class StallsService {
           timeZone: "Asia/Singapore",
         }) + " SGT";
 
-      const row = (label: string, value: any) =>
-        `<tr><td style="padding:4px 14px 4px 0;color:#64748b">${label}</td><td style="padding:4px 0;font-weight:600;color:#0f172a">${
-          value || "—"
-        }</td></tr>`;
+      // A details() row that shows "—" rather than dropping an empty value,
+      // as this table always has. Values are vendor-supplied — escaped.
+      const row = (label: string, value: any): [string, string] => [
+        label,
+        escapeEmailHtml(value || "—"),
+      ];
 
-      const html = `
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-          <div style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;padding:24px;text-align:center">
-            <h1 style="margin:0;font-size:20px">⏳ Payment Awaiting Approval</h1>
-            <p style="margin:6px 0 0;opacity:.9">${event?.title || "Your event"}</p>
-          </div>
-          <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-            <p><strong>${businessName}</strong> has submitted their payment and is
-              waiting for your approval. Please verify the payment and release
-              their stall ticket on priority so they aren't kept waiting.</p>
-            <div style="border:1px solid #fcd34d;background:#fffbeb;border-radius:10px;padding:16px;margin:16px 0;text-align:center">
-              <div style="font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#b45309">Confirmation deadline</div>
-              <div style="font-size:26px;font-weight:800;color:#d97706;margin:6px 0">⏳ ${hoursLeft} hours to approve</div>
-              <div style="font-size:13px;color:#92400e">Please confirm by <strong>${deadlineStr}</strong>.<br/>If it isn't confirmed within 24 hours, this booking is <strong>automatically cancelled</strong> and the space is released for re-booking.</div>
-            </div>
-            <table style="border-collapse:collapse;margin:12px 0">
-              ${row("Exhibitor", businessName)}
-              ${row("Email", (vendor as any)?.email || (vendor as any)?.businessEmail)}
-              ${row("Event", event?.title)}
-              ${row("Grand Total", formatMoney(grandTotal, (organizer as any)?.country))}
-              ${row("Confirm by", deadlineStr)}
-              ${row("Status", "Payment submitted — awaiting approval")}
-            </table>
-            <div style="text-align:center;margin:22px 0 6px">
-              <a href="${dashboardUrl}" style="display:inline-block;background:#d97706;color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px">
-                Review &amp; Approve Payment
-              </a>
-            </div>
-            <p style="color:#64748b;font-size:12px;margin-top:16px">Open your dashboard → Participants to verify the payment and confirm the booking.</p>
-          </div>
-        </div>`;
+      const html = brandedEmail({
+        preheading: "Payment awaiting approval",
+        preview: `${businessName} has submitted their payment — ${hoursLeft} hours to approve.`,
+        body:
+          heading("⏳ Payment Awaiting Approval") +
+          p(
+            `${strong(
+              businessName,
+            )} has submitted their payment and is waiting for your approval. Please verify the payment and release their stall ticket on priority so they aren't kept waiting.`,
+          ) +
+          callout(
+            `${strong("Confirmation deadline")} — ⏳ ${strong(
+              `${hoursLeft} hours to approve`,
+            )}<br />Please confirm by ${strong(
+              deadlineStr,
+            )}.<br />If it isn't confirmed within 24 hours, this booking is ${strong(
+              "automatically cancelled",
+            )} and the space is released for re-booking.`,
+            "warning",
+          ) +
+          details([
+            row("Exhibitor", businessName),
+            row(
+              "Email",
+              (vendor as any)?.email || (vendor as any)?.businessEmail,
+            ),
+            row("Event", event?.title),
+            row(
+              "Grand Total",
+              formatMoney(grandTotal, (organizer as any)?.country),
+            ),
+            row("Confirm by", deadlineStr),
+            row("Status", "Payment submitted — awaiting approval"),
+          ]) +
+          button("Review & Approve Payment", dashboardUrl) +
+          small(
+            "Open your dashboard → Participants to verify the payment and confirm the booking.",
+          ),
+      });
 
       await Promise.all(
         Array.from(recipients).map((to) =>
@@ -4157,20 +4280,24 @@ export class StallsService {
       const dashboardUrl = `${fe}/organizer/login?redirect=${encodeURIComponent(
         "/organizer-dashboard",
       )}`;
-      const html = `
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-          <div style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;padding:24px;text-align:center">
-            <h1 style="margin:0;font-size:20px">⏳ ${hoursRemaining} hour(s) left to approve</h1>
-            <p style="margin:6px 0 0;opacity:.9">${event?.title || "Your event"}</p>
-          </div>
-          <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-            <p><strong>${businessName}</strong> submitted their payment and is waiting for your approval.</p>
-            <p style="font-weight:600;color:#b45309">Please confirm within <strong>${hoursRemaining} hour(s)</strong>, or their booking will be automatically cancelled and the space released for re-booking.</p>
-            <div style="text-align:center;margin:22px 0 6px">
-              <a href="${dashboardUrl}" style="display:inline-block;background:#d97706;color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px">Review &amp; Approve Payment</a>
-            </div>
-          </div>
-        </div>`;
+      const html = brandedEmail({
+        preheading: "Approval reminder",
+        preview: `${businessName} is waiting for your approval — ${hoursRemaining} hour(s) left.`,
+        body:
+          heading(`⏳ ${hoursRemaining} hour(s) left to approve`) +
+          p(
+            `${strong(businessName)} submitted their payment for ${strong(
+              event?.title || "your event",
+            )} and is waiting for your approval.`,
+          ) +
+          callout(
+            `Please confirm within ${strong(
+              `${hoursRemaining} hour(s)`,
+            )}, or their booking will be automatically cancelled and the space released for re-booking.`,
+            "warning",
+          ) +
+          button("Review & Approve Payment", dashboardUrl),
+      });
       await Promise.all(
         recipients.map((to) =>
           this.mailService
@@ -4213,18 +4340,27 @@ export class StallsService {
       // Vendor — booking released.
       const vendorEmail = this.vendorEmailRecipients(vendor);
       if (vendorEmail) {
-        const html = `
-          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-            <div style="background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;padding:24px;text-align:center">
-              <h1 style="margin:0;font-size:20px">Booking released</h1>
-              <p style="margin:6px 0 0;opacity:.9">${event?.title || "Event"}</p>
-            </div>
-            <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-              <p>Dear ${vendor?.name || "Exhibitor"},</p>
-              <p>Your stall booking for <strong>${event?.title || "the event"}</strong> was <strong>not confirmed by the organizer within 24 hours</strong>, so the space has been released.</p>
-              <p>If you have already paid, please contact the organizer to resolve this or re-book.</p>
-            </div>
-          </div>`;
+        const html = brandedEmail({
+          preheading: "Booking released",
+          preview: `Your stall booking for ${
+            event?.title || "the event"
+          } was not confirmed in time.`,
+          body:
+            heading("Booking released") +
+            p(`Dear ${escapeEmailHtml(vendor?.name || "Exhibitor")},`) +
+            p(
+              `Your stall booking for ${strong(
+                event?.title || "the event",
+              )} was ${strong(
+                "not confirmed by the organizer within 24 hours",
+              )}, so the space has been released.`,
+            ) +
+            p(
+              "If you have already paid, please contact the organizer to resolve this or re-book.",
+            ),
+          // processConfirmationDeadlines populates organizerId.
+          ...this.vendorEmailFrame(stall.organizerId),
+        });
         await this.mailService
           .sendEmail({
             to: vendorEmail,
@@ -4244,16 +4380,17 @@ export class StallsService {
         const { recipients } = await this.getStallReviewerEmails(orgId);
         const businessName =
           vendor?.businessName || vendor?.name || "An exhibitor";
-        const html = `
-          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-            <div style="background:linear-gradient(135deg,#64748b,#475569);color:#fff;padding:24px;text-align:center">
-              <h1 style="margin:0;font-size:20px">Stall space released</h1>
-              <p style="margin:6px 0 0;opacity:.9">${event?.title || "Event"}</p>
-            </div>
-            <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-              <p><strong>${businessName}</strong>'s payment was not confirmed within 24 hours, so their booking was cancelled and the space is now available for re-booking.</p>
-            </div>
-          </div>`;
+        const html = brandedEmail({
+          preheading: "Stall space released",
+          preview: `${businessName}'s booking was cancelled and the space is available again.`,
+          body:
+            heading("Stall space released") +
+            p(
+              `${strong(businessName)}'s payment for ${strong(
+                event?.title || "the event",
+              )} was not confirmed within 24 hours, so their booking was cancelled and the space is now available for re-booking.`,
+            ),
+        });
         await Promise.all(
           recipients.map((to) =>
             this.mailService
@@ -4338,54 +4475,61 @@ export class StallsService {
             stall.organizerId,
             stall.eventId,
           );
-          const headerBg = isApproved
-            ? "linear-gradient(135deg,#22c55e,#16a34a)"
-            : "linear-gradient(135deg,#ef4444,#dc2626)";
           const title = isApproved
             ? "Stall Request Approved 🎉"
             : "Stall Request Rejected";
           const body = isApproved
-            ? `
-                <p>Congratulations ${vendor.name || "Vendor"}!</p>
-                <p>Your stall request for <strong>${event?.title || "the event"}</strong> has been <strong style="color:#16a34a">approved</strong>.</p>
-                <p><strong>Next steps:</strong></p>
-                <ol style="margin:8px 0 16px;padding-left:20px">
-                  <li>Click the button below to open the event page</li>
-                  <li>Log in with your registered details</li>
-                  <li>Select your preferred tables and add-ons</li>
-                  <li>Complete the payment to confirm your stall</li>
-                </ol>
-                <div style="margin:16px 0;padding:12px 14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px">
-                  <p style="margin:0;color:#b45309;font-weight:700">
-                    ⚠️ Selecting isn't reserving. Pay, upload proof &amp; tap "I have Paid" — else your space may go to another vendor.
-                  </p>
-                </div>
-                <div style="text-align:center;margin:22px 0 6px">
-                  <a href="${eventUrl}" style="display:inline-block;background:#16a34a;color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px">
-                    Open Event Page
-                  </a>
-                </div>`
-            : `
-                <p>Dear ${vendor.name || "Vendor"},</p>
-                <p>We're sorry — your stall request for <strong>${event?.title || "the event"}</strong> has been <strong style="color:#dc2626">rejected</strong>.</p>
-                <p><strong>Reason:</strong> ${stall.cancellationReason || "Not specified"}</p>
-                <p>Please contact the organizer for more information, or visit the event page below.</p>
-                <div style="text-align:center;margin:22px 0 6px">
-                  <a href="${eventUrl}" style="display:inline-block;background:#3b82f6;color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px">
-                    View Event Page
-                  </a>
-                </div>`;
-          const html = `
-            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-              <div style="background:${headerBg};color:#fff;padding:24px;text-align:center">
-                <h1 style="margin:0;font-size:20px">${title}</h1>
-                <p style="margin:6px 0 0;opacity:.9">${event?.title || "Event"}</p>
-              </div>
-              <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-                ${body}
-                <p style="color:#64748b;font-size:12px;margin-top:16px">If the button doesn't work, copy this link into your browser:<br/><a href="${eventUrl}">${eventUrl}</a></p>
-              </div>
-            </div>`;
+            ? p(`Congratulations ${escapeEmailHtml(vendor.name || "Vendor")}!`) +
+              p(
+                `Your stall request for ${strong(
+                  event?.title || "the event",
+                )} has been ${strong("approved")}.`,
+              ) +
+              p(strong("Next steps:")) +
+              steps([
+                "Click the button below to open the event page",
+                "Log in with your registered details",
+                "Select your preferred tables and add-ons",
+                "Complete the payment to confirm your stall",
+              ]) +
+              callout(
+                `<strong>⚠️ Selecting isn't reserving. Pay, upload proof &amp; tap "I have Paid" — else your space may go to another vendor.</strong>`,
+                "warning",
+              ) +
+              button("Open Event Page", eventUrl)
+            : p(`Dear ${escapeEmailHtml(vendor.name || "Vendor")},`) +
+              p(
+                `We're sorry — your stall request for ${strong(
+                  event?.title || "the event",
+                )} has been ${strong("rejected")}.`,
+              ) +
+              detail(
+                "Reason:",
+                escapeEmailHtml(stall.cancellationReason || "Not specified"),
+              ) +
+              p(
+                "Please contact the organizer for more information, or visit the event page below.",
+              ) +
+              button("View Event Page", eventUrl);
+          const html = brandedEmail({
+            preheading: isApproved
+              ? "Stall request approved"
+              : "Stall request rejected",
+            preview: `Your stall request for ${event?.title || "the event"} has been ${
+              isApproved ? "approved" : "rejected"
+            }.`,
+            body:
+              heading(title) +
+              body +
+              small(
+                `If the button doesn't work, copy this link into your browser:<br />${link(
+                  eventUrl,
+                  eventUrl,
+                )}`,
+              ),
+            // updateStatus populates organizerId (name/email/organizationName).
+            ...this.vendorEmailFrame(stall.organizerId),
+          });
           await this.mailService.sendEmail({
             to: vendorEmail,
             subject: isApproved
@@ -4641,6 +4785,7 @@ export class StallsService {
                     `Grand Total: ${formatMoney(populatedStall.grandTotal, ctry)}\n\n` +
                     `Your stall QR ticket will be released once full payment is confirmed by the organizer. Your booking details PDF is attached.`,
                   senderConfig: (orgDoc as any)?.emailConfig,
+                  organizer: this.vendorEmailFrame(orgDoc).organizer,
                 },
               );
             }
@@ -5327,45 +5472,47 @@ export class StallsService {
         const senderConfig = await this.getOrganizerSenderConfig(
           stall.organizerId,
         );
+        // The note keeps its line breaks (it used to be white-space:pre-wrap,
+        // which several clients ignore).
         const noteBlock = noteText
-          ? `<div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:14px;margin:14px 0">
-               <p style="margin:0 0 6px;font-weight:600;color:#3730a3">Note from ${this.escapeHtml(
-                 orgName,
-               )}</p>
-               <p style="margin:0;white-space:pre-wrap">${this.escapeHtml(
-                 noteText,
-               )}</p>
-             </div>`
+          ? callout(
+              `${strong(`Note from ${orgName}`)}<br />${this.escapeHtml(
+                noteText,
+              ).replace(/\n/g, "<br />")}`,
+            )
           : "";
-        const html = `
-          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-            <div style="background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;padding:24px;text-align:center">
-              <h1 style="margin:0;font-size:20px">Deposit returned 🔄</h1>
-              <p style="margin:6px 0 0;opacity:.9">${this.escapeHtml(
+        // The footer says not to reply, so point a missing refund at the
+        // organizer's inbox instead of "reply to this email".
+        const orgEmail = String(
+          organizer?.businessEmail || organizer?.email || "",
+        ).trim();
+        const orgLabel = organizer?.organizationName || "the organizer";
+        const html = brandedEmail({
+          preheading: "Deposit returned",
+          preview: `Your security deposit for ${eventTitle} has been returned.`,
+          body:
+            heading("Deposit returned 🔄") +
+            p(`Hi ${this.escapeHtml(name)},`) +
+            p(
+              `Your security deposit for ${strong(
                 eventTitle,
-              )}</p>
-            </div>
-            <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-              <p>Hi ${this.escapeHtml(name)},</p>
-              <p>Your security deposit for <strong>${this.escapeHtml(
-                eventTitle,
-              )}</strong> has been returned.</p>
-              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin:14px 0">
-                <p style="margin:0"><strong>Amount returned:</strong> ${this.escapeHtml(
-                  amountStr,
-                )}</p>
-                <p style="margin:6px 0 0"><strong>Returned on:</strong> ${this.escapeHtml(
-                  returnedOn,
-                )}</p>
-              </div>
-              ${noteBlock}
-              <p style="color:#64748b;font-size:12px;margin-top:16px">
-                Thank you for participating. If the amount has not reached your
-                account, reply to this email and we will look into it.
-              </p>
-              <p style="margin-top:12px">— ${this.escapeHtml(orgName)}</p>
-            </div>
-          </div>`;
+              )} has been returned.`,
+            ) +
+            details([
+              ["Amount returned", this.escapeHtml(amountStr)],
+              ["Returned on", this.escapeHtml(returnedOn)],
+            ]) +
+            noteBlock +
+            small(
+              `Thank you for participating. If the amount has not reached your account, please ${
+                orgEmail
+                  ? link(`email ${orgLabel}`, `mailto:${orgEmail}`)
+                  : `contact ${this.escapeHtml(orgLabel)}`
+              } and they will look into it.`,
+            ),
+          // Signed by the organizer, as the old "— <organization>" line was.
+          ...this.vendorEmailFrame(organizer),
+        });
 
         await this.mailService.sendEmail({
           to,
@@ -5810,12 +5957,8 @@ export class StallsService {
       ? ""
       : buffer
       ? ""
-      : `<div style="text-align:center;padding:8px 0 16px">
-            <img src="cid:stallqr" alt="Stall check-in QR" style="width:200px;height:200px"/>
-            <p style="color:#64748b;font-size:12px;margin:8px 0 0">
-              Show this QR at the entrance. It's also attached as an image.
-            </p>
-          </div>`;
+      : image("cid:stallqr", "Stall check-in QR", 200) +
+        small("Show this QR at the entrance. It's also attached as an image.");
     // Organizer's own words, escaped — free text from the dashboard must
     // never be able to inject markup into the email.
     const esc = (v: string) =>
@@ -5824,11 +5967,16 @@ export class StallsService {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
-    const customBlock = customMessage?.trim()
-      ? `<div style="background:#f8fafc;border-left:3px solid #6366f1;padding:12px 16px;margin:0 0 16px;border-radius:0 8px 8px 0;white-space:pre-wrap">${esc(
-          customMessage.trim(),
-        ).replace(/\n/g, "<br/>")}</div>`
+    // Set apart from the booking summary when the ticket rides along; on its
+    // own it is simply the message.
+    const customHtml = customMessage?.trim()
+      ? esc(customMessage.trim()).replace(/\n/g, "<br />")
       : "";
+    const customBlock = !customHtml
+      ? ""
+      : attachTicket
+        ? callout(customHtml)
+        : p(customHtml);
     // "N days to go" — only while the event is still ahead, so a re-send
     // after the event never claims a countdown.
     const daysToGo = (() => {
@@ -5842,31 +5990,39 @@ export class StallsService {
     const countdownBlock =
       daysToGo === null
         ? ""
-        : `<p style="margin:0 0 16px;font-size:15px;font-weight:bold;color:#4338ca">${
-            daysToGo === 0
-              ? "Today's the day!"
-              : daysToGo === 1
-                ? "1 day to go"
-                : `${daysToGo} days to go`
-          }</p>`;
+        : p(
+            strong(
+              daysToGo === 0
+                ? "Today's the day!"
+                : daysToGo === 1
+                  ? "1 day to go"
+                  : `${daysToGo} days to go`,
+            ),
+          );
     // Without the ticket this is the organizer writing to their
     // exhibitors, so "Your Stall Ticket" and the booking summary would
     // both be wrong — their message is the whole email.
-    const heading = attachTicket ? "Your Stall Ticket" : eventTitle;
-    const html = `
-      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-        <div style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:24px;text-align:center">
-          <h1 style="margin:0;font-size:20px">${heading}</h1>
-        </div>
-        <div style="padding:24px;color:#0f172a;font-size:14px;line-height:1.6">
-          ${attachTicket
-            ? `<p>${message.replace(/\*/g, "").replace(/\n/g, "<br/>")}</p>`
-            : ""}
-          ${customBlock}
-          ${countdownBlock}
-          ${qrBlock}
-        </div>
-      </div>`;
+    const headline = attachTicket ? "Your Stall Ticket" : eventTitle;
+    const html = brandedEmail({
+      // With the ticket the event title moves up here; without it, it is
+      // the headline itself.
+      preheading: attachTicket ? eventTitle : undefined,
+      body:
+        heading(headline) +
+        (attachTicket
+          ? // Plain-text summary (vendor/event names) — escape, then break.
+            p(
+              escapeEmailHtml(message.replace(/\*/g, "")).replace(
+                /\n/g,
+                "<br />",
+              ),
+            )
+          : "") +
+        customBlock +
+        countdownBlock +
+        qrBlock,
+      ...this.vendorEmailFrame(orgDoc || stall.organizerId),
+    });
 
     // No ticket means no attachment at all — not even the QR fallback,
     // which is the same credential in another form.

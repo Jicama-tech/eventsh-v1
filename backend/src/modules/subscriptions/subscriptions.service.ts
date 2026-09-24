@@ -14,6 +14,16 @@ import {
   formatPlanValidity,
 } from "../plans/plan-validity.util";
 import { currencyForCode } from "../../common/currency.util";
+import { emailBrand } from "../../common/email/email-brand";
+import {
+  brandedEmail,
+  bullets,
+  details,
+  heading,
+  p,
+  strong,
+  subheading,
+} from "../../common/email/email-layout";
 import * as fs from "fs";
 import * as path from "path";
 // pdfkit ships without @types; use require to skip the missing-type error
@@ -295,7 +305,7 @@ export class SubscriptionsService {
         .fillColor(C.accentInk)
         .font("Helvetica-Bold")
         .fontSize(22)
-        .text("EVENTSH", pageLeft + 18, 55);
+        .text(emailBrand().name.toUpperCase(), pageLeft + 18, 55);
       pdf
         .font("Helvetica")
         .fontSize(9)
@@ -616,7 +626,7 @@ export class SubscriptionsService {
         .fillColor(C.muted)
         .text(
           "This is an electronically generated receipt — no signature required. " +
-            "If you have any questions, reply to the email this receipt was attached to.",
+            `If you have any questions, contact us at ${emailBrand().contactUrl.replace(/^https?:\/\//, "")}.`,
           pageLeft,
           y,
           { width: usable, align: "center" },
@@ -669,35 +679,41 @@ export class SubscriptionsService {
       const validTill = organizer.planExpiryDate
         ? new Date(organizer.planExpiryDate).toLocaleDateString()
         : "—";
+      const brand = emailBrand();
       const featuresHtml =
         Array.isArray(plan.features) && plan.features.length
-          ? `<ul>${plan.features
-              .map((f: string) => `<li>${this.escapeHtml(f)}</li>`)
-              .join("")}</ul>`
-          : "<p><em>(no features listed)</em></p>";
-      const html = `
-        <div style="font-family: sans-serif; max-width: 600px; color: #1f2937; line-height: 1.6;">
-          <h2>Subscription activated</h2>
-          <p>Hi ${this.escapeHtml(organizer.name || "there")},</p>
-          <p>Your <strong>${this.escapeHtml(plan.planName)}</strong> plan is now active. A PDF receipt is attached for your records.</p>
-          <table style="border-collapse: collapse; margin: 12px 0;">
-            <tr><td style="padding: 4px 12px; color: #6b7280;">Amount paid</td><td style="padding: 4px 12px; font-weight: 600;">${symbol}${doc.amount} ${doc.currency}</td></tr>
-            <tr><td style="padding: 4px 12px; color: #6b7280;">Validity</td><td style="padding: 4px 12px; font-weight: 600;">${formatPlanValidity(plan)}</td></tr>
-            <tr><td style="padding: 4px 12px; color: #6b7280;">Active until</td><td style="padding: 4px 12px; font-weight: 600;">${validTill}</td></tr>
-            <tr><td style="padding: 4px 12px; color: #6b7280;">Reference</td><td style="padding: 4px 12px; font-family: monospace;">${this.escapeHtml(doc.ref)}</td></tr>
-          </table>
-          ${plan.description ? `<p>${this.escapeHtml(plan.description)}</p>` : ""}
-          <h3>What's included</h3>
-          ${featuresHtml}
-          <p>— The Eventsh Team</p>
-        </div>`;
+          ? bullets(plan.features.map((f: string) => this.escapeHtml(f)))
+          : p("<em>(no features listed)</em>");
+      const html = brandedEmail({
+        preheading: "Payment receipt",
+        preview: `Your ${plan.planName} plan is now active.`,
+        body: [
+          heading("Subscription activated"),
+          p(`Hi ${this.escapeHtml(organizer.name || "there")},`),
+          p(
+            `Your ${strong(plan.planName)} plan is now active. A PDF receipt is attached for your records.`,
+          ),
+          details([
+            ["Amount paid", `${symbol}${doc.amount} ${doc.currency}`],
+            ["Validity", `${formatPlanValidity(plan)}`],
+            ["Active until", validTill],
+            [
+              "Reference",
+              `<span style="font-family:'Courier New',Courier,monospace;">${this.escapeHtml(doc.ref)}</span>`,
+            ],
+          ]),
+          plan.description ? p(this.escapeHtml(plan.description)) : "",
+          subheading("What's included"),
+          featuresHtml,
+        ].join(""),
+      });
       await this.mailService.sendEmail({
         to,
-        subject: `Eventsh — ${plan.planName} activated (${doc.ref})`,
+        subject: `${brand.name} — ${plan.planName} activated (${doc.ref})`,
         html,
         attachments: [
           {
-            filename: `eventsh-receipt-${doc.ref}.pdf`,
+            filename: `${brand.id}-receipt-${doc.ref}.pdf`,
             content: fs.readFileSync(pdfPath),
           },
         ],
