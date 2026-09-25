@@ -26,6 +26,7 @@ import { SupplierRespondDto } from "./dto/supplier-respond.dto";
 import { RecordSupplierPaymentDto } from "./dto/record-supplier-payment.dto";
 import { AddSupplierNoteDto } from "./dto/add-supplier-note.dto";
 import { MailService } from "../roles/mail.service";
+import { OtpService } from "../otp/otp.service";
 
 function parseJson<T>(raw: unknown, fallback: T): T {
   if (raw == null || raw === "") return fallback;
@@ -56,6 +57,8 @@ export class SuppliersService {
     // Operator team members who opted in to notification emails.
     @InjectModel("Operator") private operatorModel: Model<any>,
     private readonly mailService: MailService,
+    // WhatsApp twins of the supplier emails, from the organizer's own number.
+    private readonly otpService: OtpService,
   ) {}
 
   // Enrich a config doc with `linkPath`: the shareable supplier URL built the
@@ -169,9 +172,38 @@ export class SuppliersService {
         if (supplierDoc?.businessEmail) to.push(supplierDoc.businessEmail);
       }
       if (audience === "organizer" || audience === "both") to.push(...orgTo);
-      if (to.length === 0) return;
 
       const country = (organizer as any)?.country;
+
+      // WhatsApp twins, one per recipient side, from the organizer's own
+      // linked number when they have one. Sent before the email so a
+      // recipient with a phone but no address still hears about it; each
+      // never throws. The supplier's copy is the organizer's own signed-in
+      // action (approve, pay, check goods in), so it is not capped per hour;
+      // the organizer's copy is caused by the supplier and capped per
+      // supplier, and routed so it rings (see OrganizerWhatsappService).
+      const waText = this.supplierUpdateText(payload, req, supplierDoc, (event as any)?.title, organizer);
+      if (audience === "supplier" || audience === "both") {
+        await this.otpService.trySendWhatsAppMessage(
+          supplierDoc?.whatsAppNumber || supplierDoc?.phone,
+          waText.supplier,
+          { organizerId: String(req.organizerId || ""), country, organizerInitiated: true },
+        );
+      }
+      if (audience === "organizer" || audience === "both") {
+        await this.otpService.trySendWhatsAppMessage(
+          (organizer as any)?.whatsAppNumber || (organizer as any)?.phone,
+          waText.organizer,
+          {
+            organizerId: String(req.organizerId || ""),
+            country,
+            toOrganizer: true,
+            throttleKey: `supplier:${String(supplierDoc?._id || req.supplierId || req._id)}`,
+          },
+        );
+      }
+
+      if (to.length === 0) return;
       const sym = country === "SG" ? "SG$" : "₹";
       const money = (n: number) =>
         `${sym}${Number(n || 0).toLocaleString()}`;
@@ -204,6 +236,42 @@ export class SuppliersService {
         `Supplier notification failed for ${req._id}: ${err?.message || err}`,
       );
     }
+  }
+
+  /**
+   * The WhatsApp version of a supplier update email: the same facts as a few
+   * plain lines. Two variants — the supplier knows who they are; the
+   * organizer needs to know which supplier replied.
+   */
+  private supplierUpdateText(
+    payload: { heading: string; summary: string; rows?: Array<[string, string]>; note?: string },
+    req: any,
+    supplierDoc: any,
+    eventTitle: string | undefined,
+    organizer: any,
+  ): { supplier: string; organizer: string } {
+    const country = (organizer as any)?.country;
+    const sym = country === "SG" ? "SG$" : "₹";
+    const oneLine = (text: unknown, max: number) => {
+      const s = String(text ?? "").replace(/\s+/g, " ").trim();
+      return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+    };
+    const rows = [
+      `Amount payable: ${sym}${Number(this.payable(req) || 0).toLocaleString()}`,
+      ...(payload.rows || [])
+        .map(([label, value]) => [oneLine(label, 40), oneLine(value, 120)])
+        .filter(([label, value]) => label && value)
+        .map(([label, value]) => `${label}: ${value}`),
+    ].slice(0, 8);
+    const note = payload.note ? `\n\nNote: ${oneLine(payload.note, 300)}` : "";
+    const orgName = oneLine((organizer as any)?.organizationName || (organizer as any)?.name, 60);
+    const supplierName = oneLine(supplierDoc?.companyName || supplierDoc?.name, 60) || "Supplier";
+    const top = (who: string) =>
+      `🧾 *${oneLine(payload.heading, 80)}*\n${who}Event: ${oneLine(eventTitle || "your event", 80)}\n\n${oneLine(payload.summary, 240)}\n\nStatus: ${oneLine(req.status, 40)}\n${rows.join("\n")}${note}`;
+    return {
+      supplier: `${top("")}\n\n— ${orgName || "the organizer"}`,
+      organizer: top(`Supplier: ${supplierName}\n`),
+    };
   }
 
   /**

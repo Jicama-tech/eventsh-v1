@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import PhoneField from "@/components/ui/PhoneField";
 import { ExhibitorCategoryPicker } from "@/components/ui/ExhibitorCategoryPicker";
 import {
   Award,
@@ -425,11 +426,7 @@ export function EventfrontMemberDialog({ open, onClose, organizerId }: Props) {
             planId: selectedPlan._id,
             exhibitorName: profile.name,
             exhibitorEmail: profile.email,
-            exhibitorWhatsapp: whatsapp.startsWith("+")
-              ? whatsapp
-              : whatsapp
-                ? `+${whatsapp.replace(/\D/g, "")}`
-                : "",
+            exhibitorWhatsapp: whatsapp,
             businessName,
             businessCategory,
             amountPaid: selectedPlan.price,
@@ -720,9 +717,10 @@ export function EventfrontMemberDialog({ open, onClose, organizerId }: Props) {
             </div>
             <div>
               <Label>WhatsApp</Label>
-              <Input
+              <PhoneField
+                format="e164"
                 value={whatsapp}
-                onChange={(e) => setWhatsapp(e.target.value)}
+                onChange={setWhatsapp}
                 placeholder="+91 98765 43210"
               />
             </div>

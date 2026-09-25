@@ -5,13 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { PhoneField } from "@/components/ui/PhoneField";
+import { splitE164 } from "@/lib/phone";
 import {
   Dialog,
   DialogContent,
@@ -39,24 +34,6 @@ import {
 } from "lucide-react";
 
 const apiURL = __API_URL__;
-
-// Same two-country convention used across the organizer CRM (see MyUsers /
-// SuppliersDirectory).
-const SUPPORTED_COUNTRIES = [
-  { name: "India", code: "IN", dialCode: "+91" },
-  { name: "Singapore", code: "SG", dialCode: "+65" },
-];
-
-// Split a stored phone like "+9198…" into its dial code + national part so the
-// prefill can re-populate both the country picker and the number field.
-function splitPhone(phone?: string): { dialCode: string; number: string } {
-  const p = (phone || "").trim();
-  const match = SUPPORTED_COUNTRIES.find((c) => p.startsWith(c.dialCode));
-  if (match) {
-    return { dialCode: match.dialCode, number: p.slice(match.dialCode.length) };
-  }
-  return { dialCode: SUPPORTED_COUNTRIES[0].dialCode, number: p };
-}
 
 // Inline Google "G" mark for the sign-in button (no external asset / CSP-safe).
 function GoogleG({ className }: { className?: string }) {
@@ -173,7 +150,7 @@ export default function SupplierRequestForm() {
   const [serviceCategory, setServiceCategory] = useState("");
   const [email, setEmail] = useState("");
   const [businessEmail, setBusinessEmail] = useState("");
-  const [countryCode, setCountryCode] = useState(SUPPORTED_COUNTRIES[0].dialCode);
+  // E.164 ("+919876543210") — the dial code travels inside the number.
   const [phone, setPhone] = useState("");
   const [prices, setPrices] = useState<Record<string, string>>({});
   // How much of each requirement this supplier can actually cover.
@@ -257,9 +234,7 @@ export default function SupplierRequestForm() {
         setCompanyName(s.companyName || "");
         setServiceCategory(s.serviceCategory || "");
         setBusinessEmail(s.businessEmail || "");
-        const { dialCode, number } = splitPhone(s.phone);
-        setCountryCode(dialCode);
-        setPhone(number);
+        setPhone(s.phone || "");
         // Payout details saved from a previous quotation — prefilled so they
         // don't have to type their bank details again.
         const acc = s.accountDetails || {};
@@ -464,8 +439,8 @@ export default function SupplierRequestForm() {
       fd.append("name", name);
       fd.append("email", email);
       fd.append("businessEmail", businessEmail);
-      fd.append("countryCode", countryCode);
-      fd.append("phone", phone.trim() ? `${countryCode}${phone.trim()}` : "");
+      fd.append("countryCode", splitE164(phone).dialCode);
+      fd.append("phone", phone);
       fd.append("companyName", companyName);
       fd.append("serviceCategory", serviceCategory);
       fd.append("quotationItems", JSON.stringify(items));
@@ -937,26 +912,12 @@ export default function SupplierRequestForm() {
               </div>
               <div>
                 <Label className="text-xs">Contact number</Label>
-                <div className="flex gap-2">
-                  <Select value={countryCode} onValueChange={setCountryCode}>
-                    <SelectTrigger className="w-24 shrink-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SUPPORTED_COUNTRIES.map((c) => (
-                        <SelectItem key={c.code} value={c.dialCode}>
-                          {c.dialCode} ({c.code})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="Phone number"
-                    className="flex-1"
-                  />
-                </div>
+                <PhoneField
+                  format="e164"
+                  value={phone}
+                  onChange={setPhone}
+                  placeholder="Phone number"
+                />
               </div>
               <div>
                 <Label className="text-xs">Business email</Label>

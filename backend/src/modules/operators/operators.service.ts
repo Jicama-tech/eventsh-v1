@@ -13,6 +13,22 @@ import {
   Organizer,
   OrganizerDocument,
 } from "../organizers/schemas/organizer.schema";
+import {
+  EventAgent,
+  EventAgentDocument,
+} from "../event-agents/schemas/event-agent.schema";
+
+/**
+ * What a booking stores about the `?ref=` code it came through: the code
+ * plus EITHER the operator OR the event agent it resolved to.
+ */
+export type ReferralAttribution = {
+  referralCode: string;
+  referralOperatorId?: string;
+  referralOperatorName?: string;
+  referralAgentId?: string;
+  referralAgentName?: string;
+};
 
 /** Shape the JWT strategy puts on `req.user` — mirrors expenses.service.ts's JwtActor. */
 export interface JwtActor {
@@ -28,6 +44,10 @@ export class OperatorsService {
     @InjectModel(Operator.name) private operatorModel: Model<OperatorDocument>,
     @InjectModel(Organizer.name)
     private organizerModel: Model<OrganizerDocument>,
+    // Event agents (the event form's Agents tab) share the `?ref=` namespace
+    // with operators; resolveReferral tries them second.
+    @InjectModel(EventAgent.name)
+    private eventAgentModel: Model<EventAgentDocument>,
   ) {}
 
   // 7-char uppercase alphanumeric, excluding visually-ambiguous characters
@@ -241,24 +261,58 @@ export class OperatorsService {
   // request body, so a code can only credit an operator of that event's own
   // organizer. Anything malformed, unknown, disabled or failing to look up
   // returns null — callers save no referral fields and the booking proceeds.
+  //
+  // A code is an OPERATOR's (organizer-wide, referralEnabled) or an EVENT
+  // AGENT's (the event form's Agents tab, scoped to one event). Operators are
+  // tried first, then agents of that event. An agent's usage cap is enforced
+  // right here, atomically: the credit is taken with a conditional $inc, so
+  // two bookings racing for the last use cannot both be credited, and a code
+  // past its cap (or switched off) simply stops being credited while the
+  // booking itself goes through.
   async resolveReferral(
     organizerId: string,
     code?: string | null,
-  ): Promise<{
-    referralCode: string;
-    referralOperatorId: string;
-    referralOperatorName: string;
-  } | null> {
+    /** The event being booked — agent codes only credit their own event. */
+    eventId?: string | null,
+  ): Promise<ReferralAttribution | null> {
     try {
       const normalized = String(code ?? "").trim().toUpperCase();
       if (!/^[A-Z0-9]{4,12}$/.test(normalized)) return null;
       if (!organizerId) return null;
       const operator = await this.findByReferralCode(organizerId, normalized);
-      if (!operator) return null;
+      if (operator) {
+        return {
+          referralCode: normalized,
+          referralOperatorId: String(operator._id),
+          referralOperatorName: operator.name || "",
+        };
+      }
+      if (!eventId || !Types.ObjectId.isValid(String(eventId))) return null;
+      if (!Types.ObjectId.isValid(String(organizerId))) return null;
+      const agent = await this.eventAgentModel
+        .findOneAndUpdate(
+          {
+            referralCode: normalized,
+            eventId: new Types.ObjectId(String(eventId)),
+            organizerId: new Types.ObjectId(String(organizerId)),
+            isActive: true,
+            // 0 = no cap; otherwise only while uses remain.
+            $expr: {
+              $or: [
+                { $lte: ["$maxUses", 0] },
+                { $lt: ["$usedCount", "$maxUses"] },
+              ],
+            },
+          },
+          { $inc: { usedCount: 1 }, $set: { lastUsedAt: new Date() } },
+          { new: true },
+        )
+        .lean();
+      if (!agent) return null;
       return {
         referralCode: normalized,
-        referralOperatorId: String(operator._id),
-        referralOperatorName: operator.name || "",
+        referralAgentId: String(agent._id),
+        referralAgentName: agent.name || "",
       };
     } catch {
       return null;

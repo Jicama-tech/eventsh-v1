@@ -26,13 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { PhoneField } from "@/components/ui/PhoneField";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,7 +39,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { jwtDecode } from "jwt-decode";
-import { phoneNationalLength } from "@/data/countries";
+import { isLikelyPhone, splitE164 } from "@/lib/phone";
 import {
   Plus,
   Loader2,
@@ -66,12 +60,6 @@ import {
 import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
-
-// Same two-country convention used across the organizer CRM (see MyUsers).
-const SUPPORTED_COUNTRIES = [
-  { name: "India", code: "IN", dialCode: "+91" },
-  { name: "Singapore", code: "SG", dialCode: "+65" },
-];
 
 interface Supplier {
   _id: string;
@@ -143,24 +131,13 @@ function getOrganizerId(): string | null {
   }
 }
 
-// Split a stored phone like "+9198…" into its dial code + national part so the
-// edit dialog can re-populate both the country picker and the number field.
-function splitPhone(phone?: string): { dialCode: string; number: string } {
-  const p = (phone || "").trim();
-  const match = SUPPORTED_COUNTRIES.find((c) => p.startsWith(c.dialCode));
-  if (match) {
-    return { dialCode: match.dialCode, number: p.slice(match.dialCode.length) };
-  }
-  return { dialCode: SUPPORTED_COUNTRIES[0].dialCode, number: p };
-}
-
 const EMPTY_FORM = {
   name: "",
   companyName: "",
   serviceCategory: "",
   email: "",
   businessEmail: "",
-  dialCode: SUPPORTED_COUNTRIES[0].dialCode,
+  // E.164 ("+919876543210") — the dial code travels inside the number.
   phone: "",
 };
 
@@ -824,15 +801,13 @@ function SupplierFormDialog({
   useEffect(() => {
     if (!isOpen) return;
     if (supplierToEdit) {
-      const { dialCode, number } = splitPhone(supplierToEdit.phone);
       setForm({
         name: supplierToEdit.name || "",
         companyName: supplierToEdit.companyName || "",
         serviceCategory: supplierToEdit.serviceCategory || "",
         email: supplierToEdit.email || "",
         businessEmail: supplierToEdit.businessEmail || "",
-        dialCode,
-        phone: number,
+        phone: supplierToEdit.phone || "",
       });
     } else {
       setForm({ ...EMPTY_FORM });
@@ -851,21 +826,8 @@ function SupplierFormDialog({
       e.email = "Enter a valid email";
     if (form.businessEmail.trim() && !emailRe.test(form.businessEmail.trim()))
       e.businessEmail = "Enter a valid email";
-    const ph = form.phone.trim();
-    if (ph) {
-      if (!/^\d+$/.test(ph)) {
-        e.phone = "Digits only — no letters or symbols";
-      } else {
-        const iso = SUPPORTED_COUNTRIES.find(
-          (c) => c.dialCode === form.dialCode,
-        )?.code;
-        const [min, max] = phoneNationalLength(iso);
-        if (ph.length < min || ph.length > max) {
-          e.phone =
-            min === max ? `Enter ${min} digits` : `Enter ${min}–${max} digits`;
-        }
-      }
-    }
+    if (form.phone && !isLikelyPhone(form.phone))
+      e.phone = "Enter a valid phone number";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -881,18 +843,18 @@ function SupplierFormDialog({
     setSubmitting(true);
     try {
       const token = sessionStorage.getItem("token");
-      const country = SUPPORTED_COUNTRIES.find(
-        (c) => c.dialCode === form.dialCode,
-      );
+      // The number is stored as E.164; the dial code and country the API
+      // still takes separately are read back off it.
+      const { dialCode, iso } = splitE164(form.phone);
       const payload = {
         name: form.name.trim(),
         companyName: form.companyName.trim(),
         serviceCategory: form.serviceCategory.trim(),
         email: form.email.trim(),
         businessEmail: form.businessEmail.trim(),
-        phone: form.phone.trim() ? `${form.dialCode}${form.phone.trim()}` : "",
-        countryCode: form.dialCode,
-        country: country?.code || "IN",
+        phone: form.phone,
+        countryCode: dialCode,
+        country: iso || "IN",
       };
       const url =
         mode === "edit"
@@ -995,29 +957,12 @@ function SupplierFormDialog({
 
           <div className="grid gap-1.5">
             <Label>{t("Contact Number")}</Label>
-            <div className="flex gap-2">
-              <Select
-                value={form.dialCode}
-                onValueChange={(v) => set({ dialCode: v })}
-              >
-                <SelectTrigger className="w-28">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SUPPORTED_COUNTRIES.map((c) => (
-                    <SelectItem key={c.code} value={c.dialCode}>
-                      {c.dialCode} ({c.code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input
-                value={form.phone}
-                onChange={(e) => set({ phone: e.target.value })}
-                placeholder={t("Phone number")}
-                className="flex-1"
-              />
-            </div>
+            <PhoneField
+              format="e164"
+              value={form.phone}
+              onChange={(v) => set({ phone: v })}
+              placeholder={t("Phone number")}
+            />
             {errors.phone && (
               <span className="text-xs text-red-600">{errors.phone}</span>
             )}

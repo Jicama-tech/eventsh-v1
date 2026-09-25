@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import PhoneField from "@/components/ui/PhoneField";
 import {
   Table,
   TableBody,
@@ -400,11 +401,11 @@ export function AgentsPage() {
             </div>
             <div className="space-y-1">
               <Label>WhatsApp Number *</Label>
-              <Input
+              <PhoneField
+                format="e164"
+                required
                 value={form.whatsAppNumber}
-                onChange={(e) =>
-                  setForm({ ...form, whatsAppNumber: e.target.value })
-                }
+                onChange={(val) => setForm({ ...form, whatsAppNumber: val })}
                 placeholder="+91XXXXXXXXXX"
               />
             </div>

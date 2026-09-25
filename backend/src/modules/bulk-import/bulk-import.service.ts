@@ -385,13 +385,19 @@ Return ONLY this JSON shape, nothing else:
         continue;
       }
 
-      // Skip if a matching visitor already exists for this organizer.
+      // Skip if a matching visitor already exists for this organizer — by
+      // number in any stored shape ("+91…", "91…"), under either provider tag.
       const dupQuery: any = {
-        provider: "Shopkeeper",
+        provider: { $in: ["Organizer", "Shopkeeper"] },
         providerId: organizerId,
         $or: [],
       };
-      if (wa) dupQuery.$or.push({ whatsAppNumber: wa });
+      if (wa) {
+        const waDigits = String(wa).replace(/\D/g, "");
+        dupQuery.$or.push({
+          whatsAppNumber: { $in: [wa, waDigits, `+${waDigits}`] },
+        });
+      }
       if (email) dupQuery.$or.push({ email });
       if (dupQuery.$or.length === 0) delete dupQuery.$or;
       const exists = await this.userModel.exists(dupQuery);

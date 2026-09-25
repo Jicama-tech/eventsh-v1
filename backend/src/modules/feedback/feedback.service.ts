@@ -94,6 +94,9 @@ export class FeedbackService {
     subjectId: string;
     eventId: string;
     whatsAppNumber?: string;
+    /** The event's organizer: the link goes out from their own linked
+     * WhatsApp when they have one. */
+    organizerId?: string;
     hasDeposit?: boolean;
   }) {
     if (!args.whatsAppNumber) {
@@ -119,7 +122,9 @@ export class FeedbackService {
     const text =
       `You've checked out from "${eventTitle}". ${reason}: ${link}`;
     try {
-      await this.otpService.sendWhatsAppMessage(args.whatsAppNumber, text);
+      await this.otpService.sendWhatsAppMessage(args.whatsAppNumber, text, {
+        organizerId: args.organizerId || undefined,
+      });
     } catch (err: any) {
       this.logger.warn(
         `WhatsApp feedback notification failed (${args.audience}/${args.subjectId}): ${err?.message}`,

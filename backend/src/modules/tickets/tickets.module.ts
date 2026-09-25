@@ -9,7 +9,6 @@ import {
   OrganizerSchema,
 } from "../organizers/schemas/organizer.schema";
 import { MailModule } from "../roles/mail.module";
-import { WhatsAppService } from "../otp/whatsapp.service";
 import { OtpModule } from "../otp/otp.module";
 import { OtpService } from "../otp/otp.service";
 import { UsersModule } from "../users/users.module";

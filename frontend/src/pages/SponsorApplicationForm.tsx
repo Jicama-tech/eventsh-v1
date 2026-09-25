@@ -13,6 +13,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
+import { PhoneField } from "@/components/ui/PhoneField";
+import { splitE164 } from "@/lib/phone";
 import {
   Loader2,
   CheckCircle2,
@@ -30,12 +32,6 @@ import {
 } from "lucide-react";
 
 const apiURL = __API_URL__;
-
-// Same two-country convention used across the organizer CRM.
-const SUPPORTED_COUNTRIES = [
-  { name: "India", code: "IN", dialCode: "+91" },
-  { name: "Singapore", code: "SG", dialCode: "+65" },
-];
 
 // Inline Google "G" mark for the sign-in button (no external asset / CSP-safe).
 function GoogleG({ className }: { className?: string }) {
@@ -142,9 +138,7 @@ export default function SponsorApplicationForm() {
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [companyName, setCompanyName] = useState("");
   const [contactName, setContactName] = useState("");
-  const [countryCode, setCountryCode] = useState(
-    SUPPORTED_COUNTRIES[0].dialCode,
-  );
+  // E.164 ("+919876543210") — the dial code travels inside the number.
   const [phone, setPhone] = useState("");
   const [website, setWebsite] = useState("");
   const [message, setMessage] = useState("");
@@ -336,8 +330,8 @@ export default function SponsorApplicationForm() {
       fd.append("companyName", companyName.trim());
       fd.append("contactName", contactName.trim());
       fd.append("email", authedEmail || "");
-      fd.append("countryCode", countryCode);
-      fd.append("phone", phone.trim());
+      fd.append("countryCode", splitE164(phone).dialCode);
+      fd.append("phone", phone);
       fd.append("website", website.trim());
       fd.append("message", message.trim());
       if (selectedTier?.collectPayment === false) {
@@ -810,26 +804,12 @@ export default function SponsorApplicationForm() {
               </div>
               <div>
                 <Label className="text-xs">Contact number</Label>
-                <div className="flex gap-2">
-                  <Select value={countryCode} onValueChange={setCountryCode}>
-                    <SelectTrigger className="w-24 shrink-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SUPPORTED_COUNTRIES.map((c) => (
-                        <SelectItem key={c.code} value={c.dialCode}>
-                          {c.dialCode} ({c.code})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="Phone number"
-                    className="flex-1"
-                  />
-                </div>
+                <PhoneField
+                  format="e164"
+                  value={phone}
+                  onChange={setPhone}
+                  placeholder="Phone number"
+                />
               </div>
               <div>
                 <Label className="text-xs">Website</Label>

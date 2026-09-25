@@ -14,6 +14,7 @@ import {
 } from "./entities/sponsor-request.entity";
 import { Sponsor, SponsorDocument } from "./schemas/sponsor.schema";
 import { MailService } from "../roles/mail.service";
+import { OtpService } from "../otp/otp.service";
 import {
   brandedEmail,
   button,
@@ -59,6 +60,8 @@ export class SponsorsService {
     @InjectModel("Event") private eventModel: Model<any>,
     @InjectModel("Organizer") private organizerModel: Model<any>,
     private readonly mailService: MailService,
+    // WhatsApp twins of the sponsor emails, from the organizer's own number.
+    private readonly otpService: OtpService,
   ) {}
 
   private assertId(id: string, label = "id") {
@@ -789,7 +792,7 @@ export class SponsorsService {
     note?: string,
   ) {
     const to = [req.email, req.businessEmail].filter(Boolean) as string[];
-    if (to.length === 0) return;
+    if (to.length === 0 && !req.phone) return;
 
     const organizer = await this.organizerModel
       .findById(req.organizerId)
@@ -861,6 +864,21 @@ export class SponsorsService {
           ),
       ),
     );
+
+    // WhatsApp twin, from the organizer's own linked number when they have
+    // one. Never throws.
+    await this.otpService.trySendWhatsAppMessage(
+      sponsorPhone(req),
+      `🤝 *${decision.heading}*\n\n` +
+        `${(event as any)?.title || "the event"}\n\n` +
+        `${decision.summary}` +
+        (note ? `\n\nNote from the organizer: ${note}` : ""),
+      {
+        organizerId: String(req.organizerId || ""),
+        country: (organizer as any)?.country,
+        organizerInitiated: true,
+      },
+    );
   }
 
   /**
@@ -899,6 +917,22 @@ export class SponsorsService {
         organizerEmail: (organizer as any)?.email,
       },
       (organizer as any)?.emailConfig,
+    );
+
+    // The invoice on WhatsApp too, from the organizer's own linked number
+    // when they have one. Never throws.
+    await this.otpService.trySendMediaBuffer(
+      sponsorPhone(req),
+      pdf,
+      `${req.invoiceNumber}.pdf`,
+      `🤝 *Sponsorship confirmed — ${(event as any)?.title || "the event"}*\n\n` +
+        `Hi ${req.contactName || req.companyName},\n\n` +
+        `Thank you for sponsoring ${(event as any)?.title || "the event"}. Your payment has been verified and your invoice ${req.invoiceNumber} is attached.`,
+      {
+        organizerId: String(req.organizerId || ""),
+        country,
+        organizerInitiated: true,
+      },
     );
 
     req.invoiceSentAt = new Date();
@@ -1108,4 +1142,23 @@ export class SponsorsService {
     );
     return rows.filter((r: any) => !hidden.has(String(r.sponsorId)));
   }
+}
+
+/**
+ * A sponsor's number as WhatsApp needs it: the stored `phone` completed with
+ * the separate dial-code field ("+65") when the number lacks one.
+ */
+function sponsorPhone(req: { phone?: string; countryCode?: string }): string {
+  const phone = String(req?.phone ?? "").trim();
+  const code = String(req?.countryCode ?? "").trim();
+  if (
+    phone &&
+    code &&
+    /^\+\d{1,4}$/.test(code) &&
+    !phone.startsWith("+") &&
+    phone.replace(/\D/g, "").length <= 10
+  ) {
+    return `${code}${phone.replace(/\D/g, "")}`;
+  }
+  return phone;
 }

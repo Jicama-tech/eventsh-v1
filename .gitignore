@@ -43,3 +43,7 @@ coverage/
 *.tmp
 *.bak
 .env.whitelabel
+
+# Per-organizer WhatsApp pairings (linked-device keys), one folder per organizer.
+# MUST stay ignored: the deploy runs `git clean -fd`, which would wipe them.
+whatsapp_org_auth/

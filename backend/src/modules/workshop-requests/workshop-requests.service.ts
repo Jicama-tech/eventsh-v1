@@ -100,7 +100,7 @@ export class WorkshopRequestsService {
     const organizerDoc = await this.organizerModel.findById(dto.organizerId);
 
     await this.sendWhatsAppNotification(
-      dto.hostPhone,
+      dto,
       `*Workshop Host Application Submitted*\n\n` +
         `Dear ${dto.hostName},\n\n` +
         `Your application to host "${dto.workshopName}" at *${event.title}* has been submitted and is pending organizer approval.`,
@@ -252,6 +252,17 @@ export class WorkshopRequestsService {
       const fee = Number(request.hostingFee) || 0;
       const isPaidHosting = !!request.isCharged && fee > 0;
 
+      // WhatsApp twin of the approval email below.
+      await this.sendWhatsAppNotification(
+        request,
+        `✅ *Workshop Approved — ${event?.title}*\n\n` +
+          `Hi ${request.hostName},\n\n` +
+          `Great news — the organizer approved your workshop, *${request.workshopName}*.` +
+          (isPaidHosting
+            ? `\n\nTo confirm your slot, pay the hosting fee of ${fee}. Sign back in on the event page with ${request.hostEmail} to pay — your workshop goes live as soon as the organizer confirms your payment.`
+            : ""),
+      );
+
       if (isPaidHosting) {
         await this.sendWorkshopEmail({
           to: request.hostEmail,
@@ -288,6 +299,14 @@ export class WorkshopRequestsService {
         }
       }
     } else if (dto.status === "Rejected") {
+      // WhatsApp twin of the rejection email below.
+      await this.sendWhatsAppNotification(
+        request,
+        `ℹ️ *Workshop Application Update — ${event?.title}*\n\n` +
+          `Hi ${request.hostName},\n\n` +
+          `Thank you for your interest in hosting at *${event?.title}*. On this occasion your application wasn't selected.` +
+          (dto.rejectionReason ? `\n\nReason: ${dto.rejectionReason}` : ""),
+      );
       await this.sendWorkshopEmail({
         to: request.hostEmail,
         organizerId: request.organizerId,
@@ -477,7 +496,7 @@ export class WorkshopRequestsService {
     await request.save();
 
     await this.sendWhatsAppNotification(
-      request.hostPhone,
+      request,
       `*Your Workshop is Live!*\n\n` +
         `"${request.workshopName}" is now published on *${event.title}* and open for bookings.`,
     );
@@ -576,10 +595,24 @@ export class WorkshopRequestsService {
     }
   }
 
-  private async sendWhatsAppNotification(phone?: string, message?: string) {
+  /**
+   * A WhatsApp message to the host, from the event organizer's own linked
+   * number when they have one (else the platform number while it is on).
+   * Takes the request/DTO rather than a bare number so the organizer is the
+   * one on the record being notified about.
+   */
+  private async sendWhatsAppNotification(
+    source: { hostPhone?: string; organizerId?: any } | null | undefined,
+    message?: string,
+  ) {
+    const phone = source?.hostPhone;
     if (!phone || !message) return;
     try {
-      await this.otpService.sendWhatsAppMessage(phone, message);
+      await this.otpService.sendWhatsAppMessage(phone, message, {
+        organizerId: String(
+          (source?.organizerId as any)?._id || source?.organizerId || "",
+        ),
+      });
     } catch {
       // Best-effort — WhatsApp is a secondary channel, email is primary.
     }

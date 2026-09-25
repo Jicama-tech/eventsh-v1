@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import PhoneField from "@/components/ui/PhoneField";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -184,12 +185,11 @@ export function AddShopkeeperForm({
                 </div>
                 <div>
                   <Label htmlFor="phone">{t("Phone *")}</Label>
-                  <Input
+                  <PhoneField
                     id="phone"
-                    type="tel"
-                    maxLength={10}
+                    format="e164"
                     value={formData.phone}
-                    onChange={(e) => handleInputChange("phone", e.target.value)}
+                    onChange={(val) => handleInputChange("phone", val)}
                     placeholder="+1-555-0123"
                     required
                   />

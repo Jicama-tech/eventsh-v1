@@ -32,6 +32,7 @@ export const hi: Record<string, string> = {
   "nav.membership": "सदस्यता",
   "nav.support": "सहायता",
   "nav.storefront": "इवेंटफ्रंट",
+  "nav.whatsapp": "व्हाट्सऐप",
   "nav.settings": "सेटिंग्स",
 
   // ---- individual (marriage) sidebar ----

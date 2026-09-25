@@ -88,6 +88,10 @@ export class FeaturesDto {
   @IsBoolean()
   @IsOptional()
   hasScheduledSpaces?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  hasAgents?: boolean;
 }
 
 // One custom age restriction: a heading (e.g. "Vendors") + an age (e.g. "18+").

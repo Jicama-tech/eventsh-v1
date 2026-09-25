@@ -84,6 +84,14 @@ export class WorkshopBooking {
   @Prop()
   referralOperatorName?: string;
 
+  // Or an event AGENT's code (the event form's Agents tab) — one of the two
+  // pairs is set, never both. Same visibility rules as the operator pair.
+  @Prop()
+  referralAgentId?: string;
+
+  @Prop()
+  referralAgentName?: string;
+
   @Prop()
   createdAt: Date;
 

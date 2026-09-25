@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
+import { assertReferralIfRequired } from "../../common/referral-required.util";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import * as QRCode from "qrcode";
@@ -19,6 +20,7 @@ import {
   ScheduledSpaceStatusEnum,
 } from "./entities/scheduled-space-request.entity";
 import { MailService } from "../roles/mail.service";
+import { OtpService } from "../otp/otp.service";
 import { OperatorsService } from "../operators/operators.service";
 import { omitReferralFields } from "../../common/referral.util";
 import { emailBrand } from "../../common/email/email-brand";
@@ -64,6 +66,8 @@ export class ScheduledSpacesService {
     @InjectModel("Organizer") private organizerModel: Model<any>,
     private mailService: MailService,
     private operatorsService: OperatorsService,
+    // WhatsApp twin of the ticket email, from the organizer's own number.
+    private readonly otpService: OtpService,
   ) {}
 
   // A visitor registers and is immediately confirmed — no organizer approval
@@ -99,7 +103,11 @@ export class ScheduledSpacesService {
     const referral = await this.operatorsService.resolveReferral(
       String(event.organizer),
       dto.referralCode,
+      String(event._id),
     );
+    // Referral-only booking (Agents section on): refused before anything is
+    // written unless the code resolved to an agent or operator.
+    assertReferralIfRequired(event, referral, dto.referralCode);
 
     const request = new this.requestModel({
       eventId: new Types.ObjectId(String(dto.eventId)),
@@ -468,6 +476,36 @@ export class ScheduledSpacesService {
         { filename: "qr-code.png", content: qrBase64, encoding: "base64", cid: qrCid },
       ],
     });
+
+    // WhatsApp twin of the ticket email, from the organizer's own linked
+    // number when they have one (else the platform number while it is on).
+    // Never throws; the email above is the delivery that counts.
+    const waNumber = request.whatsappNumber || request.phone;
+    if (waNumber) {
+      const caption =
+        `🎟️ *${isReissue ? "Your ticket, resent" : "Booking confirmed"} — ${event?.title || "Event"}*\n\n` +
+        `Hi ${request.name},\n\n` +
+        `Your payment for *${event?.title || "the event"}* has been confirmed. ` +
+        (pdfBuffer
+          ? `Your check-in QR ticket is attached — please show it at the venue.`
+          : `Your check-in QR ticket has been emailed to ${request.email}.`);
+      const route = {
+        organizerId: String(request.organizerId || ""),
+        country: (organizer as any)?.country,
+        organizerInitiated: isReissue,
+      };
+      if (pdfBuffer) {
+        await this.otpService.trySendMediaBuffer(
+          waNumber,
+          pdfBuffer,
+          "scheduled-space-ticket.pdf",
+          caption,
+          route,
+        );
+      } else {
+        await this.otpService.trySendWhatsAppMessage(waNumber, caption, route);
+      }
+    }
   }
 
   // Renders a single-page PDF ticket (event, registrant, booked slots, QR)

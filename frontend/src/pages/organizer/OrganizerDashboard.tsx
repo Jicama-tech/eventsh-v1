@@ -64,6 +64,7 @@ import { OrganizerAnalyticsCharts } from "@/components/organizer/OrganizerAnalyt
 import { ChatbotWidget } from "@/components/organizer/ChatbotWidget";
 import DemoPrompt from "@/components/user/DemoPrompt";
 import { ModuleGate } from "@/components/ui/ModuleGate";
+import { FaWhatsapp } from "react-icons/fa";
 import { jwtDecode } from "jwt-decode";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrencyhook";
@@ -183,6 +184,13 @@ const RoundTableBookings = lazy(
   () => import("@/components/organizer/RoundTableBookings"),
 );
 const SupportPanel = lazy(() => import("@/components/organizer/SupportPanel"));
+// WhatsApp campaigns: personalised messages to the organizer's own contacts
+// from the number linked in Settings › Profile › WhatsApp.
+const WhatsAppCampaignScreen = lazy(() =>
+  import("@/components/organizer/whatsapp/WhatsAppCampaign").then((m) => ({
+    default: m.WhatsAppCampaignScreen,
+  })),
+);
 const MembershipPanel = lazy(() =>
   import("@/components/organizer/MembershipPanel").then((m) => ({
     default: m.MembershipPanel,
@@ -791,7 +799,17 @@ export function OrganizerDashboard({
       }
       throw new Error(detail);
     }
+    // The created event, so the form can create the agents queued on its
+    // Agents tab against the new id (it closes itself afterwards).
+    let created: any = null;
+    try {
+      const j = await res.json();
+      created = j?.data || j;
+    } catch {
+      // Non-JSON success body — nothing to hand back.
+    }
     setShowCreateEvent(false);
+    return created;
   };
 
   const handleEditEvent = (event: any) => {
@@ -1118,6 +1136,15 @@ export function OrganizerDashboard({
       isAction: true,
       moduleKey: "storefront",
     },
+    {
+      // WhatsApp campaigns from the organizer's own linked number. Gated by
+      // the whatsappCampaign plan module; operators also need the "whatsapp"
+      // access tab (enforced on the API by TabsGuard).
+      id: "whatsapp",
+      label: t("nav.whatsapp"),
+      icon: FaWhatsapp,
+      moduleKey: "whatsappCampaign",
+    },
     { id: "settings", label: t("nav.settings"), icon: Settings, moduleKey: null },
   ];
 
@@ -1144,6 +1171,7 @@ export function OrganizerDashboard({
     membership: STAT_ACCENTS[2].icon,
     support: STAT_ACCENTS[1].icon,
     storefront: STAT_ACCENTS[4].icon,
+    whatsapp: "text-green-600 dark:text-green-400",
     settings: "text-muted-foreground",
     "guest-list": STAT_ACCENTS[3].icon,
     "email-settings": STAT_ACCENTS[5].icon,
@@ -1593,6 +1621,16 @@ export function OrganizerDashboard({
                   <Suspense fallback={<TabLoader />}>
                     <div className="space-y-4">
                       <MyEventUsers setShowAddUser={setShowAddUser} />
+                    </div>
+                  </Suspense>
+                </ModuleGate>
+              </TabsContent>
+
+              <TabsContent value="whatsapp" className="mt-0">
+                <ModuleGate moduleKey="whatsappCampaign" hideWhenLocked>
+                  <Suspense fallback={<TabLoader />}>
+                    <div className="space-y-4">
+                      <WhatsAppCampaignScreen />
                     </div>
                   </Suspense>
                 </ModuleGate>

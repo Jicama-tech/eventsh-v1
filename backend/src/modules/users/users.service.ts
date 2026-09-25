@@ -442,23 +442,55 @@ export class UsersService {
     }
   }
 
+  /**
+   * A WhatsApp number is unique within an organizer's customer list (CRM).
+   * Stored numbers vary in shape ("+91…", "91…", "+91 98…"), so the match is
+   * on digits, over the organizer's own rows (legacy "Shopkeeper"-tagged ones
+   * included). `excludeId` is the row being edited.
+   */
+  private async assertCustomerNumberFree(
+    organizerId: string,
+    whatsAppNumber: string | undefined,
+    excludeId?: string,
+  ): Promise<void> {
+    const digits = String(whatsAppNumber ?? "").replace(/\D/g, "");
+    if (!digits) return;
+    const rows = await this.userModel
+      .find({
+        providerId: organizerId,
+        provider: { $in: ["Organizer", "Shopkeeper"] },
+        ...(excludeId ? { _id: { $ne: excludeId } } : {}),
+      })
+      .select("_id name whatsAppNumber")
+      .lean();
+    const clash = (rows as any[]).find(
+      (r) => String(r.whatsAppNumber ?? "").replace(/\D/g, "") === digits,
+    );
+    if (clash) {
+      throw new BadRequestException(
+        `This WhatsApp number is already in your customer list${
+          clash.name ? ` (${clash.name})` : ""
+        }. Each customer needs a unique number.`,
+      );
+    }
+  }
+
+  /** "+<digits>" for storage, "" when empty. */
+  private e164(value: string | undefined): string {
+    const digits = String(value ?? "").replace(/\D/g, "");
+    return digits ? `+${digits}` : "";
+  }
+
   async createUserByOrganizer(data: CreateUserDto, organizerId: string) {
     try {
-      const user = await this.userModel.findOne({
-        whatsAppNumber: data.whatsAppNumber,
-        email: data?.email,
-      });
-
-      if (user) {
-        throw new BadRequestException("User Already Exists");
-      }
+      await this.assertCustomerNumberFree(organizerId, data.whatsAppNumber);
 
       const created = new this.userModel({
         name: data.firstName + " " + data.lastName,
         email: data.email,
         provider: "Organizer",
         providerId: organizerId,
-        whatsAppNumber: data.whatsAppNumber,
+        whatsAppNumber: this.e164(data.whatsAppNumber),
         firstName: data.firstName,
         lastName: data.lastName,
       });
@@ -489,24 +521,15 @@ export class UsersService {
         throw new BadRequestException("User not found or access denied");
       }
 
-      // 2. Check for duplicate WhatsApp / Email (excluding current user)
-      // const duplicateUser = await this.userModel.findOne({
-      //   _id: { $ne: userId },
-      //   $or: [{ whatsAppNumber: data.whatsAppNumber }, { email: data.email }],
-      // });
-
-      // if (duplicateUser) {
-      //   throw new BadRequestException(
-      //     "Another user already exists with this WhatsApp number or email",
-      //   );
-      // }
+      // 2. The number must stay unique within this organizer's customers.
+      await this.assertCustomerNumberFree(organizerId, data.whatsAppNumber, userId);
 
       // 3. Update fields
       existingUser.firstName = data.firstName;
       existingUser.lastName = data.lastName;
       existingUser.name = `${data.firstName} ${data.lastName}`;
       existingUser.email = data.email;
-      existingUser.whatsAppNumber = data.whatsAppNumber;
+      existingUser.whatsAppNumber = this.e164(data.whatsAppNumber);
 
       const updatedUser = await existingUser.save();
 

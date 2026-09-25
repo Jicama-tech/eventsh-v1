@@ -471,7 +471,13 @@ const RoundTableBookings = ({
                       {t("Referral")}
                     </span>
                     <span className="text-sm">
-                      {[selectedBooking.referralCode, selectedBooking.referralOperatorName]
+                      {[
+                        selectedBooking.referralCode,
+                        selectedBooking.referralOperatorName ||
+                          (selectedBooking.referralAgentName
+                            ? `${t("Agent")}: ${selectedBooking.referralAgentName}`
+                            : ""),
+                      ]
                         .filter(Boolean)
                         .join(" · ")}
                     </span>

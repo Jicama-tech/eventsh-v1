@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import PhoneField from "@/components/ui/PhoneField";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -396,25 +397,25 @@ export function ShopkeeperRequestForm({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <Label htmlFor="phone">{t("Primary Phone *")}</Label>
-                    <Input
+                    <PhoneField
                       id="phone"
+                      format="e164"
                       value={formData.phone}
-                      onChange={(e) =>
-                        setFormData({ ...formData, phone: e.target.value })
-                      }
+                      onChange={(val) => setFormData({ ...formData, phone: val })}
                       placeholder="+1-555-0123"
                       required
                     />
                   </div>
                   <div>
                     <Label htmlFor="alternatePhone">{t("Alternate Phone")}</Label>
-                    <Input
+                    <PhoneField
                       id="alternatePhone"
+                      format="e164"
                       value={formData.alternatePhone}
-                      onChange={(e) =>
+                      onChange={(val) =>
                         setFormData({
                           ...formData,
-                          alternatePhone: e.target.value,
+                          alternatePhone: val,
                         })
                       }
                       placeholder="+1-555-0124"

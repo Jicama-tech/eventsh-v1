@@ -617,6 +617,11 @@ export class Event {
     hasRoundTables?: boolean;
     hasWorkshops?: boolean;
     hasScheduledSpaces?: boolean;
+    // Agents: referral-only booking. When on, every booking on this event
+    // (tickets, stalls, scheduled spaces, round tables, workshops, speaker
+    // applications) needs a code that resolves to one of the event's
+    // agents or the organizer's operators.
+    hasAgents?: boolean;
   };
 
   @Prop()

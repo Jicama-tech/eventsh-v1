@@ -14,6 +14,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useLocation, useNavigate } from "react-router-dom";
 import Footer from "@/components/ui/footer";
+import PhoneField from "@/components/ui/PhoneField";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -390,15 +391,16 @@ const Contact = () => {
                 <div className="grid md:grid-cols-2 gap-6">
                   <div>
                     <label className={labelClass}>Contact Number</label>
-                    <input
-                      type="tel"
+                    <PhoneField
+                      id="contactNumber"
                       name="contactNumber"
-                      value={formData.contactNumber}
-                      onChange={handleInputChange}
+                      format="e164"
                       required
-                      maxLength={15}
+                      value={formData.contactNumber}
+                      onChange={(val) =>
+                        setFormData((prev) => ({ ...prev, contactNumber: val }))
+                      }
                       placeholder="+91 XXXXXXXXXX"
-                      className={inputClass}
                     />
                   </div>
 

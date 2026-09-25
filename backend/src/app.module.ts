@@ -49,6 +49,9 @@ import { AnalyticsModule } from "./modules/analytics/analytics.module";
 import { ExpensesModule } from "./modules/expenses/expenses.module";
 import { PlatformRegistryModule } from "./modules/platform-registry/platform-registry.module";
 import { PlatformSyncModule } from "./modules/platform-sync/platform-sync.module";
+import { WhatsappModule } from "./modules/whatsapp/whatsapp.module";
+import { CampaignsModule } from "./modules/campaigns/campaigns.module";
+import { EventAgentsModule } from "./modules/event-agents/event-agents.module";
 
 @Module({
   imports: [
@@ -119,6 +122,11 @@ import { PlatformSyncModule } from "./modules/platform-sync/platform-sync.module
     AnalyticsModule,
     PlatformRegistryModule,
     PlatformSyncModule,
+    // Each organizer's own WhatsApp number, and campaigns sent from it.
+    WhatsappModule,
+    CampaignsModule,
+    // Per-event agents with referral links (the event form's Agents tab).
+    EventAgentsModule,
   ],
   providers: [
     // Read-only demo sessions can never mutate real data via the API.
