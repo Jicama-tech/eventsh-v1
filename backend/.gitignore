@@ -7,3 +7,5 @@ dist
 /uploads
 npm-debug.log
 whatsapp_auth
+# Per-organizer WhatsApp pairings — see root .gitignore.
+whatsapp_org_auth

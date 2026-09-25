@@ -399,7 +399,9 @@ const ScheduledSpaceRequests = ({
                           <span className="font-mono">{req.referralCode}</span>
                           {req.referralOperatorName
                             ? ` · ${req.referralOperatorName}`
-                            : ""}
+                            : req.referralAgentName
+                              ? ` · ${t("Agent")}: ${req.referralAgentName}`
+                              : ""}
                         </span>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
@@ -502,7 +504,9 @@ const ScheduledSpaceRequests = ({
                     <span className="font-mono">{selected.referralCode}</span>
                     {selected.referralOperatorName
                       ? ` · ${selected.referralOperatorName}`
-                      : ""}
+                      : selected.referralAgentName
+                        ? ` · ${t("Agent")}: ${selected.referralAgentName}`
+                        : ""}
                   </p>
                 )}
                 {scheduledSpaceFieldOn("purpose") && selected.purpose && (

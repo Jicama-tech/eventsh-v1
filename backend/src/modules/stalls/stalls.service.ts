@@ -6,6 +6,7 @@ import {
   InternalServerErrorException,
   Logger,
 } from "@nestjs/common";
+import { assertReferralIfRequired } from "../../common/referral-required.util";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import {
@@ -487,7 +488,11 @@ export class StallsService {
       const referral = await this.operatorsService.resolveReferral(
         String(event.organizer),
         createStallDto.referralCode,
+        String(event._id),
       );
+      // Referral-only booking (Agents section on): refused before anything
+      // is written unless the code resolved to an agent or operator.
+      assertReferralIfRequired(event, referral, createStallDto.referralCode);
 
       const newStall = await this.stallModel.create({
         shopkeeperId,
@@ -850,6 +855,23 @@ export class StallsService {
             `Vendor ${stall.shopkeeperId} has no email — submission notice not sent`,
           );
         }
+
+        // WhatsApp twin of the email above, from the organizer's own linked
+        // number when they have one. Never throws.
+        await this.otpService.trySendWhatsAppMessage(
+          (vendor as any)?.whatsAppNumber || (vendor as any)?.whatsappNumber,
+          `✅ *Booking Received — ${event.title}*\n\n` +
+            `Hi ${vendor?.name || "there"},\n\n` +
+            `Your booking for *${event.title}* has been received and your payment details have been submitted.\n\n` +
+            `Spaces: ${selectDto.selectedTables.map((t) => t.tableName).join(", ") || "—"}\n` +
+            `Status: Awaiting organizer payment approval\n\n` +
+            `Once the organizer approves your payment, your stall ticket with the QR code will be sent to you.`,
+          {
+            organizerId: String(
+              (updatedStall as any)?.organizerId?._id || stall.organizerId || "",
+            ),
+          },
+        );
       } catch (notifyErr) {
         this.logger.warn(
           "Failed to send payment-submitted notification",
@@ -1657,6 +1679,21 @@ export class StallsService {
       this.logger.log(
         `Deadline-extension email sent to vendor for stall ${stall._id}`,
       );
+
+      // WhatsApp twin, from the organizer's own linked number when they have
+      // one. Never throws.
+      await this.otpService.trySendWhatsAppMessage(
+        vendor?.whatsAppNumber || vendor?.whatsappNumber,
+        `⏳ *Payment window extended — ${event?.title || "Event"}*\n\n` +
+          `Hi ${businessName},\n\n` +
+          `The organizer has extended your payment confirmation window. New deadline: *${deadlineStr}*.\n\n` +
+          (note ? `Message from the organizer: ${note}\n\n` : "") +
+          `Please connect with the organizer and complete payment (if not done) before the new deadline so your space is secured.`,
+        {
+          organizerId: String((stall.organizerId as any)?._id || stall.organizerId || ""),
+          organizerInitiated: true,
+        },
+      );
     } catch (e: any) {
       this.logger.warn(
         `[stalls] notifyVendorDeadlineExtended failed: ${e?.message || e}`,
@@ -1848,7 +1885,10 @@ export class StallsService {
     try {
       if (vendorWhatsApp) {
         try {
-          await this.otpService.sendWhatsAppMessage(vendorWhatsApp, message);
+          await this.otpService.sendWhatsAppMessage(vendorWhatsApp, message, {
+            organizerId: String(orgId || ""),
+            country,
+          });
         } catch (waErr) {
           this.logger.warn(
             `WhatsApp text failed for stall ${stallId} (continuing to email): ${
@@ -1875,6 +1915,9 @@ export class StallsService {
             // Heads and signs the ticket email (brandedEmail's organizer).
             organizer: this.vendorEmailFrame(organizerDoc).organizer,
           },
+          // The PDF goes out from the organizer's own linked WhatsApp when
+          // they have one (else the platform number while it is on).
+          { organizerId: String(orgId || ""), country, organizerInitiated: isReissue },
         );
       } else if (vendorEmail) {
         await this.mailService.sendEmail({
@@ -2393,6 +2436,20 @@ export class StallsService {
         }
       }
 
+      // WhatsApp twin of the cancellation email, from the organizer's own
+      // linked number when they have one. Never throws.
+      {
+        const vendorDoc: any = stall.shopkeeperId;
+        await this.otpService.trySendWhatsAppMessage(
+          vendorDoc?.whatsAppNumber || vendorDoc?.whatsappNumber,
+          `❌ *Booking Cancelled — ${eventObj?.title || "Event"}*\n\n` +
+            `Your stall booking for *${eventObj?.title || "the event"}* has been cancelled as you requested.\n\n` +
+            (note ? `Note from the organizer: ${note}\n\n` : "") +
+            `Any refund or deposit is settled by the organizer — please contact them for the details.`,
+          { organizerId: String(orgId || ""), organizerInitiated: true },
+        );
+      }
+
       const actor = (dto.changedBy || "").trim() || "Organizer";
       stall.status = "Cancelled" as any;
       (stall as any).cancelledVia = "organizer-decision";
@@ -2462,6 +2519,19 @@ export class StallsService {
       } catch {
         /* non-fatal */
       }
+    }
+
+    // WhatsApp twin, from the organizer's own linked number when they have
+    // one. Never throws.
+    {
+      const vendorDoc: any = stall.shopkeeperId;
+      await this.otpService.trySendWhatsAppMessage(
+        vendorDoc?.whatsAppNumber || vendorDoc?.whatsappNumber,
+        `ℹ️ *Cancellation Not Approved — ${eventObj?.title || "Event"}*\n\n` +
+          `Your request to cancel your stall for *${eventObj?.title || "the event"}* was not approved. Your booking remains active.\n\n` +
+          (note ? `Note from the organizer: ${note}` : ""),
+        { organizerId: String(orgId || ""), organizerInitiated: true },
+      );
     }
 
     return {
@@ -3547,7 +3617,10 @@ export class StallsService {
       // Kept for deployments that still have WhatsApp switched on; it no-ops
       // when the kill-switch is off.
       const wa = vendor?.whatsAppNumber || vendor?.whatsappNumber;
-      if (wa) await this.otpService.sendWhatsAppMessage(wa, message);
+      if (wa)
+        await this.otpService.sendWhatsAppMessage(wa, message, {
+          organizerId: String((stall.organizerId as any)?._id || stall.organizerId || ""),
+        });
     } catch (e: any) {
       this.logger.warn(
         `[stalls] attendance notification failed for stall ${stall?._id}: ${
@@ -3566,6 +3639,7 @@ export class StallsService {
           subjectId: String(stall._id),
           eventId: String(stall.eventId?._id || stall.eventId || ""),
           whatsAppNumber: vendor?.whatsAppNumber || vendor?.whatsappNumber,
+          organizerId: String((stall.organizerId as any)?._id || stall.organizerId || ""),
           hasDeposit: ((stall.depositTotal as number) || 0) > 0,
         });
       } catch (e: any) {
@@ -3787,6 +3861,7 @@ export class StallsService {
         await this.otpService.sendWhatsAppMessage(
           vendor.whatsAppNumber || vendor.whatsappNumber,
           message,
+          { organizerId: String((stall.organizerId as any)?._id || stall.organizerId || "") },
         );
       } catch (waErr) {
         this.logger.warn("Stall created WhatsApp notify failed", waErr);
@@ -4375,6 +4450,17 @@ export class StallsService {
           );
       }
 
+      // WhatsApp twin of the release notice, from the organizer's own linked
+      // number when they have one. Never throws.
+      await this.otpService.trySendWhatsAppMessage(
+        vendor?.whatsAppNumber || vendor?.whatsappNumber,
+        `⚠️ *Booking Released — ${event?.title || "Event"}*\n\n` +
+          `Dear ${vendor?.name || "Exhibitor"},\n\n` +
+          `Your stall booking for *${event?.title || "the event"}* was not confirmed by the organizer within 24 hours, so the space has been released.\n\n` +
+          `If you have already paid, please contact the organizer to resolve this or re-book.`,
+        { organizerId: String(orgId || "") },
+      );
+
       // Organizer + operators — space freed.
       if (orgId) {
         const { recipients } = await this.getStallReviewerEmails(orgId);
@@ -4454,6 +4540,7 @@ export class StallsService {
           await this.otpService.sendWhatsAppMessage(
             vendor.whatsAppNumber || vendor.whatsappNumber,
             message,
+            { organizerId: String((stall.organizerId as any)?._id || stall.organizerId || "") },
           );
         } catch (waErr) {
           this.logger.warn("Status update WhatsApp notify failed", waErr);
@@ -4760,10 +4847,17 @@ export class StallsService {
                 `Your booking details PDF is attached.`;
 
               // WhatsApp text only when a number is on file.
+              const partialRoute = {
+                organizerId: String(
+                  (populatedStall.organizerId as any)?._id || populatedStall.organizerId || "",
+                ),
+                country: ctry,
+              };
               if (vendorWhatsApp) {
                 await this.otpService.sendWhatsAppMessage(
                   vendorWhatsApp,
                   waText,
+                  partialRoute,
                 );
               }
 
@@ -4787,6 +4881,7 @@ export class StallsService {
                   senderConfig: (orgDoc as any)?.emailConfig,
                   organizer: this.vendorEmailFrame(orgDoc).organizer,
                 },
+                partialRoute,
               );
             }
           } catch (partialErr) {
@@ -5539,7 +5634,11 @@ export class StallsService {
     // kill-switch is off. Isolated so a gateway error cannot mask the email.
     try {
       const wa = vendor?.whatsAppNumber || vendor?.whatsappNumber;
-      if (wa) await this.otpService.sendWhatsAppMessage(wa, message);
+      if (wa)
+        await this.otpService.sendWhatsAppMessage(wa, message, {
+          organizerId: String((stall.organizerId as any)?._id || stall.organizerId || ""),
+          organizerInitiated: true,
+        });
     } catch (e: any) {
       this.logger.warn(
         `[stalls] deposit-returned WhatsApp failed for stall ${stall._id}: ${
@@ -5784,7 +5883,16 @@ export class StallsService {
     // Attempt WhatsApp only when it can actually deliver. sendMediaMessage
     // returns quietly when the kill-switch is off, so without this the run
     // would report a pile of successful sends that never left the building.
-    const waUsable = wantWhatsApp && waStatus.enabled && waStatus.connected;
+    // The event's organizer: with their own WhatsApp linked, the tickets go
+    // out from it even while the platform number is off.
+    const eventOrganizerId = String(
+      ((await this.eventModel.findById(eventId).select("organizer").lean()) as any)
+        ?.organizer || "",
+    );
+    const waUsable =
+      wantWhatsApp &&
+      ((waStatus.enabled && waStatus.connected) ||
+        this.otpService.isOrganizerWhatsAppConnected(eventOrganizerId));
     const waSkipped: Row[] = [];
     const waFailed: Row[] = [];
     let waSent = 0;
@@ -5837,6 +5945,8 @@ export class StallsService {
               pdfPath,
               customMessage?.trim() || "Your stall ticket",
               "stall-ticket.pdf",
+              undefined,
+              { organizerId: eventOrganizerId, organizerInitiated: true },
             );
             waSent += 1;
           } catch (err: any) {
@@ -6073,6 +6183,13 @@ export class StallsService {
           pdfPath,
           `Stall Ticket - ${eventTitle}`,
           "stall-ticket.pdf",
+          undefined,
+          {
+            organizerId: String(
+              (orgDoc as any)?._id || (stall.organizerId as any)?._id || stall.organizerId || "",
+            ),
+            organizerInitiated: true,
+          },
         );
       } catch (waErr) {
         this.logger.warn(

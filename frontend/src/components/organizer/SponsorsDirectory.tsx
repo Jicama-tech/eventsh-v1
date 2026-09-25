@@ -28,13 +28,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { PhoneField } from "@/components/ui/PhoneField";
+import { splitE164 } from "@/lib/phone";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,12 +65,6 @@ import {
 import { t } from "@/i18n/t";
 
 const apiURL = __API_URL__;
-
-// Same two-country convention used across the organizer CRM (see MyUsers).
-const SUPPORTED_COUNTRIES = [
-  { name: "India", code: "IN", dialCode: "+91" },
-  { name: "Singapore", code: "SG", dialCode: "+65" },
-];
 
 interface Sponsor {
   _id: string;
@@ -148,23 +137,12 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-// Split a stored phone like "+9198…" into its dial code + national part so the
-// edit dialog can re-populate both the country picker and the number field.
-function splitPhone(phone?: string): { dialCode: string; number: string } {
-  const p = (phone || "").trim();
-  const match = SUPPORTED_COUNTRIES.find((c) => p.startsWith(c.dialCode));
-  if (match) {
-    return { dialCode: match.dialCode, number: p.slice(match.dialCode.length) };
-  }
-  return { dialCode: SUPPORTED_COUNTRIES[0].dialCode, number: p };
-}
-
 const EMPTY = {
   companyName: "",
   contactName: "",
   email: "",
   businessEmail: "",
-  countryCode: SUPPORTED_COUNTRIES[0].dialCode,
+  // E.164 ("+919876543210") — the dial code travels inside the number.
   phone: "",
   website: "",
   notes: "",
@@ -318,16 +296,13 @@ export default function SponsorsDirectory() {
   };
 
   const openEdit = (s: Sponsor) => {
-    // Stored phones carry their dial code — peel it back off so the picker
-    // and the number field each show the right half.
-    const { dialCode, number } = splitPhone(s.phone);
+    // Stored phones carry their dial code — the field reads it straight in.
     setForm({
       companyName: s.companyName || "",
       contactName: s.contactName || "",
       email: s.email || "",
       businessEmail: s.businessEmail || "",
-      countryCode: s.countryCode || dialCode,
-      phone: number,
+      phone: s.phone || "",
       website: s.website || "",
       notes: s.notes || "",
     });
@@ -378,13 +353,11 @@ export default function SponsorsDirectory() {
       const fd = new FormData();
       fd.append("companyName", form.companyName.trim());
       fd.append("contactName", form.contactName.trim());
-      fd.append("countryCode", form.countryCode);
-      // Store the dial code inline, as the supplier CRM and the Excel
-      // importer both do — the table renders `phone` on its own.
-      fd.append(
-        "phone",
-        form.phone.trim() ? `${form.countryCode}${form.phone.trim()}` : "",
-      );
+      // The dial code lives inside the E.164 number, as the supplier CRM and
+      // the Excel importer both store it — the table renders `phone` on its
+      // own. `countryCode` is read back off the number for the API.
+      fd.append("countryCode", splitE164(form.phone).dialCode);
+      fd.append("phone", form.phone);
       fd.append("website", form.website.trim());
       fd.append("notes", form.notes.trim());
       // An empty string fails @IsEmail, so omit the field entirely when blank.
@@ -940,32 +913,11 @@ export default function SponsorsDirectory() {
             </div>
             <div>
               <Label className="text-xs">{t("Phone")}</Label>
-              <div className="flex gap-2">
-                <Select
-                  value={form.countryCode}
-                  onValueChange={(v) =>
-                    setForm((f) => ({ ...f, countryCode: v }))
-                  }
-                >
-                  <SelectTrigger className="w-24 shrink-0">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SUPPORTED_COUNTRIES.map((c) => (
-                      <SelectItem key={c.code} value={c.dialCode}>
-                        {c.dialCode} ({c.code})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  value={form.phone}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, phone: e.target.value }))
-                  }
-                  className="flex-1"
-                />
-              </div>
+              <PhoneField
+                format="e164"
+                value={form.phone}
+                onChange={(v) => setForm((f) => ({ ...f, phone: v }))}
+              />
             </div>
             <div className="sm:col-span-2">
               <Label className="text-xs">{t("Website")}</Label>

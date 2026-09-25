@@ -11,6 +11,7 @@ import { Sponsor, SponsorSchema } from "./schemas/sponsor.schema";
 import { EventSchema } from "../events/schemas/event.schema";
 import { OrganizerSchema } from "../organizers/schemas/organizer.schema";
 import { MailModule } from "../roles/mail.module";
+import { OtpModule } from "../otp/otp.module";
 import { OrganizersModule } from "../organizers/organizers.module";
 
 @Module({
@@ -24,6 +25,9 @@ import { OrganizersModule } from "../organizers/organizers.module";
     ]),
     // Invoice emails go out from the organizer's SMTP when configured.
     MailModule,
+    // WhatsApp twins of those emails (OtpService routes them through the
+    // organizer's own linked number).
+    OtpModule,
     // JwtAuthGuard injects JwtService — it verifies with JWT_ACCESS_SECRET
     // itself, so these register options only need to provide the instance.
     JwtModule.register({

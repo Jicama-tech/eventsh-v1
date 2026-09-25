@@ -5,6 +5,7 @@ import {
   ConflictException,
   Logger,
 } from "@nestjs/common";
+import { assertReferralIfRequired } from "../../common/referral-required.util";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import {
@@ -181,7 +182,11 @@ export class RoundTableBookingsService {
     const referral = await this.operatorsService.resolveReferral(
       String(event.organizer),
       dto.referralCode,
+      String(event._id),
     );
+    // Referral-only booking (Agents section on): refused before anything is
+    // written unless the code resolved to an agent or operator.
+    assertReferralIfRequired(event, referral, dto.referralCode);
 
     const booking = await this.bookingModel.create({
       eventId: new Types.ObjectId(dto.eventId),
@@ -251,6 +256,12 @@ export class RoundTableBookingsService {
             `Seats: ${booking.numberOfSeats}\n` +
             `Amount: ${booking.amount}\n\n` +
             `Please confirm this payment from your organizer dashboard.`,
+          // TO the organizer: routed so it rings (the platform number when the
+          // organizer's own number is the linked one).
+          {
+            organizerId: String((eventDoc?.organizer as any)?._id || ""),
+            toOrganizer: true,
+          },
         );
       }
     } catch {
@@ -367,15 +378,20 @@ export class RoundTableBookingsService {
 
       booking.qrCodePath = `/uploads/roundTableTickets/${pdfFileName}`;
 
-      // Send TABLE QR to the booking person (master ticket)
-      if (booking.visitorPhone) {
+      // Send TABLE QR to the booking person (master ticket). Email and
+      // WhatsApp are independent: a booker with only an email still gets the
+      // ticket (sendMediaMessage emails first and skips WhatsApp without a
+      // number), and the WhatsApp copy goes from the organizer's own linked
+      // number when they have one.
+      const route = { organizerId: String(booking.organizerId || ""), country };
+      if (booking.visitorPhone || booking.visitorEmail) {
         try {
           const chairList =
             booking.sellingMode === "table"
               ? `Entire table (${booking.numberOfSeats} seats)`
               : `Chair(s): ${booking.selectedChairIndices.map((c: number) => c + 1).join(", ")}`;
 
-          await this.otpService.sendWhatsAppMessage(
+          if (booking.visitorPhone) await this.otpService.sendWhatsAppMessage(
             booking.visitorPhone,
             `*Round Table Booking Confirmed!*\n\n` +
               `Event: *${eventDoc.title}*\n` +
@@ -383,10 +399,11 @@ export class RoundTableBookingsService {
               `${chairList}\n` +
               `Amount: *${formatCurrency(booking.amount, country)}*\n\n` +
               `Your table ticket with QR code is attached. Individual seat QRs have been sent to each guest.`,
+            route,
           );
 
           await this.otpService.sendMediaMessage(
-            booking.visitorPhone,
+            booking.visitorPhone || "",
             pdfPath,
             `Table Ticket - ${eventDoc.title}`,
             "table-ticket.pdf",
@@ -404,6 +421,7 @@ export class RoundTableBookingsService {
               organizer:
                 (organizerDoc as any)?.organizationName || (organizerDoc as any)?.name,
             },
+            route,
           );
         } catch (err) {
           this.logger.warn("Failed to send table ticket to booker", err);
@@ -413,7 +431,8 @@ export class RoundTableBookingsService {
       // Send INDIVIDUAL seat QR to each guest
       const seatGuests = booking.seatGuests || [];
       for (const guest of seatGuests) {
-        if (!guest.name || !guest.whatsApp) continue;
+        // A guest with only an email still gets their seat ticket by email.
+        if (!guest.name || (!guest.whatsApp && !guest.email)) continue;
 
         try {
           const seatQrPayload = {
@@ -443,7 +462,7 @@ export class RoundTableBookingsService {
           const seatPdfPath = path.join(pdfDir, seatPdfName);
           await fs.promises.writeFile(seatPdfPath, seatPdfBuffer);
 
-          await this.otpService.sendWhatsAppMessage(
+          if (guest.whatsApp) await this.otpService.sendWhatsAppMessage(
             guest.whatsApp,
             `*You're Invited!*\n\n` +
               `Hi *${escapeHtml(guest.name)}*, you have a reserved seat at:\n\n` +
@@ -451,10 +470,11 @@ export class RoundTableBookingsService {
               `Table: *${booking.tableName}* (${booking.tableCategory})\n` +
               `Seat: *Chair ${guest.chairIndex + 1}*\n\n` +
               `Your personal QR ticket is attached. Please show it at the entrance.`,
+            route,
           );
 
           await this.otpService.sendMediaMessage(
-            guest.whatsApp,
+            guest.whatsApp || "",
             seatPdfPath,
             `Seat Ticket - Chair ${guest.chairIndex + 1} - ${eventDoc.title}`,
             "seat-ticket.pdf",
@@ -472,6 +492,7 @@ export class RoundTableBookingsService {
               organizer:
                 (organizerDoc as any)?.organizationName || (organizerDoc as any)?.name,
             },
+            route,
           );
 
           this.logger.log(`Sent seat QR to ${guest.name} (${guest.whatsApp})`);
@@ -588,6 +609,7 @@ export class RoundTableBookingsService {
           await this.otpService.sendWhatsAppMessage(
             booking.visitorPhone,
             `*Check-in Successful!*\nWelcome! You have been checked in for *${(booking.eventId as any).title}*.\nTable: ${booking.tableName} (${booking.tableCategory})`,
+            { organizerId: String(booking.organizerId || "") },
           );
         } catch {
           // Non-critical
@@ -623,6 +645,7 @@ export class RoundTableBookingsService {
           await this.otpService.sendWhatsAppMessage(
             booking.visitorPhone,
             `*Check-out Successful!*\nThank you for attending *${(booking.eventId as any).title}*.\nDuration: ${durationMin} minutes.`,
+            { organizerId: String(booking.organizerId || "") },
           );
         } catch {
           // Non-critical
@@ -637,6 +660,7 @@ export class RoundTableBookingsService {
           (booking.eventId as any)?._id || booking.eventId,
         ),
         whatsAppNumber: booking.visitorPhone,
+        organizerId: String(booking.organizerId || ""),
         hasDeposit: !!(booking as any).depositAmount,
       });
 

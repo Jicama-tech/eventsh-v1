@@ -178,10 +178,13 @@ interface TicketCustomer {
   notes?: string;
   qrCode?: string;
   pdfPath?: string;
-  // Operator referral captured from a shared ?ref= link (server-resolved).
+  // Referral captured from a shared ?ref= link (server-resolved): either an
+  // operator's code or an event agent's (the event form's Agents tab).
   referralCode?: string;
   referralOperatorId?: string;
   referralOperatorName?: string;
+  referralAgentId?: string;
+  referralAgentName?: string;
   updatedAt: string;
   createdAt: string;
 }
@@ -2320,7 +2323,13 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         s.noOfOperators || v.noOfOperators || "", // No. of Operators
         s.couponCodeAssigned || "", // Coupon Assigned
         s.referralCode
-          ? [s.referralCode, s.referralOperatorName].filter(Boolean).join(" · ")
+          ? [
+              s.referralCode,
+              s.referralOperatorName ||
+                (s.referralAgentName ? `Agent: ${s.referralAgentName}` : ""),
+            ]
+              .filter(Boolean)
+              .join(" · ")
           : "", // Referral
         s.refundPaymentDescription || v.refundPaymentDescription || "", // Refund Payment Description
         s.productDescription || v.productDescription || "", // Product Description
@@ -4191,7 +4200,10 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                         <div className="text-muted-foreground">
                           {[
                             selectedVisitor.referralCode,
-                            selectedVisitor.referralOperatorName,
+                            selectedVisitor.referralOperatorName ||
+                              (selectedVisitor.referralAgentName
+                                ? `Agent: ${selectedVisitor.referralAgentName}`
+                                : ""),
                           ]
                             .filter(Boolean)
                             .join(" · ")}
@@ -4450,7 +4462,10 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     <div className="text-muted-foreground">
                       {[
                         selectedSpeaker.referralCode,
-                        selectedSpeaker.referralOperatorName,
+                        selectedSpeaker.referralOperatorName ||
+                          (selectedSpeaker.referralAgentName
+                            ? `Agent: ${selectedSpeaker.referralAgentName}`
+                            : ""),
                       ]
                         .filter(Boolean)
                         .join(" · ")}

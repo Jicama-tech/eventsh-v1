@@ -197,18 +197,11 @@ interface ProcessedExhibitor {
   membershipExpiry?: string;
 }
 
-import { useCountryCodes } from "@/hooks/useCountryCodes";
-import { phoneNationalLength } from "@/data/countries";
+import { PhoneField } from "@/components/ui/PhoneField";
+import { isLikelyPhone, splitE164 } from "@/lib/phone";
 import SuppliersDirectory from "@/components/organizer/SuppliersDirectory";
 import SponsorsDirectory from "@/components/organizer/SponsorsDirectory";
 import { t } from "@/i18n/t";
-
-interface Country {
-  name: string;
-  dialCode: string;
-  code: string;
-  flag: string;
-}
 
 interface MyEventUsersProps {
   setShowAddUser: React.Dispatch<React.SetStateAction<boolean>>;
@@ -2779,54 +2772,23 @@ export function AddCustomerDialog({
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
+    // E.164 ("+919876543210") — the dial code travels inside the number.
     whatsAppNumber: "",
     email: "",
   });
-  const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
-  // Country dial codes come from a single shared hook (local data, no network).
-  const { countries } = useCountryCodes();
-  const [searchQuery, setSearchQuery] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
-  // Default the WhatsApp country to India unless one is already selected.
   useEffect(() => {
-    if (!selectedCountry) {
-      const def = countries.find((c) => c.code === "IN");
-      if (def) setSelectedCountry(def);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [countries]);
-
-  useEffect(() => {
-    if (isOpen && customerToEdit && mode === "edit" && countries.length > 0) {
+    if (isOpen && customerToEdit && mode === "edit") {
       const [first, ...rest] = customerToEdit.name.split(" ");
 
-      const rawWhatsapp = customerToEdit.whatsapp || "";
-
-
-      // Extract country code (e.g. +91)
-      const match = rawWhatsapp.match(/^(\+\d{1,2})(.*)$/);
-
-
-      let country = null;
-      let localNumber = rawWhatsapp;
-
-      if (match) {
-        const dialCode = match[1]; // +91
-        localNumber = match[2].replace(/\s/g, ""); // remaining number
-
-        country = countries.find((c) => c.dialCode === dialCode) || null;
-      }
-
-      // 1️⃣ Set selected country first
-      setSelectedCountry(country);
-
-      // 2️⃣ Set form data with CLEAN number
+      // The stored number already carries its dial code; the phone field
+      // reads it straight in and shows the matching flag.
       setFormData({
         firstName: first || "",
         lastName: rest.join(" ") || "",
-        whatsAppNumber: localNumber,
+        whatsAppNumber: customerToEdit.whatsapp || "",
         email: customerToEdit.email || "",
       });
 
@@ -2834,7 +2796,7 @@ export function AddCustomerDialog({
     } else if (isOpen && mode === "add") {
       resetForm();
     }
-  }, [isOpen, customerToEdit, mode, countries]);
+  }, [isOpen, customerToEdit, mode]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -2860,9 +2822,9 @@ export function AddCustomerDialog({
     // Validate whatsAppNumber
     if (!formData.whatsAppNumber.trim()) {
       newErrors.whatsAppNumber = "WhatsApp number is required";
-    } else if (!/^\d{6,15}$/.test(formData.whatsAppNumber.trim())) {
+    } else if (!isLikelyPhone(formData.whatsAppNumber)) {
       newErrors.whatsAppNumber =
-        "Please enter a valid phone number (6-15 digits)";
+        "Please enter a valid phone number (7-15 digits)";
     }
 
     // Validate email if provided
@@ -2917,13 +2879,11 @@ export function AddCustomerDialog({
     setSubmitting(true);
 
     try {
-      const fullWhatsAppNumber = `${selectedCountry?.dialCode}${formData.whatsAppNumber.trim()}`;
-
       const payload = {
         name: `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim(),
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
-        whatsAppNumber: fullWhatsAppNumber,
+        whatsAppNumber: formData.whatsAppNumber,
         ...(formData.email.trim() && { email: formData.email.trim() }),
       };
 
@@ -2991,21 +2951,13 @@ export function AddCustomerDialog({
       whatsAppNumber: "",
       email: "",
     });
-    setSelectedCountry(null);
     setErrors({});
-    setSearchQuery("");
   };
 
   const handleClose = () => {
     resetForm();
     onClose();
   };
-
-  const filteredCountries = countries.filter(
-    (country) =>
-      country.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      country.dialCode.includes(searchQuery),
-  );
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -3060,108 +3012,22 @@ export function AddCustomerDialog({
             )}
           </div>
 
-          {/* WhatsApp Number with Country Code - UNCHANGED */}
+          {/* WhatsApp Number — one field, the country comes from its flag menu */}
           <div>
             <Label htmlFor="whatsAppNumber" className="font-medium mb-2 block">
               WhatsApp Number <span className="text-red-500">*</span>
             </Label>
-            <div className="flex gap-2">
-              <Select
-                value={selectedCountry?.code}
-                onValueChange={(code) => {
-                  const country = countries.find((c) => c.code === code);
-                  setSelectedCountry(country || null);
-                  if (errors.countryCode) {
-                    setErrors((prev) => {
-                      const newErrors = { ...prev };
-                      delete newErrors.countryCode;
-                      return newErrors;
-                    });
-                  }
-                }}
-                disabled={submitting}
-              >
-                <SelectTrigger
-                  className={`w-[140px] ${
-                    errors.countryCode ? "border-red-500" : ""
-                  }`}
-                >
-                  <SelectValue>
-                    {selectedCountry ? (
-                      <div className="flex items-center gap-2">
-                        {selectedCountry.flag && (
-                          <img
-                            src={selectedCountry.flag}
-                            alt={selectedCountry.name}
-                            className="w-5 h-3 object-cover"
-                          />
-                        )}
-                        <span>{selectedCountry.dialCode}</span>
-                      </div>
-                    ) : (
-                      "Select"
-                    )}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <div className="p-2">
-                    <Input
-                      placeholder={t("Search country...")}
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="mb-2"
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </div>
-                  <ScrollArea className="h-[200px]">
-                    {filteredCountries.map((country) => (
-                      <SelectItem key={country.code} value={country.code}>
-                        <div className="flex items-center gap-2">
-                          {country.flag && (
-                            <img
-                              src={country.flag}
-                              alt={country.name}
-                              className="w-5 h-3 object-cover"
-                            />
-                          )}
-                          <span className="font-medium">
-                            {country.dialCode}
-                          </span>
-                          <span className="text-muted-foreground text-sm">
-                            {country.name}
-                          </span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </ScrollArea>
-                </SelectContent>
-              </Select>
-
-              <Input
-                id="whatsAppNumber"
-                type="tel"
-                value={formData.whatsAppNumber}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, "");
-                  handleChange("whatsAppNumber", value);
-                }}
-                maxLength={10}
-                placeholder="1234567890"
-                className={`flex-1 ${
-                  errors.whatsAppNumber ? "border-red-500" : ""
-                }`}
-                disabled={submitting}
-              />
-            </div>
-            {(errors.whatsAppNumber || errors.countryCode) && (
+            <PhoneField
+              format="e164"
+              id="whatsAppNumber"
+              value={formData.whatsAppNumber}
+              onChange={(v) => handleChange("whatsAppNumber", v)}
+              placeholder="98765 43210"
+              disabled={submitting}
+            />
+            {errors.whatsAppNumber && (
               <p className="text-red-500 text-sm mt-1">
-                {errors.whatsAppNumber || errors.countryCode}
-              </p>
-            )}
-            {selectedCountry && formData.whatsAppNumber && (
-              <p className="text-muted-foreground text-xs mt-1">
-                Full number: {selectedCountry.dialCode}
-                {formData.whatsAppNumber}
+                {errors.whatsAppNumber}
               </p>
             )}
           </div>
@@ -3242,7 +3108,6 @@ export function AddExhibitorDialog({
     email: "",
     shopName: "",
     country: "India",
-    dialCode: "+91",
     whatsappNumber: "",
     phone: "",
     address: "",
@@ -3255,15 +3120,10 @@ export function AddExhibitorDialog({
     membershipEndDate: "2026-12-31",
   });
 
-  // Sync Dial Code when Country changes
   const handleCountryChange = (countryName: string) => {
     const country = SUPPORTED_COUNTRIES.find((c) => c.name === countryName);
     if (country) {
-      setFormData((prev) => ({
-        ...prev,
-        country: country.name,
-        dialCode: country.dialCode,
-      }));
+      setFormData((prev) => ({ ...prev, country: country.name }));
     }
   };
 
@@ -3271,27 +3131,27 @@ export function AddExhibitorDialog({
     if (isOpen && exhibitorToEdit && mode === "edit") {
       const [first, ...rest] = (exhibitorToEdit.name || "").split(" ");
 
-      // Determine dial code from existing number if possible
+      // Pick the country from the stored record, else from the WhatsApp
+      // number's dial code. The numbers themselves are passed through as
+      // stored — the phone fields read the dial code off them.
+      const iso = splitE164(exhibitorToEdit.whatsappNumber).iso;
       const existingCountry =
-        SUPPORTED_COUNTRIES.find((c) =>
-          exhibitorToEdit.whatsappNumber?.startsWith(c.dialCode),
-        ) || SUPPORTED_COUNTRIES[0];
+        SUPPORTED_COUNTRIES.find(
+          (c) =>
+            c.name === exhibitorToEdit.country ||
+            c.code === exhibitorToEdit.country,
+        ) ||
+        SUPPORTED_COUNTRIES.find((c) => c.code === iso) ||
+        SUPPORTED_COUNTRIES[0];
 
       setFormData({
         firstName: first || "",
         lastName: rest.join(" ") || "",
         email: exhibitorToEdit.email || "",
         country: existingCountry.name,
-        dialCode: existingCountry.dialCode,
-        whatsappNumber: (exhibitorToEdit.whatsappNumber || "").replace(
-          existingCountry.dialCode,
-          "",
-        ),
+        whatsappNumber: exhibitorToEdit.whatsappNumber || "",
         shopName: exhibitorToEdit.shopName,
-        phone: (exhibitorToEdit.phone || "").replace(
-          existingCountry.dialCode,
-          "",
-        ),
+        phone: exhibitorToEdit.phone || "",
         address: exhibitorToEdit.address || "",
         businessCategory: exhibitorToEdit.businessCategory || "",
         businessEmail: exhibitorToEdit.businessEmail || "",
@@ -3317,24 +3177,11 @@ export function AddExhibitorDialog({
     if (!formData.firstName.trim())
       newErrors.firstName = "First name is required";
     if (!formData.lastName.trim()) newErrors.lastName = "Last name is required";
-    // ISO code of the chosen country → drives the per-country digit length
-    // (India 10, Singapore 8, …).
-    const isoCode =
-      SUPPORTED_COUNTRIES.find((c) => c.dialCode === formData.dialCode)?.code ||
-      SUPPORTED_COUNTRIES.find((c) => c.name === formData.country)?.code;
-    const countryLabel = formData.country || "the selected country";
-
     const wa = formData.whatsappNumber.trim();
     if (!wa) {
       newErrors.whatsappNumber = "WhatsApp required";
-    } else if (!/^\d+$/.test(wa)) {
-      newErrors.whatsappNumber = "Digits only — no letters or symbols";
-    } else {
-      const [min, max] = phoneNationalLength(isoCode);
-      if (wa.length < min || wa.length > max) {
-        const need = min === max ? `${min} digits` : `${min}–${max} digits`;
-        newErrors.whatsappNumber = `Enter ${need} for ${countryLabel}`;
-      }
+    } else if (!isLikelyPhone(wa)) {
+      newErrors.whatsappNumber = "Enter a valid WhatsApp number";
     }
 
     if (!formData.shopName.trim())
@@ -3343,15 +3190,8 @@ export function AddExhibitorDialog({
     const ph = formData.phone.trim();
     if (!ph) {
       newErrors.phone = "Phone required";
-    } else if (!/^\d+$/.test(ph)) {
-      newErrors.phone = "Digits only — no letters or symbols";
-    } else {
-      const [pmin, pmax] = phoneNationalLength(isoCode);
-      if (ph.length < pmin || ph.length > pmax) {
-        const need =
-          pmin === pmax ? `${pmin} digits` : `${pmin}–${pmax} digits`;
-        newErrors.phone = `Enter ${need} for ${countryLabel}`;
-      }
+    } else if (!isLikelyPhone(ph)) {
+      newErrors.phone = "Enter a valid phone number";
     }
     if (!formData.address.trim()) newErrors.address = "Address is required";
     if (!formData.businessCategory)
@@ -3384,7 +3224,7 @@ export function AddExhibitorDialog({
         name: `${formData.firstName} ${formData.lastName}`.trim(),
         email: formData.email,
         country: formData.country,
-        whatsappNumber: `${formData.dialCode}${formData.whatsappNumber}`,
+        whatsappNumber: formData.whatsappNumber,
         isMember: !!formData.isMember,
         // Only send when the toggle is on; clearing the toggle wipes
         // the date so a returning member doesn't keep a stale expiry.
@@ -3392,7 +3232,7 @@ export function AddExhibitorDialog({
           formData.isMember && formData.membershipEndDate
             ? formData.membershipEndDate
             : undefined,
-        phone: `${formData.dialCode}${formData.phone}`,
+        phone: formData.phone,
         address: formData.address,
         shopName: formData.shopName,
         businessCategory: formData.businessCategory,
@@ -3438,8 +3278,7 @@ export function AddExhibitorDialog({
       lastName: "",
       email: "",
       country: "India",
-      dialCode: "+91",
-      whatsappNumber: "",
+        whatsappNumber: "",
       phone: "",
       address: "",
       shopName: "",
@@ -3589,52 +3428,24 @@ export function AddExhibitorDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>{t("WhatsApp Number*")}</Label>
-              <div className="flex">
-                <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 bg-muted text-muted-foreground text-sm">
-                  {formData.dialCode}
-                </span>
-                <Input
-                  className="rounded-l-none"
-                  value={formData.whatsappNumber}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      whatsappNumber: e.target.value.replace(/\D/g, ""),
-                    })
-                  }
-                />
-              </div>
-              {errors.whatsappNumber ? (
+              <PhoneField
+                format="e164"
+                value={formData.whatsappNumber}
+                onChange={(v) =>
+                  setFormData((prev) => ({ ...prev, whatsappNumber: v }))
+                }
+              />
+              {errors.whatsappNumber && (
                 <p className="text-red-500 text-xs">{errors.whatsappNumber}</p>
-              ) : (
-                <p className="text-[11px] text-muted-foreground">
-                  {(() => {
-                    const iso = SUPPORTED_COUNTRIES.find(
-                      (c) => c.dialCode === formData.dialCode,
-                    )?.code;
-                    const [min, max] = phoneNationalLength(iso);
-                    return `Enter ${min === max ? `${min} digits` : `${min}–${max} digits`} for ${formData.country || "the selected country"}`;
-                  })()}
-                </p>
               )}
             </div>
             <div className="space-y-2">
               <Label>{t("Phone Number*")}</Label>
-              <div className="flex">
-                <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 bg-muted text-muted-foreground text-sm">
-                  {formData.dialCode}
-                </span>
-                <Input
-                  className="rounded-l-none"
-                  value={formData.phone}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      phone: e.target.value.replace(/\D/g, ""),
-                    })
-                  }
-                />
-              </div>
+              <PhoneField
+                format="e164"
+                value={formData.phone}
+                onChange={(v) => setFormData((prev) => ({ ...prev, phone: v }))}
+              />
               {errors.phone && (
                 <p className="text-red-500 text-xs">{errors.phone}</p>
               )}

@@ -93,6 +93,7 @@ const EVENT_TAB_SECTIONS: { key: string; label: string }[] = [
   { key: "workshops", label: "Workshops" },
   { key: "workshopRequests", label: "Workshop Requests" },
   { key: "roundtables", label: "Round Tables" },
+  { key: "agents", label: "Agents (referral links)" },
   { key: "schedule", label: "Scheduled Spaces" },
   { key: "layout", label: "Space Layout" },
 ];
@@ -263,6 +264,22 @@ const ORGANIZER_FEATURE_MODULES: {
     key: "customEmail",
     label: "Custom Sender Email",
     icon: MailIcon,
+  },
+  {
+    // When enabled, the organizer can link their OWN WhatsApp number in
+    // Settings › Profile (QR scan) and every ticket, booking update and
+    // approval to attendees/vendors goes out from it, alongside the email.
+    key: "whatsappConnect",
+    label: "WhatsApp Connection (own number)",
+    icon: Zap,
+  },
+  {
+    // The WhatsApp sidebar tab: personalised campaigns to the organizer's
+    // own contacts from the linked number. Sending also needs
+    // whatsappConnect.
+    key: "whatsappCampaign",
+    label: "WhatsApp Campaigns",
+    icon: Zap,
   },
   {
     key: "operators",

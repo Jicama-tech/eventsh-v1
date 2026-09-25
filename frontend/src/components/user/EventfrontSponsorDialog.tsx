@@ -10,16 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { PhoneField } from "@/components/ui/PhoneField";
 import { toast } from "@/hooks/use-toast";
 import { buildPayNowQrUrl } from "@/lib/paynowQr";
-import { COUNTRIES } from "@/data/countries";
+import { splitE164 } from "@/lib/phone";
 import {
   Loader2,
   Handshake,
@@ -111,7 +105,7 @@ export default function EventfrontSponsorDialog({
   const [contactName, setContactName] = useState("");
   const [email, setEmail] = useState("");
   const [businessEmail, setBusinessEmail] = useState("");
-  const [countryCode, setCountryCode] = useState("+91");
+  // E.164 ("+919876543210") — the dial code travels inside the number.
   const [phone, setPhone] = useState("");
   const [website, setWebsite] = useState("");
   const [message, setMessage] = useState("");
@@ -316,8 +310,8 @@ export default function EventfrontSponsorDialog({
       fd.append("email", email.trim().toLowerCase());
       if (businessEmail.trim())
         fd.append("businessEmail", businessEmail.trim().toLowerCase());
-      fd.append("countryCode", countryCode);
-      fd.append("phone", phone.trim());
+      fd.append("countryCode", splitE164(phone).dialCode);
+      fd.append("phone", phone);
       fd.append("website", website.trim());
       fd.append("message", message.trim());
       if (tier.collectPayment === false) {
@@ -612,26 +606,8 @@ export default function EventfrontSponsorDialog({
               </div>
               <div>
                 <Label className="text-xs">Contact number</Label>
-                <div className="flex gap-2">
-                  <Select value={countryCode} onValueChange={setCountryCode}>
-                    <SelectTrigger className="w-32 shrink-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    {/* Sponsors can be anywhere — full country list. */}
-                    <SelectContent className="max-h-64">
-                      {COUNTRIES.map((c) => (
-                        <SelectItem key={c.code} value={c.dialCode}>
-                          {c.flag} {c.dialCode} {c.code}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="flex-1"
-                  />
-                </div>
+                {/* Sponsors can be anywhere — full country list. */}
+                <PhoneField format="e164" value={phone} onChange={setPhone} />
               </div>
               <div>
                 <Label className="text-xs">Website</Label>

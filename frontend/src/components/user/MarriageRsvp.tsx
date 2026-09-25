@@ -414,6 +414,7 @@ export default function MarriageRsvp({
 
       <Field label="Contact number">
         <PhoneField
+          format="e164"
           value={contactNumber}
           onChange={setContactNumber}
           placeholder="Phone number"
@@ -459,6 +460,7 @@ export default function MarriageRsvp({
                   </div>
                   <div className="flex-1">
                     <PhoneField
+                      format="e164"
                       value={a.contactNumber}
                       onChange={(v) => setAtt(i, "contactNumber", v)}
                       placeholder="Contact no."

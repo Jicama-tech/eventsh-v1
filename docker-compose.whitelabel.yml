@@ -47,6 +47,10 @@ services:
       # deliberately sets WHATSAPP_ENABLED=true in .env.whitelabel — the
       # baileys session otherwise has nowhere persistent to store its pairing.
       # - whatsapp-auth-data:/app/whatsapp_auth
+      # Per-organizer WhatsApp pairings (Settings › Profile › WhatsApp). On a
+      # volume so a container recreate does not make every organizer scan
+      # their QR again.
+      - whatsapp-org-auth-data:/app/whatsapp_org_auth
 
   frontend:
     build:
@@ -66,3 +70,4 @@ volumes:
   mongo-data:
   uploads-data:
   # whatsapp-auth-data:
+  whatsapp-org-auth-data:

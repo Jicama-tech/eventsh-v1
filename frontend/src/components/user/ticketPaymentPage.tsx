@@ -441,10 +441,13 @@ export default function TicketPaymentPage() {
         paymentConfirmed: true,
         purchaseDate: new Date().toISOString(),
         notes: state.notes || "",
-        // Operator share link (?ref) captured on the event page — only the
-        // stored, unexpired (30-day) copy. The server decides whether it counts.
+        // The code typed on the cart's referral field, else the agent /
+        // operator link (?ref) captured on the event page (30-day copy).
+        // The server decides whether it counts.
         referralCode:
-          getEventReferral(state.eventId || state.eventInfo.id) || undefined,
+          state.referralCode ||
+          getEventReferral(state.eventId || state.eventInfo.id) ||
+          undefined,
       };
 
       const res = await fetch(`${apiURL}/tickets/create-ticket`, {

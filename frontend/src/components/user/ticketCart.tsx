@@ -63,6 +63,8 @@ interface TicketItem {
 
 interface EventInfo {
   id: string;
+  /** Copied from the event: `hasAgents` = referral-only booking. */
+  features?: { hasAgents?: boolean };
   title: string;
   organizerId: string;
   organizerName: string;
@@ -84,6 +86,13 @@ interface OrderSummary {
 }
 
 import { useCountryCodes } from "@/hooks/useCountryCodes";
+import {
+  getEventReferral,
+  isMalformedReferralInput,
+  normalizeReferralInput,
+} from "@/lib/eventReferral";
+import { getEventCoupon, normalizeCouponCode } from "@/lib/eventCoupon";
+import { ReferralCodeField } from "@/components/ui/ReferralCodeField";
 
 interface Country {
   name: string;
@@ -107,6 +116,14 @@ export default function TicketCart() {
   const [couponCode, setCouponCode] = useState("");
   const [couponToProceed, setCouponToProceed] = useState("");
   const [discount, setDiscount] = useState(0);
+  // Visible referral-code field (first on the buyer form). Prefilled from
+  // the agent / operator link captured on the event page; editable.
+  const [referralCode, setReferralCode] = useState("");
+  // Agents section on for this event: no checkout without a valid code.
+  const referralRequired = !!eventInfo?.features?.hasAgents;
+  // Came through an agent / operator link: the code is shown but locked.
+  const referralLocked = !!getEventReferral(eventInfo?.id);
+  const autoCouponTried = React.useRef(false);
 
   // Email and WhatsApp verification states
   const [email, setEmail] = useState("");
@@ -812,6 +829,43 @@ export default function TicketCart() {
     }
   }, []);
 
+  // Prefill the referral code and a shared coupon (?coupon= on the event
+  // link) once the cart knows which event it is for.
+  useEffect(() => {
+    const evId = eventInfo?.id;
+    if (!evId) return;
+    const storedRef = getEventReferral(evId);
+    if (storedRef) setReferralCode((cur) => (cur.trim() ? cur : storedRef));
+    const sharedCoupon = getEventCoupon(evId);
+    if (sharedCoupon)
+      setCouponCode((cur) => (cur.trim() ? cur : sharedCoupon));
+  }, [eventInfo?.id]);
+
+  // Apply a shared coupon once, automatically. Validation counts as a use on
+  // the server, so a session marker stops a reload from applying it again;
+  // after that the buyer can still press Apply.
+  useEffect(() => {
+    const evId = eventInfo?.id;
+    if (!evId || couponToProceed || autoCouponTried.current) return;
+    if (ticketItems.length === 0) return;
+    const sharedCoupon = getEventCoupon(evId);
+    if (!sharedCoupon) return;
+    const guardKey = `eventsh:couponApplied:${evId}:${sharedCoupon}`;
+    try {
+      if (sessionStorage.getItem(guardKey)) return;
+    } catch {
+      /* storage unavailable — apply anyway */
+    }
+    autoCouponTried.current = true;
+    try {
+      sessionStorage.setItem(guardKey, "1");
+    } catch {
+      /* ignore */
+    }
+    void applyCoupon(sharedCoupon);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventInfo?.id, ticketItems.length]);
+
   // Save cart to localStorage whenever it changes
   useEffect(() => {
     const cartData = {
@@ -870,8 +924,10 @@ export default function TicketCart() {
     });
   };
 
-  const applyCoupon = async () => {
-    if (!couponCode.trim() || !eventInfo) return;
+  const applyCoupon = async (codeOverride?: string) => {
+    const code = normalizeCouponCode(codeOverride ?? couponCode);
+    if (!code || !eventInfo) return;
+    if (codeOverride) setCouponCode(code);
 
     try {
       setIsLoading(true);
@@ -881,7 +937,7 @@ export default function TicketCart() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          code: couponCode.trim(),
+          code,
           eventId: eventInfo.id,
           orderAmount: calculateOrderSummary().subtotal,
         }),
@@ -898,7 +954,7 @@ export default function TicketCart() {
           setDiscount(discountPercent);
         }
 
-        setCouponToProceed(couponCode.trim());
+        setCouponToProceed(code);
 
         toast({
           duration: 5000,
@@ -941,6 +997,57 @@ export default function TicketCart() {
         variant: "destructive",
       });
       return;
+    }
+    if (isMalformedReferralInput(referralCode)) {
+      toast({
+        duration: 5000,
+        title: "Check the referral code",
+        description:
+          "Referral codes are 4 to 12 letters or digits. Check the code your agent shared, or clear the field.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (referralRequired) {
+      // Tickets are created after payment, so the code is checked here,
+      // before payment starts (read-only on the server; nothing is consumed).
+      const code = referralLocked
+        ? getEventReferral(eventInfo?.id)
+        : normalizeReferralInput(referralCode);
+      if (!code) {
+        toast({
+        duration: 5000,
+        title: "Referral code needed",
+        description:
+          "This event can only be booked with a referral code. Enter the code your agent shared with you.",
+        variant: "destructive",
+      });
+        return;
+      }
+      try {
+        const res = await fetch(
+          `${apiURL}/events/${eventInfo?.id}/agents/check?ref=${encodeURIComponent(code)}`,
+        );
+        const body = await res.json().catch(() => null);
+        if (!res.ok || !body?.valid) {
+          toast({
+            duration: 5000,
+            title: "Referral code not valid",
+            description:
+              "This referral code is not valid for this event, or it has reached its limit. Ask your agent for the right code.",
+            variant: "destructive",
+          });
+          return;
+        }
+      } catch {
+        toast({
+          duration: 5000,
+          title: "Could not check the referral code",
+          description: "Check your internet connection and try again.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     if (orderFor === "customer") {
@@ -1003,6 +1110,10 @@ export default function TicketCart() {
         },
         orderSummary,
         couponCode: couponCode || null,
+        // Typed on this form, else the agent / operator link (?ref).
+        referralCode: referralLocked
+          ? getEventReferral(eventInfo?.id)
+          : normalizeReferralInput(referralCode) || null,
         discount: discount,
         whatsAppNumber: whatsAppNumber, // Organizer's WhatsApp for contact
       };
@@ -1214,6 +1325,12 @@ export default function TicketCart() {
                 <CardContent className="space-y-4">
                   <Tabs value="customer">
                     <TabsContent value="customer" className="space-y-4">
+                      <ReferralCodeField
+                        value={referralCode}
+                        onChange={setReferralCode}
+                        required={referralRequired}
+                        locked={referralLocked}
+                      />
                       {/* Google Sign-in */}
                       {!googleAuthed && (
                         <div className="mb-4">
@@ -1432,7 +1549,7 @@ export default function TicketCart() {
                       onChange={(e) => setCouponCode(e.target.value)}
                     />
                     <Button
-                      onClick={applyCoupon}
+                      onClick={() => applyCoupon()}
                       disabled={!couponCode.trim() || isLoading}
                       size="sm"
                     >
@@ -1644,6 +1761,12 @@ export default function TicketCart() {
               <CardContent className="space-y-4">
                 <Tabs value="customer">
                   <TabsContent value="customer" className="space-y-4">
+                      <ReferralCodeField
+                        value={referralCode}
+                        onChange={setReferralCode}
+                        required={referralRequired}
+                        locked={referralLocked}
+                      />
                     {/* Google Sign-in (skips manual entry; auto-fills from saved record if known) */}
                     {!googleAuthed && (
                       <div className="mb-4">
@@ -1851,7 +1974,7 @@ export default function TicketCart() {
                     onChange={(e) => setCouponCode(e.target.value)}
                   />
                   <Button
-                    onClick={applyCoupon}
+                    onClick={() => applyCoupon()}
                     disabled={!couponCode.trim() || isLoading}
                     size="sm"
                   >

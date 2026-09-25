@@ -11,3 +11,4 @@ whatsapp_auth
 Dockerfile
 .dockerignore
 docker-compose*.yml
+whatsapp_org_auth

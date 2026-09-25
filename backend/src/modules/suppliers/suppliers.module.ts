@@ -21,6 +21,7 @@ import {
 import { Stall, StallSchema } from "../stalls/entities/stall.entity";
 import { OperatorSchema } from "../operators/entities/operator.entity";
 import { MailModule } from "../roles/mail.module";
+import { OtpModule } from "../otp/otp.module";
 
 @Module({
   imports: [
@@ -40,6 +41,9 @@ import { MailModule } from "../roles/mail.module";
     ]),
     // Lifecycle notifications go out from the organizer's SMTP when set.
     MailModule,
+    // WhatsApp twins of those notifications (OtpService routes them through
+    // the organizer's own linked number).
+    OtpModule,
     // JwtAuthGuard injects JwtService; it verifies with JWT_ACCESS_SECRET.
     JwtModule.register({
       secret: process.env.JWT_SECRET || "secretKey",

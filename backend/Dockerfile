@@ -87,7 +87,7 @@ COPY Fonts ./Fonts
 # container run: Puppeteer failed to launch at all ("chrome_crashpad_handler:
 # --database is required") with HOME=/nonexistent, no combination of launch
 # args (--disable-dev-shm-usage, --disable-crash-reporter) worked around it.
-RUN mkdir -p uploads whatsapp_auth \
+RUN mkdir -p uploads whatsapp_auth whatsapp_org_auth \
     && addgroup --system --gid 1001 eventsh \
     && adduser --system --home /home/eventsh --uid 1001 --gid 1001 eventsh \
     && chown -R eventsh:eventsh /app /home/eventsh \

@@ -980,6 +980,9 @@ const MyEvents: React.FC = () => {
       });
 
       setShouldRefresh((prev) => prev + 1);
+      // The saved event, so the form can create the agents queued on its
+      // Agents tab against the new event's id.
+      return updatedEvent;
     } catch (err: any) {
       console.error("Error saving event:", err);
       throw new Error(err.message || "Failed to save event");

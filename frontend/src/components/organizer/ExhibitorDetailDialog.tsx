@@ -269,7 +269,11 @@ export function ExhibitorDetailDialog({
   const stallFieldOn = (key: string) =>
     isFieldEnabled(registrationFormFields, "stall", key);
   const stallWithReferral = stallRequest as
-    | (StallRequest & { referralCode?: string; referralOperatorName?: string })
+    | (StallRequest & {
+        referralCode?: string;
+        referralOperatorName?: string;
+        referralAgentName?: string;
+      })
     | null;
   const { country } = useCountry();
   const { formatPrice } = useCurrency(country);
@@ -1262,7 +1266,10 @@ export function ExhibitorDetailDialog({
                     <p className="text-sm">
                       {[
                         stallWithReferral.referralCode,
-                        stallWithReferral.referralOperatorName,
+                        stallWithReferral.referralOperatorName ||
+                          (stallWithReferral.referralAgentName
+                            ? `${t("Agent")}: ${stallWithReferral.referralAgentName}`
+                            : ""),
                       ]
                         .filter(Boolean)
                         .join(" · ")}

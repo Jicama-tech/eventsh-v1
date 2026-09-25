@@ -5,13 +5,8 @@ import { buildPayNowQrUrl } from "@/lib/paynowQr";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { PhoneField } from "@/components/ui/PhoneField";
+import { isLikelyPhone } from "@/lib/phone";
 import {
   CalendarDays,
   MapPin,
@@ -84,7 +79,8 @@ export function InlineWalkinForm({
 }) {
   const country = (payload.country || "").toUpperCase();
   const sym = symbolForCountry(country);
-  const defaultDial = country === "SG" ? "+65" : "+91";
+  // Flag the WhatsApp field opens on; the number itself is kept as E.164.
+  const defaultCountry = country === "SG" ? "sg" : "in";
 
   const [step, setStep] = useState<Step>("pick_event");
   const [eventId, setEventId] = useState("");
@@ -92,7 +88,6 @@ export function InlineWalkinForm({
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [dial, setDial] = useState(defaultDial);
   const [whatsapp, setWhatsapp] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(null);
   const [qrPayload, setQrPayload] = useState("");
@@ -192,7 +187,8 @@ export function InlineWalkinForm({
 
   const validate = (): string | null => {
     if (!firstName.trim() || !lastName.trim()) return "Name required";
-    if (!whatsapp.trim() || whatsapp.length < 6) return "WhatsApp number required";
+    if (!whatsapp.trim()) return "WhatsApp number required";
+    if (!isLikelyPhone(whatsapp)) return "Enter a valid WhatsApp number";
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
       return "Invalid email";
     return null;
@@ -241,7 +237,6 @@ export function InlineWalkinForm({
     setError(null);
     try {
       const ticketId = `evtsh-${shortRand(6)}-${shortRand(4)}`;
-      const fullWhatsapp = `${dial}${whatsapp.replace(/\D/g, "")}`;
       const start = event.startDate ? new Date(event.startDate) : new Date();
       const dateStr = start.toLocaleDateString(undefined, {
         year: "numeric",
@@ -263,7 +258,7 @@ export function InlineWalkinForm({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           email: email.trim() || undefined,
-          whatsapp: fullWhatsapp,
+          whatsapp,
         },
         total: totalPrice,
         paymentConfirmed: true,
@@ -294,7 +289,7 @@ export function InlineWalkinForm({
       setConfirmation({
         ticketId,
         name: `${firstName.trim()} ${lastName.trim()}`,
-        whatsapp: fullWhatsapp,
+        whatsapp,
         email: email.trim() || undefined,
       });
       setStep("done");
@@ -468,32 +463,15 @@ export function InlineWalkinForm({
         </div>
         <div>
           <Label className="text-[10px]">{t("WhatsApp *")}</Label>
-          <div className="flex gap-1">
-            <Select
-              value={dial}
-              onValueChange={setDial}
-              disabled={submitting || qrPreparing}
-            >
-              <SelectTrigger className="w-20 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="max-h-60">
-                <SelectItem value="+91">+91</SelectItem>
-                <SelectItem value="+65">+65</SelectItem>
-                <SelectItem value="+1">+1</SelectItem>
-                <SelectItem value="+44">+44</SelectItem>
-                <SelectItem value="+971">+971</SelectItem>
-                <SelectItem value="+61">+61</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              value={whatsapp}
-              onChange={(e) => setWhatsapp(e.target.value.replace(/\D/g, ""))}
-              className="h-8 text-xs flex-1"
-              placeholder="9876543210"
-              disabled={submitting || qrPreparing}
-            />
-          </div>
+          <PhoneField
+            format="e164"
+            compact
+            value={whatsapp}
+            onChange={setWhatsapp}
+            defaultCountry={defaultCountry}
+            placeholder="9876543210"
+            disabled={submitting || qrPreparing}
+          />
         </div>
 
         {/* Payment method when paid */}

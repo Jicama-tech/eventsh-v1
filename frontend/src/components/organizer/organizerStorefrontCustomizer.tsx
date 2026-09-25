@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import PhoneField from "@/components/ui/PhoneField";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -976,15 +977,16 @@ export function OrganizerStorefrontCustomizer({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="phone">{t("Phone Number")}</Label>
-                      <Input
+                      <PhoneField
                         id="phone"
+                        format="e164"
                         value={settings.general.contactInfo.phone}
-                        onChange={(e) =>
+                        onChange={(val) =>
                           handleNestedInputChange(
                             "general",
                             "contactInfo",
                             "phone",
-                            e.target.value,
+                            val,
                           )
                         }
                         placeholder="+1 (555) 123-4567"

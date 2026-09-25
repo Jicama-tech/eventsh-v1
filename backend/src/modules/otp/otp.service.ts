@@ -31,6 +31,34 @@ import makeWASocket, {
 import * as qrcode from "qrcode";
 import { OrganizersService } from "../organizers/organizers.service";
 import * as fs from "fs";
+import { OrganizerWhatsappService } from "../whatsapp/organizer-whatsapp.service";
+
+/**
+ * Who a WhatsApp message is sent on behalf of, and from which number.
+ *
+ * `organizerId` is the organizer whose event, stall or booking the message
+ * is about — ALWAYS taken from the stored entity (event.organizer,
+ * stall.organizerId, booking.organizerId), never from a request body, since
+ * it decides whose phone the message goes out from. With it, the message is
+ * sent from that organizer's own linked WhatsApp when they have one
+ * (Settings › Profile › WhatsApp); without one, or when they are not
+ * connected, it falls back to the platform number exactly as before, and the
+ * WHATSAPP_ENABLED kill-switch decides whether that goes out at all.
+ *
+ * `toOrganizer` marks a message TO the organizer themselves (a new request,
+ * a payment submitted). OrganizerWhatsappService routes those so they ring:
+ * from the platform number when the organizer's own number is the linked one.
+ */
+export type WhatsAppRouteOptions = {
+  organizerId?: string;
+  /** The organizer's country, for numbers stored without a country code. */
+  country?: string;
+  toOrganizer?: boolean;
+  /** Who caused the message, when that is not the recipient (`vendor:<id>`). */
+  throttleKey?: string;
+  /** The organizer's own signed-in action set it off (an approval, a resend). */
+  organizerInitiated?: boolean;
+};
 
 @Injectable()
 export class OtpService implements OnModuleInit {
@@ -63,9 +91,20 @@ export class OtpService implements OnModuleInit {
     private mailService: MailService,
     private readonly organizerService: OrganizersService,
     private readonly jwtService: JwtService,
+    private readonly organizerWhatsapp: OrganizerWhatsappService,
   ) {}
 
   async onModuleInit() {
+    // The platform number rings an organizer whose alerts would otherwise
+    // come from their own linked device and land silently in "Message
+    // yourself" — see OrganizerWhatsappService.notify(). Registered before
+    // the kill-switch check below: `isConnected` answers false while the
+    // platform number is off, and the alert then goes from the organizer's
+    // own number instead.
+    this.organizerWhatsapp.registerPlatformSender({
+      isConnected: () => this.whatsAppEnabled && this.waAuthed && !!this.sock,
+      send: (phone, text) => this.rawSendText(phone, text),
+    });
     // WHATSAPP_ENABLED/WHATSAPP_OTP_ENABLED (see the `whatsAppEnabled`/
     // `whatsAppOtpEnabled` getters below) were originally just kill-switches
     // for OUTBOUND sends on the existing SaaS deployment — connecting still
@@ -217,8 +256,16 @@ export class OtpService implements OnModuleInit {
     return process.env.WHATSAPP_OTP_ENABLED !== "false";
   }
 
+  /** Whether this organizer's own linked WhatsApp can send right now. */
+  isOrganizerWhatsAppConnected(organizerId?: string | null): boolean {
+    return !!organizerId && this.organizerWhatsapp.isConnected(String(organizerId));
+  }
+
   // Low-level send — used by both messaging and OTP. Not gated; callers decide.
   private async rawSendText(whatsappNumber: string, text: string) {
+    if (!whatsappNumber || !String(whatsappNumber).replace(/\D/g, "")) {
+      throw new BadRequestException("No WhatsApp number to send to.");
+    }
     if (!this.sock) {
       throw new BadRequestException(
         "WhatsApp gateway not initialized. Please contact admin.",
@@ -236,12 +283,75 @@ export class OtpService implements OnModuleInit {
     await this.sock.sendMessage(jid, { text });
   }
 
-  async sendWhatsAppMessage(whatsappNumber: string, text: string) {
+  /**
+   * A text message, from the organizer's own linked number when `organizerId`
+   * is given and that organizer is connected (see WhatsAppRouteOptions), else
+   * from the platform number while WHATSAPP_ENABLED allows it.
+   *
+   * The organizer route never throws: it returns quietly when the organizer
+   * is not connected, the plan lacks the add-on or a ceiling is reached, and
+   * the platform path then decides as it always has. Callers keep their
+   * existing try/catch around the platform path's own failures.
+   */
+  async sendWhatsAppMessage(
+    whatsappNumber: string,
+    text: string,
+    opts: WhatsAppRouteOptions = {},
+  ) {
+    if (!whatsappNumber || !String(text ?? "").trim()) {
+      this.logger.log("WhatsApp text skipped (no number or empty text).");
+      return;
+    }
+    if (opts.organizerId) {
+      const route = await this.organizerWhatsapp.notifyRoute({
+        organizerId: opts.organizerId,
+        to: whatsappNumber,
+        text,
+        country: opts.country,
+        toOrganizer: opts.toOrganizer,
+        throttleKey: opts.throttleKey,
+        organizerInitiated: opts.organizerInitiated,
+      });
+      if (route) return;
+    }
     if (!this.whatsAppEnabled) {
       this.logger.log("WhatsApp messaging disabled — skipping text message.");
       return;
     }
     await this.rawSendText(whatsappNumber, text);
+  }
+
+  /**
+   * Like sendWhatsAppMessage, but never throws and says whether anything
+   * went out — for the notifications that are mirrored beside an email and
+   * must not be able to fail it.
+   */
+  async trySendWhatsAppMessage(
+    whatsappNumber: string | null | undefined,
+    text: string,
+    opts: WhatsAppRouteOptions = {},
+  ): Promise<boolean> {
+    if (!whatsappNumber) return false;
+    try {
+      if (opts.organizerId) {
+        const route = await this.organizerWhatsapp.notifyRoute({
+          organizerId: opts.organizerId,
+          to: whatsappNumber,
+          text,
+          country: opts.country,
+          toOrganizer: opts.toOrganizer,
+          throttleKey: opts.throttleKey,
+          organizerInitiated: opts.organizerInitiated,
+        });
+        if (route) return true;
+      }
+      if (!this.whatsAppEnabled || !this.waAuthed) return false;
+      await this.rawSendText(whatsappNumber, text);
+      return true;
+    } catch (e: any) {
+      this.logger.warn(`WhatsApp text not sent: ${e?.message || e}`);
+      return false;
+    }
   }
 
   // =========================
@@ -375,7 +485,7 @@ export class OtpService implements OnModuleInit {
     const text =
       `Your verification code is ${otp}.\n` +
       `It expires in 5 minutes. Do not share it with anyone.\n\n` +
-      `EventSh Verification`;
+      `${emailBrand().name} Verification`;
 
     // Separate switch from notifications: fail loudly rather than pretend the
     // OTP was sent, so login flows surface the issue instead of hanging.
@@ -637,6 +747,9 @@ export class OtpService implements OnModuleInit {
       // and signs the mirror email (see brandedEmail's `organizer`).
       organizer?: string;
     },
+    /** See WhatsAppRouteOptions: with `organizerId`, the document goes out
+     * from that organizer's own linked WhatsApp when they are connected. */
+    opts: WhatsAppRouteOptions & { mimetype?: string } = {},
   ) {
     // Mirror to email FIRST (independent of WhatsApp connectivity) so the
     // recipient still gets it even when the WhatsApp socket is down.
@@ -644,28 +757,93 @@ export class OtpService implements OnModuleInit {
       await this.emailDocument(filePath, fileName, caption, email);
     }
 
-    // WhatsApp messaging is being phased out — when disabled, OR when there's
-    // no number to send to, the document was already delivered by email above,
-    // so just stop here (callers can safely pass an empty number to email-only).
-    if (!this.whatsAppEnabled || !whatsappNumber) {
+    // No number: the document was already delivered by email above, so stop
+    // here (callers can safely pass an empty number to email-only).
+    if (!whatsappNumber) {
+      this.logger.log("WhatsApp document send skipped (no number) — delivered by email.");
+      return;
+    }
+
+    let fileBuffer: Buffer | null = null;
+    if (opts.organizerId) {
+      fileBuffer = await fs.promises.readFile(filePath);
+      const sent = await this.organizerWhatsapp.trySendDocumentFromOrganizer(
+        opts.organizerId,
+        whatsappNumber,
+        {
+          document: fileBuffer,
+          fileName: fileName || "ticket.pdf",
+          mimetype: opts.mimetype || "application/pdf",
+          caption: caption || undefined,
+        },
+        opts.country,
+        { perRecipientLimit: !opts.organizerInitiated },
+      );
+      if (sent) return;
+    }
+
+    // The platform number, unless the kill-switch says email only.
+    if (!this.whatsAppEnabled) {
       this.logger.log(
-        "WhatsApp document send skipped (disabled or no number) — delivered by email.",
+        "WhatsApp document send skipped (platform WhatsApp disabled) — delivered by email.",
       );
       return;
     }
 
     if (!this.sock) throw new Error("WhatsApp not connected");
     const jid = this.toJid(whatsappNumber);
-
-    // Read the file
-    const fileBuffer = await fs.promises.readFile(filePath);
+    if (!fileBuffer) fileBuffer = await fs.promises.readFile(filePath);
 
     await this.sock.sendMessage(jid, {
       document: fileBuffer,
-      mimetype: "application/pdf",
+      mimetype: opts.mimetype || "application/pdf",
       fileName: fileName || "ticket.pdf",
       caption: caption || "",
     });
+  }
+
+  /**
+   * sendMediaMessage for a document that only exists in memory (a ticket PDF
+   * rendered for an email attachment, a receipt built with pdfkit). Never
+   * throws — these are mirrors beside an email that must not be able to fail
+   * it — and says whether the file went out on WhatsApp.
+   */
+  async trySendMediaBuffer(
+    whatsappNumber: string | null | undefined,
+    document: Buffer,
+    fileName: string,
+    caption?: string,
+    opts: WhatsAppRouteOptions & { mimetype?: string } = {},
+  ): Promise<boolean> {
+    if (!whatsappNumber || !document?.length) return false;
+    try {
+      if (opts.organizerId) {
+        const sent = await this.organizerWhatsapp.trySendDocumentFromOrganizer(
+          opts.organizerId,
+          whatsappNumber,
+          {
+            document,
+            fileName: fileName || "document.pdf",
+            mimetype: opts.mimetype || "application/pdf",
+            caption: caption || undefined,
+          },
+          opts.country,
+          { perRecipientLimit: !opts.organizerInitiated },
+        );
+        if (sent) return true;
+      }
+      if (!this.whatsAppEnabled || !this.waAuthed || !this.sock) return false;
+      await this.sock.sendMessage(this.toJid(whatsappNumber), {
+        document,
+        mimetype: opts.mimetype || "application/pdf",
+        fileName: fileName || "document.pdf",
+        caption: caption || "",
+      });
+      return true;
+    } catch (e: any) {
+      this.logger.warn(`WhatsApp document not sent: ${e?.message || e}`);
+      return false;
+    }
   }
 
   // Email a document attachment, reusing the WhatsApp caption/message as the

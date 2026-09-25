@@ -8,17 +8,26 @@ import {
   BadRequestException,
   Query,
   Res,
+  UseGuards,
 } from "@nestjs/common";
+import { ThrottlerGuard } from "@nestjs/throttler";
 import { Response } from "express";
 import { OtpService } from "./otp.service";
 import { CreateOtpDto } from "./dto/create-otp.dto";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { AdminRolesGuard } from "../auth/guards/admin-roles.guard";
 
 @Controller("otp")
 export class OtpController {
   constructor(private readonly otpService: OtpService) {}
 
-  // Open in a browser to scan the WhatsApp pairing QR.
+  // The PLATFORM number's pairing QR (the shared EventSH sender for OTPs and
+  // alerts to organizers). Admin only: whoever scans this QR becomes the
+  // platform sender and reads every login code — until now the page was
+  // open to anyone. Organizers link their OWN numbers from Settings, through
+  // /whatsapp/*, never here.
   @Get("whatsapp/qr-image")
+  @UseGuards(JwtAuthGuard, AdminRolesGuard)
   async qrImage(@Res() res: Response) {
     if (this.otpService.isWhatsAppConnected()) {
       return res
@@ -52,6 +61,7 @@ export class OtpController {
 
   // Business Email OTP (existing)
   @Post("send-business-email-otp")
+  @UseGuards(ThrottlerGuard)
   async sendOtp(
     @Body() body: { businessEmail: string; role: string; organizerId?: string },
   ) {
@@ -67,9 +77,11 @@ export class OtpController {
     return { message: "OTP verified" };
   }
 
-  // WhatsApp pairing via pairing code (fallback if terminal QR is inconvenient)
+  // Platform-number pairing via pairing code (fallback if the QR is
+  // inconvenient). Admin only, for the same reason as the QR page.
   // Usage: GET /otp/whatsapp/pair?phone=9198XXXXXXXX
   @Get("whatsapp/pair")
+  @UseGuards(JwtAuthGuard, AdminRolesGuard)
   async pair(@Query("phone") phone: string) {
     if (!phone)
       throw new BadRequestException("phone is required (digits, E.164 no +)");
@@ -78,18 +90,14 @@ export class OtpController {
     return { phone: digits, code };
   }
 
-  // WhatsApp quick send test
-  // Usage: POST /otp/whatsapp/send { to: "+9198...", text: "Hello" }
-  @Post("whatsapp/send")
-  async sendWhatsApp(@Body() body: { to: string; text: string }) {
-    if (!body?.to || !body?.text)
-      throw new BadRequestException("to and text are required");
-    await this.otpService.sendWhatsAppMessage(body.to, body.text);
-    return { sent: true };
-  }
+  // The old unauthenticated POST /otp/whatsapp/send ("quick send test") is
+  // gone: it let anyone send any text to any number from the platform
+  // number. Organizers test their own number with POST /whatsapp/send.
 
-  // WhatsApp OTP
+  // WhatsApp OTP. Throttled: the 30 s per-number cooldown alone let a caller
+  // bomb many numbers at once.
   @Post("send-whatsapp-otp")
+  @UseGuards(ThrottlerGuard)
   async sendWhatsAppOtp(
     @Body() body: { whatsappNumber: string; role: string },
   ) {
@@ -109,6 +117,7 @@ export class OtpController {
 
   // Email OTP LOGIN (organizer) — email-first replacement for WhatsApp login.
   @Post("send-email-login-otp")
+  @UseGuards(ThrottlerGuard)
   async sendEmailLoginOtp(
     @Body() body: { email: string; role: string },
   ) {

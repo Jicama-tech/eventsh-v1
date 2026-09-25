@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import PhoneField from "@/components/ui/PhoneField";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -731,11 +732,10 @@ export default function SpeakerCRM() {
               </div>
               <div>
                 <Label className="text-xs">{t("Phone")}</Label>
-                <Input
+                <PhoneField
+                  format="e164"
                   value={form.phone}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, phone: e.target.value }))
-                  }
+                  onChange={(val) => setForm((f) => ({ ...f, phone: val }))}
                   placeholder="+91 …"
                 />
               </div>

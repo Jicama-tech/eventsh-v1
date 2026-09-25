@@ -13,6 +13,7 @@ import { FacilityCourtMarkings } from "@/lib/facilityCourtLines";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import PhoneField from "@/components/ui/PhoneField";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -95,6 +96,11 @@ import {
 } from "@/components/ui/popover";
 import { jwtDecode } from "jwt-decode";
 import BlurOverlay from "../ui/blurOverlay";
+import {
+  EventAgentsTab,
+  createQueuedEventAgents,
+  type QueuedEventAgent,
+} from "./EventAgentsTab";
 import { ModuleGate } from "../ui/ModuleGate";
 import {
   isIndividualAccount as isIndividualAcct,
@@ -279,7 +285,12 @@ const SECTION_NAV: "top" | "rail" = "top";
 
 interface CreateEventFormProps {
   onClose: () => void;
-  onSave: (data: FormData) => Promise<void>;
+  /**
+   * Saves the event. May resolve with the saved event (or anything carrying
+   * its `_id`): in create mode the form uses that id to create the agents
+   * queued on the Agents tab right after the event exists.
+   */
+  onSave: (data: FormData) => Promise<void | { _id?: string } | null | undefined>;
   editMode?: boolean;
   /**
    * When true, the form pre-fills from `initialData` (banner, gallery, all
@@ -9018,6 +9029,9 @@ export function CreateEventForm({
 }: CreateEventFormProps) {
   const { toast } = useToast();
   const venueRef = useRef<HTMLDivElement>(null);
+  // Agents typed on the Agents tab before the event exists (create mode).
+  // Created, with their referral codes, right after the event is saved.
+  const queuedAgentsRef = useRef<QueuedEventAgent[]>([]);
 
   // Individual accounts have no payment integration (no Razorpay /
   // Stripe / bank). Force every visitor-type price to 0 in the UI so
@@ -9638,6 +9652,8 @@ export function CreateEventForm({
         initialData?.features?.hasScheduledSpaces ??
         (Array.isArray(initialData?.scheduledSpaceTemplates) &&
           initialData.scheduledSpaceTemplates.length > 0),
+      // Agents = referral-only booking. Off unless the organizer turned it on.
+      hasAgents: initialData?.features?.hasAgents ?? false,
     },
     ageRestriction: initialData?.ageRestriction ?? "All Ages",
     ageRestrictions: Array.isArray(initialData?.ageRestrictions)
@@ -10717,6 +10733,7 @@ export function CreateEventForm({
       (currentTab === "sponsors" && !f.hasSponsors) ||
       (currentTab === "seating" && !f.hasSeating) ||
       (currentTab === "schedule" && !f.hasScheduledSpaces) ||
+      (currentTab === "agents" && !f.hasAgents) ||
       (currentTab === "layout" &&
         !f.hasStalls &&
         !f.hasSpeakers &&
@@ -10736,6 +10753,7 @@ export function CreateEventForm({
     formData.features.hasSponsors,
     formData.features.hasSeating,
     formData.features.hasScheduledSpaces,
+    formData.features.hasAgents,
     venueConfigurations,
   ]);
 
@@ -11813,12 +11831,40 @@ export function CreateEventForm({
         .filter((v) => v.email);
       data.append("volunteers", JSON.stringify(cleanedVolunteers));
 
-      await onSave(data);
+      const saved = await onSave(data);
       toast({
         duration: 5000,
         title: editMode ? "Event updated!" : "Event created!",
         description: "Your event has been saved.",
       });
+      // Create mode: the agents queued on the Agents tab get created — and
+      // their referral codes — now that the event has an id. Best-effort:
+      // the event itself is already saved.
+      const queuedAgents = queuedAgentsRef.current;
+      const createdId = (saved as any)?._id ? String((saved as any)._id) : "";
+      if (!editMode && queuedAgents.length > 0) {
+        if (createdId) {
+          const outcome = await createQueuedEventAgents(createdId, queuedAgents);
+          queuedAgentsRef.current = [];
+          toast({
+            duration: 6000,
+            title: outcome.failed
+              ? `${outcome.created} of ${queuedAgents.length} agents added`
+              : `${outcome.created} agent${outcome.created === 1 ? "" : "s"} added`,
+            description: outcome.failed
+              ? "Open the event and add the missing agents from the Agents tab."
+              : "Open the event's Agents tab to share their referral links.",
+            variant: outcome.failed ? "destructive" : undefined,
+          });
+        } else {
+          toast({
+            duration: 6000,
+            title: "Agents not added yet",
+            description:
+              "The event was saved. Open it and add the agents from the Agents tab.",
+          });
+        }
+      }
       // In edit mode, keep the form open after a successful save so
       // the organizer can keep tweaking and re-save without losing
       // context. They can dismiss it from the Cancel / X button in
@@ -11856,6 +11902,9 @@ export function CreateEventForm({
         // defining templates; placement still happens on the shared Space
         // Layout canvas, same as Stalls/Round Tables.
         const showScheduledSpaces = !!formData.features.hasScheduledSpaces;
+        // Agents tab appears only when the Agents section (referral-only
+        // booking) is on — same rule as every other section.
+        const showAgents = !!formData.features.hasAgents;
         // Layout tab is also useful when any door type is defined (per venue),
         // since the user needs the canvas to place those door markers.
         const anyDoorsEnabled = venueConfigurations.some(
@@ -11910,6 +11959,14 @@ export function CreateEventForm({
             label: t("Sponsors"),
             icon: Handshake,
             show: showSponsors,
+          },
+          {
+            // Promoters with referral links (their own collection; the tab
+            // talks to /events/:id/agents itself).
+            id: "agents",
+            label: t("Agents"),
+            icon: UserCheck,
+            show: showAgents,
           },
           {
             id: "schedule",
@@ -13216,10 +13273,11 @@ export function CreateEventForm({
                       </div>
                       <div className="md:col-span-3">
                         <Label className="text-xs">{t("Phone")}</Label>
-                        <Input
+                        <PhoneField
+                          format="e164"
                           value={v.phoneNumber}
-                          onChange={(e) =>
-                            updateVolunteer(idx, "phoneNumber", e.target.value)
+                          onChange={(val) =>
+                            updateVolunteer(idx, "phoneNumber", val)
                           }
                           placeholder="+1 555 123 4567"
                         />
@@ -14706,13 +14764,11 @@ export function CreateEventForm({
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               <div>
                                 <Label className="text-xs">{t("WhatsApp Number")}</Label>
-                                <Input
+                                <PhoneField
+                                  format="e164"
                                   value={session.whatsAppNumber || ""}
-                                  onChange={(e) =>
-                                    updateSession(
-                                      "whatsAppNumber",
-                                      e.target.value,
-                                    )
+                                  onChange={(val) =>
+                                    updateSession("whatsAppNumber", val)
                                   }
                                   placeholder="+91 98765 43210"
                                 />
@@ -15462,6 +15518,22 @@ export function CreateEventForm({
                           <p className="text-xs text-muted-foreground">
                             Spaces bookable in specific time slots, not sold
                             once for the whole event
+                          </p>
+                        </div>
+                      </label>
+                      <label className="flex items-start gap-3 border rounded-lg p-3 cursor-pointer hover:bg-muted/30">
+                        <Switch
+                          checked={!!formData.features.hasAgents}
+                          onCheckedChange={(checked) =>
+                            handleFeatureChange("hasAgents", checked)
+                          }
+                        />
+                        <div>
+                          <p className="font-medium text-sm">Agents</p>
+                          <p className="text-xs text-muted-foreground">
+                            Referral-only booking: agents share links with
+                            their codes and every booking needs a valid agent
+                            or operator code. Off = codes stay optional
                           </p>
                         </div>
                       </label>
@@ -16304,6 +16376,21 @@ export function CreateEventForm({
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* AGENTS TAB — promoters with referral links. Their own collection,
+              so this tab saves through /events/:id/agents in edit mode and
+              queues agents for creation right after the event is created. */}
+          <TabsContent value="agents" className="space-y-6">
+            <ModuleGate moduleKey="events" sectionKey="agents">
+              <EventAgentsTab
+                key={editMode ? String(initialData?._id || "") : "new"}
+                eventId={editMode ? initialData?._id : null}
+                onQueueChange={(queued) => {
+                  queuedAgentsRef.current = queued;
+                }}
+              />
+            </ModuleGate>
           </TabsContent>
 
           {/* SCHEDULED SPACES TAB */}
