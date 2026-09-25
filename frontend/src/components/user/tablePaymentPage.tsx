@@ -28,6 +28,7 @@ import QRCode from "react-qr-code";
 import jsQR from "jsqr";
 import { Input } from "../ui/input";
 import { buildPayNowQrUrl } from "@/lib/paynowQr";
+import { getEventCoupon } from "@/lib/eventCoupon";
 import PaymentFeedbackDialog from "./PaymentFeedbackDialog";
 
 const TablePaymentPage = () => {
@@ -78,6 +79,16 @@ const TablePaymentPage = () => {
   const [appliedCoupon, setAppliedCoupon] = useState("");
   const [discount, setDiscount] = useState(0);
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+
+  // A coupon shared through the event link (?coupon=CODE) pre-fills the
+  // field; the vendor still presses Apply (validation counts as a use).
+  useEffect(() => {
+    const evId = orderData?.eventId || orderData?.eventInfo?.id;
+    if (!evId) return;
+    const shared = getEventCoupon(evId);
+    if (shared) setCouponCode((cur) => (cur.trim() ? cur : shared));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Bank transfer & transaction verification
   const [paymentMode, setPaymentMode] = useState<"qr" | "bank">("qr");

@@ -848,6 +848,9 @@ export class MembershipsService {
           filePath,
           caption,
           fileName,
+          undefined,
+          // From the organizer's own linked WhatsApp when they have one.
+          { organizerId: String(membership.organizerId || "") },
         );
       } catch (err: any) {
         this.logger.warn(

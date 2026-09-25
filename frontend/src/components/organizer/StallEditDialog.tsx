@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import PhoneField from "@/components/ui/PhoneField";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Loader2,
@@ -359,6 +360,12 @@ export function StallEditDialog({
           value={form[key] || ""}
           onChange={(e) => setField(key, e.target.value)}
           rows={2}
+        />
+      ) : key === "whatsAppNumber" || key === "phoneNumber" ? (
+        <PhoneField
+          format="e164"
+          value={form[key] || ""}
+          onChange={(val) => setField(key, val)}
         />
       ) : (
         <Input

@@ -63,3 +63,25 @@ export function getEventReferral(
   }
   return null;
 }
+
+/**
+ * Normalises a code the visitor typed into a booking form. Returns the
+ * upper-cased code when it looks like one, otherwise null (an empty field is
+ * "no code", not an error — the server decides whether one is required).
+ */
+export function normalizeReferralInput(
+  value: string | null | undefined,
+): string | null {
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase();
+  return CODE_PATTERN.test(normalized) ? normalized : null;
+}
+
+/** True when the visitor typed something that can't be a referral code. */
+export function isMalformedReferralInput(
+  value: string | null | undefined,
+): boolean {
+  const trimmed = String(value || "").trim();
+  return trimmed.length > 0 && !CODE_PATTERN.test(trimmed.toUpperCase());
+}

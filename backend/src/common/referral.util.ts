@@ -1,11 +1,13 @@
-// Operator referral attribution (referralCode / referralOperatorId /
-// referralOperatorName) is organizer-dashboard-only. The public create
-// endpoints hand the saved booking back to the visitor/vendor/speaker, so
-// strip those fields from that copy. The stored document keeps them.
+// Referral attribution (referralCode + the operator or event agent it
+// resolved to) is organizer-dashboard-only. The public create endpoints hand
+// the saved booking back to the visitor/vendor/speaker, so strip those fields
+// from that copy. The stored document keeps them.
 const REFERRAL_FIELDS = [
   "referralCode",
   "referralOperatorId",
   "referralOperatorName",
+  "referralAgentId",
+  "referralAgentName",
 ] as const;
 
 export function omitReferralFields<T>(doc: T): T {

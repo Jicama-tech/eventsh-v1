@@ -110,7 +110,9 @@ export class StallPaymentSchedulerService {
         `Table(s): ${stall.selectedTables?.map((t: any) => t.tableName).join(", ") || "—"}\n` +
         `Paid: ${stall.paidAmount} | Remaining: ${stall.remainingAmount}`;
 
-      await this.otpService.sendWhatsAppMessage(whatsApp, message);
+      await this.otpService.sendWhatsAppMessage(whatsApp, message, {
+        organizerId: String((stall.organizerId as any)?._id || stall.organizerId || ""),
+      });
 
       // Track that reminder was sent
       stall.statusHistory.push({
@@ -196,7 +198,9 @@ export class StallPaymentSchedulerService {
             `The partial payment of ${stall.paidAmount} is non-refundable as per the booking terms.\n\n` +
             `If you believe this is an error, please contact the organizer immediately.`;
 
-          await this.otpService.sendWhatsAppMessage(whatsApp, message);
+          await this.otpService.sendWhatsAppMessage(whatsApp, message, {
+            organizerId: String((stall.organizerId as any)?._id || stall.organizerId || ""),
+          });
         } catch {
           this.logger.warn("Failed to send forfeit WhatsApp notification");
         }
@@ -214,6 +218,11 @@ export class StallPaymentSchedulerService {
               `Tables released: ${tableNames}\n` +
               `Forfeited amount: ${stall.paidAmount}\n\n` +
               `These tables are now available for re-booking.`,
+            // TO the organizer: routed so it rings.
+            {
+              organizerId: String((stall.organizerId as any)?._id || stall.organizerId || ""),
+              toOrganizer: true,
+            },
           );
         }
       } catch {

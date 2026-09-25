@@ -12,6 +12,7 @@ import { Event, EventDocument } from "../events/schemas/event.schema";
 import { Organizer } from "../organizers/schemas/organizer.schema";
 import { CreateRsvpDto } from "./dto/create-rsvp.dto";
 import { MailService, OrgEmailConfig } from "../roles/mail.service";
+import { OtpService } from "../otp/otp.service";
 import { emailBrand } from "../../common/email/email-brand";
 import {
   brandedEmail,
@@ -28,6 +29,8 @@ export class RsvpService {
     @InjectModel(Event.name) private eventModel: Model<EventDocument>,
     @InjectModel(Organizer.name) private organizerModel: Model<any>,
     private readonly mailService: MailService,
+    // WhatsApp twins of the guest emails, from the host's own linked number.
+    private readonly otpService: OtpService,
   ) {}
 
   // Public: create or update the guest's RSVP for an event. Keyed on
@@ -166,6 +169,7 @@ export class RsvpService {
         guestCount: doc.guestCount,
         side: dto.side?.trim() || "",
         selectedFunctions,
+        contactNumber: doc.contactNumber,
       },
       senderConfig,
     ).catch((e) =>
@@ -611,6 +615,21 @@ export class RsvpService {
       attachments,
       senderConfig,
     });
+
+    // WhatsApp twin: each room pass PDF, from the host's own linked WhatsApp
+    // when they have one. Best-effort; the email above is the send that counts.
+    if (rsvp.contactNumber) {
+      for (const a of attachments) {
+        if (!a.filename.endsWith(".pdf")) continue;
+        await this.otpService.trySendMediaBuffer(
+          rsvp.contactNumber,
+          a.content,
+          a.filename,
+          `🏨 *${subject}*\n\nYour room pass is attached — show it at check-in.`,
+          { organizerId, organizerInitiated: true },
+        );
+      }
+    }
     return { sent: true, rooms: rooms.length };
   }
 
@@ -912,7 +931,7 @@ export class RsvpService {
     if (isLive && opts?.notify !== false && !wasLive) {
       const rsvps = await this.rsvpModel
         .find({ eventId, attending: { $ne: false } })
-        .select("email")
+        .select("email contactNumber")
         .lean();
       const recipients = Array.from(
         new Set(
@@ -949,6 +968,30 @@ export class RsvpService {
               `Function-start email: ${failed}/${recipients.length} failed`,
             );
         });
+
+        // WhatsApp twin, from the host's own linked number when they have
+        // one. One at a time in the background (the organizer's session paces
+        // and caps its own sends), never affecting the request.
+        const numbers = Array.from(
+          new Set(
+            rsvps
+              .map((r: any) => String(r.contactNumber || "").trim())
+              .filter(Boolean),
+          ),
+        );
+        if (numbers.length) {
+          const text =
+            `💒 *${subject}*\n\n` +
+            `${String(fn?.name || fn?.title || "The ceremony")} at *${(event as any).title || "the wedding"}* is starting now. See you there!`;
+          void (async () => {
+            for (const to of numbers) {
+              await this.otpService.trySendWhatsAppMessage(to, text, {
+                organizerId,
+                organizerInitiated: true,
+              });
+            }
+          })();
+        }
       }
     }
 
@@ -1124,6 +1167,8 @@ export class RsvpService {
       guestCount: number;
       side: string;
       selectedFunctions: { id: string; name: string }[];
+      /** For the WhatsApp twin of the confirmation. */
+      contactNumber?: string;
     },
     senderConfig?: OrgEmailConfig,
   ): Promise<void> {
@@ -1232,5 +1277,27 @@ export class RsvpService {
       html,
       senderConfig,
     });
+
+    // WhatsApp twin of the confirmation, from the host's own linked number
+    // when they have one. Never throws.
+    if (rsvp.contactNumber) {
+      const organizerId = String(
+        (event as any)?.organizer?._id || (event as any)?.organizer || "",
+      );
+      const eventTitle = String((event as any)?.title || "the wedding");
+      await this.otpService.trySendWhatsAppMessage(
+        rsvp.contactNumber,
+        rsvp.attending
+          ? `💒 *RSVP received — ${eventTitle}*\n\n` +
+              `Dear ${String(rsvp.name || "guest")},\n\n` +
+              `🎉 You're on the guest list! Number of guests (incl. you): ${rsvp.guestCount}.` +
+              (sideText ? `\nAttending from: ${sideText}` : "") +
+              `\n\nYou can update your RSVP anytime from the wedding page.`
+          : `💒 *RSVP received — ${eventTitle}*\n\n` +
+              `Dear ${String(rsvp.name || "guest")},\n\n` +
+              `Your response has been noted. We're sorry you can't make it — thank you for letting us know. 💛`,
+        { organizerId },
+      );
+    }
   }
 }

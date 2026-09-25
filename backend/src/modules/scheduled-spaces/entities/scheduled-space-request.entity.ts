@@ -111,6 +111,14 @@ export class ScheduledSpaceRequest {
   @Prop()
   referralOperatorName?: string;
 
+  // Or an event AGENT's code (the event form's Agents tab) — one of the two
+  // pairs is set, never both. Same visibility rules as the operator pair.
+  @Prop()
+  referralAgentId?: string;
+
+  @Prop()
+  referralAgentName?: string;
+
   // Names of people attending alongside the registrant — free-text, no
   // separate identity/contact info (mirrors how Round Table's per-seat
   // guest names work: display-only, not booking records of their own).

@@ -1,4 +1,4 @@
-import { ValidationPipe } from "@nestjs/common";
+import { ShutdownSignal, ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import * as dotenv from "dotenv";
 import { AppModule } from "./app.module";
@@ -87,6 +87,17 @@ async function bootstrap() {
         return callback(null, true);
       }
 
+      // Local development: the Vite dev server is reached as localhost,
+      // 127.0.0.1 or a LAN address (a phone on the same Wi-Fi), on any
+      // port. Never in production — there the list below is the rule.
+      if (
+        process.env.NODE_ENV !== "production" &&
+        /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/.test(
+          origin,
+        )
+      ) {
+        return callback(null, true);
+      }
       const allowedDomains = await getAllowedDomains();
       if (allowedDomains.includes(origin)) {
         callback(null, true);
@@ -133,6 +144,18 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // Lets providers clean up when pm2 restarts the process. Each organizer's
+  // WhatsApp socket is ended and its pending pairing write finished, rather
+  // than the process dying mid-write and leaving a pairing the organizer has
+  // to scan again (OrganizerWhatsappService.onModuleDestroy).
+  //
+  // Only the real stop signals (pm2 sends SIGINT; systemd and docker send
+  // SIGTERM). With no argument Nest also traps SIGSEGV, SIGBUS, SIGFPE and
+  // SIGILL, and a handled fault in a native addon (sharp or canvas decoding a
+  // bad image) re-faults forever instead of crashing — the API would hang
+  // rather than exit and be restarted by pm2.
+  app.enableShutdownHooks([ShutdownSignal.SIGTERM, ShutdownSignal.SIGINT]);
 
   const port = process.env.PORT || 3000;
   await app.listen(port);

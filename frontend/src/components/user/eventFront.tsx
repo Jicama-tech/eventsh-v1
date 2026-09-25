@@ -128,7 +128,15 @@ import { FacilityCourtMarkings } from "@/lib/facilityCourtLines";
 import DemoPrompt from "./DemoPrompt";
 import { startDemoDashboard } from "@/lib/demoDashboard";
 import { isFieldEnabled as isRegFieldEnabled } from "@/lib/registrationFormFields";
-import { captureEventReferral, getEventReferral } from "@/lib/eventReferral";
+import {
+  captureEventReferral,
+  getEventReferral,
+  isMalformedReferralInput,
+  normalizeReferralInput,
+} from "@/lib/eventReferral";
+import { captureEventCoupon } from "@/lib/eventCoupon";
+import { toE164 } from "@/lib/phone";
+import { ReferralCodeField } from "@/components/ui/ReferralCodeField";
 import StallPaymentPanel from "./StallPaymentPanel";
 import PaymentFeedbackDialog from "./PaymentFeedbackDialog";
 import { EventChatbot } from "./EventChatbot";
@@ -301,6 +309,8 @@ interface FetchedEvent {
     photography: boolean;
     security: boolean;
     accessibility: boolean;
+    /** Agents section on = referral-only booking. */
+    hasAgents?: boolean;
   };
   registrationFormFields?: {
     stall?: Record<string, boolean>;
@@ -548,18 +558,78 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const { search: routeSearch } = useLocation();
   useEffect(() => {
     if (!eventData?._id) return;
-    const refCode = new URLSearchParams(routeSearch).get("ref");
-    if (!refCode) return;
-    captureEventReferral(
-      [eventData._id, (eventData as any)?.slug, eventId, id].filter(
-        Boolean,
-      ) as string[],
-      refCode,
-    );
+    const params = new URLSearchParams(routeSearch);
+    const keys = [eventData._id, (eventData as any)?.slug, eventId, id].filter(
+      Boolean,
+    ) as string[];
+    const refCode = params.get("ref");
+    if (refCode) captureEventReferral(keys, refCode);
+    // Shared coupon link (?coupon=CODE) from the dashboard's Coupons tab —
+    // remembered per event so the ticket / stall checkout can pre-fill it.
+    const couponCode = params.get("coupon");
+    if (couponCode) captureEventCoupon(keys, couponCode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeSearch, eventData?._id]);
   const getReferralCode = () =>
     getEventReferral(eventData?._id, (eventData as any)?.slug, eventId, id);
+
+  // The visible "Referral code" field shown first on every booking form.
+  // Prefilled from the captured link code; a valid typed code wins, and an
+  // emptied field falls back to the link code (the visitor still came
+  // through it). The server decides whether the code counts.
+  const [referralInput, setReferralInput] = useState("");
+  useEffect(() => {
+    const stored = getReferralCode();
+    if (stored) setReferralInput((cur) => (cur.trim() ? cur : stored));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeSearch, eventData?._id]);
+  // A code that arrived through a share link is shown on every form but
+  // locked; only a visitor who came without one can type a code.
+  const referralLocked = !!getReferralCode();
+  const bookingReferralCode = (): string | undefined =>
+    referralLocked
+      ? getReferralCode() || undefined
+      : normalizeReferralInput(referralInput) || undefined;
+  const referralInputProblem = (): string | null =>
+    !referralLocked && isMalformedReferralInput(referralInput)
+      ? "Referral codes are 4 to 12 letters or digits. Check the code your agent shared, or clear the field."
+      : null;
+  // Agents section on (event form → Venue → Event Sections) = referral-only
+  // booking: every form asks for the code first and the server refuses a
+  // booking without a valid one.
+  const referralRequired = !!(eventData as any)?.features?.hasAgents;
+
+  // When the visit came through an agent link, the "Contact Organizer" card
+  // shows that agent instead of the organizer (public, throttled endpoint;
+  // null when the code is an operator's or unknown).
+  const [referralAgent, setReferralAgent] = useState<{
+    name: string;
+    whatsAppNumber: string;
+    email: string;
+  } | null>(null);
+  useEffect(() => {
+    const code = getReferralCode();
+    const evId = eventData?._id;
+    if (!evId || !code) {
+      setReferralAgent(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(
+      `${__API_URL__}/events/${evId}/agents/contact?ref=${encodeURIComponent(code)}`,
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled) setReferralAgent(d?.agent || null);
+      })
+      .catch(() => {
+        if (!cancelled) setReferralAgent(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeSearch, eventData?._id]);
   const [isFavorited, setIsFavorited] = useState(false);
   const [ticketQuantity, setTicketQuantity] = useState(1);
   const [selectedVisitorType, setSelectedVisitorType] = useState<number>(0);
@@ -2089,6 +2159,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       !scheduledSpaceForm.facilityType
     )
       missing.push("Type of Space Required");
+    if (referralRequired && !bookingReferralCode())
+      missing.push("Referral code");
+    const referralProblem = referralInputProblem();
+    if (referralProblem) {
+      toast({
+        duration: 5000,
+        title: "Check the referral code",
+        description: referralProblem,
+        variant: "destructive",
+      });
+      return;
+    }
     if (missing.length > 0) {
       toast({
         duration: 5000,
@@ -2108,13 +2190,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           organizerId: (eventData as any)?.organizer?._id,
           name: scheduledSpaceForm.name,
           email: scheduledSpaceForm.email,
-          phone: scheduledSpaceForm.phone || undefined,
-          whatsappNumber: scheduledSpaceForm.whatsappNumber || undefined,
+          // Stored as E.164 ("+<dial><number>") like every number in the app.
+          phone: toE164(scheduledSpaceForm.phone) || undefined,
+          whatsappNumber: toE164(scheduledSpaceForm.whatsappNumber) || undefined,
           facilityTypeRequested: scheduledSpaceForm.facilityType || undefined,
           purpose: scheduledSpaceForm.purpose || undefined,
           organization: scheduledSpaceForm.organization || undefined,
-          // From the operator share link (?ref), if any — never typed.
-          referralCode: getReferralCode() || undefined,
+          // Typed on the form, else the agent / operator share link (?ref).
+          referralCode: bookingReferralCode(),
           companions: scheduledSpaceForm.companions
             .map((c) => c.trim())
             .filter(Boolean),
@@ -2916,6 +2999,26 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       });
       return;
     }
+    if (referralRequired && !bookingReferralCode()) {
+      toast({
+        duration: 5000,
+        title: "Referral code needed",
+        description:
+          "This event can only be booked with a referral code. Enter the code your agent shared with you.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const referralProblem = referralInputProblem();
+    if (referralProblem) {
+      toast({
+        duration: 5000,
+        title: "Check the referral code",
+        description: referralProblem,
+        variant: "destructive",
+      });
+      return;
+    }
     setSpeakerSubmitting(true);
     try {
       const sessions = [
@@ -2955,7 +3058,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         fd.append("socialLinks", JSON.stringify(speakerFormData.socialLinks));
         fd.append("source", "external");
         fd.append("sessions", JSON.stringify(sessions));
-        const referralCode = getReferralCode();
+        const referralCode = bookingReferralCode();
         if (referralCode) fd.append("referralCode", referralCode);
         res = await fetch(`${apiURL}/speaker-requests/apply-with-image`, {
           method: "POST",
@@ -2984,7 +3087,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             socialLinks: speakerFormData.socialLinks,
             source: "external",
             sessions,
-            referralCode: getReferralCode() || undefined,
+            referralCode: bookingReferralCode(),
           }),
         });
       }
@@ -3264,7 +3367,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         fd.append("organizerId", organizerId);
         fd.append("hostName", workshopHostFormData.hostName);
         fd.append("hostEmail", email);
-        fd.append("hostPhone", workshopHostFormData.hostPhone || "");
+        fd.append("hostPhone", toE164(workshopHostFormData.hostPhone));
         fd.append("hostBio", workshopHostFormData.hostBio || "");
         fd.append("workshopName", workshopHostFormData.workshopName);
         fd.append(
@@ -3312,7 +3415,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             organizerId,
             hostName: workshopHostFormData.hostName,
             hostEmail: email,
-            hostPhone: workshopHostFormData.hostPhone,
+            hostPhone: toE164(workshopHostFormData.hostPhone),
             hostBio: workshopHostFormData.hostBio,
             workshopName: workshopHostFormData.workshopName,
             workshopDescription: workshopHostFormData.workshopDescription,
@@ -4800,6 +4903,85 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
   const design = settings?.settings?.design;
 
+  // "Contact Organizer" becomes "Contact Your Agent" when the visit came
+  // through an agent link. Used by both (mobile / desktop) contact blocks.
+  const renderReferralAgentCard = () => {
+    if (!referralAgent) return null;
+    const rawNumber = String(referralAgent.whatsAppNumber || "").trim();
+    const waDigits = rawNumber.replace(/\D/g, "");
+    return (
+      <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+        <div className="px-5 pt-5 pb-4">
+          <p
+            className="text-sm sm:text-lg font-bold tracking-widest uppercase mb-1"
+            style={{ color: design?.primaryColor }}
+          >
+            Contact Your Agent
+          </p>
+          <p className="text-xs text-gray-400 mb-4">
+            You reached this event through an agent. Contact them for bookings
+            and questions.
+          </p>
+          <div className="space-y-3">
+            {referralAgent.name && (
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                  <User className="h-3.5 w-3.5 text-gray-400" />
+                </div>
+                <p className="text-sm font-semibold text-gray-800">
+                  {referralAgent.name}
+                </p>
+              </div>
+            )}
+            {rawNumber && (
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                  <Phone className="h-3.5 w-3.5 text-gray-400" />
+                </div>
+                <a
+                  href={`tel:${rawNumber.replace(/[^\d+]/g, "")}`}
+                  className="text-sm font-medium hover:underline"
+                  style={{ color: design?.secondaryColor || "#ef4444" }}
+                >
+                  {rawNumber}
+                </a>
+              </div>
+            )}
+            {waDigits && (
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                  <FaWhatsapp className="h-3.5 w-3.5 text-green-500" />
+                </div>
+                <a
+                  href={`https://wa.me/${waDigits}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-medium text-gray-700 hover:text-green-600 transition-colors"
+                >
+                  Chat on WhatsApp
+                </a>
+              </div>
+            )}
+            {referralAgent.email && (
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                  <Mail className="h-3.5 w-3.5 text-gray-400" />
+                </div>
+                <a
+                  href={`mailto:${referralAgent.email}`}
+                  className="text-sm font-medium hover:underline break-all"
+                  style={{ color: design?.secondaryColor || "#ef4444" }}
+                >
+                  {referralAgent.email}
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const getThemeColors = () => {
     const isDark = design?.theme === "dark";
     return {
@@ -5237,6 +5419,17 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       return;
     }
 
+    const referralProblem = referralInputProblem();
+    if (referralProblem) {
+      toast({
+        duration: 5000,
+        title: "Check the referral code",
+        description: referralProblem,
+        variant: "destructive",
+      });
+      return;
+    }
+
     // ---- Mandatory-field validation ----
     // Selects, file uploads, the phone input and textareas can't rely on the
     // native `required` attribute inside this dialog, so we validate every
@@ -5255,6 +5448,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     // eventData, shared with the form JSX. See
     // frontend/src/lib/registrationFormFields.ts.
 
+    // Referral-only events (Spaces & Add-ons switch) need a code first.
+    req(referralRequired && !bookingReferralCode(), "Referral code");
     req(blank(d.nameOfApplicant), "Name of Applicant");
     req(blank(d.name), "Owner Name");
     if (stallOn("businessOwnerNationality"))
@@ -5366,8 +5561,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       const formData = new FormData();
       formData.append("eventId", eventData?._id || "");
       formData.append("organizerId", eventData?.organizer?._id || "");
-      // Operator share link (?ref) attribution, when one was captured.
-      const referralCode = getReferralCode();
+      // Typed on the form, else the agent / operator share link (?ref).
+      const referralCode = bookingReferralCode();
       if (referralCode) formData.append("referralCode", referralCode);
 
       // Append standard info
@@ -5392,11 +5587,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         );
       formData.append(
         "shopkeeperWhatsAppNumber",
-        shopkeeperDetails.whatsappNumber.startsWith("+")
-          ? shopkeeperDetails.whatsappNumber
-          : `+${shopkeeperDetails.whatsappNumber}`,
+        toE164(shopkeeperDetails.whatsappNumber),
       );
-      formData.append("shopkeeperPhoneNumber", shopkeeperDetails.phone);
+      formData.append("shopkeeperPhoneNumber", toE164(shopkeeperDetails.phone));
       formData.append("businessName", shopkeeperDetails.shopName);
       formData.append("businessType", shopkeeperDetails.businessCategory);
       formData.append("businessAddress", shopkeeperDetails.address);
@@ -8209,6 +8402,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               )}
               {/* ── Contact Organizer ── */}
               {(() => {
+                // Came through an agent link? Show the agent, not the organizer.
+                const agentCard = renderReferralAgentCard();
+                if (agentCard) return agentCard;
                 // Resolve the list of phones to render. Prefer the new
                 // contactPhones array; fall back to the legacy single
                 // phoneNumber/phone fields so older organizer records
@@ -8640,6 +8836,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 navigate("/workshop-checkout", {
                                   state: {
                                     eventId: eventId || id,
+                                    referralRequired: !!(eventData as any)?.features?.hasAgents,
                                     organizerId: eventData?.organizer?._id,
                                     eventTitle: eventData?.title,
                                     bookingType: "session",
@@ -8751,6 +8948,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             navigate("/workshop-checkout", {
                               state: {
                                 eventId: eventId || id,
+                                referralRequired: !!(eventData as any)?.features?.hasAgents,
                                 organizerId: eventData?.organizer?._id,
                                 eventTitle: eventData?.title,
                                 bookingType: "package",
@@ -9284,6 +9482,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   <p className="text-gray-400 text-xs mb-4">
                     Showcase your business at this event as an exhibitor.
                   </p>
+                  {referralRequired && (
+                    <p className="text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mb-3">
+                      Booking needs a referral code from an agent.
+                    </p>
+                  )}
                   <button
                     onClick={handleRentStallClick}
                     className="w-full h-14 rounded-xl border-2 font-bold text-lg text-white shadow-md transition-all hover:opacity-90"
@@ -9350,6 +9553,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   <p className="text-gray-400 text-xs mb-4">
                     Reserve a court, ground or table for a specific time slot.
                   </p>
+                  {referralRequired && (
+                    <p className="text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mb-3">
+                      Booking needs a referral code from an agent.
+                    </p>
+                  )}
                   <button
                     onClick={handleScheduledSpaceClick}
                     className="w-full h-14 rounded-xl border-2 font-bold text-lg text-white shadow-md transition-all hover:opacity-90"
@@ -9440,6 +9648,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               <div className="hidden lg:block">
               {/* ── Contact Organizer ── */}
               {(() => {
+                // Came through an agent link? Show the agent, not the organizer.
+                const agentCard = renderReferralAgentCard();
+                if (agentCard) return agentCard;
                 // Resolve the list of phones to render. Prefer the new
                 // contactPhones array; fall back to the legacy single
                 // phoneNumber/phone fields so older organizer records
@@ -11738,6 +11949,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                             Contact Details
                           </p>
+                          <ReferralCodeField
+                            compact
+                            value={referralInput}
+                            onChange={setReferralInput}
+                            locked={referralLocked}
+                            required={referralRequired}
+                          />
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div>
                               <label className="text-[11px] font-medium text-gray-500 mb-1 block">
@@ -12012,12 +12230,31 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               });
                               return;
                             }
+                            if (referralRequired && !bookingReferralCode()) {
+                              toast({
+                                duration: 5000,
+                                title: "Referral code needed",
+                                description:
+                                  "This event can only be booked with a referral code. Enter the code your agent shared with you.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+                            const referralProblem = referralInputProblem();
+                            if (referralProblem) {
+                              toast({
+                                duration: 5000,
+                                title: "Check the referral code",
+                                description: referralProblem,
+                                variant: "destructive",
+                              });
+                              return;
+                            }
                             setRtBookingLoading(true);
                             try {
                               const organizerId = eventData?.organizer?._id;
                               const eid = eventId || id;
-                              const referralCode =
-                                getReferralCode() || undefined;
+                              const referralCode = bookingReferralCode();
                               const bookingPromises = roundTableSelections.map(
                                 (sel) => {
                                   const seatGuestsForTable =
@@ -12030,7 +12267,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                         return {
                                           chairIndex: chairIdx,
                                           name: g?.name || "",
-                                          whatsApp: g?.whatsApp || "",
+                                          whatsApp: toE164(g?.whatsApp),
                                           email: g?.email || "",
                                         };
                                       })
@@ -12051,7 +12288,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                           sel.selectedChairIndices,
                                         visitorName: rtVisitorInfo.name,
                                         visitorEmail: rtVisitorInfo.email,
-                                        visitorPhone: rtVisitorInfo.phone,
+                                        visitorPhone: toE164(rtVisitorInfo.phone),
                                         seatGuests: seatGuestsForTable,
                                         referralCode,
                                       }),
@@ -12751,6 +12988,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         </div>
                       </div>
                       )}
+
+                      <ReferralCodeField
+                        compact
+                        value={referralInput}
+                        onChange={setReferralInput}
+                        locked={referralLocked}
+                        required={referralRequired}
+                      />
 
                       <div className="grid grid-cols-2 gap-3">
                         <div>
@@ -13912,6 +14157,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               onSubmit={handleScheduledSpaceFormSubmit}
               className="space-y-4"
             >
+              <ReferralCodeField
+                value={referralInput}
+                onChange={setReferralInput}
+                locked={referralLocked}
+                required={referralRequired}
+              />
               <div>
                 <Label>Full Name *</Label>
                 <Input
@@ -17514,6 +17765,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               )}
 
               <form onSubmit={handleRentFormSubmit} className="space-y-4">
+                <ReferralCodeField
+                  value={referralInput}
+                  onChange={setReferralInput}
+                  locked={referralLocked}
+                  required={referralRequired}
+                />
                 {/* --- SECTION: PERSONAL & BUSINESS DETAILS --- */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">

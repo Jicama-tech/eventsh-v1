@@ -16,6 +16,11 @@ export const OPERATOR_TABS = [
   "events",
   "storefront",
   "settings",
+  // The organizer's own WhatsApp: the connection card in Settings and the
+  // Campaigns tab. Enforced on the API by TabsGuard (common/tabs), not only
+  // hidden in the sidebar — linking a phone or messaging every attendee is
+  // not something every operator should be able to do.
+  "whatsapp",
 ] as const;
 export type OperatorTab = (typeof OPERATOR_TABS)[number];
 

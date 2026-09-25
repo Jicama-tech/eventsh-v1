@@ -25,7 +25,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit3, Plus, Trash } from "lucide-react";
+import { Copy, Edit3, Plus, Share2, Trash } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { withCouponCode } from "@/lib/eventCoupon";
 import { jwtDecode } from "jwt-decode";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";
@@ -57,6 +59,12 @@ export function CouponsManager() {
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [couponToDelete, setCouponToDelete] = useState<string | null>(null);
+
+  // Share a coupon as the event's own eventfront link (?coupon=CODE).
+  const { toast } = useToast();
+  const [organizerSlug, setOrganizerSlug] = useState("");
+  const [shareCoupon, setShareCoupon] = useState<any | null>(null);
+  const [shareEventId, setShareEventId] = useState("");
 
   const blankCoupon = {
     code: "",
@@ -102,6 +110,32 @@ export function CouponsManager() {
           const data = await eventsRes.json();
           setEvents(data.data || []);
         }
+
+        // Organizer slug for shareable eventfront links: the storefront slug
+        // is the live one; the profile slug is the fallback.
+        let slug = "";
+        try {
+          const storeRes = await fetch(
+            `${apiURL}/organizer-stores/organizer-store-detail`,
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          if (storeRes.ok) {
+            const storeData = await storeRes.json();
+            slug = storeData?.data?.slug || "";
+          }
+        } catch {
+          /* fall through to the profile slug */
+        }
+        if (!slug) {
+          const profileRes = await fetch(
+            `${apiURL}/organizers/profile-get/${organizerId}`,
+          );
+          if (profileRes.ok) {
+            const profile = await profileRes.json();
+            slug = profile?.data?.slug || "";
+          }
+        }
+        if (slug) setOrganizerSlug(slug);
       } catch (e) {
         console.error("CouponsManager init failed:", e);
       }
@@ -257,6 +291,81 @@ export function CouponsManager() {
     }
   };
 
+  // ===== Share link =====
+  const couponEventIds = (c: any): string[] =>
+    Array.isArray(c?.eventIds) && c.eventIds.length > 0
+      ? c.eventIds.map(String)
+      : c?.eventId && c.eventId !== "NONE"
+        ? [String(c.eventId)]
+        : [];
+
+  // Events the link can point at: the coupon's own events, else any event.
+  const shareableEvents = (() => {
+    if (!shareCoupon) return [] as any[];
+    const ids = couponEventIds(shareCoupon);
+    const linked = events.filter((e) => ids.includes(String(e._id)));
+    return linked.length > 0 ? linked : events;
+  })();
+
+  const buildCouponLink = (c: any, eventId: string) => {
+    const ev = events.find((e) => String(e._id) === String(eventId));
+    const org = organizerSlug.trim() || "event";
+    const base = `${window.location.origin}/${encodeURIComponent(org)}/events/${encodeURIComponent(ev?.slug || eventId)}`;
+    return withCouponCode(base, c?.code);
+  };
+
+  const openShare = (c: any) => {
+    const ids = couponEventIds(c);
+    const first =
+      ids.find((i) => events.some((e) => String(e._id) === i)) ||
+      events[0]?._id ||
+      "";
+    setShareEventId(String(first));
+    setShareCoupon(c);
+  };
+
+  const shareLink =
+    shareCoupon && shareEventId
+      ? buildCouponLink(shareCoupon, shareEventId)
+      : "";
+  const shareEvent = events.find(
+    (e) => String(e._id) === String(shareEventId),
+  );
+
+  const copyShareLink = async () => {
+    if (!shareLink) return;
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      toast({ title: "Link copied", description: shareLink });
+    } catch {
+      window.prompt("Copy the link to share:", shareLink);
+    }
+  };
+
+  const nativeShare = async () => {
+    if (!shareLink) return;
+    const text = `Use coupon ${shareCoupon?.code} for "${shareEvent?.title || "this event"}"`;
+    try {
+      if (typeof navigator !== "undefined" && (navigator as any).share) {
+        await (navigator as any).share({
+          title: shareEvent?.title || "Event",
+          text,
+          url: shareLink,
+        });
+        return;
+      }
+    } catch (e: any) {
+      if (e?.name === "AbortError") return;
+    }
+    await copyShareLink();
+  };
+
+  const whatsappShareHref = shareLink
+    ? `https://wa.me/?text=${encodeURIComponent(
+        `Use coupon ${shareCoupon?.code} on "${shareEvent?.title || "this event"}": ${shareLink}`,
+      )}`
+    : "";
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -298,6 +407,15 @@ export function CouponsManager() {
                   <Button
                     variant="outline"
                     size="sm"
+                    title="Share as event link"
+                    onClick={() => openShare(c)}
+                    disabled={events.length === 0}
+                  >
+                    <Share2 className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => handleEditCoupon(c)}
                   >
                     <Edit3 className="w-4 h-4" />
@@ -318,6 +436,94 @@ export function CouponsManager() {
           ))}
         </div>
       )}
+
+      {/* Share dialog — the event's own eventfront link with ?coupon=CODE.
+          The visitor's ticket / stall checkout pre-fills (and applies) it. */}
+      <Dialog
+        open={!!shareCoupon}
+        onOpenChange={(open) => {
+          if (!open) setShareCoupon(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Share coupon {shareCoupon?.code}</DialogTitle>
+            <DialogDescription>
+              The link opens the event page with the coupon attached; it is
+              applied when the visitor checks out.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {shareableEvents.length > 1 && (
+              <div>
+                <Label>Event</Label>
+                <Select value={shareEventId} onValueChange={setShareEventId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose an event" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {shareableEvents.map((e) => (
+                      <SelectItem key={e._id} value={String(e._id)}>
+                        {e.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {shareableEvents.length === 1 && (
+              <p className="text-sm text-muted-foreground">
+                Event:{" "}
+                <span className="font-medium text-foreground">
+                  {shareableEvents[0].title}
+                </span>
+              </p>
+            )}
+            {shareableEvents.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                Create an event first — the link points at an event page.
+              </p>
+            )}
+            <div>
+              <Label>Link</Label>
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={shareLink}
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={copyShareLink}
+                  disabled={!shareLink}
+                  title="Copy link"
+                >
+                  <Copy className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 justify-end">
+              {shareLink && (
+                <Button type="button" variant="outline" asChild>
+                  <a
+                    href={whatsappShareHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Send on WhatsApp
+                  </a>
+                </Button>
+              )}
+              <Button type="button" onClick={nativeShare} disabled={!shareLink}>
+                <Share2 className="w-4 h-4 mr-2" />
+                Share
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Create / Edit dialog */}
       <Dialog open={openCouponDialog} onOpenChange={setOpenCouponDialog}>

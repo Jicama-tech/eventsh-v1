@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import PhoneField from "@/components/ui/PhoneField";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -139,12 +140,11 @@ export function AddUserForm({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="phone">{t("Phone Number")}</Label>
-                  <Input
+                  <PhoneField
                     id="phone"
+                    format="e164"
                     value={formData.phone}
-                    onChange={(e) =>
-                      setFormData({ ...formData, phone: e.target.value })
-                    }
+                    onChange={(val) => setFormData({ ...formData, phone: val })}
                     placeholder="+1-555-0123"
                   />
                 </div>
@@ -246,13 +246,14 @@ export function AddUserForm({
                 </div>
                 <div>
                   <Label htmlFor="emergencyContactPhone">{t("Emergency Contact Phone")}</Label>
-                  <Input
+                  <PhoneField
                     id="emergencyContactPhone"
+                    format="e164"
                     value={formData.emergencyContactPhone}
-                    onChange={(e) =>
+                    onChange={(val) =>
                       setFormData({
                         ...formData,
-                        emergencyContactPhone: e.target.value,
+                        emergencyContactPhone: val,
                       })
                     }
                     placeholder="+1-555-0123"

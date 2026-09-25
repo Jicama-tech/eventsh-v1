@@ -98,6 +98,16 @@ export class Plan {
     // Customize Email — lets the organizer send emails from their own
     // address (Personal Email card in Settings) instead of admin@eventsh.com.
     customEmail?: { enabled: boolean };
+    // WhatsApp Connection — the organizer links their OWN WhatsApp number
+    // (Settings › Profile › WhatsApp) and tickets, booking updates and
+    // approvals to attendees and vendors go out from it. A paid add-on: a
+    // plan with module config has it OFF until an admin switches it on.
+    whatsappConnect?: { enabled: boolean };
+    // WhatsApp Campaigns — personalised marketing messages to the
+    // organizer's own contacts (ticket buyers, vendors, speakers, …) from the
+    // linked number, paced and capped (modules/campaigns). Needs
+    // whatsappConnect to actually send.
+    whatsappCampaign?: { enabled: boolean };
     // Operators
     operators?: { enabled: boolean; limit: number };
     // Platform Fees — the organizer's own view of what EventSH charges them

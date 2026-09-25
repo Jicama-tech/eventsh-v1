@@ -179,7 +179,8 @@ export class TicketsService {
       // codes resolve to null and are silently dropped — never saved raw.
       const referral = await this.operatorsService.resolveReferral(
         eventOrganizerId,
-        createTicketDto.referralCode
+        createTicketDto.referralCode,
+        createTicketDto.eventId,
       );
 
       // 4. Create the ticket document
@@ -231,7 +232,8 @@ export class TicketsService {
             qrCodeBase64,
             whatsAppNumber,
             country,
-            orgName
+            orgName,
+            eventOrganizerId || String(savedTicket.organizerId || ""),
           );
         } catch (error) {
           console.error("Ticket WhatsApp delivery failed:", error);
@@ -386,7 +388,10 @@ export class TicketsService {
     qrBase64: string,
     whatsappNumber: string,
     country?: string,
-    orgName?: string
+    orgName?: string,
+    /** The EVENT's organizer (never the client-supplied id): the ticket goes
+     * out from their own linked WhatsApp when they have one. */
+    organizerId?: string,
   ): Promise<void> {
     try {
       const pdfBuffer = await this.generateTicketPDF(ticket, qrBase64, country, orgName);
@@ -411,11 +416,15 @@ The QR code can ONLY be scanned using the official Eventsh app.
 
 Thank you for choosing Eventsh! 🎊`;
 
-      await this.otpService.sendWhatsAppMessage(whatsappNumber, message);
+      const route = { organizerId: organizerId || undefined, country };
+      await this.otpService.sendWhatsAppMessage(whatsappNumber, message, route);
       await this.otpService.sendMediaMessage(
         whatsappNumber,
         pdfPath,
-        `🎫 Your ticket for ${ticket.eventTitle}`
+        `🎫 Your ticket for ${ticket.eventTitle}`,
+        undefined,
+        undefined,
+        route,
       );
     } catch (error) {
       throw error;
@@ -879,6 +888,27 @@ Thank you for choosing Eventsh! 🎊`;
       throw new InternalServerErrorException(
         `Couldn't email the ticket: ${err?.message || "mail server error"}`,
       );
+    }
+
+    // WhatsApp mirror of the resend, from the organizer's own number when they
+    // have one linked. Best-effort: the email above is the resend that counts.
+    if (ticket.customerWhatsapp) {
+      try {
+        const pdf = await this.generateTicketPDF(ticket, qrCodeBase64, country, orgName);
+        await this.otpService.trySendMediaBuffer(
+          ticket.customerWhatsapp,
+          pdf,
+          `ticket_${ticket.ticketId}.pdf`,
+          `🎫 Your ticket for ${ticket.eventTitle}`,
+          {
+            organizerId: String(ticket.organizerId || ""),
+            country,
+            organizerInitiated: true,
+          },
+        );
+      } catch (err: any) {
+        console.warn(`Ticket resend WhatsApp mirror failed: ${err?.message || err}`);
+      }
     }
 
     return {

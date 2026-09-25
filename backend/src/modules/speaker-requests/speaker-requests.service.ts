@@ -5,6 +5,7 @@ import {
   ConflictException,
   Logger,
 } from "@nestjs/common";
+import { assertReferralIfRequired } from "../../common/referral-required.util";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import {
@@ -664,10 +665,16 @@ export class SpeakerRequestsService {
       } = dto as CreateSpeakerRequestDto & Record<string, any>;
       delete fields.referralOperatorId;
       delete fields.referralOperatorName;
+      delete fields.referralAgentId;
+      delete fields.referralAgentName;
       const referral = await this.operatorsService.resolveReferral(
         String(event.organizer),
         rawReferralCode,
+        String(event._id),
       );
+      // Referral-only booking (Agents section on): refused before anything
+      // is written unless the code resolved to an agent or operator.
+      assertReferralIfRequired(event, referral, rawReferralCode);
 
       const request = await this.speakerRequestModel.create({
         ...fields,
@@ -728,7 +735,7 @@ export class SpeakerRequestsService {
 
       // Send WhatsApp to speaker
       await this.sendWhatsAppNotification(
-        dto.phone,
+        request,
         `🎤 *Speaker Application Submitted*\n\n` +
           `Dear ${dto.name},\n\n` +
           `Your speaker application for *${event.title}* has been submitted successfully.\n\n` +
@@ -864,7 +871,7 @@ export class SpeakerRequestsService {
         const isPaidSlot = !!updated.isCharged && fee > 0;
 
         await this.sendWhatsAppNotification(
-          request.phone,
+          request,
           `✅ *Speaker Application Approved!*\n\n` +
             `Congratulations ${request.name}!\n\n` +
             `Your speaker application for *${event?.title}* has been approved.\n\n` +
@@ -918,7 +925,7 @@ export class SpeakerRequestsService {
         }
       } else if (dto.status === "Rejected") {
         await this.sendWhatsAppNotification(
-          request.phone,
+          request,
           `❌ *Speaker Application Update*\n\n` +
             `Dear ${request.name},\n\n` +
             `Your speaker application for *${event?.title}* was not selected.\n\n` +
@@ -950,7 +957,7 @@ export class SpeakerRequestsService {
         });
       } else if (dto.status === "Cancelled") {
         await this.sendWhatsAppNotification(
-          request.phone,
+          request,
           `⚠️ *Speaker Slot Cancelled*\n\n` +
             `Dear ${request.name},\n\n` +
             `Your speaker slot for *${event?.title}* has been cancelled.\n\n` +
@@ -1006,7 +1013,7 @@ export class SpeakerRequestsService {
 
       const event: any = request.eventId;
       await this.sendWhatsAppNotification(
-        request.phone,
+        request,
         `📅 *Time Slot Selected*\n\n` +
           `Dear ${request.name},\n\n` +
           `Your session for *${event?.title}* has been scheduled.\n\n` +
@@ -1184,7 +1191,7 @@ export class SpeakerRequestsService {
       : "TBA";
 
     await this.sendWhatsAppNotification(
-      request.phone,
+      request,
       `🎉 *Your Speaker Pass is Ready!*\n\n` +
         `🎤 *Speaker:* ${request.name}\n` +
         `📅 *Event:* ${event?.title}\n` +
@@ -1193,6 +1200,27 @@ export class SpeakerRequestsService {
         `⚠️ The QR code can ONLY be scanned using the official EventSH app.\n\n` +
         `Thank you for speaking at our event! 🎊`,
     );
+
+    // The pass itself on WhatsApp too, when it rendered — from the
+    // organizer's own linked number when they have one. Best-effort.
+    if (pdfPath && request.phone) {
+      try {
+        await this.otpService.sendMediaMessage(
+          request.phone,
+          pdfPath,
+          `🎤 Speaker pass — ${event?.title || "Event"}`,
+          `speaker_pass_${id}.pdf`,
+          undefined,
+          {
+            organizerId: String(
+              (request.organizerId as any)?._id || request.organizerId || "",
+            ),
+          },
+        );
+      } catch (err) {
+        this.logger.warn("Speaker pass WhatsApp send failed:", err);
+      }
+    }
 
     // Email is the pass's real home. Attach the PDF when we have one;
     // otherwise embed the QR itself so the speaker is never left without a
@@ -1269,7 +1297,7 @@ export class SpeakerRequestsService {
         await request.save();
 
         await this.sendWhatsAppNotification(
-          request.phone,
+          request,
           `✅ *Check-in Successful*\n\n` +
             `Welcome ${request.name}!\n` +
             `Check-in time: ${now.toLocaleString()}\n\n` +
@@ -1299,7 +1327,7 @@ export class SpeakerRequestsService {
         );
 
         await this.sendWhatsAppNotification(
-          request.phone,
+          request,
           `👋 *Check-out Successful*\n\n` +
             `Thank you ${request.name}!\n` +
             `Check-out: ${now.toLocaleString()}\n` +
@@ -1313,6 +1341,9 @@ export class SpeakerRequestsService {
           subjectId: String(request._id),
           eventId: String((request as any).eventId),
           whatsAppNumber: request.phone,
+          organizerId: String(
+            (request.organizerId as any)?._id || request.organizerId || "",
+          ),
           hasDeposit: !!(request as any).depositAmount,
         });
 
@@ -1763,10 +1794,24 @@ export class SpeakerRequestsService {
   }
 
   // ============ PRIVATE: WHATSAPP HELPER ============
-  private async sendWhatsAppNotification(phone: string, message: string) {
+  /**
+   * A WhatsApp message to the speaker, from the event organizer's own linked
+   * number when they have one (else the platform number while it is on).
+   * Takes the request rather than a bare number so the organizer is always
+   * the one on the stored record, never a caller-supplied id.
+   */
+  private async sendWhatsAppNotification(
+    request: { phone?: string; organizerId?: any },
+    message: string,
+  ) {
+    const phone = request?.phone;
     if (!phone) return;
     try {
-      await this.otpService.sendWhatsAppMessage(phone, message);
+      await this.otpService.sendWhatsAppMessage(phone, message, {
+        organizerId: String(
+          (request.organizerId as any)?._id || request.organizerId || "",
+        ),
+      });
     } catch (err) {
       this.logger.warn("WhatsApp notification failed:", err);
     }

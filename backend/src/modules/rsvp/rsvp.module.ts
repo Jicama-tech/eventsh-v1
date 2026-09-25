@@ -6,10 +6,14 @@ import { Rsvp, RsvpSchema } from "./schemas/rsvp.schema";
 import { Event, EventSchema } from "../events/schemas/event.schema";
 import { Organizer, OrganizerSchema } from "../organizers/schemas/organizer.schema";
 import { MailModule } from "../roles/mail.module";
+import { OtpModule } from "../otp/otp.module";
 
 @Module({
   imports: [
     MailModule,
+    // WhatsApp twins of the guest emails (OtpService routes them through the
+    // host's own linked number).
+    OtpModule,
     MongooseModule.forFeature([
       { name: Rsvp.name, schema: RsvpSchema },
       { name: Event.name, schema: EventSchema },

@@ -9,6 +9,7 @@ import {
 import { EventSchema } from "../events/schemas/event.schema";
 import { OrganizerSchema } from "../organizers/schemas/organizer.schema";
 import { MailModule } from "../roles/mail.module";
+import { OtpModule } from "../otp/otp.module";
 import { OperatorsModule } from "../operators/operators.module";
 
 @Module({
@@ -19,6 +20,9 @@ import { OperatorsModule } from "../operators/operators.module";
       { name: "Organizer", schema: OrganizerSchema },
     ]),
     MailModule,
+    // WhatsApp twin of the ticket email (OtpService routes it through the
+    // organizer's own linked number).
+    OtpModule,
     OperatorsModule,
   ],
   controllers: [ScheduledSpacesController],

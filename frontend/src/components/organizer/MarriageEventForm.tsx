@@ -1719,6 +1719,7 @@ export function MarriageEventForm({
                   <div>
                     <Label>{t("Contact phone")}</Label>
                     <PhoneField
+                      format="e164"
                       value={form.contactPhone}
                       onChange={(v) => setField("contactPhone", v)}
                       placeholder={t("Phone number")}

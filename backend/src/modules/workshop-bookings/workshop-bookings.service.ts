@@ -5,6 +5,7 @@ import {
   ConflictException,
   Logger,
 } from "@nestjs/common";
+import { assertReferralIfRequired } from "../../common/referral-required.util";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import {
@@ -135,7 +136,11 @@ export class WorkshopBookingsService {
     const referral = await this.operatorsService.resolveReferral(
       event.organizer ? String(event.organizer) : "",
       dto.referralCode,
+      String(event._id),
     );
+    // Referral-only booking (Agents section on): refused before anything is
+    // written unless the code resolved to an agent or operator.
+    assertReferralIfRequired(event, referral, dto.referralCode);
 
     const booking = await this.bookingModel.create({
       eventId: new Types.ObjectId(dto.eventId),
@@ -334,9 +339,14 @@ export class WorkshopBookingsService {
           ? `Includes: ${sessionNames.join(", ")}\n`
           : "";
 
+      // Email and WhatsApp are independent: a visitor with only an email
+      // still gets the ticket (sendMediaMessage emails first and skips
+      // WhatsApp without a number). The WhatsApp copy goes from the
+      // organizer's own linked number when they have one.
+      const route = { organizerId: String(booking.organizerId || ""), country };
       if (booking.visitorPhone || booking.visitorEmail) {
         try {
-          await this.otpService.sendWhatsAppMessage(
+          if (booking.visitorPhone) await this.otpService.sendWhatsAppMessage(
             booking.visitorPhone,
             `*Workshop Booking Confirmed!*\n\n` +
               `Event: *${eventDoc.title}*\n` +
@@ -345,10 +355,11 @@ export class WorkshopBookingsService {
               `Quantity: ${booking.quantity}\n` +
               `Amount: *${formatCurrency(booking.amount, country)}*\n\n` +
               `Your ticket${booking.bookingType === "package" ? "s are" : " is"} attached.`,
+            route,
           );
 
           await this.otpService.sendMediaMessage(
-            booking.visitorPhone,
+            booking.visitorPhone || "",
             pdfPath,
             `Workshop Ticket - ${eventDoc.title}`,
             "workshop-ticket.pdf",
@@ -367,6 +378,7 @@ export class WorkshopBookingsService {
               organizer:
                 (organizerDoc as any)?.organizationName || (organizerDoc as any)?.name,
             },
+            route,
           );
         } catch (err) {
           this.logger.warn("Failed to send workshop ticket to visitor", err);
@@ -414,6 +426,8 @@ export class WorkshopBookingsService {
               referralCode: booking.referralCode,
               referralOperatorId: booking.referralOperatorId,
               referralOperatorName: booking.referralOperatorName,
+              referralAgentId: booking.referralAgentId,
+              referralAgentName: booking.referralAgentName,
             }
           : {}),
       });

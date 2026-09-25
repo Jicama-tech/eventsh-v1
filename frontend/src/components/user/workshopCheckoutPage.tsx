@@ -22,7 +22,12 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountryCodes } from "@/hooks/useCountryCodes";
-import { getEventReferral } from "@/lib/eventReferral";
+import {
+  getEventReferral,
+  isMalformedReferralInput,
+  normalizeReferralInput,
+} from "@/lib/eventReferral";
+import { ReferralCodeField } from "@/components/ui/ReferralCodeField";
 
 interface WorkshopSelection {
   eventId: string;
@@ -36,6 +41,8 @@ interface WorkshopSelection {
   unitPrice: number;
   seatsRemaining: number | null;
   included?: string[];
+  /** Agents section on for the event: no booking without a valid code. */
+  referralRequired?: boolean;
 }
 
 // Persisted across the Google OAuth round trip — window.location.href
@@ -76,6 +83,14 @@ const WorkshopCheckoutPage = () => {
   // Customer details
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  // Visible referral-code field, prefilled from the agent / operator link
+  // captured on the event page (item.eventId may be the id or the slug).
+  const [referralCode, setReferralCode] = useState(
+    () => getEventReferral(item?.eventId) || "",
+  );
+  const referralRequired = !!item?.referralRequired;
+  // Came through an agent / operator link: the code is shown but locked.
+  const referralLocked = !!getEventReferral(item?.eventId);
   const [isNameDisabled, setIsNameDisabled] = useState(false);
   const [email, setEmail] = useState("");
   const [emailVerified, setEmailVerified] = useState(false);
@@ -324,6 +339,27 @@ const WorkshopCheckoutPage = () => {
       });
       return;
     }
+    if (isMalformedReferralInput(referralCode)) {
+      toast({
+        title: "Check the referral code",
+        description:
+          "Referral codes are 4 to 12 letters or digits. Check the code your agent shared, or clear the field.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (
+      referralRequired &&
+      !(referralLocked ? getEventReferral(item.eventId) : normalizeReferralInput(referralCode))
+    ) {
+      toast({
+        title: "Referral code needed",
+        description:
+          "This event can only be booked with a referral code. Enter the code your agent shared with you.",
+        variant: "destructive",
+      });
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`${apiURL}/workshop-bookings/create`, {
@@ -339,8 +375,11 @@ const WorkshopCheckoutPage = () => {
           visitorName: `${firstName} ${lastName}`.trim(),
           visitorEmail: email,
           visitorPhone: `${countryCode}${whatsapp}`,
-          // item.eventId may be the id or the slug — both keys are stored.
-          referralCode: getEventReferral(item.eventId) || undefined,
+          // Typed on this form, else the link code (item.eventId may be the
+          // id or the slug — both keys are stored).
+          referralCode: referralLocked
+            ? getEventReferral(item.eventId) || undefined
+            : normalizeReferralInput(referralCode) || undefined,
         }),
       });
       const result = await res.json();
@@ -444,6 +483,12 @@ const WorkshopCheckoutPage = () => {
             <CardTitle className="text-base">Your Details (To Be Printed On Ticket)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <ReferralCodeField
+              value={referralCode}
+              onChange={setReferralCode}
+              required={referralRequired}
+              locked={referralLocked}
+            />
             {!googleAuthed && (
               <div>
                 <button

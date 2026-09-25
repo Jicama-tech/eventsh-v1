@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import PhoneField from "@/components/ui/PhoneField";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -74,6 +75,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { MembershipPanel } from "./MembershipPanel";
+import { WhatsAppSettings } from "./whatsapp/WhatsAppSettings";
 import { jwtDecode } from "jwt-decode";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { format } from "date-fns";
@@ -164,6 +166,10 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
   // (custom sender) card only renders when the active plan includes it.
   const { isModuleEnabled, isModuleSectionEnabled } = useSubscription();
   const customEmailInPlan = isModuleEnabled("customEmail");
+  // WhatsApp Connection (the organizer's own linked number) is a paid add-on;
+  // without it the card shows the upgrade prompt plus a way to unlink a phone
+  // that is still linked from before (see WhatsAppSettings).
+  const whatsappConnectInPlan = isModuleEnabled("whatsappConnect");
   const [paymentQrFile, setPaymentQrFile] = useState<File | null>(null);
   const [paymentQrPreview, setPaymentQrPreview] = useState<string | null>(null);
   const apiURL = __API_URL__;
@@ -232,9 +238,15 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     if (!id) return;
     setEmailCfgSaving(true);
     try {
+      // The route is guarded (OrganizerOrApiKeyGuard) — without the token
+      // this save always answered 401.
+      const token = sessionStorage.getItem("token");
       const res = await fetch(`${apiURL}/organizers/${id}/email-config`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(emailCfg),
       });
       const j = await res.json();
@@ -264,9 +276,13 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
     }
     setEmailCfgTesting(true);
     try {
+      const token = sessionStorage.getItem("token");
       const res = await fetch(`${apiURL}/organizers/${id}/email-config/test`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ ...emailCfg, to }),
       });
       const j = await res.json();
@@ -2407,7 +2423,6 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                   </div>
                   <Input
                     type="tel"
-                    maxLength={10}
                     placeholder={t("Enter number")}
                     value={whatsAppNumber}
                     onChange={(e) =>
@@ -2913,6 +2928,13 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
             </CardContent>
           </Card>
           )}
+
+          {/* ---- WhatsApp Connection (the organizer's own number) ----
+               Every attendee/vendor message — tickets, booking updates,
+               approvals, campaigns — goes out from the number linked here,
+               alongside the email. Locked mode shows the upgrade prompt and
+               still lets a previously linked phone be switched off/unlinked. */}
+          <WhatsAppSettings locked={!whatsappConnectInPlan} />
         </TabsContent>
 
         <TabsContent value="subscription" className="space-y-6">
@@ -3102,6 +3124,14 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                             {
                               key: "customEmail",
                               label: "Customize Email (own sender)",
+                            },
+                            {
+                              key: "whatsappConnect",
+                              label: "WhatsApp Connection (own number)",
+                            },
+                            {
+                              key: "whatsappCampaign",
+                              label: "WhatsApp Campaigns",
                             },
                           ].map((m) => {
                             const cfg = subscription.modules[m.key];
@@ -3540,7 +3570,6 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                     <Input
                       type="tel"
                       placeholder={t("Enter number")}
-                      maxLength={10}
                       value={operatorForm.operatorLocalNumber}
                       onChange={(e) =>
                         setOperatorForm((prev) => ({
@@ -3682,6 +3711,9 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                       { id: "membership", label: "Membership" },
                       { id: "support", label: "Support" },
                       { id: "storefront", label: "Eventfront" },
+                      // The WhatsApp connection card and the Campaigns tab.
+                      // Enforced on the API (TabsGuard), not just hidden here.
+                      { id: "whatsapp", label: "WhatsApp" },
                       { id: "settings", label: "Settings" },
                     ].map((t) => {
                       const checked = (operatorForm.accessTabs ?? []).includes(
@@ -4347,17 +4379,17 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
                               htmlFor="rzpPhone"
                               className="text-xs font-semibold"
                             >{t("Business Phone")}</Label>
-                            <Input
+                            <PhoneField
                               id="rzpPhone"
+                              format="e164"
                               placeholder="+91 98xxxxxx"
                               value={razorpaySettings.businessPhone || ""}
-                              onChange={(e) =>
+                              onChange={(val) =>
                                 setRazorpaySettings((prev) => ({
                                   ...prev,
-                                  businessPhone: e.target.value,
+                                  businessPhone: val,
                                 }))
                               }
-                              className="text-sm"
                             />
                           </div>
 

@@ -20,6 +20,7 @@ export const en: Record<string, string> = {
   "nav.membership": "Membership",
   "nav.support": "Support",
   "nav.storefront": "Eventfront",
+  "nav.whatsapp": "WhatsApp",
   "nav.settings": "Settings",
 
   // ---- individual (marriage) sidebar ----
