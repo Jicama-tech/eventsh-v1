@@ -39,10 +39,30 @@ export interface ReportSection {
   adjustments: { label: string; amount: number }[];
 }
 
+/** What the organizer logged as spent. Approved counts; pending is listed
+ * but not taken off. */
+export interface ReportExpenses {
+  total: number;
+  pending: number;
+  byCategory: { category: string; amount: number; count: number }[];
+  items: {
+    title: string;
+    category: string;
+    amount: number;
+    spentAt: string | null;
+    paidTo: string;
+    status: string;
+  }[];
+}
+
 export interface EventReport {
   hasVisitorTicketing: boolean;
   totalRevenue: number;
   sections: ReportSection[];
+  /** Missing on the partial fallback. */
+  expenses?: ReportExpenses;
+  /** totalRevenue less approved expenses. */
+  afterExpenses?: number;
   /** Built from the dashboard's own totals because the report couldn't
    * load — headline figures only, no per-item tables. */
   partial?: boolean;
@@ -260,5 +280,131 @@ export function drawSectionTable(
     ],
     true,
   );
+  return y + 6;
+}
+
+/**
+ * The event's logged expenses: one row per expense (pending ones marked and
+ * left out of the total), then the approved spend by category, then the
+ * total. Returns the y below the table.
+ */
+export function drawExpensesTable(
+  doc: jsPDF,
+  expenses: ReportExpenses,
+  opts: {
+    x: number;
+    y: number;
+    width: number;
+    money: (v: number) => string;
+    pageBreak: (y: number, need: number) => number;
+  },
+): number {
+  const { x, width, money, pageBreak } = opts;
+  const RED: RGB = [220, 38, 38];
+  const INK: RGB = [20, 20, 20];
+  const GRAY: RGB = [107, 114, 128];
+  const fill = (c: RGB) => doc.setFillColor(c[0], c[1], c[2]);
+  const text = (c: RGB) => doc.setTextColor(c[0], c[1], c[2]);
+  const ROW = 20;
+  const cCat = x + width * 0.34;
+  const cPaid = x + width * 0.52;
+  const cDate = x + width * 0.7;
+  const cStatus = x + width * 0.82;
+  const cAmt = x + width - 12;
+  const clip = (t: string, w: number) => doc.splitTextToSize(t || "—", w)[0] || "";
+
+  let y = pageBreak(opts.y + 8, 26 + ROW * 3);
+  fill(RED);
+  doc.roundedRect(x, y, width, 26, 4, 4, "F");
+  doc.rect(x, y + 22, width, 4, "F");
+  text([255, 255, 255]);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text("EXPENSES", x + 14, y + 17);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text(`Total ${money(expenses.total)}`, x + width - 14, y + 17, {
+    align: "right",
+  });
+  y += 26;
+
+  const subHeader = (cells: [string, number, "left" | "right"][]) => {
+    y = pageBreak(y, ROW * 2);
+    fill([243, 244, 246]);
+    doc.rect(x, y, width, 18, "F");
+    text(GRAY);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    for (const [label, cx, align] of cells) doc.text(label, cx, y + 12, { align });
+    y += 18;
+  };
+  const line = (draw: (ty: number) => void, shade: RGB | null) => {
+    y = pageBreak(y, ROW);
+    if (shade) {
+      fill(shade);
+      doc.rect(x, y, width, ROW, "F");
+    }
+    draw(y + 13.5);
+    y += ROW;
+  };
+
+  subHeader([
+    ["EXPENSE", x + 12, "left"],
+    ["CATEGORY", cCat, "left"],
+    ["PAID TO", cPaid, "left"],
+    ["DATE", cDate, "left"],
+    ["STATUS", cStatus, "left"],
+    ["AMOUNT", cAmt, "right"],
+  ]);
+  expenses.items.forEach((e, idx) =>
+    line((ty) => {
+      const pending = e.status !== "Approved";
+      text(pending ? GRAY : INK);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(clip(e.title, cCat - x - 20), x + 12, ty);
+      doc.text(clip(e.category, cPaid - cCat - 8), cCat, ty);
+      doc.text(clip(e.paidTo, cDate - cPaid - 8), cPaid, ty);
+      doc.text(e.spentAt ? new Date(e.spentAt).toLocaleDateString() : "—", cDate, ty);
+      doc.text(e.status, cStatus, ty);
+      doc.setFont("helvetica", "bold");
+      doc.text(money(e.amount), cAmt, ty, { align: "right" });
+    }, idx % 2 === 1 ? [249, 250, 252] : null),
+  );
+
+  if (expenses.byCategory.length > 0) {
+    subHeader([
+      ["APPROVED, BY CATEGORY", x + 12, "left"],
+      ["ENTRIES", cStatus, "left"],
+      ["AMOUNT", cAmt, "right"],
+    ]);
+    for (const c of expenses.byCategory) {
+      line((ty) => {
+        text(INK);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.text(c.category, x + 12, ty);
+        doc.text(String(c.count), cStatus, ty);
+        doc.setFont("helvetica", "bold");
+        doc.text(money(c.amount), cAmt, ty, { align: "right" });
+      }, null);
+    }
+  }
+  if (expenses.pending > 0) {
+    line((ty) => {
+      text(GRAY);
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(9);
+      doc.text("Pending approval (not counted)", x + 12, ty);
+      doc.text(money(expenses.pending), cAmt, ty, { align: "right" });
+    }, null);
+  }
+  line((ty) => {
+    text(INK);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text("Total expenses", x + 12, ty);
+    doc.text(money(expenses.total), cAmt, ty, { align: "right" });
+  }, [252, 226, 226]);
   return y + 6;
 }
