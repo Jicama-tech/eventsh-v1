@@ -965,6 +965,21 @@ export default function DashboardOverview({
         doc.setFillColor(c[0], c[1], c[2]);
       const setText = (c: [number, number, number]) =>
         doc.setTextColor(c[0], c[1], c[2]);
+      // Set the largest font size (up to `max`) at which `txt` fits in
+      // `maxW`, in the current font. Money like "SG$12,345.00" runs far wider
+      // than a bare count, so fixed sizes spill out of their boxes.
+      const fitFont = (txt: string, maxW: number, max: number, min = 6) => {
+        let fs = max;
+        doc.setFontSize(fs);
+        while (fs > min && doc.getTextWidth(txt) > maxW) {
+          fs -= 0.5;
+          doc.setFontSize(fs);
+        }
+        return fs;
+      };
+      // Whole amounts print without the ".00" (SG$200, not SG$200.00);
+      // real cents stay.
+      const pdfPrice = (v: number) => formatPrice(v).replace(/[.,]00$/, "");
 
       // ===== HEADER BANNER =====
       const headerH = 90;
@@ -1014,7 +1029,7 @@ export default function DashboardOverview({
         },
         {
           label: "Total Revenue",
-          value: formatPrice(event.revenue ?? 0),
+          value: pdfPrice(event.revenue ?? 0),
           sub: "all sources",
           color: C.green,
           glyph: "$",
@@ -1059,11 +1074,12 @@ export default function DashboardOverview({
         doc.setFontSize(13);
         const gw = doc.getTextWidth(kpi.glyph);
         doc.text(kpi.glyph, cx + 22 - gw / 2, cy + 36);
-        // big value
+        // big value — shrunk to fit between the icon and the card edge,
+        // centred on the icon
         setText([20, 20, 20]);
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(18);
-        doc.text(kpi.value, cx + 42, cy + 38);
+        const vfs = fitFont(kpi.value, cardW - 42 - 10, 18);
+        doc.text(kpi.value, cx + 42, cy + 32 + vfs * 0.35);
         // label
         setText(C.gray);
         doc.setFont("helvetica", "bold");
@@ -1129,8 +1145,8 @@ export default function DashboardOverview({
       // total in middle
       setText([20, 20, 20]);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      const totalLabel = formatPrice(totalRev);
+      const totalLabel = pdfPrice(totalRev);
+      fitFont(totalLabel, donutR * 0.55 * 2 - 8, 11);
       const tw = doc.getTextWidth(totalLabel);
       doc.text(totalLabel, donutCx - tw / 2, donutCy);
       setText(C.gray);
@@ -1154,9 +1170,10 @@ export default function DashboardOverview({
         doc.text(name, legendX + 16, legY);
         setText(C.gray);
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
         const pct = totalRev > 0 ? Math.round((value / totalRev) * 100) : 0;
-        doc.text(`${formatPrice(value)}  ·  ${pct}%`, legendX + 16, legY + 12);
+        const legendTxt = `${pdfPrice(value)}  ·  ${pct}%`;
+        fitFont(legendTxt, aX + panelW - 8 - (legendX + 16), 8);
+        doc.text(legendTxt, legendX + 16, legY + 12);
         legY += 36;
       };
       legendItem(C.blue, "Tickets", ticketsRev);
@@ -1351,19 +1368,19 @@ export default function DashboardOverview({
         ["Tickets Sold", String(event.ticketsSold ?? 0)],
         ["Total Tickets", String(event.totalTickets ?? "Unlimited")],
         ["Sales Progress", `${event.salesPercent ?? 0}%`],
-        ["Tickets Revenue", formatPrice(event.ticketsRevenue ?? 0)],
+        ["Tickets Revenue", pdfPrice(event.ticketsRevenue ?? 0)],
       ]);
 
       dataTable("Stall Metrics", C.orange, [
         ["Stalls Booked", String(event.stallsBooked ?? 0)],
         ["Pending Stalls", String(event.stallsPending ?? 0)],
-        ["Stalls Revenue", formatPrice(event.stallsRevenue ?? 0)],
+        ["Stalls Revenue", pdfPrice(event.stallsRevenue ?? 0)],
       ]);
 
       dataTable("Revenue Summary", C.green, [
-        ["Tickets Revenue", formatPrice(event.ticketsRevenue ?? 0)],
-        ["Stalls Revenue", formatPrice(event.stallsRevenue ?? 0)],
-        ["Total Revenue", formatPrice(event.revenue ?? 0)],
+        ["Tickets Revenue", pdfPrice(event.ticketsRevenue ?? 0)],
+        ["Stalls Revenue", pdfPrice(event.stallsRevenue ?? 0)],
+        ["Total Revenue", pdfPrice(event.revenue ?? 0)],
       ]);
 
       // ===== FOOTER on every page =====
