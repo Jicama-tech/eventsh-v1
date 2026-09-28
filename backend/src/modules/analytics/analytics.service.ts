@@ -12,6 +12,44 @@ export interface PnlLine {
   note?: string;
 }
 
+/** One thing an event sells, and how much of it went. */
+export interface ReportItem {
+  name: string;
+  /** Regular price; null when the item has no single cash price. */
+  price: number | null;
+  /** Member rate, only where the organizer set one. */
+  memberPrice?: number | null;
+  /** How many were sold, in the group's unit. */
+  sold: number;
+  /** How many are still open; null = unlimited or not tracked. */
+  left: number | null;
+  revenue: number;
+  /** Placed copies of this item are priced differently. */
+  priceVaries?: boolean;
+}
+
+export interface ReportSection {
+  key:
+    | "visitors"
+    | "exhibitors"
+    | "roundTables"
+    | "workshops"
+    | "scheduledSpaces"
+    | "speakers"
+    | "sponsors";
+  label: string;
+  /** Headline figure for the PDF's KPI cards. */
+  sold: number;
+  soldLabel: string;
+  revenue: number;
+  /** How full the section is, when its capacity is finite. */
+  fill: { used: number; total: number; unit: string } | null;
+  groups: { title: string; unit: string; items: ReportItem[] }[];
+  /** Money lines under the table that make the items add up to `revenue`
+   * (discounts, deposits). */
+  adjustments: { label: string; amount: number }[];
+}
+
 /**
  * Per-event profit and loss for an organizer.
  *
@@ -41,6 +79,9 @@ export class AnalyticsService {
     @InjectModel("PlatformBillingRates") private ratesModel: Model<any>,
     // Out-of-pocket costs logged by the organizer or an operator.
     @InjectModel("EventExpense") private expenseModel: Model<any>,
+    @InjectModel("WorkshopBooking") private workshopBookingModel: Model<any>,
+    @InjectModel("ScheduledSpaceRequest")
+    private scheduledSpaceRequestModel: Model<any>,
   ) {}
 
   private assertId(id: string, label = "id") {
@@ -389,6 +430,609 @@ export class AnalyticsService {
   }
 
   /** P&L for every event an organizer runs, newest first. */
+  /**
+   * Section-by-section report for one event: for every section the event
+   * uses (visitors, exhibitors, round tables, workshops, scheduled spaces,
+   * speakers, sponsors), each thing it sells, how much of it went and what
+   * it brought in. Sections the event doesn't use are left out, so an event
+   * with no visitor ticketing has no visitors section.
+   *
+   * Only money actually received counts — the same rules as the dashboard's
+   * Total Revenue and the P&L: tickets with payment confirmed, stalls and
+   * round tables marked Paid, confirmed sponsors. Workshops, scheduled
+   * spaces and charged speakers are counted once paid too.
+   */
+  async eventReport(eventId: string) {
+    this.assertId(eventId, "eventId");
+    // eventId is stored uncast on some booking schemas — match both forms.
+    const byEvent = { eventId: { $in: [eventId, new Types.ObjectId(eventId)] } };
+
+    const event = (await this.eventModel
+      .findById(eventId)
+      .select(
+        "title features visitorTypes seatRowTemplates venueSeats tableTemplates venueTables addOnItems roundTableTemplates venueRoundTables workshopSessions workshopPackages scheduledSpaceTemplates venueScheduledSpaces scheduledSpaceBookedSlots speakerSlotTemplates sponsorTypes",
+      )
+      .lean()) as any;
+    if (!event) throw new NotFoundException("Event not found");
+
+    const [tickets, stalls, rounds, workshops, scheduled, speakers, sponsors] =
+      (await Promise.all([
+        this.ticketModel
+          .find(byEvent)
+          .select("ticketId ticketDetails totalAmount paymentConfirmed status")
+          .lean(),
+        this.stallModel
+          .find(byEvent)
+          .select(
+            "status paymentStatus selectedTables selectedAddOns tablesTotal depositTotal addOnsTotal grandTotal",
+          )
+          .lean(),
+        this.roundTableModel
+          .find(byEvent)
+          .select(
+            "tablePositionId tableName sellingMode isWholeTable numberOfSeats selectedChairIndices amount paymentStatus",
+          )
+          .lean(),
+        this.workshopBookingModel
+          .find(byEvent)
+          .select("bookingType sessionId packageId itemName quantity amount paymentStatus")
+          .lean(),
+        this.scheduledSpaceRequestModel
+          .find(byEvent)
+          .select("status paymentStatus selectedSlots slotsTotal paidAmount")
+          .lean(),
+        this.speakerModel
+          .find(byEvent)
+          .select("selectedSlotId selectedSlotName status isCharged fee paymentStatus")
+          .lean(),
+        this.sponsorModel
+          .find(byEvent)
+          .select("sponsorTypeId sponsorTypeName amount status")
+          .lean(),
+      ])) as any[][];
+
+    const n = (v: any) => Number(v) || 0;
+    const optNum = (v: any): number | null =>
+      v === null || v === undefined || v === "" || !Number.isFinite(Number(v))
+        ? null
+        : Number(v);
+    const sum = <T>(xs: T[], f: (x: T) => number) =>
+      xs.reduce((a, x) => a + f(x), 0);
+    // A placed space / table can override its template's price (the booking
+    // flow reads the placed row first, then the template). One shared value
+    // is shown as-is; several mean the price varies by position.
+    const placedPrice = (placed: any[], field: string, tplValue: any) => {
+      const vals = new Set(
+        (placed.length ? placed : [{}]).map(
+          (p) => optNum(p?.[field]) ?? optNum(tplValue),
+        ),
+      );
+      vals.delete(null);
+      return vals.size > 1
+        ? { price: null, priceVaries: true }
+        : { price: vals.size ? ([...vals][0] as number) : null, priceVaries: false };
+    };
+    const features = event.features || {};
+    // Same rule as the Event Sections switches: explicit on/off wins, unset
+    // means "on if it has anything set up". Real bookings always show.
+    const uses = (flag: any, hasSetup: boolean, hasBookings: boolean) =>
+      hasBookings || flag === true || (flag !== false && hasSetup);
+    // Items that sold something but no longer match a sellable (renamed or
+    // deleted since) are kept under their booked name.
+    const bucket = () => {
+      const m = new Map<string, ReportItem>();
+      return {
+        add(key: string, name: string, sold: number, revenue: number) {
+          const it =
+            m.get(key) ||
+            m.set(key, { name, price: null, sold: 0, left: null, revenue: 0 }).get(key)!;
+          it.sold += sold;
+          it.revenue += revenue;
+        },
+        /** Remove and return one entry, so what's left is the leftovers. */
+        take(key: string) {
+          const it = m.get(key);
+          m.delete(key);
+          return it;
+        },
+        items: () => [...m.values()],
+      };
+    };
+    const sections: ReportSection[] = [];
+
+    // ── Visitors ───────────────────────────────────────────────────
+    // Confirmed workshop bookings also issue a "WS-" ticket; those belong
+    // to the workshops section below.
+    const visitorTickets = tickets.filter(
+      (t) =>
+        !String(t.ticketId || "").startsWith("WS-") &&
+        String(t.status) !== "cancelled" &&
+        !!t.paymentConfirmed,
+    );
+    const visitorTypes: any[] = event.visitorTypes || [];
+    const seatRows: any[] = event.seatRowTemplates || [];
+    const seats: any[] = this.flatten(event.venueSeats);
+    // Ticketing is on when a ticket type is on sale (switched-off types
+    // don't count), seats are placed, or tickets were sold anyway.
+    if (
+      visitorTypes.some((v) => v?.isActive !== false) ||
+      seats.length > 0 ||
+      visitorTickets.length > 0
+    ) {
+      const types = [
+        ...visitorTypes.map((v) => ({ id: String(v.id), name: String(v.name || "Ticket"), price: optNum(v.price), left: optNum(v.maxCount), hidden: v.isActive === false })),
+        ...seatRows.map((r) => ({
+          id: String(r.id),
+          name: String(r.name || "Seat row"),
+          price: optNum(r.price),
+          left: null as number | null,
+          seatCount: seats.filter((s) => String(s.rowId) === String(r.id)).length,
+          hidden: false,
+        })),
+      ];
+      const byType = new Map<string, { sold: number; revenue: number }>();
+      const other = bucket();
+      let linesTotal = 0;
+      for (const t of visitorTickets) {
+        for (const d of t.ticketDetails || []) {
+          const qty = n(d.quantity);
+          const value = n(d.price) * qty;
+          linesTotal += value;
+          const label = String(d.ticketType || "Ticket");
+          // tierId is the reliable link; older tickets only carry the name,
+          // sometimes decorated as "VIP (Seats A1, A2)".
+          const match =
+            types.find((x) => d.tierId && x.id === String(d.tierId)) ||
+            types.find((x) => label === x.name || label.startsWith(`${x.name} (`));
+          if (match) {
+            const e = byType.get(match.id) || { sold: 0, revenue: 0 };
+            e.sold += qty;
+            e.revenue += value;
+            byType.set(match.id, e);
+          } else {
+            const base = label.replace(/\s*\(.*\)$/, "");
+            other.add(base, base, qty, value);
+          }
+        }
+      }
+      const items: ReportItem[] = [
+        ...types
+          .filter((x) => !x.hidden || byType.has(x.id))
+          .map((x: any) => {
+            const s = byType.get(x.id) || { sold: 0, revenue: 0 };
+            // maxCount is the stock still open (it drops with each sale);
+            // a seat row's stock is its seats.
+            const left =
+              x.seatCount != null ? Math.max(0, x.seatCount - s.sold) : x.left;
+            return { name: x.name, price: x.price, sold: s.sold, left, revenue: s.revenue };
+          }),
+        ...other.items(),
+      ];
+      const collected = sum(visitorTickets, (t) => n(t.totalAmount));
+      const discount = linesTotal - collected;
+      const sold = sum(items, (i) => i.sold);
+      const finite = items.length > 0 && items.every((i) => i.left != null);
+      sections.push({
+        key: "visitors",
+        label: "Visitors",
+        sold,
+        soldLabel: "Tickets sold",
+        revenue: collected,
+        fill: finite
+          ? { used: sold, total: sold + sum(items, (i) => i.left || 0), unit: "tickets" }
+          : null,
+        groups: [{ title: "Ticket types", unit: "tickets", items }],
+        adjustments:
+          Math.abs(discount) >= 0.5
+            ? [{ label: "Less: discounts and coupons", amount: -discount }]
+            : [],
+      });
+    }
+
+    // ── Exhibitors ─────────────────────────────────────────────────
+    const spaceTpls = ((event.tableTemplates || []) as any[]).filter(
+      (t) => t?.forSale !== false,
+    );
+    const placedSpaces = this.flatten(event.venueTables).filter(
+      (p: any) => p?.forSale !== false,
+    );
+    const paidStalls = stalls.filter(
+      (s) => String(s.paymentStatus) === "Paid" && String(s.status) !== "Cancelled",
+    );
+    if (uses(features.hasStalls, placedSpaces.length > 0, paidStalls.length > 0)) {
+      const placedByPos = new Map<string, any>(
+        placedSpaces.map((p: any) => [String(p.positionId), p]),
+      );
+      const tplById = new Map<string, any>(spaceTpls.map((t) => [String(t.id), t]));
+      const spaceSales = new Map<string, { sold: number; revenue: number }>();
+      const otherSpaces = bucket();
+      const addOnSales = bucket();
+      for (const s of paidStalls) {
+        for (const t of s.selectedTables || []) {
+          const tplId = String(placedByPos.get(String(t.positionId))?.id ?? t.tableId);
+          if (tplById.has(tplId)) {
+            const e = spaceSales.get(tplId) || { sold: 0, revenue: 0 };
+            e.sold += 1;
+            e.revenue += n(t.price);
+            spaceSales.set(tplId, e);
+          } else {
+            const name = String(t.name || t.tableName || "Space");
+            otherSpaces.add(name, name, 1, n(t.price));
+          }
+        }
+        for (const a of s.selectedAddOns || []) {
+          const qty = n(a.quantity) || 1;
+          addOnSales.add(String(a.addOnId || a.name), String(a.name || "Add-on"), qty, n(a.price) * qty);
+        }
+      }
+      const spaceItems: ReportItem[] = [
+        ...spaceTpls.map((tpl) => {
+          const placed = placedSpaces.filter((p: any) => String(p.id) === String(tpl.id));
+          const s = spaceSales.get(String(tpl.id)) || { sold: 0, revenue: 0 };
+          return {
+            name: String(tpl.name || "Space"),
+            ...placedPrice(placed, "tablePrice", tpl.tablePrice ?? tpl.price),
+            memberPrice: placedPrice(placed, "memberPrice", tpl.memberPrice).price,
+            sold: s.sold,
+            // isBooked covers every held space, paid or awaiting approval.
+            left: placed.filter((p: any) => !p.isBooked).length,
+            revenue: s.revenue,
+          };
+        }),
+        ...otherSpaces.items(),
+      ];
+      const catalog: any[] = event.addOnItems || [];
+      const addOnItems: ReportItem[] = catalog.map((a) => {
+        const s = addOnSales.take(String(a.id));
+        return {
+          name: String(a.name || "Add-on"),
+          price: optNum(a.price),
+          sold: s?.sold || 0,
+          left: null,
+          revenue: s?.revenue || 0,
+        };
+      });
+      // add-ons sold but since removed from the list
+      addOnItems.push(...addOnSales.items());
+
+      const revenue = sum(paidStalls, (s) => n(s.grandTotal));
+      const deposits = sum(paidStalls, (s) => n(s.depositTotal));
+      const itemsTotal =
+        sum(spaceItems, (i) => i.revenue) + sum(addOnItems, (i) => i.revenue);
+      const otherAdj = revenue - itemsTotal - deposits;
+      sections.push({
+        key: "exhibitors",
+        label: "Exhibitors",
+        sold: sum(spaceItems, (i) => i.sold),
+        soldLabel: "Spaces sold",
+        revenue,
+        fill: placedSpaces.length
+          ? {
+              used: placedSpaces.filter((p: any) => !!p.isBooked).length,
+              total: placedSpaces.length,
+              unit: "spaces",
+            }
+          : null,
+        groups: [
+          { title: "Space types", unit: "spaces", items: spaceItems },
+          ...(addOnItems.length ? [{ title: "Add-ons", unit: "qty", items: addOnItems }] : []),
+        ],
+        adjustments: [
+          ...(deposits > 0
+            ? [{ label: "Security deposits (refundable)", amount: deposits }]
+            : []),
+          ...(Math.abs(otherAdj) >= 0.5
+            ? [{ label: "Other adjustments (coupons, edits)", amount: otherAdj }]
+            : []),
+        ],
+      });
+    }
+
+    // ── Round tables ───────────────────────────────────────────────
+    const rtTpls = ((event.roundTableTemplates || []) as any[]).filter(
+      (t) => t?.forSale !== false,
+    );
+    const placedRts = this.flatten(event.venueRoundTables).filter(
+      (p: any) => p?.forSale !== false,
+    );
+    const paidRounds = rounds.filter((r) => String(r.paymentStatus) === "Paid");
+    if (uses(features.hasRoundTables, placedRts.length > 0, paidRounds.length > 0)) {
+      const rtByPos = new Map<string, any>(
+        placedRts.map((p: any) => [String(p.positionId), p]),
+      );
+      const sales = new Map<string, { sold: number; revenue: number }>();
+      const other = bucket();
+      for (const b of paidRounds) {
+        const tplId = rtByPos.get(String(b.tablePositionId))?.templateId;
+        const tpl = rtTpls.find((t) => String(t.id) === String(tplId));
+        // A per-seat table sells seats; a whole-table one sells the table.
+        const qty =
+          tpl?.sellingMode === "chair"
+            ? n(b.numberOfSeats) || (b.selectedChairIndices || []).length || 1
+            : 1;
+        if (tpl) {
+          const e = sales.get(String(tpl.id)) || { sold: 0, revenue: 0 };
+          e.sold += qty;
+          e.revenue += n(b.amount);
+          sales.set(String(tpl.id), e);
+        } else {
+          const name = String(b.tableName || "Round table");
+          other.add(name, name, qty, n(b.amount));
+        }
+      }
+      const seatsTaken = (p: any) =>
+        p.isFullyBooked ? n(p.numberOfChairs) : (p.bookedChairs || []).length;
+      const items: ReportItem[] = [
+        ...rtTpls.map((tpl) => {
+          const perSeat = tpl.sellingMode === "chair";
+          const placed = placedRts.filter((p: any) => String(p.templateId) === String(tpl.id));
+          const s = sales.get(String(tpl.id)) || { sold: 0, revenue: 0 };
+          return {
+            name: `${tpl.name || "Round table"} (${perSeat ? "per seat" : "whole table"})`,
+            ...placedPrice(
+              placed,
+              perSeat ? "chairPrice" : "tablePrice",
+              perSeat ? tpl.chairPrice : tpl.tablePrice,
+            ),
+            memberPrice: placedPrice(
+              placed,
+              perSeat ? "memberChairPrice" : "memberTablePrice",
+              perSeat ? tpl.memberChairPrice : tpl.memberTablePrice,
+            ).price,
+            sold: s.sold,
+            left: perSeat
+              ? sum(placed, (p: any) => Math.max(0, n(p.numberOfChairs) - seatsTaken(p)))
+              : placed.filter((p: any) => seatsTaken(p) === 0 && !p.isFullyBooked).length,
+            revenue: s.revenue,
+          };
+        }),
+        ...other.items(),
+      ];
+      const seatTotal = sum(placedRts, (p: any) => n(p.numberOfChairs));
+      sections.push({
+        key: "roundTables",
+        label: "Round Tables",
+        sold: paidRounds.length,
+        soldLabel: "Table bookings",
+        revenue: sum(paidRounds, (r) => n(r.amount)),
+        fill: seatTotal
+          ? { used: sum(placedRts, seatsTaken), total: seatTotal, unit: "seats" }
+          : null,
+        groups: [{ title: "Table types", unit: "tables / seats", items }],
+        adjustments: [],
+      });
+    }
+
+    // ── Workshops ──────────────────────────────────────────────────
+    const sessions: any[] = event.workshopSessions || [];
+    const packages: any[] = event.workshopPackages || [];
+    const paidWorkshops = workshops.filter((w) => String(w.paymentStatus) === "Paid");
+    if (uses(features.hasWorkshops, sessions.length > 0, paidWorkshops.length > 0)) {
+      const line = (list: any[], kind: string, idOf: (w: any) => any) => {
+        const sales = new Map<string, { sold: number; revenue: number }>();
+        const other = bucket();
+        for (const w of paidWorkshops.filter((w) => (w.bookingType || "session") === kind)) {
+          const id = String(idOf(w));
+          const qty = n(w.quantity) || 1;
+          if (list.some((x) => String(x.id) === id)) {
+            const e = sales.get(id) || { sold: 0, revenue: 0 };
+            e.sold += qty;
+            e.revenue += n(w.amount);
+            sales.set(id, e);
+          } else {
+            const name = String(w.itemName || "Workshop");
+            other.add(name, name, qty, n(w.amount));
+          }
+        }
+        return { sales, other: other.items() };
+      };
+      const s = line(sessions, "session", (w) => w.sessionId);
+      const p = line(packages, "package", (w) => w.packageId);
+      const sessionItems: ReportItem[] = [
+        ...sessions.map((x) => ({
+          name: String(x.name || "Session"),
+          price: optNum(x.price),
+          sold: s.sales.get(String(x.id))?.sold || 0,
+          // bookedSeats also counts seats taken through packages.
+          left: n(x.maxSeats) > 0 ? Math.max(0, n(x.maxSeats) - n(x.bookedSeats)) : null,
+          revenue: s.sales.get(String(x.id))?.revenue || 0,
+        })),
+        ...s.other,
+      ];
+      const packageItems: ReportItem[] = [
+        ...packages.map((x) => ({
+          name: String(x.name || "Package"),
+          price: optNum(x.price),
+          sold: p.sales.get(String(x.id))?.sold || 0,
+          left: null,
+          revenue: p.sales.get(String(x.id))?.revenue || 0,
+        })),
+        ...p.other,
+      ];
+      const capped = sessions.length > 0 && sessions.every((x) => n(x.maxSeats) > 0);
+      sections.push({
+        key: "workshops",
+        label: "Workshops",
+        sold: sum(paidWorkshops, (w) => n(w.quantity) || 1),
+        soldLabel: "Workshop seats sold",
+        revenue: sum(paidWorkshops, (w) => n(w.amount)),
+        fill: capped
+          ? {
+              used: sum(sessions, (x) => n(x.bookedSeats)),
+              total: sum(sessions, (x) => n(x.maxSeats)),
+              unit: "seats",
+            }
+          : null,
+        groups: [
+          { title: "Sessions", unit: "seats", items: sessionItems },
+          ...(packageItems.length ? [{ title: "Packages", unit: "bookings", items: packageItems }] : []),
+        ],
+        adjustments: [],
+      });
+    }
+
+    // ── Scheduled spaces ───────────────────────────────────────────
+    const ssTpls: any[] = event.scheduledSpaceTemplates || [];
+    const placedSs = this.flatten(event.venueScheduledSpaces);
+    // Part-paid requests hold their slots and count what's been paid.
+    const paidScheduled = scheduled.filter(
+      (r) =>
+        ["Paid", "Partial"].includes(String(r.paymentStatus)) &&
+        !["Cancelled", "Rejected"].includes(String(r.status)),
+    );
+    if (uses(features.hasScheduledSpaces, ssTpls.length > 0, paidScheduled.length > 0)) {
+      const sales = new Map<string, { sold: number; revenue: number }>();
+      const other = bucket();
+      for (const r of paidScheduled) {
+        const slots: any[] = r.selectedSlots || [];
+        const full = sum(slots, (x) => n(x.price)) || n(r.slotsTotal);
+        const share =
+          String(r.paymentStatus) === "Paid" || full === 0
+            ? 1
+            : Math.min(1, n(r.paidAmount) / full);
+        for (const x of slots) {
+          const id = String(x.templateId);
+          if (ssTpls.some((t) => String(t.id) === id)) {
+            const e = sales.get(id) || { sold: 0, revenue: 0 };
+            e.sold += 1;
+            e.revenue += n(x.price) * share;
+            sales.set(id, e);
+          } else {
+            const name = String(x.spaceName || "Space");
+            other.add(name, name, 1, n(x.price) * share);
+          }
+        }
+      }
+      const booked = new Set<string>((event.scheduledSpaceBookedSlots || []).map(String));
+      // A placed space carries its own slot list; the template's is the fallback.
+      const slotsOf = (p: any, tpl: any) =>
+        ((p?.slots?.length ? p.slots : tpl.slots) || []) as any[];
+      const items: ReportItem[] = [
+        ...ssTpls.map((tpl) => {
+          const placed = placedSs.filter((p: any) => String(p.templateId) === String(tpl.id));
+          const open = sum(placed, (p: any) =>
+            slotsOf(p, tpl).filter((sl) => !booked.has(`${p.positionId}:${sl.id}`)).length,
+          );
+          const s = sales.get(String(tpl.id)) || { sold: 0, revenue: 0 };
+          return {
+            name: `${tpl.name || "Space"}${tpl.facilityType && tpl.facilityType !== tpl.name ? ` (${tpl.facilityType})` : ""}`,
+            ...placedPrice(placed, "price", tpl.price),
+            memberPrice: placedPrice(placed, "memberPrice", tpl.memberPrice).price,
+            sold: s.sold,
+            left: open,
+            revenue: s.revenue,
+          };
+        }),
+        ...other.items(),
+      ];
+      const total = sum(ssTpls, (tpl) =>
+        sum(
+          placedSs.filter((p: any) => String(p.templateId) === String(tpl.id)),
+          (p: any) => slotsOf(p, tpl).length,
+        ),
+      );
+      sections.push({
+        key: "scheduledSpaces",
+        label: "Scheduled Spaces",
+        sold: sum(items, (i) => i.sold),
+        soldLabel: "Slots booked",
+        revenue: sum(items, (i) => i.revenue),
+        fill: total ? { used: total - sum(items, (i) => i.left || 0), total, unit: "slots" } : null,
+        groups: [{ title: "Spaces (per slot)", unit: "slots", items }],
+        adjustments: [],
+      });
+    }
+
+    // ── Speakers ───────────────────────────────────────────────────
+    const speakerSlots: any[] = event.speakerSlotTemplates || [];
+    const confirmedSpeakers = speakers.filter((s) =>
+      ["Confirmed", "Completed"].includes(String(s.status)),
+    );
+    if (uses(features.hasSpeakers, speakerSlots.length > 0, confirmedSpeakers.length > 0)) {
+      // A speaker only brings money in when charged and paid.
+      const paidFee = (s: any) =>
+        s.isCharged && String(s.paymentStatus) === "Paid" ? n(s.fee) : 0;
+      const other = bucket();
+      const items: ReportItem[] = speakerSlots.map((slot) => {
+        const mine = confirmedSpeakers.filter((s) => String(s.selectedSlotId) === String(slot.id));
+        return {
+          name: String(slot.name || "Speaker slot"),
+          price: optNum(slot.slotPrice),
+          sold: mine.length,
+          left: Math.max(0, (n(slot.maxSpeakers) || 1) - mine.length),
+          revenue: sum(mine, paidFee),
+        };
+      });
+      for (const s of confirmedSpeakers) {
+        if (speakerSlots.some((slot) => String(slot.id) === String(s.selectedSlotId))) continue;
+        const name = String(s.selectedSlotName || "Other speakers");
+        other.add(name, name, 1, paidFee(s));
+      }
+      items.push(...other.items());
+      const cap = sum(speakerSlots, (slot) => n(slot.maxSpeakers) || 1);
+      sections.push({
+        key: "speakers",
+        label: "Speakers",
+        sold: confirmedSpeakers.length,
+        soldLabel: "Speakers confirmed",
+        revenue: sum(confirmedSpeakers, paidFee),
+        fill: cap
+          ? { used: Math.min(cap, sum(items.slice(0, speakerSlots.length), (i) => i.sold)), total: cap, unit: "speakers" }
+          : null,
+        groups: [{ title: "Speaker slots", unit: "speakers", items }],
+        adjustments: [],
+      });
+    }
+
+    // ── Sponsors ───────────────────────────────────────────────────
+    const tiers: any[] = event.sponsorTypes || [];
+    const confirmedSponsors = sponsors.filter((s) => String(s.status) === "Confirmed");
+    if (uses(features.hasSponsors, tiers.length > 0, confirmedSponsors.length > 0)) {
+      const other = bucket();
+      const items: ReportItem[] = tiers
+        .filter(
+          (t) =>
+            t.isActive !== false ||
+            confirmedSponsors.some((s) => String(s.sponsorTypeId) === String(t.id)),
+        )
+        .map((t) => {
+          const mine = confirmedSponsors.filter((s) => String(s.sponsorTypeId) === String(t.id));
+          return {
+            name: String(t.name || "Sponsorship"),
+            // For a tier paid in kind this is the value it's worth.
+            price: optNum(t.price),
+            sold: mine.length,
+            left: null,
+            revenue: sum(mine, (s) => n(s.amount)),
+          };
+        });
+      for (const s of confirmedSponsors) {
+        if (tiers.some((t) => String(t.id) === String(s.sponsorTypeId))) continue;
+        const name = String(s.sponsorTypeName || "Other sponsors");
+        other.add(name, name, 1, n(s.amount));
+      }
+      items.push(...other.items());
+      sections.push({
+        key: "sponsors",
+        label: "Sponsors",
+        sold: confirmedSponsors.length,
+        soldLabel: "Sponsors confirmed",
+        revenue: sum(confirmedSponsors, (s) => n(s.amount)),
+        fill: null,
+        groups: [{ title: "Sponsorship tiers", unit: "sponsors", items }],
+        adjustments: [],
+      });
+    }
+
+    return {
+      eventId,
+      title: event.title,
+      hasVisitorTicketing: sections.some((s) => s.key === "visitors"),
+      totalRevenue: sum(sections, (s) => s.revenue),
+      sections,
+    };
+  }
+
   async organizerPnl(organizerId: string) {
     this.assertId(organizerId, "organizerId");
     const events = (await this.eventModel
