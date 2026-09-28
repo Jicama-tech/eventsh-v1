@@ -256,6 +256,39 @@ export class OperatorsService {
     });
   }
 
+  /**
+   * Read-only: is `code` a real referral code for this event — one of its
+   * organizer's operators with referrals on, or an active agent of the
+   * event — whether or not the agent still has uses left? Nothing is
+   * consumed. The ticket backstop uses it: tickets are issued after the
+   * buyer pays, so a code that ran out while they were paying must not
+   * leave them paid with no ticket.
+   */
+  async isEventReferralCode(
+    organizerId: string,
+    code?: string | null,
+    eventId?: string | null,
+  ): Promise<boolean> {
+    try {
+      const normalized = String(code ?? "").trim().toUpperCase();
+      if (!/^[A-Z0-9]{4,12}$/.test(normalized) || !organizerId) return false;
+      if (await this.findByReferralCode(organizerId, normalized)) return true;
+      if (!eventId || !Types.ObjectId.isValid(String(eventId))) return false;
+      if (!Types.ObjectId.isValid(String(organizerId))) return false;
+      return !!(await this.eventAgentModel.exists({
+        referralCode: normalized,
+        eventId: new Types.ObjectId(String(eventId)),
+        // Stored uncast (see resolveReferral) — match either form.
+        organizerId: {
+          $in: [String(organizerId), new Types.ObjectId(String(organizerId))],
+        },
+        isActive: true,
+      }));
+    } catch {
+      return false;
+    }
+  }
+
   // Resolve a visitor-submitted referral code into the attribution fields a
   // booking stores. organizerId must come from the Event document, never the
   // request body, so a code can only credit an operator of that event's own
