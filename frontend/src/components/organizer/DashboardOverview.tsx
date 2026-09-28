@@ -981,6 +981,7 @@ export default function DashboardOverview({
         primary: [99, 102, 241] as [number, number, number], // indigo-500
         primaryDark: [79, 70, 229] as [number, number, number], // indigo-600
         green: [34, 197, 94] as [number, number, number],
+        red: [220, 38, 38] as [number, number, number],
         purple: [139, 92, 246] as [number, number, number],
         gray: [107, 114, 128] as [number, number, number],
         white: [255, 255, 255] as [number, number, number],
@@ -1004,6 +1005,8 @@ export default function DashboardOverview({
       // Whole amounts print without the ".00" (SG$200, not SG$200.00);
       // real cents stay.
       const pdfPrice = (v: number) => formatPrice(v).replace(/[.,]00$/, "");
+      const signedPrice = (v: number) =>
+        v < 0 ? `-${pdfPrice(-v)}` : pdfPrice(v);
       const colorOf = (key: string): [number, number, number] =>
         SECTION_STYLE[key as keyof typeof SECTION_STYLE]?.color || C.gray;
       const pct = (a: number, b: number) =>
@@ -1067,7 +1070,8 @@ export default function DashboardOverview({
       doc.text(secLine, margin, y);
       y += secLine.length * 12 + 10;
 
-      // ===== KPI CARDS — Total Revenue + the first sections' headline =====
+      // ===== KPI CARDS — Total Revenue, Net Profit, then sections =====
+      const profit = report.profit;
       const kpis = [
         {
           label: "Total Revenue",
@@ -1076,7 +1080,21 @@ export default function DashboardOverview({
           color: C.green,
           glyph: "$",
         },
-        ...sections.slice(0, 3).map((s) => ({
+        ...(profit
+          ? [
+              {
+                label: "Net Profit",
+                value: signedPrice(profit.netProfit),
+                sub:
+                  profit.margin != null
+                    ? `${profit.margin}% margin`
+                    : "after all deductions",
+                color: profit.netProfit >= 0 ? C.green : C.red,
+                glyph: profit.netProfit >= 0 ? "+" : "-",
+              },
+            ]
+          : []),
+        ...sections.slice(0, profit ? 2 : 3).map((s) => ({
           label: s.soldLabel,
           value: String(s.sold),
           sub: `${s.label} · ${pdfPrice(s.revenue)}`,
@@ -1429,32 +1447,69 @@ export default function DashboardOverview({
       dataTable("Revenue Summary", C.green, [
         ...sections.map((s): [string, string] => [s.label, pdfPrice(s.revenue)]),
         ["Total Revenue", pdfPrice(report.totalRevenue)],
-        ...(expenses && expenses.total > 0
-          ? ([
-              ["Less: expenses", `-${pdfPrice(expenses.total)}`],
-              [
-                "Revenue after expenses",
-                pdfPrice(report.afterExpenses ?? report.totalRevenue - expenses.total),
-              ],
-            ] as [string, string][])
-          : []),
       ]);
-      y = pageBreak(y + 8, 30);
+
+      // ===== NET PROFIT — revenue less every deduction =====
+      const notes: string[] = [
+        "Counts money received: tickets with payment confirmed, exhibitor and round-table bookings marked paid, confirmed sponsors, and paid workshops, scheduled slots and speaker fees.",
+      ];
+      if (profit) {
+        dataTable("Net Profit", profit.netProfit >= 0 ? C.green : C.red, [
+          ["Total Revenue", pdfPrice(profit.revenue)],
+          ...profit.deductions.map((d): [string, string] => [
+            `Less: ${d.label}`,
+            d.amount ? `-${pdfPrice(d.amount)}` : pdfPrice(0),
+          ]),
+          ["Net Profit", signedPrice(profit.netProfit)],
+          ["Margin", profit.margin != null ? `${profit.margin}%` : "—"],
+        ]);
+        // highlighted result
+        y = pageBreak(y + 8, 52);
+        const good = profit.netProfit >= 0;
+        setFill(good ? [220, 252, 231] : [254, 226, 226]);
+        doc.roundedRect(margin, y, innerW, 44, 6, 6, "F");
+        setText(good ? [21, 128, 61] : [185, 28, 28]);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.text(good ? "NET PROFIT" : "NET LOSS", margin + 16, y + 27);
+        doc.setFontSize(18);
+        doc.text(signedPrice(profit.netProfit), margin + innerW - 16, y + 29, {
+          align: "right",
+        });
+        y += 52;
+
+        if (profit.platformFeeLines.length > 0) {
+          notes.push(
+            `EventSH platform fee: ${profit.platformFeeLines
+              .map((l) => `${l.count} ${l.label.toLowerCase()} × ${pdfPrice(l.rate)}`)
+              .join(" + ")} = ${pdfPrice(
+              profit.platformFeeLines.reduce((a, l) => a + l.amount, 0),
+            )}.`,
+          );
+        }
+        notes.push(
+          "Security deposits are refundable, so they come off revenue; only approved expenses are taken off.",
+        );
+        if (expenses && expenses.pending > 0) {
+          notes.push(
+            `${pdfPrice(expenses.pending)} in expenses is still awaiting approval and isn't taken off yet.`,
+          );
+        }
+        if (profit.supplierOutstanding > 0) {
+          notes.push(
+            `${pdfPrice(profit.supplierOutstanding)} is still owed to suppliers on accepted quotes and isn't taken off until paid.`,
+          );
+        }
+      }
       setText(C.gray);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
-      doc.text(
-        doc.splitTextToSize(
-          `Counts money received: tickets with payment confirmed, exhibitor and round-table bookings marked paid, confirmed sponsors, and paid workshops, scheduled slots and speaker fees. Exhibitor revenue includes refundable security deposits. Only approved expenses are taken off${
-            expenses && expenses.pending > 0
-              ? ` (${pdfPrice(expenses.pending)} is still awaiting approval)`
-              : ""
-          }.`,
-          innerW,
-        ),
-        margin,
-        y + 6,
-      );
+      for (const note of notes) {
+        const lines = doc.splitTextToSize(note, innerW);
+        y = pageBreak(y + 4, lines.length * 10 + 4);
+        doc.text(lines, margin, y + 6);
+        y += lines.length * 10;
+      }
 
       // ===== FOOTER on every page =====
       const pageCount = doc.getNumberOfPages();

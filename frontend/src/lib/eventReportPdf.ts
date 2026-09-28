@@ -55,14 +55,28 @@ export interface ReportExpenses {
   }[];
 }
 
+/** Net profit: money received less everything that comes off it. */
+export interface ReportProfit {
+  revenue: number;
+  /** Deposits, expenses, supplier payouts, EventSH platform fee. */
+  deductions: { key: string; label: string; amount: number }[];
+  netProfit: number;
+  /** % of revenue; null with no revenue. */
+  margin: number | null;
+  /** Owed on accepted supplier quotes but not paid yet — not taken off. */
+  supplierOutstanding: number;
+  /** What the platform fee is made of (only lines with a count). */
+  platformFeeLines: { label: string; count: number; rate: number; amount: number }[];
+}
+
 export interface EventReport {
   hasVisitorTicketing: boolean;
   totalRevenue: number;
   sections: ReportSection[];
   /** Missing on the partial fallback. */
   expenses?: ReportExpenses;
-  /** totalRevenue less approved expenses. */
-  afterExpenses?: number;
+  /** Missing on the partial fallback. */
+  profit?: ReportProfit;
   /** Built from the dashboard's own totals because the report couldn't
    * load — headline figures only, no per-item tables. */
   partial?: boolean;
