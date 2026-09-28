@@ -135,7 +135,7 @@ import {
   normalizeReferralInput,
 } from "@/lib/eventReferral";
 import { captureEventCoupon } from "@/lib/eventCoupon";
-import { toE164 } from "@/lib/phone";
+import { phoneDigits, toE164 } from "@/lib/phone";
 import { ReferralCodeField } from "@/components/ui/ReferralCodeField";
 import StallPaymentPanel from "./StallPaymentPanel";
 import PaymentFeedbackDialog from "./PaymentFeedbackDialog";
@@ -2151,8 +2151,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       !scheduledSpaceForm.whatsappNumber?.trim()
     )
       missing.push("WhatsApp Number");
-    if (scheduledSpaceOn("phone") && !scheduledSpaceForm.phone?.trim())
-      missing.push("Phone Number");
     if (
       scheduledSpaceOn("facilityType") &&
       scheduledSpaceFacilityTypes.length > 0 &&
@@ -2191,7 +2189,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           name: scheduledSpaceForm.name,
           email: scheduledSpaceForm.email,
           // Stored as E.164 ("+<dial><number>") like every number in the app.
-          phone: toE164(scheduledSpaceForm.phone) || undefined,
+          // The phone is optional: picking a country only fills in its dial
+          // code, and that alone isn't a number, so it isn't sent.
+          phone:
+            phoneDigits(scheduledSpaceForm.phone) &&
+            phoneDigits(scheduledSpaceForm.phone) !==
+              String(scheduledSpacePhoneCountry?.dialCode ?? "")
+              ? toE164(scheduledSpaceForm.phone)
+              : undefined,
           whatsappNumber: toE164(scheduledSpaceForm.whatsappNumber) || undefined,
           facilityTypeRequested: scheduledSpaceForm.facilityType || undefined,
           purpose: scheduledSpaceForm.purpose || undefined,
@@ -14217,7 +14222,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               )}
               {scheduledSpaceOn("phone") && (
                 <div className="space-y-2">
-                  <Label>Phone Number *</Label>
+                  <Label>Phone Number</Label>
                   <PhoneInput
                     value={scheduledSpaceForm.phone}
                     onChange={(phone: string, country: any) => {
