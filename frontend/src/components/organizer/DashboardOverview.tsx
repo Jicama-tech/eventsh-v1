@@ -56,7 +56,9 @@ import {
   MEMBER_SPLIT_PDF_HEIGHT,
   type MemberSplit,
 } from "@/lib/memberSplit";
+import { buildEventReportCsv } from "@/lib/eventReportCsv";
 import {
+  drawExpensesTable,
   drawSectionTable,
   fallbackReport,
   fetchEventReport,
@@ -143,7 +145,7 @@ export default function DashboardOverview({
   const [showFeedback, setShowFeedback] = useState(false);
   const [venueLayoutEvent, setVenueLayoutEvent] = useState<any>(null);
   const { country } = useCountry();
-  const { formatPrice, getSymbol } = useCurrency(country);
+  const { formatPrice, getSymbol, config: currencyConfig } = useCurrency(country);
 
   const calculateEventMetrics = (event, tickets, stalls = [], revenueByEvent = {}) => {
     // eventId can arrive populated (object), a plain id, or null (the ticket's
@@ -828,7 +830,7 @@ export default function DashboardOverview({
                         className="focus:bg-blue-600 focus:text-white cursor-pointer"
                       >
                         <FileSpreadsheet className="h-4 w-4 mr-2" />
-                        Export as CSV
+                        Export as Excel (CSV)
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => exportEventToPDF(event)}
@@ -860,62 +862,77 @@ export default function DashboardOverview({
     setShowAnalyticsDialog(true);
   };
 
-  // Build the row data once — both CSV and PDF render the same content.
-  const buildEventReportRows = (event: any): [string, string][] => [
-    ["Event Information", ""],
-    ["Event Title", event.title || ""],
-    ["Category", event.category || ""],
-    ["Location", event.location || ""],
-    [
-      "Start Date",
-      event.startDate ? new Date(event.startDate).toLocaleDateString() : "",
-    ],
-    [
-      "End Date",
-      event.endDate ? new Date(event.endDate).toLocaleDateString() : "",
-    ],
-    ["", ""],
-    ["Ticket Metrics", ""],
-    ["Tickets Sold", String(event.ticketsSold ?? 0)],
-    ["Total Tickets", String(event.totalTickets ?? "Unlimited")],
-    ["Sales Progress", `${event.salesPercent ?? 0}%`],
-    ["Tickets Revenue", `${formatPrice(event.ticketsRevenue ?? 0)}`],
-    ["", ""],
-    ["Stall Metrics", ""],
-    ["Stalls Booked", String(event.stallsBooked ?? 0)],
-    ["Pending Stalls", String(event.stallsPending ?? 0)],
-    ["Stalls Revenue", `${formatPrice(event.stallsRevenue ?? 0)}`],
-    ["", ""],
-    ["Revenue Summary", ""],
-    ["Total Revenue", `${formatPrice(event.revenue ?? 0)}`],
-  ];
+  // Everything both exports need, loaded fresh: the section report (what
+  // each section sells and made, plus expenses) and members vs non-members.
+  // The member split is on paid bookings only, so it adds up with the
+  // Exhibitors table. If the report can't load, headline figures from the
+  // dashboard stand in; a failed member split just leaves it out.
+  const loadEventReportData = async (
+    event: any,
+  ): Promise<{ report: EventReport; memberSplit: MemberSplit | null }> => {
+    const token = sessionStorage.getItem("token");
+    const auth: Record<string, string> = token
+      ? { Authorization: `Bearer ${token}` }
+      : {};
+    const loadMemberSplit = async (): Promise<MemberSplit | null> => {
+      try {
+        const [evRes, stallRes] = await Promise.all([
+          fetch(`${apiURL}/events/${event._id}`),
+          fetch(`${apiURL}/stalls/event/${event._id}`, { headers: auth }),
+        ]);
+        const evJson = await evRes.json();
+        const stallJson = await stallRes.json();
+        return computeMemberSplit(
+          evJson?.data || evJson,
+          Array.isArray(stallJson?.data)
+            ? stallJson.data
+            : Array.isArray(stallJson)
+              ? stallJson
+              : [],
+          (s) => s?.paymentStatus === "Paid" && s?.status !== "Cancelled",
+        );
+      } catch {
+        return null;
+      }
+    };
+    const [fetched, memberSplit] = await Promise.all([
+      fetchEventReport(apiURL, event._id, auth),
+      loadMemberSplit(),
+    ]);
+    return { report: fetched || fallbackReport(event), memberSplit };
+  };
 
-  const exportEventToCSV = (event: any) => {
-    const csvContent = buildEventReportRows(event)
-      .map((row) =>
-        row
-          .map((cell) => {
-            const s = String(cell ?? "");
-            // Escape any commas / quotes / newlines in the cell
-            return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-          })
-          .join(","),
-      )
-      .join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    const fileName = `${event.title.replace(/[^a-z0-9]/gi, "_")}_Report_${
-      new Date().toISOString().split("T")[0]
-    }.csv`;
-    link.setAttribute("href", url);
-    link.setAttribute("download", fileName);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  // CSV (opens in Excel) — the same content as the PDF, from the same data.
+  const exportEventToCSV = async (event: any) => {
+    try {
+      const { report, memberSplit } = await loadEventReportData(event);
+      const csvContent = buildEventReportCsv(
+        event,
+        report,
+        memberSplit,
+        currencyConfig.code,
+      );
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      const fileName = `${event.title.replace(/[^a-z0-9]/gi, "_")}_Report_${
+        new Date().toISOString().split("T")[0]
+      }.csv`;
+      link.setAttribute("href", url);
+      link.setAttribute("download", fileName);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("CSV export failed:", e);
+      toast({
+        title: "CSV export failed",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   // Event report PDF, built around the sections this event actually uses:
@@ -925,40 +942,7 @@ export default function DashboardOverview({
   // and the page says so.
   const exportEventToPDF = async (event: any) => {
     try {
-      const token = sessionStorage.getItem("token");
-      const auth: Record<string, string> = token
-        ? { Authorization: `Bearer ${token}` }
-        : {};
-
-      // Members vs non-members needs the event's space pricing and its
-      // bookings with each vendor's membership. Paid bookings only, so it
-      // adds up with the Exhibitors table. A failed fetch leaves it out.
-      const loadMemberSplit = async (): Promise<MemberSplit | null> => {
-        try {
-          const [evRes, stallRes] = await Promise.all([
-            fetch(`${apiURL}/events/${event._id}`),
-            fetch(`${apiURL}/stalls/event/${event._id}`, { headers: auth }),
-          ]);
-          const evJson = await evRes.json();
-          const stallJson = await stallRes.json();
-          return computeMemberSplit(
-            evJson?.data || evJson,
-            Array.isArray(stallJson?.data)
-              ? stallJson.data
-              : Array.isArray(stallJson)
-                ? stallJson
-                : [],
-            (s) => s?.paymentStatus === "Paid" && s?.status !== "Cancelled",
-          );
-        } catch {
-          return null;
-        }
-      };
-      const [fetched, memberSplit] = await Promise.all([
-        fetchEventReport(apiURL, event._id, auth),
-        loadMemberSplit(),
-      ]);
-      const report: EventReport = fetched || fallbackReport(event);
+      const { report, memberSplit } = await loadEventReportData(event);
       const sections = report.sections;
 
       const { default: jsPDF } = await import("jspdf");
@@ -1430,9 +1414,30 @@ export default function DashboardOverview({
         }
       }
 
+      // Logged expenses — approved ones come off the revenue below.
+      const expenses = report.expenses;
+      if (expenses && expenses.items.length > 0) {
+        y = drawExpensesTable(doc, expenses, {
+          x: margin,
+          y: y + 10,
+          width: innerW,
+          money: pdfPrice,
+          pageBreak,
+        });
+      }
+
       dataTable("Revenue Summary", C.green, [
         ...sections.map((s): [string, string] => [s.label, pdfPrice(s.revenue)]),
         ["Total Revenue", pdfPrice(report.totalRevenue)],
+        ...(expenses && expenses.total > 0
+          ? ([
+              ["Less: expenses", `-${pdfPrice(expenses.total)}`],
+              [
+                "Revenue after expenses",
+                pdfPrice(report.afterExpenses ?? report.totalRevenue - expenses.total),
+              ],
+            ] as [string, string][])
+          : []),
       ]);
       y = pageBreak(y + 8, 30);
       setText(C.gray);
@@ -1440,7 +1445,11 @@ export default function DashboardOverview({
       doc.setFontSize(8);
       doc.text(
         doc.splitTextToSize(
-          "Counts money received: tickets with payment confirmed, exhibitor and round-table bookings marked paid, confirmed sponsors, and paid workshops, scheduled slots and speaker fees. Exhibitor revenue includes refundable security deposits.",
+          `Counts money received: tickets with payment confirmed, exhibitor and round-table bookings marked paid, confirmed sponsors, and paid workshops, scheduled slots and speaker fees. Exhibitor revenue includes refundable security deposits. Only approved expenses are taken off${
+            expenses && expenses.pending > 0
+              ? ` (${pdfPrice(expenses.pending)} is still awaiting approval)`
+              : ""
+          }.`,
           innerW,
         ),
         margin,
