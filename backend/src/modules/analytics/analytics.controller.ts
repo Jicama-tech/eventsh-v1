@@ -16,6 +16,13 @@ export class AnalyticsController {
     return { success: true, message: "Event P&L built", data };
   }
 
+  /** What each section of one event sells, how much went, what it made. */
+  @Get("event/:eventId/report")
+  async eventReport(@Param("eventId") eventId: string) {
+    const data = await this.analyticsService.eventReport(eventId);
+    return { success: true, message: "Event report built", data };
+  }
+
   /** The same, per event, across everything an organizer runs. */
   @Get("organizer/:organizerId/pnl")
   async organizerPnl(@Param("organizerId") organizerId: string) {
