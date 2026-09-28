@@ -19,6 +19,9 @@ export interface PnlLine {
  * exhibitors, round tables, speakers and sponsors, minus what went out to
  * suppliers and to EventSH in platform fees.
  *
+ * Exhibitor security deposits are collected but refundable, so they are
+ * deducted from revenue: net profit only counts money the organizer keeps.
+ *
  * Only money that has actually changed hands is counted. Pending bookings,
  * unpaid speaker fees and unverified sponsorships are reported separately as
  * "expected" so the organizer can see the pipeline without it inflating the
@@ -87,7 +90,9 @@ export class AnalyticsService {
           .lean(),
         this.stallModel
           .find({ eventId: evObjId })
-          .select("grandTotal paidAmount remainingAmount paymentStatus status")
+          .select(
+            "grandTotal depositTotal paidAmount remainingAmount paymentStatus status depositReturned",
+          )
           .lean(),
         this.roundTableModel
           .find({ eventId: evObjId })
@@ -130,8 +135,11 @@ export class AnalyticsService {
     // remainingAmount 0. So `paymentStatus` is the source of truth, with
     // `remainingAmount` covering the partial case, and `paidAmount` used only
     // when something has actually populated it.
+    //
+    // "Returned" stays in: that exhibitor used the space and paid the rent —
+    // only the deposit went back, and that is taken out below.
     const liveStalls = (stalls as any[]).filter(
-      (s) => !["Cancelled", "Returned", "Forfeited"].includes(String(s.status)),
+      (s) => !["Cancelled", "Forfeited"].includes(String(s.status)),
     );
     const stallCollected = (r: any) => {
       const total = Number(r.grandTotal) || 0;
@@ -150,6 +158,23 @@ export class AnalyticsService {
       (s, r) => s + Math.max(0, (Number(r.grandTotal) || 0) - stallCollected(r)),
       0,
     );
+
+    // Security deposits: grandTotal = rent + deposit + add-ons, but the
+    // deposit goes back to the vendor after check-out, so it is never
+    // income. A part-paid booking doesn't record which part it covered, so
+    // the deposit is taken as paid first — profit is never overstated.
+    const stallDeposit = (r: any) =>
+      Math.min(Math.max(0, Number(r.depositTotal) || 0), stallCollected(r));
+    const isDepositReturned = (r: any) =>
+      !!r.depositReturned || String(r.status) === "Returned";
+    const depositStalls = liveStalls.filter((r) => stallDeposit(r) > 0);
+    const depositsReturned = depositStalls
+      .filter(isDepositReturned)
+      .reduce((s, r) => s + stallDeposit(r), 0);
+    const depositsToReturn = depositStalls
+      .filter((r) => !isDepositReturned(r))
+      .reduce((s, r) => s + stallDeposit(r), 0);
+    const depositsCollected = depositsReturned + depositsToReturn;
 
     const paidRounds = (rounds as any[]).filter(
       (r) => String(r.paymentStatus) === "Paid",
@@ -250,6 +275,19 @@ export class AnalyticsService {
         count: liveStalls.length,
         note: exhibitorOutstanding > 0 ? `${exhibitorOutstanding} still due` : undefined,
       },
+      // Negative on purpose: the exhibitor line above is what was collected,
+      // deposits included; this takes the refundable part out.
+      ...(depositsCollected > 0
+        ? [
+            {
+              key: "deposits",
+              label: "Less: exhibitor deposits (refundable)",
+              amount: -depositsCollected,
+              count: depositStalls.length,
+              note: `${depositsToReturn} to return, ${depositsReturned} returned`,
+            },
+          ]
+        : []),
       {
         key: "roundTables",
         label: "Round tables",
@@ -331,6 +369,13 @@ export class AnalyticsService {
           totalRevenue > 0
             ? Math.round((netProfit / totalRevenue) * 1000) / 10
             : null,
+      },
+      // Exhibitor deposits, already deducted from revenue above.
+      deposits: {
+        collected: depositsCollected,
+        toReturn: depositsToReturn,
+        returned: depositsReturned,
+        count: depositStalls.length,
       },
       // Money not yet realised, kept out of the totals above.
       expected: {
