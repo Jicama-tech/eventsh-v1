@@ -50,6 +50,19 @@ import {
 } from "@/components/ui/dialog";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountry } from "@/hooks/useCountry";
+import {
+  computeMemberSplit,
+  drawMemberSplitPdf,
+  MEMBER_SPLIT_PDF_HEIGHT,
+  type MemberSplit,
+} from "@/lib/memberSplit";
+import {
+  drawSectionTable,
+  fallbackReport,
+  fetchEventReport,
+  SECTION_STYLE,
+  type EventReport,
+} from "@/lib/eventReportPdf";
 import { t } from "@/i18n/t";
 
 // Updated STAT_ICONS to include new metrics
@@ -905,8 +918,49 @@ export default function DashboardOverview({
     URL.revokeObjectURL(url);
   };
 
+  // Event report PDF, built around the sections this event actually uses:
+  // one table per section (visitors, exhibitors, round tables, workshops,
+  // scheduled spaces, speakers, sponsors) listing everything it sells. A
+  // section the event doesn't use — e.g. no visitor ticketing — is left out,
+  // and the page says so.
   const exportEventToPDF = async (event: any) => {
     try {
+      const token = sessionStorage.getItem("token");
+      const auth: Record<string, string> = token
+        ? { Authorization: `Bearer ${token}` }
+        : {};
+
+      // Members vs non-members needs the event's space pricing and its
+      // bookings with each vendor's membership. Paid bookings only, so it
+      // adds up with the Exhibitors table. A failed fetch leaves it out.
+      const loadMemberSplit = async (): Promise<MemberSplit | null> => {
+        try {
+          const [evRes, stallRes] = await Promise.all([
+            fetch(`${apiURL}/events/${event._id}`),
+            fetch(`${apiURL}/stalls/event/${event._id}`, { headers: auth }),
+          ]);
+          const evJson = await evRes.json();
+          const stallJson = await stallRes.json();
+          return computeMemberSplit(
+            evJson?.data || evJson,
+            Array.isArray(stallJson?.data)
+              ? stallJson.data
+              : Array.isArray(stallJson)
+                ? stallJson
+                : [],
+            (s) => s?.paymentStatus === "Paid" && s?.status !== "Cancelled",
+          );
+        } catch {
+          return null;
+        }
+      };
+      const [fetched, memberSplit] = await Promise.all([
+        fetchEventReport(apiURL, event._id, auth),
+        loadMemberSplit(),
+      ]);
+      const report: EventReport = fetched || fallbackReport(event);
+      const sections = report.sections;
+
       const { default: jsPDF } = await import("jspdf");
       const doc = new jsPDF({ unit: "pt", format: "a4" });
       const pageW = doc.internal.pageSize.getWidth();
@@ -938,27 +992,13 @@ export default function DashboardOverview({
         (doc as any).lines(deltas, pts[0][0], pts[0][1], [1, 1], "F", true);
       };
 
-      // Concentric rings → donut effect (overlay smaller filled circle in center)
-      const drawDonutHole = (
-        cx: number,
-        cy: number,
-        innerR: number,
-        color: [number, number, number],
-      ) => {
-        doc.setFillColor(color[0], color[1], color[2]);
-        doc.circle(cx, cy, innerR, "F");
-      };
-
       // Color palette (mirrors the dashboard tones)
       const C = {
         primary: [99, 102, 241] as [number, number, number], // indigo-500
         primaryDark: [79, 70, 229] as [number, number, number], // indigo-600
-        blue: [59, 130, 246] as [number, number, number],
         green: [34, 197, 94] as [number, number, number],
         purple: [139, 92, 246] as [number, number, number],
-        orange: [249, 115, 22] as [number, number, number],
         gray: [107, 114, 128] as [number, number, number],
-        light: [243, 244, 246] as [number, number, number],
         white: [255, 255, 255] as [number, number, number],
       };
       const setFill = (c: [number, number, number]) =>
@@ -980,9 +1020,21 @@ export default function DashboardOverview({
       // Whole amounts print without the ".00" (SG$200, not SG$200.00);
       // real cents stay.
       const pdfPrice = (v: number) => formatPrice(v).replace(/[.,]00$/, "");
+      const colorOf = (key: string): [number, number, number] =>
+        SECTION_STYLE[key as keyof typeof SECTION_STYLE]?.color || C.gray;
+      const pct = (a: number, b: number) =>
+        b > 0 ? Math.round((a / b) * 100) : 0;
 
       // ===== HEADER BANNER =====
-      const headerH = 90;
+      // Grows with a title that wraps, so the lines under it never overlap.
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      const title = doc.splitTextToSize(
+        event.title || "Event Report",
+        innerW - 200,
+      );
+      const metaY = 38 + 25.3 * (title.length - 1) + 20;
+      const headerH = Math.max(90, metaY + 32);
       setFill(C.primaryDark);
       doc.rect(0, 0, pageW, headerH, "F");
       // Decorative circle accents
@@ -991,16 +1043,9 @@ export default function DashboardOverview({
       doc.circle(pageW - 90, headerH - 5, 35, "F");
 
       setText(C.white);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(22);
-      const title = doc.splitTextToSize(
-        event.title || "Event Report",
-        innerW - 200,
-      );
       doc.text(title, margin, 38);
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
-      let metaY = 38 + 18 * title.length;
       const metaParts: string[] = [];
       if (event.category) metaParts.push(event.category);
       if (event.location) metaParts.push(event.location);
@@ -1016,41 +1061,47 @@ export default function DashboardOverview({
         headerH - 12,
       );
 
-      let y = headerH + 28;
+      let y = headerH + 22;
+      const pageBreak = (at: number, need: number) => {
+        if (at + need > pageH - margin - 30) {
+          doc.addPage();
+          return margin;
+        }
+        return at;
+      };
 
-      // ===== KPI CARDS — single row of 4, with colored icon-badge =====
+      // ===== WHICH SECTIONS THIS EVENT USES =====
+      setText(C.gray);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      const secLine = doc.splitTextToSize(
+        `Sections: ${sections.map((s) => s.label).join("  ·  ") || "none set up yet"}${
+          report.hasVisitorTicketing ? "" : "      No visitor ticketing for this event"
+        }`,
+        innerW,
+      );
+      doc.text(secLine, margin, y);
+      y += secLine.length * 12 + 10;
+
+      // ===== KPI CARDS — Total Revenue + the first sections' headline =====
       const kpis = [
         {
-          label: "Tickets Sold",
-          value: String(event.ticketsSold ?? 0),
-          sub: `of ${event.totalTickets ?? "∞"}`,
-          color: C.blue,
-          glyph: "T",
-        },
-        {
           label: "Total Revenue",
-          value: pdfPrice(event.revenue ?? 0),
-          sub: "all sources",
+          value: pdfPrice(report.totalRevenue),
+          sub: "all sections",
           color: C.green,
           glyph: "$",
         },
-        {
-          label: "Stalls Booked",
-          value: String(event.stallsBooked ?? 0),
-          sub: `${event.stallsPending ?? 0} pending`,
-          color: C.orange,
-          glyph: "B",
-        },
-        {
-          label: "Sales %",
-          value: `${event.salesPercent ?? 0}%`,
-          sub: "of capacity",
-          color: C.purple,
-          glyph: "%",
-        },
+        ...sections.slice(0, 3).map((s) => ({
+          label: s.soldLabel,
+          value: String(s.sold),
+          sub: `${s.label} · ${pdfPrice(s.revenue)}`,
+          color: colorOf(s.key),
+          glyph: SECTION_STYLE[s.key]?.glyph || "•",
+        })),
       ];
       const cardGap = 10;
-      const cardW = (innerW - cardGap * 3) / 4;
+      const cardW = (innerW - cardGap * (kpis.length - 1)) / kpis.length;
       const cardH = 92;
       kpis.forEach((kpi, i) => {
         const cx = margin + i * (cardW + cardGap);
@@ -1083,25 +1134,24 @@ export default function DashboardOverview({
         // label
         setText(C.gray);
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(8);
-        doc.text(kpi.label.toUpperCase(), cx + 12, cy + 60);
+        const label = kpi.label.toUpperCase();
+        fitFont(label, cardW - 24, 8);
+        doc.text(label, cx + 12, cy + 60);
         // sub
-        setText(C.gray);
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(9);
+        fitFont(kpi.sub, cardW - 24, 9);
         doc.text(kpi.sub, cx + 12, cy + 76);
       });
       y += cardH + 28;
 
-      // ===== TWO-PANEL VIZ ROW: Donut (revenue) + Gauge (sales %) =====
+      // ===== TWO-PANEL VIZ ROW: revenue by section + how full each is =====
       const panelGap = 16;
       const panelW = (innerW - panelGap) / 2;
       const panelH = 200;
-      const ticketsRev = Number(event.ticketsRevenue ?? 0);
-      const stallsRev = Number(event.stallsRevenue ?? 0);
-      const totalRev = ticketsRev + stallsRev;
+      const earning = sections.filter((s) => s.revenue > 0);
+      const totalRev = earning.reduce((a, s) => a + s.revenue, 0);
 
-      // -- Panel A: Revenue Donut --
+      // -- Panel A: Revenue by section donut --
       const aX = margin;
       setFill([250, 251, 254]);
       doc.setDrawColor(230, 232, 240);
@@ -1109,77 +1159,70 @@ export default function DashboardOverview({
       setText([20, 20, 20]);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(11);
-      doc.text("Revenue Breakdown", aX + 14, y + 20);
-      // Donut on left half of panel
-      const donutCx = aX + panelW / 3;
-      const donutCy = y + panelH / 2 + 6;
-      const donutR = 52;
+      doc.text("Revenue by Section", aX + 14, y + 20);
+      const donutCx = aX + panelW / 4 + 8;
+      const donutCy = y + panelH / 2 + 8;
+      const donutR = 48;
       if (totalRev > 0) {
-        const ticketShare = ticketsRev / totalRev;
-        const stallShare = stallsRev / totalRev;
-        const TWO_PI = Math.PI * 2;
-        // start from -90° (top)
-        const start = -Math.PI / 2;
-        drawPieSlice(
-          donutCx,
-          donutCy,
-          donutR,
-          start,
-          ticketShare * TWO_PI,
-          C.blue,
-        );
-        drawPieSlice(
-          donutCx,
-          donutCy,
-          donutR,
-          start + ticketShare * TWO_PI,
-          stallShare * TWO_PI,
-          C.orange,
-        );
+        let start = -Math.PI / 2;
+        for (const s of earning) {
+          const sweep = (s.revenue / totalRev) * Math.PI * 2;
+          drawPieSlice(donutCx, donutCy, donutR, start, sweep, colorOf(s.key));
+          start += sweep;
+        }
       } else {
         setFill([220, 223, 230]);
         doc.circle(donutCx, donutCy, donutR, "F");
       }
-      // donut hole
-      drawDonutHole(donutCx, donutCy, donutR * 0.55, [250, 251, 254]);
-      // total in middle
+      // donut hole + total in the middle
+      setFill([250, 251, 254]);
+      doc.circle(donutCx, donutCy, donutR * 0.55, "F");
       setText([20, 20, 20]);
       doc.setFont("helvetica", "bold");
       const totalLabel = pdfPrice(totalRev);
       fitFont(totalLabel, donutR * 0.55 * 2 - 8, 11);
-      const tw = doc.getTextWidth(totalLabel);
-      doc.text(totalLabel, donutCx - tw / 2, donutCy);
+      doc.text(totalLabel, donutCx, donutCy, { align: "center" });
       setText(C.gray);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7);
-      const totW = doc.getTextWidth("TOTAL");
-      doc.text("TOTAL", donutCx - totW / 2, donutCy + 10);
-      // Legend on right half
-      const legendX = aX + panelW / 2 + 14;
-      let legY = y + 56;
-      const legendItem = (
-        color: [number, number, number],
-        name: string,
-        value: number,
-      ) => {
-        setFill(color);
-        doc.roundedRect(legendX, legY - 8, 10, 10, 2, 2, "F");
-        setText([20, 20, 20]);
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(9);
-        doc.text(name, legendX + 16, legY);
+      doc.text("TOTAL", donutCx, donutCy + 10, { align: "center" });
+      // Legend — every section, two lines each when they fit, else one
+      const legendX = aX + panelW / 2 - 2;
+      const legendW = aX + panelW - 8 - (legendX + 14);
+      const roomy = sections.length <= 4;
+      const legStep = roomy
+        ? 34
+        : Math.min(22, (panelH - 44) / Math.max(1, sections.length));
+      let legY = y + (roomy ? 52 : 42);
+      if (sections.length === 0) {
         setText(C.gray);
-        doc.setFont("helvetica", "normal");
-        const pct = totalRev > 0 ? Math.round((value / totalRev) * 100) : 0;
-        const legendTxt = `${pdfPrice(value)}  ·  ${pct}%`;
-        fitFont(legendTxt, aX + panelW - 8 - (legendX + 16), 8);
-        doc.text(legendTxt, legendX + 16, legY + 12);
-        legY += 36;
-      };
-      legendItem(C.blue, "Tickets", ticketsRev);
-      legendItem(C.orange, "Stalls", stallsRev);
+        doc.setFontSize(8);
+        doc.text("No sections set up yet.", legendX, legY);
+      }
+      for (const s of sections) {
+        setFill(colorOf(s.key));
+        doc.roundedRect(legendX, legY - 8, 9, 9, 2, 2, "F");
+        const share = `${pdfPrice(s.revenue)}  ·  ${pct(s.revenue, totalRev)}%`;
+        if (roomy) {
+          setText([20, 20, 20]);
+          doc.setFont("helvetica", "bold");
+          fitFont(s.label, legendW, 9);
+          doc.text(s.label, legendX + 14, legY);
+          setText(C.gray);
+          doc.setFont("helvetica", "normal");
+          fitFont(share, legendW, 8);
+          doc.text(share, legendX + 14, legY + 12);
+        } else {
+          setText([20, 20, 20]);
+          doc.setFont("helvetica", "normal");
+          const one = `${s.label}  ${share}`;
+          fitFont(one, legendW, 8);
+          doc.text(one, legendX + 14, legY);
+        }
+        legY += legStep;
+      }
 
-      // -- Panel B: Sales Gauge (semicircle arc) --
+      // -- Panel B: how full each section is --
       const bX = margin + panelW + panelGap;
       setFill([250, 251, 254]);
       doc.setDrawColor(230, 232, 240);
@@ -1187,46 +1230,46 @@ export default function DashboardOverview({
       setText([20, 20, 20]);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(11);
-      doc.text("Capacity Utilisation", bX + 14, y + 20);
-      const pct = Math.max(0, Math.min(100, event.salesPercent ?? 0));
-      const gaugeCx = bX + panelW / 2;
-      const gaugeCy = y + panelH / 2 + 28;
-      const gaugeR = 64;
-      // Background arc (full half circle)
-      drawPieSlice(gaugeCx, gaugeCy, gaugeR, Math.PI, Math.PI, [230, 232, 240]);
-      // Filled arc up to pct
-      drawPieSlice(
-        gaugeCx,
-        gaugeCy,
-        gaugeR,
-        Math.PI,
-        (Math.PI * pct) / 100,
-        C.primary,
-      );
-      // Inner cutout for "ring" look
-      drawDonutHole(gaugeCx, gaugeCy, gaugeR * 0.6, [250, 251, 254]);
-      // Hide bottom half of donut hole (since gauge is only top semicircle)
-      setFill([250, 251, 254]);
-      doc.rect(gaugeCx - gaugeR - 4, gaugeCy, gaugeR * 2 + 8, gaugeR + 6, "F");
-      // Re-draw the baseline of the arc
-      doc.setDrawColor(230, 232, 240);
-      doc.line(gaugeCx - gaugeR, gaugeCy, gaugeCx + gaugeR, gaugeCy);
-      // Big % in center
-      setText(C.primary);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(28);
-      const pctLabel = `${pct}%`;
-      const pw = doc.getTextWidth(pctLabel);
-      doc.text(pctLabel, gaugeCx - pw / 2, gaugeCy - 8);
-      setText(C.gray);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      const subLabel = `${event.ticketsSold ?? 0} / ${
-        event.totalTickets ?? "Unlimited"
-      } sold`;
-      const sw = doc.getTextWidth(subLabel);
-      doc.text(subLabel, gaugeCx - sw / 2, gaugeCy + 16);
-
+      doc.text("How Full Each Section Is", bX + 14, y + 20);
+      const filled = sections.filter((s) => s.fill && s.fill.total > 0);
+      if (filled.length === 0) {
+        setText(C.gray);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.text(
+          "No section has a set capacity.",
+          bX + panelW / 2,
+          y + panelH / 2,
+          { align: "center" },
+        );
+      } else {
+        const step = Math.min(36, (panelH - 44) / filled.length);
+        let by = y + 44;
+        for (const s of filled) {
+          const f = s.fill!;
+          setText([20, 20, 20]);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(8.5);
+          doc.text(s.label, bX + 14, by);
+          setText(C.gray);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8);
+          doc.text(
+            `${f.used}/${f.total} ${f.unit}  ·  ${pct(f.used, f.total)}%`,
+            bX + panelW - 14,
+            by,
+            { align: "right" },
+          );
+          setFill([230, 232, 240]);
+          doc.roundedRect(bX + 14, by + 4, panelW - 28, 7, 3.5, 3.5, "F");
+          const w = ((panelW - 28) * Math.min(f.used, f.total)) / f.total;
+          if (w > 0) {
+            setFill(colorOf(s.key));
+            doc.roundedRect(bX + 14, by + 4, Math.max(7, w), 7, 3.5, 3.5, "F");
+          }
+          by += step;
+        }
+      }
       y += panelH + 24;
 
       // ===== HORIZONTAL STACKED REVENUE BAR =====
@@ -1238,22 +1281,17 @@ export default function DashboardOverview({
       const stackH = 22;
       setFill([235, 237, 244]);
       doc.roundedRect(margin, y, innerW, stackH, 4, 4, "F");
-      if (totalRev > 0) {
-        const tW = (innerW * ticketsRev) / totalRev;
-        const sW = innerW - tW;
-        setFill(C.blue);
-        doc.roundedRect(margin, y, tW, stackH, 4, 4, "F");
-        // Right segment (clip-feel by overlaying rect on the shared seam)
-        setFill(C.orange);
-        doc.roundedRect(margin + tW, y, sW, stackH, 4, 4, "F");
-        // Inline labels
+      let sx = margin;
+      for (const s of earning) {
+        const w = (innerW * s.revenue) / totalRev;
+        setFill(colorOf(s.key));
+        doc.roundedRect(sx, y, w, stackH, 4, 4, "F");
         setText(C.white);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9);
-        const tPct = Math.round((ticketsRev / totalRev) * 100);
-        const sPct = 100 - tPct;
-        if (tW > 50) doc.text(`Tickets ${tPct}%`, margin + 8, y + 14);
-        if (sW > 50) doc.text(`Stalls ${sPct}%`, margin + tW + 8, y + 14);
+        const lbl = `${s.label} ${pct(s.revenue, totalRev)}%`;
+        if (doc.getTextWidth(lbl) + 12 < w) doc.text(lbl, sx + 8, y + 14);
+        sx += w;
       }
       y += stackH + 24;
 
@@ -1362,26 +1400,52 @@ export default function DashboardOverview({
           "End Date",
           event.endDate ? new Date(event.endDate).toLocaleDateString() : "—",
         ],
+        [
+          "Visitor ticketing",
+          report.hasVisitorTicketing ? "Yes" : "Not used for this event",
+        ],
       ]);
 
-      dataTable("Ticket Metrics", C.blue, [
-        ["Tickets Sold", String(event.ticketsSold ?? 0)],
-        ["Total Tickets", String(event.totalTickets ?? "Unlimited")],
-        ["Sales Progress", `${event.salesPercent ?? 0}%`],
-        ["Tickets Revenue", pdfPrice(event.ticketsRevenue ?? 0)],
-      ]);
-
-      dataTable("Stall Metrics", C.orange, [
-        ["Stalls Booked", String(event.stallsBooked ?? 0)],
-        ["Pending Stalls", String(event.stallsPending ?? 0)],
-        ["Stalls Revenue", pdfPrice(event.stallsRevenue ?? 0)],
-      ]);
+      // One table per section with everything it sells. The partial
+      // fallback has no per-item detail, so it relies on the summary below.
+      if (!report.partial) {
+        for (const s of sections) {
+          y = drawSectionTable(doc, s, {
+            x: margin,
+            y: y + 10,
+            width: innerW,
+            money: pdfPrice,
+            pageBreak,
+          });
+          // Only for events with a member rate on some sellable space.
+          if (s.key === "exhibitors" && memberSplit) {
+            y = pageBreak(y + 22, MEMBER_SPLIT_PDF_HEIGHT);
+            y = drawMemberSplitPdf(doc, memberSplit, {
+              x: margin,
+              y: y === margin ? y + 12 : y,
+              width: innerW,
+              money: pdfPrice,
+            });
+          }
+        }
+      }
 
       dataTable("Revenue Summary", C.green, [
-        ["Tickets Revenue", pdfPrice(event.ticketsRevenue ?? 0)],
-        ["Stalls Revenue", pdfPrice(event.stallsRevenue ?? 0)],
-        ["Total Revenue", pdfPrice(event.revenue ?? 0)],
+        ...sections.map((s): [string, string] => [s.label, pdfPrice(s.revenue)]),
+        ["Total Revenue", pdfPrice(report.totalRevenue)],
       ]);
+      y = pageBreak(y + 8, 30);
+      setText(C.gray);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.text(
+        doc.splitTextToSize(
+          "Counts money received: tickets with payment confirmed, exhibitor and round-table bookings marked paid, confirmed sponsors, and paid workshops, scheduled slots and speaker fees. Exhibitor revenue includes refundable security deposits.",
+          innerW,
+        ),
+        margin,
+        y + 6,
+      );
 
       // ===== FOOTER on every page =====
       const pageCount = doc.getNumberOfPages();
