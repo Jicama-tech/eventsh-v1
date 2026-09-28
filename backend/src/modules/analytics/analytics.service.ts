@@ -96,6 +96,85 @@ export class AnalyticsService {
     return Object.values(v).flat() as any[];
   }
 
+  /**
+   * Supplier money for one event: what's actually been paid out, plus
+   * what's still owed on quotes the organizer accepted.
+   */
+  private supplierCosts(reqs: any[]) {
+    const liveQuotes = reqs.filter(
+      (r) => !["Rejected", "Cancelled"].includes(String(r.status)),
+    );
+    const paid = liveQuotes.reduce(
+      (s, r) => s + (Number(r.payment?.amountPaid) || 0),
+      0,
+    );
+    const outstanding = liveQuotes.reduce((s, r) => {
+      // A settled negotiation replaces the original quote as what's owed.
+      const agreed = Number(r.agreedTotal);
+      const total =
+        Number.isFinite(agreed) && agreed > 0
+          ? agreed
+          : Number(r.quotationTotal) || 0;
+      const paidSoFar = Number(r.payment?.amountPaid) || 0;
+      const balance =
+        r.payment?.balanceDue != null
+          ? Number(r.payment.balanceDue)
+          : Math.max(0, total - paidSoFar);
+      // Only quotes the organizer accepted represent a real commitment.
+      return ["Approved", "Partially Paid", "Paid", "Completed"].includes(
+        String(r.status),
+      )
+        ? s + balance
+        : s;
+    }, 0);
+    return { paid, outstanding, count: liveQuotes.length };
+  }
+
+  /**
+   * EventSH's fee for one event — the same basis billing-payments charges
+   * on: booked spaces, round tables with any seat taken, seats, and
+   * confirmed speakers, each at its platform rate.
+   */
+  private platformFeeFor(
+    event: any,
+    speakers: any[],
+    rates: { stallRate: number; roundTableRate: number; chairRate: number; speakerRate: number },
+  ) {
+    const tables = this.flatten(event.venueTables);
+    const roundsLayout = this.flatten(event.venueRoundTables);
+    const lines = [
+      {
+        label: "Spaces booked",
+        count: tables.filter((t: any) => !!t?.isBooked).length,
+        rate: rates.stallRate,
+      },
+      {
+        label: "Round tables booked",
+        count: roundsLayout.filter(
+          (rt: any) =>
+            !!rt?.isFullyBooked ||
+            (Array.isArray(rt?.bookedChairs) && rt.bookedChairs.length > 0),
+        ).length,
+        rate: rates.roundTableRate,
+      },
+      {
+        label: "Round-table seats booked",
+        count: roundsLayout.reduce(
+          (acc: number, rt: any) =>
+            acc + (Array.isArray(rt?.bookedChairs) ? rt.bookedChairs.length : 0),
+          0,
+        ),
+        rate: rates.chairRate,
+      },
+      {
+        label: "Speakers confirmed",
+        count: speakers.filter((s) => String(s.status) === "Confirmed").length,
+        rate: rates.speakerRate,
+      },
+    ].map((l) => ({ ...l, amount: l.count * l.rate }));
+    return { total: lines.reduce((a, l) => a + l.amount, 0), lines };
+  }
+
   /** Platform rates, with the same defaults billing-payments falls back to. */
   private async loadRates() {
     const doc = (await this.ratesModel.findOne().lean()) as any;
@@ -250,57 +329,11 @@ export class AnalyticsService {
       .reduce((s, r) => s + (Number(r.amount) || 0), 0);
 
     // ── Costs ──────────────────────────────────────────────────────
-    // Suppliers: what's actually been paid out, plus what's still owed on
-    // approved quotes.
-    const liveQuotes = (supplierReqs as any[]).filter(
-      (r) => !["Rejected", "Cancelled"].includes(String(r.status)),
-    );
-    const supplierPaid = liveQuotes.reduce(
-      (s, r) => s + (Number(r.payment?.amountPaid) || 0),
-      0,
-    );
-    const supplierOutstanding = liveQuotes.reduce((s, r) => {
-      // A settled negotiation replaces the original quote as what's owed.
-      const agreed = Number(r.agreedTotal);
-      const total =
-        Number.isFinite(agreed) && agreed > 0
-          ? agreed
-          : Number(r.quotationTotal) || 0;
-      const paid = Number(r.payment?.amountPaid) || 0;
-      const balance =
-        r.payment?.balanceDue != null
-          ? Number(r.payment.balanceDue)
-          : Math.max(0, total - paid);
-      // Only quotes the organizer accepted represent a real commitment.
-      return ["Approved", "Partially Paid", "Paid", "Completed"].includes(
-        String(r.status),
-      )
-        ? s + balance
-        : s;
-    }, 0);
-
-    // Platform fees: same basis billing-payments charges on.
-    const tables = this.flatten(event.venueTables);
-    const roundsLayout = this.flatten(event.venueRoundTables);
-    const stallsSold = tables.filter((t: any) => !!t?.isBooked).length;
-    const tablesBooked = roundsLayout.filter(
-      (rt: any) =>
-        !!rt?.isFullyBooked ||
-        (Array.isArray(rt?.bookedChairs) && rt.bookedChairs.length > 0),
-    ).length;
-    const chairsBooked = roundsLayout.reduce(
-      (acc: number, rt: any) =>
-        acc + (Array.isArray(rt?.bookedChairs) ? rt.bookedChairs.length : 0),
-      0,
-    );
-    const speakersBooked = (speakers as any[]).filter(
-      (s) => String(s.status) === "Confirmed",
-    ).length;
-    const platformFee =
-      stallsSold * rates.stallRate +
-      tablesBooked * rates.roundTableRate +
-      chairsBooked * rates.chairRate +
-      speakersBooked * rates.speakerRate;
+    const suppliers = this.supplierCosts(supplierReqs as any[]);
+    const supplierPaid = suppliers.paid;
+    const supplierOutstanding = suppliers.outstanding;
+    const fee = this.platformFeeFor(event, speakers as any[], rates);
+    const platformFee = fee.total;
 
     const revenue: PnlLine[] = [
       {
@@ -369,7 +402,7 @@ export class AnalyticsService {
         key: "suppliers",
         label: "Suppliers (paid out)",
         amount: supplierPaid,
-        count: liveQuotes.length,
+        count: suppliers.count,
         note:
           supplierOutstanding > 0 ? `${supplierOutstanding} still owed` : undefined,
       },
@@ -383,7 +416,7 @@ export class AnalyticsService {
         key: "platformFee",
         label: "EventSH platform fee",
         amount: platformFee,
-        count: stallsSold + tablesBooked + chairsBooked + speakersBooked,
+        count: fee.lines.reduce((a, l) => a + l.count, 0),
       },
     ];
 
@@ -437,7 +470,8 @@ export class AnalyticsService {
    * templates, are left out — so an event with no visitor ticketing has no
    * visitors section, and round tables switched on with no table types set
    * up don't appear either. Also carries the event's logged expenses and
-   * what's left of the revenue after them.
+   * the net profit after every deduction: refundable deposits, expenses,
+   * supplier payouts and the EventSH platform fee.
    *
    * Only money actually received counts — the same rules as the dashboard's
    * Total Revenue and the P&L: tickets with payment confirmed, stalls and
@@ -466,6 +500,7 @@ export class AnalyticsService {
       speakers,
       sponsors,
       expenses,
+      supplierReqs,
     ] =
       (await Promise.all([
         this.ticketModel
@@ -505,7 +540,12 @@ export class AnalyticsService {
           .select("title category amount spentAt paidTo status")
           .sort({ spentAt: -1 })
           .lean(),
+        this.supplierRequestModel
+          .find(byEvent)
+          .select("quotationTotal agreedTotal payment status")
+          .lean(),
       ])) as any[][];
+    const rates = await this.loadRates();
 
     const n = (v: any) => Number(v) || 0;
     const optNum = (v: any): number | null =>
@@ -1070,6 +1110,28 @@ export class AnalyticsService {
     const totalRevenue = sum(sections, (s) => s.revenue);
     const expensesTotal = sum(approved, (e) => n(e.amount));
 
+    // ── Net profit ─────────────────────────────────────────────────
+    // Everything that comes off the money received. Deposits on paid
+    // stalls go back to the exhibitors (a forfeited one is kept, so it
+    // stays); supplier payouts and the platform fee use the P&L's rules.
+    const depositsHeld = sum(
+      stalls.filter(
+        (s) =>
+          String(s.paymentStatus) === "Paid" &&
+          !["Cancelled", "Forfeited"].includes(String(s.status)),
+      ),
+      (s) => n(s.depositTotal),
+    );
+    const supplierTotals = this.supplierCosts(supplierReqs);
+    const fee = this.platformFeeFor(event, speakers, rates);
+    const deductions = [
+      { key: "deposits", label: "Security deposits (refundable)", amount: depositsHeld },
+      { key: "expenses", label: "Expenses (approved)", amount: expensesTotal },
+      { key: "suppliers", label: "Supplier payouts", amount: supplierTotals.paid },
+      { key: "platformFee", label: "EventSH platform fee", amount: fee.total },
+    ];
+    const netProfit = totalRevenue - sum(deductions, (d) => d.amount);
+
     return {
       eventId,
       title: event.title,
@@ -1092,7 +1154,20 @@ export class AnalyticsService {
           status: statusOf(e),
         })),
       },
-      afterExpenses: totalRevenue - expensesTotal,
+      profit: {
+        revenue: totalRevenue,
+        deductions,
+        netProfit,
+        // On revenue net of deposits (they were never income), as the P&L
+        // does. Meaningless without revenue — null rather than 0.
+        margin:
+          totalRevenue - depositsHeld > 0
+            ? Math.round((netProfit / (totalRevenue - depositsHeld)) * 1000) / 10
+            : null,
+        // Owed on accepted quotes but not paid yet — not taken off.
+        supplierOutstanding: supplierTotals.outstanding,
+        platformFeeLines: fee.lines.filter((l) => l.count > 0),
+      },
     };
   }
 
