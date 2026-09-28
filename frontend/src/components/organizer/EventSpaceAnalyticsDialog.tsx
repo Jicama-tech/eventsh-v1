@@ -30,6 +30,8 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { ExhibitorDetailDialog } from "./ExhibitorDetailDialog";
+import { useCountry } from "@/hooks/useCountry";
+import { useCurrency } from "@/hooks/useCurrencyhook";
 
 const apiURL = __API_URL__;
 
@@ -64,6 +66,28 @@ const emailOf = (stall: any): string =>
   stall?.shopkeeperId?.email || stall?.shopkeeperId?.businessEmail || "";
 const phoneOf = (stall: any): string =>
   stall?.shopkeeperId?.phone || stall?.shopkeeperId?.whatsappNumber || "";
+
+// Optional numeric price field: unset / blank means "no value" (a template
+// without a member rate stores memberPrice as undefined).
+const num = (v: any): number | null => {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+interface SplitGroup {
+  bookings: number;
+  spaces: number;
+  rent: number;
+  addOns: number;
+  deposit: number;
+}
+
+interface MemberSplit {
+  members: SplitGroup;
+  nonMembers: SplitGroup;
+  memberStallIds: Set<string>;
+}
 
 // Trigger a client-side file download from a Blob.
 function downloadBlob(blob: Blob, filename: string) {
@@ -120,6 +144,8 @@ export function EventSpaceAnalyticsDialog({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [stallForDetail, setStallForDetail] = useState<any>(null);
   const detailRef = useRef<HTMLDivElement>(null);
+  const { country } = useCountry();
+  const { config: currency } = useCurrency(country);
 
   const eventId = event?._id;
 
@@ -236,6 +262,127 @@ export function EventSpaceAnalyticsDialog({
   }, [detail, stalls]);
 
   const selected = templates.find((t) => t.id === selectedId) || null;
+
+  // Members vs non-members across the sold bookings. Null when no sellable
+  // space has a member rate — everyone pays the same, so there is no split.
+  //
+  // A booking doesn't store which tier it was charged, so it's read off the
+  // price: a space charged its member rate (or member deposit) where that
+  // differs from the regular one is a member booking; charged the regular
+  // rate, a non-member one. When the price can't tell (coupon, same rate on
+  // both tiers, price edited since), the vendor's current membership decides.
+  const memberSplit: MemberSplit | null = useMemo(() => {
+    if (!detail) return null;
+    const sellableIds = new Set(templates.map((t) => t.id));
+    const tplById = new Map<string, any>(
+      (Array.isArray(detail.tableTemplates) ? detail.tableTemplates : []).map(
+        (t: any) => [String(t.id), t],
+      ),
+    );
+    const placed = flattenPlaced(detail.venueTables).filter((p) =>
+      sellableIds.has(String(p.id)),
+    );
+    const placedByPos = new Map<string, any>(
+      placed.map((p) => [p.positionId, p]),
+    );
+
+    const hasMemberRate = (x: any) =>
+      num(x?.memberPrice) != null || num(x?.memberDepositPrice) != null;
+    const hasMemberPricing =
+      [...sellableIds].some((id) => hasMemberRate(tplById.get(id))) ||
+      placed.some(hasMemberRate);
+    if (!hasMemberPricing) return null;
+
+    // Same fallback as the booking flow: placed space first, then template.
+    const tiersOf = (p: any) => {
+      const tpl = tplById.get(String(p?.id));
+      return {
+        memberPrice: num(p?.memberPrice) ?? num(tpl?.memberPrice),
+        regularPrice: num(p?.tablePrice) ?? num(tpl?.tablePrice) ?? num(tpl?.price),
+        memberDeposit: num(p?.memberDepositPrice) ?? num(tpl?.memberDepositPrice),
+        regularDeposit: num(p?.depositPrice) ?? num(tpl?.depositPrice),
+      };
+    };
+    const bookedAsMember = (s: any): boolean => {
+      let regular = false;
+      for (const t of s.selectedTables || []) {
+        const p = placedByPos.get(t?.positionId);
+        if (!p) continue;
+        const tier = tiersOf(p);
+        const price = num(t.price);
+        const dep = num(t.depositAmount);
+        if (
+          price != null &&
+          tier.memberPrice != null &&
+          tier.regularPrice != null &&
+          tier.memberPrice !== tier.regularPrice
+        ) {
+          if (price === tier.memberPrice) return true;
+          if (price === tier.regularPrice) regular = true;
+        }
+        if (
+          dep != null &&
+          tier.memberDeposit != null &&
+          tier.regularDeposit != null &&
+          tier.memberDeposit !== tier.regularDeposit
+        ) {
+          if (dep === tier.memberDeposit) return true;
+          if (dep === tier.regularDeposit) regular = true;
+        }
+      }
+      return regular ? false : !!s?.shopkeeperId?.isMember;
+    };
+
+    // One entry per sold booking, with the spaces it holds across templates.
+    const byStall = new Map<string, { stall: any; spaces: number }>();
+    for (const t of templates) {
+      for (const b of t.brands) {
+        const key = String(b.stall?._id);
+        const e = byStall.get(key);
+        if (e) e.spaces += b.spaces;
+        else byStall.set(key, { stall: b.stall, spaces: b.spaces });
+      }
+    }
+
+    const empty = (): SplitGroup => ({
+      bookings: 0,
+      spaces: 0,
+      rent: 0,
+      addOns: 0,
+      deposit: 0,
+    });
+    const members = empty();
+    const nonMembers = empty();
+    const memberStallIds = new Set<string>();
+    for (const [key, { stall: s, spaces }] of byStall) {
+      const tables = s.selectedTables || [];
+      const rent =
+        Number(s.tablesTotal) ||
+        tables.reduce((a: number, t: any) => a + (Number(t.price) || 0), 0);
+      const deposit =
+        Number(s.depositTotal) ||
+        tables.reduce(
+          (a: number, t: any) => a + (Number(t.depositAmount) || 0),
+          0,
+        );
+      const addOns =
+        Number(s.addOnsTotal) ||
+        (s.selectedAddOns || []).reduce(
+          (a: number, x: any) =>
+            a + (Number(x.price) || 0) * (Number(x.quantity) || 1),
+          0,
+        );
+      const isMember = bookedAsMember(s);
+      if (isMember) memberStallIds.add(key);
+      const g = isMember ? members : nonMembers;
+      g.bookings += 1;
+      g.spaces += spaces;
+      g.rent += rent;
+      g.addOns += addOns;
+      g.deposit += deposit;
+    }
+    return { members, nonMembers, memberStallIds };
+  }, [detail, templates]);
 
   const eventTitle = event?.title || event?.name || "Event";
   const safeName = String(eventTitle).replace(/[^a-z0-9]/gi, "_");
@@ -568,13 +715,125 @@ export function EventSpaceAnalyticsDialog({
     });
     y += panelH + 26;
 
-    // ===== PER-TEMPLATE DETAIL =====
     const ensure = (need: number) => {
       if (y + need > pageH - margin) {
         doc.addPage();
         y = margin + 6;
       }
     };
+
+    // ===== MEMBERS VS NON-MEMBERS =====
+    // Only for events with a member rate on some sellable space.
+    // Helvetica has no ₹ glyph, so amounts carry the ISO code.
+    if (memberSplit) {
+      const m = memberSplit.members;
+      const n = memberSplit.nonMembers;
+      const moneyPdf = (v: number) =>
+        `${currency.code} ${v.toLocaleString(currency.locale, { maximumFractionDigits: 2 })}`;
+      const business = (g: SplitGroup) => g.rent + g.addOns;
+      const billed = (g: SplitGroup) => g.rent + g.addOns + g.deposit;
+
+      ensure(290);
+      text(C.ink);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.text("Members vs non-members", margin, y);
+      text(C.gray);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      const note = doc.splitTextToSize(
+        "Sold bookings, split by the rate they booked at. Business is space rent plus add-ons; security deposits are refundable, so they are shown on their own.",
+        innerW,
+      );
+      doc.text(note, margin, y + 14);
+      y += 14 + note.length * 11 + 6;
+
+      const colM = margin + innerW * 0.6;
+      const colN = margin + innerW * 0.8;
+      const colT = margin + innerW - 12;
+
+      // header strip with a colour key per group
+      fill(C.light);
+      doc.roundedRect(margin, y, innerW, 22, 5, 5, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      const headY = y + 14;
+      const keyedHead = (label: string, x: number, color: RGB) => {
+        text(C.gray);
+        doc.text(label, x, headY, { align: "right" });
+        fill(color);
+        doc.circle(x - doc.getTextWidth(label) - 7, headY - 3, 3, "F");
+      };
+      keyedHead("MEMBERS", colM, C.purple);
+      keyedHead("NON-MEMBERS", colN, C.blue);
+      text(C.gray);
+      doc.text("TOTAL", colT, headY, { align: "right" });
+      y += 22;
+
+      const rows: { label: string; m: string; n: string; t: string; key?: boolean }[] = [
+        { label: "Bookings", m: String(m.bookings), n: String(n.bookings), t: String(m.bookings + n.bookings) },
+        { label: "Spaces booked", m: String(m.spaces), n: String(n.spaces), t: String(m.spaces + n.spaces) },
+        { label: "Space rent", m: moneyPdf(m.rent), n: moneyPdf(n.rent), t: moneyPdf(m.rent + n.rent) },
+        { label: "Add-ons", m: moneyPdf(m.addOns), n: moneyPdf(n.addOns), t: moneyPdf(m.addOns + n.addOns) },
+        { label: "Business (rent + add-ons)", m: moneyPdf(business(m)), n: moneyPdf(business(n)), t: moneyPdf(business(m) + business(n)), key: true },
+        { label: "Deposits taken", m: moneyPdf(m.deposit), n: moneyPdf(n.deposit), t: moneyPdf(m.deposit + n.deposit), key: true },
+        { label: "Total billed", m: moneyPdf(billed(m)), n: moneyPdf(billed(n)), t: moneyPdf(billed(m) + billed(n)) },
+      ];
+      const rowH = 20;
+      rows.forEach((r, idx) => {
+        if (idx % 2 === 1) {
+          fill([249, 250, 251]);
+          doc.rect(margin, y, innerW, rowH, "F");
+        }
+        const ty = y + 13.5;
+        text(C.ink);
+        doc.setFont("helvetica", r.key ? "bold" : "normal");
+        doc.setFontSize(9);
+        doc.text(r.label, margin + 12, ty);
+        doc.text(r.m, colM, ty, { align: "right" });
+        doc.text(r.n, colN, ty, { align: "right" });
+        doc.setFont("helvetica", "bold");
+        doc.text(r.t, colT, ty, { align: "right" });
+        y += rowH;
+      });
+      draw([232, 234, 240]);
+      doc.line(margin, y, margin + innerW, y);
+      y += 22;
+
+      // Share bars: members' slice (purple) over the non-member track (blue).
+      const shareBar = (label: string, a: number, b: number) => {
+        const total = a + b;
+        text(C.ink);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.text(label, margin, y);
+        text(C.gray);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        const pa = total > 0 ? Math.round((a / total) * 100) : 0;
+        doc.text(
+          total > 0
+            ? `Members ${pa}%  ·  Non-members ${100 - pa}%`
+            : "Nothing taken yet",
+          margin + innerW,
+          y,
+          { align: "right" },
+        );
+        y += 7;
+        fill(total > 0 ? C.blue : C.track);
+        doc.roundedRect(margin, y, innerW, 10, 5, 5, "F");
+        if (total > 0 && a > 0) {
+          fill(C.purple);
+          doc.roundedRect(margin, y, Math.max(10, (innerW * a) / total), 10, 5, 5, "F");
+        }
+        y += 26;
+      };
+      shareBar("Share of business", business(m), business(n));
+      shareBar("Share of deposits", m.deposit, n.deposit);
+      y += 4;
+    }
+
+    // ===== PER-TEMPLATE DETAIL =====
 
     text(C.ink);
     doc.setFont("helvetica", "bold");
@@ -653,11 +912,28 @@ export function EventSpaceAnalyticsDialog({
         text(C.ink);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9);
-        doc.text(
-          doc.splitTextToSize(b.name, innerW * 0.55)[0],
-          cBrand,
-          y,
+        const isMemberBrand = !!memberSplit?.memberStallIds.has(
+          String(b.stall?._id),
         );
+        // leave room for the member tag before the SPACES column
+        const brandTxt = doc.splitTextToSize(
+          b.name,
+          innerW * (isMemberBrand ? 0.48 : 0.55),
+        )[0];
+        doc.text(brandTxt, cBrand, y);
+        if (isMemberBrand) {
+          const tagX = cBrand + doc.getTextWidth(brandTxt) + 6;
+          doc.setFontSize(6.5);
+          const tagW = doc.getTextWidth("MEMBER") + 8;
+          doc.setFillColor(
+            Math.round(C.purple[0] + (255 - C.purple[0]) * 0.85),
+            Math.round(C.purple[1] + (255 - C.purple[1]) * 0.85),
+            Math.round(C.purple[2] + (255 - C.purple[2]) * 0.85),
+          );
+          doc.roundedRect(tagX, y - 7, tagW, 10, 5, 5, "F");
+          text(C.purple);
+          doc.text("MEMBER", tagX + 4, y + 0.5);
+        }
         const email = emailOf(b.stall);
         if (email) {
           text(C.gray);
