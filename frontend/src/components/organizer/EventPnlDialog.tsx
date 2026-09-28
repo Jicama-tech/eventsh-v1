@@ -67,6 +67,14 @@ interface Pnl {
     netProfit: number;
     margin: number | null;
   };
+  /** Exhibitor deposits — collected but refundable, already taken out of
+   * revenue by the negative "deposits" line. */
+  deposits?: {
+    collected: number;
+    toReturn: number;
+    returned: number;
+    count: number;
+  };
   expected: {
     exhibitorOutstanding: number;
     speakerOutstanding: number;
@@ -193,6 +201,16 @@ export default function EventPnlDialog({
           pdf.text(`${l.label}  (${l.count})`, left, y);
           pdf.text(moneyPdf(l.amount, cur), right, y, { align: "right" });
           y += 16;
+          if (l.key === "deposits" && pnl.deposits) {
+            pdf.setFontSize(8).setTextColor(110);
+            pdf.text(
+              `${moneyPdf(pnl.deposits.toReturn, cur)} still to return  ·  ${moneyPdf(pnl.deposits.returned, cur)} returned`,
+              left + 10,
+              y - 4,
+            );
+            pdf.setFontSize(10).setTextColor(0);
+            y += 10;
+          }
         }
         pdf.setFont("helvetica", "bold");
         pdf.text("Total", left, y);
@@ -372,8 +390,19 @@ export default function EventPnlDialog({
                           <span className="ml-1 text-xs text-muted-foreground">
                             ({r.count})
                           </span>
+                          {r.key === "deposits" && pnl.deposits && (
+                            <span className="block text-[11px] text-muted-foreground">
+                              {money(pnl.deposits.toReturn, cur)} still to return
+                              {" · "}
+                              {money(pnl.deposits.returned, cur)} returned
+                            </span>
+                          )}
                         </span>
-                        <span className="shrink-0 font-medium">
+                        <span
+                          className={`shrink-0 font-medium ${
+                            r.amount < 0 ? "text-red-600" : ""
+                          }`}
+                        >
                           {money(r.amount, cur)}
                         </span>
                       </li>
