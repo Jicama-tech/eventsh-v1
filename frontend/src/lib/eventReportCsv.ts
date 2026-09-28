@@ -154,13 +154,40 @@ export function buildEventReportCsv(
   rows.push(["REVENUE SUMMARY"]);
   for (const s of report.sections) rows.push([s.label, money(s.revenue)]);
   rows.push(["Total Revenue", money(report.totalRevenue)]);
-  if (ex && ex.total > 0) {
-    rows.push(["Less: expenses", money(-ex.total)]);
-    rows.push(["Revenue after expenses", money(report.afterExpenses ?? report.totalRevenue - ex.total)]);
-  }
   blank();
+
+  // Revenue less every deduction.
+  const p = report.profit;
+  if (p) {
+    rows.push(["NET PROFIT"]);
+    rows.push(["Total Revenue", money(p.revenue)]);
+    for (const d of p.deductions) rows.push([`Less: ${d.label}`, money(-d.amount)]);
+    rows.push([p.netProfit >= 0 ? "Net Profit" : "Net Loss", money(p.netProfit)]);
+    rows.push(["Margin", p.margin != null ? `${p.margin}%` : ""]);
+    blank();
+    if (p.platformFeeLines.length > 0) {
+      rows.push(["EVENTSH PLATFORM FEE"]);
+      rows.push(["Charged on", "Count", "Rate", "Amount"]);
+      for (const l of p.platformFeeLines) {
+        rows.push([l.label, l.count, money(l.rate), money(l.amount)]);
+      }
+      rows.push([
+        "Total platform fee",
+        "",
+        "",
+        money(p.platformFeeLines.reduce((a, l) => a + l.amount, 0)),
+      ]);
+      blank();
+    }
+    if (ex && ex.pending > 0) {
+      rows.push(["Expenses awaiting approval (not taken off)", money(ex.pending)]);
+    }
+    if (p.supplierOutstanding > 0) {
+      rows.push(["Still owed to suppliers (not taken off until paid)", money(p.supplierOutstanding)]);
+    }
+  }
   rows.push([
-    "Counts money received: tickets with payment confirmed, exhibitor and round-table bookings marked paid, confirmed sponsors, and paid workshops, scheduled slots and speaker fees. Exhibitor revenue includes refundable security deposits. Only approved expenses are taken off.",
+    "Counts money received: tickets with payment confirmed, exhibitor and round-table bookings marked paid, confirmed sponsors, and paid workshops, scheduled slots and speaker fees. Security deposits are refundable, so they come off revenue; only approved expenses are taken off.",
   ]);
 
   // BOM so Excel reads the file as UTF-8 (names with accents, "—").
