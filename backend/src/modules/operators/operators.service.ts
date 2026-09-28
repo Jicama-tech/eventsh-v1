@@ -294,7 +294,12 @@ export class OperatorsService {
           {
             referralCode: normalized,
             eventId: new Types.ObjectId(String(eventId)),
-            organizerId: new Types.ObjectId(String(organizerId)),
+            // Stored as whatever event.organizer held when the agent was
+            // added — a string on most events (the schema path is Mixed, so
+            // nothing casts it) — so match either form.
+            organizerId: {
+              $in: [String(organizerId), new Types.ObjectId(String(organizerId))],
+            },
             isActive: true,
             // 0 = no cap; otherwise only while uses remain.
             $expr: {
