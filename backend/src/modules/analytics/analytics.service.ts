@@ -429,13 +429,15 @@ export class AnalyticsService {
     };
   }
 
-  /** P&L for every event an organizer runs, newest first. */
   /**
    * Section-by-section report for one event: for every section the event
    * uses (visitors, exhibitors, round tables, workshops, scheduled spaces,
    * speakers, sponsors), each thing it sells, how much of it went and what
-   * it brought in. Sections the event doesn't use are left out, so an event
-   * with no visitor ticketing has no visitors section.
+   * it brought in. Sections the event doesn't use, or that have no sellable
+   * templates, are left out — so an event with no visitor ticketing has no
+   * visitors section, and round tables switched on with no table types set
+   * up don't appear either. Also carries the event's logged expenses and
+   * what's left of the revenue after them.
    *
    * Only money actually received counts — the same rules as the dashboard's
    * Total Revenue and the P&L: tickets with payment confirmed, stalls and
@@ -455,7 +457,16 @@ export class AnalyticsService {
       .lean()) as any;
     if (!event) throw new NotFoundException("Event not found");
 
-    const [tickets, stalls, rounds, workshops, scheduled, speakers, sponsors] =
+    const [
+      tickets,
+      stalls,
+      rounds,
+      workshops,
+      scheduled,
+      speakers,
+      sponsors,
+      expenses,
+    ] =
       (await Promise.all([
         this.ticketModel
           .find(byEvent)
@@ -489,6 +500,11 @@ export class AnalyticsService {
           .find(byEvent)
           .select("sponsorTypeId sponsorTypeName amount status")
           .lean(),
+        this.expenseModel
+          .find(byEvent)
+          .select("title category amount spentAt paidTo status")
+          .sort({ spentAt: -1 })
+          .lean(),
       ])) as any[][];
 
     const n = (v: any) => Number(v) || 0;
@@ -513,10 +529,13 @@ export class AnalyticsService {
         : { price: vals.size ? ([...vals][0] as number) : null, priceVaries: false };
     };
     const features = event.features || {};
-    // Same rule as the Event Sections switches: explicit on/off wins, unset
-    // means "on if it has anything set up". Real bookings always show.
-    const uses = (flag: any, hasSetup: boolean, hasBookings: boolean) =>
-      hasBookings || flag === true || (flag !== false && hasSetup);
+    // A section is in the report only when it has something to sell — at
+    // least one sellable template (a switched-on section with nothing set
+    // up is left out), and not switched off. Paid bookings always keep it
+    // in, even if their templates were deleted since, so no money drops
+    // out of the total.
+    const uses = (flag: any, hasSellables: boolean, hasBookings: boolean) =>
+      hasBookings || (flag !== false && hasSellables);
     // Items that sold something but no longer match a sellable (renamed or
     // deleted since) are kept under their booked name.
     const bucket = () => {
@@ -639,7 +658,7 @@ export class AnalyticsService {
     const paidStalls = stalls.filter(
       (s) => String(s.paymentStatus) === "Paid" && String(s.status) !== "Cancelled",
     );
-    if (uses(features.hasStalls, placedSpaces.length > 0, paidStalls.length > 0)) {
+    if (uses(features.hasStalls, spaceTpls.length > 0, paidStalls.length > 0)) {
       const placedByPos = new Map<string, any>(
         placedSpaces.map((p: any) => [String(p.positionId), p]),
       );
@@ -736,7 +755,7 @@ export class AnalyticsService {
       (p: any) => p?.forSale !== false,
     );
     const paidRounds = rounds.filter((r) => String(r.paymentStatus) === "Paid");
-    if (uses(features.hasRoundTables, placedRts.length > 0, paidRounds.length > 0)) {
+    if (uses(features.hasRoundTables, rtTpls.length > 0, paidRounds.length > 0)) {
       const rtByPos = new Map<string, any>(
         placedRts.map((p: any) => [String(p.positionId), p]),
       );
@@ -807,7 +826,11 @@ export class AnalyticsService {
     const sessions: any[] = event.workshopSessions || [];
     const packages: any[] = event.workshopPackages || [];
     const paidWorkshops = workshops.filter((w) => String(w.paymentStatus) === "Paid");
-    if (uses(features.hasWorkshops, sessions.length > 0, paidWorkshops.length > 0)) {
+    if (uses(
+        features.hasWorkshops,
+        sessions.length + packages.length > 0,
+        paidWorkshops.length > 0,
+      )) {
       const line = (list: any[], kind: string, idOf: (w: any) => any) => {
         const sales = new Map<string, { sold: number; revenue: number }>();
         const other = bucket();
@@ -987,7 +1010,11 @@ export class AnalyticsService {
     // ── Sponsors ───────────────────────────────────────────────────
     const tiers: any[] = event.sponsorTypes || [];
     const confirmedSponsors = sponsors.filter((s) => String(s.status) === "Confirmed");
-    if (uses(features.hasSponsors, tiers.length > 0, confirmedSponsors.length > 0)) {
+    if (uses(
+        features.hasSponsors,
+        tiers.some((t) => t?.isActive !== false),
+        confirmedSponsors.length > 0,
+      )) {
       const other = bucket();
       const items: ReportItem[] = tiers
         .filter(
@@ -1024,15 +1051,52 @@ export class AnalyticsService {
       });
     }
 
+    // ── Expenses ───────────────────────────────────────────────────
+    // What the organizer logged as spent on the event (supplier payouts
+    // live in the supplier flow, not here). Same rule as the P&L: approved
+    // spend counts — older entries with no status were never gated, so they
+    // count too — pending is listed but not taken off, rejected is dropped.
+    const statusOf = (e: any) => String(e.status || "Approved");
+    const listed = expenses.filter((e) => statusOf(e) !== "Rejected");
+    const approved = listed.filter((e) => statusOf(e) === "Approved");
+    const byCategory = new Map<string, { category: string; amount: number; count: number }>();
+    for (const e of approved) {
+      const category = String(e.category || "Other");
+      const c = byCategory.get(category) || { category, amount: 0, count: 0 };
+      c.amount += n(e.amount);
+      c.count += 1;
+      byCategory.set(category, c);
+    }
+    const totalRevenue = sum(sections, (s) => s.revenue);
+    const expensesTotal = sum(approved, (e) => n(e.amount));
+
     return {
       eventId,
       title: event.title,
       hasVisitorTicketing: sections.some((s) => s.key === "visitors"),
-      totalRevenue: sum(sections, (s) => s.revenue),
+      totalRevenue,
       sections,
+      expenses: {
+        total: expensesTotal,
+        pending: sum(
+          listed.filter((e) => statusOf(e) === "Pending"),
+          (e) => n(e.amount),
+        ),
+        byCategory: [...byCategory.values()].sort((a, b) => b.amount - a.amount),
+        items: listed.map((e) => ({
+          title: String(e.title || "Expense"),
+          category: String(e.category || "Other"),
+          amount: n(e.amount),
+          spentAt: e.spentAt || null,
+          paidTo: String(e.paidTo || ""),
+          status: statusOf(e),
+        })),
+      },
+      afterExpenses: totalRevenue - expensesTotal,
     };
   }
 
+  /** P&L for every event an organizer runs, newest first. */
   async organizerPnl(organizerId: string) {
     this.assertId(organizerId, "organizerId");
     const events = (await this.eventModel
