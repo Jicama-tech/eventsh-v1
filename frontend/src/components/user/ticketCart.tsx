@@ -120,9 +120,29 @@ export default function TicketCart() {
   // the agent / operator link captured on the event page; editable.
   const [referralCode, setReferralCode] = useState("");
   // Agents section on for this event: no checkout without a valid code.
-  const referralRequired = !!eventInfo?.features?.hasAgents;
+  // The cart's copy of the event is saved in the browser and can predate
+  // the organizer switching the section on, so the server is asked too.
+  const [liveReferralRequired, setLiveReferralRequired] = useState(false);
+  const referralRequired =
+    !!eventInfo?.features?.hasAgents || liveReferralRequired;
   // Came through an agent / operator link: the code is shown but locked.
   const referralLocked = !!getEventReferral(eventInfo?.id);
+  // Mark the code field required as soon as the cart opens when the event
+  // is referral-only now (read-only check; nothing is consumed).
+  useEffect(() => {
+    const evId = eventInfo?.id;
+    if (!evId) return;
+    let cancelled = false;
+    fetch(`${apiURL}/events/${evId}/agents/check?ref=`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => {
+        if (!cancelled) setLiveReferralRequired(!!b?.required);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [eventInfo?.id]);
   const autoCouponTried = React.useRef(false);
 
   // Email and WhatsApp verification states
@@ -1008,42 +1028,49 @@ export default function TicketCart() {
       });
       return;
     }
-    if (referralRequired) {
-      // Tickets are created after payment, so the code is checked here,
-      // before payment starts (read-only on the server; nothing is consumed).
-      const code = referralLocked
-        ? getEventReferral(eventInfo?.id)
-        : normalizeReferralInput(referralCode);
+    // Tickets are created after payment, so the code is checked here, before
+    // payment starts (read-only on the server; nothing is consumed). The
+    // server is asked every time — it also says whether the event is
+    // referral-only now, which the saved cart may not know yet.
+    const code = referralLocked
+      ? getEventReferral(eventInfo?.id)
+      : normalizeReferralInput(referralCode);
+    let check: { required?: boolean; valid?: boolean } | null = null;
+    try {
+      const res = await fetch(
+        `${apiURL}/events/${eventInfo?.id}/agents/check?ref=${encodeURIComponent(code || "")}`,
+      );
+      check = res.ok ? await res.json().catch(() => null) : null;
+    } catch {
+      check = null;
+    }
+    if (check?.required) setLiveReferralRequired(true);
+    if (referralRequired || check?.required) {
       if (!code) {
         toast({
-        duration: 5000,
-        title: "Referral code needed",
-        description:
-          "This event can only be booked with a referral code. Enter the code your agent shared with you.",
-        variant: "destructive",
-      });
+          duration: 5000,
+          title: "Referral code needed",
+          description:
+            "This event can only be booked with a referral code. Enter the code your agent shared with you.",
+          variant: "destructive",
+        });
         return;
       }
-      try {
-        const res = await fetch(
-          `${apiURL}/events/${eventInfo?.id}/agents/check?ref=${encodeURIComponent(code)}`,
-        );
-        const body = await res.json().catch(() => null);
-        if (!res.ok || !body?.valid) {
-          toast({
-            duration: 5000,
-            title: "Referral code not valid",
-            description:
-              "This referral code is not valid for this event, or it has reached its limit. Ask your agent for the right code.",
-            variant: "destructive",
-          });
-          return;
-        }
-      } catch {
+      if (!check) {
         toast({
           duration: 5000,
           title: "Could not check the referral code",
           description: "Check your internet connection and try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!check.valid) {
+        toast({
+          duration: 5000,
+          title: "Referral code not valid",
+          description:
+            "This referral code is not valid for this event, or it has reached its limit. Ask your agent for the right code.",
           variant: "destructive",
         });
         return;

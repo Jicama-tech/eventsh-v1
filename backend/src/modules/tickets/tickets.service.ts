@@ -13,6 +13,11 @@ import {
   eventHasEnded,
   EVENT_ENDED_MESSAGE,
 } from "../../common/event-timing.util";
+import {
+  isReferralRequired,
+  REFERRAL_INVALID_MESSAGE,
+  REFERRAL_REQUIRED_MESSAGE,
+} from "../../common/referral-required.util";
 import { CreateTicketDto } from "./dto/create-ticket.dto";
 import { UpdateTicketDto } from "./dto/update-ticket.dto";
 import { Ticket, TicketDocument, TicketStatus } from "./entities/ticket.entity";
@@ -65,7 +70,13 @@ export class TicketsService {
     if (!fs.existsSync(qrDir)) fs.mkdirSync(qrDir, { recursive: true });
   }
 
-  async create(createTicketDto: CreateTicketDto): Promise<Ticket> {
+  async create(
+    createTicketDto: CreateTicketDto,
+    /** Who is signed in, when anyone is — the organizer (or one of their
+     * operators, whose token carries the organizer's id) selling at the
+     * kiosk or as a walk-in. */
+    opts: { actorUserId?: string } = {},
+  ): Promise<Ticket> {
     try {
       // 0. Refuse ticket purchases once the event is over.
       // The event's own organizer (never the client-supplied organizerId)
@@ -74,12 +85,36 @@ export class TicketsService {
       if (createTicketDto.eventId) {
         const ev = await this.eventModel
           .findById(createTicketDto.eventId)
-          .select("startDate endDate organizer")
+          .select("startDate endDate organizer features")
           .lean();
         if (eventHasEnded(ev)) {
           throw new BadRequestException(EVENT_ENDED_MESSAGE);
         }
         eventOrganizerId = ev?.organizer ? String(ev.organizer) : "";
+
+        // Referral-only event (Agents section on). The cart refuses to start
+        // payment without a valid code; this is the server-side backstop for
+        // a cart saved before the switch was turned on, or a hand-made
+        // request. The organizer's own kiosk / walk-in sales need no code.
+        // Any real code of this event is enough here — one whose agent ran
+        // out of uses while the buyer was paying still gets its ticket
+        // (it just isn't credited), so nobody pays for nothing.
+        const staffSale =
+          !!opts.actorUserId && String(opts.actorUserId) === eventOrganizerId;
+        if (isReferralRequired(ev) && !staffSale) {
+          const known = await this.operatorsService.isEventReferralCode(
+            eventOrganizerId,
+            createTicketDto.referralCode,
+            createTicketDto.eventId,
+          );
+          if (!known) {
+            throw new BadRequestException(
+              String(createTicketDto.referralCode ?? "").trim()
+                ? REFERRAL_INVALID_MESSAGE
+                : REFERRAL_REQUIRED_MESSAGE,
+            );
+          }
+        }
       }
 
       // 0.5 Assigned-seating events: atomically reserve any selected seats

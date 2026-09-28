@@ -23,6 +23,7 @@ import { OrganizerOrApiKeyGuard } from "../organizers/guards/organizer-or-api-ke
 import { Response } from "express";
 import * as fs from "fs";
 import { omitReferralFields } from "../../common/referral.util";
+import { OptionalJwtGuard } from "../auth/guards/optional-jwt.guard";
 
 @Controller("tickets")
 export class TicketsController {
@@ -70,9 +71,16 @@ export class TicketsController {
   }
 
   @Post("create-ticket")
-  async create(@Body() createTicketDto: CreateTicketDto) {
+  // Public buyers send no token; the organizer's kiosk and walk-in sales
+  // send theirs, which lets them sell on a referral-only event without a code.
+  @UseGuards(OptionalJwtGuard)
+  async create(@Body() createTicketDto: CreateTicketDto, @Req() req: any) {
     // The buyer gets their ticket back — minus the dashboard-only referral.
-    return omitReferralFields(await this.ticketsService.create(createTicketDto));
+    return omitReferralFields(
+      await this.ticketsService.create(createTicketDto, {
+        actorUserId: req.user?.userId,
+      }),
+    );
   }
 
   @Get()
