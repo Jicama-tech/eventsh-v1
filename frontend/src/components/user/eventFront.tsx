@@ -551,6 +551,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // the backend can disambiguate a custom slug that collides across two
   // different organizers (slugs are unique per organizer, not globally).
   const { id, organizationName } = useParams();
+  // The URL segment may be the organizer's custom SLUG, not a Mongo id —
+  // only the event fetch itself may use it (the backend resolves slugs
+  // there). Every booking/request call validates `eventId` with
+  // @IsMongoId, so they must send the real database id from the loaded
+  // event; the URL value is only a fallback before the event has loaded.
+  const dbEventId = String((eventData as any)?._id || eventId || id || "");
   // Operator share links carry ?ref=CODE. Remember it per event (id, slug
   // and route param) so a booking made later — even after navigating away
   // and back — is attributed to that operator. The server validates the
@@ -1736,7 +1742,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   useEffect(() => {
     if (!hasRoundTables) return;
     setRoundTableData((prev) => (prev.length > 0 ? prev : placedRoundTables));
-    const eid = eventId || id;
+    const eid = dbEventId;
     if (!eid) return;
     const fetchRoundTables = async () => {
       try {
@@ -1762,7 +1768,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       }
     };
     fetchRoundTables();
-  }, [hasRoundTables, placedRoundTables, eventId, id]);
+  }, [hasRoundTables, placedRoundTables, dbEventId]);
 
   // Compute the rendered canvas extents from currently-placed items.
   // Inlined here (and inside the ResizeObservers) instead of using a
@@ -1789,8 +1795,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     // Only items belonging to the hall being sized count toward its extent.
     // Untagged/legacy ("" / "default") items belong to the first hall only,
     // so another hall's items can't inflate this one into empty space.
+    // Same orphan rule as belongsToLayout below: a tag that matches no hall
+    // counts as the first hall.
     const inLayout = (cfgId?: string) =>
-      cfgId && cfgId !== "default"
+      cfgId && cfgId !== "default" && layoutIds.includes(cfgId)
         ? cfgId === layoutId
         : currentLayoutIndex === 0;
     const tables =
@@ -3304,7 +3312,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       hostName: p.hostName || name || "",
     }));
     try {
-      const eid = eventId || id;
+      const eid = dbEventId;
       const res = await fetch(`${apiURL}/workshop-requests/event/${eid}`);
       const data = await res.json();
       const mine = (data?.data || []).find(
@@ -3445,7 +3453,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       const organizerId = String(
         (eventData as any)?.organizer?._id || (eventData as any)?.organizer || "",
       );
-      const eid = eventId || id;
+      const eid = dbEventId;
       const email = workshopHostFormData.hostEmail || workshopHostAuthedEmail;
 
       let res: Response;
@@ -6551,7 +6559,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // belong ONLY to the first hall — otherwise they'd leak onto every hall in
   // a multi-venue event.
   const belongsToLayout = (cfgId?: string) => {
-    if (cfgId && cfgId !== "default") return cfgId === currentLayoutId;
+    if (cfgId && cfgId !== "default") {
+      // A tag matching no hall at all (seeded/imported events whose venue
+      // configs carry no id, or a hall deleted after placement) would leave
+      // the item unreachable on every hall — treat it like an untagged
+      // legacy item and show it on the first hall instead.
+      if (!layoutIds.includes(cfgId)) return currentLayoutIndex === 0;
+      return cfgId === currentLayoutId;
+    }
     return currentLayoutIndex === 0;
   };
 
@@ -8958,7 +8973,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               onClick={() =>
                                 navigate("/workshop-checkout", {
                                   state: {
-                                    eventId: eventId || id,
+                                    eventId: dbEventId,
                                     referralRequired: !!(eventData as any)?.features?.hasAgents,
                                     organizerId: eventData?.organizer?._id,
                                     eventTitle: eventData?.title,
@@ -9070,7 +9085,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             setShowWorkshopCombos(false);
                             navigate("/workshop-checkout", {
                               state: {
-                                eventId: eventId || id,
+                                eventId: dbEventId,
                                 referralRequired: !!(eventData as any)?.features?.hasAgents,
                                 organizerId: eventData?.organizer?._id,
                                 eventTitle: eventData?.title,
@@ -12221,7 +12236,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                   <p className="text-[10px] text-gray-400 mt-0.5">
                                     {filledGuests > 0
                                       ? `${filledGuests} of ${totalSeats} guests added — each gets their own QR via WhatsApp`
-                                      : `Optional — add guest names & WhatsApp to send individual QR tickets`}
+                                      : `Optional`}
                                   </p>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -12416,7 +12431,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             setRtBookingLoading(true);
                             try {
                               const organizerId = eventData?.organizer?._id;
-                              const eid = eventId || id;
+                              const eid = dbEventId;
                               const referralCode = bookingReferralCode();
                               const bookingPromises = roundTableSelections.map(
                                 (sel) => {
