@@ -777,6 +777,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [downloadingRtTicketId, setDownloadingRtTicketId] = useState<
     string | null
   >(null);
+  // Booked-vs-vacant seats are shown only to a Google-verified visitor.
+  // Before sign-in every round table is drawn as open — the layout is
+  // still fully visible, it just doesn't reveal who's taken what. Clicking
+  // any seat first opens the sign-in dialog (ensureRoundTableAuth), after
+  // which the real availability appears.
+  const canSeeRoundTableAvailability = !!roundTableAuthedEmail;
   const [rtSeatGuests, setRtSeatGuests] = useState<
     Record<
       string,
@@ -7356,10 +7362,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }
   };
 
+  // Store settings can be missing (organizer never saved a storefront design,
+  // or the store lookup failed) — fall back to the event page's own design
+  // colour rather than crashing the whole page on a null read.
   const infoBadgeStyle = {
-    backgroundColor: settings.settings.design.secondaryColor,
+    backgroundColor:
+      settings?.settings?.design?.secondaryColor ||
+      design?.secondaryColor ||
+      "#0ea5e9",
     color: "#fff",
-    fontFamily: settings.settings.design.fontFamily,
+    fontFamily: settings?.settings?.design?.fontFamily,
   };
 
   const gradientHeadingStyle: React.CSSProperties = {
@@ -11286,8 +11298,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                       inCrop(rt?.x, rt?.y),
                                   )
                                   .map((rt: any) => {
+                                    // Which seats are taken is only revealed after Google sign-in —
+                                    // until then every table reads as open (see canSeeRoundTableAvailability).
                                     const bookedChairs: number[] =
-                                      rt.bookedChairs || [];
+                                      canSeeRoundTableAvailability ? rt.bookedChairs || [] : [];
                                     const isReference = rt.forSale === false;
                                     const mySelection =
                                       roundTableSelections.find(
@@ -11297,8 +11311,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     const mySelectedChairs =
                                       mySelection?.selectedChairIndices || [];
                                     const isFullyBooked =
-                                      rt.isFullyBooked ||
-                                      bookedChairs.length >= rt.numberOfChairs;
+                                      canSeeRoundTableAvailability &&
+                                      (rt.isFullyBooked ||
+                                      bookedChairs.length >= rt.numberOfChairs);
                                     const diameter = rt.tableDiameter || 120;
                                     const chairSz = Math.max(
                                       12,
@@ -11407,16 +11422,23 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                             top: cy - diameter / 2,
                                             width: diameter,
                                             height: diameter,
-                                            background: hasSel
-                                              ? `radial-gradient(circle at 40% 35%, ${col}30, ${col}15)`
-                                              : `radial-gradient(circle at 40% 35%, ${col}18, ${col}08)`,
+                                            // One backgroundImage (hatch layered over the
+                                            // tint for reference tables) — mixing the
+                                            // `background` shorthand with backgroundImage
+                                            // trips React's conflicting-style warning.
+                                            backgroundImage: `${
+                                              isReference
+                                                ? "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 6px), "
+                                                : ""
+                                            }${
+                                              hasSel
+                                                ? `radial-gradient(circle at 40% 35%, ${col}30, ${col}15)`
+                                                : `radial-gradient(circle at 40% 35%, ${col}18, ${col}08)`
+                                            }`,
                                             border: hasSel
                                               ? `2.5px solid ${col}`
                                               : `1.5px solid ${col}55`,
                                             opacity: isReference ? 0.7 : 1,
-                                            backgroundImage: isReference
-                                              ? "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 6px)"
-                                              : undefined,
                                             cursor: isReference
                                               ? "not-allowed"
                                               : rt.sellingMode === "table"
@@ -11787,11 +11809,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               (s: number, rt: any) => s + rt.numberOfChairs,
                               0,
                             );
-                            const bookedSeats = tablesInCat.reduce(
-                              (s: number, rt: any) =>
-                                s + (rt.bookedChairs?.length || 0),
-                              0,
-                            );
+                            const bookedSeats = canSeeRoundTableAvailability
+                              ? tablesInCat.reduce(
+                                  (s: number, rt: any) =>
+                                    s + (rt.bookedChairs?.length || 0),
+                                  0,
+                                )
+                              : 0;
                             return (
                               <div
                                 key={cat}
@@ -11840,7 +11864,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                       />
                                     </div>
                                     <span className="text-[10px] text-gray-400">
-                                      {totalSeats - bookedSeats} left
+                                      {canSeeRoundTableAvailability
+                                        ? `${totalSeats - bookedSeats} left`
+                                        : `${totalSeats} seats`}
                                     </span>
                                   </div>
                                 </div>
@@ -11980,8 +12006,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
                                 {/* Round Tables — positioned relative to pad offset */}
                                 {roundTableData.map((rt: any) => {
+                                  // Which seats are taken is only revealed after Google sign-in —
+                                  // until then every table reads as open (see canSeeRoundTableAvailability).
                                   const bookedChairs: number[] =
-                                    rt.bookedChairs || [];
+                                    canSeeRoundTableAvailability ? rt.bookedChairs || [] : [];
                                   const mySelection = roundTableSelections.find(
                                     (sel) =>
                                       sel.tablePositionId === rt.positionId,
@@ -11989,8 +12017,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                   const mySelectedChairs =
                                     mySelection?.selectedChairIndices || [];
                                   const isFullyBooked =
-                                    rt.isFullyBooked ||
-                                    bookedChairs.length >= rt.numberOfChairs;
+                                    canSeeRoundTableAvailability &&
+                                    (rt.isFullyBooked ||
+                                    bookedChairs.length >= rt.numberOfChairs);
                                   const d = Math.round(
                                     (rt.tableDiameter || 120) * 0.55,
                                   );
@@ -12429,6 +12458,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     phone: value,
                                   })
                                 }
+                                // With countryCodeEditable off the widget
+                                // needs a country pre-selected, otherwise
+                                // typed digits are dropped until the visitor
+                                // opens the flag menu. Default to the
+                                // organizer's country like the other forms.
+                                country={country === "SG" ? "sg" : "in"}
                                 enableSearch={true}
                                 countryCodeEditable={false}
                                 preferredCountries={[
